@@ -2063,7 +2063,27 @@ def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet
         df = pd.read_excel(file_path, sheet_name=0, header=None)
     if df.empty or len(df.index) < 1:
         return []
-    known_headers = {"科室", "患者姓名", "住院号", "visit_id", "存在问题", "责任医生", "质控日期", "质控人员"}
+    known_headers = {
+        "科室",
+        "患者姓名",
+        "住院号",
+        "病历ID",
+        "病案号",
+        "就诊ID",
+        "流水号",
+        "住院流水号",
+        "visit_id",
+        "VisitID",
+        "VISIT_ID",
+        "mr_no",
+        "MR_NO",
+        "inpat_no",
+        "INPAT_NO",
+        "存在问题",
+        "责任医生",
+        "质控日期",
+        "质控人员",
+    }
     header_index = 0
     for idx in range(min(len(df.index), 3)):
         row_headers = {str(item).strip() for item in df.iloc[idx].tolist() if str(item).strip()}
@@ -2075,11 +2095,24 @@ def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet
     data.columns = header_row
     rows: List[Dict[str, Any]] = []
     for index, raw in enumerate(data.to_dict(orient="records"), start=header_index + 2):
-        mr_no = _safe_text(raw.get("住院号"))
-        visit_id = _safe_text(raw.get("visit_id") or raw.get("VisitID") or raw.get("VISIT_ID"))
+        visit_id = _safe_text(
+            raw.get("就诊ID")
+            or raw.get("流水号")
+            or raw.get("visit_id")
+            or raw.get("VisitID")
+            or raw.get("VISIT_ID")
+        )
+        mr_no = _safe_text(raw.get("病案号") or raw.get("mr_no") or raw.get("MR_NO"))
+        inpat_no = _safe_text(
+            raw.get("住院号")
+            or raw.get("住院流水号")
+            or raw.get("病历ID")
+            or raw.get("inpat_no")
+            or raw.get("INPAT_NO")
+        )
         issue_text = _safe_text(raw.get("存在问题"))
         patient_name = _safe_text(raw.get("患者姓名"))
-        if not mr_no and not visit_id and not issue_text and not patient_name:
+        if not mr_no and not inpat_no and not visit_id and not issue_text and not patient_name:
             continue
         rows.append(
             {
@@ -2087,6 +2120,7 @@ def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet
                 "department": _safe_text(raw.get("科室")),
                 "patient_name": patient_name,
                 "mr_no": mr_no,
+                "inpat_no": inpat_no,
                 "visit_id": visit_id,
                 "manual_issue_text": issue_text,
                 "doctor_name": _safe_text(raw.get("责任医生")),
@@ -2411,6 +2445,9 @@ class CustomQCSamplePoolService:
         visit_id = _safe_text(
             raw_payload.get("visit_id") if isinstance(raw_payload, dict) else ""
         )
+        inpat_no = _safe_text(
+            raw_payload.get("inpat_no") if isinstance(raw_payload, dict) else ""
+        )
         coverage_type = _safe_text(row.get("coverage_type"), "unsupported")
         issue_category = _safe_text(row.get("issue_category"), "unclassified")
         manual_issue_text = _safe_text(row.get("manual_issue_text"))
@@ -2428,6 +2465,7 @@ class CustomQCSamplePoolService:
             "department": _safe_text(row.get("department")),
             "patient_name": _safe_text(row.get("patient_name")),
             "mr_no": _safe_text(row.get("mr_no")),
+            "inpat_no": inpat_no,
             "visit_id": visit_id,
             "manual_issue_text": manual_issue_text,
             "normalized_issue_text": _safe_text(row.get("normalized_issue_text")),
@@ -2643,6 +2681,13 @@ class CustomQCSamplePoolService:
                 "step_label": "排队中",
                 "total_candidates": 0,
                 "eligible_visits": 0,
+                "record_progress": {
+                    "total": 0,
+                    "completed": 0,
+                    "remaining": 0,
+                    "basis": "mr_visible",
+                    "label": "病历池可见进度",
+                },
                 "processed_tables": 0,
                 "total_tables": 0,
                 "current_table": "",
@@ -3275,6 +3320,7 @@ class CustomQCSamplePoolService:
                 for item in (payload.get("golden_answers") or [])
                 if isinstance(item, dict) and _safe_text(item.get("qc_point_id"))
             ]
+            source_meta = payload.get("source") if isinstance(payload.get("source"), dict) else {}
             item_payload = {
                 "builder_version": "v1",
                 "source": "customer_synthetic_case_builder",
@@ -3288,6 +3334,24 @@ class CustomQCSamplePoolService:
                 "selected_rule_ids": payload.get("selected_rule_ids") or [],
                 "golden_answers": golden_answers,
             }
+            if source_meta:
+                item_payload["builder_version"] = "v2-derived"
+                item_payload["source_record"] = {
+                    "type": _safe_text(source_meta.get("type"), "customer_source_editable_copy"),
+                    "source_pool_id": _safe_text(source_meta.get("source_pool_id")),
+                    "source_pool_name": _safe_text(source_meta.get("source_pool_name")),
+                    "source_record_id": _safe_text(source_meta.get("source_record_id")),
+                    "source_item_ids": [
+                        _safe_text(item_id)
+                        for item_id in (source_meta.get("source_item_ids") or [])
+                        if _safe_text(item_id)
+                    ],
+                    "source_visit_id": _safe_text(source_meta.get("source_visit_id")),
+                    "source_mr_no": _safe_text(source_meta.get("source_mr_no")),
+                    "source_patient_name": _safe_text(source_meta.get("source_patient_name")),
+                    "source_department": _safe_text(source_meta.get("source_department")),
+                    "created_from": _safe_text(source_meta.get("created_from"), "customer_sample_validation"),
+                }
             candidate_rule_ids = [
                 _safe_text(rule_id).upper()
                 for rule_id in (payload.get("selected_rule_ids") or [])
@@ -3863,6 +3927,7 @@ class CustomQCSamplePoolService:
                 raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
                 visit_id_input = _safe_text(raw_payload.get("visit_id") if isinstance(raw_payload, dict) else "")
                 mr_no_input = _safe_text(raw_payload.get("mr_no") if isinstance(raw_payload, dict) else "")
+                inpat_no_input = _safe_text(raw_payload.get("inpat_no") if isinstance(raw_payload, dict) else "")
                 patient_name = _safe_text(raw_payload.get("patient_name") if isinstance(raw_payload, dict) else "")
                 department = _safe_text(raw_payload.get("department") if isinstance(raw_payload, dict) else "")
                 qc_date_value = _parse_date(raw_payload.get("qc_date") if isinstance(raw_payload, dict) else None)
@@ -3905,6 +3970,23 @@ class CustomQCSamplePoolService:
                     if candidate is not None:
                         match_status = "matched"
                     elif mr_no_candidates:
+                        match_status = "ambiguous"
+
+                if candidate is None and match_status == "unmatched" and inpat_no_input:
+                    inpat_no_candidates = (
+                        session.query(MedicalRecordFrontpage)
+                        .filter(MedicalRecordFrontpage.inpat_no == inpat_no_input)
+                        .all()
+                    )
+                    candidate = _pick_best_local_candidate(
+                        candidates=inpat_no_candidates,
+                        patient_name=patient_name,
+                        department=department,
+                        qc_date_value=qc_date_value,
+                    )
+                    if candidate is not None:
+                        match_status = "matched"
+                    elif inpat_no_candidates:
                         match_status = "ambiguous"
 
                 if candidate is not None:
@@ -4032,6 +4114,189 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
+    def match_pool_items_from_source(self, *, pool_id: str) -> Dict[str, Any]:
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            return self.match_pool_items(pool_id=pool_id)
+
+        session = _session()
+        try:
+            rows = (
+                session.execute(
+                    select(self._item_table)
+                    .where(self._item_table.c.pool_id == pool_id)
+                    .order_by(self._item_table.c.row_no.asc())
+                )
+                .mappings()
+                .all()
+            )
+            items = [self._row_to_item(dict(row)) for row in rows]
+            lookup = self._lookup_remote_match_candidates(items=items)
+
+            matched = 0
+            ambiguous = 0
+            unmatched = 0
+            for row, item in zip(rows, items):
+                raw_payload = item.get("raw_payload") if isinstance(item.get("raw_payload"), dict) else {}
+                patient_name = _safe_text(item.get("patient_name") or raw_payload.get("patient_name"))
+                department = _safe_text(item.get("department") or raw_payload.get("department"))
+                qc_date_value = _parse_date(raw_payload.get("qc_date") if isinstance(raw_payload, dict) else None)
+
+                chosen: Optional[Dict[str, Any]] = None
+                match_status = "unmatched"
+                for field_name in ("visit_id", "mr_no", "inpat_no"):
+                    input_value = _safe_text(item.get(field_name))
+                    if not input_value:
+                        continue
+                    candidates = lookup.get(field_name, {}).get(input_value, [])
+                    chosen = _pick_best_remote_candidate(
+                        candidates=candidates,
+                        patient_name=patient_name,
+                        department=department,
+                        qc_date_value=qc_date_value,
+                    )
+                    if chosen is not None:
+                        match_status = "matched"
+                        break
+                    if candidates:
+                        match_status = "ambiguous"
+                        break
+
+                institute_id = _safe_text(chosen.get("institute_id")) if chosen else ""
+                patient_id = _safe_text(chosen.get("patient_id")) if chosen else ""
+                visit_id = _safe_text(chosen.get("visit_id")) if chosen else ""
+                sync_status = "pending" if chosen else "missing"
+                bundle_status = "pending"
+
+                if match_status == "matched":
+                    matched += 1
+                elif match_status == "ambiguous":
+                    ambiguous += 1
+                else:
+                    unmatched += 1
+
+                session.execute(
+                    update(self._item_table)
+                    .where(self._item_table.c.id == row["id"])
+                    .values(
+                        matched_institute_id=institute_id,
+                        matched_patient_id=patient_id,
+                        matched_visit_id=visit_id,
+                        match_status=match_status,
+                        sync_status=sync_status,
+                        bundle_status=bundle_status,
+                        updated_at=_now_utc(),
+                    )
+                )
+
+            self._update_pool_counters(session, pool_id)
+            session.commit()
+            return {
+                "pool_id": pool_id,
+                "matched": matched,
+                "ambiguous": ambiguous,
+                "unmatched": unmatched,
+                "match_source": "remote_source",
+                "pool": self.get_pool(pool_id=pool_id),
+            }
+        finally:
+            session.close()
+
+    def _lookup_remote_match_candidates(
+        self,
+        *,
+        items: Sequence[Dict[str, Any]],
+    ) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
+        visit_ids = sorted(
+            {str(item.get("visit_id") or "").strip() for item in items if str(item.get("visit_id") or "").strip()}
+        )
+        mr_nos = sorted(
+            {str(item.get("mr_no") or "").strip() for item in items if str(item.get("mr_no") or "").strip()}
+        )
+        inpat_nos = sorted(
+            {str(item.get("inpat_no") or "").strip() for item in items if str(item.get("inpat_no") or "").strip()}
+        )
+        result: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
+            "visit_id": {},
+            "mr_no": {},
+            "inpat_no": {},
+        }
+        if not visit_ids and not mr_nos and not inpat_nos:
+            return result
+
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            return result
+        cfg = load_db_config()
+        remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
+        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
+        if not schema_ident:
+            raise ValueError("远端 schema 非法")
+
+        conn = psycopg2.connect(remote_url, connect_timeout=10)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            for table_name in ("mr", "inpat_registration"):
+                if not _remote_column_exists(cursor, schema_ident, table_name, "visit_id"):
+                    continue
+
+                def expr(candidates: Sequence[str], alias: str, default_sql: str = "''") -> str:
+                    for column in candidates:
+                        if _remote_column_exists(cursor, schema_ident, table_name, column):
+                            return f"{column}::text AS {alias}"
+                    return f"{default_sql} AS {alias}"
+
+                institute_expr = expr(("institute_id",), "institute_id")
+                patient_expr = expr(("patient_id",), "patient_id")
+                inpat_expr = expr(("inpat_no",), "inpat_no")
+                mr_expr = expr(("mr_no",), "mr_no")
+                name_expr = expr(("name", "patient_name"), "name")
+                admission_dept_expr = expr(("admission_dept_name", "dept_name"), "admission_dept_name")
+                discharge_dept_expr = expr(("discharge_dept_name", "dept_name"), "discharge_dept_name")
+                admission_time_expr = expr(("admission_datetime", "admission_time"), "admission_datetime", "NULL")
+                discharge_time_expr = expr(("discharge_datetime", "discharge_time"), "discharge_datetime", "NULL")
+                update_time_expr = expr(("update_time", "last_modified_time", "sys_source_time"), "update_time", "NULL")
+
+                def fetch(field_name: str, values: Sequence[str]) -> None:
+                    if not values or not _remote_column_exists(cursor, schema_ident, table_name, field_name):
+                        return
+                    chunk_size = 200
+                    for start in range(0, len(values), chunk_size):
+                        chunk = values[start : start + chunk_size]
+                        placeholders = ", ".join(["%s"] * len(chunk))
+                        sql = f"""
+                            SELECT
+                                {institute_expr},
+                                {patient_expr},
+                                visit_id::text AS visit_id,
+                                {inpat_expr},
+                                {mr_expr},
+                                {name_expr},
+                                {admission_dept_expr},
+                                {discharge_dept_expr},
+                                {admission_time_expr},
+                                {discharge_time_expr},
+                                {update_time_expr},
+                                %s::text AS source_anchor_table
+                            FROM {schema_ident}.{table_name}
+                            WHERE COALESCE({field_name}::text, '') IN ({placeholders})
+                        """
+                        cursor.execute(sql, [table_name, *chunk])
+                        for row in cursor.fetchall() or []:
+                            candidate = dict(row)
+                            lookup_key = _safe_text(candidate.get(field_name))
+                            if lookup_key:
+                                result[field_name].setdefault(lookup_key, []).append(candidate)
+
+                fetch("visit_id", visit_ids)
+                fetch("mr_no", mr_nos)
+                fetch("inpat_no", inpat_nos)
+        finally:
+            cursor.close()
+            conn.close()
+
+        return result
+
     def _resolve_remote_visit_keys(self, *, items: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         remote_url = get_remote_db_url()
         if not remote_url:
@@ -4048,7 +4313,10 @@ class CustomQCSamplePoolService:
         mr_nos = sorted(
             {str(item.get("mr_no") or "").strip() for item in items if str(item.get("mr_no") or "").strip()}
         )
-        if not visit_ids and not mr_nos:
+        inpat_nos = sorted(
+            {str(item.get("inpat_no") or "").strip() for item in items if str(item.get("inpat_no") or "").strip()}
+        )
+        if not visit_ids and not mr_nos and not inpat_nos:
             return {
                 "matched": 0,
                 "ambiguous": 0,
@@ -4058,6 +4326,7 @@ class CustomQCSamplePoolService:
 
         visit_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
         mr_no_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
+        inpat_no_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
         conn = psycopg2.connect(remote_url, connect_timeout=10)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
@@ -4114,6 +4383,7 @@ class CustomQCSamplePoolService:
 
             _fetch_lookup_rows("visit_id", visit_ids, visit_lookup_map)
             _fetch_lookup_rows("mr_no", mr_nos, mr_no_lookup_map)
+            _fetch_lookup_rows("inpat_no", inpat_nos, inpat_no_lookup_map)
         finally:
             cursor.close()
             conn.close()
@@ -4125,6 +4395,7 @@ class CustomQCSamplePoolService:
         for item in items:
             visit_id_input = str(item.get("visit_id") or "").strip()
             mr_no_input = str(item.get("mr_no") or "").strip()
+            inpat_no_input = str(item.get("inpat_no") or "").strip()
             patient_name = str(item.get("patient_name") or "").strip()
             department = str(item.get("department") or "").strip()
             qc_date_value = _parse_date(item.get("qc_date"))
@@ -4147,6 +4418,17 @@ class CustomQCSamplePoolService:
                     qc_date_value=qc_date_value,
                 )
                 if chosen is None and mr_no_candidates:
+                    ambiguous += 1
+                    continue
+            if chosen is None and inpat_no_input:
+                inpat_no_candidates = inpat_no_lookup_map.get(inpat_no_input, [])
+                chosen = _pick_best_remote_candidate(
+                    candidates=inpat_no_candidates,
+                    patient_name=patient_name,
+                    department=department,
+                    qc_date_value=qc_date_value,
+                )
+                if chosen is None and inpat_no_candidates:
                     ambiguous += 1
                     continue
 
@@ -4188,6 +4470,23 @@ class CustomQCSamplePoolService:
 
         sync_plan = self.resolve_sync_table_names(group_ids=table_groups)
         total_tables = len(sync_plan["table_names"])
+
+        def _build_record_progress(
+            *,
+            total: int,
+            completed_visit_ids: Optional[set[str]] = None,
+        ) -> Dict[str, Any]:
+            completed = min(len(completed_visit_ids or set()), max(total, 0))
+            remaining = max(total - completed, 0)
+            return {
+                "total": total,
+                "completed": completed,
+                "remaining": remaining,
+                "missing_mr": remaining,
+                "basis": "mr_visible",
+                "label": "病历池可见进度",
+            }
+
         if progress_callback is not None:
             progress_callback(
                 {
@@ -4195,6 +4494,7 @@ class CustomQCSamplePoolService:
                     "step_label": "正在解析样本病历",
                     "total_candidates": len(items),
                     "eligible_visits": 0,
+                    "record_progress": _build_record_progress(total=0),
                     "processed_tables": 0,
                     "total_tables": total_tables,
                     "current_table": "",
@@ -4203,6 +4503,12 @@ class CustomQCSamplePoolService:
             )
         resolved = self._resolve_remote_visit_keys(items=items)
         visit_keys: List[tuple[str, str]] = resolved["visit_keys"]
+        eligible_visit_ids = {
+            str(visit_id or "").strip()
+            for _patient_id, visit_id in visit_keys
+            if str(visit_id or "").strip()
+        }
+        mr_synced_visit_ids: set[str] = set()
         if progress_callback is not None:
             progress_callback(
                 {
@@ -4210,6 +4516,7 @@ class CustomQCSamplePoolService:
                     "step_label": "病历解析完成",
                     "total_candidates": len(items),
                     "eligible_visits": len(visit_keys),
+                    "record_progress": _build_record_progress(total=len(eligible_visit_ids)),
                     "processed_tables": 0,
                     "total_tables": total_tables,
                     "current_table": "",
@@ -4226,6 +4533,7 @@ class CustomQCSamplePoolService:
                 "ambiguous": resolved["ambiguous"],
                 "unmatched": resolved["unmatched"],
                 "eligible_visits": 0,
+                "record_progress": _build_record_progress(total=0),
                 "synced_tables": [],
                 "total_rows_pulled": 0,
                 "total_rows_upserted": 0,
@@ -4253,6 +4561,10 @@ class CustomQCSamplePoolService:
                         "step_label": "正在同步病历表",
                         "total_candidates": len(items),
                         "eligible_visits": len(visit_keys),
+                        "record_progress": _build_record_progress(
+                            total=len(eligible_visit_ids),
+                            completed_visit_ids=mr_synced_visit_ids,
+                        ),
                         "processed_tables": index - 1,
                         "total_tables": total_tables,
                         "current_table": table_name,
@@ -4295,6 +4607,10 @@ class CustomQCSamplePoolService:
                             "step_label": "正在同步病历表",
                             "total_candidates": len(items),
                             "eligible_visits": len(visit_keys),
+                            "record_progress": _build_record_progress(
+                                total=len(eligible_visit_ids),
+                                completed_visit_ids=mr_synced_visit_ids,
+                            ),
                             "processed_tables": index,
                             "total_tables": total_tables,
                             "current_table": table_name,
@@ -4324,6 +4640,11 @@ class CustomQCSamplePoolService:
                     )
             total_rows_pulled += len(rows)
             total_rows_upserted += upserted
+            if table_name == "mr":
+                for row in rows:
+                    visit_id = _safe_text(row.get("visit_id"))
+                    if visit_id:
+                        mr_synced_visit_ids.add(visit_id)
 
             if table_name in anchor_tables and rows:
                 ingest_sync_rows(
@@ -4364,6 +4685,10 @@ class CustomQCSamplePoolService:
                         "step_label": "正在同步病历表",
                         "total_candidates": len(items),
                         "eligible_visits": len(visit_keys),
+                        "record_progress": _build_record_progress(
+                            total=len(eligible_visit_ids),
+                            completed_visit_ids=mr_synced_visit_ids,
+                        ),
                         "processed_tables": index,
                         "total_tables": total_tables,
                         "current_table": table_name,
@@ -4396,6 +4721,10 @@ class CustomQCSamplePoolService:
                     "step_label": "正在回写匹配结果",
                     "total_candidates": len(items),
                     "eligible_visits": len(visit_keys),
+                    "record_progress": _build_record_progress(
+                        total=len(eligible_visit_ids),
+                        completed_visit_ids=mr_synced_visit_ids,
+                    ),
                     "processed_tables": total_tables,
                     "total_tables": total_tables,
                     "current_table": "",
@@ -4411,6 +4740,10 @@ class CustomQCSamplePoolService:
             "ambiguous": resolved["ambiguous"],
             "unmatched": resolved["unmatched"],
             "eligible_visits": len(visit_keys),
+            "record_progress": _build_record_progress(
+                total=len(eligible_visit_ids),
+                completed_visit_ids=mr_synced_visit_ids,
+            ),
             "synced_tables": results,
             "total_rows_pulled": total_rows_pulled,
             "total_rows_upserted": total_rows_upserted,

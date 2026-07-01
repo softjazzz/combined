@@ -7,6 +7,7 @@ DEFAULT_DEMO_USER_EMAILS = frozenset({
     "admin@medqc.com",
     "qc@medqc.com",
     "doctor@medqc.com",
+    "sync_admin@medqc.com",
 })
 
 
@@ -68,6 +69,20 @@ users_db = {
         "phone": "13800138002",
         "bio": "\u5185\u79d1\u533b\u751f\uff0c\u4ece\u4e8b\u4e34\u5e8a\u8bca\u7597\u548c\u75c5\u6848\u8bb0\u5f55\u5de5\u4f5c\u3002",
         "created_at": "2024-02-01T00:00:00Z",
+        "last_login": None,
+    },
+    "sync_admin@medqc.com": {
+        "id": "sync-admin-001",
+        "username": "sync_admin",
+        "email": "sync_admin@medqc.com",
+        "display_name": "\u5b9e\u65bd\u7ba1\u7406\u5458",
+        "department": "\u5b9e\u65bd\u8fd0\u7ef4\u90e8",
+        "roles": ["sync_admin"],
+        "password_hash": pwd_context.hash("sync888"),
+        "avatar": "",
+        "phone": "13800138003",
+        "bio": "\u5ba2\u6237\u673a\u5b9e\u65bd\u4e0e\u540c\u6b65\u6392\u969c\u8d26\u53f7\uff0c\u53ef\u8bbf\u95ee\u6570\u636e\u540c\u6b65\u9ad8\u7ea7\u914d\u7f6e\u3002",
+        "created_at": "2024-02-15T00:00:00Z",
         "last_login": None,
     },
 }

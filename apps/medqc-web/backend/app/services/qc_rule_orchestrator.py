@@ -24,6 +24,87 @@ from .qc_cancellation import raise_if_cancelled
 logger = logging.getLogger(__name__)
 
 
+def _norm_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _timeline_from_medical_record(medical_record: dict[str, Any]) -> dict[str, Any]:
+    payload = medical_record.get("evidence_payload")
+    if isinstance(payload, dict) and isinstance(payload.get("programmatic_timeline"), dict):
+        return dict(payload["programmatic_timeline"])
+    return {}
+
+
+def _has_meaningful_first_course_text(medical_record: dict[str, Any]) -> bool | None:
+    timeline = _timeline_from_medical_record(medical_record)
+    docs = timeline.get("documents")
+    if isinstance(docs, dict):
+        first_courses = [item for item in list(docs.get("first_course_record") or []) if isinstance(item, dict)]
+        if not first_courses:
+            return False
+        for item in first_courses:
+            text = "\n".join(
+                _norm_text(item.get(key)).strip()
+                for key in ("content", "raw_text", "content_preview")
+                if _norm_text(item.get(key)).strip()
+            )
+            normalized = "".join(text.split())
+            if normalized and normalized not in {"首次病程记录", "首次病程"} and len(normalized) >= 20:
+                return True
+        return False
+
+    content = _norm_text(medical_record.get("content"))
+    for marker in ("首次病程记录", "首次病程"):
+        position = content.find(marker)
+        if position < 0:
+            continue
+        window = content[position: position + 600]
+        cleaned = (
+            window.replace("首次病程记录", "")
+            .replace("首次病程", "")
+            .replace("记录时间", "")
+            .replace("提交时间", "")
+            .replace("正文", "")
+        )
+        if len("".join(cleaned.split())) >= 30:
+            return True
+    return False
+
+
+def _luxian_0609_copy_guard_result(
+    *,
+    rule: dict[str, Any],
+    medical_record: dict[str, Any],
+    meta: RuleExecutionMeta,
+) -> dict[str, Any] | None:
+    rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+    if rule_id != "LX0609-016":
+        return None
+    if _has_meaningful_first_course_text(medical_record):
+        return None
+    return {
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "rule_name": str(rule.get("name") or rule.get("rule_name") or rule_id),
+        "status": "data_gap",
+        "is_compliant": False,
+        "findings": "首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。",
+        "evidence": "数据缺口：首次病程记录正文为空；复制病历比对未执行。",
+        "suggestion": "请先补齐首次病程记录正文，再复核是否与入院记录或其他病程存在复制。",
+        "confidence": 0.9,
+        "metadata": {
+            **meta.to_dict(),
+            "executor_type": "program",
+            "copy_rule_priority_guard": "first_course_missing",
+            "data_gap_reason": "首次病程记录缺失或正文为空，无法进行复制病历比对",
+        },
+    }
+
+
 @dataclass(frozen=True)
 class RuleExecutionMeta:
     executor_type: str
@@ -259,6 +340,15 @@ class QCRuleOrchestrator:
             meta = resolve_rule_execution_meta(rule)
             executor_type = meta.executor_type
             can_program = executor_type == "program" and self._program_executor.can_execute(rule)
+            guarded_result = _luxian_0609_copy_guard_result(
+                rule=rule,
+                medical_record=medical_record,
+                meta=meta,
+            )
+            if guarded_result is not None:
+                program_count += 1
+                program_results[idx] = guarded_result
+                continue
             cache_key = build_execution_cache_key(
                 record_snapshot_hash=record_snapshot_hash,
                 rule_id=str(rule.get("rule_id") or rule.get("rule_code") or ""),

@@ -114,8 +114,27 @@ const ARadioGroupStub = defineComponent({
     },
   },
   emits: ['update:value'],
-  setup(_, { slots }) {
-    return () => h('div', { class: 'a-radio-group-stub' }, slots.default?.())
+  setup(_, { slots, emit }) {
+    return () =>
+      h('div', { class: 'a-radio-group-stub' }, [
+        h(
+          'button',
+          {
+            class: 'a-radio-business-stub',
+            onClick: () => emit('update:value', 'business'),
+          },
+          '业务视图',
+        ),
+        h(
+          'button',
+          {
+            class: 'a-radio-advanced-stub',
+            onClick: () => emit('update:value', 'advanced'),
+          },
+          '高级视图',
+        ),
+        slots.default?.(),
+      ])
   },
 })
 
@@ -325,10 +344,10 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('涉及问题病历')
-    expect(wrapper.text()).toContain('病历级去重统计')
-    expect(wrapper.text()).toContain('失败次数')
-    expect(wrapper.text()).toContain('规则执行失败总次数')
+    expect(wrapper.text()).toContain('总病历10')
+    expect(wrapper.text()).toContain('不合规规则2')
+    expect(wrapper.text()).toContain('待复核规则0')
+    expect(wrapper.text()).toContain('已完成 0 / 10 份病历')
   })
 
   it('按单规则筛选时应联动规则结果概览、命中明细并拉取调试快照', async () => {
@@ -340,6 +359,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
+    await wrapper.find('.a-radio-advanced-stub').trigger('click')
+    await wrapper.vm.$nextTick()
+
     await wrapper.find('.debug-rule-select.a-select-stub').setValue('rule-job-2')
     await flushPromises()
     await wrapper.vm.$nextTick()
@@ -349,7 +371,9 @@ describe('SemanticRulesBatchResultDrawer', () => {
     })
 
     const tables = wrapper.findAllComponents(ATableStub)
-    const ruleOverviewData = tables[0]?.props('dataSource') as Array<{ id?: string }>
+    const ruleOverviewData = tables
+      .map((table) => table.props('dataSource') as Array<{ id?: string }>)
+      .find((data) => data.some((item) => item.id === 'rule-job-2')) as Array<{ id?: string }>
     const issueCards = wrapper.findAll('.issue-conclusion-card')
 
     expect(ruleOverviewData).toHaveLength(1)
@@ -373,7 +397,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCards).toHaveLength(2)
     expect(wrapper.text()).toContain('当前共 2 条重点结果，其中不合规 2 条，待复核 0 条')
     expect(wrapper.text()).toContain('重点结果')
-    expect(wrapper.text()).toContain('涉及问题病历')
+    expect(wrapper.text()).toContain('总病历10')
     expect(wrapper.text()).toContain('规则一命中')
     expect(wrapper.text()).toContain('规则二命中')
   })
@@ -407,7 +431,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const text = wrapper.text()
     expect(text).toContain('任务已完成，已发现泸县0609质控点问题')
     expect(text).toContain('不合规 2 条')
-    expect(text).toContain('当前为泸县0609 scoped run 结果，共 2 条客户质控点结果')
+    expect(text).toContain('当前展示泸县0609选定质控点验证结果，共 2 条客户质控点结果')
     expect(text).toContain('LX0609 客户质控点结果')
     expect(text).not.toContain('本次未发现泸县0609质控点问题')
   })
@@ -443,7 +467,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(text).toContain('全量 0609 规则集')
     expect(text).toContain('未限定，执行全量 0609 质控点')
     expect(text).toContain('全量运行，不按单病历限定执行规则')
-    expect(text).toContain('当前为泸县0609 全量 0609 规则集 结果')
+    expect(text).toContain('当前展示泸县0609全量 0609 规则集结果')
     expect(text).not.toContain('scoped run')
   })
 
@@ -486,6 +510,86 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCard?.text()).toContain('首次病程记录记录时间：2026-06-01 19:00:00')
     expect(issueCard?.text()).not.toContain('映射执行规则')
     expect(issueCard?.text()).not.toContain('应包含证据要素')
+  })
+
+  it('data_gap 结果摘要应展示数据缺口，不应展示门控关键词', () => {
+    const props = buildProps()
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-013',
+      rule_id: 'LX0609-013',
+      qc_point_id: 'LX0609-013',
+      customer_rule_id: 'LX0609-013',
+      rule_set_key: 'luxian_0609_qc_v1',
+      rule_name: '病理检查：病理检查结果在手术记录、病程中未记录',
+      status: 'data_gap',
+      result_status: 'data_gap',
+      display_status: 'data_quality_gap',
+      is_compliant: false,
+      findings: '已发现触发事件，但缺少病理报告时间，无法完成自动判定。',
+      evidence:
+        '触发门控：已发现触发事实，但缺少完成判定所需的结构化字段 ' +
+        '匹配关键词：手术记录、术前讨论、麻醉记录、安全核查、切口、术后 ' +
+        '数据缺口：病理报告时间',
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const issueCard = wrapper
+      .findAll('.issue-conclusion-card')
+      .find((card) => card.text().includes('缺少病理报告时间'))
+    expect(issueCard).toBeTruthy()
+    expect(issueCard?.text()).toContain('缺少病理报告时间')
+    expect(issueCard?.text()).not.toContain('触发门控')
+    expect(issueCard?.text()).not.toContain('匹配关键词')
+    expect(issueCard?.text()).not.toContain('安全核查')
+  })
+
+  it('复制病历结果应展示左右对比证据', () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-016',
+      rule_name: '不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同',
+      status: 'non_compliant',
+      result_status: 'non_compliant',
+      findings: '首次病程记录与入院记录存在高度重复。',
+      evidence_items: [
+        {
+          evidence_id: 'E-001',
+          source_document_type: '入院记录',
+          field_path: '现病史',
+          quote: '患者腰背部疼痛伴活动受限3天，夜间疼痛明显。',
+          evidence_role: 'source_admission_snippet',
+        },
+        {
+          evidence_id: 'E-002',
+          source_document_type: '首次病程记录',
+          field_path: '病例特点',
+          quote: '患者腰背部疼痛伴活动受限3天，夜间疼痛明显。',
+          evidence_role: 'target_course_snippet',
+        },
+      ],
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const compare = wrapper.find('.copy-evidence-compare')
+    expect(compare.exists()).toBe(true)
+    expect(compare.text()).toContain('入院记录')
+    expect(compare.text()).toContain('首次病程记录')
+    expect(compare.text()).toContain('患者腰背部疼痛伴活动受限3天')
   })
 
   it('运行中暂无返回结果时应展示等待首份病历的动态提示', () => {

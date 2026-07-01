@@ -399,6 +399,184 @@ def _should_postprocess_formal_qc_results(
     )
 
 
+def _has_meaningful_first_course_text_for_batch(*, eval_item: Dict[str, Any], record: Dict[str, Any]) -> bool:
+    def _meaningful(text: Any) -> bool:
+        normalized = "".join(str(text or "").split())
+        return bool(normalized and normalized not in {"首次病程记录", "首次病程"} and len(normalized) >= 20)
+
+    metadata = eval_item.get("metadata") if isinstance(eval_item.get("metadata"), dict) else {}
+    timeline = metadata.get("programmatic_timeline") if isinstance(metadata, dict) else None
+    if isinstance(timeline, dict):
+        docs = timeline.get("documents")
+        if isinstance(docs, dict):
+            first_courses = [item for item in list(docs.get("first_course_record") or []) if isinstance(item, dict)]
+            if not first_courses:
+                return False
+            return any(
+                _meaningful(
+                    "\n".join(
+                        str(item.get(key) or "").strip()
+                        for key in ("content", "raw_text", "content_preview")
+                        if str(item.get(key) or "").strip()
+                    )
+                )
+                for item in first_courses
+            )
+
+    medical_text = str(record.get("medical_text") or "")
+    for marker in ("首次病程记录", "首次病程"):
+        start = 0
+        while True:
+            position = medical_text.find(marker, start)
+            if position < 0:
+                break
+            window = medical_text[position: position + 600]
+            cleaned = re.sub(r"(首次病程记录|首次病程|记录时间|提交时间|正文|文书类型|文书编号|[:：\s\d\-T]+)", "", window)
+            if _meaningful(cleaned):
+                return True
+            start = position + len(marker)
+    return False
+
+
+def _guard_luxian_copy_result_for_batch(
+    *,
+    rule_id: str,
+    eval_item: Dict[str, Any],
+    record: Dict[str, Any],
+) -> Dict[str, Any]:
+    normalized_rule_id = str(rule_id or eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
+    if normalized_rule_id != "LX0609-016":
+        return eval_item
+    if _has_meaningful_first_course_text_for_batch(eval_item=eval_item, record=record):
+        return eval_item
+    guarded = dict(eval_item)
+    metadata = dict(guarded.get("metadata") or {})
+    metadata.update(
+        {
+            "executor_type": "program",
+            "copy_rule_priority_guard": "first_course_missing",
+            "data_gap_reason": "首次病程记录缺失或正文为空，无法进行复制病历比对",
+        }
+    )
+    guarded.update(
+        {
+            "rule_id": normalized_rule_id,
+            "rule_code": normalized_rule_id,
+            "status": "data_gap",
+            "is_compliant": False,
+            "findings": "首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。",
+            "evidence": "数据缺口：首次病程记录正文为空；复制病历比对未执行。",
+            "suggestion": "请先补齐首次病程记录正文，再复核是否与入院记录或其他病程存在复制。",
+            "confidence": max(float(guarded.get("confidence") or 0.0), 0.9),
+            "metadata": metadata,
+        }
+    )
+    return guarded
+
+
+def _snippet_near(text: str, markers: tuple[str, ...], *, limit: int = 180) -> str:
+    if not text:
+        return ""
+    for marker in markers:
+        position = text.find(marker)
+        if position < 0:
+            continue
+        start = max(0, position - 50)
+        end = min(len(text), position + limit)
+        return " ".join(text[start:end].split())
+    return ""
+
+
+def _consultation_evidence_items_for_batch(
+    *,
+    rule_id: str,
+    eval_item: Dict[str, Any],
+    record: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    normalized_rule_id = str(rule_id or eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
+    if normalized_rule_id not in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}:
+        existing = eval_item.get("evidence_items")
+        return list(existing) if isinstance(existing, list) else []
+
+    existing_items = [item for item in list(eval_item.get("evidence_items") or []) if isinstance(item, dict)]
+
+    def _existing_quote(*roles: str, require_consultation_context: bool = False) -> str:
+        execution_context_markers = ("遵会诊", "已遵会诊", "会诊意见", "按会诊", "采纳会诊", "执行会诊")
+        for item in existing_items:
+            role = str(item.get("evidence_role") or "")
+            if role not in roles:
+                continue
+            quote = " ".join(str(item.get("quote") or "").split())
+            if require_consultation_context and not any(marker in quote for marker in execution_context_markers):
+                continue
+            if quote:
+                return quote
+        return ""
+
+    medical_text = str(record.get("medical_text") or "")
+    request_quote = _snippet_near(
+        medical_text,
+        ("会诊申请", "申请会诊", "请会诊", "申请目的", "会诊目的", "会诊记录"),
+    ) or _existing_quote("consultation_request")
+    opinion_quote = _snippet_near(
+        medical_text,
+        ("会诊意见", "处理意见", "会诊后指出", "考虑既往感染", "继续保肝"),
+    ) or _existing_quote("consultation_opinion") or str(eval_item.get("evidence") or "")[:180]
+    execution_quote = _snippet_near(
+        medical_text,
+        ("遵会诊", "已遵会诊", "会诊意见执行", "采纳会诊", "按会诊"),
+    ) or _existing_quote("consultation_execution_record", require_consultation_context=True)
+    if execution_quote and not any(marker in execution_quote for marker in ("遵会诊", "已遵会诊", "会诊意见", "采纳会诊", "按会诊")):
+        execution_quote = ""
+
+    items: List[Dict[str, Any]] = []
+    if request_quote:
+        items.append(
+            {
+                "evidence_id": "CONSULT-REQUEST",
+                "source_table": "consultation_record",
+                "source_document_type": "会诊申请/会诊记录",
+                "source_document_name": "会诊申请/会诊记录",
+                "source_document_id": "",
+                "record_time": "",
+                "field_path": "会诊申请/目的",
+                "quote": request_quote,
+                "normalized_value": "",
+                "evidence_role": "consultation_request",
+            }
+        )
+    if opinion_quote:
+        items.append(
+            {
+                "evidence_id": "CONSULT-OPINION",
+                "source_table": "consultation_record",
+                "source_document_type": "会诊记录",
+                "source_document_name": "会诊记录",
+                "source_document_id": "",
+                "record_time": "",
+                "field_path": "会诊意见",
+                "quote": " ".join(opinion_quote.split())[:260],
+                "normalized_value": "",
+                "evidence_role": "consultation_opinion",
+            }
+        )
+    items.append(
+        {
+            "evidence_id": "CONSULT-EXECUTION",
+            "source_table": "daily_course_record",
+            "source_document_type": "后续病程记录",
+            "source_document_name": "后续病程记录",
+            "source_document_id": "",
+            "record_time": "",
+            "field_path": "会诊意见执行情况",
+            "quote": execution_quote or "未检索到与会诊意见对应的后续病程执行记录。",
+            "normalized_value": "",
+            "evidence_role": "consultation_execution_record" if execution_quote else "consultation_execution_gap",
+        }
+    )
+    return items
+
+
 def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     clusters: Dict[str, Dict[str, Any]] = {}
     rule_counter: Dict[str, int] = {}
@@ -475,6 +653,44 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         "document_breakdown": _to_breakdown_list(doc_counter, top_n=8),
         "defect_level_breakdown": _to_breakdown_list(defect_counter, top_n=8),
         "status_breakdown": _to_breakdown_list(status_counter, top_n=6),
+    }
+
+
+def _build_record_status_counts(
+    *,
+    total_records: int,
+    issue_record_ids: set[str],
+    uncertain_record_ids: set[str],
+    data_gap_record_ids: set[str],
+    failed_record_ids: set[str],
+    not_applicable_record_ids: Optional[set[str]] = None,
+) -> Dict[str, int]:
+    issue_ids = {str(item or "").strip() for item in issue_record_ids if str(item or "").strip()}
+    uncertain_ids = {str(item or "").strip() for item in uncertain_record_ids if str(item or "").strip()}
+    data_gap_ids = {str(item or "").strip() for item in data_gap_record_ids if str(item or "").strip()}
+    failed_ids = {str(item or "").strip() for item in failed_record_ids if str(item or "").strip()}
+    not_applicable_ids = {
+        str(item or "").strip()
+        for item in (not_applicable_record_ids or set())
+        if str(item or "").strip()
+    }
+    not_applicable_ids.difference_update(issue_ids, uncertain_ids, data_gap_ids, failed_ids)
+    compliant_records = max(
+        0,
+        int(total_records or 0)
+        - len(issue_ids)
+        - len(uncertain_ids)
+        - len(data_gap_ids)
+        - len(failed_ids)
+        - len(not_applicable_ids),
+    )
+    return {
+        "non_compliant": len(issue_ids),
+        "uncertain": len(uncertain_ids),
+        "data_gap": len(data_gap_ids),
+        "not_applicable": len(not_applicable_ids),
+        "failed": len(failed_ids),
+        "compliant": compliant_records,
     }
 
 
@@ -1141,7 +1357,24 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         def _raise_if_cancelled() -> None:
             raise_if_cancelled(_is_cancelled)
 
+        def _record_ids_for_item_status(status: str) -> set[str]:
+            normalized_status = str(status or "").strip().lower()
+            return {
+                str(item.get("record_id") or "").strip()
+                for item in all_items
+                if str(item.get("status") or "").strip().lower() == normalized_status
+                and str(item.get("record_id") or "").strip()
+            }
+
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
+            record_status_counts = _build_record_status_counts(
+                total_records=processed_records_count,
+                issue_record_ids=issue_record_ids,
+                uncertain_record_ids=uncertain_record_ids,
+                data_gap_record_ids=_record_ids_for_item_status("data_gap"),
+                failed_record_ids=failed_record_ids,
+                not_applicable_record_ids=_record_ids_for_item_status("not_applicable"),
+            )
             return {
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
@@ -1161,13 +1394,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "failed_record_count": len(failed_record_ids),
                 "issue_records": len(issue_record_ids),
                 "uncertain_records": len(uncertain_record_ids),
-                "compliant_records": max(
-                    0,
-                    processed_records_count
-                    - len(issue_record_ids)
-                    - len(uncertain_record_ids)
-                    - len(failed_record_ids),
-                ),
+                "data_quality_gap_records": record_status_counts["data_gap"],
+                "not_applicable_records": record_status_counts["not_applicable"],
+                "compliant_records": record_status_counts["compliant"],
+                "status_breakdown": record_status_counts,
                 "total_tokens": int(total_tokens),
                 "total_processing_time": float(total_processing_time),
                 "executor_breakdown": {"program": executor_program, "llm": executor_llm},
@@ -1203,6 +1433,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 state = output_rule_states[rule_id]
                 rule_items = list(state.get("items") or [])
                 rule_failed = list(state.get("failed_records") or [])
+                rule_failed_record_ids = {
+                    str(item.get("record_id") or "").strip()
+                    for item in rule_failed
+                    if str(item.get("record_id") or "").strip()
+                }
                 confirmed_record_ids = {
                     str(item.get("record_id") or "")
                     for item in rule_items
@@ -1223,6 +1458,18 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     for item in rule_items
                     if _item_rejected_by_system(item)
                 }
+                not_applicable_record_ids_for_rule = {
+                    str(item.get("record_id") or "")
+                    for item in rule_items
+                    if str(item.get("status") or "").strip().lower() == "not_applicable"
+                }
+                not_applicable_record_ids_for_rule.difference_update(
+                    confirmed_record_ids,
+                    uncertain_record_ids_for_rule,
+                    data_gap_record_ids_for_rule,
+                    rejected_record_ids_for_rule,
+                    rule_failed_record_ids,
+                )
                 rule_summary = {
                     "total_records": effective_total_records,
                     "success_count": max(0, effective_total_records - len(rule_failed)),
@@ -1231,6 +1478,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "uncertain_records": len(uncertain_record_ids_for_rule),
                     "data_quality_gap_records": len(data_gap_record_ids_for_rule),
                     "rejected_by_system_records": len(rejected_record_ids_for_rule),
+                    "not_applicable_records": len(not_applicable_record_ids_for_rule),
                     "compliant_records": max(
                         0,
                         effective_total_records
@@ -1238,7 +1486,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         - len(confirmed_record_ids)
                         - len(uncertain_record_ids_for_rule)
                         - len(data_gap_record_ids_for_rule)
-                        - len(rejected_record_ids_for_rule),
+                        - len(rejected_record_ids_for_rule)
+                        - len(not_applicable_record_ids_for_rule),
                     ),
                     "total_tokens": int(state.get("total_tokens") or 0),
                     "total_processing_time": float(state.get("total_processing_time") or 0.0),
@@ -1266,6 +1515,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "uncertain_records": rule_summary["uncertain_records"],
                         "data_quality_gap_records": rule_summary["data_quality_gap_records"],
                         "rejected_by_system_records": rule_summary["rejected_by_system_records"],
+                        "not_applicable_records": rule_summary["not_applicable_records"],
                         "compliant_records": rule_summary["compliant_records"],
                         "total_tokens": rule_summary["total_tokens"],
                         "total_processing_time": rule_summary["total_processing_time"],
@@ -1633,6 +1883,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 has_issue = False
                 has_uncertain = False
                 record_issue_items: List[Dict[str, Any]] = []
+                record_status_items: List[Dict[str, Any]] = []
 
                 fallback_tokens_per_rule = int(record_total_tokens / max(1, len(result_rule_ids)))
                 fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(result_rule_ids)))
@@ -1665,10 +1916,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             }
                         )
                         continue
+                    eval_item = _guard_luxian_copy_result_for_batch(
+                        rule_id=normalized_rule_id,
+                        eval_item=eval_item,
+                        record=record,
+                    )
 
                     status = str(eval_item.get("status") or "").strip().lower()
                     if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain"}:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
+                    evidence_items = _consultation_evidence_items_for_batch(
+                        rule_id=normalized_rule_id,
+                        eval_item=eval_item,
+                        record=record,
+                    )
                     metadata = dict(eval_item.get("metadata") or {})
                     metadata.setdefault("tokens_used", fallback_tokens_per_rule)
                     metadata.setdefault("prompt_tokens", fallback_prompt_tokens_per_rule)
@@ -1732,6 +1993,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "is_compliant": bool(eval_item.get("is_compliant") is True),
                         "findings": str(eval_item.get("findings") or ""),
                         "evidence": str(eval_item.get("evidence") or ""),
+                        "evidence_items": evidence_items,
                         "suggestion": str(eval_item.get("suggestion") or ""),
                         "confidence": float(eval_item.get("confidence") or 0),
                         "executor_type": executor_type,
@@ -1801,6 +2063,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         has_uncertain = True
                     if issue_item["status"] in {"non_compliant", "data_gap", "uncertain"}:
                         record_issue_items.append(issue_item)
+                    elif issue_item["status"] == "not_applicable":
+                        record_status_items.append(issue_item)
 
                 if should_postprocess_formal_results and record_issue_items:
                     adjudicator_client = getattr(qc_service, "adjudicator_client", None) or getattr(qc_service, "client", None)
@@ -1822,7 +2086,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         mode="formal_final_online",
                     )
 
-                for final_item in record_issue_items:
+                for final_item in [*record_issue_items, *record_status_items]:
                     final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
                     if final_rule_id not in items_by_rule:
                         continue
@@ -2122,6 +2386,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for item in all_items
             if str(item.get("display_status") or "") == "rejected_by_system" and str(item.get("record_id") or "")
         }
+        not_applicable_record_ids = {
+            str(item.get("record_id") or "")
+            for item in all_items
+            if str(item.get("status") or "").strip().lower() == "not_applicable"
+            and str(item.get("record_id") or "")
+        }
+        record_status_counts = _build_record_status_counts(
+            total_records=total_records,
+            issue_record_ids=issue_record_ids,
+            uncertain_record_ids=uncertain_record_ids,
+            data_gap_record_ids=data_quality_gap_record_ids,
+            failed_record_ids=failed_record_ids,
+            not_applicable_record_ids=not_applicable_record_ids,
+        )
 
         summary = {
             "rule_set_key": rule_set_key,
@@ -2141,14 +2419,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "failed_count": len(all_failed_records),
             "issue_records": len(issue_record_ids),
             "uncertain_records": len(uncertain_record_ids),
-            "compliant_records": max(
-                0,
-                total_records
-                - len(issue_record_ids)
-                - len(uncertain_record_ids)
-                - len(data_quality_gap_record_ids)
-                - len(failed_record_ids),
-            ),
+            "compliant_records": record_status_counts["compliant"],
             "postprocess_summary": postprocess_summary,
             "confirmed_defect_count": int(postprocess_summary.get("confirmed_defect_count") or len(issue_record_ids)),
             "qc_review_candidate_count": int(postprocess_summary.get("qc_review_candidate_count") or 0),
@@ -2160,22 +2431,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "display_status_counts": display_status_counts,
             "postprocess_label_counts": postprocess_label_counts,
             "data_quality_gap_records": len(data_quality_gap_record_ids),
+            "not_applicable_records": record_status_counts["not_applicable"],
             "rejected_by_system_records": len(rejected_by_system_record_ids),
             "technical_error_records": len(technical_error_record_ids),
-            "status_breakdown": {
-                "non_compliant": len(issue_record_ids),
-                "uncertain": len(uncertain_record_ids),
-                "data_gap": len(data_quality_gap_record_ids),
-                "failed": len(failed_record_ids),
-                "compliant": max(
-                    0,
-                    total_records
-                    - len(issue_record_ids)
-                    - len(uncertain_record_ids)
-                    - len(data_quality_gap_record_ids)
-                    - len(failed_record_ids),
-                ),
-            },
+            "status_breakdown": record_status_counts,
             "total_tokens": int(total_tokens),
             "total_prompt_tokens": int(total_prompt_tokens),
             "total_completion_tokens": int(total_completion_tokens),

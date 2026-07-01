@@ -82,6 +82,8 @@ export interface SyncPreflightResult {
   blockers: string[]
   warnings: string[]
   estimated_impact: number
+  estimate_basis?: 'eligible_visit_count' | string
+  preflight_fingerprint?: string
   risk_level: 'low' | 'medium' | 'high' | string
   matrix_scope?: {
     execution?: 'enabled' | 'all' | string
@@ -303,6 +305,7 @@ export const syncApi = {
     target_departments?: string[]
     policy_version?: string
     table_groups?: string[]
+    preflight_fingerprint?: string
   }): Promise<SyncTriggerResponse> {
     const response = await http.post('/api/v1/sync/trigger', payload)
     return unwrapSyncResponse<SyncTriggerResponse>(response.data)

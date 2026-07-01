@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
@@ -78,6 +79,315 @@ def _strip_sensitive(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_sensitive(item) for item in value]
     return value
+
+
+def _timeline_from_audit(audit_context: dict[str, Any] | None) -> dict[str, Any]:
+    context = dict(audit_context or {})
+    timeline = context.get("programmatic_timeline")
+    if isinstance(timeline, dict):
+        return timeline
+    payload = context.get("evidence_payload")
+    if isinstance(payload, dict) and isinstance(payload.get("programmatic_timeline"), dict):
+        return dict(payload["programmatic_timeline"])
+    return {}
+
+
+def _doc_text(item: dict[str, Any]) -> str:
+    return "\n".join(
+        str(item.get(key) or "").strip()
+        for key in ("content", "raw_text", "content_preview")
+        if str(item.get(key) or "").strip()
+    )
+
+
+def _has_first_course_content(audit_context: dict[str, Any] | None) -> bool:
+    timeline = _timeline_from_audit(audit_context)
+    docs = timeline.get("documents")
+    if not isinstance(docs, dict):
+        return True
+    first_courses = [item for item in list(docs.get("first_course_record") or []) if isinstance(item, dict)]
+    if not first_courses:
+        return False
+    for item in first_courses:
+        text = _doc_text(dict(item))
+        normalized = "".join(text.split())
+        if normalized and normalized not in {"首次病程记录", "首次病程"} and len(normalized) >= 20:
+            return True
+    return False
+
+
+def _guard_copy_rule_without_first_course(
+    *,
+    wrapper_id: str,
+    selected: dict[str, Any],
+    audit_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if wrapper_id != "LX0609-016" or _status(selected) != "non_compliant":
+        return selected
+    if _has_first_course_content(audit_context):
+        return selected
+    guarded = dict(selected)
+    metadata = dict(guarded.get("metadata") or {})
+    metadata.update(
+        {
+            "copy_rule_priority_guard": "first_course_missing",
+            "data_gap_reason": "首次病程记录缺失或正文为空，无法进行复制病历比对",
+        }
+    )
+    guarded.update(
+        {
+            "status": "data_gap",
+            "is_compliant": False,
+            "findings": "首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。",
+            "evidence": "数据缺口：首次病程记录正文为空；复制病历比对未执行。",
+            "suggestion": "请先补齐首次病程记录正文，再复核是否与入院记录或其他病程存在复制。",
+            "metadata": metadata,
+        }
+    )
+    return guarded
+
+
+def _has_any(text: str, *needles: str) -> bool:
+    return any(needle and needle in text for needle in needles)
+
+
+_PATHOLOGY_OBJECTIVE_POSITIVE_PATTERN = re.compile(
+    r"("
+    r"(?:送检|送病理|送病检|标本|取材).{0,60}(?:冰冻病理|术中冰冻|病理提示|病理诊断|病理结果|浸润性腺癌|腺癌|癌转移|恶性)"
+    r"|(?:冰冻病理|术中冰冻|病理提示|病理诊断|病理结果|浸润性腺癌|腺癌|癌转移|恶性).{0,60}(?:送检|送病理|送病检|标本|取材)"
+    r")"
+)
+_PATHOLOGY_MATERIAL_ABSENCE_PATTERN = re.compile(
+    r"("
+    r"(?:未记录|未见|缺失|缺少|不完整|仅笼统|未详细|未明确|无记录).{0,24}(?:取材|标本|送检|送病理|送病检|冰冻|术中病理|淋巴结清扫)"
+    r"|(?:取材|标本|送检|送病理|送病检|淋巴结清扫).{0,24}(?:未记录|未见|缺失|缺少|不完整|仅笼统|未详细|未明确|无记录)"
+    r")"
+)
+_PATHOLOGY_OBJECTIVE_NEGATIVE_CONTEXT_PATTERN = re.compile(
+    r"缺(?:少)?病理(?:结果|诊断|来源|报告|对照)|未见病理(?:结果|诊断|报告)|病理(?:结果|诊断|报告)?对照不足"
+)
+
+
+def _has_recorded_pathology_material(text: str) -> bool:
+    if not text:
+        return False
+    explicit_positive = _has_any(
+        text,
+        "已记录术中取材",
+        "已记录取材",
+        "已记录术中取材及冰冻病理结果",
+        "记录了术中冰冻病理结果",
+        "记录术中冰冻病理结果",
+    )
+    objective_positive = bool(_PATHOLOGY_OBJECTIVE_POSITIVE_PATTERN.search(text))
+    if objective_positive and _PATHOLOGY_OBJECTIVE_NEGATIVE_CONTEXT_PATTERN.search(text):
+        objective_positive = False
+    if not explicit_positive and not objective_positive:
+        return False
+    return not bool(_PATHOLOGY_MATERIAL_ABSENCE_PATTERN.search(text))
+
+
+def _extract_execution_evidence(text: str) -> str:
+    marker = "执行证据："
+    index = text.find(marker)
+    if index < 0:
+        return text.strip()
+    return text[index + len(marker):].strip()
+
+
+def _readable_uncertain_evidence(
+    text: str,
+    fallback: str = "系统未能提取到可直接支撑判定的结构化证据片段。",
+) -> str:
+    evidence = _extract_execution_evidence(text)
+    if _has_any(evidence, "LLM", "非结构化结果", "原始输出"):
+        return fallback
+    return evidence or fallback
+
+
+def _readable_uncertain_findings(wrapper_id: str) -> tuple[str, str, str]:
+    if wrapper_id == "LX0609-017":
+        return (
+            "病程记录重复度未形成可靠自动结论，需人工复核。",
+            "系统未能提取到可直接比较的两份以上病程记录结构化片段。",
+            "请人工比对两次以上病程记录的主要内容、记录时间和病情变化描述，确认是否存在复制粘贴。",
+        )
+    return (
+        "本质控点未形成可靠自动结论，需人工复核。",
+        "系统未能提取到可直接支撑判定的结构化证据片段。",
+        "请质控员结合来源文书、记录时间和关键字段进行人工复核。",
+    )
+
+
+def _consultation_execution_missing(text: str) -> bool:
+    return _has_any(
+        text,
+        "未体现具体执行",
+        "未记载具体执行",
+        "未记录具体执行",
+        "未体现会诊意见的具体执行",
+        "未记录执行情况",
+        "无请会诊执行记录",
+        "执行记录缺失",
+        "仅描述",
+        "照抄会诊意见",
+    )
+
+
+def _consultation_positive_execution(text: str) -> bool:
+    return _has_any(
+        text,
+        "已包含执行情况",
+        "已记录执行情况",
+        "已体现执行情况",
+        "已有执行记录",
+        "有执行记录",
+        "未违反规则",
+        "未违反本规则",
+    )
+
+
+_COPY_TWO_COURSE_RELIABLE_PATTERNS = (
+    re.compile(r"(两次|2次|二次|两份|2份|多次|连续).{0,20}(病程记录|查房记录|日常病程)"),
+    re.compile(r"(病程记录|查房记录|日常病程).{0,20}(两次|2次|二次|两份|2份|多次|连续)"),
+    re.compile(r"(相似度|重复率).{0,12}(?:大于|超过|>|≥)?\s*70%"),
+)
+
+
+def _has_reliable_two_course_copy_evidence(text: str) -> bool:
+    if not text.strip():
+        return False
+    if any(pattern.search(text) for pattern in _COPY_TWO_COURSE_RELIABLE_PATTERNS):
+        return True
+    date_course_mentions = re.findall(
+        r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}.{0,24}(?:病程记录|查房记录|日常病程)",
+        text,
+    )
+    return len(set(date_course_mentions)) >= 2
+
+
+def _guard_customer_display_result(
+    *,
+    wrapper_id: str,
+    selected: dict[str, Any],
+) -> dict[str, Any]:
+    status = _status(selected)
+    findings = str(selected.get("findings") or "")
+    evidence = str(selected.get("evidence") or "")
+    suggestion = str(selected.get("suggestion") or "")
+    combined_text = f"{findings}\n{evidence}\n{suggestion}"
+
+    if wrapper_id == "LX0609-003" and status == "non_compliant":
+        if _has_any(combined_text, "未超过24小时", "未超24小时", "符合质控规则要求", "符合规则要求"):
+            guarded = dict(selected)
+            has_missing_cross_check = _has_any(combined_text, "缺少麻醉记录", "无法通过", "无法交叉验证", "证据不足")
+            guarded.update(
+                {
+                    "status": "data_gap" if has_missing_cross_check else "compliant",
+                    "is_compliant": False if has_missing_cross_check else True,
+                    "findings": (
+                        "手术记录时间未超过术后24小时，但缺少麻醉记录等交叉核对字段，暂不能作为缺陷展示。"
+                        if has_missing_cross_check
+                        else "手术记录完成时间未超过术后24小时，本质控点未形成缺陷。"
+                    ),
+                    "evidence": _extract_execution_evidence(evidence) or findings,
+                    "suggestion": (
+                        "请补齐麻醉记录或手术结束时间等交叉核对字段后复核。"
+                        if has_missing_cross_check
+                        else "当前无需按超时缺陷处理。"
+                    ),
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "lx0609_003_positive_time_result"
+            guarded["metadata"] = metadata
+            return guarded
+
+    if wrapper_id in {"LX0609-019", "LX0609-024"} and status == "non_compliant":
+        if _has_recorded_pathology_material(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "手术记录已记录术中取材及冰冻/病理相关结果，本质控点未形成缺陷。",
+                    "evidence": _extract_execution_evidence(evidence) or findings,
+                    "suggestion": "当前无需按取材或病理记录缺陷处理；如需确认手术范围调整，请按对应规则人工复核。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "pathology_specimen_positive_recorded"
+            guarded["metadata"] = metadata
+            return guarded
+
+    if wrapper_id in {"LX0609-020", "LX0609-023"} and status == "non_compliant":
+        if _consultation_positive_execution(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "会诊意见执行情况已有记录，本质控点未形成缺陷。",
+                    "evidence": _extract_execution_evidence(evidence) or findings,
+                    "suggestion": "当前无需按会诊执行情况缺陷处理；如需核对签名或申请单项目，请按对应质控点人工复核。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "consultation_execution_positive_recorded"
+            guarded["metadata"] = metadata
+            return guarded
+        if "签名" in combined_text and not _consultation_execution_missing(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "当前证据主要指向签名或申请记录问题，未能确认会诊意见执行情况缺陷。",
+                    "evidence": _extract_execution_evidence(evidence) or findings,
+                    "suggestion": "请人工区分签名缺项、会诊申请缺项和会诊意见执行情况缺陷，避免串用质控点。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "consultation_signature_only_not_execution_defect"
+            guarded["metadata"] = metadata
+            return guarded
+
+    if wrapper_id == "LX0609-017" and status == "non_compliant":
+        if not _has_reliable_two_course_copy_evidence(combined_text):
+            readable_findings, readable_evidence, readable_suggestion = _readable_uncertain_findings(wrapper_id)
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": readable_findings,
+                    "evidence": _readable_uncertain_evidence(evidence, readable_evidence),
+                    "suggestion": readable_suggestion,
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "copy_rule_requires_two_course_records"
+            guarded["metadata"] = metadata
+            return guarded
+
+    if status == "uncertain" and _has_any(combined_text, "LLM", "非结构化结果", "原始输出"):
+        readable_findings, readable_evidence, readable_suggestion = _readable_uncertain_findings(wrapper_id)
+        guarded = dict(selected)
+        guarded.update(
+            {
+                "status": "uncertain",
+                "is_compliant": False,
+                "findings": readable_findings,
+                "evidence": _readable_uncertain_evidence(evidence, readable_evidence),
+                "suggestion": readable_suggestion,
+            }
+        )
+        metadata = dict(guarded.get("metadata") or {})
+        metadata["customer_display_guard"] = "customer_readable_uncertain"
+        guarded["metadata"] = metadata
+        return guarded
+
+    return selected
 
 
 def _select_best_result(
@@ -170,6 +480,34 @@ def aggregate_luxian_0609_results(
             continue
         decision = decisions.get(wrapper_id)
         gate_result = None
+        if decision and (
+            decision.status == TRIGGER_ABSENT
+            or (wrapper_id == "LX0609-016" and decision.status == TRIGGER_DATA_GAP)
+        ):
+            gate_result = decision_to_result(wrapper, decision)
+            if gate_result is not None:
+                result = _copy_customer_fields(
+                    wrapper=wrapper,
+                    selected=gate_result,
+                    mapped_results=[],
+                    source="trigger_gate",
+                    gate_decision=decision,
+                )
+                if format_evidence:
+                    result = format_luxian_0609_evidence(
+                        result=result,
+                        wrapper_rule=wrapper,
+                        gate_decision=decision,
+                    )
+                result = apply_luxian_0609_result_schema(
+                    result=result,
+                    wrapper_rule=wrapper,
+                    gate_decision=decision,
+                    audit_context=audit_context,
+                )
+                customer_results.append(result)
+                continue
+
         direct_results = list(result_by_rule.get(wrapper_id) or [])
         if direct_results:
             direct_results.sort(
@@ -177,6 +515,15 @@ def aggregate_luxian_0609_results(
                 reverse=True,
             )
             selected = direct_results[0]
+            selected = _guard_copy_rule_without_first_course(
+                wrapper_id=wrapper_id,
+                selected=selected,
+                audit_context=audit_context,
+            )
+            selected = _guard_customer_display_result(
+                wrapper_id=wrapper_id,
+                selected=selected,
+            )
             source = "customer_programmatic"
             result = _copy_customer_fields(
                 wrapper=wrapper,
@@ -232,6 +579,16 @@ def aggregate_luxian_0609_results(
                     "confidence": 0.0,
                     "metadata": {"technical_error_internal": True},
                 }
+            else:
+                selected = _guard_copy_rule_without_first_course(
+                    wrapper_id=wrapper_id,
+                    selected=selected,
+                    audit_context=audit_context,
+                )
+                selected = _guard_customer_display_result(
+                    wrapper_id=wrapper_id,
+                    selected=selected,
+                )
             result = _copy_customer_fields(
                 wrapper=wrapper,
                 selected=selected,

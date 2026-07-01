@@ -78,6 +78,46 @@ DATA_GAP_TERMS = (
     "覆盖不足",
     "缺少必要",
 )
+SC099_POSITIVE_DOCUMENTED_TERMS = (
+    "已记录术中取材",
+    "已记录取材",
+    "已记录标本",
+    "已记录送病理",
+    "已记录送病检",
+    "已记录冰冻病理",
+    "已记录病理结果",
+    "已记录术中取材及冰冻病理结果",
+    "手术记录已记录",
+    "手术记录中已记录",
+    "记录了术中冰冻病理结果",
+    "记录术中冰冻病理结果",
+)
+SC099_NEGATIVE_DOCUMENTED_TERMS = (
+    "未记录",
+    "未见",
+    "缺失",
+    "缺少",
+    "不完整",
+    "仅笼统",
+    "未详细",
+    "未明确",
+    "无记录",
+)
+SC099_OBJECTIVE_POSITIVE_PATTERN = re.compile(
+    r"("
+    r"(?:送检|送病理|送病检|标本|取材).{0,60}(?:冰冻病理|术中冰冻|病理提示|病理诊断|病理结果|浸润性腺癌|腺癌|癌转移|恶性)"
+    r"|(?:冰冻病理|术中冰冻|病理提示|病理诊断|病理结果|浸润性腺癌|腺癌|癌转移|恶性).{0,60}(?:送检|送病理|送病检|标本|取材)"
+    r")"
+)
+SC099_MATERIAL_ABSENCE_PATTERN = re.compile(
+    r"("
+    r"(?:未记录|未见|缺失|缺少|不完整|仅笼统|未详细|未明确|无记录).{0,24}(?:取材|标本|送检|送病理|送病检|冰冻|术中病理|淋巴结清扫)"
+    r"|(?:取材|标本|送检|送病理|送病检|淋巴结清扫).{0,24}(?:未记录|未见|缺失|缺少|不完整|仅笼统|未详细|未明确|无记录)"
+    r")"
+)
+SC099_OBJECTIVE_NEGATIVE_CONTEXT_PATTERN = re.compile(
+    r"缺(?:少)?病理(?:结果|诊断|来源|报告|对照)|未见病理(?:结果|诊断|报告)|病理(?:结果|诊断|报告)?对照不足"
+)
 SEMANTIC_REJECTION_TECHNICAL_TERMS = (
     "错配",
     "错误匹配",
@@ -172,6 +212,23 @@ def _semantic_technical_error_should_be_rejected(reason: str, quote: str) -> boo
     if not combined.strip():
         return False
     return _contains_any(combined, SEMANTIC_REJECTION_TECHNICAL_TERMS)
+
+
+def _sc099_positive_documentation_should_reject(text: str) -> bool:
+    normalized = _safe_text(text)
+    if not normalized:
+        return False
+    has_explicit_positive = _contains_any(normalized, SC099_POSITIVE_DOCUMENTED_TERMS)
+    has_objective_positive = bool(SC099_OBJECTIVE_POSITIVE_PATTERN.search(normalized)) and not bool(
+        SC099_OBJECTIVE_NEGATIVE_CONTEXT_PATTERN.search(normalized)
+    )
+    if not has_explicit_positive and not has_objective_positive:
+        return False
+    if SC099_MATERIAL_ABSENCE_PATTERN.search(normalized):
+        return False
+    if has_explicit_positive and _contains_any(normalized, SC099_NEGATIVE_DOCUMENTED_TERMS) and not has_objective_positive:
+        return False
+    return True
 
 
 def _metadata(item: dict[str, Any]) -> dict[str, Any]:
@@ -1835,16 +1892,20 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
         failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
         failure_reason = "confirmed_defect 缺少二审 adjudicator_reason，不能作为正式确认缺陷。"
     elif rule_id == "SC-099":
-        gate_failure = _guardrail_sc099_gate_context(next_item)
-        if gate_failure:
-            failure_status, failure_reason = gate_failure
+        if _sc099_positive_documentation_should_reject(f"{reason}\n{quote}"):
+            failure_status = "rejected_by_system"
+            failure_reason = "SC-099 二审文本已说明手术记录中存在取材、标本、送病理或病理结果记录，不支持确认“未记录”缺陷。"
         else:
-            targeted_failure = _guardrail_targeted_rule(
-                rule_id=rule_id,
-                coverage=_coverage_flags(next_item),
-            )
-            if targeted_failure:
-                failure_status, failure_reason = targeted_failure
+            gate_failure = _guardrail_sc099_gate_context(next_item)
+            if gate_failure:
+                failure_status, failure_reason = gate_failure
+            else:
+                targeted_failure = _guardrail_targeted_rule(
+                    rule_id=rule_id,
+                    coverage=_coverage_flags(next_item),
+                )
+                if targeted_failure:
+                    failure_status, failure_reason = targeted_failure
     elif rule_id == "SC-123":
         gate_failure = _guardrail_sc123_gate_matrix(next_item)
         if gate_failure:

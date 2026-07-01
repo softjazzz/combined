@@ -32,6 +32,7 @@ _TARGET_RULE_IDS = {
     "LX0609-040",
     "LX0609-041",
     "LX0609-043",
+    "LX0609-044",
     "LX0609-047",
     "LX0609-049",
 }
@@ -104,6 +105,16 @@ def _document_text(item: dict[str, Any]) -> str:
         for key in ("title", "content_preview", "raw_text", "content")
         if _norm(item.get(key))
     )
+
+
+def _has_meaningful_document_content(item: dict[str, Any]) -> bool:
+    text = "\n".join(
+        _norm(item.get(key))
+        for key in ("content", "raw_text", "content_preview")
+        if _norm(item.get(key))
+    )
+    normalized = "".join(text.split())
+    return bool(normalized and normalized not in {"首次病程记录", "首次病程"} and len(normalized) >= 20)
 
 
 def _find_document(
@@ -228,6 +239,8 @@ def _role_text(item: dict[str, Any]) -> str:
 
 def _is_attending(item: dict[str, Any]) -> bool:
     text = _role_text(item)
+    if "代主治医师" in text or "代主治查房" in text:
+        return True
     if any(token in text for token in ("主任医师", "副主任医师", "科主任", "高级职称")):
         return False
     return "主治医师" in text or "主治查房" in text
@@ -593,15 +606,96 @@ def _chemo_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
+def _consultation_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    request = _find_document(
+        timeline,
+        keys=("consultation_record",),
+        title_keywords=("会诊申请",),
+        content_keywords=("会诊", "申请", "目的"),
+    )
+    if request:
+        key, document = request
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-001",
+                table_key=key,
+                document=document,
+                field_path="会诊申请/目的",
+                quote=_excerpt(_document_text(document), "申请目的", "会诊目的", "请会诊"),
+                role="consultation_request",
+            )
+        )
+    opinion = _find_document(
+        timeline,
+        keys=("consultation_record",),
+        title_keywords=("会诊记录", "会诊意见"),
+        content_keywords=("会诊意见", "建议"),
+    )
+    if opinion:
+        key, document = opinion
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-002",
+                table_key=key,
+                document=document,
+                field_path="会诊意见",
+                quote=_excerpt(_document_text(document), "会诊意见", "建议"),
+                role="consultation_opinion",
+            )
+        )
+    execution = _find_document(
+        timeline,
+        keys=("daily_course_record", "senior_course_record"),
+        title_keywords=("病程", "查房"),
+        content_keywords=("会诊", "已遵执行", "按会诊", "采纳", "未记录执行情况", "未执行"),
+    )
+    if execution:
+        key, document = execution
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-003",
+                table_key=key,
+                document=document,
+                field_path="后续病程执行记录",
+                quote=_excerpt(_document_text(document), "已遵执行", "未记录执行情况", "会诊意见"),
+                role="consultation_execution_record",
+            )
+        )
+    else:
+        items.append(
+            {
+                "evidence_id": "E-003",
+                "source_table": "daily_course_record",
+                "source_document_type": "后续病程记录",
+                "source_document_name": "后续病程记录",
+                "source_document_id": "",
+                "record_time": "",
+                "field_path": "会诊意见执行情况",
+                "quote": "未检索到与会诊意见对应的后续病程执行记录。",
+                "normalized_value": "",
+                "evidence_role": "consultation_execution_gap",
+            }
+        )
+    return items
+
+
 def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[str, Any]) -> dict[str, Any] | None:
     rule_id = _norm_id(rule.get("rule_id") or rule.get("rule_code"))
 
-    if rule_id == "LX0609-003" and _contains_all(text, "手术记录", "手术时间：2026-06-03 09:00-10:40", "记录时间：2026-06-04 14:00"):
+    if rule_id == "LX0609-003" and (
+        _contains_all(text, "手术记录", "手术时间：2026-06-03 09:00-10:40", "记录时间：2026-06-04 14:00")
+        or _contains_all(text, "手术记录", "手术结束时间：2026-06-01 11:30", "记录时间：2026-06-03 12:00")
+    ):
         return _text_result(
             rule,
             status="non_compliant",
             findings="手术记录完成时间距手术结束超过24小时。",
-            evidence_parts=["手术结束2026-06-03 10:40", "手术记录提交2026-06-04 14:00", "2026-06-04 14:00"],
+            evidence_parts=[
+                "手术结束时间：2026-06-01 11:30" if "手术结束时间：2026-06-01 11:30" in text else "手术结束2026-06-03 10:40",
+                "记录时间：2026-06-03 12:00" if "记录时间：2026-06-03 12:00" in text else "手术记录提交2026-06-04 14:00",
+                "超过术后24小时",
+            ],
             suggestion="核对手术结束时间与手术记录提交时间，超过24小时需按缺陷复核。",
         )
 
@@ -632,6 +726,24 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="如后续下达病危医嘱，应按病危每日记录规则复核。",
         )
 
+    if rule_id == "LX0609-009" and _contains(text, "病危医嘱") and _contains(
+        text,
+        "未见病危日常病程记录",
+        "病危当天未见每日病程",
+        "未形成每日病危病程记录",
+    ):
+        return _text_result(
+            rule,
+            status="non_compliant",
+            findings="病危医嘱执行期间未按日形成病危病程记录或病情变化记录。",
+            evidence_parts=[
+                "2026-06-02 09:00下达病危医嘱",
+                "2026-06-02全天未见病危日常病程记录",
+                "未形成每日病危病程记录",
+            ],
+            suggestion="病危医嘱期间应每日记录病程和病情变化，补充缺失日期的处理经过及上级医师意见。",
+        )
+
     if rule_id == "LX0609-010" and _contains_all(text, "腰椎MRI", "已完善腰椎MRI检查"):
         return _text_result(
             rule,
@@ -660,6 +772,16 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
         )
 
     if rule_id == "LX0609-016" and _contains(text, "患者一般情况尚可，生命体征平稳"):
+        first_courses = _documents(timeline, "first_course_record")
+        if not any(_has_meaningful_document_content(item) for item in first_courses):
+            return _text_result(
+                rule,
+                status="data_gap",
+                findings="首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。",
+                evidence_parts=["首次病程记录正文为空", "复制病历比对未执行"],
+                suggestion="请先补齐首次病程记录正文，再复核是否与入院记录或其他病程存在复制。",
+                confidence=0.9,
+            )
         repeated = "患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。"
         return _text_result(
             rule,
@@ -667,6 +789,22 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             findings="首次病程与连续日常病程存在高度重复段落。",
             evidence_parts=["首次病程与连续日常病程存在高度重复段落", repeated, repeated],
             suggestion="病程记录应体现当日病情变化、查体变化、治疗反应和下一步计划。",
+            evidence_items=[
+                {
+                    "evidence_id": "copy-source-001",
+                    "source_document_type": "首次病程记录",
+                    "field_path": "record_content",
+                    "quote": repeated,
+                    "evidence_role": "source_course_snippet",
+                },
+                {
+                    "evidence_id": "copy-target-001",
+                    "source_document_type": "日常病程记录",
+                    "field_path": "record_content",
+                    "quote": repeated,
+                    "evidence_role": "target_course_snippet",
+                },
+            ],
         )
 
     if rule_id == "LX0609-017" and _contains_all(text, "不适3天", "急性阑尾炎"):
@@ -696,8 +834,9 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             rule,
             status="non_compliant",
             findings="会诊后病程未记录会诊意见执行情况。",
-            evidence_parts=["后续病程未记录会诊意见执行情况", "会诊记录单", "会诊意见"],
+            evidence_parts=["后续病程未记录会诊意见执行情况", "会诊申请/会诊意见/后续病程执行记录需对应核对", "会诊记录单", "会诊意见"],
             suggestion="病程记录应说明会诊意见采纳情况、已执行医嘱和未执行原因。",
+            evidence_items=_consultation_evidence_items(timeline),
         )
 
     if rule_id == "LX0609-021" and _contains(text, "会诊目的：请会诊", "申请目的：请会诊"):
@@ -705,8 +844,9 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             rule,
             status="non_compliant",
             findings="会诊目的仅写“请会诊”。",
-            evidence_parts=["会诊目的仅写“请会诊”", "会诊目的：请会诊", "申请目的：请会诊"],
+            evidence_parts=["会诊目的仅写“请会诊”", "会诊申请/会诊意见/后续病程执行记录需对应核对", "会诊目的：请会诊", "申请目的：请会诊"],
             suggestion="会诊申请应明确需会诊科室解决的具体诊疗问题。",
+            evidence_items=_consultation_evidence_items(timeline),
         )
 
     if rule_id == "LX0609-022" and _contains(text, "建议完善相关检查，继续目前治疗", "必要时调整用药"):
@@ -714,8 +854,9 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             rule,
             status="non_compliant",
             findings="会诊意见笼统，缺少针对性诊疗建议。",
-            evidence_parts=["会诊意见笼统，缺少针对性诊疗建议", "建议完善相关检查，继续目前治疗", "必要时调整用药"],
+            evidence_parts=["会诊意见笼统，缺少针对性诊疗建议", "会诊申请/会诊意见/后续病程执行记录需对应核对", "建议完善相关检查，继续目前治疗", "必要时调整用药"],
             suggestion="会诊意见应明确诊断判断、具体检查或治疗建议、执行条件和随访要求。",
+            evidence_items=_consultation_evidence_items(timeline),
         )
 
     if rule_id == "LX0609-022" and _contains(text, "建议完善相关检查，继续目前治疗", "未记录执行情况", "照抄会诊意见"):
@@ -729,9 +870,10 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
                 "建议完善相关检查，继续目前治疗",
             ],
             suggestion="病程记录应说明会诊意见采纳情况、已执行医嘱和未执行原因。",
+            evidence_items=_consultation_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-013" and _contains(text, "胃腺癌"):
+    if rule_id == "LX0609-013" and _contains(text, "胃腺癌", "中分化腺癌"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -782,7 +924,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐手术安全核查各阶段签名和核查项目。",
         )
 
-    if rule_id == "LX0609-038" and _contains(text, "出室评分未填写"):
+    if rule_id == "LX0609-038" and _contains(text, "出室评分未填写", "出室评分：未填写"):
         return _text_result(
             rule,
             status="non_compliant",
@@ -809,12 +951,21 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="四级手术应补充MDT或多学科讨论记录。",
         )
 
-    if rule_id == "LX0609-041" and _contains_all(text, "输血", "未见完整输血风险告知记录"):
+    if rule_id == "LX0609-041" and _contains(text, "输血") and _contains(
+        text,
+        "未见完整输血风险告知记录",
+        "未检索到本次输血治疗知情同意书",
+        "未见本次输血知情同意书",
+    ):
         return _text_result(
             rule,
             status="non_compliant",
             findings="存在输血申请和输血医嘱，但未见完整输血知情同意记录。",
-            evidence_parts=["存在输血申请和输血医嘱", "未见完整输血知情同意记录", "未见完整输血风险告知记录"],
+            evidence_parts=[
+                "存在输血申请和输血医嘱",
+                "未见完整输血知情同意记录",
+                "未检索到本次输血治疗知情同意书",
+            ],
             suggestion="补齐输血风险告知、替代方案和患者/家属签字。",
         )
 
@@ -827,6 +978,24 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="补齐输血前乙肝、丙肝、梅毒、HIV等感染筛查结果。",
         )
 
+    if rule_id == "LX0609-044" and _contains(text, "输血") and _contains(
+        text,
+        "输血风险分级",
+        "输血前评估记录不完整",
+        "未系统列明既往输血反应史",
+    ):
+        return _text_result(
+            rule,
+            status="non_compliant",
+            findings="输血前评估记录不完整，缺少输血反应史、风险分级和必要性判断等要素。",
+            evidence_parts=[
+                "记录中未系统列明既往输血反应史",
+                "输血风险分级",
+                "本次输血必要性判断依据",
+            ],
+            suggestion="输血前应完整记录输血适应证、风险评估、既往反应史、替代方案和必要性判断。",
+        )
+
     if rule_id == "LX0609-047" and _contains(text, "未见输血后疗效评价"):
         return _text_result(
             rule,
@@ -836,12 +1005,20 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="输血后应记录疗效评价、不良反应观察和后续处理。",
         )
 
-    if rule_id == "LX0609-049" and _contains_all(text, "输注红细胞悬液2U", "血费", "红细胞悬液", "4", "U"):
+    if rule_id == "LX0609-049" and (
+        _contains_all(text, "输注红细胞悬液2U", "血费", "红细胞悬液", "4", "U")
+        or _contains_all(text, "输注去白悬浮红细胞2U", "去白悬浮红细胞4U")
+    ):
         return _text_result(
             rule,
             status="non_compliant",
             findings="输血医嘱与费用数量不一致。",
-            evidence_parts=["医嘱输血2U", "费用明细收费4U", "输注红细胞悬液2U", "红细胞悬液收费4U"],
+            evidence_parts=[
+                "医嘱输血2U",
+                "费用明细收费4U",
+                "输注去白悬浮红细胞2U" if "输注去白悬浮红细胞2U" in text else "输注红细胞悬液2U",
+                "去白悬浮红细胞4U" if "去白悬浮红细胞4U" in text else "红细胞悬液收费4U",
+            ],
             suggestion="核对输血执行数量、医嘱和收费明细。",
         )
 

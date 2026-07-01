@@ -89,6 +89,21 @@ const WorkstationLoginFormStub = defineComponent({
           },
           '普通登录',
         ),
+        h(
+          'button',
+          {
+            class: 'login-sync-admin',
+            type: 'button',
+            onClick: () =>
+              emit('login', {
+                account: 'sync_admin',
+                password: 'sync888',
+                role: 'admin',
+                remember_me: true,
+              }),
+          },
+          '实施账号登录',
+        ),
       ])
   },
 })
@@ -130,5 +145,15 @@ describe('WorkstationLoginView', () => {
 
     expect(signIn).toHaveBeenCalledWith('doctor@medqc.com', 'doctor-pass', 'doctor')
     expect(routerReplace).toHaveBeenCalledWith('/workstation-v4/rules?tab=semantic')
+  })
+
+  it('实施账号支持 sync_admin 简写登录', async () => {
+    const wrapper = mountView()
+
+    await wrapper.find('.login-sync-admin').trigger('click')
+    await flushPromises()
+
+    expect(signIn).toHaveBeenCalledWith('sync_admin@medqc.com', 'sync888', 'admin')
+    expect(routerReplace).toHaveBeenCalledWith('/workstation-v4')
   })
 })

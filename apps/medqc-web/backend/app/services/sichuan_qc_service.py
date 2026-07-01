@@ -1148,6 +1148,7 @@ class SichuanQCService:
                 audit_context={
                     "visit_id": str(document_id or ""),
                     "model_name": model_version,
+                    "evidence_payload": evidence_payload,
                 },
             )
             orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
@@ -4283,6 +4284,7 @@ class SichuanQCService:
                     audit_context={
                         "visit_id": str((bundle or {}).get("visit_id") or document_id or ""),
                         "model_name": model_version,
+                        "evidence_payload": evidence_payload,
                     },
                 )
                 orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY

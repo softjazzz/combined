@@ -21,6 +21,11 @@ const redirectTarget = computed(() => {
 
 const featurePills = ['首页生成', '编码校验', '证据溯源', 'DRG 预分组']
 
+const loginAccountAliases: Record<string, string> = {
+  admin: 'admin@medqc.com',
+  sync_admin: 'sync_admin@medqc.com',
+}
+
 const demoAccounts = [
   {
     label: '功能演示账号',
@@ -46,7 +51,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     // 演示账号映射到后端真实管理员账号
     const account = loginData.account?.trim() || ''
     const isDemoLogin = account === 'admin' && loginData.password?.trim() === 'admin888'
-    const signInAccount = isDemoLogin ? 'admin@medqc.com' : account
+    const signInAccount = loginAccountAliases[account] || account
     const signInPassword = isDemoLogin ? 'admin888' : loginData.password
     const role = isDemoLogin
       ? 'admin'

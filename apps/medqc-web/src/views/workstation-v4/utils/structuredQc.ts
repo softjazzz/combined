@@ -431,7 +431,15 @@ export function createDefaultStructuredQCFilter(): StructuredQCFilterState {
 }
 
 export function isProblemStatus(status: StructuredQCStatus): boolean {
-  return status === 'non_compliant' || status === 'uncertain'
+  return (
+    status === 'non_compliant' ||
+    status === 'uncertain' ||
+    status === 'data_gap' ||
+    status === 'not_executed' ||
+    status === 'technical_error' ||
+    status === 'failed' ||
+    status === 'error'
+  )
 }
 
 export function filterStructuredQCIssues(

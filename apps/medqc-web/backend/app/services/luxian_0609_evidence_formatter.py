@@ -57,6 +57,22 @@ def _detect_family(rule: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
     return "通用质控", ("触发事实", "来源文书", "判定依据", "处理建议")
 
 
+def _gate_evidence_lines(gate_decision: Luxian0609GateDecision) -> list[str]:
+    if gate_decision.status == "absent":
+        lines = ["判定依据：未发现与本质控点直接相关的适用事件。"]
+    elif gate_decision.status == "data_gap":
+        lines = ["判定依据：已发现相关事件，但自动判定所需字段不完整。"]
+    elif gate_decision.status == "present":
+        lines = ["判定依据：已发现相关事件，进入规则复核。"]
+    else:
+        lines = ["判定依据：本质控点按现有文书和结构化数据直接复核。"]
+    if gate_decision.matched_keywords:
+        lines.append(f"来源线索：{'、'.join(gate_decision.matched_keywords)}")
+    if gate_decision.data_gap_fields:
+        lines.append(f"缺失字段：{'、'.join(gate_decision.data_gap_fields)}")
+    return lines
+
+
 def format_luxian_0609_evidence(
     *,
     result: dict[str, Any],
@@ -75,12 +91,7 @@ def format_luxian_0609_evidence(
     lines = [f"证据模板：{family}"]
     lines.append(f"质控点：{wrapper_rule.get('rule_id')} {wrapper_rule.get('name') or wrapper_rule.get('rule_name') or ''}".strip())
     if gate_decision is not None:
-        lines.append(f"触发状态：{gate_decision.status}")
-        lines.append(f"触发说明：{gate_decision.reason}")
-        if gate_decision.matched_keywords:
-            lines.append(f"触发关键词：{'、'.join(gate_decision.matched_keywords)}")
-        if gate_decision.data_gap_fields:
-            lines.append(f"数据缺口：{'、'.join(gate_decision.data_gap_fields)}")
+        lines.extend(_gate_evidence_lines(gate_decision))
     mapped_rule_ids = list(wrapper_rule.get("mapped_rule_ids") or [])
     if mapped_rule_ids:
         lines.append(f"映射执行规则：{'、'.join(str(item) for item in mapped_rule_ids)}")

@@ -18,6 +18,8 @@ import {
   type SyncTier,
 } from '@/api/sync'
 
+const DEFAULT_PG_TABLE_GROUP_ID = 'sample_full_domain'
+
 export interface SyncRuntimeLogItem {
   timestamp: string
   level: 'info' | 'success' | 'warn' | 'error'
@@ -131,7 +133,7 @@ function createInitialState() {
 
     pgSyncTables: [] as PgSyncTableFormItem[],
     pgTableGroups: [] as PgSyncTableGroupItem[],
-    selectedTableGroups: ['core_8'] as string[],
+    selectedTableGroups: [DEFAULT_PG_TABLE_GROUP_ID] as string[],
 
     policyForm: {
       scope: 'both',
@@ -160,6 +162,7 @@ function createInitialState() {
     pgStats: { PENDING: 0, PARTIAL: 0, SYNCED: 0, STALE: 0, FAILED: 0 } as SyncStatistics,
     connectionStatus: null as SyncConnectionStatus | null,
     preflightResult: null as SyncPreflightResult | null,
+    preflightRequestKey: '',
     mappings: [] as SyncMappingItem[],
     runHistory: [] as SyncRunHistoryItem[],
     runHistoryTotal: 0,
@@ -224,7 +227,6 @@ function patchSyncPolicy(payload: SyncPolicyConfig) {
 
   const scope = String(payload.scope || 'both').toLowerCase()
   const normalizedScope: SyncPolicyForm['scope'] = [
-    'running',
     'final',
     'frontpage',
     'coding',
@@ -234,7 +236,7 @@ function patchSyncPolicy(payload: SyncPolicyConfig) {
     ? (scope as SyncPolicyForm['scope'])
     : 'both'
 
-  globalSyncState.policyForm.scope = normalizedScope
+  globalSyncState.policyForm.scope = scope === 'running' ? 'final' : normalizedScope
   globalSyncState.policyForm.target_departments = departments
   globalSyncState.policyForm.start_date = String(payload.start_date || '')
   globalSyncState.policyForm.end_date = String(payload.end_date || '')
@@ -286,8 +288,8 @@ function normalizeSelectedTableGroups(
   if (kept.length > 0) {
     return kept
   }
-  if (validIds.has('core_8')) {
-    return ['core_8']
+  if (validIds.has(DEFAULT_PG_TABLE_GROUP_ID)) {
+    return [DEFAULT_PG_TABLE_GROUP_ID]
   }
   return Array.from(validIds).slice(0, 1)
 }
@@ -657,28 +659,77 @@ function resolveTableGroups(): string[] | undefined {
   return groups.length > 0 ? groups : undefined
 }
 
+function sortStrings(values?: string[]): string[] | undefined {
+  const cleaned = [
+    ...new Set((values || []).map((item) => String(item || '').trim()).filter(Boolean)),
+  ].sort()
+  return cleaned.length > 0 ? cleaned : undefined
+}
+
+function buildSyncScopePayload(
+  source: SyncSource = 'pg',
+  options: { normalizeGroups?: boolean } = {},
+) {
+  const targetDepartments = source === 'pg' ? resolveTargetDepartments() : undefined
+  let tableGroups: string[] | undefined
+  if (source === 'pg') {
+    if (options.normalizeGroups !== false) {
+      tableGroups = resolveTableGroups()
+    } else {
+      const groups = normalizeSelectedTableGroups(
+        globalSyncState.selectedTableGroups,
+        globalSyncState.pgTableGroups,
+      )
+      tableGroups = groups.length > 0 ? groups : undefined
+    }
+  }
+  return {
+    source,
+    tier: globalSyncState.selectedTier,
+    scene:
+      source === 'pg'
+        ? globalSyncState.policyForm.scope === 'running'
+          ? 'final'
+          : globalSyncState.policyForm.scope
+        : undefined,
+    date_window:
+      source === 'pg'
+        ? {
+            start: globalSyncState.policyForm.start_date || undefined,
+            end: globalSyncState.policyForm.end_date || undefined,
+          }
+        : undefined,
+    target_departments: targetDepartments,
+    policy_version:
+      source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
+    table_groups: tableGroups,
+  }
+}
+
+function buildPreflightRequestKey(payload = buildSyncScopePayload('pg')): string {
+  return JSON.stringify({
+    source: payload.source,
+    tier: payload.tier,
+    scene: payload.scene || '',
+    date_window: {
+      start: payload.date_window?.start || '',
+      end: payload.date_window?.end || '',
+    },
+    target_departments: sortStrings(payload.target_departments) || [],
+    policy_version: payload.policy_version || '',
+    table_groups: sortStrings(payload.table_groups) || [],
+  })
+}
+
 async function runPreflight(source: SyncSource = 'pg') {
   globalSyncState.isPreflighting = true
   try {
-    const result = await syncApi.preflight({
-      source,
-      tier: globalSyncState.selectedTier,
-      scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
-      date_window:
-        source === 'pg'
-          ? {
-              start: globalSyncState.policyForm.start_date || undefined,
-              end: globalSyncState.policyForm.end_date || undefined,
-            }
-          : undefined,
-      target_departments: source === 'pg' ? resolveTargetDepartments() : undefined,
-      policy_version:
-        source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
-      table_groups: source === 'pg' ? resolveTableGroups() : undefined,
-    })
+    const payload = buildSyncScopePayload(source)
+    const result = await syncApi.preflight(payload)
     globalSyncState.preflightResult = result
+    globalSyncState.preflightRequestKey = buildPreflightRequestKey(payload)
     if (result.executable) {
-      pushLog('success', `预检通过：预计影响 ${result.estimated_impact} 条`)
+      pushLog('success', `预检通过：预计涉及 ${result.estimated_impact} 份病历`)
     } else {
       pushLog('warn', `预检未通过：${result.blockers.join('；') || '存在阻断项'}`)
     }
@@ -694,22 +745,13 @@ async function runPreflight(source: SyncSource = 'pg') {
 
 async function executeSync(source: SyncSource = 'pg') {
   globalSyncState.isSyncing = true
+  pushLog('info', '同步任务已提交，正在轮询执行进度')
+  startPolling()
   try {
+    const payload = buildSyncScopePayload(source)
     const result = await syncApi.triggerSync({
-      source,
-      tier: globalSyncState.selectedTier,
-      scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
-      date_window:
-        source === 'pg'
-          ? {
-              start: globalSyncState.policyForm.start_date || undefined,
-              end: globalSyncState.policyForm.end_date || undefined,
-            }
-          : undefined,
-      target_departments: source === 'pg' ? resolveTargetDepartments() : undefined,
-      policy_version:
-        source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
-      table_groups: source === 'pg' ? resolveTableGroups() : undefined,
+      ...payload,
+      preflight_fingerprint: globalSyncState.preflightResult?.preflight_fingerprint,
     })
     if (result.success || result.status === 'partial') {
       const warnings = Array.isArray(result.warnings) ? result.warnings.filter(Boolean) : []
@@ -722,16 +764,41 @@ async function executeSync(source: SyncSource = 'pg') {
         pushLog('info', '同步任务已启动，进入状态轮询')
       }
       await loadStatusAndStats()
-      startPolling()
+      if (globalSyncState.isSyncing) {
+        startPolling()
+      } else {
+        stopPolling()
+      }
     } else {
       pushLog('warn', result.error || '同步任务未启动')
       globalSyncState.isSyncing = false
+      stopPolling()
     }
     return result
   } catch (error: any) {
     const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
+    const isTimeout =
+      error?.code === 'ECONNABORTED' ||
+      String(error?.message || '')
+        .toLowerCase()
+        .includes('timeout')
+    if (isTimeout) {
+      pushLog('warn', '同步请求超过前端等待时间，已转入状态轮询。请勿重复点击执行。')
+      try {
+        await loadStatusAndStats()
+        startPolling()
+      } catch (pollError) {
+        console.error('同步超时后加载状态失败:', pollError)
+      }
+      return {
+        success: true,
+        status: 'timeout_polling',
+        message: '同步请求仍可能在后端执行，已转入状态轮询。',
+      }
+    }
     pushLog('error', `执行同步失败：${errMsg}`)
     globalSyncState.isSyncing = false
+    stopPolling()
     throw error
   }
 }
@@ -835,7 +902,12 @@ export function useDataSync() {
   const authStore = useAuthStore()
   const isAdmin = computed(() => authStore.userRoles.includes('admin'))
   const isReadonly = computed(() => !isAdmin.value)
-  const hasPreflightPass = computed(() => Boolean(globalSyncState.preflightResult?.executable))
+  const hasPreflightPass = computed(
+    () =>
+      Boolean(globalSyncState.preflightResult?.executable) &&
+      globalSyncState.preflightRequestKey ===
+        buildPreflightRequestKey(buildSyncScopePayload('pg', { normalizeGroups: false })),
+  )
 
   return {
     state: globalSyncState,

@@ -219,7 +219,7 @@ def _trigger(
                 }
             )
     if not facts:
-        evidence_text = _trim(result.get("evidence") or result.get("findings"), 180)
+        evidence_text = _customer_evidence_quote(_trim(result.get("evidence") or result.get("findings"), 180))
         if evidence_text:
             facts.append(
                 {
@@ -245,23 +245,207 @@ def _trigger(
     }
 
 
-def _evidence_items(result: dict[str, Any], metadata: dict[str, Any]) -> list[dict[str, Any]]:
+def _doc_text(item: dict[str, Any]) -> str:
+    return _trim(
+        "\n".join(
+            _text(item.get(key))
+            for key in ("title", "document_title", "content", "raw_text", "content_preview", "text_preview")
+            if _text(item.get(key))
+        ),
+        260,
+    )
+
+
+def _doc_title(item: dict[str, Any], fallback: str) -> str:
+    return _text(item.get("title") or item.get("document_title") or item.get("document_type") or fallback)
+
+
+def _doc_time(item: dict[str, Any]) -> str:
+    return _text(item.get("authored_at") or item.get("record_time") or item.get("display_time") or item.get("submit_datetime"))
+
+
+_INTERNAL_EVIDENCE_PREFIXES = (
+    "证据模板：",
+    "质控点：",
+    "映射执行规则：",
+    "应包含证据要素：",
+)
+
+
+def _customer_evidence_quote(text: str) -> str:
+    cleaned_lines: list[str] = []
+    for raw_line in _text(text).replace("\r\n", "\n").replace("\r", "\n").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if any(line.startswith(prefix) for prefix in _INTERNAL_EVIDENCE_PREFIXES):
+            continue
+        if line.startswith("执行证据："):
+            line = line.removeprefix("执行证据：").strip()
+        cleaned_lines.append(line)
+    rendered = "；".join(cleaned_lines).strip()
+    return _trim(rendered or text, 600)
+
+
+def _evidence_item_from_doc(
+    *,
+    evidence_id: str,
+    source_table: str,
+    document: dict[str, Any],
+    field_path: str,
+    role: str,
+    fallback_quote: str = "",
+) -> dict[str, Any]:
+    quote = _doc_text(document) or fallback_quote
+    return {
+        "evidence_id": evidence_id,
+        "source_table": source_table,
+        "source_document_type": _doc_title(document, source_table),
+        "source_document_name": _doc_title(document, source_table),
+        "source_document_id": _text(document.get("document_id") or document.get("id")),
+        "record_time": _doc_time(document),
+        "field_path": field_path,
+        "quote": _trim(quote, 260),
+        "normalized_value": "",
+        "evidence_role": role,
+    }
+
+
+def _rule_is_consultation(wrapper_rule: dict[str, Any]) -> bool:
+    profile = "\n".join(
+        _text(wrapper_rule.get(key))
+        for key in ("rule_id", "name", "rule_name", "description", "trigger_condition", "data_dependencies")
+        if wrapper_rule.get(key) is not None
+    )
+    return "会诊" in profile or _text(wrapper_rule.get("rule_id")).upper() in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}
+
+
+def _consultation_evidence_items_from_context(audit_context: dict[str, Any] | None) -> list[dict[str, Any]]:
+    context = dict(audit_context or {})
+    payload = context.get("evidence_payload") if isinstance(context.get("evidence_payload"), dict) else {}
+    timeline = payload.get("programmatic_timeline") if isinstance(payload, dict) else {}
+    documents = timeline.get("documents") if isinstance(timeline, dict) else {}
+    if not isinstance(documents, dict):
+        return []
+
+    consultations = [item for item in list(documents.get("consultation_record") or []) if isinstance(item, dict)]
+    courses = [
+        item
+        for key in ("daily_course_record", "senior_course_record")
+        for item in list(documents.get(key) or [])
+        if isinstance(item, dict)
+    ]
+    if not consultations:
+        return []
+
+    items: list[dict[str, Any]] = []
+    request_doc = next(
+        (
+            item
+            for item in consultations
+            if any(token in _doc_text(item) for token in ("申请", "目的", "请会诊", "会诊科室"))
+        ),
+        consultations[0],
+    )
+    items.append(
+        _evidence_item_from_doc(
+            evidence_id="CONSULT-REQUEST",
+            source_table="consultation_record",
+            document=request_doc,
+            field_path="会诊申请/目的",
+            role="consultation_request",
+        )
+    )
+
+    opinion_doc = next(
+        (
+            item
+            for item in consultations
+            if any(token in _doc_text(item) for token in ("会诊意见", "处理意见", "建议", "考虑"))
+        ),
+        consultations[0],
+    )
+    items.append(
+        _evidence_item_from_doc(
+            evidence_id="CONSULT-OPINION",
+            source_table="consultation_record",
+            document=opinion_doc,
+            field_path="会诊意见",
+            role="consultation_opinion",
+        )
+    )
+
+    execution_doc = next(
+        (
+            item
+            for item in courses
+            if "会诊" in _doc_text(item)
+            and any(token in _doc_text(item) for token in ("遵", "执行", "采纳", "调整", "复查", "落实"))
+        ),
+        None,
+    )
+    if execution_doc:
+        items.append(
+            _evidence_item_from_doc(
+                evidence_id="CONSULT-EXECUTION",
+                source_table=_text(execution_doc.get("source_table") or "daily_course_record"),
+                document=execution_doc,
+                field_path="后续病程执行记录",
+                role="consultation_execution_record",
+            )
+        )
+    else:
+        items.append(
+            {
+                "evidence_id": "CONSULT-EXECUTION",
+                "source_table": "daily_course_record",
+                "source_document_type": "后续病程记录",
+                "source_document_name": "后续病程记录",
+                "source_document_id": "",
+                "record_time": "",
+                "field_path": "后续病程执行记录",
+                "quote": "未检索到与会诊意见对应的后续病程执行记录。",
+                "normalized_value": "",
+                "evidence_role": "consultation_execution_gap",
+            }
+        )
+    return items
+
+
+def _evidence_items(
+    result: dict[str, Any],
+    metadata: dict[str, Any],
+    *,
+    wrapper_rule: dict[str, Any],
+    audit_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     existing = result.get("evidence_items")
     if isinstance(existing, list) and existing:
         return _safe(existing)
 
-    evidence_text = _trim(result.get("evidence") or result.get("findings"), 1000)
+    if _rule_is_consultation(wrapper_rule):
+        consultation_items = _consultation_evidence_items_from_context(audit_context)
+        if consultation_items:
+            return _safe(consultation_items)
+
+    evidence_text = _customer_evidence_quote(_trim(result.get("evidence") or result.get("findings"), 1000))
     if not evidence_text:
         return []
     return [
         {
             "evidence_id": "E-001",
             "source_table": _text(metadata.get("source_table")),
-            "source_document_type": _text(metadata.get("document_type") or metadata.get("source_document_type")),
-            "source_document_name": _text(metadata.get("document_name") or metadata.get("source_document_name")),
+            "source_document_type": _text(metadata.get("document_type") or metadata.get("source_document_type") or "质控结果"),
+            "source_document_name": _text(
+                metadata.get("document_name")
+                or metadata.get("source_document_name")
+                or metadata.get("document_type")
+                or metadata.get("source_document_type")
+                or "质控结果"
+            ),
             "source_document_id": _text(metadata.get("document_id") or metadata.get("source_document_id")),
             "record_time": metadata.get("record_time") or metadata.get("record_datetime"),
-            "field_path": _text(metadata.get("field_path") or "evidence"),
+            "field_path": _text(metadata.get("field_path") or "关键证据"),
             "quote": evidence_text,
             "normalized_value": "",
             "evidence_role": "supporting_evidence",
@@ -375,7 +559,12 @@ def apply_luxian_0609_result_schema(
         or ("、".join(item["source_name"] for item in missing_sources) if result_status == "data_gap" else None),
         "source_coverage_level": coverage,
     }
-    evidence_items = _evidence_items(normalized, metadata)
+    evidence_items = _evidence_items(
+        normalized,
+        metadata,
+        wrapper_rule=wrapper_rule,
+        audit_context=audit_context,
+    )
     first_evidence = _first_evidence_item(evidence_items)
     decision = _decision(result_status, normalized, wrapper_rule)
     review = _review(result_status)

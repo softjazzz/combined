@@ -3,11 +3,15 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 import type {
   ManualSamplePoolItemsResult,
   ManualSamplePoolListResult,
+  ManualSamplePool,
   ManualSamplePoolRecordsResult,
   ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
   ManualTestRecordCreateRequest,
   ManualTestRecordCreateResult,
+  EditableMedicalRecordDocumentsResult,
+  EditableMedicalRecordDocument,
+  ManualLuxian0609RuleCatalogResult,
   ManualSampleValidationRuleSetListResult,
   Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
@@ -18,6 +22,8 @@ type ServiceResult<T> = {
   message?: string
   errorType?: 'timeout' | 'network' | 'server' | 'unknown'
 }
+
+const EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS = 90000
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return extractApiErrorMessageFromError(error, fallback)
@@ -121,6 +127,167 @@ export async function createManualTestMedicalRecord(payload: ManualTestRecordCre
   )
 }
 
+function readStringField(source: Record<string, unknown>, keys: string[], fallback = ''): string {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return fallback
+}
+
+function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalRecordDocumentsResult {
+  const payload =
+    value && typeof value === 'object' && 'data' in value
+      ? (value as { data?: unknown }).data
+      : value
+  const candidate =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
+  const documentsSource = Array.isArray(candidate.documents)
+    ? candidate.documents
+    : Array.isArray(candidate.items)
+      ? candidate.items
+      : Array.isArray(payload)
+        ? payload
+        : []
+  const documents = documentsSource
+    .map((item, index): EditableMedicalRecordDocument | null => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      const content = readStringField(row, [
+        'content',
+        'record_content',
+        'text',
+        'document_content',
+        'original_text',
+      ])
+      const title = readStringField(
+        row,
+        [
+          'title',
+          'document_title',
+          'doc_name',
+          'label',
+          'doc_title',
+          'name',
+          'document_type',
+          'doc_type',
+          'type',
+        ],
+        `文书 ${index + 1}`,
+      )
+      const documentType = readStringField(
+        row,
+        ['document_type', 'doc_type', 'type', 'source_table', 'table_name'],
+        title,
+      )
+      return {
+        key: readStringField(
+          row,
+          ['key', 'doc_key', 'document_id', 'id'],
+          `${documentType}-${index + 1}`,
+        ),
+        source_document_id: readStringField(row, ['document_id', 'id']),
+        source_table: readStringField(row, ['source_table', 'table_name']),
+        document_type: documentType,
+        title,
+        record_time: readStringField(row, [
+          'record_time',
+          'record_datetime',
+          'report_datetime',
+          'order_datetime',
+          'start_time',
+          'start_datetime',
+          'begin_time',
+          'begin_datetime',
+          'order_start_time',
+        ]),
+        submit_time: readStringField(row, ['submit_time', 'submit_datetime']),
+        order_start_time: readStringField(row, [
+          'order_start_time',
+          'start_time',
+          'start_datetime',
+          'begin_time',
+          'begin_datetime',
+          'order_datetime',
+          'record_time',
+          'record_datetime',
+        ]),
+        order_stop_time: readStringField(row, [
+          'order_stop_time',
+          'stop_time',
+          'stop_datetime',
+          'end_time',
+          'end_datetime',
+          'cancel_time',
+          'cancel_datetime',
+        ]),
+        order_category: readStringField(row, [
+          'order_category',
+          'order_class',
+          'order_type_name',
+          'order_type',
+          'item_type',
+          'category',
+        ]),
+        order_item: readStringField(row, [
+          'order_item',
+          'order_name',
+          'item_name',
+          'project_name',
+          'drug_name',
+          'order_text',
+          'order_content',
+        ]),
+        order_status: readStringField(row, ['order_status', 'status', 'order_state', 'state']),
+        doctor_name: readStringField(row, ['doctor_name', 'submitter', 'recorder']),
+        doctor_code: readStringField(row, ['doctor_code', 'submitter_id']),
+        enabled: true,
+        content,
+      }
+    })
+    .filter(
+      (item): item is EditableMedicalRecordDocument =>
+        Boolean(item) && item.enabled !== false && Boolean(item.content.trim()),
+    )
+  return {
+    visit_id: readStringField(candidate, ['visit_id']),
+    documents,
+    raw: payload,
+  }
+}
+
+export async function getEditableMedicalRecordDocuments(
+  visitId: string,
+  params?: {
+    institute_id?: string
+    patient_id?: string
+    visit_id?: string
+  },
+) {
+  try {
+    const response = await ApiService.requestRaw<unknown>({
+      method: 'GET',
+      url: `/api/v1/emr/${encodeURIComponent(visitId)}/documents`,
+      timeout: EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS,
+      params: {
+        ...(params || {}),
+        visit_id: params?.visit_id || visitId,
+      },
+    })
+    return {
+      success: true,
+      data: normalizeEditableDocumentsResponse(response.data),
+    } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '读取病历文书失败'),
+      errorType: classifyRequestError(error),
+    } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
+  }
+}
+
 export async function getManualSamplePoolItems(
   poolId: string,
   params: {
@@ -164,7 +331,13 @@ export async function getManualSamplePoolRecords(
 }
 
 export async function matchManualSamplePool(poolId: string) {
-  return requestEnvelope<Record<string, unknown>>(
+  return requestEnvelope<{
+    pool_id: string
+    matched: number
+    ambiguous: number
+    unmatched: number
+    pool?: ManualSamplePool
+  }>(
     {
       method: 'POST',
       url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/match`,
@@ -264,6 +437,20 @@ export async function listManualSampleValidationRuleSets() {
       url: '/api/v1/qc/sample-pools/rule-sets',
     },
     '获取样本验证规则集失败',
+  )
+}
+
+export async function listLuxian0609CustomerRules() {
+  return requestEnvelope<ManualLuxian0609RuleCatalogResult>(
+    {
+      method: 'GET',
+      url: '/api/v1/qc/sichuan/rules',
+      params: {
+        rule_set_key: 'luxian_0609_qc_v1',
+        _ts: Date.now(),
+      },
+    },
+    '获取泸县0609质控点目录失败',
   )
 }
 

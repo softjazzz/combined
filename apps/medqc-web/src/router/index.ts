@@ -962,13 +962,19 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'WorkstationV4Index',
         component: () => import('@/views/workstation-v4/WorkstationV4HomeEntry.vue'),
-        meta: { title: '工作台', permission: ['admin', 'qc_manager', 'doctor'] },
+        meta: {
+          title: '工作台',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'worklist',
         name: 'WorkstationV4Worklist',
         component: () => import('@/views/workstation-v4/WorkstationV4View.vue'),
-        meta: { title: '病历池', permission: ['admin', 'qc_manager', 'doctor'] },
+        meta: {
+          title: '病历池',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'records/outpatient-emergency',
@@ -1090,7 +1096,10 @@ const routes: RouteRecordRaw[] = [
         path: 'system-config',
         name: 'WorkstationV4SystemConfig',
         component: () => import('@/views/workstation-v4/DataSyncConfigPage.vue'),
-        meta: { title: '系统配置', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '系统配置',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'tender-acceptance',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildSyntheticCaseRunPayload,
   buildRuleDrivenCaseTitle,
+  buildSyntheticCaseRuleFamiliesFromCatalog,
   createDefaultSyntheticCaseForm,
   createGoldenAnswer,
   createSyntheticDocument,
@@ -52,6 +53,40 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
         )
       })
     })
+  })
+
+  it('完整 0609 目录进入创建页时手术麻醉族应保留 16 条质控点', () => {
+    const surgeryRuleIds = [
+      'LX0609-003',
+      'LX0609-024',
+      'LX0609-025',
+      'LX0609-028',
+      'LX0609-029',
+      'LX0609-030',
+      'LX0609-031',
+      'LX0609-032',
+      'LX0609-033',
+      'LX0609-034',
+      'LX0609-035',
+      'LX0609-036',
+      'LX0609-037',
+      'LX0609-038',
+      'LX0609-039',
+      'LX0609-040',
+    ]
+    const families = buildSyntheticCaseRuleFamiliesFromCatalog(
+      surgeryRuleIds.map((ruleId) => ({
+        rule_id: ruleId,
+        rule_code: ruleId,
+        name: `${ruleId} 手术麻醉质控点`,
+        required_documents_label: '手术麻醉文书',
+      })),
+    )
+
+    const surgery = families.find((family) => family.key === 'surgery_anesthesia')
+    expect(surgery?.name).toBe('手术麻醉')
+    expect(surgery?.templateKey).toBe('surgery-anesthesia-defect')
+    expect(surgery?.rules.map((rule) => rule.ruleId)).toEqual(surgeryRuleIds)
   })
 
   it('保存 payload 保留所选质控点和 golden answer，且过滤停用文书', () => {
@@ -143,7 +178,8 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     )
     expect(
       consultation?.documents.some(
-        (document) => document.title === '会诊申请单' && document.content.includes('会诊目的：请会诊'),
+        (document) =>
+          document.title === '会诊申请单' && document.content.includes('会诊目的：请会诊'),
       ),
     ).toBe(true)
     expect(
@@ -216,7 +252,32 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     expect(surgeryRecord?.content).toContain('记录时间：2026-06-03 12:00')
     expect(anesthesiaRecord?.content).toContain('麻醉方式：')
     expect(anesthesiaRecord?.content).toContain('麻醉医师代码：')
+    expect(anesthesiaRecord?.content).toContain('出室评分：未填写')
     surgery?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
+
+    const criticalRounds = templateByKey.get('critical-round-defect')
+    expect(criticalRounds?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining([
+        'medical_order',
+        'first_course_record',
+        'daily_course_record',
+        'senior_course_record',
+      ]),
+    )
+    expect(
+      criticalRounds?.documents.some((document) =>
+        document.content.includes('2026-06-02 09:00 患者氧合较前下降'),
+      ),
+    ).toBe(true)
+    expect(
+      criticalRounds?.documents.some((document) =>
+        document.content.includes('未形成每日病危病程记录'),
+      ),
+    ).toBe(true)
+    criticalRounds?.documents.forEach((document) => {
       expect(document.content.length).toBeGreaterThan(180)
       expect(document.content).not.toMatch(forbiddenSelfHints)
     })
@@ -244,6 +305,9 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     const transfusionRecord = transfusion?.documents.find(
       (document) => document.document_type === 'bloodtrans_record',
     )
+    const beforeTransfusionCourse = transfusion?.documents.find(
+      (document) => document.title === '输血前病程记录',
+    )
     const afterTransfusionCourse = transfusion?.documents.find(
       (document) => document.title === '输血后病程记录',
     )
@@ -254,6 +318,8 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     expect(bloodApplication?.content).toContain('输血前检查摘要')
     expect(bloodApplication?.content).toContain('未见丙肝抗体、HIV抗体、梅毒抗体完整报告')
     expect(bloodApplication?.content).toContain('未检索到本次输血治疗知情同意书')
+    expect(beforeTransfusionCourse?.content).toContain('未见本次输血知情同意书')
+    expect(beforeTransfusionCourse?.content).toContain('完整输血风险告知记录')
     expect(transfusionOrder?.content).toContain('费用明细摘要')
     expect(transfusionOrder?.content).toContain('去白悬浮红细胞4U')
     expect(transfusionRecord?.content).toContain('血袋号')
@@ -282,7 +348,9 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
       (document) => document.document_type === 'surgery_record',
     )
     const tumorPathology = tumor?.documents.find((document) => document.title === '病理检查报告')
-    const tumorChemoCourse = tumor?.documents.find((document) => document.title === '化疗前病程记录')
+    const tumorChemoCourse = tumor?.documents.find(
+      (document) => document.title === '化疗前病程记录',
+    )
     expect(tumorAdmission?.content.length).toBeGreaterThan(650)
     expect(tumorAdmission?.content).toContain('主诉')
     expect(tumorAdmission?.content).toContain('现病史')

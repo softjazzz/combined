@@ -12,6 +12,7 @@ def test_production_guard_rejects_default_demo_users():
             {
                 "admin@medqc.com": {"id": "admin-001"},
                 "doctor@medqc.com": {"id": "doctor-001"},
+                "sync_admin@medqc.com": {"id": "sync-admin-001"},
             },
         )
 
@@ -23,6 +24,16 @@ def test_production_guard_ignores_non_production_env():
             "admin@medqc.com": {"id": "admin-001"},
         },
     )
+
+
+def test_production_guard_rejects_default_sync_admin_user():
+    with pytest.raises(RuntimeError, match="sync_admin@medqc.com"):
+        assert_no_default_demo_users_in_production(
+            "production",
+            {
+                "sync_admin@medqc.com": {"id": "sync-admin-001"},
+            },
+        )
 
 
 def test_startup_fails_fast_in_production_with_default_demo_users(monkeypatch):

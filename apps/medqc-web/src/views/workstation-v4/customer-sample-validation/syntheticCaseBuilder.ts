@@ -1,7 +1,9 @@
 import type {
+  ManualLuxian0609RuleCatalogItem,
   ManualTestRecordCreateRequest,
   SyntheticCaseBuilderMode,
   SyntheticCaseGoldenAnswer,
+  SyntheticCaseRuleFamily,
   TestRecordDocumentForm,
   TestRecordForm,
 } from './types'
@@ -50,6 +52,121 @@ export const syntheticCaseBuilderModeOptions: Array<{
   { label: '按病历创建', value: 'case' },
   { label: '按质控点创建', value: 'rule' },
 ]
+
+const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
+  {
+    key: 'basic_timeliness',
+    name: '基础时限',
+    description: '覆盖入院记录、首次病程、抢救记录和上级医师首次查房时限。',
+    templateKey: 'basic-timeliness-defect',
+    ruleIds: ['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'],
+  },
+  {
+    key: 'critical_rounds',
+    name: '查房病程',
+    description: '覆盖查房频次、病程复制、主诉和诊断依据等病程质量问题。',
+    templateKey: 'critical-round-defect',
+    ruleIds: ['LX0609-007', 'LX0609-008', 'LX0609-009', 'LX0609-016', 'LX0609-017', 'LX0609-018'],
+  },
+  {
+    key: 'ct_mri_culture',
+    name: '检查检验',
+    description: '覆盖 CT/MRI、细菌培养结果记录与阳性结果分析。',
+    templateKey: 'ct-mri-culture-defect',
+    ruleIds: ['LX0609-010', 'LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'],
+  },
+  {
+    key: 'consultation_quality',
+    name: '会诊质量',
+    description: '覆盖会诊目的、会诊意见和会诊执行记录。',
+    templateKey: 'consultation-quality-defect',
+    ruleIds: ['LX0609-020', 'LX0609-021', 'LX0609-022', 'LX0609-023'],
+  },
+  {
+    key: 'surgery_anesthesia',
+    name: '手术麻醉',
+    description: '覆盖手术记录、术前小结、知情同意、核查表、麻醉记录和术前讨论。',
+    templateKey: 'surgery-anesthesia-defect',
+    ruleIds: [
+      'LX0609-003',
+      'LX0609-024',
+      'LX0609-025',
+      'LX0609-028',
+      'LX0609-029',
+      'LX0609-030',
+      'LX0609-031',
+      'LX0609-032',
+      'LX0609-033',
+      'LX0609-034',
+      'LX0609-035',
+      'LX0609-036',
+      'LX0609-037',
+      'LX0609-038',
+      'LX0609-039',
+      'LX0609-040',
+    ],
+  },
+  {
+    key: 'transfusion',
+    name: '输血',
+    description: '覆盖输血知情同意、输血前检查、输血前后评价和医嘱收费一致性。',
+    templateKey: 'transfusion-defect',
+    ruleIds: [
+      'LX0609-041',
+      'LX0609-042',
+      'LX0609-043',
+      'LX0609-044',
+      'LX0609-045',
+      'LX0609-046',
+      'LX0609-047',
+      'LX0609-048',
+      'LX0609-049',
+    ],
+  },
+  {
+    key: 'tumor_pathology',
+    name: '肿瘤病理',
+    description: '覆盖病理结果、取材情况、化疗记录和肿瘤出院治疗计划。',
+    templateKey: 'tumor-pathology-chemo-defect',
+    ruleIds: ['LX0609-013', 'LX0609-019', 'LX0609-026', 'LX0609-027'],
+  },
+] as const
+
+export function buildSyntheticCaseRuleFamiliesFromCatalog(
+  rules: ManualLuxian0609RuleCatalogItem[],
+): SyntheticCaseRuleFamily[] {
+  const ruleById = new Map<string, ManualLuxian0609RuleCatalogItem>()
+  rules.forEach((rule) => {
+    const ruleId = String(rule.rule_id || rule.rule_code || '')
+      .trim()
+      .toUpperCase()
+    if (/^LX0609-\d{3}$/u.test(ruleId)) {
+      ruleById.set(ruleId, rule)
+    }
+  })
+  return LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS.map((family) => ({
+    key: family.key,
+    name: family.name,
+    description: family.description,
+    templateKey: family.templateKey,
+    rules: family.ruleIds
+      .map((ruleId) => {
+        const rule = ruleById.get(ruleId)
+        if (!rule) return null
+        const requiredDocumentsLabel =
+          rule.required_documents_label ||
+          (Array.isArray(rule.applicable_document_labels)
+            ? rule.applicable_document_labels.join('、')
+            : '')
+        return {
+          ruleId,
+          name: String(rule.name || rule.description || ruleId).trim() || ruleId,
+          requiredDocumentsLabel: String(requiredDocumentsLabel || '病历文书').trim(),
+        }
+      })
+      .filter((rule): rule is SyntheticCaseRuleFamily['rules'][number] => Boolean(rule)),
+  })).filter((family) => family.rules.length > 0)
+}
 
 export function toDateTimeLocal(value: Date): string {
   const pad = (input: number) => String(input).padStart(2, '0')
@@ -138,15 +255,15 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
   }
 }
 
-export function buildRuleDrivenCaseTitle(ruleFamilyNames: string[], ruleIds: string[], now = new Date()): string {
-  const families = ruleFamilyNames
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
+export function buildRuleDrivenCaseTitle(
+  ruleFamilyNames: string[],
+  ruleIds: string[],
+  now = new Date(),
+): string {
+  const families = ruleFamilyNames.map((item) => String(item || '').trim()).filter(Boolean)
   const normalizedRuleIds = normalizeRuleIds(ruleIds)
   const familyText = families.length ? families.join('、') : '泸县0609'
-  const ruleText = normalizedRuleIds
-    .map((ruleId) => ruleId.replace(/^LX0609-/u, ''))
-    .join('/')
+  const ruleText = normalizedRuleIds.map((ruleId) => ruleId.replace(/^LX0609-/u, '')).join('/')
   const pad = (input: number) => String(input).padStart(2, '0')
   const timeText = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
   return `${familyText}质控病历｜LX${ruleText || '全量'}｜${timeText}`

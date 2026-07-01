@@ -131,6 +131,7 @@ class SyncState:
     last_sync_status: str = "never"  # never / success / partial / failed
     total_records_synced: int = 0
     logs: List[Dict] = field(default_factory=list)
+    progress: Dict[str, Any] = field(default_factory=dict)
     remote_connected: bool = False
     local_connected: bool = False
 
@@ -200,6 +201,8 @@ def _upsert_sync_job_state(state: SyncState):
 
 def get_sync_state() -> Dict:
     """获取当前同步状态（优先读取数据库状态，回退内存）"""
+    if _sync_state.is_running:
+        return asdict(_sync_state)
     if engine is None:
         if _pg_required_in_current_env():
             raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
@@ -238,6 +241,7 @@ def get_sync_state() -> Dict:
                 "last_sync_status": row.get("last_sync_status") or "never",
                 "total_records_synced": int(row.get("total_records_synced") or 0),
                 "logs": logs if isinstance(logs, list) else [],
+                "progress": dict(_sync_state.progress or {}),
                 "remote_connected": bool(row.get("remote_connected")),
                 "local_connected": bool(row.get("local_connected")),
             }
@@ -1849,7 +1853,7 @@ def _resolve_remote_visit_filters(cursor, remote_schema: str, source_table: str)
 def list_remote_departments(limit: int = 500) -> Dict[str, Any]:
     """
     从源 PG 拉取科室列表（用于同步策略中的科室选择）。
-    固定从 discharge_record.dept_name 读取，避免跨表口径不一致。
+    固定从 discharge_record 读取，字段兼容 discharge_dept_name / admission_dept_name / dept_name。
     """
     remote_url = get_remote_db_url()
     if not remote_url:
@@ -1865,15 +1869,23 @@ def list_remote_departments(limit: int = 500) -> Dict[str, Any]:
     remote_schema = _safe_identifier(str(cfg.get("remote_schema") or "public").strip() or "public")
     schema_ident = _safe_identifier(remote_schema)
     source_table = "discharge_record"
-    dept_field = "dept_name"
+    dept_field_candidates = ["discharge_dept_name", "admission_dept_name", "dept_name"]
 
     conn = psycopg2.connect(remote_url, connect_timeout=10)
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         if not _remote_table_exists(cursor, remote_schema, source_table):
             raise ValueError(f"源 PG 缺少表: {remote_schema}.{source_table}")
-        if not _remote_column_exists(cursor, remote_schema, source_table, dept_field):
-            raise ValueError(f"源 PG 缺少科室字段: {remote_schema}.{source_table}.{dept_field}")
+        dept_field = None
+        for candidate in dept_field_candidates:
+            if _remote_column_exists(cursor, remote_schema, source_table, candidate):
+                dept_field = candidate
+                break
+        if dept_field is None:
+            raise ValueError(
+                f"源 PG 缺少科室字段: {remote_schema}.{source_table}."
+                f"{'/'.join(dept_field_candidates)}"
+            )
 
         table_ident = _safe_identifier(source_table)
         dept_ident = _safe_identifier(dept_field)
@@ -1984,6 +1996,43 @@ def collect_visit_keys_by_policy(
         conn.close()
 
     return sorted(visit_key_set)
+
+
+def estimate_pg_sync_impact(
+    *,
+    date_window: Optional[Dict[str, str]] = None,
+    target_departments: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Estimate the current PG sync scope by counting eligible visits.
+
+    This mirrors the visit-anchor logic used by ``run_sync`` without pulling or
+    writing source rows.
+    """
+    policy = load_sync_policy()
+    start_date, end_date, dept_filters = _resolve_pg_extract_window(
+        policy=policy,
+        sync_date=None,
+        date_window=date_window,
+        target_departments=target_departments,
+    )
+    remote_url = get_remote_db_url()
+    if not remote_url:
+        raise ValueError("REMOTE_DB_URL 未配置")
+    cfg = load_db_config()
+    remote_schema = _safe_identifier(str(cfg.get("remote_schema") or "public").strip() or "public")
+    visit_keys = collect_visit_keys_by_policy(
+        remote_url=remote_url,
+        remote_schema=remote_schema,
+        start_date=start_date,
+        end_date=end_date,
+        target_departments=dept_filters,
+    )
+    return {
+        "estimated_impact": len(visit_keys),
+        "estimate_basis": "eligible_visit_count",
+        "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+        "target_departments": dept_filters or ["*"],
+    }
 
 
 def fetch_remote_rows_by_visit_keys(
@@ -2292,6 +2341,7 @@ def _emit_sync_progress(
     progress_callback: Optional[Callable[[Dict[str, Any]], None]],
     payload: Dict[str, Any],
 ) -> None:
+    _sync_state.progress = dict(payload)
     if progress_callback is None:
         return
     try:
@@ -2305,6 +2355,26 @@ def _visit_id_set_from_rows(rows: List[Dict[str, Any]]) -> set[str]:
         str((row or {}).get("visit_id") or "").strip()
         for row in rows or []
         if str((row or {}).get("visit_id") or "").strip()
+    }
+
+
+def _build_visit_progress(
+    eligible_visit_ids: set[str],
+    mr_visit_ids: set[str],
+    detail_visit_ids: Optional[set[str]] = None,
+) -> Dict[str, Any]:
+    """Build patient-level progress by local mr visibility, not evidence completeness."""
+    total = len(eligible_visit_ids)
+    completed = len(eligible_visit_ids & mr_visit_ids) if eligible_visit_ids else 0
+    detail_only = len((detail_visit_ids or set()) - mr_visit_ids)
+    return {
+        "total": total,
+        "completed": completed,
+        "remaining": max(0, total - completed),
+        "missing_mr": max(0, total - completed),
+        "detail_only": detail_only,
+        "basis": "mr_visible",
+        "label": "病历池可见进度",
     }
 
 
@@ -2365,6 +2435,8 @@ def run_sync(
                 "tables_done": 0,
                 "rows_pulled_total": 0,
                 "rows_upserted_total": 0,
+                "eligible_visit_count": 0,
+                "visit_progress": _build_visit_progress(set(), set()),
                 "failed_tables": 0,
                 "eta_seconds": None,
             },
@@ -2401,6 +2473,11 @@ def run_sync(
             if mr_missing:
                 return {"success": False, "error": "同步表配置缺少 mr，无法补拉病历主记录"}
             target_tables = [*mr_tables, *target_tables]
+        if any(str(item.get("name") or "") == "mr" for item in target_tables):
+            target_tables = [
+                *[item for item in target_tables if str(item.get("name") or "") == "mr"],
+                *[item for item in target_tables if str(item.get("name") or "") != "mr"],
+            ]
         _emit_sync_progress(
             progress_callback,
             {
@@ -2412,6 +2489,8 @@ def run_sync(
                 "tables_done": 0,
                 "rows_pulled_total": 0,
                 "rows_upserted_total": 0,
+                "eligible_visit_count": 0,
+                "visit_progress": _build_visit_progress(set(), set()),
                 "failed_tables": 0,
                 "eta_seconds": None,
             },
@@ -2486,26 +2565,30 @@ def run_sync(
 
         if not scoped_visit_keys:
             _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            _sync_state.last_sync_status = "success"
+            _sync_state.last_sync_status = "failed"
             _sync_state.total_records_synced = 0
             _sync_state.logs = []
             _emit_sync_progress(
                 progress_callback,
                 {
                     "run_id": run_id,
-                    "status": "success",
+                    "status": "failed",
                     "stage": "completed",
                     "current_table": "",
                     "tables_total": len(target_tables),
                     "tables_done": len(target_tables),
                     "rows_pulled_total": 0,
                     "rows_upserted_total": 0,
+                    "eligible_visit_count": 0,
+                    "visit_progress": _build_visit_progress(set(), set()),
                     "failed_tables": 0,
                     "eta_seconds": 0,
                 },
             )
             return {
-                "success": True,
+                "success": False,
+                "status": "rejected",
+                "error": "当前出院日期范围和科室条件下未找到可同步的终末病历，请调整日期范围、科室或源库配置后重试",
                 "mode": sync_mode,
                 "scene": resolved_scene,
                 "policy_version": str(policy_version or ""),
@@ -2515,11 +2598,12 @@ def run_sync(
                 "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
                 "target_departments": dept_filters or ["*"],
                 "eligible_visits": 0,
-                "message": "当前筛选条件下无可抽取病历",
+                "message": "候选病历数为 0，本次未执行同步。",
                 "tables": [],
             }
 
         total_synced = 0
+        eligible_visit_count = len(scoped_visit_keys)
         results = []
         has_error = False
         pulled_total = 0
@@ -2566,6 +2650,12 @@ def run_sync(
                         "tables_done": done_tables,
                         "rows_pulled_total": pulled_total,
                         "rows_upserted_total": total_synced,
+                        "eligible_visit_count": eligible_visit_count,
+                        "visit_progress": _build_visit_progress(
+                            eligible_visit_ids,
+                            mr_visit_ids,
+                            detail_visit_ids,
+                        ),
                         "failed_tables": failed_tables,
                         "eta_seconds": None if done_tables <= 0 else max(
                             0,
@@ -2739,6 +2829,12 @@ def run_sync(
                     "tables_done": done_tables,
                     "rows_pulled_total": pulled_total,
                     "rows_upserted_total": total_synced,
+                    "eligible_visit_count": eligible_visit_count,
+                    "visit_progress": _build_visit_progress(
+                        eligible_visit_ids,
+                        mr_visit_ids,
+                        detail_visit_ids,
+                    ),
                     "failed_tables": failed_tables,
                     "eta_seconds": int(avg_seconds * remaining),
                 },
@@ -2775,6 +2871,12 @@ def run_sync(
                 "tables_done": len(target_tables),
                 "rows_pulled_total": pulled_total,
                 "rows_upserted_total": total_synced,
+                "eligible_visit_count": eligible_visit_count,
+                "visit_progress": _build_visit_progress(
+                    eligible_visit_ids,
+                    mr_visit_ids,
+                    detail_visit_ids,
+                ),
                 "failed_tables": failed_tables,
                 "eta_seconds": 0,
             },

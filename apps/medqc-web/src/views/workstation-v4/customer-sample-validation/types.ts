@@ -27,6 +27,7 @@ export type ManualSamplePoolItem = {
   department: string
   patient_name: string
   mr_no: string
+  inpat_no?: string
   visit_id: string
   manual_issue_text: string
   normalized_issue_text: string
@@ -138,6 +139,24 @@ export type ManualSampleValidationRuleSetListResult = {
   items: ManualSampleValidationRuleSet[]
 }
 
+export type ManualLuxian0609RuleCatalogItem = {
+  rule_id: string
+  rule_code?: string
+  name: string
+  description?: string
+  category?: string
+  required_documents_label?: string
+  applicable_document_labels?: string[]
+  mapped_rule_ids?: string[]
+  primary_execution_rule_id?: string
+}
+
+export type ManualLuxian0609RuleCatalogResult = {
+  rule_set_key?: string
+  total_rules?: number
+  rules: ManualLuxian0609RuleCatalogItem[]
+}
+
 export type ManualSamplePoolListResult = {
   items: ManualSamplePool[]
   total: number
@@ -167,11 +186,29 @@ export type ManualSamplePoolSyncJob = {
   status: string
   payload?: Record<string, unknown>
   summary?: {
+    record_progress?: {
+      total?: number
+      completed?: number
+      remaining?: number
+      missing_mr?: number
+      detail_only?: number
+      basis?: string
+      label?: string
+    }
     progress?: {
       step_key?: string
       step_label?: string
       total_candidates?: number
       eligible_visits?: number
+      record_progress?: {
+        total?: number
+        completed?: number
+        remaining?: number
+        missing_mr?: number
+        detail_only?: number
+        basis?: string
+        label?: string
+      }
       processed_tables?: number
       total_tables?: number
       current_table?: string
@@ -226,6 +263,37 @@ export type ManualTestRecordDocument = {
   doctor_name?: string
   doctor_code?: string
   enabled?: boolean
+}
+
+export type ManualTestRecordSourceMeta = {
+  type: 'customer_source_editable_copy' | string
+  source_pool_id?: string
+  source_pool_name?: string
+  source_record_id?: string
+  source_item_ids?: string[]
+  source_visit_id?: string
+  source_mr_no?: string
+  source_patient_name?: string
+  source_department?: string
+  created_from?: string
+}
+
+export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
+  key: string
+  source_document_id?: string
+  source_table?: string
+  order_start_time?: string
+  order_stop_time?: string
+  order_category?: string
+  order_item?: string
+  order_status?: string
+  is_new?: boolean
+}
+
+export type EditableMedicalRecordDocumentsResult = {
+  visit_id?: string
+  documents: EditableMedicalRecordDocument[]
+  raw?: unknown
 }
 
 export type SyntheticCaseExpectedStatus =
@@ -308,6 +376,7 @@ export type ManualTestRecordCreateRequest = {
   manual_issue_text?: string
   template_key?: string
   golden_answers?: SyntheticCaseGoldenAnswer[]
+  source?: ManualTestRecordSourceMeta
 }
 
 export type ManualTestRecordCreateResult = {

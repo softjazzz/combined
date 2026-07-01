@@ -415,6 +415,139 @@ async def test_confirmed_guardrail_should_reject_sc099_without_specimen_trigger(
 
 
 @pytest.mark.asyncio
+async def test_confirmed_guardrail_should_reject_sc099_when_adjudicator_says_pathology_recorded():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-099",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录已记录术中取材及冰冻病理结果。",
+                                        "adjudicator_supporting_quote": "手术记录：送检肿物及第7组淋巴结，冰冻病理提示恶性。",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-099",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "术中取材和病理结果未记录。",
+                "evidence": "手术记录：送检肿物及第7组淋巴结，冰冻病理提示恶性。",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_specimen_or_pathology_trigger": True,
+                        "has_pathology_source": True,
+                        "specimen_pathology_coverage": "documented",
+                    },
+                    "applicability_gate_metadata": {
+                        "pathology_linkage_context": {
+                            "linkage_status": "linked",
+                            "surgery_specimen_quote": "手术记录：送检肿物及第7组淋巴结，冰冻病理提示恶性。",
+                            "pathology_specimen_quote": "病理报告：第7组淋巴结见癌转移。",
+                            "pathology_diagnosis_quote": "病理诊断：肺腺癌，淋巴结转移。",
+                        }
+                    },
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicated_display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+    assert "已说明手术记录中存在取材" in rows[0]["adjudicator_guardrail_reason"]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_reject_sc099_when_quote_records_specimen_and_frozen_pathology():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-099",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录记录了术中冰冻病理结果，但未记录术后石蜡病理最终结果。",
+                                        "adjudicator_supporting_quote": (
+                                            "手术记录：楔形切除左肺上叶结节，检查切缘无出血，"
+                                            "家属看过标本后送检。术中冰冻病理提示浸润性腺癌。"
+                                        ),
+                                        "adjudicator_confidence": 0.91,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-099",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "术中取材和病理结果未记录。",
+                "evidence": (
+                    "手术记录：楔形切除左肺上叶结节，检查切缘无出血，家属看过标本后送检。"
+                    "术中冰冻病理提示浸润性腺癌。"
+                ),
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_specimen_or_pathology_trigger": True,
+                        "has_pathology_source": True,
+                        "specimen_pathology_coverage": "documented",
+                    },
+                    "applicability_gate_metadata": {
+                        "pathology_linkage_context": {
+                            "linkage_status": "linked",
+                            "surgery_specimen_quote": (
+                                "楔形切除左肺上叶结节，家属看过标本后送检。术中冰冻病理提示浸润性腺癌。"
+                            ),
+                            "pathology_specimen_quote": "术中冰冻病理提示浸润性腺癌。",
+                            "pathology_diagnosis_quote": "病理诊断：浸润性腺癌。",
+                        }
+                    },
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicated_display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
 async def test_confirmed_guardrail_should_mark_sc099_pathology_source_gap():
     async def _fake_generate(prompt: str) -> dict[str, Any]:
         return {

@@ -23,11 +23,10 @@ from .medical_records_export import router as medical_records_export_router
 router = APIRouter(
     prefix="/api/medical-records",
     tags=["病案数据"],
-    dependencies=[Depends(require_roles("admin", "qc_manager", "doctor", "reviewer"))],
+    dependencies=[Depends(require_roles("admin", "qc_manager", "doctor", "reviewer", "sync_admin", "super_admin"))],
 )
 
 router.include_router(medical_records_query_router)
 router.include_router(medical_records_detail_router)
 router.include_router(medical_records_maintenance_router)
 router.include_router(medical_records_export_router)
-

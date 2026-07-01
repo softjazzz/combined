@@ -1245,6 +1245,11 @@ function inferDocGroupKey(doc: ReviewDocItem): string {
   return 'course'
 }
 
+function isOrderGroup(group?: Pick<ReviewDocTreeGroup, 'key' | 'label'> | null): boolean {
+  const probe = `${safeText(group?.key)} ${safeText(group?.label)}`.toLowerCase()
+  return probe.includes('orders') || probe.includes('order') || probe.includes('医嘱')
+}
+
 function prettifyFieldLabel(fieldName?: string): string {
   const raw = safeText(fieldName)
   if (!raw) return '字段'
@@ -1590,26 +1595,27 @@ const documentTree = computed<ReviewDocTreeGroup[]>(() => {
   const rawTree = detail.documents_tree || documents.documents_tree
   const normalized = normalizeDocTree(rawTree, documentList.value)
   if (orderSourceDocs.value.length === 0) return normalized
-  const orderNodes = orderSourceDocs.value.map((doc) => buildTreeNodeFromDoc(doc))
-  const orderGroupIndex = normalized.findIndex((group) => group.key === 'orders')
+  const orderSummaryNodes = orderSummaryDocs.value.map((doc) => buildTreeNodeFromDoc(doc))
+  const orderGroupIndex = normalized.findIndex((group) => isOrderGroup(group))
   if (orderGroupIndex < 0) {
     return [
       ...normalized,
       {
         key: 'orders',
         label: DOC_GROUP_LABELS.orders,
-        count: orderNodes.length,
-        children: orderNodes,
+        count: orderRows.value.length,
+        children: orderSummaryNodes,
       },
     ]
   }
-  if (normalized[orderGroupIndex].children.length > 0) return normalized
   return normalized.map((group, index) =>
     index === orderGroupIndex
       ? {
           ...group,
-          count: orderNodes.length,
-          children: orderNodes,
+          key: 'orders',
+          label: DOC_GROUP_LABELS.orders,
+          count: orderRows.value.length,
+          children: orderSummaryNodes,
         }
       : group,
   )
@@ -1879,7 +1885,7 @@ function renderDocListTitle(doc: ReviewDocItem): string {
 }
 
 function isSidebarGroupExpandable(group: ReviewDocTreeGroup): boolean {
-  if (group.key === 'orders') return true
+  if (isOrderGroup(group)) return true
   return group.children.length > 1
 }
 
@@ -1902,7 +1908,7 @@ function toggleSidebarGroup(groupKey: string) {
 }
 
 function getSidebarGroupDocs(group: ReviewDocTreeGroup): ReviewDocItem[] {
-  if (group.key === 'orders') return orderSummaryDocs.value
+  if (isOrderGroup(group)) return orderSummaryDocs.value
   return sortDocsByTimeDesc(
     group.children
       .map((node) => resolveDocByNode(node))

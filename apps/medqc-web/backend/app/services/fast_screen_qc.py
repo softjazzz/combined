@@ -1600,6 +1600,69 @@ def _build_evidence_payload(
     }
 
 
+def _evidence_payload_has_first_course_content(evidence_payload: dict[str, Any]) -> bool:
+    first_course_texts: list[str] = []
+    for item in _safe_list(evidence_payload.get("supporting_documents")):
+        if isinstance(item, dict):
+            source_table = str(item.get("source_table") or "").lower()
+            document_type = str(item.get("document_type") or "")
+            if source_table == "first_course_record" or "首次病程" in document_type:
+                first_course_texts.append(str(item.get("evidence_text") or ""))
+    if first_course_texts:
+        return any(
+            "".join(text.split()) not in {"", "首次病程记录", "首次病程"}
+            and len("".join(text.split())) >= 20
+            for text in first_course_texts
+        )
+    combined = str(evidence_payload.get("primary_document_text") or "")
+    for marker in ("首次病程记录", "首次病程"):
+        start = 0
+        while True:
+            position = combined.find(marker, start)
+            if position < 0:
+                break
+            window = combined[position: position + 600]
+            cleaned = (
+                window.replace("首次病程记录", "")
+                .replace("首次病程", "")
+                .replace("记录时间", "")
+                .replace("提交时间", "")
+                .replace("正文", "")
+            )
+            if len("".join(cleaned.split())) >= 30:
+                return True
+            start = position + len(marker)
+    return False
+
+
+def _build_lx0609_copy_guard_item(
+    *,
+    rule: dict[str, Any],
+    evidence_payload: dict[str, Any],
+    document_type: str,
+) -> dict[str, Any] | None:
+    rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+    if rule_id != "LX0609-016" or _evidence_payload_has_first_course_content(evidence_payload):
+        return None
+    return {
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "rule_name": str(rule.get("name") or rule.get("rule_name") or rule_id),
+        "status": "data_gap",
+        "is_compliant": False,
+        "findings": "首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。",
+        "evidence": "数据缺口：首次病程记录正文为空；复制病历比对未执行。",
+        "suggestion": "请先补齐首次病程记录正文，再复核是否与入院记录或其他病程存在复制。",
+        "confidence": 0.9,
+        "target_document_type": document_type,
+        "metadata": {
+            "executor_type": "program",
+            "copy_rule_priority_guard": "first_course_missing",
+            "data_gap_reason": "首次病程记录缺失或正文为空，无法进行复制病历比对",
+        },
+    }
+
+
 def _merge_cot_summary(current: dict[str, int], observation: dict[str, Any]) -> dict[str, int]:
     next_value = dict(current or {})
     for key in (
@@ -1988,8 +2051,15 @@ async def run_final_fast_screen(
                     pack_result_map[configured_rule_id] = normalized_item
             normalized_pack_results: list[dict[str, Any]] = []
             for rule in pack_rules:
-                rule_id = str(rule.get("rule_id") or "").strip().upper()
+                rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
                 item = pack_result_map.get(rule_id)
+                guard_item = _build_lx0609_copy_guard_item(
+                    rule=rule,
+                    evidence_payload=evidence_payload_for_pack,
+                    document_type=pack.document_type,
+                )
+                if guard_item is not None:
+                    item = guard_item
                 if not item:
                     item = _build_pack_uncertain_result_item(
                         qc_service=qc_service,
@@ -2016,6 +2086,23 @@ async def run_final_fast_screen(
                 if criteria_metadata:
                     metadata.update(criteria_metadata)
                     item.update(criteria_metadata)
+                normalized_rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+                if normalized_rule_id == "LX0609-016":
+                    guard_item = _build_lx0609_copy_guard_item(
+                        rule={
+                            "rule_id": normalized_rule_id,
+                            "name": item.get("rule_name") or rule.get("name") or rule.get("rule_name"),
+                        },
+                        evidence_payload=evidence_payload_for_pack,
+                        document_type=pack.document_type,
+                    )
+                    if guard_item is not None:
+                        guard_metadata = dict(guard_item.get("metadata") or {})
+                        guard_metadata.update(metadata)
+                        guard_metadata["executor_type"] = "program"
+                        guard_metadata["copy_rule_priority_guard"] = "first_course_missing"
+                        guard_item["metadata"] = guard_metadata
+                        item = guard_item
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}

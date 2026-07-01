@@ -17,7 +17,7 @@
       <div class="flex p-1 rounded-[8px] bg-slate-100/80 border border-slate-200/50 relative">
         <button :class="tabClass('pg_local')" @click="state.activeTab = 'pg_local'">本地库</button>
         <button :class="tabClass('pg_remote')" @click="state.activeTab = 'pg_remote'">
-          前端 PG
+          源库 PG
         </button>
       </div>
     </div>
@@ -33,7 +33,12 @@
 
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="pt-2 pb-3 border-b border-slate-100">
-            <div class="text-[13px] font-semibold text-slate-800">业务流水库 (PG 远端)</div>
+            <div class="text-[13px] font-semibold text-slate-800">
+              数据融合库 clinical_data（PG 源库）
+            </div>
+            <div class="text-[11px] text-slate-500 mt-1">
+              对接病案平台入 ES 前的融合库；客户样本优先用 visit_id 匹配，可辅以 inpat_no / mr_no。
+            </div>
             <div class="text-[11px] text-slate-500 mt-1">仅 admin 可修改，qc_manager 只读。</div>
           </div>
 
@@ -340,7 +345,7 @@
           <div v-if="showAdvancedPolicy">
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="studio-label">抽取场景</label>
+                <label class="studio-label">终末抽取场景</label>
                 <a-select
                   v-model:value="state.policyForm.scope"
                   :disabled="isReadonly"
@@ -807,8 +812,7 @@ const scheduleModeOptions = [
 ]
 
 const sceneOptions = [
-  { label: '全部场景', value: 'both' },
-  { label: '在院病历', value: 'running' },
+  { label: '全部终末相关', value: 'both' },
   { label: '终末病历', value: 'final' },
   { label: '病案首页', value: 'frontpage' },
   { label: '编码质控', value: 'coding' },
@@ -816,8 +820,8 @@ const sceneOptions = [
 ]
 
 const sceneLabelMap: Record<string, string> = {
-  both: '全部场景',
-  running: '在院病历',
+  both: '全部终末相关',
+  running: '在院病历（待接入）',
   final: '终末病历',
   frontpage: '病案首页',
   coding: '编码质控',
@@ -835,7 +839,7 @@ const currentTemplate = computed(() =>
   state.syncTemplates.find((item) => item.id === state.selectedTemplateId),
 )
 
-const sceneLabel = computed(() => sceneLabelMap[state.policyForm.scope] || '全部场景')
+const sceneLabel = computed(() => sceneLabelMap[state.policyForm.scope] || '全部终末相关')
 
 const departmentOptions = computed(() =>
   state.availableDepartments.map((name) => ({

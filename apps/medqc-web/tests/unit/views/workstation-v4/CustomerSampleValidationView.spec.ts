@@ -14,14 +14,17 @@ const {
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
+  getEditableMedicalRecordDocuments,
   importManualSamplePoolByUpload,
   createManualTestMedicalRecord,
   exportLuxian0609EvaluationReport,
+  listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
   runManualSamplePool,
   syncManualSamplePoolRecords,
   getSichuanWorkspaceBatchJob,
+  listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
   routeQuery,
   routerPush,
@@ -43,14 +46,17 @@ const {
   getLatestManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolRecords: vi.fn(),
+  getEditableMedicalRecordDocuments: vi.fn(),
   importManualSamplePoolByUpload: vi.fn(),
   createManualTestMedicalRecord: vi.fn(),
   exportLuxian0609EvaluationReport: vi.fn(),
+  listLuxian0609CustomerRules: vi.fn(),
   listManualSampleValidationRuleSets: vi.fn(),
   matchManualSamplePool: vi.fn(),
   runManualSamplePool: vi.fn(),
   syncManualSamplePoolRecords: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
+  listSichuanWorkspaceBatchJobs: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
@@ -81,9 +87,11 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
+  getEditableMedicalRecordDocuments,
   importManualSamplePoolByUpload,
   createManualTestMedicalRecord,
   exportLuxian0609EvaluationReport,
+  listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
   runManualSamplePool,
@@ -92,6 +100,7 @@ vi.mock('@/services/manual-case-sample-service', () => ({
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob,
+  listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
 }))
 
@@ -764,6 +773,89 @@ function buildRuleSets() {
   ]
 }
 
+const luxian0609RuleNames: Record<string, string> = {
+  'LX0609-001': '入院记录：入院后24小时内是否完成',
+  'LX0609-002': '首次病程：入院后 8 小时内无首次病程记录',
+  'LX0609-003': '手术记录：手术后24小时内是否完成',
+  'LX0609-004': '抢救记录：抢救结束后6小时内是否完成',
+  'LX0609-005': '上级医生查房记录：入院后 48 小时内无主治医师首次查房记录',
+  'LX0609-006': '上级医生查房记录：入院后 72小时内无最高级别首次查房记录',
+  'LX0609-007': '查房记录：病情稳定患者3天内无查房病程记录',
+  'LX0609-008': '查房记录：病重患者2天内无查房病程记录',
+  'LX0609-009': '查房记录：病危患者未每天记录查房病程',
+  'LX0609-010': 'CT/MRI 检查记录：CT/MRI检查前有无病程记录',
+  'LX0609-011': 'CT/MRI 检查记录：影像报告出具后24小时内未记录',
+  'LX0609-012': 'CT/MRI 检查记录：阳性结果未进行分析',
+  'LX0609-013': '病理检查：病理检查结果在手术记录、病程中未记录',
+  'LX0609-014': '细菌培养记录：细菌培养结果在病程中未记录',
+  'LX0609-015': '细菌培养结果无分析：阳性菌在病程记录中无分析',
+  'LX0609-016': '不合理复制病历：首次病程记录病例特点与入院记录完全相同',
+  'LX0609-017': '不合理复制病历：2次以上病程记录完全相同',
+  'LX0609-018': '主诉能导出第一诊断：主诉书写不规范或不能导出第一诊断',
+  'LX0609-019': '病理检查：取材情况未在病程记录/手术记录中记录',
+  'LX0609-020': '会诊记录：有会诊记录单无请会诊执行记录',
+  'LX0609-021': '会诊记录：会诊申请单会诊目的不明确',
+  'LX0609-022': '会诊记录：会诊记录单会诊意见不明确',
+  'LX0609-023': '会诊记录：请会诊执行记录不规范',
+  'LX0609-024': '手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况',
+  'LX0609-025': '手术记录：未记录植入物名称、规格及数量',
+  'LX0609-026': '恶性肿瘤化学治疗记录：病程化疗记录与医嘱不一致',
+  'LX0609-027': '出院记录：恶性肿瘤患者缺少出院后治疗计划',
+  'LX0609-028': '抗菌药物使用记录：预防使用抗菌药物时间超过规定',
+  'LX0609-029': '术前小结：无术前小结',
+  'LX0609-030': '手术记录：无手术记录',
+  'LX0609-031': '手术记录：手术记录非手术者签字',
+  'LX0609-032': '手术安全核查表：无手术安全核查表',
+  'LX0609-033': '手术知情同意书：无手术知情同意书',
+  'LX0609-034': '麻醉知情同意书：无麻醉知情同意书',
+  'LX0609-035': '麻醉知情同意书：填写不规范',
+  'LX0609-036': '麻醉访视：无麻醉术前/术后访视记录',
+  'LX0609-037': '麻醉访视：记录填写不规范',
+  'LX0609-038': '麻醉记录单：无麻醉记录单',
+  'LX0609-039': '术前讨论记录：无术前讨论或术者未参加',
+  'LX0609-040': '术前多学科讨论记录：四级手术术前讨论未多学科讨论',
+  'LX0609-041': '输血知情同意书：无输血知情同意书',
+  'LX0609-042': '输血知情同意书：填写或签名不完整',
+  'LX0609-043': '输血前辅助检查：输血前常规检查不完整',
+  'LX0609-044': '输血前评估：无输血前评估记录或记录不完整',
+  'LX0609-045': '输血记录：无输血病程记录',
+  'LX0609-046': '输血记录：输血病程记录不完整或不规范',
+  'LX0609-047': '输血后评价：无输血后评价',
+  'LX0609-048': '输血记录：术中输血相关内容记录不一致',
+  'LX0609-049': '输血医嘱：输血医嘱与收费不一致',
+}
+
+function buildLuxian0609Rules() {
+  return Array.from({ length: 49 }, (_, index) => {
+    const ruleId = `LX0609-${String(index + 1).padStart(3, '0')}`
+    return {
+      rule_id: ruleId,
+      rule_code: ruleId,
+      name: luxian0609RuleNames[ruleId] || `${ruleId} 质控点`,
+      description: luxian0609RuleNames[ruleId] || `${ruleId} 质控点`,
+      required_documents_label: '病程记录',
+      mapped_rule_ids: [`SC-${String(index + 1).padStart(3, '0')}`],
+      primary_execution_rule_id: `SC-${String(index + 1).padStart(3, '0')}`,
+    }
+  })
+}
+
+function expectedCompactLocalTime(value: string): string {
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`)
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value || ''
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
+}
+
 async function mountView() {
   const wrapper = mount(CustomerSampleValidationView, {
     global: {
@@ -871,14 +963,61 @@ describe('CustomerSampleValidationView', () => {
       success: true,
       data: { items: buildRuleSets() },
     })
+    listLuxian0609CustomerRules.mockResolvedValue({
+      success: true,
+      data: {
+        rule_set_key: 'luxian_0609_qc_v1',
+        total_rules: 49,
+        rules: buildLuxian0609Rules(),
+      },
+    })
     getLatestManualSamplePoolSyncJob.mockResolvedValue({ success: true, data: null })
     getManualSamplePoolSyncJob.mockResolvedValue({
       success: true,
       data: {
         id: 'sync-job-1',
         pool_id: 'pool-1',
-        status: 'running',
-        summary: { progress: { step_label: '正在同步', total_candidates: 2, eligible_visits: 2 } },
+        status: 'completed',
+        summary: { progress: { step_label: '同步完成', total_candidates: 2, eligible_visits: 2 } },
+      },
+    })
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: {
+        items: [
+          {
+            id: 'job-history-1',
+            rule_code: 'LX0609',
+            rule_name: '泸县0609质控点验证',
+            scope: 'running',
+            status: 'completed',
+            rule_set_key: 'luxian_0609_qc_v1',
+            rule_set_name: '泸县0609质控点验证 v1',
+            customer_rule_count: 3,
+            execution_rule_count: 4,
+            record_ids: ['V001'],
+            created_at: '2026-06-30T10:30:00Z',
+            filters: {
+              selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-005'],
+            },
+            summary: {
+              total_records: 1,
+              success_count: 1,
+              failed_count: 0,
+              issue_records: 1,
+              compliant_records: 0,
+              total_tokens: 0,
+              total_processing_time: 0,
+              display_status_counts: {
+                non_compliant: 2,
+                data_gap: 1,
+              },
+            },
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
       },
     })
     getManualSamplePoolRecords.mockResolvedValue({
@@ -897,6 +1036,118 @@ describe('CustomerSampleValidationView', () => {
         total: 2,
         page: 1,
         page_size: 20,
+      },
+    })
+    getEditableMedicalRecordDocuments.mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: 'V001',
+        documents: [
+          {
+            key: 'admission-1',
+            document_type: '入院记录',
+            title: '入院记录',
+            record_time: '2026-06-01T09:00:00',
+            submit_time: '2026-06-01T09:10:00',
+            content: '患者因腹痛入院，完善相关检查后收入普通外科。',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'course-empty-time',
+            document_type: '日常病程记录',
+            title: '日常病程记录',
+            record_time: '',
+            submit_time: '',
+            content: '患者入院后继续完善检查，治疗方案待上级医师查房后调整。',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'long-order-1',
+            document_type: 'inpat_drug_order',
+            title: '长期医嘱',
+            record_time: '2026-06-01T10:00:00',
+            submit_time: '',
+            content: '长期医嘱：大活络胶囊 0.25g*60粒 口服 Tid。',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'long-order-2',
+            document_type: 'inpat_drug_order',
+            title: '长期医嘱',
+            record_time: '2026-06-03T08:00:00',
+            submit_time: '',
+            content: '长期医嘱：奥美拉唑肠溶胶囊 20mg 口服 Qd。',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'temp-order-1',
+            document_type: 'temporary_order',
+            title: '临时医嘱',
+            record_time: '',
+            submit_time: '',
+            order_start_time: '2026-06-02T16:30:00',
+            order_stop_time: '',
+            content: '临时医嘱：头孢曲松 2g 静滴 qd，开立医师陈医师。',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'fragment-long-order',
+            document_type: 'temporary_order',
+            title: '临时医嘱',
+            record_time: '',
+            submit_time: '',
+            content: '长期\n护理\nII级护理\n新开',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+          {
+            key: 'fragment-temp-order',
+            document_type: 'temporary_order',
+            title: '临时医嘱',
+            record_time: '',
+            submit_time: '',
+            content: '临时\n用药\n氨溴索注射液 30mg 静滴\n新开',
+            doctor_name: '陈医师',
+            enabled: true,
+          },
+        ],
+      },
+    })
+    createManualTestMedicalRecord.mockResolvedValue({
+      success: true,
+      data: {
+        pool: buildPool({ id: 'customer-created-test-records-v1', name: '客户自建测试病历' }),
+        item: {
+          id: 'ct-edit-copy',
+          pool_id: 'customer-created-test-records-v1',
+          row_no: 1,
+          department: '普外科',
+          patient_name: '张三',
+          mr_no: 'CUSTOMER_TEST_EDIT_COPY',
+          visit_id: 'CUSTOMER_TEST_EDIT_COPY',
+          manual_issue_text: '源病历编辑副本',
+          normalized_issue_text: '源病历编辑副本',
+          doctor_name: '测试医师',
+          qc_user: 'tester',
+          coverage_type: 'llm_intrinsic',
+          issue_category: '客户自建测试病历',
+          expected_scene: 'running',
+          candidate_rule_ids: ['LX0609-001'],
+          include_in_batch_1: true,
+          match_status: 'matched',
+          sync_status: 'synced',
+          bundle_status: 'ready',
+        },
+        visit_id: 'CUSTOMER_TEST_EDIT_COPY',
+        mr_no: 'CUSTOMER_TEST_EDIT_COPY',
+        patient_id: 'P_EDIT_COPY',
+        inserted_tables: { mr: 1 },
+        bundle_status: 'ready',
       },
     })
     runManualSamplePool.mockResolvedValue({
@@ -923,6 +1174,15 @@ describe('CustomerSampleValidationView', () => {
       success: true,
       data: { id: 'pool-2', name: '第二轮', imported_rows: 2 },
     })
+    matchManualSamplePool.mockResolvedValue({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        matched: 2,
+        ambiguous: 0,
+        unmatched: 0,
+      },
+    })
     getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: { id: 'job-2', status: 'completed' },
@@ -934,9 +1194,72 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
+  it('样本池名称已包含数量时不应重复追加数量', async () => {
+    listManualSamplePools.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [
+          buildPool({
+            id: 'luxian-0609-0426-syn-v2',
+            name: '泸县0609真实结构合成样本v2（30）',
+            total_items: 30,
+            matched_items: 30,
+            ready_items: 30,
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('泸县0609真实结构合成样本v2（30）')
+    expect(wrapper.text()).not.toContain('泸县0609真实结构合成样本v2（30）（30）')
+  })
+
+  it('页面初始化不应默认加载旧 Sheet2 验收包', async () => {
+    await mountView()
+
+    expect(getSheet2ExactReviewAcceptancePackage).not.toHaveBeenCalled()
+  })
+
+  it('提供显式质控记录入口并可从记录打开结果抽屉', async () => {
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('质控记录')
+
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    expect(historyButton).toBeTruthy()
+    await historyButton?.trigger('click')
+    await flushPromises()
+
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledWith({
+      page: 1,
+      page_size: 20,
+    })
+    expect(wrapper.text()).toContain('历史质控任务')
+    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
+    expect(wrapper.text()).toContain('LX0609-001、LX0609-002、LX0609-005')
+    expect(wrapper.text()).toContain('不合规 2，数据不足 1')
+
+    const viewResultButton = wrapper.find('.customer-sample-task-history-item button')
+    expect(viewResultButton.exists()).toBe(true)
+    await viewResultButton.trigger('click')
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
+    expect(latestBatchResultDrawerProps?.open).toBe(true)
+  })
+
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
     const wrapper = await mountView()
 
+    expect(getSheet2ExactReviewAcceptancePackage).not.toHaveBeenCalled()
     expect(listManualSampleValidationRuleSets).toHaveBeenCalled()
     expect(wrapper.text()).toContain('验证规则集')
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
@@ -944,16 +1267,33 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('场景 运行中病历')
     expect(wrapper.text()).toContain('规则数 59 条')
     expect(wrapper.text()).toContain('内部覆盖详情')
+    expect(wrapper.text()).toContain('基础时限5 条')
+    expect(wrapper.text()).toContain('手术麻醉16 条')
+    expect(wrapper.text()).toContain('展开剩余 11 条')
+    expect(wrapper.text()).toContain('展开剩余 4 条')
+    expect(wrapper.text()).not.toContain('LX0609-049')
     expect(wrapper.text()).not.toContain('闸门未过 3/9')
     expect(wrapper.text()).not.toContain('证据待补强 10')
+
+    const transfusionExpandButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('展开剩余 4 条'))
+    expect(transfusionExpandButton).toBeTruthy()
+    await transfusionExpandButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('LX0609-049')
+    expect(wrapper.text()).toContain('输血医嘱：输血医嘱与收费不一致')
 
     const internalButton = wrapper
       .findAll('button')
       .find((node) => node.text().includes('内部覆盖详情'))
     expect(internalButton).toBeTruthy()
     await internalButton!.trigger('click')
+    await flushPromises()
     await nextTick()
 
+    expect(getSheet2ExactReviewAcceptancePackage).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('客户验收口径与规则增强诊断')
   })
 
@@ -1021,7 +1361,13 @@ describe('CustomerSampleValidationView', () => {
   it('可从更多操作导出泸县0609专项评估报告', async () => {
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('导出泸县0609报告')
+    expect(wrapper.text()).toContain('导出报告')
+    expect(
+      wrapper
+        .find('.a-dropdown-overlay-stub')
+        .findAll('button')
+        .filter((node) => node.text() === '创建测试病历'),
+    ).toHaveLength(0)
     const exportItem = wrapper
       .findAll('button')
       .find((node) => node.text().includes('Markdown 评估报告'))
@@ -1046,9 +1392,7 @@ describe('CustomerSampleValidationView', () => {
     expect(parallelSelect).toBeTruthy()
     await parallelSelect!.setValue('2')
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1066,12 +1410,34 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalled()
   })
 
+  it('选中病历后显示底部开始质控操作条并可取消选择', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.find('[data-testid="customer-sample-selection-run-bar"]').exists()).toBe(false)
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await nextTick()
+
+    const runBar = wrapper.find('[data-testid="customer-sample-selection-run-bar"]')
+    expect(runBar.exists()).toBe(true)
+    expect(runBar.text()).toContain('已选 1 份病历')
+    expect(runBar.text()).toContain('可质控 1 份')
+    expect(runBar.text()).toContain('开始0609质控')
+
+    const clearButton = runBar.findAll('button').find((node) => node.text() === '取消选择')
+    expect(clearButton).toBeTruthy()
+    await clearButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="customer-sample-selection-run-bar"]').exists()).toBe(false)
+    expect((recordCheckboxes[0].element as HTMLInputElement).checked).toBe(false)
+  })
+
   it('客户样本复现模式未选择病历时提示先选择病历', async () => {
     const wrapper = await mountView()
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('请选择病历后发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
     expect(runButton!.attributes('disabled')).toBeUndefined()
     await runButton!.trigger('click')
@@ -1082,6 +1448,39 @@ describe('CustomerSampleValidationView', () => {
   })
 
   it('点击同步样本病历后展示同步进度区块', async () => {
+    getManualSamplePoolSyncJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              step_label: '正在同步',
+              total_candidates: 2,
+              eligible_visits: 2,
+              record_progress: {
+                total: 2,
+                completed: 1,
+                remaining: 1,
+                missing_mr: 1,
+              },
+            },
+          },
+        },
+      })
+      .mockResolvedValue({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'completed',
+          summary: {
+            progress: { step_label: '同步完成', total_candidates: 2, eligible_visits: 2 },
+          },
+        },
+      })
     const wrapper = await mountView()
 
     const syncButton = wrapper
@@ -1097,6 +1496,7 @@ describe('CustomerSampleValidationView', () => {
     })
     expect(wrapper.text()).toContain('样本病历同步进度')
     expect(wrapper.text()).toContain('正在同步')
+    expect(wrapper.text()).toContain('已同步 1 / 2 份')
   })
 
   it('同步任务轮询时应更新进度并在完成后刷新列表', async () => {
@@ -1113,6 +1513,12 @@ describe('CustomerSampleValidationView', () => {
               step_label: '正在同步病历文书',
               total_candidates: 3,
               eligible_visits: 2,
+              record_progress: {
+                total: 2,
+                completed: 1,
+                remaining: 1,
+                missing_mr: 1,
+              },
               processed_tables: 1,
               total_tables: 3,
             },
@@ -1130,6 +1536,12 @@ describe('CustomerSampleValidationView', () => {
               step_label: '继续同步病历文书',
               total_candidates: 3,
               eligible_visits: 2,
+              record_progress: {
+                total: 2,
+                completed: 2,
+                remaining: 0,
+                missing_mr: 0,
+              },
               processed_tables: 2,
               total_tables: 3,
             },
@@ -1147,6 +1559,12 @@ describe('CustomerSampleValidationView', () => {
               step_label: '同步完成',
               total_candidates: 3,
               eligible_visits: 2,
+              record_progress: {
+                total: 2,
+                completed: 2,
+                remaining: 0,
+                missing_mr: 0,
+              },
               processed_tables: 3,
               total_tables: 3,
             },
@@ -1167,12 +1585,14 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('1/3')
+    expect(wrapper.text()).toContain('已同步 1 / 2 份')
     expect(wrapper.text()).toContain('正在同步病历文书')
 
     await vi.advanceTimersByTimeAsync(3000)
     await flushPromises()
 
     expect(wrapper.text()).toContain('2/3')
+    expect(wrapper.text()).toContain('已同步 2 / 2 份')
     expect(wrapper.text()).toContain('继续同步病历文书')
 
     await vi.advanceTimersByTimeAsync(3000)
@@ -1183,7 +1603,53 @@ describe('CustomerSampleValidationView', () => {
     expect(getManualSamplePoolRecords.mock.calls.length).toBeGreaterThan(initialRecordCalls)
   })
 
-  it('支持下载简化后的客户样本导入模板', async () => {
+  it('最近同步任务完成但未匹配源库病历时保留诊断提示', async () => {
+    getLatestManualSamplePoolSyncJob.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'sync-job-empty',
+        pool_id: 'pool-1',
+        status: 'completed',
+        summary: {
+          progress: {
+            step_label: '同步完成',
+            total_candidates: 3,
+            eligible_visits: 0,
+            record_progress: {
+              total: 0,
+              completed: 0,
+              remaining: 0,
+              missing_mr: 0,
+            },
+            processed_tables: 0,
+            total_tables: 12,
+            matched: 0,
+            ambiguous: 1,
+            unmatched: 2,
+            total_rows_pulled: 0,
+            total_rows_upserted: 0,
+          },
+          eligible_visits: 0,
+          matched: 0,
+          ambiguous: 1,
+          unmatched: 2,
+          total_rows_pulled: 0,
+          total_rows_upserted: 0,
+        },
+      },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('样本病历同步进度')
+    expect(wrapper.text()).toContain('源库未匹配到可同步病历')
+    expect(wrapper.text()).toContain('0 份匹配')
+    expect(wrapper.text()).toContain('待确认 1 份，未找到 2 份')
+    expect(wrapper.text()).toContain('已同步 0 / 0 份')
+  })
+
+  it('支持下载以就诊ID为主的客户样本导入模板', async () => {
     const wrapper = await mountView()
 
     const importButton = wrapper.findAll('button').find((node) => node.text().includes('导入模板'))
@@ -1201,7 +1667,33 @@ describe('CustomerSampleValidationView', () => {
     expect(writeFile).toHaveBeenCalled()
     const args = writeFile.mock.calls[0]
     expect(args[1]).toBe('客户样本导入模板.xlsx')
-    expect(aoaToSheet).toHaveBeenCalledWith([['住院号'], ['2248248'], ['161241']])
+    expect(aoaToSheet).toHaveBeenCalledWith([
+      ['就诊ID', '住院流水号', '病案号', '患者姓名', '备注'],
+      ['1870471', 'IP0000135258', '362948', '蒲云鹏', '示例：优先填写就诊ID'],
+      ['1430048', '', '', '', '没有住院流水号/病案号时，可只填就诊ID'],
+    ])
+    expect(aoaToSheet).toHaveBeenCalledWith([
+      ['字段', '是否必填', '说明'],
+      ['就诊ID', '推荐必填', '最可靠的匹配字段，对应源库 visit_id。'],
+      ['住院流水号', '可选', '对应源库 inpat_no，例如 IP0000135258。'],
+      ['病案号', '可选', '对应源库 mr_no，例如 362948。'],
+      ['患者姓名', '可选', '只用于人工核对，不作为唯一匹配键。'],
+      ['备注', '可选', '客户自定义来源或批次说明。'],
+    ])
+    expect(bookAppendSheet).toHaveBeenCalledWith(expect.anything(), expect.anything(), '样本ID')
+    expect(bookAppendSheet).toHaveBeenCalledWith(expect.anything(), expect.anything(), '填写说明')
+  })
+
+  it('导入模板上传提示不再要求只填写住院号', async () => {
+    const wrapper = await mountView()
+
+    const importButton = wrapper.findAll('button').find((node) => node.text().includes('导入模板'))
+    expect(importButton).toBeTruthy()
+    await importButton!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('优先填写就诊ID，可补充住院流水号、病案号和患者姓名。')
+    expect(wrapper.text()).not.toContain('模板只需填写住院号')
   })
 
   it('导入模板成功后应切换到新样本池并刷新病历池', async () => {
@@ -1228,12 +1720,53 @@ describe('CustomerSampleValidationView', () => {
           page_size: 50,
         },
       })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            buildPool(),
+            {
+              ...buildPool(),
+              id: 'pool-2',
+              name: '第二轮样本池',
+              latest_job_id: undefined,
+              latest_job_status: undefined,
+            },
+          ],
+          total: 2,
+          page: 1,
+          page_size: 50,
+        },
+      })
     getManualSamplePoolRecords
       .mockResolvedValueOnce({
         success: true,
         data: {
           pool: buildPool(),
           items: [buildRecord()],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool: {
+            ...buildPool(),
+            id: 'pool-2',
+            name: '第二轮样本池',
+            latest_job_id: undefined,
+            latest_job_status: undefined,
+          },
+          items: [
+            buildRecord({
+              id: 'V010',
+              matched_visit_id: 'V010',
+              mr_no: '300001',
+              patient_name: '新患者',
+            }),
+          ],
           total: 1,
           page: 1,
           page_size: 20,
@@ -1294,13 +1827,58 @@ describe('CustomerSampleValidationView', () => {
         name: 'demo.xlsx',
       }),
     })
-    expect(message.success).toHaveBeenCalledWith('导入成功，共写入 2 条样本')
+    expect(message.success).toHaveBeenCalledWith('导入成功，共写入 2 条样本，正在匹配源库病历')
+    expect(matchManualSamplePool).toHaveBeenCalledWith('pool-2')
+    expect(wrapper.text()).toContain('导入样本 ID 结果')
+    expect(wrapper.text()).toContain('已读取 2 条 ID')
+    expect(wrapper.text()).toContain('匹配 2 份，待确认 0 份，未找到 0 份')
     expect(wrapper.text()).toContain('当前样本池')
     expect(wrapper.text()).toContain('第二轮样本池')
     expect(wrapper.text()).toContain('新患者')
   })
 
-  it('点击查看病历后打开病历联审抽屉', async () => {
+  it('导入模板后若没有匹配到病历应显示明确警告并禁用同步', async () => {
+    matchManualSamplePool.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool_id: 'pool-2',
+        matched: 0,
+        ambiguous: 0,
+        unmatched: 2,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    const importButton = wrapper.findAll('button').find((node) => node.text().includes('导入模板'))
+    expect(importButton).toBeTruthy()
+    await importButton!.trigger('click')
+    await flushPromises()
+
+    const poolNameInput = wrapper
+      .findAll('input')
+      .find((node) => node.attributes('placeholder')?.includes('手工问题样本池'))
+    expect(poolNameInput).toBeTruthy()
+    await poolNameInput!.setValue('第二轮样本池')
+
+    const uploadTrigger = wrapper.find('button.upload-trigger')
+    await uploadTrigger.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('button.modal-ok').trigger('click')
+    await flushPromises()
+
+    expect(message.warning).toHaveBeenCalledWith(
+      '匹配 0 份，待人工确认 0 份，未找到 2 份。没有匹配到病历，请检查 ID 类型或源库配置。',
+    )
+    expect(wrapper.text()).toContain('没有匹配到病历，请检查 ID 类型或源库配置')
+    const syncButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('开始同步匹配到的病历'))
+    expect(syncButton?.attributes('disabled')).toBeDefined()
+  })
+
+  it('点击查看病历后打开只读文书工作台', async () => {
     const wrapper = await mountView()
 
     const reviewAction = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
@@ -1310,13 +1888,31 @@ describe('CustomerSampleValidationView', () => {
     await reviewAction!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.qc-review-drawer-stub').exists()).toBe(true)
+    expect(getEditableMedicalRecordDocuments).toHaveBeenCalledWith('V001', {
+      institute_id: 'H1',
+      patient_id: 'P001',
+      visit_id: 'V001',
+    })
+    const modalText = wrapper.find('.a-modal-stub').text()
+    expect(modalText).toContain('查看病历文书')
+    expect(modalText).toContain('病历信息')
+    expect(modalText).toContain('只读原文')
+    expect(modalText).toContain('入院记录')
+    expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
+    expect(modalText).not.toContain('副本信息')
+    expect(modalText).not.toContain('张三编辑副本')
+    expect(modalText).not.toContain('源病历编辑副本')
+    expect(modalText).not.toContain('新增文书')
+    expect(modalText).not.toContain('新增医嘱')
+    expect(modalText).not.toContain('保存为测试病历')
   })
 
   it('点击查看结果后打开批量任务结果抽屉', async () => {
     const wrapper = await mountView()
 
-    const resultLink = wrapper.findAll('a').find((node) => node.text() === '查看结果')
+    const resultLink = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
+      (node) => node.text() === '查看结果',
+    )
     expect(resultLink).toBeTruthy()
     await resultLink!.trigger('click')
     await flushPromises()
@@ -1359,7 +1955,9 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
-    const resultLink = wrapper.findAll('a').find((node) => node.text() === '查看结果')
+    const resultLink = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
+      (node) => node.text() === '查看结果',
+    )
     expect(resultLink).toBeTruthy()
     await resultLink!.trigger('click')
     await flushPromises()
@@ -1404,15 +2002,13 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
 
     expect(message.warning).toHaveBeenCalledWith(
-      '当前选中的病历还未完成病历关联，暂时无法发起泸县0609验证',
+      '当前选中的病历还未完成病历关联，暂时无法开始0609质控',
     )
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
@@ -1442,9 +2038,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1465,6 +2059,7 @@ describe('CustomerSampleValidationView', () => {
   })
 
   it('客户自建病历列表优先显示可记忆的病历标题', async () => {
+    const backendCreatedAt = '2026-06-23T15:30:12'
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
       data: {
@@ -1476,11 +2071,11 @@ describe('CustomerSampleValidationView', () => {
             mr_no: 'CUSTOMER_TEST_202606231530ABCDEF',
             patient_name: '测试患者丙',
             department: '消化内科',
-            created_at: '2026-06-23 15:30:12',
+            created_at: backendCreatedAt,
             sample_items: [
               {
                 id: 'item-memory-title',
-                created_at: '2026-06-23 15:30:12',
+                created_at: backendCreatedAt,
                 raw_payload: {
                   case_title: '会诊质量质控病历｜LX020/021/022｜202606231530',
                 },
@@ -1496,17 +2091,157 @@ describe('CustomerSampleValidationView', () => {
 
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('会诊质量质控病历｜LX020/021/022')
-    expect(wrapper.find('.customer-sample-patient-name').text()).toBe(
-      '会诊质量质控病历｜LX020/021/022',
+    expect(wrapper.text()).toContain('会诊质量质控')
+    expect(wrapper.text()).not.toContain('会诊质量质控病历')
+    expect(wrapper.text()).not.toContain('会诊质量质控病历｜LX020/021/022')
+    expect(wrapper.find('.customer-sample-patient-name').text()).toBe('测试患者丙 · 会诊质量质控')
+    expect(wrapper.find('.customer-sample-created-time').text()).toBe(
+      expectedCompactLocalTime(backendCreatedAt).slice(0, 10),
     )
-    expect(wrapper.find('.customer-sample-created-time').text()).toBe('2026-06-23 15:30')
-    expect(wrapper.find('.customer-sample-patient-meta').text()).not.toContain('2026-06-23 15:30')
     expect(wrapper.find('.customer-sample-patient-cell').text()).not.toContain('ABCDEF')
-    expect(wrapper.find('.customer-sample-record-code').text()).toBe('测试-001')
+    const expectedCodeTime = expectedCompactLocalTime(backendCreatedAt)
+      .slice(5)
+      .replace('-', '')
+      .replace(' ', '-')
+      .replace(':', '')
+    expect(wrapper.find('.customer-sample-record-code').text()).toBe(`测试-${expectedCodeTime}`)
     expect(wrapper.find('.customer-sample-record-code').attributes('title')).toBe(
       'CUSTOMER_TEST_202606231530ABCDEF',
     )
+    expect(wrapper.find('.record-actions').text()).not.toContain('已关联病历')
+    expect(wrapper.find('.record-actions').text()).not.toContain('已就绪')
+    expect(wrapper.find('.record-actions').text()).not.toContain('查看详情')
+    expect(wrapper.findAll('.customer-sample-secondary-link').map((node) => node.text())).toEqual([
+      '查看病历',
+      '查看结果',
+      '创建副本',
+    ])
+  })
+
+  it('真实样本没有病历标题时病历列不重复显示患者名', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ id: 'pool-0426', name: '0426' }),
+        items: [
+          buildRecord({
+            id: 'V_REAL_001',
+            matched_visit_id: 'V_REAL_001',
+            mr_no: 'REAL_001',
+            patient_name: '邹才林',
+            department: '骨科',
+            sample_items: [],
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('.customer-sample-patient-name').text()).toBe('邹才林')
+    expect(wrapper.find('.customer-sample-patient-name').text()).not.toBe('邹才林 · 邹才林')
+  })
+
+  it('病历标题已包含患者名时列表不重复拼接患者名', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ id: 'customer-created-test-records-v1', name: '客户自建测试病历' }),
+        items: [
+          buildRecord({
+            id: 'CUSTOMER_TEST_EDIT_COPY',
+            matched_visit_id: 'CUSTOMER_TEST_EDIT_COPY',
+            mr_no: 'CUSTOMER_TEST_20260626024719B3BA68',
+            patient_name: '邹才林',
+            department: '康复科',
+            sample_items: [
+              {
+                id: 'ct-edit-copy',
+                raw_payload: {
+                  case_title: '邹才林编辑副本',
+                },
+              },
+            ],
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('.customer-sample-patient-name').text()).toBe('邹才林 · 编辑副本')
+    expect(wrapper.find('.customer-sample-patient-name').text()).not.toContain('邹才林 · 邹才林')
+  })
+
+  it('病历池列表将按质控点创建的长规则串折叠为验证范围摘要', async () => {
+    const selectedRuleIds = [
+      'LX0609-003',
+      'LX0609-024',
+      'LX0609-025',
+      'LX0609-028',
+      'LX0609-029',
+      'LX0609-030',
+      'LX0609-031',
+      'LX0609-032',
+      'LX0609-033',
+      'LX0609-034',
+      'LX0609-035',
+      'LX0609-036',
+      'LX0609-037',
+      'LX0609-038',
+      'LX0609-039',
+      'LX0609-040',
+    ]
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ id: 'customer-created-test-records-v1', name: '客户自建测试病历' }),
+        items: [
+          buildRecord({
+            id: 'CUSTOMER_TEST_202606251031A1B2C3',
+            matched_visit_id: 'CUSTOMER_TEST_202606251031A1B2C3',
+            mr_no: 'CUSTOMER_TEST_202606251031A1B2C3',
+            patient_name: '王某某',
+            department: '普通外科',
+            candidate_rule_ids: selectedRuleIds,
+            issue_preview: [`按质控点创建：${selectedRuleIds.join('、')}。`],
+            issue_preview_text: `按质控点创建：${selectedRuleIds.join('、')}。`,
+            sample_items: [
+              {
+                id: 'item-long-rule-summary',
+                row_no: 1,
+                manual_issue_text: `按质控点创建：${selectedRuleIds.join('、')}。`,
+                issue_category: '手术麻醉',
+                raw_payload: {
+                  case_title:
+                    '手术麻醉质控病历｜LX003/024/025/028/029/030/031/032/033/034/035/036/037/038/039/040｜0625-1031',
+                  selected_rule_ids: selectedRuleIds,
+                },
+              },
+            ],
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.find('.customer-sample-patient-name').text()).toBe('王某某 · 手术麻醉质控')
+    expect(wrapper.find('.customer-sample-family-chip').text()).toBe('手术麻醉16个质控点')
+    expect(wrapper.find('.customer-sample-rule-count-chip').exists()).toBe(false)
+    expect(wrapper.find('.customer-sample-rule-id-chip').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('按质控点创建 · 手术麻醉')
+    expect(wrapper.text()).not.toContain('LX0609-028、LX0609-029、LX0609-030')
+    expect(wrapper.find('.record-actions').text()).not.toContain('查看详情')
   })
 
   it('合成样本可勾选 LX0609 质控点并只提交 selected_rule_ids', async () => {
@@ -1541,9 +2276,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1553,6 +2286,227 @@ describe('CustomerSampleValidationView', () => {
       {
         record_ids: ['LX0609_SYN_001'],
         max_parallel_records: 4,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+        selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+      },
+      { timeout: 90000 },
+    )
+  })
+
+  it('已同步病历可创建编辑副本，保存时不修改源病历并记录来源信息', async () => {
+    const wrapper = await mountView()
+
+    const copyAction = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '创建副本')
+    expect(copyAction).toBeTruthy()
+    await copyAction!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(getEditableMedicalRecordDocuments).toHaveBeenCalledWith('V001', {
+      institute_id: 'H1',
+      patient_id: 'P001',
+      visit_id: 'V001',
+    })
+    expect(wrapper.find('.a-modal-stub').text()).toContain('原始同步病历保持只读')
+    expect(wrapper.find('.editable-copy-document-workbench').exists()).toBe(true)
+    expect(wrapper.find('.editable-copy-document-directory').text()).toContain('医嘱')
+    expect(wrapper.find('.editable-copy-document-directory').text()).toContain(
+      '长期 3 条 · 临时 2 条',
+    )
+
+    const textareas = wrapper.findAll('textarea')
+    const documentTextarea = textareas.find((node) => node.element.value.includes('患者因腹痛入院'))
+    expect(documentTextarea).toBeTruthy()
+    await documentTextarea!.setValue('编辑后的入院记录正文，保留临床上下文并补充质控关注点。')
+
+    const saveButton = wrapper.findAll('button').find((node) => node.text() === '保存为测试病历')
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(createManualTestMedicalRecord).toHaveBeenCalledTimes(1)
+    const payload = createManualTestMedicalRecord.mock.calls[0][0]
+    expect(payload.documents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: '入院记录',
+          content: '编辑后的入院记录正文，保留临床上下文并补充质控关注点。',
+        }),
+      ]),
+    )
+    const courseDocument = payload.documents.find(
+      (item: { title?: string }) => item.title === '日常病程记录',
+    )
+    expect(courseDocument).toBeTruthy()
+    expect(courseDocument.record_time).toBeUndefined()
+    expect(courseDocument.submit_time).toBeUndefined()
+    expect(payload.source).toEqual(
+      expect.objectContaining({
+        type: 'customer_source_editable_copy',
+        source_pool_id: 'pool-1',
+        source_record_id: 'V001',
+        source_visit_id: 'V001',
+      }),
+    )
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+  })
+
+  it('编辑副本支持新增文书、医嘱并从副本删除源文书', async () => {
+    const wrapper = await mountView()
+
+    const copyAction = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '创建副本')
+    expect(copyAction).toBeTruthy()
+    await copyAction!.trigger('click')
+    await flushPromises()
+
+    const documentNavCount = wrapper.findAll('.editable-copy-document-nav-item').length
+
+    const addDocumentButton = wrapper.findAll('button').find((node) => node.text() === '新增文书')
+    expect(addDocumentButton).toBeTruthy()
+    await addDocumentButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.findAll('.editable-copy-document-nav-item')).toHaveLength(documentNavCount + 1)
+    const newDocumentTextarea = wrapper
+      .findAll('textarea')
+      .find((node) => node.element.value.includes('请填写日常病程记录正文'))
+    expect(newDocumentTextarea).toBeTruthy()
+    await newDocumentTextarea!.setValue('新增的日常病程记录正文，说明患者治疗经过和复核关注点。')
+
+    const addOrderButton = wrapper.findAll('button').find((node) => node.text() === '新增医嘱')
+    expect(addOrderButton).toBeTruthy()
+    await addOrderButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.findAll('.editable-copy-document-nav-item')).toHaveLength(documentNavCount + 1)
+    const orderGroupNavItem = wrapper
+      .findAll('.editable-copy-document-nav-item')
+      .find((node) => node.text().includes('医嘱'))
+    expect(orderGroupNavItem).toBeTruthy()
+    await orderGroupNavItem!.trigger('click')
+    await nextTick()
+    expect(wrapper.findAll('.editable-copy-order-table tbody tr').length).toBeGreaterThanOrEqual(2)
+    const newOrderTextarea = wrapper
+      .findAll('textarea')
+      .find((node) => node.element.value.includes('请填写医嘱名称'))
+    expect(newOrderTextarea).toBeTruthy()
+    await newOrderTextarea!.setValue('临时医嘱：头孢曲松 2g 静滴 qd，开立医师陈医师。')
+
+    const admissionNavItem = wrapper
+      .findAll('.editable-copy-document-nav-item')
+      .find((node) => node.text().includes('入院记录'))
+    expect(admissionNavItem).toBeTruthy()
+    await admissionNavItem!.trigger('click')
+    await nextTick()
+
+    const removeFromCopyButton = wrapper
+      .find('.editable-copy-document-editor')
+      .findAll('button')
+      .find((node) => node.text() === '从副本删除')
+    expect(removeFromCopyButton).toBeTruthy()
+    await removeFromCopyButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('.editable-copy-document-editor').text()).toContain('恢复')
+
+    const saveButton = wrapper.findAll('button').find((node) => node.text() === '保存为测试病历')
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    const payload = createManualTestMedicalRecord.mock.calls[0][0]
+    const documentContents = payload.documents.map((item: { content: string }) => item.content)
+    expect(documentContents).not.toContain('患者因腹痛入院，完善相关检查后收入普通外科。')
+    expect(documentContents).toContain('新增的日常病程记录正文，说明患者治疗经过和复核关注点。')
+    expect(documentContents).toContain('临时医嘱：头孢曲松 2g 静滴 qd，开立医师陈医师。')
+  })
+
+  it('医嘱在查看/编辑副本中按长期和临时分类并按时间倒序展示', async () => {
+    const wrapper = await mountView()
+
+    const copyAction = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '创建副本')
+    expect(copyAction).toBeTruthy()
+    await copyAction!.trigger('click')
+    await flushPromises()
+
+    const orderGroupNavItem = wrapper
+      .findAll('.editable-copy-document-nav-item')
+      .find((node) => node.text().includes('长期 3 条 · 临时 2 条'))
+    expect(orderGroupNavItem).toBeTruthy()
+    await orderGroupNavItem!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('.editable-copy-order-type-switch').text()).toContain('长期医嘱')
+    expect(wrapper.find('.editable-copy-order-type-switch').text()).toContain('临时医嘱')
+    expect(wrapper.find('.editable-copy-order-table').text()).toContain('开始时间')
+    expect(wrapper.find('.editable-copy-order-table').text()).toContain('医嘱类型')
+    expect(wrapper.find('.editable-copy-order-table').text()).toContain('医嘱项目')
+    expect(wrapper.find('.editable-copy-order-table').text()).toContain('停止时间')
+    expect(wrapper.find('.editable-copy-order-table').text()).toContain('医嘱状态')
+
+    expect(wrapper.find('.editable-copy-order-type-switch button.is-active').text()).toBe(
+      '临时医嘱',
+    )
+    const temporaryOrderText = wrapper.find('.editable-copy-order-table tbody').text()
+    expect(temporaryOrderText).toContain('2026-06-02 16:30:00')
+    expect(temporaryOrderText).toContain('头孢曲松')
+    expect(temporaryOrderText).toContain('氨溴索注射液')
+    expect(temporaryOrderText).not.toContain('II级护理')
+    expect(temporaryOrderText).not.toContain('长期')
+
+    const longOrderButton = wrapper
+      .findAll('.editable-copy-order-type-switch button')
+      .find((node) => node.text() === '长期医嘱')
+    expect(longOrderButton).toBeTruthy()
+    await longOrderButton!.trigger('click')
+    await nextTick()
+
+    const longRows = wrapper.findAll('.editable-copy-order-table tbody tr')
+    expect(longRows).toHaveLength(3)
+    const longOrderText = wrapper.find('.editable-copy-order-table tbody').text()
+    expect(longRows[0].text()).toContain('奥美拉唑')
+    expect(longOrderText).toContain('II级护理')
+    expect(longOrderText).toContain('护理')
+    expect(longOrderText).toContain('大活络胶囊')
+  })
+
+  it('编辑副本保存并验证时只运行新测试病历和已选 LX0609 质控点', async () => {
+    const wrapper = await mountView()
+
+    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
+    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
+    await lx020.setValue(true)
+    await lx021.setValue(true)
+
+    const copyAction = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '创建副本')
+    expect(copyAction).toBeTruthy()
+    await copyAction!.trigger('click')
+    await flushPromises()
+
+    const runButton = wrapper.findAll('button').find((node) => node.text() === '保存并验证')
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(createManualTestMedicalRecord).toHaveBeenCalledTimes(1)
+    expect(createManualTestMedicalRecord.mock.calls[0][0].selected_rule_ids).toEqual([
+      'LX0609-020',
+      'LX0609-021',
+    ])
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'customer-created-test-records-v1',
+      {
+        record_ids: ['CUSTOMER_TEST_EDIT_COPY'],
+        max_parallel_records: 1,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
         selected_rule_ids: ['LX0609-020', 'LX0609-021'],
@@ -1613,9 +2567,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1636,7 +2588,7 @@ describe('CustomerSampleValidationView', () => {
     )
   })
 
-  it('LX0609 质控点范围支持选择多组规则', async () => {
+  it('LX0609 质控点范围支持选择多组规则并按族并发提交', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
       data: {
@@ -1668,21 +2620,72 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
 
-    const payload = runManualSamplePool.mock.calls.at(-1)?.[1] as { selected_rule_ids?: string[] }
-    expect(payload.selected_rule_ids).toEqual([
-      'LX0609-001',
-      'LX0609-002',
-      'LX0609-005',
-      'LX0609-012',
-      'LX0609-014',
-    ])
+    expect(runManualSamplePool).toHaveBeenCalledTimes(2)
+    const submittedPayloads = runManualSamplePool.mock.calls.map((call) => call[1]) as Array<{
+      max_parallel_records?: number
+      selected_rule_ids?: string[]
+    }>
+    expect(submittedPayloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          max_parallel_records: 1,
+          selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'],
+        }),
+        expect.objectContaining({
+          max_parallel_records: 1,
+          selected_rule_ids: [
+            'LX0609-007',
+            'LX0609-008',
+            'LX0609-009',
+            'LX0609-016',
+            'LX0609-017',
+            'LX0609-018',
+          ],
+        }),
+      ]),
+    )
+  })
+
+  it('LX0609 质控点范围支持一次性选择全部规则族', async () => {
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const selectAllButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('勾选全部7个质控族'))
+    expect(selectAllButton).toBeTruthy()
+    await selectAllButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('当前范围：已勾选全部 49 个质控点')
+    expect(wrapper.text()).toContain('取消全部勾选')
+
+    const checkedRules = wrapper
+      .findAll('input.luxian-rule-checkbox')
+      .filter((input) => (input.element as HTMLInputElement).checked)
+    expect(checkedRules.length).toBeGreaterThanOrEqual(5)
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledTimes(7)
+    const submittedRuleIds = runManualSamplePool.mock.calls.flatMap((call) => {
+      const payload = call[1] as { selected_rule_ids?: string[] }
+      return payload.selected_rule_ids || []
+    })
+    expect(submittedRuleIds.sort()).toEqual(
+      Array.from({ length: 49 }, (_, index) => `LX0609-${String(index + 1).padStart(3, '0')}`),
+    )
   })
 
   it('创建测试病历时带入当前已选 LX0609 质控点范围', async () => {
@@ -1691,8 +2694,8 @@ describe('CustomerSampleValidationView', () => {
     const familyButtons = wrapper
       .findAll('button')
       .filter((node) => node.text().includes('选择本组'))
-    expect(familyButtons.length).toBeGreaterThanOrEqual(2)
-    await familyButtons[1].trigger('click')
+    expect(familyButtons.length).toBeGreaterThanOrEqual(3)
+    await familyButtons[2].trigger('click')
     await nextTick()
 
     const createButton = wrapper.find('.customer-sample-create-action')
@@ -1702,8 +2705,8 @@ describe('CustomerSampleValidationView', () => {
     expect(routerPush).toHaveBeenLastCalledWith({
       name: 'WorkstationV4SyntheticCaseNew',
       query: {
-        ruleIds: 'LX0609-012,LX0609-014',
-        ruleFamily: 'ct_mri_culture',
+        ruleIds: 'LX0609-010,LX0609-011,LX0609-012,LX0609-014,LX0609-015',
+        ruleFamily: 'exam_lab',
       },
     })
   })
@@ -1736,9 +2739,7 @@ describe('CustomerSampleValidationView', () => {
     await recordCheckboxes[0].setValue(true)
     await recordCheckboxes[1].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1762,9 +2763,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1789,7 +2788,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1841,7 +2840,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1908,9 +2907,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起SC全量验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始SC质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1938,9 +2935,7 @@ describe('CustomerSampleValidationView', () => {
 
     await selectRuleSet(wrapper, 'sc_content_full_v1')
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('请选择病历后发起SC全量验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1982,9 +2977,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起SC全量验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始SC质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await nextTick()
@@ -2083,9 +3076,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起SC全量验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始SC质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()

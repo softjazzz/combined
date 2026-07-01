@@ -51,6 +51,25 @@ def _clear_dependency_overrides(client):
 @pytest.mark.unit
 @pytest.mark.api
 class TestSyncRouter:
+    def test_builtin_sync_admin_login_success(self, client):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "sync_admin@medqc.com", "password": "sync888"},
+        )
+
+        assert response.status_code == 200
+        login_data = response.json()
+        assert login_data["access_token"]
+
+        me_response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {login_data['access_token']}"},
+        )
+        assert me_response.status_code == 200
+        me_data = me_response.json()
+        assert me_data["email"] == "sync_admin@medqc.com"
+        assert me_data["roles"] == ["sync_admin"]
+
     def test_read_permission_matrix(self, client, monkeypatch):
         monkeypatch.setattr(
             "app.services.etl_sync.get_sync_state",
@@ -63,13 +82,46 @@ class TestSyncRouter:
         _override_user(client, ["qc_manager"])
         assert client.get("/api/v1/sync/status").status_code == 200
 
+        _override_user(client, ["sync_admin"])
+        assert client.get("/api/v1/sync/status").status_code == 200
+
+        _override_user(client, ["super_admin"])
+        assert client.get("/api/v1/sync/status").status_code == 200
+
         _override_user(client, ["doctor"])
         assert client.get("/api/v1/sync/status").status_code == 403
 
-    def test_write_permission_matrix(self, client):
+    def test_write_permission_matrix(self, client, monkeypatch):
+        monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True})
+        monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True})
+        monkeypatch.setattr(
+            "app.services.etl_sync.validate_pg_sync_plan",
+            lambda tables=None, include_disabled=False: {
+                "mode": "table",
+                "remote_schema": "public",
+                "blockers": [],
+                "warnings": [],
+                "table_validations": [],
+                "target_tables": [],
+                "matrix_scope": "enabled" if not include_disabled else "all",
+            },
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.estimate_pg_sync_impact",
+            lambda **kwargs: {"estimated_impact": 1, "estimate_basis": "eligible_visit_count"},
+        )
+
         _override_user(client, ["qc_manager"])
         resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tier": "all"})
         assert resp.status_code == 403
+
+        _override_user(client, ["sync_admin"])
+        resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tier": "all"})
+        assert resp.status_code == 200
+
+        _override_user(client, ["super_admin"])
+        resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tier": "all"})
+        assert resp.status_code == 200
 
     def test_get_status_and_statistics(self, client, monkeypatch):
         _override_user(client, ["admin"])
@@ -218,7 +270,15 @@ class TestSyncRouter:
         _override_user(client, ["admin"])
         monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})
         monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True, "error": ""})
-        monkeypatch.setattr("app.services.etl_sync.get_sync_state", lambda: {"total_records_synced": 888})
+        monkeypatch.setattr(
+            "app.services.etl_sync.estimate_pg_sync_impact",
+            lambda **_kwargs: {
+                "estimated_impact": 7,
+                "estimate_basis": "eligible_visit_count",
+                "date_window": {"start": "2026-06-01", "end": "2026-06-02"},
+                "target_departments": ["骨科"],
+            },
+        )
         monkeypatch.setattr(
             "app.services.etl_sync.validate_pg_sync_plan",
             lambda tables=None, include_disabled=False: {
@@ -232,12 +292,122 @@ class TestSyncRouter:
             },
         )
 
-        resp = client.post("/api/v1/sync/preflight", json={"source": "pg", "tables": ["mr"]})
+        resp = client.post(
+            "/api/v1/sync/preflight",
+            json={
+                "source": "pg",
+                "tables": ["mr"],
+                "date_window": {"start": "2026-06-01", "end": "2026-06-02"},
+                "target_departments": ["骨科"],
+            },
+        )
         assert resp.status_code == 200
         data = _assert_success_shell(resp.json())
         assert data["source"] == "pg"
         assert data["executable"] is True
-        assert data["estimated_impact"] == 888
+        assert data["estimated_impact"] == 7
+        assert data["estimate_basis"] == "eligible_visit_count"
+        assert data["date_window"] == {"start": "2026-06-01", "end": "2026-06-02"}
+        assert data["target_departments"] == ["骨科"]
+        assert isinstance(data["preflight_fingerprint"], str)
+        assert len(data["preflight_fingerprint"]) == 64
+
+    def test_preflight_pg_zero_candidates_should_block_sync(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})
+        monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True, "error": ""})
+        monkeypatch.setattr(
+            "app.services.etl_sync.estimate_pg_sync_impact",
+            lambda **_kwargs: {
+                "estimated_impact": 0,
+                "estimate_basis": "eligible_visit_count",
+                "date_window": {"start": "2026-06-01", "end": "2026-06-02"},
+                "target_departments": ["骨科"],
+            },
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.validate_pg_sync_plan",
+            lambda tables=None, include_disabled=False: {
+                "mode": "table",
+                "remote_schema": "public",
+                "matrix_scope": "enabled" if not include_disabled else "all",
+                "blockers": [],
+                "warnings": [],
+                "table_validations": [{"table": "mr", "executable": True, "blockers": []}],
+                "target_tables": ["mr"],
+            },
+        )
+
+        resp = client.post(
+            "/api/v1/sync/preflight",
+            json={
+                "source": "pg",
+                "tables": ["mr"],
+                "date_window": {"start": "2026-06-01", "end": "2026-06-02"},
+                "target_departments": ["骨科"],
+            },
+        )
+        assert resp.status_code == 200
+        data = _assert_success_shell(resp.json())
+        assert data["executable"] is False
+        assert data["estimated_impact"] == 0
+        assert any("未找到可同步的终末病历" in item for item in data["blockers"])
+        assert any("候选病历数为 0" in item for item in data["warnings"])
+        assert data["risk_level"] == "high"
+
+    def test_preflight_running_scene_should_block_sync(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})
+        monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True, "error": ""})
+        monkeypatch.setattr(
+            "app.services.etl_sync.validate_pg_sync_plan",
+            lambda tables=None, include_disabled=False: {
+                "mode": "table",
+                "remote_schema": "public",
+                "matrix_scope": "enabled" if not include_disabled else "all",
+                "blockers": [],
+                "warnings": [],
+                "table_validations": [{"table": "mr", "executable": True, "blockers": []}],
+                "target_tables": ["mr"],
+            },
+        )
+
+        resp = client.post(
+            "/api/v1/sync/preflight",
+            json={"source": "pg", "tables": ["mr"], "scene": "running"},
+        )
+        assert resp.status_code == 200
+        data = _assert_success_shell(resp.json())
+        assert data["executable"] is False
+        assert data["scene"] == "running"
+        assert any("running 在院病历同步尚未接入本页" in item for item in data["blockers"])
+        assert data["estimated_impact"] == 0
+        assert data["risk_level"] == "high"
+
+    def test_trigger_rejects_stale_preflight_fingerprint(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        calls = {"run": 0}
+
+        def _fake_run_sync(**_kwargs):
+            calls["run"] += 1
+            return {"success": True, "total_records": 1}
+
+        monkeypatch.setattr("app.services.etl_sync.run_sync", _fake_run_sync)
+
+        resp = client.post(
+            "/api/v1/sync/trigger",
+            json={
+                "source": "pg",
+                "tier": "all",
+                "scene": "both",
+                "date_window": {"start": "2026-06-01", "end": "2026-06-02"},
+                "target_departments": ["骨科"],
+                "preflight_fingerprint": "stale",
+            },
+        )
+        assert resp.status_code == 409
+        assert "预检结果已过期" in str(resp.json())
+        assert calls["run"] == 0
 
     def test_trigger_running_rejected(self, client, monkeypatch):
         _override_user(client, ["admin"])

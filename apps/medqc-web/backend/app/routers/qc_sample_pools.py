@@ -200,6 +200,19 @@ class TestRecordGoldenAnswer(BaseModel):
     human_reason: Optional[str] = Field(default=None, description="人工判定理由")
 
 
+class TestRecordSourceMeta(BaseModel):
+    type: str = Field(default="customer_source_editable_copy", description="来源类型")
+    source_pool_id: Optional[str] = Field(default=None, description="来源样本池 ID")
+    source_pool_name: Optional[str] = Field(default=None, description="来源样本池名称")
+    source_record_id: Optional[str] = Field(default=None, description="来源病历聚合记录 ID")
+    source_item_ids: list[str] = Field(default_factory=list, description="来源样本行 ID")
+    source_visit_id: Optional[str] = Field(default=None, description="来源 visit_id")
+    source_mr_no: Optional[str] = Field(default=None, description="来源病案号")
+    source_patient_name: Optional[str] = Field(default=None, description="来源患者姓名")
+    source_department: Optional[str] = Field(default=None, description="来源科室")
+    created_from: Optional[str] = Field(default=None, description="创建来源入口")
+
+
 class TestRecordCreateRequest(BaseModel):
     case_title: str = Field(..., description="测试病历名称")
     basic_info: TestRecordBasicInfo
@@ -208,6 +221,7 @@ class TestRecordCreateRequest(BaseModel):
     manual_issue_text: Optional[str] = Field(default=None, description="样本说明")
     template_key: Optional[str] = Field(default=None, description="使用的测试病历模板 key")
     golden_answers: list[TestRecordGoldenAnswer] = Field(default_factory=list, description="人工预期结果")
+    source: Optional[TestRecordSourceMeta] = Field(default=None, description="派生测试病历来源记录")
 
 
 def _run_sample_pool_sync_job(job_id: str) -> None:
@@ -499,7 +513,10 @@ async def match_sample_pool(
     pool = _service().get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
-    result = _service().match_pool_items(pool_id=pool_id)
+    try:
+        result = _service().match_pool_items_from_source(pool_id=pool_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"源库病历匹配失败: {exc}") from exc
     return success_response(
         data=result,
         message="客户样本病历匹配完成",

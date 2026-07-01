@@ -1026,21 +1026,28 @@ def test_classify_empty_issue_defaults_to_intrinsic_record_batch():
 def test_load_manual_case_rows_from_excel_supports_minimal_identifier_columns(monkeypatch):
     dataframe = pd.DataFrame(
         [
-            ["住院号", "visit_id", "存在问题"],
-            ["2248248", "", ""],
-            ["", "VISIT-001", "首次病程记录鉴别诊断不全面"],
+            ["住院号", "病案号", "visit_id", "流水号", "存在问题"],
+            ["IP0000135258", "362948", "", "", ""],
+            ["", "", "VISIT-001", "", "首次病程记录鉴别诊断不全面"],
+            ["", "", "", "2431973", "按客户界面流水号导入"],
         ]
     )
     monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: dataframe)
 
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
 
-    assert len(rows) == 2
-    assert rows[0]["mr_no"] == "2248248"
+    assert len(rows) == 3
+    assert rows[0]["inpat_no"] == "IP0000135258"
+    assert rows[0]["mr_no"] == "362948"
     assert rows[0]["visit_id"] == ""
     assert rows[1]["mr_no"] == ""
+    assert rows[1]["inpat_no"] == ""
     assert rows[1]["visit_id"] == "VISIT-001"
     assert rows[1]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
+    assert rows[2]["mr_no"] == ""
+    assert rows[2]["inpat_no"] == ""
+    assert rows[2]["visit_id"] == "2431973"
+    assert rows[2]["manual_issue_text"] == "按客户界面流水号导入"
 
 
 def test_load_manual_case_rows_from_excel_keeps_mr_no_only_rows(monkeypatch):
@@ -1055,7 +1062,8 @@ def test_load_manual_case_rows_from_excel_keeps_mr_no_only_rows(monkeypatch):
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
 
     assert len(rows) == 1
-    assert rows[0]["mr_no"] == "161241"
+    assert rows[0]["inpat_no"] == "161241"
+    assert rows[0]["mr_no"] == ""
     assert rows[0]["visit_id"] == ""
 
 
@@ -1077,7 +1085,8 @@ def test_load_manual_case_rows_from_excel_supports_mr_no_only_template(monkeypat
 
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="")
 
-    assert [row["mr_no"] for row in rows] == ["2248248", "161241"]
+    assert [row["inpat_no"] for row in rows] == ["2248248", "161241"]
+    assert all(row["mr_no"] == "" for row in rows)
     assert all(row["visit_id"] == "" for row in rows)
     assert calls[0]["sheet_name"] == 0
 
@@ -1102,7 +1111,7 @@ def test_load_manual_case_rows_from_excel_falls_back_to_first_sheet_when_sheet2_
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
 
     assert len(rows) == 1
-    assert rows[0]["mr_no"] == "2248248"
+    assert rows[0]["inpat_no"] == "2248248"
     assert [call["sheet_name"] for call in calls] == ["Sheet2", 0]
 
 
@@ -1195,7 +1204,26 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert [call["scene"] for call in refresh_calls] == ["running", "final", "running", "final", "running", "final"]
     assert progress_events[0]["step_key"] == "resolving"
     assert progress_events[1]["step_key"] == "resolved"
+    assert progress_events[1]["record_progress"] == {
+        "total": 1,
+        "completed": 0,
+        "remaining": 1,
+        "missing_mr": 1,
+        "basis": "mr_visible",
+        "label": "病历池可见进度",
+    }
+    assert progress_events[3]["record_progress"]["completed"] == 1
     assert progress_events[-1]["step_key"] == "matching"
+    assert progress_events[-1]["record_progress"] == {
+        "total": 1,
+        "completed": 1,
+        "remaining": 0,
+        "missing_mr": 0,
+        "basis": "mr_visible",
+        "label": "病历池可见进度",
+    }
+    assert result["record_progress"]["completed"] == 1
+    assert result["record_progress"]["total"] == 1
 
 
 def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):

@@ -2,6 +2,7 @@
   <main class="customer-sample-page relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5"
+      :class="{ 'has-selection-run-bar': selectedRecordStats.selectedCount > 0 }"
     >
       <div class="customer-sample-container mx-auto w-full max-w-[1440px] space-y-4">
         <section class="customer-sample-console">
@@ -40,21 +41,21 @@
               >
                 {{ runButtonText }}
               </a-button>
+              <a-button
+                class="customer-sample-task-history-action !rounded-lg"
+                @click="openTaskHistoryDrawer"
+              >
+                <History :size="15" />
+                质控记录
+                <span v-if="taskHistoryTotal > 0" class="customer-sample-task-history-count">
+                  {{ taskHistoryTotal > 99 ? '99+' : taskHistoryTotal }}
+                </span>
+              </a-button>
               <a-dropdown :trigger="['click']">
-                <a-button class="!rounded-lg">
-                  更多操作
-                </a-button>
+                <a-button class="!rounded-lg"> 更多操作 </a-button>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="handleMoreActionKey('import')">
-                      导入模板
-                    </a-menu-item>
-                    <a-menu-item @click="handleMoreActionKey('create-test-record')">
-                      创建测试病历
-                    </a-menu-item>
-                    <a-menu-item @click="handleMoreActionKey('refresh')">
-                      刷新样本池
-                    </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('refresh')"> 刷新样本池 </a-menu-item>
                     <a-menu-item
                       :disabled="!selectedPoolId || syncLoading"
                       @click="handleMoreActionKey('sync')"
@@ -74,25 +75,21 @@
                       查看最近任务
                     </a-menu-item>
                     <a-menu-divider />
-                    <a-sub-menu
-                      key="luxian-report"
-                      title="导出泸县0609报告"
-                    >
+                    <a-sub-menu key="luxian-report" title="导出报告">
                       <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
                         Markdown 评估报告
                       </a-menu-item>
                       <a-menu-item @click="handleMoreActionKey('export-luxian-csv')">
                         CSV 指标明细
                       </a-menu-item>
+                    </a-sub-menu>
+                    <a-menu-divider />
+                    <a-sub-menu key="developer-admin" title="开发/管理员">
+                      <a-menu-item @click="handleMoreActionKey('import')"> 导入模板 </a-menu-item>
                       <a-menu-item @click="handleMoreActionKey('export-luxian-json')">
                         JSON 原始结果
                       </a-menu-item>
-                    </a-sub-menu>
-                    <a-menu-divider />
-                    <a-sub-menu
-                      key="advanced"
-                      title="高级模式"
-                    >
+                      <a-menu-divider />
                       <a-menu-item @click="handleMoreActionKey('mode-sc')">
                         SC 样本规则模式
                       </a-menu-item>
@@ -115,9 +112,7 @@
               data-customer-guide="sample-pool"
               :class="customerSampleGuideTargetClass('sample-pool')"
             >
-              <div class="customer-sample-field-label">
-                当前样本池
-              </div>
+              <div class="customer-sample-field-label">当前样本池</div>
               <div class="flex items-center gap-2">
                 <a-select
                   v-model:value="selectedPoolId"
@@ -144,9 +139,7 @@
               data-customer-guide="sample-rule"
               :class="customerSampleGuideTargetClass('sample-rule')"
             >
-              <div class="customer-sample-field-label">
-                验证规则集
-              </div>
+              <div class="customer-sample-field-label">验证规则集</div>
               <div class="customer-sample-rule-switcher">
                 <button
                   v-for="ruleSet in mainRuleSets"
@@ -181,13 +174,22 @@
                 <span class="text-[14px] font-semibold text-slate-900">
                   {{ selectedRuleSet?.rule_set_name || '泸县0609质控点验证 v1' }}
                 </span>
-                <span class="customer-sample-meta-chip">场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span>
+                <span class="customer-sample-meta-chip"
+                  >场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span
+                >
               </div>
             </div>
             <div class="customer-sample-rule-summary">
               <span class="customer-sample-coverage-chip border-sky-200 bg-sky-50 text-sky-700">
                 规则数 {{ selectedRuleSetRuleCountText }}
               </span>
+              <button
+                type="button"
+                class="customer-sample-internal-toggle"
+                @click="openTaskHistoryDrawer"
+              >
+                质控记录
+              </button>
               <button
                 v-if="selectedRuleSetCoverageChips.length"
                 type="button"
@@ -200,6 +202,80 @@
           </div>
 
           <section
+            v-if="importWorkflow"
+            class="rounded-[22px] border border-slate-200/80 bg-white px-5 py-4 shadow-[0_12px_28px_rgba(148,163,184,0.12)]"
+          >
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-[16px] font-semibold text-slate-900">导入样本 ID 结果</span>
+                  <span
+                    class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] font-medium text-slate-500"
+                  >
+                    {{ importWorkflow.poolName }}
+                  </span>
+                </div>
+                <div class="mt-2 grid gap-2 text-[13px] leading-6 text-slate-600 md:grid-cols-3">
+                  <div>
+                    已导入
+                    <strong class="text-slate-900">{{ importWorkflow.importedRows }}</strong> 条 ID
+                  </div>
+                  <div>
+                    匹配 <strong class="text-slate-900">{{ importWorkflow.matched }}</strong> 份
+                    <span class="text-slate-400">/</span>
+                    待确认 {{ importWorkflow.ambiguous }} 份
+                    <span class="text-slate-400">/</span>
+                    未找到 {{ importWorkflow.unmatched }} 份
+                  </div>
+                  <div
+                    :class="
+                      importWorkflow.status === 'no_match' ||
+                      importWorkflow.status === 'match_failed'
+                        ? 'text-amber-700'
+                        : 'text-slate-500'
+                    "
+                  >
+                    {{ importWorkflow.message }}
+                  </div>
+                </div>
+              </div>
+              <div class="flex shrink-0 flex-wrap items-center gap-2">
+                <a-button
+                  :loading="importWorkflow.matching || matchLoading"
+                  class="!rounded-lg"
+                  @click="runPoolMatch({ source: 'workflow' })"
+                >
+                  重新匹配
+                </a-button>
+                <a-button
+                  type="primary"
+                  class="!rounded-lg"
+                  :disabled="importWorkflow.matched <= 0 || syncLoading"
+                  :loading="syncLoading || importWorkflow.status === 'syncing'"
+                  @click="handleSyncPoolRecords"
+                >
+                  开始同步匹配到的病历
+                </a-button>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-2 md:grid-cols-3">
+              <div
+                v-for="step in importWorkflowSteps"
+                :key="step.label"
+                class="rounded-2xl border px-3 py-2 text-[13px]"
+                :class="step.className"
+              >
+                <div class="font-semibold">
+                  {{ step.label }}
+                </div>
+                <div class="mt-1 text-[12px] leading-5">
+                  {{ step.description }}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
             v-if="isLuxian0609Mode"
             class="customer-sample-luxian-scope"
             data-customer-guide="lx0609-scope"
@@ -207,21 +283,25 @@
           >
             <div class="customer-sample-luxian-scope-head">
               <div>
-                <div class="customer-sample-luxian-scope-title">
-                  泸县0609质控点范围
-                </div>
-                <p>
-                  默认运行全量 0609 客户质控点；勾选后仅验证选中的 LX0609 质控点。
-                </p>
+                <div class="customer-sample-luxian-scope-title">泸县0609质控点范围</div>
+                <p>未勾选时按完整 0609 规则集运行；勾选后仅验证选中的 LX0609 质控点。</p>
               </div>
               <div class="customer-sample-luxian-scope-actions">
                 <span>{{ luxianScopeModeText }}</span>
+                <a-button size="small" class="!rounded-lg" @click="toggleAllLuxianRuleFamilies">
+                  {{
+                    isAllLuxianRulesSelected
+                      ? '取消全部勾选'
+                      : `勾选全部${luxianRuleFamilies.length}个质控族`
+                  }}
+                </a-button>
                 <a-button
+                  v-if="selectedLuxianCustomerRuleIds.length && !isAllLuxianRulesSelected"
                   size="small"
                   class="!rounded-lg"
                   @click="clearLuxianRuleScope"
                 >
-                  全量运行
+                  清空勾选
                 </a-button>
               </div>
             </div>
@@ -233,19 +313,19 @@
               >
                 <div class="customer-sample-luxian-rule-group-head">
                   <div>
-                    <strong>{{ family.name }}</strong>
+                    <div class="customer-sample-luxian-rule-group-title">
+                      <strong>{{ family.name }}</strong>
+                      <span>{{ family.rules.length }} 条</span>
+                    </div>
                     <small>{{ family.description }}</small>
                   </div>
-                  <button
-                    type="button"
-                    @click="selectLuxianRuleFamily(family.ruleIds)"
-                  >
+                  <button type="button" @click="selectLuxianRuleFamily(family.ruleIds)">
                     {{ isLuxianRuleFamilySelected(family.ruleIds) ? '取消本组' : '选择本组' }}
                   </button>
                 </div>
                 <div class="customer-sample-luxian-rule-options">
                   <label
-                    v-for="rule in family.rules"
+                    v-for="rule in visibleLuxianFamilyRules(family)"
                     :key="rule.ruleId"
                     class="customer-sample-luxian-rule-option"
                     :class="{ 'is-selected': selectedLuxianCustomerRuleIds.includes(rule.ruleId) }"
@@ -257,11 +337,23 @@
                       :value="rule.ruleId"
                       :checked="selectedLuxianCustomerRuleIds.includes(rule.ruleId)"
                       @change="toggleLuxianRule(rule.ruleId)"
-                    >
+                    />
                     <span>{{ rule.ruleId }}</span>
                     <em>{{ rule.name }}</em>
                   </label>
                 </div>
+                <button
+                  v-if="hiddenLuxianFamilyRuleCount(family) > 0"
+                  type="button"
+                  class="customer-sample-luxian-rule-expand"
+                  @click="toggleLuxianRuleFamilyExpanded(family.key)"
+                >
+                  {{
+                    isLuxianRuleFamilyExpanded(family.key)
+                      ? '收起'
+                      : `展开剩余 ${hiddenLuxianFamilyRuleCount(family)} 条`
+                  }}
+                </button>
               </div>
             </div>
           </section>
@@ -272,11 +364,9 @@
             v-model:active-key="internalDiagnosticKeys"
             ghost
             class="customer-sample-internal-collapse"
+            @change="handleInternalDiagnosticChange"
           >
-            <a-collapse-panel
-              key="sheet2"
-              header="内部验收诊断"
-            >
+            <a-collapse-panel key="sheet2" header="内部验收诊断">
               <div class="border-b border-slate-200/80 px-5 pb-4">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div class="min-w-0">
@@ -294,10 +384,7 @@
               </div>
 
               <a-spin :spinning="exactReviewLoading">
-                <div
-                  v-if="exactReviewAcceptance"
-                  class="space-y-4 px-5 py-4"
-                >
+                <div v-if="exactReviewAcceptance" class="space-y-4 px-5 py-4">
                   <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div
                       v-for="item in exactReviewStatusCards"
@@ -320,9 +407,7 @@
                   <div
                     class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
                   >
-                    <div class="font-semibold text-amber-950">
-                      blocked_with_reason 口径
-                    </div>
+                    <div class="font-semibold text-amber-950">blocked_with_reason 口径</div>
                     <div class="mt-1">
                       {{ exactReviewAcceptance.explanations.blocked_with_reason }}
                     </div>
@@ -395,10 +480,7 @@
                   </div>
                 </div>
 
-                <div
-                  v-else
-                  class="px-5 py-6 text-[13px] leading-6 text-rose-600"
-                >
+                <div v-else class="px-5 py-6 text-[13px] leading-6 text-rose-600">
                   {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
                 </div>
               </a-spin>
@@ -407,15 +489,13 @@
         </section>
 
         <section
-          v-if="syncJobDetail && isSyncJobRunning(syncJobDetail.status)"
+          v-if="syncJobDetail"
           class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
         >
           <div class="border-b border-slate-200/80 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
-                <div class="text-[17px] font-semibold text-slate-900">
-                  样本病历同步进度
-                </div>
+                <div class="text-[17px] font-semibold text-slate-900">样本病历同步进度</div>
                 <div class="mt-1 text-[13px] leading-6 text-slate-500">
                   按样本池定向从源库拉取真实病历到本地 PG，并刷新 running bundle。
                 </div>
@@ -425,45 +505,62 @@
               </a-tag>
             </div>
           </div>
-          <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">
-                样本病历
+          <div
+            v-if="syncResultNotice"
+            class="mx-5 mt-4 rounded-2xl border px-4 py-3 text-[13px] leading-6"
+            :class="syncResultNotice.className"
+          >
+            <div class="font-semibold">
+              {{ syncResultNotice.title }}
+            </div>
+            <div class="mt-1">
+              {{ syncResultNotice.description }}
+            </div>
+          </div>
+          <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">病历进度</div>
+              <div class="mt-2 text-[26px] font-semibold leading-none text-slate-900">
+                已同步 {{ syncRecordProgress.completed }} / {{ syncRecordProgress.total }} 份
               </div>
-              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
-                {{ syncProgress.total_candidates ?? 0 }}
+              <div class="mt-2 text-[12px] leading-5 text-slate-500">
+                按病历主记录已写入本地计算。
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">
-                可同步病历
-              </div>
+              <div class="text-[12px] text-slate-400">文书就绪</div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
-                {{ syncProgress.eligible_visits ?? 0 }}
+                {{ syncRecordProgress.ready }} 份
+              </div>
+              <div
+                class="mt-2 text-[12px] leading-5"
+                :class="
+                  syncRecordProgress.completed > syncRecordProgress.ready
+                    ? 'text-amber-700'
+                    : 'text-slate-500'
+                "
+              >
+                {{ syncRecordProgress.readyHint }}
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">
-                已完成表数
+              <div class="text-[12px] text-slate-400">源库匹配</div>
+              <div class="mt-2 text-[20px] font-semibold leading-none text-slate-900">
+                {{ syncResolvedStats.matched }} 份匹配
               </div>
-              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
-                {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }}
-              </div>
-            </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">
-                已拉取行数
-              </div>
-              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
-                {{ syncProgress.total_rows_pulled ?? 0 }}
+              <div class="mt-2 text-[12px] leading-5 text-slate-500">
+                待确认 {{ syncResolvedStats.ambiguous }} 份，未找到
+                {{ syncResolvedStats.unmatched }} 份。
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">
-                已写入行数
+              <div class="text-[12px] text-slate-400">表/行进度</div>
+              <div class="mt-2 text-[20px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }} 表
               </div>
-              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
-                {{ syncProgress.total_rows_upserted ?? 0 }}
+              <div class="mt-2 text-[12px] leading-5 text-slate-500">
+                拉取 {{ syncProgress.total_rows_pulled ?? 0 }} 行，写入
+                {{ syncProgress.total_rows_upserted ?? 0 }} 行。
               </div>
             </div>
           </div>
@@ -479,10 +576,15 @@
                   syncProgress.remaining_tables ?? 0
                 }}
               </div>
-              <div
-                v-if="syncJobDetail.error_message"
-                class="mt-2 text-rose-600"
-              >
+              <div class="mt-1">
+                已同步 {{ syncRecordProgress.completed }} /
+                {{ syncRecordProgress.total }} 份病历；文书就绪 {{ syncRecordProgress.ready }} 份。
+                明细文书、医嘱、检查检验等仍以表进度和文书就绪状态为准。
+              </div>
+              <div v-if="syncRecordProgress.missingMr > 0" class="mt-1 text-amber-700">
+                有 {{ syncRecordProgress.missingMr }} 份病历尚未写入主记录，暂时不会出现在病历池中。
+              </div>
+              <div v-if="syncJobDetail.error_message" class="mt-2 text-rose-600">
                 {{ syncJobDetail.error_message }}
               </div>
             </div>
@@ -498,14 +600,9 @@
             <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-3">
-                  <div class="text-[18px] font-semibold text-slate-900">
-                    病历池
-                  </div>
+                  <div class="text-[18px] font-semibold text-slate-900">病历池</div>
                   <div class="customer-sample-inline-metrics">
-                    <span
-                      v-for="item in summaryCards"
-                      :key="item.label"
-                    >
+                    <span v-for="item in summaryCards" :key="item.label">
                       {{ item.label }} <strong>{{ item.value }}</strong>
                     </span>
                   </div>
@@ -571,19 +668,10 @@
                     :options="parallelOptions"
                   />
                 </div>
-                <a-button
-                  type="primary"
-                  class="!rounded-full"
-                  @click="loadRecords()"
-                >
+                <a-button type="primary" class="!rounded-full" @click="loadRecords()">
                   查询
                 </a-button>
-                <a-button
-                  class="!rounded-full"
-                  @click="resetFilters"
-                >
-                  重置
-                </a-button>
+                <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
               </div>
             </div>
 
@@ -605,17 +693,37 @@
     </div>
 
     <div
-      v-if="customerSampleGuideOpen"
-      class="customer-sample-tour-layer"
+      v-if="selectedRecordStats.selectedCount > 0"
+      class="customer-sample-selection-run-bar"
+      data-testid="customer-sample-selection-run-bar"
     >
+      <div class="customer-sample-selection-run-summary">
+        <strong>已选 {{ selectedRecordStats.selectedCount }} 份病历</strong>
+        <span>
+          可质控 {{ selectedRecordStats.runnableCount }} 份
+          <template v-if="selectedRecordStats.skippedCount > 0">
+            ，{{ selectedRecordStats.skippedCount }} 份将自动跳过
+          </template>
+        </span>
+      </div>
+      <div class="customer-sample-selection-run-actions">
+        <a-button class="!rounded-lg" @click="clearSelectedRecords"> 取消选择 </a-button>
+        <a-button
+          type="primary"
+          class="!rounded-lg"
+          :disabled="runButtonDisabled"
+          :loading="runLoading"
+          @click="handleRunPool"
+        >
+          {{ runButtonActionText }}
+        </a-button>
+      </div>
+    </div>
+
+    <div v-if="customerSampleGuideOpen" class="customer-sample-tour-layer">
       <div class="customer-sample-tour-scrim" />
-      <div
-        class="customer-sample-tour-card"
-        :style="customerSampleTourCardStyle"
-      >
-        <div class="customer-sample-tour-kicker">
-          客户演示主流程
-        </div>
+      <div class="customer-sample-tour-card" :style="customerSampleTourCardStyle">
+        <div class="customer-sample-tour-kicker">客户演示主流程</div>
         <div class="customer-sample-tour-count">
           {{ customerSampleGuideStepIndex + 1 }} / {{ customerSampleGuideSteps.length }}
         </div>
@@ -673,9 +781,7 @@
     >
       <div class="space-y-4 pt-2">
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">
-            样本池名称
-          </div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">样本池名称</div>
           <a-input
             v-model:value="importForm.poolName"
             placeholder="例如：手工问题样本池-第二轮"
@@ -683,9 +789,7 @@
           />
         </div>
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">
-            备注
-          </div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">备注</div>
           <a-textarea
             v-model:value="importForm.description"
             :rows="3"
@@ -698,11 +802,7 @@
             class="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-700"
           >
             <span>Excel 模板</span>
-            <a-button
-              type="link"
-              class="!px-0"
-              @click="handleDownloadTemplate"
-            >
+            <a-button type="link" class="!px-0" @click="handleDownloadTemplate">
               下载模板
             </a-button>
           </div>
@@ -716,60 +816,42 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">
-              点击或拖拽上传 Excel 模板
-            </p>
-            <p class="ant-upload-hint">
-              支持 .xls / .xlsx，默认读取第一个工作表。
-            </p>
+            <p class="ant-upload-text">点击或拖拽上传 Excel 模板</p>
+            <p class="ant-upload-hint">支持 .xls / .xlsx，默认读取第一个工作表。</p>
             <p class="mt-2 text-[12px] text-slate-400">
-              模板只需填写住院号，一行一个。
+              优先填写就诊ID，可补充住院流水号、病案号和患者姓名。
             </p>
           </a-upload-dragger>
         </div>
       </div>
     </a-modal>
 
-    <a-drawer
-      :open="detailOpen"
-      width="720"
-      title="病历关联问题"
-      @close="detailOpen = false"
-    >
-      <div
-        v-if="activeRecord"
-        class="space-y-5"
-      >
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            病历概况
-          </template>
+    <a-drawer :open="detailOpen" width="720" title="病历关联问题" @close="detailOpen = false">
+      <div v-if="activeRecord" class="space-y-5">
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 病历概况 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">科室：</span>{{ activeRecord.department || '-' }}
+              <span class="font-medium text-slate-500">科室：</span
+              >{{ activeRecord.department || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">患者：</span>{{ activeRecord.patient_name || '-' }}
+              <span class="font-medium text-slate-500">患者：</span
+              >{{ activeRecord.patient_name || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">住院号：</span>{{ activeRecord.mr_no || '-' }}
+              <span class="font-medium text-slate-500">住院号：</span
+              >{{ activeRecord.mr_no || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span
+              >{{ activeRecord.matched_visit_id || '-' }}
             </div>
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            识别范围
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 识别范围 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
               <span class="font-medium text-slate-500">文书范围：</span>
@@ -786,42 +868,38 @@
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            病历关联
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 病历关联 </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">关联结果：</span
+              >{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">下一步：</span>{{ matchStatusHint(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">下一步：</span
+              >{{ matchStatusHint(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span
+              >{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
+              <span class="font-medium text-slate-500">同步状态：</span
+              >{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">文书就绪：</span
+              >{{ bundleStatusLabel(activeRecord.bundle_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">处理建议：</span>{{ bundleStatusHint(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">处理建议：</span
+              >{{ bundleStatusHint(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
 
-        <a-card
-          size="small"
-          class="rounded-2xl"
-        >
-          <template #title>
-            关联人工问题
-          </template>
+        <a-card size="small" class="rounded-2xl">
+          <template #title> 关联人工问题 </template>
           <div class="space-y-3">
             <div
               v-for="sample in activeRecord.sample_items"
@@ -839,6 +917,377 @@
         </a-card>
       </div>
     </a-drawer>
+
+    <a-modal
+      v-model:open="editableCopyOpen"
+      :title="null"
+      :width="1120"
+      :footer="null"
+      :destroy-on-close="false"
+      centered
+      class="editable-copy-workstation-modal"
+      @cancel="closeEditableCopyDrawer"
+    >
+      <div class="editable-copy-drawer">
+        <header class="editable-copy-hero">
+          <div>
+            <div class="editable-copy-eyebrow">
+              客户样本验证 / {{ editableCopyReadonly ? '查看病历' : '编辑副本' }}
+            </div>
+            <h2>{{ editableCopyReadonly ? '查看病历文书' : '创建可编辑测试病历副本' }}</h2>
+            <p>
+              {{
+                editableCopyReadonly
+                  ? '按文书目录查看已同步病历原文；当前模式只读，不会修改源病历。'
+                  : '从已同步病历读取文书，复制成新的客户自建测试病历；本页所有修改只写入新副本。'
+              }}
+            </p>
+          </div>
+          <div class="editable-copy-source-card">
+            <span>来源病历</span>
+            <strong>{{ editableCopySourceRecord?.patient_name || '-' }}</strong>
+            <em>{{ editableCopySourceRecord?.department || '-' }}</em>
+          </div>
+        </header>
+
+        <div class="editable-copy-notice">
+          <div class="editable-copy-notice-title">原始同步病历保持只读</div>
+          <div>
+            {{
+              editableCopyReadonly
+                ? '这里展示的是已同步病历文书原文，只用于浏览和定位，不提供编辑、新增或删除文书。'
+                : '这里会基于已同步病历创建一份新的客户自建测试病历。修改只保存到新副本，不会写回客户源库或原样本池。'
+            }}
+          </div>
+        </div>
+
+        <a-spin :spinning="editableCopyLoading">
+          <div v-if="editableCopyDraft" class="editable-copy-content">
+            <section class="editable-copy-section">
+              <h3>{{ editableCopyReadonly ? '病历信息' : '副本信息' }}</h3>
+              <div class="editable-copy-form-grid">
+                <label>
+                  <span>病历名称</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.caseTitle"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+                <label>
+                  <span>患者</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.patientName"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+                <label>
+                  <span>科室</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.department"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+                <label>
+                  <span>入院时间</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.admissionTime"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+                <label class="editable-copy-form-wide">
+                  <span>主要诊断</span>
+                  <a-input
+                    v-model:value="editableCopyDraft.mainDiagnosis"
+                    :readonly="editableCopyReadonly"
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section class="editable-copy-section editable-copy-document-workbench-section">
+              <div class="editable-copy-section-header">
+                <div>
+                  <h3>文书内容</h3>
+                  <p>
+                    {{
+                      editableCopyReadonly
+                        ? '左侧按文书类型定位，右侧查看当前文书。当前模式不支持编辑和新增。'
+                        : '左侧按文书类型定位，右侧编辑当前文书。删除仅影响新测试病历副本，原始同步病历不受影响。'
+                    }}
+                  </p>
+                </div>
+                <span>
+                  {{
+                    editableCopyReadonly
+                      ? `${editableCopyDraft.documents.length} 份文书`
+                      : `${editableCopyEnabledDocumentCount} / ${editableCopyDraft.documents.length} 份将保存`
+                  }}
+                </span>
+              </div>
+              <div v-if="!editableCopyReadonly" class="editable-copy-document-toolbar">
+                <a-select
+                  v-model:value="editableCopyNewDocumentType"
+                  :options="testRecordDocumentTypeOptions"
+                  class="editable-copy-document-type-select"
+                />
+                <a-button @click="addEditableCopyDocument()"> 新增文书 </a-button>
+                <a-button @click="addEditableCopyOrderDocument()"> 新增医嘱 </a-button>
+              </div>
+
+              <div class="editable-copy-document-workbench">
+                <aside class="editable-copy-document-directory">
+                  <div class="editable-copy-document-directory-head">
+                    <strong>文书目录</strong>
+                    <span
+                      >{{ editableCopyFilteredDocuments.length }} /
+                      {{ editableCopyDraft.documents.length }}</span
+                    >
+                  </div>
+                  <a-input
+                    v-model:value="editableCopyDocumentQuery"
+                    placeholder="搜索标题、正文或医嘱"
+                    class="editable-copy-document-search"
+                  />
+                  <div class="editable-copy-document-filter">
+                    <button
+                      type="button"
+                      :class="{ 'is-active': editableCopyDocumentFilter === 'all' }"
+                      @click="editableCopyDocumentFilter = 'all'"
+                    >
+                      全部
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': editableCopyDocumentFilter === 'enabled' }"
+                      @click="editableCopyDocumentFilter = 'enabled'"
+                    >
+                      {{ editableCopyReadonly ? '有正文' : '将保存' }}
+                    </button>
+                    <button
+                      type="button"
+                      :class="{ 'is-active': editableCopyDocumentFilter === 'orders' }"
+                      @click="editableCopyDocumentFilter = 'orders'"
+                    >
+                      医嘱
+                    </button>
+                    <button
+                      v-if="!editableCopyReadonly"
+                      type="button"
+                      :class="{ 'is-active': editableCopyDocumentFilter === 'new' }"
+                      @click="editableCopyDocumentFilter = 'new'"
+                    >
+                      新增
+                    </button>
+                  </div>
+                  <div
+                    class="editable-copy-document-directory-list"
+                    :class="{ 'is-tree': editableCopyReadonly }"
+                  >
+                    <template v-for="group in editableCopyDocumentGroups" :key="group.key">
+                      <div class="editable-copy-document-group-title">
+                        <span>
+                          <i v-if="editableCopyReadonly" />
+                          {{ group.label }}
+                        </span>
+                        <em>{{ group.documents.length }}</em>
+                      </div>
+                      <button
+                        v-if="group.key === 'order'"
+                        type="button"
+                        class="editable-copy-document-nav-item"
+                        :class="{
+                          'is-active': isEditableOrderDocument(editableCopyActiveDocument || {}),
+                        }"
+                        @click="selectEditableCopyOrderGroup"
+                      >
+                        <span>医嘱</span>
+                        <small>{{ formatEditableCopyOrderGroupMeta(group.documents) }}</small>
+                      </button>
+                      <template v-else>
+                        <button
+                          v-for="document in group.documents"
+                          :key="document.key"
+                          type="button"
+                          class="editable-copy-document-nav-item"
+                          :class="{
+                            'is-active': editableCopyActiveDocument?.key === document.key,
+                            'is-disabled': document.enabled === false,
+                          }"
+                          @click="selectEditableCopyDocument(document.key)"
+                        >
+                          <span>{{ document.title || document.document_type }}</span>
+                          <small>{{ formatEditableCopyDocumentMeta(document) }}</small>
+                        </button>
+                      </template>
+                    </template>
+                    <div
+                      v-if="!editableCopyFilteredDocuments.length"
+                      class="editable-copy-document-empty"
+                    >
+                      没有匹配的文书
+                    </div>
+                  </div>
+                </aside>
+
+                <article v-if="editableCopyActiveDocument" class="editable-copy-document-editor">
+                  <div class="editable-copy-document-editor-head">
+                    <div>
+                      <span>{{
+                        isEditableOrderDocument(editableCopyActiveDocument)
+                          ? resolveEditableOrderTypeLabel(editableCopyActiveDocument)
+                          : editableCopyActiveDocument.document_type
+                      }}</span>
+                      <h4>{{ editableCopyActiveDocument.title || '未命名文书' }}</h4>
+                    </div>
+                    <div class="editable-copy-document-actions">
+                      <span v-if="editableCopyReadonly" class="editable-copy-readonly-pill">
+                        只读原文
+                      </span>
+                      <label v-else class="editable-copy-document-toggle">
+                        <input v-model="editableCopyActiveDocument.enabled" type="checkbox" />
+                        <span>写入副本</span>
+                      </label>
+                      <a-button
+                        v-if="!editableCopyReadonly"
+                        size="small"
+                        @click="removeEditableCopyDocument(editableCopyActiveDocument)"
+                      >
+                        {{
+                          editableCopyActiveDocument.is_new
+                            ? '删除'
+                            : editableCopyActiveDocument.enabled === false
+                              ? '恢复'
+                              : '从副本删除'
+                        }}
+                      </a-button>
+                    </div>
+                  </div>
+                  <div
+                    v-if="isEditableOrderDocument(editableCopyActiveDocument)"
+                    class="editable-copy-order-table-panel"
+                  >
+                    <div class="editable-copy-order-type-switch">
+                      <button
+                        type="button"
+                        :class="{ 'is-active': editableCopyOrderTypeFilter === 'long' }"
+                        @click="editableCopyOrderTypeFilter = 'long'"
+                      >
+                        长期医嘱
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ 'is-active': editableCopyOrderTypeFilter === 'temporary' }"
+                        @click="editableCopyOrderTypeFilter = 'temporary'"
+                      >
+                        临时医嘱
+                      </button>
+                    </div>
+                    <div class="editable-copy-order-table-wrap">
+                      <table class="editable-copy-order-table">
+                        <thead>
+                          <tr>
+                            <th>开始时间</th>
+                            <th>医嘱类型</th>
+                            <th>医嘱项目</th>
+                            <th>停止时间</th>
+                            <th>医嘱状态</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="order in editableCopyVisibleOrderRows"
+                            :key="order.document.key"
+                            :class="{
+                              'is-active': editableCopyActiveDocument?.key === order.document.key,
+                              'is-disabled': order.document.enabled === false,
+                            }"
+                            @click="selectEditableCopyDocument(order.document.key)"
+                          >
+                            <td>{{ order.startTime }}</td>
+                            <td>{{ order.orderType }}</td>
+                            <td>{{ order.item }}</td>
+                            <td>{{ order.stopTime }}</td>
+                            <td>{{ order.status }}</td>
+                          </tr>
+                          <tr v-if="!editableCopyVisibleOrderRows.length">
+                            <td colspan="5" class="editable-copy-order-empty">
+                              暂无{{
+                                editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
+                              }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div class="editable-copy-document-fields">
+                    <label>
+                      <span>文书标题</span>
+                      <a-input
+                        v-model:value="editableCopyActiveDocument.title"
+                        :readonly="editableCopyReadonly"
+                      />
+                    </label>
+                    <label>
+                      <span>记录时间</span>
+                      <a-input
+                        v-model:value="editableCopyActiveDocument.record_time"
+                        :readonly="editableCopyReadonly"
+                      />
+                    </label>
+                    <label>
+                      <span>提交时间</span>
+                      <a-input
+                        v-model:value="editableCopyActiveDocument.submit_time"
+                        :readonly="editableCopyReadonly"
+                      />
+                    </label>
+                  </div>
+                  <a-textarea
+                    v-model:value="editableCopyActiveDocument.content"
+                    :rows="isEditableOrderDocument(editableCopyActiveDocument) ? 12 : 16"
+                    :readonly="editableCopyReadonly"
+                  />
+                </article>
+
+                <article
+                  v-else
+                  class="editable-copy-document-editor editable-copy-document-editor-empty"
+                >
+                  请选择左侧文书进行编辑
+                </article>
+              </div>
+            </section>
+
+            <section v-if="!editableCopyReadonly" class="editable-copy-section">
+              <h3>验证说明</h3>
+              <a-textarea v-model:value="editableCopyDraft.manualIssueText" :rows="3" />
+            </section>
+          </div>
+        </a-spin>
+
+        <div class="editable-copy-footer">
+          <a-button @click="closeEditableCopyDrawer">
+            {{ editableCopyReadonly ? '关闭' : '取消' }}
+          </a-button>
+          <a-button
+            v-if="!editableCopyReadonly"
+            :loading="editableCopySaving"
+            @click="saveEditableCopy({ runAfterSave: false })"
+          >
+            保存为测试病历
+          </a-button>
+          <a-button
+            v-if="!editableCopyReadonly"
+            type="primary"
+            :loading="editableCopySaveAndRunLoading"
+            @click="saveEditableCopy({ runAfterSave: true })"
+          >
+            保存并验证
+          </a-button>
+        </div>
+      </div>
+    </a-modal>
 
     <SemanticRulesBatchResultDrawer
       :open="batchResultOpen"
@@ -859,6 +1308,61 @@
       :format-date-time="formatDateTime"
     />
 
+    <a-drawer
+      :open="taskHistoryOpen"
+      title="质控记录"
+      :width="720"
+      placement="right"
+      class="customer-sample-task-history-drawer"
+      @close="taskHistoryOpen = false"
+    >
+      <div class="customer-sample-task-history">
+        <div class="customer-sample-task-history-head">
+          <div>
+            <strong>历史质控任务</strong>
+            <p>按发起时间倒序展示最近任务，可直接查看结果抽屉。</p>
+          </div>
+          <a-button size="small" :loading="taskHistoryLoading" @click="loadTaskHistory">
+            刷新
+          </a-button>
+        </div>
+
+        <a-spin :spinning="taskHistoryLoading">
+          <div v-if="taskHistoryJobs.length === 0" class="customer-sample-task-history-empty">
+            暂无质控记录。发起验证后，最近任务会显示在这里。
+          </div>
+
+          <div v-else class="customer-sample-task-history-list">
+            <article
+              v-for="job in taskHistoryJobs"
+              :key="job.id"
+              class="customer-sample-task-history-item"
+            >
+              <div class="customer-sample-task-history-item-main">
+                <div class="customer-sample-task-history-title">
+                  <span>{{ taskHistoryRuleSetText(job) }}</span>
+                  <em :class="getBatchJobStatusTagClass(job.status)">
+                    {{ getBatchJobStatusText(job.status) }}
+                  </em>
+                </div>
+                <div class="customer-sample-task-history-meta">
+                  <span>{{ formatDateTime(job.created_at) || '未返回时间' }}</span>
+                  <span>{{ taskHistoryScopeText(job) }}</span>
+                  <span>{{ taskHistoryRecordText(job) }}</span>
+                </div>
+                <div class="customer-sample-task-history-summary">
+                  {{ taskHistoryResultSummary(job) }}
+                </div>
+              </div>
+              <div class="customer-sample-task-history-actions">
+                <a-button size="small" @click="openTaskHistoryJob(job)"> 查看结果 </a-button>
+              </div>
+            </article>
+          </div>
+        </a-spin>
+      </div>
+    </a-drawer>
+
     <QCReviewDrawer
       :visible="reviewDrawerVisible"
       :record="reviewDrawerRecord"
@@ -877,22 +1381,29 @@ import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import { Compass, FilePlus2 } from 'lucide-vue-next'
+import { Compass, FilePlus2, History } from 'lucide-vue-next'
 import type {
   ManualSamplePool,
   ManualSamplePoolRecord,
+  ManualTestRecordCreateRequest,
+  EditableMedicalRecordDocument,
   ManualSampleValidationMode,
   ManualSampleValidationRuleSet,
+  ManualSamplePoolRunResult,
+  ManualLuxian0609RuleCatalogItem,
   ManualSamplePoolSyncJob,
   Sheet2ExactReviewAcceptancePackage,
 } from './customer-sample-validation/types'
 import {
+  createManualTestMedicalRecord,
   exportLuxian0609EvaluationReport,
+  getEditableMedicalRecordDocuments,
   getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
   importManualSamplePoolByUpload,
+  listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   listManualSamplePools,
   matchManualSamplePool,
@@ -900,10 +1411,12 @@ import {
   syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
 import { syntheticCaseRuleFamilies } from './customer-sample-validation/syntheticCaseTemplates'
+import { testRecordDocumentTypeOptions } from './customer-sample-validation/syntheticCaseBuilder'
 import {
   cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
+  listSichuanWorkspaceBatchJobs,
 } from '@/services/sichuan-rule-workspace-service'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
@@ -933,8 +1446,151 @@ const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
 const SAMPLE_RULE_SET_RUN_TIMEOUT_MS = 90000
 const RUN_DUPLICATE_GUARD_MS = 120000
+const LUXIAN_FAMILY_RUN_CONCURRENCY = 3
 const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
+const CUSTOMER_TEST_POOL_ID = 'customer-created-test-records-v1'
+const LUXIAN_RULE_FAMILY_PREVIEW_LIMIT = 5
 let customerSampleGuidePositionTimer: ReturnType<typeof setTimeout> | null = null
+
+type LuxianRuleOption = {
+  ruleId: string
+  name: string
+  description: string
+  requiredDocumentsLabel: string
+}
+
+type LuxianRuleFamilyView = {
+  key: string
+  name: string
+  description: string
+  rules: LuxianRuleOption[]
+  ruleIds: string[]
+}
+
+type SamplePoolRunPayload = {
+  record_ids: string[]
+  max_parallel_records: number
+  validation_mode: ManualSampleValidationMode
+  rule_set_key: string
+  selected_rule_ids?: string[]
+}
+
+type LuxianFamilyRunScope = {
+  key: string
+  name: string
+  ruleIds: string[]
+}
+
+type LuxianFamilyRunSuccess = {
+  family: LuxianFamilyRunScope
+  data: ManualSamplePoolRunResult
+}
+
+type EditableCopyDraft = {
+  caseTitle: string
+  patientName: string
+  sex: string
+  age: number
+  mrNo: string
+  department: string
+  admissionTime: string
+  dischargeTime: string
+  mainDiagnosis: string
+  manualIssueText: string
+  documents: EditableMedicalRecordDocument[]
+}
+
+type EditableCopyDocumentFilter = 'all' | 'enabled' | 'orders' | 'new'
+
+type EditableCopyDocumentGroup = {
+  key: string
+  label: string
+  documents: EditableMedicalRecordDocument[]
+}
+
+type EditableCopyOrderTypeFilter = 'long' | 'temporary'
+
+type EditableCopyOrderRow = {
+  document: EditableMedicalRecordDocument
+  startTime: string
+  stopTime: string
+  orderType: string
+  item: string
+  status: string
+  orderTypeKey: EditableCopyOrderTypeFilter
+}
+
+const LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
+  {
+    key: 'basic_timeliness',
+    name: '基础时限',
+    description: '覆盖入院记录、首次病程、抢救记录和上级医师首次查房时限。',
+    ruleIds: ['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'],
+  },
+  {
+    key: 'course_quality',
+    name: '查房病程',
+    description: '覆盖查房频次、病程复制、主诉和诊断依据等病程质量问题。',
+    ruleIds: ['LX0609-007', 'LX0609-008', 'LX0609-009', 'LX0609-016', 'LX0609-017', 'LX0609-018'],
+  },
+  {
+    key: 'exam_lab',
+    name: '检查检验',
+    description: '覆盖 CT/MRI、细菌培养结果记录与阳性结果分析。',
+    ruleIds: ['LX0609-010', 'LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'],
+  },
+  {
+    key: 'consultation_quality',
+    name: '会诊质量',
+    description: '覆盖会诊目的、会诊意见和会诊执行记录。',
+    ruleIds: ['LX0609-020', 'LX0609-021', 'LX0609-022', 'LX0609-023'],
+  },
+  {
+    key: 'surgery_anesthesia',
+    name: '手术麻醉',
+    description: '覆盖手术记录、术前小结、知情同意、核查表、麻醉记录和术前讨论。',
+    ruleIds: [
+      'LX0609-003',
+      'LX0609-024',
+      'LX0609-025',
+      'LX0609-028',
+      'LX0609-029',
+      'LX0609-030',
+      'LX0609-031',
+      'LX0609-032',
+      'LX0609-033',
+      'LX0609-034',
+      'LX0609-035',
+      'LX0609-036',
+      'LX0609-037',
+      'LX0609-038',
+      'LX0609-039',
+      'LX0609-040',
+    ],
+  },
+  {
+    key: 'transfusion',
+    name: '输血',
+    description: '覆盖输血知情同意、输血前检查、输血前后评价和医嘱收费一致性。',
+    ruleIds: [
+      'LX0609-041',
+      'LX0609-042',
+      'LX0609-043',
+      'LX0609-044',
+      'LX0609-045',
+      'LX0609-046',
+      'LX0609-047',
+      'LX0609-048',
+      'LX0609-049',
+    ],
+  },
+  {
+    key: 'tumor_pathology',
+    name: '肿瘤病理',
+    description: '覆盖病理结果、取材情况、化疗记录和肿瘤出院治疗计划。',
+    ruleIds: ['LX0609-013', 'LX0609-019', 'LX0609-026', 'LX0609-027'],
+  },
+] as const
 
 type CustomerSampleGuideTarget =
   | 'sample-pool'
@@ -943,6 +1599,26 @@ type CustomerSampleGuideTarget =
   | 'create-record'
   | 'record-list'
   | 'run-validation'
+
+type ImportWorkflowState = {
+  poolId: string
+  poolName: string
+  importedRows: number
+  matching: boolean
+  matched: number
+  ambiguous: number
+  unmatched: number
+  status:
+    | 'imported'
+    | 'matching'
+    | 'matched'
+    | 'no_match'
+    | 'match_failed'
+    | 'syncing'
+    | 'synced'
+    | 'sync_failed'
+  message: string
+}
 
 const customerSampleGuideSteps: Array<{
   target: CustomerSampleGuideTarget
@@ -958,7 +1634,8 @@ const customerSampleGuideSteps: Array<{
   {
     target: 'sample-rule',
     title: '确认验证规则集',
-    description: '这里选择本次运行的规则包。客户演示优先使用泸县0609质控点验证，页面会显示规则数量和覆盖状态。',
+    description:
+      '这里选择本次运行的规则包。客户演示优先使用泸县0609质控点验证，页面会显示规则数量和覆盖状态。',
   },
   {
     target: 'lx0609-scope',
@@ -1107,6 +1784,9 @@ const selectedRuleSetKey = ref<string>(LUXIAN_0609_RULE_SET_KEY)
 const ruleSetDirectoryFallbackActive = ref(false)
 const internalDiagnosticKeys = ref<string[]>([])
 const selectedLuxianCustomerRuleIds = ref<string[]>([])
+const luxian0609RuleCatalog = ref<ManualLuxian0609RuleCatalogItem[]>([])
+const expandedLuxianRuleFamilyKeys = ref<string[]>([])
+const importWorkflow = ref<ImportWorkflowState | null>(null)
 
 const detailOpen = ref(false)
 const activeRecord = ref<ManualSamplePoolRecord>()
@@ -1121,11 +1801,86 @@ const reviewDrawerRecord = ref<{
   defect_count?: number
   status?: string
 } | null>(null)
+const editableCopyOpen = ref(false)
+const editableCopyLoading = ref(false)
+const editableCopySaving = ref(false)
+const editableCopySaveAndRunLoading = ref(false)
+const editableCopyReadonly = ref(false)
+const editableCopySourceRecord = ref<ManualSamplePoolRecord | null>(null)
+const editableCopyDraft = ref<EditableCopyDraft | null>(null)
+const editableCopyNewDocumentType = ref('daily_course_record')
+const editableCopyDocumentQuery = ref('')
+const editableCopyDocumentFilter = ref<EditableCopyDocumentFilter>('all')
+const editableCopyOrderTypeFilter = ref<EditableCopyOrderTypeFilter>('temporary')
+const editableCopyActiveDocumentKey = ref('')
+const editableCopyAllDocuments = computed(() => editableCopyDraft.value?.documents || [])
+const editableCopyEnabledDocumentCount = computed(
+  () => editableCopyAllDocuments.value.filter((document) => document.enabled !== false).length,
+)
+const editableCopyOrderDocuments = computed(() =>
+  editableCopyAllDocuments.value
+    .filter((document) => isEditableOrderDocument(document))
+    .slice()
+    .sort(compareEditableOrderDocumentByTimeDesc),
+)
+const editableCopyOrderRows = computed<EditableCopyOrderRow[]>(() =>
+  editableCopyOrderDocuments.value.map((document) => parseEditableOrderRow(document)),
+)
+const editableCopyVisibleOrderRows = computed(() =>
+  editableCopyOrderRows.value.filter(
+    (row) => row.orderTypeKey === editableCopyOrderTypeFilter.value,
+  ),
+)
+const editableCopyFilteredDocuments = computed(() => {
+  const query = editableCopyDocumentQuery.value.trim().toLowerCase()
+  return editableCopyAllDocuments.value.filter((document) => {
+    if (editableCopyDocumentFilter.value === 'enabled' && document.enabled === false) return false
+    if (editableCopyDocumentFilter.value === 'orders' && !isEditableOrderDocument(document))
+      return false
+    if (editableCopyDocumentFilter.value === 'new' && !document.is_new) return false
+    if (!query) return true
+    return [
+      document.title,
+      document.document_type,
+      document.record_time,
+      document.content,
+      resolveEditableOrderTypeLabel(document),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(query)
+  })
+})
+const editableCopyDocumentGroups = computed<EditableCopyDocumentGroup[]>(() => {
+  const groups = new Map<string, EditableCopyDocumentGroup>()
+  editableCopyFilteredDocuments.value.forEach((document) => {
+    const key = editableCopyDocumentGroupKey(document)
+    const label = editableCopyDocumentGroupLabel(key)
+    if (!groups.has(key)) groups.set(key, { key, label, documents: [] })
+    groups.get(key)?.documents.push(document)
+  })
+  return ['admission', 'course', 'surgery', 'exam_lab', 'other', 'order']
+    .map((key) => groups.get(key))
+    .filter((group): group is EditableCopyDocumentGroup => Boolean(group))
+})
+const editableCopyActiveDocument = computed(() => {
+  const documents = editableCopyAllDocuments.value
+  return (
+    documents.find((document) => document.key === editableCopyActiveDocumentKey.value) ||
+    editableCopyFilteredDocuments.value[0] ||
+    documents[0] ||
+    null
+  )
+})
 
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob | null>(null)
 const batchJobLoading = ref(false)
 const cancelBatchJobLoading = ref(false)
+const taskHistoryOpen = ref(false)
+const taskHistoryLoading = ref(false)
+const taskHistoryJobs = ref<SichuanBatchJob[]>([])
+const taskHistoryTotal = ref(0)
 const batchResultFocusRecord = ref<{
   visitId: string
   recordId: string
@@ -1168,11 +1923,19 @@ const lastRunSubmission = ref<{
   key: string
   startedAt: number
   jobId?: string
+  jobIds?: string[]
 }>()
+
+function formatSamplePoolOptionLabel(pool: ManualSamplePool): string {
+  const name = String(pool.name || '未命名样本池').trim() || '未命名样本池'
+  const total = Number(pool.total_items || 0)
+  const countText = `（${total}）`
+  return name.endsWith(countText) ? name : `${name}${countText}`
+}
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
-    label: `${item.name}（${item.total_items}）`,
+    label: formatSamplePoolOptionLabel(item),
     value: item.id,
   })),
 )
@@ -1206,19 +1969,37 @@ const selectedRuleSetPayloadKey = computed(() =>
 const isLuxian0609Mode = computed(
   () => selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY,
 )
-const luxianRuleFamilies = computed(() =>
-  syntheticCaseRuleFamilies.map((family) => ({
+const luxianRuleFamilies = computed<LuxianRuleFamilyView[]>(() => {
+  if (luxian0609RuleCatalog.value.length) {
+    return buildLuxian0609RuleFamilies(luxian0609RuleCatalog.value)
+  }
+  return syntheticCaseRuleFamilies.map((family) => ({
     key: family.key,
     name: family.name,
     description: family.description,
-    rules: family.rules,
+    rules: family.rules.map((rule) => ({
+      ruleId: rule.ruleId,
+      name: rule.name,
+      description: rule.name,
+      requiredDocumentsLabel: rule.requiredDocumentsLabel,
+    })),
     ruleIds: family.rules.map((rule) => rule.ruleId),
-  })),
+  }))
+})
+const allLuxianRuleIds = computed(() =>
+  normalizeLuxianRuleIds(luxianRuleFamilies.value.flatMap((family) => family.ruleIds)),
 )
+const isAllLuxianRulesSelected = computed(() => {
+  if (!allLuxianRuleIds.value.length) return false
+  const selected = new Set(selectedLuxianCustomerRuleIds.value)
+  return allLuxianRuleIds.value.every((ruleId) => selected.has(ruleId))
+})
 const luxianScopeModeText = computed(() =>
   selectedLuxianCustomerRuleIds.value.length
-    ? `scoped run：${selectedLuxianCustomerRuleIds.value.length} 个客户质控点`
-    : '全量 0609 客户质控点',
+    ? isAllLuxianRulesSelected.value
+      ? `当前范围：已勾选全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+      : `当前范围：已勾选 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+    : '当前范围：完整 0609 规则集',
 )
 const currentCustomerSampleGuideStep = computed(
   () => customerSampleGuideSteps[customerSampleGuideStepIndex.value] || customerSampleGuideSteps[0],
@@ -1363,13 +2144,13 @@ const summaryCards = computed(() => {
     : isSyncedOnlyValidationMode.value
       ? (pool?.matched_items ?? 0)
       : (pool?.ready_items ?? 0)
-  let runnableHelp = '文书已就绪，可直接发起当前模式质控'
+  let runnableHelp = '文书已就绪，可直接开始当前模式质控'
   if (isLuxian0609Mode.value) {
-    runnableHelp = '已关联真实病历即可发起泸县0609验证；可再限定 LX0609 质控点范围'
+    runnableHelp = '已关联真实病历即可开始0609质控；可再限定 LX0609 质控点范围'
   } else if (isFormalFastScreenMode.value) {
-    runnableHelp = '已匹配且已同步，可发起正式 84 条质控'
+    runnableHelp = '已匹配且已同步，可开始正式 84 条质控'
   } else if (selectedValidationMode.value === 'programmatic') {
-    runnableHelp = '已匹配且已同步，可直接发起程序规则验证'
+    runnableHelp = '已匹配且已同步，可直接开始程序规则验证'
   }
   const latestStatus = pool?.latest_job_status
   return [
@@ -1443,6 +2224,163 @@ const exactReviewBacklogBuckets = computed(
 )
 
 const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
+const syncRecordProgress = computed(() => {
+  const summary = syncJobDetail.value?.summary || {}
+  const rawProgress = syncProgress.value.record_progress || summary.record_progress || {}
+  const total = Number(
+    rawProgress.total ??
+      syncProgress.value.eligible_visits ??
+      summary.eligible_visits ??
+      selectedPool.value?.matched_items ??
+      0,
+  )
+  const fallbackCompleted = records.value.filter((record) =>
+    isRecordSyncedForValidation(record),
+  ).length
+  const completed = Math.min(
+    Math.max(0, Number(rawProgress.completed ?? fallbackCompleted ?? 0)),
+    Math.max(total, 0),
+  )
+  const remaining = Math.max(0, Number(rawProgress.remaining ?? Math.max(total - completed, 0)))
+  const missingMr = Math.max(0, Number(rawProgress.missing_mr ?? remaining))
+  const ready =
+    total > 0
+      ? Math.min(
+          Math.max(
+            0,
+            Number(
+              selectedPool.value?.ready_items ??
+                records.value.filter((record) => record.bundle_status === 'ready').length,
+            ),
+          ),
+          Math.max(total, 0),
+        )
+      : 0
+  const readyHint =
+    completed > ready
+      ? '有病历已同步，文书仍在整理中。'
+      : ready > 0
+        ? '文书已可用于质控。'
+        : '等待文书整理完成。'
+  return {
+    total,
+    completed,
+    remaining,
+    missingMr,
+    detailOnly: Math.max(0, Number(rawProgress.detail_only ?? 0)),
+    ready,
+    readyHint,
+  }
+})
+const syncResolvedStats = computed(() => {
+  const summary = syncJobDetail.value?.summary || {}
+  const progress = syncProgress.value
+  return {
+    matched: Number(progress.matched ?? summary.matched ?? 0),
+    ambiguous: Number(progress.ambiguous ?? summary.ambiguous ?? 0),
+    unmatched: Number(progress.unmatched ?? summary.unmatched ?? 0),
+  }
+})
+const syncResultNotice = computed(() => {
+  const job = syncJobDetail.value
+  if (!job) return null
+  const normalizedStatus = String(job.status || '').toLowerCase()
+  const summary = job.summary || {}
+  const progress = syncProgress.value
+  const totalCandidates = Number(progress.total_candidates ?? 0)
+  const eligibleVisits = Number(progress.eligible_visits ?? summary.eligible_visits ?? 0)
+  const rowsUpserted = Number(progress.total_rows_upserted ?? summary.total_rows_upserted ?? 0)
+  if (normalizedStatus === 'failed') {
+    return {
+      title: '同步失败',
+      description:
+        job.error_message || '后台同步任务失败，请检查客户源库连接、源表权限或后端日志。',
+      className: 'border-rose-200 bg-rose-50 text-rose-700',
+    }
+  }
+  if (normalizedStatus === 'completed' && totalCandidates === 0) {
+    return {
+      title: '没有找到可同步样本',
+      description:
+        '当前筛选条件下没有进入同步的样本病历，请检查是否被“仅内涵/仅首批”过滤，或先执行病历匹配。',
+      className: 'border-amber-200 bg-amber-50 text-amber-800',
+    }
+  }
+  if (normalizedStatus === 'completed' && eligibleVisits === 0) {
+    return {
+      title: '源库未匹配到可同步病历',
+      description:
+        '同步任务已结束，但没有解析到可拉取的真实病历。请检查住院号/visit_id 是否能在客户源库 mr 表中匹配，以及远端 PG 配置是否指向正确库。',
+      className: 'border-amber-200 bg-amber-50 text-amber-800',
+    }
+  }
+  if (normalizedStatus === 'completed' && rowsUpserted === 0) {
+    return {
+      title: '未写入任何病历数据',
+      description:
+        '已找到可同步病历，但本次没有写入本地数据。请检查源表是否有文书记录、同步表组是否完整，以及后端是否跳过了可选表。',
+      className: 'border-amber-200 bg-amber-50 text-amber-800',
+    }
+  }
+  return null
+})
+
+const importWorkflowSteps = computed(() => {
+  const workflow = importWorkflow.value
+  if (!workflow) return []
+  const isImported = workflow.importedRows > 0
+  const isMatched =
+    workflow.status === 'matched' ||
+    workflow.status === 'syncing' ||
+    workflow.status === 'synced' ||
+    workflow.status === 'sync_failed'
+  const hasNoMatch = workflow.status === 'no_match'
+  return [
+    {
+      label: '1. 导入样本 ID',
+      description: isImported ? `已读取 ${workflow.importedRows} 条 ID。` : '等待上传模板。',
+      className: isImported
+        ? 'border-sky-200 bg-sky-50 text-sky-800'
+        : 'border-slate-200 bg-slate-50 text-slate-500',
+    },
+    {
+      label: '2. 匹配源库病历',
+      description: workflow.matching
+        ? '正在按就诊ID、住院号、病案号匹配源库。'
+        : hasNoMatch
+          ? '未匹配到病历，请检查 ID 类型或源库配置。'
+          : `匹配 ${workflow.matched} 份，待确认 ${workflow.ambiguous} 份，未找到 ${workflow.unmatched} 份。`,
+      className: workflow.matching
+        ? 'border-blue-200 bg-blue-50 text-blue-800'
+        : hasNoMatch
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : isMatched
+            ? 'border-sky-200 bg-sky-50 text-sky-800'
+            : 'border-slate-200 bg-slate-50 text-slate-500',
+    },
+    {
+      label: '3. 同步病历文书',
+      description:
+        workflow.status === 'syncing'
+          ? '同步任务已创建，请在下方查看进度。'
+          : workflow.status === 'synced'
+            ? workflow.message
+            : workflow.status === 'sync_failed'
+              ? workflow.message
+              : workflow.matched > 0
+                ? '可开始同步匹配到的病历文书。'
+                : '匹配到病历后才能同步文书。',
+      className:
+        workflow.status === 'syncing'
+          ? 'border-blue-200 bg-blue-50 text-blue-800'
+          : workflow.status === 'sync_failed'
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : workflow.status === 'synced' || workflow.matched > 0
+              ? 'border-sky-200 bg-sky-50 text-sky-800'
+              : 'border-slate-200 bg-slate-50 text-slate-500',
+    },
+  ]
+})
 
 const currentScopeDescription = computed(() => {
   const total = pagination.value.total || 0
@@ -1458,8 +2396,8 @@ const currentScopeDescription = computed(() => {
   const base = isLuxian0609Mode.value
     ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，可按全量或选定 LX0609 质控点发起验证。`
     : isSyncedOnlyValidationMode.value
-    ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
-    : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
+      ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
+      : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
   if (!filterLabels.length) {
     return `${base} ${runnableRequirementHint()}`
   }
@@ -1489,18 +2427,26 @@ const runButtonDisabled = computed(
   () => runLoading.value || !selectedPoolId.value || !selectedPool.value?.total_items,
 )
 
+const runButtonActionText = computed(() =>
+  isFormalFastScreenMode.value
+    ? '开始SC质控'
+    : isLuxian0609Mode.value
+      ? '开始0609质控'
+      : '开始样本验证',
+)
+
 const runButtonText = computed(() =>
   isFormalFastScreenMode.value
     ? selectedRecordStats.value.selectedCount > 0
-      ? `发起SC全量验证（${selectedRecordStats.value.selectedCount}）`
-      : '请选择病历后发起SC全量验证'
+      ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+      : '请先选择病历'
     : isLuxian0609Mode.value
       ? selectedRecordStats.value.selectedCount > 0
-        ? `发起泸县0609验证（${selectedRecordStats.value.selectedCount}）`
-        : '请选择病历后发起泸县0609验证'
+        ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+        : '请先选择病历'
       : selectedRecordStats.value.selectedCount > 0
-        ? `发起样本验证（${selectedRecordStats.value.selectedCount}）`
-        : '发起样本验证',
+        ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+        : runButtonActionText.value,
 )
 
 const paginationConfig = computed(() => ({
@@ -1542,41 +2488,38 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
   {
     title: '编号',
     key: 'record_code',
-    width: 120,
-    customRender: ({ record, index }) =>
+    width: 150,
+    customRender: ({ record }) =>
       h(
         'span',
         {
           class: 'customer-sample-record-code',
           title: resolveRecordIdentifier(record),
         },
-        resolveRecordDisplayCode(record, Number(index || 0)),
+        resolveRecordDisplayCode(record),
       ),
   },
   {
-    title: '创建时间',
+    title: '创建日期',
     key: 'created_time',
-    width: 150,
+    width: 120,
     customRender: ({ record }) =>
-      h(
-        'span',
-        { class: 'customer-sample-created-time' },
-        resolveRecordCreatedTime(record) || '-',
-      ),
+      h('span', { class: 'customer-sample-created-time' }, resolveRecordCreatedDate(record) || '-'),
   },
   {
-    title: '患者信息',
+    title: '病历',
     key: 'patient',
-    width: 260,
+    width: 300,
     customRender: ({ record }) =>
       h('div', { class: 'customer-sample-patient-cell' }, [
-        h('div', { class: 'customer-sample-patient-avatar' }, patientInitial(record)),
-        h('div', { class: 'min-w-0' }, [
-          h('div', { class: 'customer-sample-patient-name' }, resolveRecordDisplayTitle(record)),
-          h('div', { class: 'customer-sample-patient-meta' }, [
-            h('span', resolveRecordPatientLine(record)),
-          ]),
-        ]),
+        h(
+          'div',
+          {
+            class: 'customer-sample-patient-name',
+            title: resolveRecordPatientTitle(record),
+          },
+          resolveRecordPatientTitle(record),
+        ),
       ]),
   },
   {
@@ -1587,23 +2530,17 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
       h('span', { class: 'customer-sample-department' }, String(value || '-')),
   },
   {
-    title: '样本问题与文书范围',
+    title: '验证范围',
     key: 'issue_scope',
-    width: 560,
+    width: 460,
     customRender: ({ record }) => renderRecordSummary(record),
   },
   {
-    title: '状态与操作',
-    key: 'status_actions',
-    width: 280,
+    title: '操作',
+    key: 'actions',
+    width: 260,
     customRender: ({ record }) =>
-      h('div', { class: 'customer-sample-state-action-cell' }, [
-        renderRecordStatus(record),
-        h('div', { class: 'customer-sample-action-cell' }, [
-          renderPrimaryAction(record),
-          h('div', { class: 'customer-sample-secondary-actions' }, buildSecondaryActions(record)),
-        ]),
-      ]),
+      h('div', { class: 'customer-sample-action-cell' }, buildRecordActions(record)),
   },
 ]
 
@@ -1670,16 +2607,6 @@ function matchStatusHint(value: string): string {
   return '请先完成病历匹配。'
 }
 
-function matchStatusTagClass(value: string): string {
-  if (value === 'matched') {
-    return 'customer-sample-status-badge is-success'
-  }
-  if (value === 'ambiguous') {
-    return 'customer-sample-status-badge is-warning'
-  }
-  return 'customer-sample-status-badge is-danger'
-}
-
 function bundleStatusLabel(value: string): string {
   if (value === 'ready') return '已就绪'
   if (value === 'missing') return '待同步'
@@ -1688,20 +2615,10 @@ function bundleStatusLabel(value: string): string {
 }
 
 function bundleStatusHint(value: string): string {
-  if (value === 'ready') return '可以查看病历并发起样本验证。'
+  if (value === 'ready') return '可以查看病历并开始样本验证。'
   if (value === 'pending') return '正在刷新文书和 bundle，请稍后再看。'
   if (value === 'missing') return '下一步执行“同步样本病历”。'
   return '请先完成病历同步。'
-}
-
-function bundleStatusTagClass(value: string): string {
-  if (value === 'ready') {
-    return 'customer-sample-status-badge is-success'
-  }
-  if (value === 'pending') {
-    return 'customer-sample-status-badge is-warning'
-  }
-  return 'customer-sample-status-badge is-muted'
 }
 
 function backlogBucketCardClass(category: string): string {
@@ -1810,113 +2727,120 @@ function recordScopeHint(record: ManualSamplePoolRecord): string {
   return '当前还没有可识别的文书范围。'
 }
 
-function resolveIssueSummaryLines(record: ManualSamplePoolRecord): string[] {
-  const previews = (record.issue_preview || []).filter(Boolean)
-  if (previews.length > 0) {
-    return previews.slice(0, 2)
+function normalizeLuxianRuleIdsForSummary(ruleIds: unknown[]): string[] {
+  const normalized: string[] = []
+  for (const item of ruleIds || []) {
+    const ruleId = String(item || '')
+      .trim()
+      .toUpperCase()
+    if (!/^LX0609-\d{3}$/u.test(ruleId)) continue
+    if (!normalized.includes(ruleId)) normalized.push(ruleId)
   }
-  return record.issue_preview_text && record.issue_preview_text !== '-'
-    ? [record.issue_preview_text]
-    : []
+  return normalized
 }
 
-function patientInitial(record: ManualSamplePoolRecord): string {
-  const name = resolveRecordPatientName(record).trim()
-  if (!name || name === '-') return '病'
-  return name.slice(0, 1)
+function resolveRecordLuxianRuleIds(record: ManualSamplePoolRecord): string[] {
+  const rawPayloadRuleIds = record.sample_items.flatMap((item) => {
+    const rawPayload = item.raw_payload || {}
+    const selectedRuleIds = rawPayload.selected_rule_ids
+    if (Array.isArray(selectedRuleIds)) return selectedRuleIds
+    const goldenAnswers = rawPayload.golden_answers
+    if (Array.isArray(goldenAnswers)) {
+      return goldenAnswers
+        .map((answer) =>
+          answer && typeof answer === 'object'
+            ? (answer as Record<string, unknown>).qc_point_id
+            : '',
+        )
+        .filter(Boolean)
+    }
+    return []
+  })
+  const preferredRuleIds = normalizeLuxianRuleIdsForSummary(rawPayloadRuleIds)
+  if (preferredRuleIds.length > 0) return preferredRuleIds
+  return normalizeLuxianRuleIdsForSummary(record.candidate_rule_ids || [])
+}
+
+function resolveLuxianRuleFamilyNames(ruleIds: string[]): string[] {
+  if (!ruleIds.length) return []
+  const ruleSet = new Set(ruleIds)
+  const familyNames = LUXIAN_0609_RULE_FAMILY_DEFINITIONS.filter((family) =>
+    family.ruleIds.some((ruleId) => ruleSet.has(ruleId)),
+  ).map((family) => family.name)
+  return familyNames.length ? familyNames : ['泸县0609']
+}
+
+function resolveRecordIssueDisplayText(record: ManualSamplePoolRecord, ruleIds: string[]): string {
+  const rawText = (record.issue_preview?.[0] || record.issue_preview_text || '').trim()
+  const normalized = rawText.replace(/\s+/gu, ' ')
+  if (/^按质控点创建/u.test(normalized)) {
+    const familyNames = resolveLuxianRuleFamilyNames(ruleIds)
+    return ['按质控点创建', familyNames.slice(0, 2).join('、')].filter(Boolean).join(' · ')
+  }
+  if (!normalized || normalized === '-') return '当前没有人工问题摘要'
+  return normalized
+}
+
+function formatCompactLuxianRuleIds(ruleIds: string[]): string {
+  if (!ruleIds.length) return ''
+  const visible = ruleIds
+    .slice(0, 3)
+    .map((ruleId, index) => (index === 0 ? ruleId : ruleId.replace(/^LX0609-/u, '')))
+  const remainingCount = Math.max(0, ruleIds.length - visible.length)
+  return `${visible.join('、')}${remainingCount > 0 ? ` +${remainingCount}` : ''}`
+}
+
+function resolveRecordRuleSummary(record: ManualSamplePoolRecord) {
+  const ruleIds = resolveRecordLuxianRuleIds(record)
+  const familyNames = resolveLuxianRuleFamilyNames(ruleIds)
+  const issueText = resolveRecordIssueDisplayText(record, ruleIds)
+  const scopeText = summarizeRecordScope(record)
+  return {
+    ruleIds,
+    issueText,
+    familyText: familyNames.slice(0, 2).join('、') || '验证范围待识别',
+    familyOverflowCount: Math.max(0, familyNames.length - 2),
+    ruleIdText: formatCompactLuxianRuleIds(ruleIds),
+    countText:
+      ruleIds.length > 0 ? `${ruleIds.length}个质控点` : `${record.issue_count || 0}条问题`,
+    scopeText: scopeText === '-' ? '文书范围待识别' : scopeText,
+    title: [
+      issueText,
+      ruleIds.length ? `质控点：${ruleIds.join('、')}` : '',
+      scopeText && scopeText !== '-' ? `文书范围：${scopeText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  }
 }
 
 function renderRecordSummary(record: ManualSamplePoolRecord) {
-  const lines = resolveIssueSummaryLines(record)
-  const displayLines = lines.length ? lines.slice(0, 2) : ['当前没有人工问题摘要']
-  const scopeText = summarizeRecordScope(record)
+  const summary = resolveRecordRuleSummary(record)
+  const scopeSummary = `${summary.familyText}${summary.countText}`
   return h('div', { class: 'customer-sample-summary-cell' }, [
-    h(
-      'div',
-      { class: lines.length ? 'customer-sample-issue-lines' : 'customer-sample-empty-issue' },
-      displayLines.map((line, index) =>
-        h(
-          'div',
-          {
-            class:
-              index === 0 ? 'customer-sample-issue-primary' : 'customer-sample-issue-secondary',
-          },
-          line,
-        ),
-      ),
-    ),
-    h('div', { class: 'customer-sample-row-meta' }, [
-      h('span', { class: 'customer-sample-issue-count' }, `共 ${record.issue_count || 0} 条问题`),
-      h('span', { class: 'customer-sample-row-dot' }, '·'),
+    h('div', { class: 'customer-sample-rule-summary' }, [
       h(
         'span',
-        { class: 'customer-sample-scope-text' },
-        scopeText === '-' ? '文书范围待识别' : scopeText,
+        {
+          class: 'customer-sample-family-chip',
+          title: summary.title,
+        },
+        scopeSummary,
       ),
     ]),
   ])
 }
 
-function renderRecordStatus(record: ManualSamplePoolRecord) {
-  return h('div', { class: 'customer-sample-status-cell' }, [
-    h('div', { class: 'customer-sample-status-line' }, [
-      h('span', { class: 'customer-sample-status-label' }, '病历'),
-      h(
-        'span',
-        {
-          class: matchStatusTagClass(String(record.match_status || '')),
-        },
-        matchStatusLabel(String(record.match_status || '')),
-      ),
-    ]),
-    h('div', { class: 'customer-sample-status-line' }, [
-      h('span', { class: 'customer-sample-status-label' }, '文书'),
-      h(
-        'span',
-        {
-          class: bundleStatusTagClass(String(record.bundle_status || '')),
-        },
-        bundleStatusLabel(String(record.bundle_status || '')),
-      ),
-    ]),
-  ])
-}
-
-function renderPrimaryAction(record: ManualSamplePoolRecord) {
-  const primary = resolvePrimaryAction(record)
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'customer-sample-primary-action',
-      onClick: primary.handler,
-    },
-    primary.label,
-  )
-}
-
-function buildSecondaryActions(record: ManualSamplePoolRecord) {
+function buildRecordActions(record: ManualSamplePoolRecord) {
   const actions = []
-  const primary = resolvePrimaryAction(record).key
-  if (primary !== 'detail') {
+  if (record.matched_visit_id) {
     actions.push(
       h(
-        'a',
+        'button',
         {
+          type: 'button',
           class: 'customer-sample-secondary-link',
-          onClick: () => openRecordDetail(record),
-        },
-        '查看详情',
-      ),
-    )
-  }
-  if (record.matched_visit_id && primary !== 'review') {
-    actions.push(
-      h(
-        'a',
-        {
-          class: 'customer-sample-secondary-link',
-          onClick: () => openReviewDrawer(record),
+          onClick: () => openMedicalRecordViewer(record),
         },
         '查看病历',
       ),
@@ -1925,8 +2849,9 @@ function buildSecondaryActions(record: ManualSamplePoolRecord) {
   if (selectedPool.value?.latest_job_id && record.matched_visit_id) {
     actions.push(
       h(
-        'a',
+        'button',
         {
+          type: 'button',
           class: 'customer-sample-secondary-link',
           onClick: () =>
             openBatchJob(selectedPool.value?.latest_job_id || '', {
@@ -1945,26 +2870,20 @@ function buildSecondaryActions(record: ManualSamplePoolRecord) {
       ),
     )
   }
-  return actions
-}
-
-function resolvePrimaryAction(record: ManualSamplePoolRecord): {
-  key: 'detail' | 'review'
-  label: string
-  handler: () => void
-} {
   if (record.matched_visit_id && record.bundle_status === 'ready') {
-    return {
-      key: 'review',
-      label: '查看病历',
-      handler: () => openReviewDrawer(record),
-    }
+    actions.push(
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'customer-sample-secondary-link',
+          onClick: () => openEditableCopyDrawer(record),
+        },
+        '创建副本',
+      ),
+    )
   }
-  return {
-    key: 'detail',
-    label: '查看详情',
-    handler: () => openRecordDetail(record),
-  }
+  return actions
 }
 
 function isRecordSyncedForValidation(record: ManualSamplePoolRecord): boolean {
@@ -2005,7 +2924,7 @@ function runnableRequirementHint(): string {
 
 function selectedRecordNotRunnableMessage(): string {
   if (isLuxian0609Mode.value) {
-    return '当前选中的病历还未完成病历关联，暂时无法发起泸县0609验证'
+    return '当前选中的病历还未完成病历关联，暂时无法开始0609质控'
   }
   if (selectedValidationMode.value === 'formal_fast_screen_full') {
     return '当前选中的病历还未完成匹配或同步，暂时无法发起正式质控 84 条'
@@ -2014,6 +2933,10 @@ function selectedRecordNotRunnableMessage(): string {
     return '当前选中的病历还未完成匹配或同步，暂时无法发起程序规则验证'
   }
   return '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证'
+}
+
+function clearSelectedRecords() {
+  selectedRowKeys.value = []
 }
 
 function normalizeRuleSetKey(
@@ -2082,6 +3005,64 @@ function buildRuleSetDirectory(
     if (Boolean(left.advanced) !== Boolean(right.advanced)) return left.advanced ? 1 : -1
     return left.rule_set_name.localeCompare(right.rule_set_name, 'zh-CN')
   })
+}
+
+function normalizeLuxianCatalogRule(
+  rule: ManualLuxian0609RuleCatalogItem,
+): LuxianRuleOption | null {
+  const ruleId = normalizeLuxianRuleIds([rule.rule_id || rule.rule_code || ''])[0]
+  if (!ruleId) return null
+  const requiredDocumentsLabel =
+    rule.required_documents_label ||
+    (Array.isArray(rule.applicable_document_labels)
+      ? rule.applicable_document_labels.join('、')
+      : '')
+  return {
+    ruleId,
+    name: String(rule.name || rule.description || ruleId).trim() || ruleId,
+    description: String(rule.description || rule.name || '').trim(),
+    requiredDocumentsLabel: String(requiredDocumentsLabel || '').trim(),
+  }
+}
+
+function buildLuxian0609RuleFamilies(
+  rules: ManualLuxian0609RuleCatalogItem[],
+): LuxianRuleFamilyView[] {
+  const ruleById = new Map<string, LuxianRuleOption>()
+  rules.forEach((rule) => {
+    const normalized = normalizeLuxianCatalogRule(rule)
+    if (normalized) {
+      ruleById.set(normalized.ruleId, normalized)
+    }
+  })
+  const usedRuleIds = new Set<string>()
+  const families: LuxianRuleFamilyView[] = LUXIAN_0609_RULE_FAMILY_DEFINITIONS.map((family) => {
+    const familyRules = family.ruleIds
+      .map((ruleId) => ruleById.get(ruleId))
+      .filter((rule): rule is LuxianRuleOption => Boolean(rule))
+    familyRules.forEach((rule) => usedRuleIds.add(rule.ruleId))
+    return {
+      key: family.key,
+      name: family.name,
+      description: family.description,
+      rules: familyRules,
+      ruleIds: familyRules.map((rule) => rule.ruleId),
+    }
+  }).filter((family) => family.rules.length > 0)
+
+  const uncategorizedRules = Array.from(ruleById.values())
+    .filter((rule) => !usedRuleIds.has(rule.ruleId))
+    .sort((left, right) => left.ruleId.localeCompare(right.ruleId))
+  if (uncategorizedRules.length) {
+    families.push({
+      key: 'other',
+      name: '其他',
+      description: '后端目录中未归入固定业务族的 LX0609 质控点。',
+      rules: uncategorizedRules,
+      ruleIds: uncategorizedRules.map((rule) => rule.ruleId),
+    })
+  }
+  return families
 }
 
 function openTestRecordDrawer() {
@@ -2195,7 +3176,21 @@ function openCustomerSampleGuide() {
 }
 
 function toggleInternalDiagnostic() {
-  internalDiagnosticKeys.value = internalDiagnosticKeys.value.includes('sheet2') ? [] : ['sheet2']
+  const shouldOpen = !internalDiagnosticKeys.value.includes('sheet2')
+  internalDiagnosticKeys.value = shouldOpen ? ['sheet2'] : []
+  if (shouldOpen) {
+    void ensureExactReviewAcceptanceLoaded()
+  }
+}
+
+function isSheet2DiagnosticOpen(keys: string | string[]) {
+  return Array.isArray(keys) ? keys.includes('sheet2') : keys === 'sheet2'
+}
+
+function handleInternalDiagnosticChange(keys: string | string[]) {
+  if (isSheet2DiagnosticOpen(keys)) {
+    void ensureExactReviewAcceptanceLoaded()
+  }
 }
 
 function closeCustomerSampleGuide() {
@@ -2256,11 +3251,19 @@ async function loadRuleSets() {
   )
 }
 
+async function loadLuxian0609RuleCatalog() {
+  const result = await listLuxian0609CustomerRules()
+  if (!result.success || !result.data) {
+    luxian0609RuleCatalog.value = []
+    return
+  }
+  luxian0609RuleCatalog.value = Array.isArray(result.data.rules) ? result.data.rules : []
+}
+
 async function loadPools() {
   poolLoading.value = true
   const result = await listManualSamplePools({ page: 1, page_size: 50 })
   poolLoading.value = false
-  await loadExactReviewAcceptance()
   if (!result.success || !result.data) {
     message.error(result.message || '获取样本池失败')
     return
@@ -2279,6 +3282,13 @@ async function loadPools() {
     await loadRecords()
     await openInitialQueryJob()
   }
+}
+
+async function ensureExactReviewAcceptanceLoaded() {
+  if (exactReviewLoading.value || exactReviewAcceptance.value) {
+    return
+  }
+  await loadExactReviewAcceptance()
 }
 
 async function loadExactReviewAcceptance() {
@@ -2368,7 +3378,7 @@ function sortManualSampleRecordsForDisplay(
   poolId: string,
   focusedRecordId = '',
 ): ManualSamplePoolRecord[] {
-  const shouldSortCustomerTestPool = poolId === 'customer-created-test-records-v1'
+  const shouldSortCustomerTestPool = poolId === CUSTOMER_TEST_POOL_ID
   if (!shouldSortCustomerTestPool && !focusedRecordId) return items
   return [...items].sort((left, right) => {
     const leftFocused = isFocusedRecord(left, focusedRecordId)
@@ -2385,6 +3395,9 @@ async function handlePoolChange() {
   pagination.value.page = 1
   selectedRowKeys.value = []
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
+  if (importWorkflow.value && importWorkflow.value.poolId !== selectedPoolId.value) {
+    importWorkflow.value = null
+  }
   await loadLatestSyncJob()
   await loadRecords()
 }
@@ -2417,7 +3430,11 @@ function normalizeLuxianRuleIds(ruleIds: string[]): string[] {
   return Array.from(
     new Set(
       ruleIds
-        .map((ruleId) => String(ruleId || '').trim().toUpperCase())
+        .map((ruleId) =>
+          String(ruleId || '')
+            .trim()
+            .toUpperCase(),
+        )
         .filter((ruleId) => /^LX0609-\d{3}$/u.test(ruleId)),
     ),
   ).sort()
@@ -2458,6 +3475,32 @@ function isLuxianRuleFamilySelected(ruleIds: string[]): boolean {
   return normalizedRuleIds.every((ruleId) => current.has(ruleId))
 }
 
+function isLuxianRuleFamilyExpanded(familyKey: string): boolean {
+  return expandedLuxianRuleFamilyKeys.value.includes(familyKey)
+}
+
+function visibleLuxianFamilyRules(family: LuxianRuleFamilyView): LuxianRuleOption[] {
+  if (isLuxianRuleFamilyExpanded(family.key)) {
+    return family.rules
+  }
+  return family.rules.slice(0, LUXIAN_RULE_FAMILY_PREVIEW_LIMIT)
+}
+
+function hiddenLuxianFamilyRuleCount(family: LuxianRuleFamilyView): number {
+  if (isLuxianRuleFamilyExpanded(family.key)) return 0
+  return Math.max(0, family.rules.length - LUXIAN_RULE_FAMILY_PREVIEW_LIMIT)
+}
+
+function toggleLuxianRuleFamilyExpanded(familyKey: string) {
+  if (isLuxianRuleFamilyExpanded(familyKey)) {
+    expandedLuxianRuleFamilyKeys.value = expandedLuxianRuleFamilyKeys.value.filter(
+      (key) => key !== familyKey,
+    )
+    return
+  }
+  expandedLuxianRuleFamilyKeys.value = [...expandedLuxianRuleFamilyKeys.value, familyKey]
+}
+
 function selectLuxianRuleFamily(ruleIds: string[]) {
   const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds)
   const current = new Set(selectedLuxianCustomerRuleIds.value)
@@ -2469,8 +3512,68 @@ function selectLuxianRuleFamily(ruleIds: string[]) {
   selectedLuxianCustomerRuleIds.value = normalizeLuxianRuleIds([...current])
 }
 
+function toggleAllLuxianRuleFamilies() {
+  selectedLuxianCustomerRuleIds.value = isAllLuxianRulesSelected.value
+    ? []
+    : normalizeLuxianRuleIds(allLuxianRuleIds.value)
+}
+
 function clearLuxianRuleScope() {
   selectedLuxianCustomerRuleIds.value = []
+}
+
+function buildLuxianFamilyRunScopes(ruleIds: string[]): LuxianFamilyRunScope[] {
+  const selectedRuleIds = normalizeLuxianRuleIds(ruleIds)
+  if (!selectedRuleIds.length) return []
+  const selectedSet = new Set(selectedRuleIds)
+  const coveredRuleIds = new Set<string>()
+  const scopes = luxianRuleFamilies.value
+    .map((family) => {
+      const familyRuleIds = normalizeLuxianRuleIds(family.ruleIds).filter((ruleId) =>
+        selectedSet.has(ruleId),
+      )
+      familyRuleIds.forEach((ruleId) => coveredRuleIds.add(ruleId))
+      return {
+        key: family.key,
+        name: family.name,
+        ruleIds: familyRuleIds,
+      }
+    })
+    .filter((scope) => scope.ruleIds.length > 0)
+
+  const orphanRuleIds = selectedRuleIds.filter((ruleId) => !coveredRuleIds.has(ruleId))
+  if (orphanRuleIds.length) {
+    scopes.push({
+      key: 'other',
+      name: '其他质控点',
+      ruleIds: orphanRuleIds,
+    })
+  }
+  return scopes
+}
+
+async function runWithLimitedConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = []
+  let nextIndex = 0
+  const workerCount = Math.max(1, Math.min(limit, items.length))
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex
+        nextIndex += 1
+        results[index] = await worker(items[index])
+      }
+    }),
+  )
+  return results
+}
+
+function shouldRunLuxianFamiliesInParallel(ruleIds: string[]): boolean {
+  return isLuxian0609Mode.value && buildLuxianFamilyRunScopes(ruleIds).length > 1
 }
 
 async function handleRuleSetChange(ruleSetKey: string | number) {
@@ -2641,17 +3744,44 @@ async function handleImportPool() {
     return
   }
   selectedPoolId.value = result.data.id
+  importWorkflow.value = {
+    poolId: result.data.id,
+    poolName: result.data.name || poolName,
+    importedRows: Number(result.data.imported_rows || 0),
+    matching: true,
+    matched: 0,
+    ambiguous: 0,
+    unmatched: 0,
+    status: 'matching',
+    message: '已导入样本 ID，正在自动匹配源库病历...',
+  }
   resetImportForm()
-  message.success(`导入成功，共写入 ${result.data.imported_rows} 条样本`)
+  message.success(`导入成功，共写入 ${result.data.imported_rows} 条样本，正在匹配源库病历`)
   await loadPools()
+  await runPoolMatch({ source: 'import' })
 }
 
 async function handleDownloadTemplate() {
   const XLSX = await import('xlsx')
   const workbook = XLSX.utils.book_new()
-  const worksheet = XLSX.utils.aoa_to_sheet([['住院号'], ['2248248'], ['161241']])
-  worksheet['!cols'] = [{ wch: 18 }]
-  XLSX.utils.book_append_sheet(workbook, worksheet, '住院号')
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ['就诊ID', '住院流水号', '病案号', '患者姓名', '备注'],
+    ['1870471', 'IP0000135258', '362948', '蒲云鹏', '示例：优先填写就诊ID'],
+    ['1430048', '', '', '', '没有住院流水号/病案号时，可只填就诊ID'],
+  ])
+  worksheet['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 34 }]
+  XLSX.utils.book_append_sheet(workbook, worksheet, '样本ID')
+
+  const instructionSheet = XLSX.utils.aoa_to_sheet([
+    ['字段', '是否必填', '说明'],
+    ['就诊ID', '推荐必填', '最可靠的匹配字段，对应源库 visit_id。'],
+    ['住院流水号', '可选', '对应源库 inpat_no，例如 IP0000135258。'],
+    ['病案号', '可选', '对应源库 mr_no，例如 362948。'],
+    ['患者姓名', '可选', '只用于人工核对，不作为唯一匹配键。'],
+    ['备注', '可选', '客户自定义来源或批次说明。'],
+  ])
+  instructionSheet['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 48 }]
+  XLSX.utils.book_append_sheet(workbook, instructionSheet, '填写说明')
   XLSX.writeFile(workbook, '客户样本导入模板.xlsx')
 }
 
@@ -2669,12 +3799,35 @@ function resolveRecordCaseTitle(record: ManualSamplePoolRecord): string {
   return caseTitle || ''
 }
 
+function resolveRecordMainDiagnosis(record: ManualSamplePoolRecord): string {
+  for (const item of record.sample_items || []) {
+    const rawPayload = item.raw_payload || {}
+    const basicInfo = rawPayload.basic_info
+    const candidates = [
+      rawPayload.main_diagnosis,
+      rawPayload.diagnosis,
+      typeof basicInfo === 'object' && basicInfo !== null
+        ? (basicInfo as Record<string, unknown>).main_diagnosis
+        : undefined,
+      typeof basicInfo === 'object' && basicInfo !== null
+        ? (basicInfo as Record<string, unknown>).diagnosis
+        : undefined,
+    ]
+    const diagnosis = candidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find(Boolean)
+    if (diagnosis) return diagnosis
+  }
+  return ''
+}
+
 function resolveRecordDisplayTitle(record: ManualSamplePoolRecord): string {
   const caseTitle = resolveRecordCaseTitle(record)
   if (caseTitle) {
     const cleaned = caseTitle
       .replace(/[-_]\d{10,}$/u, '')
       .replace(/CUSTOMER_TEST_\d+[A-Z0-9]*$/u, '')
+      .replace(/[｜|]\s*LX(?:0609-)?\d{3}(?:[/、,，]\s*(?:LX(?:0609-)?)?\d{3})*\s*/u, '')
       .replace(/[｜|]\s*\d{2,4}[-_/年]?\d{1,2}[-_/月]?\d{1,2}日?\s*\d{0,2}:?\d{0,2}\s*$/u, '')
       .replace(/[｜|]\s*\d{4}[-_/]?\d{2}[-_/]?\d{2}[-_/]?\d{0,6}\s*$/u, '')
       .replace(/[｜|]\s*\d{4}-\d{4}\s*$/u, '')
@@ -2686,10 +3839,17 @@ function resolveRecordDisplayTitle(record: ManualSamplePoolRecord): string {
   return resolveRecordPatientName(record)
 }
 
-function resolveRecordPatientLine(record: ManualSamplePoolRecord): string {
+function resolveRecordPatientTitle(record: ManualSamplePoolRecord): string {
   const patientName = resolveRecordPatientName(record)
-  const department = String(record.department || '').trim()
-  return [patientName === '-' ? '' : patientName, department].filter(Boolean).join(' · ') || '-'
+  let title = resolveRecordDisplayTitle(record).replace(/病历$/u, '').trim()
+  if (patientName !== '-' && title.startsWith(patientName)) {
+    title = title
+      .slice(patientName.length)
+      .replace(/^[\s·・,，:：-]+/u, '')
+      .trim()
+  }
+  if (!title || title === patientName) return patientName === '-' ? '-' : patientName
+  return [patientName === '-' ? '' : patientName, title].filter(Boolean).join(' · ') || '-'
 }
 
 function resolveRecordIdentifier(record: ManualSamplePoolRecord): string {
@@ -2702,9 +3862,18 @@ function resolveRecordIdentifier(record: ManualSamplePoolRecord): string {
   )
 }
 
-function resolveRecordDisplayCode(record: ManualSamplePoolRecord, index = 0): string {
-  if (/^CUSTOMER_TEST_/u.test(resolveRecordIdentifier(record))) {
-    return `测试-${String(index + 1).padStart(3, '0')}`
+function resolveRecordDisplayCode(record: ManualSamplePoolRecord): string {
+  const identifier = resolveRecordIdentifier(record)
+  if (/^CUSTOMER_TEST_/u.test(identifier.trim())) {
+    const displayTime = formatRecordCodeTime(recordSortTime(record))
+    if (displayTime) return `测试-${displayTime}`
+  }
+  const customerTestMatch = identifier
+    .trim()
+    .match(/^CUSTOMER_TEST_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d{0,2}[A-Z0-9]*$/u)
+  if (customerTestMatch) {
+    const [, , month, day, hour, minute] = customerTestMatch
+    return `测试-${month}${day}-${hour}${minute}`
   }
   return resolveRecordShortIdentifier(record).replace(/^编号\s*/u, '')
 }
@@ -2721,26 +3890,18 @@ function resolveRecordShortIdentifier(record: ManualSamplePoolRecord): string {
   return normalized.length > 22 ? `编号 ...${normalized.slice(-10)}` : `编号 ${normalized}`
 }
 
-function resolveRecordCreatedTime(record: ManualSamplePoolRecord): string {
+function resolveRecordCreatedDate(record: ManualSamplePoolRecord): string {
   const raw = recordSortTime(record)
   if (!raw) return ''
-  return formatCompactDateTime(raw)
+  return formatCompactDate(raw)
 }
 
-function formatCompactDateTime(value: string): string {
+function formatRecordCodeTime(value: string): string {
   const text = value.trim()
   if (!text) return ''
-  const directMatch = text.match(/^(\d{4})[-/](\d{2})[-/](\d{2})[ T](\d{2}):(\d{2})/u)
-  if (directMatch) {
-    const [, year, month, day, hour, minute] = directMatch
-    return `${year}-${month}-${day} ${hour}:${minute}`
-  }
-  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
-  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
-  const date = new Date(hasTimezone ? normalized : `${normalized}Z`)
-  if (Number.isNaN(date.getTime())) return text
+  const date = parseBackendDateTime(text)
+  if (Number.isNaN(date.getTime())) return ''
   const parts = new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -2748,7 +3909,29 @@ function formatCompactDateTime(value: string): string {
     hour12: false,
   }).formatToParts(date)
   const getPart = (type: string) => parts.find((part) => part.type === type)?.value || ''
-  return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
+  return `${getPart('month')}${getPart('day')}-${getPart('hour')}${getPart('minute')}`
+}
+
+function formatCompactDate(value: string): string {
+  const text = value.trim()
+  if (!text) return ''
+  const date = parseBackendDateTime(text)
+  if (Number.isNaN(date.getTime())) return text
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value || ''
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}`
+}
+
+function parseBackendDateTime(value: string): Date {
+  const text = value.trim()
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+  const normalizedWithMilliseconds = normalized.replace(/\.(\d{3})\d+/u, '.$1')
+  return new Date(hasTimezone ? normalizedWithMilliseconds : `${normalizedWithMilliseconds}Z`)
 }
 
 function openRecordDetail(record: ManualSamplePoolRecord) {
@@ -2772,22 +3955,625 @@ function openReviewDrawer(record: ManualSamplePoolRecord) {
   reviewDrawerVisible.value = true
 }
 
-async function handleMatchPool() {
+async function loadEditableCopyDocuments(record: ManualSamplePoolRecord): Promise<boolean> {
+  editableCopySourceRecord.value = record
+  editableCopyDraft.value = null
+  editableCopyOpen.value = true
+  editableCopyLoading.value = true
+  const result = await getEditableMedicalRecordDocuments(record.matched_visit_id || '', {
+    institute_id: record.matched_institute_id,
+    patient_id: record.matched_patient_id,
+    visit_id: record.matched_visit_id,
+  })
+  editableCopyLoading.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '读取源病历文书失败')
+    return false
+  }
+  if (!result.data.documents.length) {
+    message.warning('当前源病历未读取到可编辑文书')
+  }
+  editableCopyDraft.value = buildEditableCopyDraft(record, result.data.documents, {
+    readonly: editableCopyReadonly.value,
+  })
+  editableCopyDocumentQuery.value = ''
+  editableCopyDocumentFilter.value = 'all'
+  editableCopyOrderTypeFilter.value = editableCopyOrderRows.value.some(
+    (row) => row.orderTypeKey === 'temporary',
+  )
+    ? 'temporary'
+    : 'long'
+  editableCopyActiveDocumentKey.value = editableCopyDraft.value.documents[0]?.key || ''
+  return true
+}
+
+async function openMedicalRecordViewer(record: ManualSamplePoolRecord) {
+  if (!record.matched_visit_id) {
+    message.warning('当前样本尚未匹配到病历，无法查看原文')
+    return
+  }
+  editableCopyReadonly.value = true
+  await loadEditableCopyDocuments(record)
+}
+
+function resolveEditableCopyTitle(record: ManualSamplePoolRecord): string {
+  const title = resolveRecordDisplayTitle(record)
+  if (title && title !== '-') return `${title}编辑副本`
+  const patientName = resolveRecordPatientName(record)
+  return `${patientName === '-' ? '源病历' : patientName}编辑副本`
+}
+
+function resolveEditableCopyAdmissionTime(record: ManualSamplePoolRecord): string {
+  const raw = record.created_at || record.updated_at || new Date().toISOString()
+  const parsed = parseBackendDateTime(raw)
+  if (Number.isNaN(parsed.getTime())) return new Date().toISOString().slice(0, 16)
+  return parsed.toISOString().slice(0, 16)
+}
+
+function isEditableOrderDocument(
+  document?: Partial<EditableMedicalRecordDocument> | null,
+): boolean {
+  const probe = [document?.document_type, document?.title, document?.source_table, document?.key]
+    .map((item) => String(item || '').toLowerCase())
+    .join(' ')
+  return (
+    probe.includes('order') ||
+    probe.includes('医嘱') ||
+    probe.includes('长期') ||
+    probe.includes('临时')
+  )
+}
+
+function editableOrderContentLines(document: EditableMedicalRecordDocument): string[] {
+  return String(document.content || '')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function resolveEditableOrderKindFromContent(
+  document: EditableMedicalRecordDocument,
+): EditableCopyOrderTypeFilter | null {
+  const firstLine = editableOrderContentLines(document)[0] || ''
+  const normalized = firstLine.replace(/\s+/gu, '')
+  if (/^长期(医嘱)?[:：]?$/u.test(normalized) || /^长期医嘱[:：]/u.test(normalized)) return 'long'
+  if (/^临时(医嘱)?[:：]?$/u.test(normalized) || /^临时医嘱[:：]/u.test(normalized))
+    return 'temporary'
+  return null
+}
+
+function resolveEditableOrderTypeLabel(document: EditableMedicalRecordDocument): string {
+  const kindFromContent = resolveEditableOrderKindFromContent(document)
+  if (kindFromContent === 'long') return '长期医嘱'
+  if (kindFromContent === 'temporary') return '临时医嘱'
+  const probe = [document.document_type, document.title, document.source_table, document.key]
+    .map((item) => String(item || '').toLowerCase())
+    .join(' ')
+  if (probe.includes('临时') || probe.includes('temp')) return '临时医嘱'
+  if (probe.includes('长期') || probe.includes('long')) return '长期医嘱'
+  if (probe.includes('出院')) return '出院医嘱'
+  if (probe.includes('drug') || probe.includes('药')) return '药品医嘱'
+  return '医嘱'
+}
+
+function resolveEditableOrderTypeKey(
+  document: EditableMedicalRecordDocument,
+): EditableCopyOrderTypeFilter {
+  const kindFromContent = resolveEditableOrderKindFromContent(document)
+  if (kindFromContent) return kindFromContent
+  const label = resolveEditableOrderTypeLabel(document)
+  if (label.includes('长期')) return 'long'
+  if (label.includes('临时')) return 'temporary'
+  const probe = [document.document_type, document.title, document.source_table, document.key]
+    .map((item) => String(item || '').toLowerCase())
+    .join(' ')
+  if (probe.includes('long') || probe.includes('长期')) return 'long'
+  return 'temporary'
+}
+
+function normalizeEditableOrderTimeText(value?: string, fallback = '-'): string {
+  const raw = String(value || '').trim()
+  if (!raw) return fallback
+  const parsed = parseBackendDateTime(raw)
+  if (Number.isNaN(parsed.getTime())) return raw.replace('T', ' ').slice(0, 19)
+  return parsed.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+function resolveEditableOrderStartTimeValue(document: EditableMedicalRecordDocument): string {
+  return document.order_start_time || document.record_time || document.submit_time || ''
+}
+
+function resolveEditableOrderStopTimeValue(document: EditableMedicalRecordDocument): string {
+  return document.order_stop_time || ''
+}
+
+function editableOrderTimeValue(document: EditableMedicalRecordDocument): number {
+  const parsed = parseBackendDateTime(resolveEditableOrderStartTimeValue(document))
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime()
+}
+
+function compareEditableOrderDocumentByTimeDesc(
+  left: EditableMedicalRecordDocument,
+  right: EditableMedicalRecordDocument,
+): number {
+  return editableOrderTimeValue(right) - editableOrderTimeValue(left)
+}
+
+function stripEditableOrderPrefix(value: string): string {
+  return value
+    .replace(/^(长期医嘱|临时医嘱|医嘱记录|医嘱)[:：]\s*/u, '')
+    .replace(/^(长期|临时)(医嘱)?[:：]?\s*/u, '')
+    .trim()
+}
+
+function isEditableOrderKindLine(value: string): boolean {
+  return /^(长期|临时)(医嘱)?[:：]?$/u.test(value.replace(/\s+/gu, ''))
+}
+
+function isEditableOrderStatusLine(value: string): boolean {
+  return /^(新开|开立|停止|停用|作废|撤销|执行中|已执行|未执行)$/u.test(value.trim())
+}
+
+function isEditableOrderCategoryLine(value: string): boolean {
+  return /^(用药|药品|护理|治疗|处置|检查|检验|手术|麻醉|输血|会诊|康复|膳食|嘱托|其他)$/u.test(
+    value.trim(),
+  )
+}
+
+function resolveEditableOrderCategoryText(document: EditableMedicalRecordDocument): string {
+  const lines = editableOrderContentLines(document)
+    .map((line) => stripEditableOrderPrefix(line))
+    .filter(Boolean)
+  const explicitCategory = lines.find((line) => isEditableOrderCategoryLine(line))
+  if (explicitCategory) return explicitCategory === '药品' ? '用药' : explicitCategory
+
+  const probe = [
+    document.document_type,
+    document.title,
+    document.source_table,
+    document.key,
+    document.content,
+  ]
+    .map((item) => String(item || '').toLowerCase())
+    .join(' ')
+  if (probe.includes('drug') || probe.includes('药')) return '用药'
+  if (probe.includes('nursing') || probe.includes('护理')) return '护理'
+  if (probe.includes('blood') || probe.includes('输血')) return '输血'
+  if (probe.includes('exam') || probe.includes('检查')) return '检查'
+  if (probe.includes('lab') || probe.includes('检验')) return '检验'
+  if (probe.includes('surg') || probe.includes('手术')) return '手术'
+  return '医嘱'
+}
+
+function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): string {
+  const lines = editableOrderContentLines(document)
+    .map((line) => stripEditableOrderPrefix(line))
+    .filter(
+      (line) => Boolean(line) && !isEditableOrderKindLine(line) && !isEditableOrderStatusLine(line),
+    )
+  const category = lines.find((line) => isEditableOrderCategoryLine(line))
+  const candidateLines =
+    category && lines.length > 1 ? lines.filter((line) => line !== category) : lines
+  const firstLine =
+    candidateLines[0] || stripEditableOrderPrefix(document.title || document.document_type || '')
+  if (!firstLine || isEditableOrderKindLine(firstLine)) return '-'
+  return firstLine.replace(/\s+/gu, ' ').slice(0, 80)
+}
+
+function resolveEditableOrderStatus(document: EditableMedicalRecordDocument): string {
+  if (document.enabled === false) return '不写入'
+  const lines = editableOrderContentLines(document).map((line) => stripEditableOrderPrefix(line))
+  const explicitStatus = lines.find((line) => isEditableOrderStatusLine(line))
+  if (explicitStatus) return explicitStatus
+  const text = `${document.title || ''} ${document.content || ''}`.toLowerCase()
+  if (text.includes('停止') || text.includes('停用') || text.includes('停')) return '停止'
+  if (text.includes('新开') || text.includes('开立') || document.is_new) return '新开'
+  if (text.includes('执行')) return '执行中'
+  return '新开'
+}
+
+function parseEditableOrderRow(document: EditableMedicalRecordDocument): EditableCopyOrderRow {
+  const orderTypeKey = resolveEditableOrderTypeKey(document)
+  return {
+    document,
+    startTime: normalizeEditableOrderTimeText(resolveEditableOrderStartTimeValue(document)),
+    stopTime: normalizeEditableOrderTimeText(resolveEditableOrderStopTimeValue(document), ''),
+    orderType: resolveEditableOrderCategoryText(document),
+    item: resolveEditableOrderItemText(document),
+    status: resolveEditableOrderStatus(document),
+    orderTypeKey,
+  }
+}
+
+function editableDocumentTypeLabel(documentType: string): string {
+  return (
+    testRecordDocumentTypeOptions.find((option) => option.value === documentType)?.label ||
+    documentType ||
+    '文书'
+  )
+}
+
+function editableCopyDocumentGroupKey(document: EditableMedicalRecordDocument): string {
+  const probe = `${document.document_type || ''} ${document.title || ''}`.toLowerCase()
+  if (isEditableOrderDocument(document)) return 'order'
+  if (probe.includes('入院')) return 'admission'
+  if (probe.includes('病程') || probe.includes('查房') || probe.includes('course')) return 'course'
+  if (
+    probe.includes('手术') ||
+    probe.includes('麻醉') ||
+    probe.includes('surg') ||
+    probe.includes('anesthesia')
+  ) {
+    return 'surgery'
+  }
+  if (
+    probe.includes('检查') ||
+    probe.includes('检验') ||
+    probe.includes('报告') ||
+    probe.includes('影像') ||
+    probe.includes('培养') ||
+    probe.includes('lab') ||
+    probe.includes('exam')
+  ) {
+    return 'exam_lab'
+  }
+  return 'other'
+}
+
+function editableCopyDocumentGroupLabel(key: string): string {
+  const labels: Record<string, string> = {
+    admission: '入院记录',
+    course: '病程记录',
+    order: '医嘱',
+    surgery: '手术麻醉',
+    exam_lab: '检查检验',
+    other: '其他文书',
+  }
+  return labels[key] || '其他文书'
+}
+
+function formatEditableCopyDocumentMeta(document: EditableMedicalRecordDocument): string {
+  const timeText = document.record_time || '未返回时间'
+  const lengthText = `${String(document.content || '').trim().length}字`
+  const stateText =
+    document.enabled === false ? '已从副本删除' : document.is_new ? '新增' : '源文书'
+  return `${timeText} · ${lengthText} · ${stateText}`
+}
+
+function formatEditableCopyOrderGroupMeta(documents: EditableMedicalRecordDocument[]): string {
+  const longCount = documents.filter(
+    (document) => resolveEditableOrderTypeKey(document) === 'long',
+  ).length
+  const temporaryCount = documents.filter(
+    (document) => resolveEditableOrderTypeKey(document) === 'temporary',
+  ).length
+  return `长期 ${longCount} 条 · 临时 ${temporaryCount} 条`
+}
+
+function selectEditableCopyDocument(key: string) {
+  editableCopyActiveDocumentKey.value = key
+  const document = editableCopyAllDocuments.value.find((item) => item.key === key)
+  if (document && isEditableOrderDocument(document)) {
+    editableCopyOrderTypeFilter.value = resolveEditableOrderTypeKey(document)
+  }
+}
+
+function selectEditableCopyOrderGroup() {
+  const rows = editableCopyVisibleOrderRows.value.length
+    ? editableCopyVisibleOrderRows.value
+    : editableCopyOrderRows.value
+  const first = rows[0]?.document
+  if (first) {
+    editableCopyActiveDocumentKey.value = first.key
+    editableCopyOrderTypeFilter.value = resolveEditableOrderTypeKey(first)
+  }
+}
+
+function createEditableCopyDocument(documentType: string): EditableMedicalRecordDocument {
+  const normalizedType =
+    String(documentType || 'daily_course_record').trim() || 'daily_course_record'
+  const title = editableDocumentTypeLabel(normalizedType)
+  const timestamp = Date.now()
+  return {
+    key: `editable-new-${normalizedType}-${timestamp}`,
+    document_type: normalizedType,
+    title,
+    record_time: new Date().toISOString().slice(0, 16),
+    submit_time: '',
+    content:
+      normalizedType === 'medical_order'
+        ? '请填写医嘱名称、剂量、频次、用法、开立时间、停止时间及开立医师。'
+        : `请填写${title}正文。`,
+    doctor_name: '',
+    enabled: true,
+    is_new: true,
+  }
+}
+
+function addEditableCopyDocument(documentType = editableCopyNewDocumentType.value) {
+  if (!editableCopyDraft.value) return
+  const document = createEditableCopyDocument(documentType)
+  editableCopyDraft.value.documents.push(document)
+  editableCopyActiveDocumentKey.value = document.key
+}
+
+function addEditableCopyOrderDocument() {
+  addEditableCopyDocument('medical_order')
+}
+
+function removeEditableCopyDocument(document: EditableMedicalRecordDocument) {
+  const draft = editableCopyDraft.value
+  if (!draft) return
+  if (document.is_new) {
+    draft.documents = draft.documents.filter((item) => item.key !== document.key)
+    if (editableCopyActiveDocumentKey.value === document.key) {
+      editableCopyActiveDocumentKey.value = draft.documents[0]?.key || ''
+    }
+    return
+  }
+  document.enabled = document.enabled === false
+  editableCopyActiveDocumentKey.value = document.key
+}
+
+function buildEditableCopyDraft(
+  record: ManualSamplePoolRecord,
+  documents: EditableMedicalRecordDocument[],
+  options: { readonly?: boolean } = {},
+): EditableCopyDraft {
+  const patientName = resolveRecordPatientName(record)
+  const readonlyMode = options.readonly === true
+  const sourceTitle = resolveRecordDisplayTitle(record)
+  const sourceDiagnosis = resolveRecordMainDiagnosis(record)
+  const normalizedDocuments = documents.map((document, index) => ({
+    ...document,
+    key: document.key || `${document.document_type || 'document'}-${index + 1}`,
+    title: document.title || document.document_type || `文书 ${index + 1}`,
+    document_type: document.document_type || document.title || '日常病程记录',
+    enabled: document.enabled !== false,
+    content: document.content || '',
+  }))
+  return {
+    caseTitle: readonlyMode
+      ? sourceTitle || resolveRecordIdentifier(record)
+      : resolveEditableCopyTitle(record),
+    patientName: patientName === '-' ? '脱敏患者' : patientName,
+    sex: '未说明',
+    age: 50,
+    mrNo: '',
+    department: record.department || '未说明科室',
+    admissionTime: resolveEditableCopyAdmissionTime(record),
+    dischargeTime: '',
+    mainDiagnosis: readonlyMode ? sourceDiagnosis || '未返回' : sourceDiagnosis || '源病历编辑副本',
+    manualIssueText: readonlyMode
+      ? `源病历：${resolveRecordIdentifier(record)}。当前仅查看已同步文书原文。`
+      : `源病历编辑副本：${resolveRecordIdentifier(record)}。原始同步病历保持只读，本副本用于客户自定义修改后验证。`,
+    documents: normalizedDocuments,
+  }
+}
+
+async function openEditableCopyDrawer(record: ManualSamplePoolRecord) {
+  if (!record.matched_visit_id) {
+    message.warning('当前样本尚未匹配到病历，无法创建编辑副本')
+    return
+  }
+  editableCopyReadonly.value = false
+  await loadEditableCopyDocuments(record)
+}
+
+function closeEditableCopyDrawer() {
+  if (editableCopySaving.value || editableCopySaveAndRunLoading.value) return
+  editableCopyOpen.value = false
+  editableCopyReadonly.value = false
+  editableCopySourceRecord.value = null
+  editableCopyDraft.value = null
+  editableCopyActiveDocumentKey.value = ''
+  editableCopyDocumentQuery.value = ''
+  editableCopyDocumentFilter.value = 'all'
+}
+
+function buildEditableCopySourceMeta(record: ManualSamplePoolRecord) {
+  return {
+    type: 'customer_source_editable_copy',
+    source_pool_id: selectedPool.value?.id || selectedPoolId.value || '',
+    source_pool_name: selectedPool.value?.name || '',
+    source_record_id: record.id,
+    source_item_ids: record.sample_item_ids || [],
+    source_visit_id: record.matched_visit_id || '',
+    source_mr_no: record.mr_no || '',
+    source_patient_name: record.patient_name || '',
+    source_department: record.department || '',
+    created_from: 'customer_sample_validation',
+  }
+}
+
+function normalizeEditableCopyDateTime(value?: string): string | undefined {
+  const text = String(value || '').trim()
+  if (!text || text === '-' || text === '未返回') return undefined
+  const parsed = parseBackendDateTime(text)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  return parsed.toISOString()
+}
+
+function buildEditableCopyPayload(
+  record: ManualSamplePoolRecord,
+): ManualTestRecordCreateRequest | null {
+  const draft = editableCopyDraft.value
+  if (!draft) return null
+  const enabledDocuments = draft.documents
+    .filter((document) => document.enabled !== false)
+    .map((document) => ({
+      document_type: document.document_type,
+      title: document.title,
+      record_time: normalizeEditableCopyDateTime(document.record_time),
+      submit_time: normalizeEditableCopyDateTime(document.submit_time),
+      content: document.content,
+      doctor_name: document.doctor_name,
+      doctor_code: document.doctor_code,
+      enabled: true,
+    }))
+    .filter((document) => document.content.trim())
+  return {
+    case_title: draft.caseTitle.trim() || resolveEditableCopyTitle(record),
+    basic_info: {
+      patient_name: draft.patientName.trim() || '脱敏患者',
+      sex: draft.sex.trim() || '未说明',
+      age: Number.isFinite(draft.age) ? draft.age : 50,
+      mr_no: draft.mrNo.trim() || undefined,
+      department: draft.department.trim() || record.department || '未说明科室',
+      admission_time:
+        normalizeEditableCopyDateTime(draft.admissionTime) || new Date().toISOString(),
+      discharge_time: normalizeEditableCopyDateTime(draft.dischargeTime),
+      main_diagnosis: draft.mainDiagnosis.trim() || '源病历编辑副本',
+    },
+    documents: enabledDocuments,
+    selected_rule_ids: isLuxian0609Mode.value
+      ? normalizeLuxianRuleIds(selectedLuxianCustomerRuleIds.value)
+      : [],
+    manual_issue_text: draft.manualIssueText.trim(),
+    template_key: 'customer_source_editable_copy',
+    source: buildEditableCopySourceMeta(record),
+  }
+}
+
+async function saveEditableCopy(options: { runAfterSave: boolean }) {
+  if (editableCopyReadonly.value) {
+    message.warning('当前为只读查看模式，不能保存测试病历')
+    return
+  }
+  const sourceRecord = editableCopySourceRecord.value
+  const payload = sourceRecord ? buildEditableCopyPayload(sourceRecord) : null
+  if (!sourceRecord || !payload) {
+    message.warning('请先读取源病历文书')
+    return
+  }
+  if (!payload.documents.length) {
+    message.warning('至少保留一份有正文的文书后再保存')
+    return
+  }
+  if (options.runAfterSave && isLuxian0609Mode.value && !payload.selected_rule_ids?.length) {
+    message.warning('请先选择要验证的 LX0609 质控点')
+    return
+  }
+  if (options.runAfterSave) {
+    editableCopySaveAndRunLoading.value = true
+  } else {
+    editableCopySaving.value = true
+  }
+  const createResult = await createManualTestMedicalRecord(payload)
+  if (options.runAfterSave) {
+    editableCopySaveAndRunLoading.value = false
+  } else {
+    editableCopySaving.value = false
+  }
+  if (!createResult.success || !createResult.data) {
+    message.error(createResult.message || '保存编辑副本失败')
+    return
+  }
+  message.success('编辑副本已保存为自建测试病历')
+  editableCopyOpen.value = false
+  const createdVisitId = createResult.data.visit_id
+  await loadPools()
+  if (selectedPoolId.value !== CUSTOMER_TEST_POOL_ID) {
+    selectedPoolId.value = CUSTOMER_TEST_POOL_ID
+    selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
+  }
+  await loadRecords()
+  if (!options.runAfterSave) return
+
+  const runPayload = {
+    record_ids: [createdVisitId],
+    max_parallel_records: 1,
+    validation_mode: selectedValidationMode.value,
+    rule_set_key: selectedRuleSetPayloadKey.value,
+    selected_rule_ids: payload.selected_rule_ids,
+  }
+  const runResult = await runManualSamplePool(CUSTOMER_TEST_POOL_ID, runPayload, {
+    timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS,
+  })
+  if (!runResult.success || !runResult.data) {
+    message.error(runResult.message || '编辑副本已保存，但发起验证失败')
+    return
+  }
+  message.success('编辑副本验证任务已创建')
+  await openBatchJob(runResult.data.job_id, {
+    visitId: createdVisitId,
+    recordId: createResult.data.item?.id || createdVisitId,
+    label: [payload.basic_info.patient_name, payload.basic_info.department, createdVisitId]
+      .filter(Boolean)
+      .join(' · '),
+  })
+}
+
+function formatMatchSummary(matched: number, ambiguous: number, unmatched: number) {
+  return `匹配 ${matched} 份，待人工确认 ${ambiguous} 份，未找到 ${unmatched} 份`
+}
+
+async function runPoolMatch(options: { source: 'import' | 'manual' | 'workflow' }) {
+  void options
   if (!selectedPoolId.value) return
   matchLoading.value = true
+  if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+    importWorkflow.value = {
+      ...importWorkflow.value,
+      matching: true,
+      status: 'matching',
+      message: '正在按就诊ID、住院号、病案号匹配源库病历...',
+    }
+  }
   const result = await matchManualSamplePool(selectedPoolId.value)
   matchLoading.value = false
   if (!result.success) {
+    if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+      importWorkflow.value = {
+        ...importWorkflow.value,
+        matching: false,
+        status: 'match_failed',
+        message: result.message || '病历匹配失败，请检查源库连接或稍后重试。',
+      }
+    }
     message.error(result.message || '执行病历匹配失败')
     return
   }
-  message.success('病历匹配完成')
+  const matched = Number(result.data?.matched ?? 0)
+  const ambiguous = Number(result.data?.ambiguous ?? 0)
+  const unmatched = Number(result.data?.unmatched ?? 0)
+  const summary = formatMatchSummary(matched, ambiguous, unmatched)
+  if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+    importWorkflow.value = {
+      ...importWorkflow.value,
+      matching: false,
+      matched,
+      ambiguous,
+      unmatched,
+      status: matched > 0 ? 'matched' : 'no_match',
+      message:
+        matched > 0
+          ? '已匹配到源库病历，可以开始同步病历文书。'
+          : '没有匹配到病历，请检查 ID 类型或源库配置。',
+    }
+  }
+  if (matched > 0) {
+    message.success(summary)
+  } else {
+    message.warning(`${summary}。没有匹配到病历，请检查 ID 类型或源库配置。`)
+  }
   await loadPools()
+}
+
+async function handleMatchPool() {
+  await runPoolMatch({ source: 'manual' })
 }
 
 async function handleSyncPoolRecords() {
   if (!selectedPoolId.value) return
   syncLoading.value = true
+  if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+    importWorkflow.value = {
+      ...importWorkflow.value,
+      status: 'syncing',
+      message: '同步任务已创建后会在下方展示进度。',
+    }
+  }
   const limitToIntrinsic = !isSyncedOnlyValidationMode.value
   const result = await syncManualSamplePoolRecords(selectedPoolId.value, {
     only_intrinsic: limitToIntrinsic,
@@ -2795,8 +4581,22 @@ async function handleSyncPoolRecords() {
   })
   syncLoading.value = false
   if (!result.success || !result.data) {
+    if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+      importWorkflow.value = {
+        ...importWorkflow.value,
+        status: importWorkflow.value.matched > 0 ? 'matched' : 'no_match',
+        message: result.message || '同步任务创建失败，请检查源库连接或稍后重试。',
+      }
+    }
     message.error(result.message || '同步样本病历失败')
     return
+  }
+  if (importWorkflow.value && importWorkflow.value.poolId === selectedPoolId.value) {
+    importWorkflow.value = {
+      ...importWorkflow.value,
+      status: 'syncing',
+      message: '同步任务已创建，请在下方查看进度。',
+    }
   }
   message.success('样本病历同步任务已创建')
   await openSyncJob(result.data.job_id)
@@ -2832,9 +4632,10 @@ async function handleRunPool() {
     lastRunSubmission.value?.key === runKey &&
     now - lastRunSubmission.value.startedAt < RUN_DUPLICATE_GUARD_MS
   ) {
-    if (lastRunSubmission.value.jobId) {
+    const reusableJobId = lastRunSubmission.value.jobId || lastRunSubmission.value.jobIds?.[0]
+    if (reusableJobId) {
       message.info('任务已创建，正在打开进度')
-      await openBatchJob(lastRunSubmission.value.jobId)
+      await openBatchJob(reusableJobId)
     } else {
       message.info('正式84条质控任务已提交，正在准备执行')
     }
@@ -2855,20 +4656,22 @@ async function handleRunPool() {
     key: runKey,
     duration: 0,
   })
-  const runPayload = {
+  const runPayload: SamplePoolRunPayload = {
     record_ids: runnableRecordIds,
     max_parallel_records: runOptions.value.maxParallelRecords,
     validation_mode: selectedValidationMode.value,
     rule_set_key: selectedRuleSetPayloadKey.value,
-  } as {
-    record_ids: string[]
-    max_parallel_records: number
-    validation_mode: ManualSampleValidationMode
-    rule_set_key: string
-    selected_rule_ids?: string[]
   }
   if (isLuxian0609Mode.value && selectedLuxianCustomerRuleIds.value.length) {
     runPayload.selected_rule_ids = selectedLuxianCustomerRuleIds.value
+  }
+  if (shouldRunLuxianFamiliesInParallel(selectedLuxianCustomerRuleIds.value)) {
+    await runLuxianFamilyScopedJobs({
+      runKey,
+      startedAt: now,
+      basePayload: runPayload,
+    })
+    return
   }
   const result = await runManualSamplePool(
     selectedPoolId.value,
@@ -2922,6 +4725,66 @@ async function handleRunPool() {
   })
   selectedRowKeys.value = []
   await openBatchJob(result.data.job_id)
+  void loadPools()
+}
+
+async function runLuxianFamilyScopedJobs(options: {
+  runKey: string
+  startedAt: number
+  basePayload: SamplePoolRunPayload
+}) {
+  const familyScopes = buildLuxianFamilyRunScopes(selectedLuxianCustomerRuleIds.value)
+  const createdJobs: LuxianFamilyRunSuccess[] = []
+  try {
+    const results = await runWithLimitedConcurrency(
+      familyScopes,
+      LUXIAN_FAMILY_RUN_CONCURRENCY,
+      async (family) => {
+        const scopedPayload: SamplePoolRunPayload = {
+          ...options.basePayload,
+          max_parallel_records: 1,
+          selected_rule_ids: family.ruleIds,
+        }
+        const result = await runManualSamplePool(
+          selectedPoolId.value,
+          scopedPayload,
+          requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
+        )
+        if (!result.success || !result.data) {
+          throw new Error(`${family.name}：${result.message || '创建样本验证任务失败'}`)
+        }
+        return {
+          family,
+          data: result.data,
+        }
+      },
+    )
+    createdJobs.push(...results)
+  } catch (error) {
+    runLoading.value = false
+    message.destroy(options.runKey)
+    lastRunSubmission.value = undefined
+    message.error(error instanceof Error ? error.message : '创建分组验证任务失败')
+    return
+  }
+
+  runLoading.value = false
+  const jobIds = createdJobs.map((item) => item.data.job_id).filter(Boolean)
+  lastRunSubmission.value = {
+    key: options.runKey,
+    startedAt: options.startedAt,
+    jobId: jobIds[0],
+    jobIds,
+  }
+  message.success({
+    content: `已按 ${createdJobs.length} 个质控族并发创建任务，单个子任务病历并发限制为 1，正在打开 ${createdJobs[0]?.family.name || '首个'} 任务进度`,
+    key: options.runKey,
+    duration: 4,
+  })
+  selectedRowKeys.value = []
+  if (jobIds[0]) {
+    await openBatchJob(jobIds[0])
+  }
   void loadPools()
 }
 
@@ -3043,6 +4906,116 @@ async function openLatestJob() {
   await openBatchJob(selectedPool.value.latest_job_id)
 }
 
+async function loadTaskHistory() {
+  taskHistoryLoading.value = true
+  try {
+    const result = await listSichuanWorkspaceBatchJobs({
+      page: 1,
+      page_size: 20,
+    })
+    if (!result.success || !result.data) {
+      message.error(result.message || '获取质控记录失败')
+      return
+    }
+    taskHistoryJobs.value = result.data.items || []
+    taskHistoryTotal.value = Number(result.data.total || taskHistoryJobs.value.length || 0)
+  } finally {
+    taskHistoryLoading.value = false
+  }
+}
+
+async function openTaskHistoryDrawer() {
+  taskHistoryOpen.value = true
+  if (taskHistoryJobs.value.length === 0) {
+    await loadTaskHistory()
+  }
+}
+
+async function openTaskHistoryJob(job: SichuanBatchJob) {
+  taskHistoryOpen.value = false
+  await openBatchJob(job.id)
+}
+
+function taskHistoryRuleSetText(job: SichuanBatchJob): string {
+  return (
+    job.rule_set_name ||
+    job.summary?.rule_set_name ||
+    (job.rule_set_key === LUXIAN_0609_RULE_SET_KEY ? '泸县0609质控点验证' : job.rule_name) ||
+    '样本质控任务'
+  )
+}
+
+function taskHistoryScopeText(job: SichuanBatchJob): string {
+  const filters = job.filters || {}
+  const selectedRuleIds = Array.isArray(filters.selected_rule_ids)
+    ? filters.selected_rule_ids.map((item) => String(item)).filter(Boolean)
+    : []
+  const customerRuleCount = Number(job.customer_rule_count || job.summary?.customer_rule_count || 0)
+  const executionRuleCount = Number(
+    job.execution_rule_count || job.summary?.execution_rule_count || 0,
+  )
+  if (selectedRuleIds.length > 0) {
+    const preview = selectedRuleIds.slice(0, 3).join('、')
+    const suffix = selectedRuleIds.length > 3 ? ` +${selectedRuleIds.length - 3}` : ''
+    return `${selectedRuleIds.length} 个 LX0609 质控点：${preview}${suffix}`
+  }
+  if (job.rule_set_key === LUXIAN_0609_RULE_SET_KEY) {
+    return customerRuleCount > 0
+      ? `全量 0609 规则集 · ${customerRuleCount} 个客户质控点`
+      : '全量 0609 规则集'
+  }
+  if (executionRuleCount > 0) return `${executionRuleCount} 条执行规则`
+  return '规则范围未返回'
+}
+
+function taskHistoryRecordText(job: SichuanBatchJob): string {
+  const totalRecords = Number(
+    job.summary?.total_records || job.total_records || job.record_ids?.length || 0,
+  )
+  if (totalRecords > 0) return `${totalRecords} 份病历`
+  return '病历数未返回'
+}
+
+function taskHistoryResultSummary(job: SichuanBatchJob): string {
+  if (job.status === 'failed') {
+    return job.error_message || '任务失败，点击查看详情。'
+  }
+  const displayCounts =
+    job.summary?.display_status_counts ||
+    job.summary?.status_breakdown ||
+    job.summary?.postprocess_summary?.display_status_counts ||
+    {}
+  const statusLabels: Record<string, string> = {
+    non_compliant: '不合规',
+    compliant: '合规',
+    not_applicable: '不适用',
+    data_gap: '数据不足',
+    uncertain: '待复核',
+    not_executed: '未执行',
+    technical_error: '技术异常',
+  }
+  const summary = Object.entries(statusLabels)
+    .map(([key, label]) => {
+      const count = Number(displayCounts[key] || 0)
+      return count > 0 ? `${label} ${count}` : ''
+    })
+    .filter(Boolean)
+    .join('，')
+  if (summary) return summary
+  const issueRecords = Number(job.summary?.issue_records || job.issue_records || 0)
+  const compliantRecords = Number(job.summary?.compliant_records || job.compliant_records || 0)
+  if (issueRecords || compliantRecords) {
+    return `有问题病历 ${issueRecords}，合规病历 ${compliantRecords}`
+  }
+  if (isBatchJobRunning(job.status)) {
+    const progressPercent = Number(
+      job.summary?.progress_percent || job.progress?.progress_percent || 0,
+    )
+    return progressPercent > 0 ? `任务执行中，进度 ${progressPercent}%` : '任务执行中，等待结果回写'
+  }
+  return '暂无结果摘要，点击查看详情。'
+}
+
 async function loadLatestSyncJob() {
   if (!selectedPoolId.value) {
     syncJobDetail.value = undefined
@@ -3070,6 +5043,7 @@ async function openSyncJob(jobId: string) {
   if (isSyncJobRunning(result.data.status)) {
     startSyncJobPolling(jobId)
   } else {
+    updateImportWorkflowFromSyncJob(result.data)
     await loadPools()
     await loadRecords()
   }
@@ -3142,10 +5116,31 @@ function startSyncJobPolling(jobId: string) {
     syncJobDetail.value = result.data
     if (!isSyncJobRunning(result.data.status)) {
       stopSyncJobPolling()
+      updateImportWorkflowFromSyncJob(result.data)
       await loadPools()
       await loadRecords()
     }
   }, 3000)
+}
+
+function updateImportWorkflowFromSyncJob(job: ManualSamplePoolSyncJob) {
+  if (!importWorkflow.value || importWorkflow.value.poolId !== job.pool_id) return
+  const status = String(job.status || '').toLowerCase()
+  if (status === 'failed') {
+    importWorkflow.value = {
+      ...importWorkflow.value,
+      status: 'sync_failed',
+      message: job.error_message || '同步失败，请检查源库连接或后端日志。',
+    }
+    return
+  }
+  if (status !== 'completed') return
+  const progress = syncRecordProgress.value
+  importWorkflow.value = {
+    ...importWorkflow.value,
+    status: 'synced',
+    message: `已同步 ${progress.completed}/${progress.total} 份病历，文书就绪 ${progress.ready} 份。`,
+  }
 }
 
 function startBatchJobPolling(jobId: string) {
@@ -3269,6 +5264,7 @@ onMounted(async () => {
   window.addEventListener('resize', updateCustomerSampleTourCardPosition)
   window.addEventListener('scroll', updateCustomerSampleTourCardPosition, true)
   await loadRuleSets()
+  await loadLuxian0609RuleCatalog()
   await loadPools()
   openInitialCustomerSampleGuide()
 })
@@ -3326,6 +5322,10 @@ onUnmounted(() => {
 
 .customer-sample-scroll {
   background: var(--customer-sample-canvas);
+}
+
+.customer-sample-scroll.has-selection-run-bar {
+  padding-bottom: 108px;
 }
 
 .customer-sample-container {
@@ -3473,6 +5473,39 @@ onUnmounted(() => {
 .customer-sample-toolbar-actions :deep(.customer-sample-guide-action svg) {
   flex: 0 0 auto;
   stroke-width: 2.2;
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(29, 29, 31, 0.72);
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn:hover),
+.customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn:focus) {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(234, 242, 255, 0.72);
+  color: #0066cc;
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-task-history-action svg) {
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.customer-sample-task-history-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 750;
+  padding: 0 5px;
 }
 
 .customer-sample-command-bar {
@@ -3653,6 +5686,197 @@ onUnmounted(() => {
   color: #0066cc;
 }
 
+.customer-sample-selection-run-bar {
+  position: absolute;
+  right: 24px;
+  bottom: 18px;
+  left: 24px;
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 10px 26px rgba(15, 23, 42, 0.12),
+    0 1px 2px rgba(15, 23, 42, 0.06);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.customer-sample-selection-run-summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.customer-sample-selection-run-summary strong {
+  color: var(--customer-sample-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.customer-sample-selection-run-summary span {
+  color: var(--customer-sample-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.customer-sample-selection-run-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-sample-selection-run-actions :deep(.ant-btn) {
+  height: 34px;
+  border-radius: 9px !important;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.customer-sample-selection-run-actions :deep(.ant-btn-primary) {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.customer-sample-task-history {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.customer-sample-task-history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(250, 250, 252, 0.72);
+  padding: 14px;
+}
+
+.customer-sample-task-history-head strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.customer-sample-task-history-head p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.customer-sample-task-history-empty {
+  border-radius: 16px;
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  background: rgba(250, 250, 252, 0.62);
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 13px;
+  line-height: 22px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.customer-sample-task-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.customer-sample-task-history-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 14px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.customer-sample-task-history-item:hover {
+  border-color: rgba(0, 102, 204, 0.14);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.customer-sample-task-history-item-main {
+  min-width: 0;
+}
+
+.customer-sample-task-history-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-sample-task-history-title > span {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.customer-sample-task-history-title em {
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 2px 8px;
+}
+
+.customer-sample-task-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.customer-sample-task-history-meta span {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 3px 8px;
+}
+
+.customer-sample-task-history-summary {
+  margin-top: 8px;
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.customer-sample-task-history-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
 .customer-sample-luxian-scope {
   margin-top: 14px;
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -3732,11 +5956,29 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.customer-sample-luxian-rule-group-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
 .customer-sample-luxian-rule-group-head strong {
   color: var(--customer-sample-text);
   font-size: 13px;
   font-weight: 700;
   line-height: 19px;
+}
+
+.customer-sample-luxian-rule-group-title span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 2px 7px;
+  color: var(--customer-sample-primary);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 16px;
 }
 
 .customer-sample-luxian-rule-group-head small {
@@ -3772,6 +6014,27 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.customer-sample-luxian-rule-expand {
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.035);
+  padding: 5px 9px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  cursor: pointer;
+  transition:
+    background 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.customer-sample-luxian-rule-expand:hover {
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--customer-sample-primary);
 }
 
 .customer-sample-luxian-rule-option {
@@ -3907,24 +6170,9 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.customer-sample-patient-avatar {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(0, 102, 204, 0.14);
-  border-radius: 50%;
-  background: var(--customer-sample-primary-soft);
-  color: var(--customer-sample-primary);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .customer-sample-patient-name {
   overflow: hidden;
-  max-width: 172px;
+  max-width: 260px;
   color: var(--customer-sample-text);
   font-size: 14px;
   font-weight: 700;
@@ -3933,19 +6181,10 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.customer-sample-patient-meta {
-  display: flex;
-  max-width: 220px;
-  flex-wrap: wrap;
-  gap: 3px 8px;
-  color: var(--customer-sample-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
 .customer-sample-record-code {
   display: inline-flex;
-  max-width: 96px;
+  max-width: 132px;
+  flex: 0 0 auto;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 999px;
@@ -3970,168 +6209,954 @@ onUnmounted(() => {
 
 .customer-sample-summary-cell {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
 }
 
-.customer-sample-issue-lines {
-  display: grid;
-  gap: 3px;
-}
-
-.customer-sample-issue-primary,
-.customer-sample-issue-secondary,
-.customer-sample-empty-issue {
-  display: -webkit-box;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 13px;
-  line-height: 21px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.customer-sample-issue-secondary {
-  color: rgba(29, 29, 31, 0.56);
-}
-
-.customer-sample-empty-issue {
-  color: rgba(29, 29, 31, 0.38);
-}
-
-.customer-sample-row-meta {
+.customer-sample-rule-summary {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 6px;
 }
 
-.customer-sample-issue-count {
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.customer-sample-row-dot {
-  color: rgba(29, 29, 31, 0.24);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.customer-sample-scope-text {
+.customer-sample-family-chip {
+  display: inline-flex;
+  max-width: 100%;
   overflow: hidden;
-  max-width: 420px;
-  color: rgba(29, 29, 31, 0.56);
+  align-items: center;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.82);
+  padding: 3px 9px;
+  color: rgba(29, 29, 31, 0.62);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   line-height: 18px;
-}
-
-.customer-sample-status-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.customer-sample-status-line {
-  display: inline-grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-}
-
-.customer-sample-status-label {
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.customer-sample-status-badge {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  background: rgba(245, 245, 247, 0.82);
-  padding: 3px 9px;
-  color: rgba(29, 29, 31, 0.56);
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 17px;
-}
-
-.customer-sample-status-badge.is-success {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #047857;
-}
-
-.customer-sample-status-badge.is-warning {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #b45309;
-}
-
-.customer-sample-status-badge.is-danger {
-  border-color: #fecdd3;
-  background: #fff1f2;
-  color: #be123c;
-}
-
-.customer-sample-status-badge.is-muted {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--customer-sample-muted);
-}
-
-.customer-sample-action-cell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-}
-
-.customer-sample-primary-action {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  border: 1px solid rgba(0, 102, 204, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  padding: 5px 12px;
+  border-color: rgba(0, 102, 204, 0.12);
+  background: rgba(234, 242, 255, 0.78);
   color: var(--customer-sample-primary);
+}
+
+:deep(.customer-sample-action-cell) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+:deep(.customer-sample-primary-action) {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 102, 204, 0.38);
+  border-radius: 8px;
+  background: #eaf2ff;
+  box-shadow: 0 1px 2px rgba(0, 102, 204, 0.08);
+  padding: 5px 11px;
+  color: #0057b8;
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
   transition:
     border-color 0.16s ease,
-    background-color 0.16s ease;
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.customer-sample-primary-action:hover {
-  border-color: rgba(0, 102, 204, 0.32);
-  background: var(--customer-sample-primary-soft);
+:deep(.customer-sample-primary-action:hover) {
+  border-color: rgba(0, 102, 204, 0.52);
+  background: #dbeafe;
+  box-shadow: 0 2px 6px rgba(0, 102, 204, 0.14);
 }
 
-.customer-sample-secondary-actions {
+:deep(.customer-sample-secondary-actions) {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 6px;
   font-size: 12px;
   line-height: 18px;
 }
 
-.customer-sample-secondary-link {
-  color: var(--customer-sample-muted);
+:deep(.customer-sample-secondary-link) {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 102, 204, 0.24);
+  border-radius: 8px;
+  background: rgba(234, 242, 255, 0.72);
+  box-shadow: 0 1px 2px rgba(0, 102, 204, 0.06);
+  padding: 5px 10px;
+  color: #0057b8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.customer-sample-secondary-link:hover {
+:deep(.customer-sample-secondary-link:hover) {
+  border-color: rgba(0, 102, 204, 0.42);
+  background: #dbeafe;
+  color: #004a9f;
+  box-shadow: 0 2px 6px rgba(0, 102, 204, 0.12);
+}
+
+.customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-content) {
+  background: #f5f5f7;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-body) {
+  max-height: min(86vh, 920px);
+  overflow: hidden;
+}
+
+.customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-close) {
+  top: 16px;
+  right: 16px;
+  color: rgba(29, 29, 31, 0.5);
+}
+
+.editable-copy-drawer {
+  display: flex;
+  height: min(86vh, 920px);
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 22px;
+  color: #1d1d1f;
+  overscroll-behavior: contain;
+}
+
+.editable-copy-drawer :deep(.ant-spin-nested-loading),
+.editable-copy-drawer :deep(.ant-spin-container) {
+  display: flex;
+  min-height: auto;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+.editable-copy-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  padding: 18px 20px;
+}
+
+.editable-copy-eyebrow {
   color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.editable-copy-hero h2 {
+  margin: 4px 0 0;
+  color: #1d1d1f;
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 30px;
+}
+
+.editable-copy-hero p {
+  margin: 6px 0 0;
+  max-width: 640px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.editable-copy-source-card {
+  display: flex;
+  min-width: 160px;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 14px;
+  background: rgba(0, 102, 204, 0.06);
+  padding: 10px 12px;
+  text-align: right;
+}
+
+.editable-copy-source-card span,
+.editable-copy-source-card em {
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+}
+
+.editable-copy-source-card strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.editable-copy-notice {
+  border: 1px solid rgba(0, 102, 204, 0.12);
+  border-radius: 12px;
+  background: rgba(234, 242, 255, 0.7);
+  padding: 10px 12px;
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.editable-copy-notice-title {
+  margin-bottom: 2px;
+  color: var(--customer-sample-primary);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.editable-copy-content {
+  display: flex;
+  min-height: auto;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 14px;
+  overflow: visible;
+}
+
+.editable-copy-section {
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  padding: 16px;
+}
+
+.editable-copy-section h3 {
+  margin: 0 0 10px;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 22px;
+}
+
+.editable-copy-document-workbench-section {
+  display: flex;
+  min-height: auto;
+  flex: 0 0 auto;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.editable-copy-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editable-copy-section-header p {
+  margin: -4px 0 10px;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.editable-copy-section-header > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.95);
+  padding: 3px 9px;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.editable-copy-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.editable-copy-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.editable-copy-form-grid :deep(.ant-input),
+.editable-copy-section :deep(.ant-input),
+.editable-copy-section :deep(.ant-input-affix-wrapper) {
+  height: 38px;
+  border-color: rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(29, 29, 31, 0.82);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.editable-copy-section :deep(textarea.ant-input) {
+  height: auto;
+  min-height: 184px;
+  padding: 11px 12px;
+  color: rgba(29, 29, 31, 0.82);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.editable-copy-form-wide {
+  grid-column: 1 / -1;
+}
+
+.editable-copy-document-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.78);
+  padding: 10px;
+}
+
+.editable-copy-document-type-select {
+  min-width: 210px;
+}
+
+.editable-copy-document-toolbar :deep(.ant-btn),
+.editable-copy-document-actions :deep(.ant-btn) {
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.editable-copy-document-workbench {
+  display: grid;
+  min-height: 520px;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+  overflow: visible;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.editable-copy-document-directory {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.editable-copy-document-directory-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 14px 8px;
+}
+
+.editable-copy-document-directory-head strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 20px;
+}
+
+.editable-copy-document-directory-head span {
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 2px 8px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editable-copy-document-search {
+  margin: 0 14px 10px;
+  width: calc(100% - 28px);
+}
+
+.editable-copy-document-filter {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 0 14px 12px;
+}
+
+.editable-copy-document-filter button {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 5px 4px;
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.editable-copy-document-filter button.is-active {
+  border-color: rgba(0, 102, 204, 0.22);
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--customer-sample-primary);
+}
+
+.editable-copy-document-directory-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 10px 12px;
+}
+
+.editable-copy-document-directory-list.is-tree {
+  padding: 8px 12px 14px 18px;
+}
+
+.editable-copy-document-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 6px 6px;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 18px;
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-group-title {
+  position: relative;
+  padding: 14px 6px 7px 0;
+  color: rgba(29, 29, 31, 0.54);
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-group-title span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-group-title i {
+  width: 7px;
+  height: 7px;
+  border: 2px solid rgba(0, 102, 204, 0.55);
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.editable-copy-document-group-title em {
+  font-style: normal;
+  font-weight: 650;
+}
+
+.editable-copy-document-nav-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  padding: 8px 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-nav-item {
+  margin-left: 10px;
+  width: calc(100% - 10px) !important;
+  border-radius: 8px;
+  padding: 7px 9px 7px 16px;
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-nav-item::before {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -6px;
+  width: 1px;
+  background: rgba(0, 102, 204, 0.16);
+  content: '';
+}
+
+.editable-copy-document-directory-list.is-tree .editable-copy-document-nav-item::after {
+  position: absolute;
+  top: 18px;
+  left: -6px;
+  width: 12px;
+  height: 1px;
+  background: rgba(0, 102, 204, 0.2);
+  content: '';
+}
+
+.editable-copy-document-nav-item:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.editable-copy-document-nav-item.is-active {
+  border-color: rgba(0, 102, 204, 0.2);
+  background: rgba(0, 102, 204, 0.08);
+}
+
+.editable-copy-document-nav-item.is-disabled {
+  opacity: 0.56;
+}
+
+.editable-copy-document-nav-item span {
+  display: block;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.82);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.editable-copy-document-nav-item small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.48);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.editable-copy-document-empty {
+  margin: 20px 8px;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 13px;
+  text-align: center;
+}
+
+.editable-copy-document-editor {
+  overflow: visible;
+  min-width: 0;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.editable-copy-document-editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.editable-copy-document-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.editable-copy-document-editor-head h4 {
+  margin: 7px 0 0;
+  color: #1d1d1f;
+  font-size: 20px;
+  font-weight: 780;
+  line-height: 28px;
+}
+
+.editable-copy-document-editor-head > div:first-child > span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(234, 242, 255, 0.82);
+  padding: 3px 9px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.editable-copy-document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editable-copy-document {
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.84);
+  padding: 14px;
+}
+
+.editable-copy-document-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editable-copy-document-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.editable-copy-document-actions > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(234, 242, 255, 0.78);
+  padding: 2px 8px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.editable-copy-readonly-pill {
+  background: rgba(0, 0, 0, 0.045) !important;
+  color: rgba(29, 29, 31, 0.56) !important;
+}
+
+.editable-copy-workstation-modal :deep(.ant-input[readonly]),
+.editable-copy-workstation-modal :deep(textarea.ant-input[readonly]) {
+  border-color: rgba(0, 0, 0, 0.06);
+  background: rgba(248, 250, 252, 0.72);
+  color: rgba(29, 29, 31, 0.76);
+  cursor: default;
+}
+
+.editable-copy-document-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr);
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.editable-copy-document-fields label,
+.editable-copy-order-meta label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editable-copy-document-fields label > span,
+.editable-copy-order-meta label > span {
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.editable-copy-document-fields :deep(.ant-input),
+.editable-copy-order-meta :deep(.ant-input) {
+  height: 32px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.editable-copy-document-toggle {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.editable-copy-document-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editable-copy-document-meta {
+  margin: 6px 0 10px;
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.editable-copy-order-table-panel {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.editable-copy-order-type-switch {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 12px 14px;
+}
+
+.editable-copy-order-type-switch button {
+  position: relative;
+  border: 0;
+  background: transparent;
+  padding: 0 0 0 22px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.editable-copy-order-type-switch button::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  background: #fff;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.editable-copy-order-type-switch button.is-active {
+  color: #1d1d1f;
+}
+
+.editable-copy-order-type-switch button.is-active::before {
+  border: 4px solid #0066cc;
+}
+
+.editable-copy-order-table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
+.editable-copy-order-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.editable-copy-order-table th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(245, 245, 247, 0.96);
+  padding: 9px 10px;
+  color: rgba(29, 29, 31, 0.56);
+  font-weight: 700;
+  text-align: left;
+}
+
+.editable-copy-order-table th:nth-child(1) {
+  width: 170px;
+}
+
+.editable-copy-order-table th:nth-child(2) {
+  width: 96px;
+}
+
+.editable-copy-order-table th:nth-child(4) {
+  width: 140px;
+}
+
+.editable-copy-order-table th:nth-child(5) {
+  width: 88px;
+}
+
+.editable-copy-order-table td {
+  overflow: hidden;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.055);
+  padding: 9px 10px;
+  color: #1d1d1f;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editable-copy-order-table tbody tr {
+  cursor: pointer;
+}
+
+.editable-copy-order-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.045);
+}
+
+.editable-copy-order-table tbody tr.is-active {
+  background: rgba(0, 102, 204, 0.1);
+}
+
+.editable-copy-order-table tbody tr.is-disabled td {
+  color: rgba(29, 29, 31, 0.38);
+  text-decoration: line-through;
+}
+
+.editable-copy-order-empty {
+  color: rgba(29, 29, 31, 0.48) !important;
+  text-align: center;
+  text-decoration: none !important;
+}
+
+.editable-copy-order-editor {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.editable-copy-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 12px 14px;
+}
+
+.editable-copy-order-head strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 20px;
+}
+
+.editable-copy-order-head span {
+  display: block;
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.editable-copy-order-head em {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 3px 9px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.editable-copy-order-list {
+  display: flex;
+  max-height: 520px;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.editable-copy-order-row {
+  display: grid;
+  grid-template-columns: 28px minmax(170px, 220px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.055);
+  padding: 11px 14px;
+}
+
+.editable-copy-order-row:last-child {
+  border-bottom: 0;
+}
+
+.editable-copy-order-check {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.editable-copy-order-meta {
+  min-width: 0;
+}
+
+.editable-copy-order-meta span {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(234, 242, 255, 0.8);
+  padding: 2px 8px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.editable-copy-order-meta button {
+  margin-top: 8px;
+  border: 1px solid rgba(0, 102, 204, 0.22);
+  border-radius: 8px;
+  background: rgba(234, 242, 255, 0.72);
+  padding: 3px 9px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.editable-copy-order-meta button:hover {
+  border-color: rgba(0, 102, 204, 0.36);
+  background: rgba(0, 102, 204, 0.1);
+}
+
+.editable-copy-order-row :deep(textarea.ant-input) {
+  min-height: 74px;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.editable-copy-footer {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(245, 245, 247, 0.94);
+  padding: 12px 0 0;
+}
+
+.editable-copy-footer :deep(.ant-btn) {
+  height: 34px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.editable-copy-footer :deep(.ant-btn-primary) {
+  border-color: var(--customer-sample-primary);
+  background: var(--customer-sample-primary);
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16);
 }
 
 .customer-sample-department {
@@ -4139,12 +7164,6 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 520;
   white-space: nowrap;
-}
-
-.customer-sample-state-action-cell {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
 }
 
 .customer-sample-empty-state {
@@ -4570,9 +7589,67 @@ onUnmounted(() => {
     0 14px 34px rgba(180, 83, 9, 0.22);
 }
 
+/* Ant Design Modal uses teleport; keep the editable-copy document manager stable even if inherited modal/table styles change. */
+.editable-copy-workstation-modal .editable-copy-document-workbench {
+  display: flex !important;
+  align-items: stretch;
+  height: auto;
+  min-height: 520px;
+}
+
+.editable-copy-workstation-modal .editable-copy-document-directory {
+  flex: 0 0 300px;
+  width: 300px;
+  max-width: 300px;
+  min-height: 0;
+}
+
+.editable-copy-workstation-modal .editable-copy-document-editor {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.editable-copy-workstation-modal .editable-copy-document-filter {
+  display: grid !important;
+}
+
+.editable-copy-workstation-modal .editable-copy-document-nav-item {
+  display: block !important;
+  width: 100% !important;
+}
+
+.editable-copy-workstation-modal .editable-copy-document-nav-item span,
+.editable-copy-workstation-modal .editable-copy-document-nav-item small {
+  display: block !important;
+}
+
 @media (max-width: 768px) {
+  .editable-copy-workstation-modal .editable-copy-document-workbench {
+    flex-direction: column;
+  }
+
+  .editable-copy-workstation-modal .editable-copy-document-directory {
+    width: 100%;
+    max-width: none;
+    flex-basis: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  }
+
   .customer-sample-tour-card {
     max-width: calc(100vw - 32px);
+  }
+
+  .customer-sample-selection-run-bar {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .customer-sample-selection-run-actions {
+    justify-content: flex-end;
   }
 }
 

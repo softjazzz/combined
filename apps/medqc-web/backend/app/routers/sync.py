@@ -66,20 +66,20 @@ def _extract_roles(current_user: dict) -> set[str]:
 
 def require_sync_read_access(current_user: dict = Depends(get_current_user)) -> dict:
     roles = _extract_roles(current_user)
-    if not roles.intersection({"admin", "qc_manager"}):
+    if not roles.intersection({"admin", "qc_manager", "sync_admin", "super_admin"}):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="数据同步读取权限不足（仅 admin / qc_manager 可访问）",
+            detail="数据同步读取权限不足（仅 admin / qc_manager / sync_admin / super_admin 可访问）",
         )
     return current_user
 
 
 def require_sync_write_access(current_user: dict = Depends(get_current_user)) -> dict:
     roles = _extract_roles(current_user)
-    if "admin" not in roles:
+    if not roles.intersection({"admin", "sync_admin", "super_admin"}):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="数据同步写入权限不足（仅 admin 可操作）",
+            detail="数据同步写入权限不足（仅 admin / sync_admin / super_admin 可操作）",
         )
     return current_user
 
@@ -106,6 +106,7 @@ class TriggerRequest(BaseModel):
     target_departments: Optional[list[str]] = None
     policy_version: Optional[str] = Field(default=None, max_length=128)
     table_groups: Optional[list[str]] = None
+    preflight_fingerprint: Optional[str] = Field(default=None, max_length=96)
 
 
 class PgConfigUpdate(BaseModel):
@@ -263,6 +264,31 @@ def _build_idempotency_key(
     payload = json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
     return f"{source}:{tier}:{sync_date}:{operator}:{digest}"
+
+
+def _build_preflight_fingerprint(
+    *,
+    source: str,
+    tier: str,
+    scene: str = "",
+    date_window: Optional[dict[str, str]] = None,
+    target_departments: Optional[list[str]] = None,
+    tables: Optional[list[str]] = None,
+    table_groups: Optional[list[str]] = None,
+    policy_version: str = "",
+) -> str:
+    fingerprint_payload = {
+        "source": source,
+        "tier": tier,
+        "scene": scene,
+        "date_window": date_window or {},
+        "target_departments": sorted([str(item) for item in (target_departments or []) if str(item).strip()]),
+        "tables": sorted([str(item) for item in (tables or []) if str(item).strip()]),
+        "table_groups": sorted([str(item) for item in (table_groups or []) if str(item).strip()]),
+        "policy_version": str(policy_version or ""),
+    }
+    payload = json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _resolve_selected_tables(
@@ -624,7 +650,7 @@ async def run_preflight(
     """
     try:
         from ..services.etl_sync import (
-            get_sync_state,
+            estimate_pg_sync_impact,
             test_local_connection,
             test_remote_connection,
             validate_pg_sync_plan,
@@ -654,8 +680,41 @@ async def run_preflight(
         warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
         warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
 
-        sync_state = get_sync_state()
-        estimated_impact = int(sync_state.get("total_records_synced") or 0)
+        date_window_payload = _normalize_date_window_payload(req.date_window)
+        target_departments = _normalize_target_departments(req.target_departments)
+        policy_version = str(req.policy_version or "")
+        scene = str(req.scene or "both")
+        if scene == "running":
+            blockers.append("running 在院病历同步尚未接入本页，请切换为终末病历按出院日期同步。")
+        impact_meta: dict[str, object] = {
+            "estimated_impact": 0,
+            "estimate_basis": "eligible_visit_count",
+            "date_window": date_window_payload or {},
+            "target_departments": target_departments or ["*"],
+        }
+        if not blockers:
+            try:
+                impact_meta = estimate_pg_sync_impact(
+                    date_window=date_window_payload,
+                    target_departments=target_departments,
+                )
+                if int(impact_meta.get("estimated_impact") or 0) <= 0:
+                    blockers.append(
+                        "当前出院日期范围和科室条件下未找到可同步的终末病历，请调整日期范围、科室或源库配置后重试"
+                    )
+                    warnings.append("候选病历数为 0，本次不会触发正式同步。")
+            except Exception as exc:
+                warnings.append(f"预计影响范围计算失败：{exc}")
+        preflight_fingerprint = _build_preflight_fingerprint(
+            source=req.source,
+            tier="all",
+            scene=scene,
+            date_window=date_window_payload,
+            target_departments=target_departments,
+            tables=selected_tables,
+            table_groups=req.table_groups,
+            policy_version=policy_version,
+        )
         return _ok(request, {
             "source": "pg",
             "tier": "all",
@@ -664,8 +723,10 @@ async def run_preflight(
             "executable": len(blockers) == 0,
             "blockers": blockers,
             "warnings": warnings,
-            "estimated_impact": estimated_impact,
+            "estimated_impact": int(impact_meta.get("estimated_impact") or 0),
+            "estimate_basis": str(impact_meta.get("estimate_basis") or "eligible_visit_count"),
             "risk_level": "low" if len(blockers) == 0 else "high",
+            "preflight_fingerprint": preflight_fingerprint,
             "matrix_scope": {
                 "execution": execution_plan.get("matrix_scope", "enabled"),
                 "full": full_matrix_plan.get("matrix_scope", "all"),
@@ -674,10 +735,10 @@ async def run_preflight(
             "target_tables": full_matrix_plan.get("target_tables", []),
             "execution_table_validations": execution_plan.get("table_validations", []),
             "execution_target_tables": execution_plan.get("target_tables", []),
-            "scene": req.scene,
-            "date_window": _normalize_date_window_payload(req.date_window),
-            "target_departments": _normalize_target_departments(req.target_departments) or ["*"],
-            "policy_version": str(req.policy_version or ""),
+            "scene": scene,
+            "date_window": impact_meta.get("date_window") or date_window_payload or {},
+            "target_departments": impact_meta.get("target_departments") or target_departments or ["*"],
+            "policy_version": policy_version,
             "table_groups": req.table_groups or [],
             "connections": {
                 "pg_remote": remote_result,
@@ -719,6 +780,22 @@ async def trigger_sync(
     target_departments = _normalize_target_departments(req.target_departments)
     policy_version = str(req.policy_version or "").strip()
     scene = str(req.scene or "both")
+    expected_preflight_fingerprint = _build_preflight_fingerprint(
+        source=req.source,
+        tier=effective_tier,
+        scene=scene,
+        date_window=date_window_payload,
+        target_departments=target_departments,
+        tables=selected_tables,
+        table_groups=req.table_groups,
+        policy_version=policy_version,
+    )
+    supplied_preflight_fingerprint = str(req.preflight_fingerprint or "").strip()
+    if supplied_preflight_fingerprint and supplied_preflight_fingerprint != expected_preflight_fingerprint:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="预检结果已过期：同步范围已变化，请重新试运行后再执行。",
+        )
     idempotency_key = _build_idempotency_key(
         source=req.source,
         tier=effective_tier,

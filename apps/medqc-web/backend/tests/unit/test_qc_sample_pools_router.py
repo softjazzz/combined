@@ -223,6 +223,23 @@ class _SyncServiceStub:
         self.failed_error = error_message
 
 
+class _TestRecordCreateServiceStub:
+    def __init__(self) -> None:
+        self.created_payload = None
+        self.created_by = None
+
+    def create_customer_test_record(self, *, payload: dict, created_by: str):
+        self.created_payload = dict(payload)
+        self.created_by = created_by
+        return {
+            "visit_id": "CUSTOMER_TEST_EDIT_COPY",
+            "mr_no": "CUSTOMER_TEST_EDIT_COPY",
+            "patient_id": "P_EDIT_COPY",
+            "inserted_tables": {"mr": 1},
+            "bundle_status": "ready",
+        }
+
+
 def _build_request():
     return SimpleNamespace(state=SimpleNamespace(trace_id="trace-test"))
 
@@ -289,6 +306,49 @@ async def test_download_luxian_0609_evaluation_report_should_return_generated_fi
 
 
 @pytest.mark.asyncio
+async def test_create_test_record_should_forward_source_metadata(monkeypatch):
+    sample_service = _TestRecordCreateServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.create_test_record(
+        request=_build_request(),
+        payload=qc_sample_pools.TestRecordCreateRequest(
+            case_title="源病历编辑副本",
+            basic_info=qc_sample_pools.TestRecordBasicInfo(
+                patient_name="王某某",
+                sex="男",
+                age=62,
+                department="普外科",
+                admission_time="2026-06-01T08:00:00",
+                main_diagnosis="胃恶性肿瘤",
+            ),
+            documents=[
+                qc_sample_pools.TestRecordDocument(
+                    document_type="入院记录",
+                    title="入院记录",
+                    content="编辑后的入院记录正文。",
+                )
+            ],
+            selected_rule_ids=["LX0609-001"],
+            source=qc_sample_pools.TestRecordSourceMeta(
+                source_pool_id="pool-0426",
+                source_record_id="record-1",
+                source_visit_id="VISIT_0426_001",
+                source_item_ids=["item-1"],
+            ),
+        ),
+        current_user={"id": "tester"},
+    )
+
+    assert response["data"]["visit_id"] == "CUSTOMER_TEST_EDIT_COPY"
+    assert sample_service.created_by == "tester"
+    assert sample_service.created_payload["source"]["source_pool_id"] == "pool-0426"
+    assert sample_service.created_payload["source"]["source_visit_id"] == "VISIT_0426_001"
+    assert sample_service.created_payload["source"]["source_item_ids"] == ["item-1"]
+    assert sample_service.created_payload["selected_rule_ids"] == ["LX0609-001"]
+
+
+@pytest.mark.asyncio
 async def test_sync_sample_pool_records_should_not_persist_default_table_groups(monkeypatch):
     sample_service = _SyncServiceStub()
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
@@ -338,6 +398,7 @@ class _SamplePoolLifecycleServiceStub:
         self.pools = {}
         self.items_by_pool = {}
         self.updated_pool_job = None
+        self.match_from_source_calls = []
 
     def create_pool_with_items(
         self,
@@ -382,6 +443,17 @@ class _SamplePoolLifecycleServiceStub:
 
     def get_pool(self, *, pool_id: str):
         return self.pools.get(pool_id)
+
+    def match_pool_items_from_source(self, *, pool_id: str):
+        self.match_from_source_calls.append(pool_id)
+        return {
+            "pool_id": pool_id,
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+            "match_source": "remote_source",
+            "pool": self.pools[pool_id],
+        }
 
     def list_pool_records(
         self,
@@ -605,6 +677,31 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         "job_status": "queued",
     }
     assert len(qc_sample_pools._submitted_tasks_for_test) == 1
+
+
+@pytest.mark.asyncio
+async def test_match_sample_pool_should_match_against_source_database(monkeypatch):
+    sample_service = _SamplePoolLifecycleServiceStub()
+    sample_service.create_pool_with_items(
+        name="客户样本池",
+        source_file="D:/docs/manual_cases.xlsx",
+        source_sheet="Sheet1",
+        created_by="tester",
+        rows=[{"visit_id": "2431973", "patient_name": "文学虎"}],
+        description=None,
+        scene="final",
+    )
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.match_sample_pool(
+        request=_build_request(),
+        pool_id="pool-imported",
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert sample_service.match_from_source_calls == ["pool-imported"]
+    assert response["data"]["match_source"] == "remote_source"
 
 
 @pytest.mark.asyncio
