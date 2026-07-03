@@ -402,6 +402,7 @@ export async function runManualSamplePool(
     sample_item_ids?: string[]
     record_ids?: string[]
     selected_rule_ids?: string[]
+    group_by_luxian_family?: boolean
     validation_mode?: string
     rule_set_key?: string
   },

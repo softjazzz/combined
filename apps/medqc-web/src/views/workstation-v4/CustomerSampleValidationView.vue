@@ -45,17 +45,26 @@
                 class="customer-sample-task-history-action !rounded-lg"
                 @click="openTaskHistoryDrawer"
               >
-                <History :size="15" />
-                质控记录
-                <span v-if="taskHistoryTotal > 0" class="customer-sample-task-history-count">
+                <span class="customer-sample-task-history-icon">
+                  <History :size="15" />
+                </span>
+                <span class="customer-sample-task-history-label">查看质控记录</span>
+                <span
+                  v-if="taskHistoryTotal > 0"
+                  class="customer-sample-task-history-count"
+                >
                   {{ taskHistoryTotal > 99 ? '99+' : taskHistoryTotal }}
                 </span>
               </a-button>
               <a-dropdown :trigger="['click']">
-                <a-button class="!rounded-lg"> 更多操作 </a-button>
+                <a-button class="!rounded-lg">
+                  更多操作
+                </a-button>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="handleMoreActionKey('refresh')"> 刷新样本池 </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('refresh')">
+                      刷新样本池
+                    </a-menu-item>
                     <a-menu-item
                       :disabled="!selectedPoolId || syncLoading"
                       @click="handleMoreActionKey('sync')"
@@ -75,7 +84,10 @@
                       查看最近任务
                     </a-menu-item>
                     <a-menu-divider />
-                    <a-sub-menu key="luxian-report" title="导出报告">
+                    <a-sub-menu
+                      key="luxian-report"
+                      title="导出报告"
+                    >
                       <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
                         Markdown 评估报告
                       </a-menu-item>
@@ -84,8 +96,13 @@
                       </a-menu-item>
                     </a-sub-menu>
                     <a-menu-divider />
-                    <a-sub-menu key="developer-admin" title="开发/管理员">
-                      <a-menu-item @click="handleMoreActionKey('import')"> 导入模板 </a-menu-item>
+                    <a-sub-menu
+                      key="developer-admin"
+                      title="开发/管理员"
+                    >
+                      <a-menu-item @click="handleMoreActionKey('import')">
+                        导入模板
+                      </a-menu-item>
                       <a-menu-item @click="handleMoreActionKey('export-luxian-json')">
                         JSON 原始结果
                       </a-menu-item>
@@ -112,7 +129,9 @@
               data-customer-guide="sample-pool"
               :class="customerSampleGuideTargetClass('sample-pool')"
             >
-              <div class="customer-sample-field-label">当前样本池</div>
+              <div class="customer-sample-field-label">
+                当前样本池
+              </div>
               <div class="flex items-center gap-2">
                 <a-select
                   v-model:value="selectedPoolId"
@@ -139,7 +158,9 @@
               data-customer-guide="sample-rule"
               :class="customerSampleGuideTargetClass('sample-rule')"
             >
-              <div class="customer-sample-field-label">验证规则集</div>
+              <div class="customer-sample-field-label">
+                验证规则集
+              </div>
               <div class="customer-sample-rule-switcher">
                 <button
                   v-for="ruleSet in mainRuleSets"
@@ -174,9 +195,7 @@
                 <span class="text-[14px] font-semibold text-slate-900">
                   {{ selectedRuleSet?.rule_set_name || '泸县0609质控点验证 v1' }}
                 </span>
-                <span class="customer-sample-meta-chip"
-                  >场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span
-                >
+                <span class="customer-sample-meta-chip">场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span>
               </div>
             </div>
             <div class="customer-sample-rule-summary">
@@ -230,7 +249,7 @@
                   <div
                     :class="
                       importWorkflow.status === 'no_match' ||
-                      importWorkflow.status === 'match_failed'
+                        importWorkflow.status === 'match_failed'
                         ? 'text-amber-700'
                         : 'text-slate-500'
                     "
@@ -283,12 +302,18 @@
           >
             <div class="customer-sample-luxian-scope-head">
               <div>
-                <div class="customer-sample-luxian-scope-title">泸县0609质控点范围</div>
+                <div class="customer-sample-luxian-scope-title">
+                  泸县0609质控点范围
+                </div>
                 <p>未勾选时按完整 0609 规则集运行；勾选后仅验证选中的 LX0609 质控点。</p>
               </div>
               <div class="customer-sample-luxian-scope-actions">
                 <span>{{ luxianScopeModeText }}</span>
-                <a-button size="small" class="!rounded-lg" @click="toggleAllLuxianRuleFamilies">
+                <a-button
+                  size="small"
+                  class="!rounded-lg"
+                  @click="toggleAllLuxianRuleFamilies"
+                >
                   {{
                     isAllLuxianRulesSelected
                       ? '取消全部勾选'
@@ -319,7 +344,10 @@
                     </div>
                     <small>{{ family.description }}</small>
                   </div>
-                  <button type="button" @click="selectLuxianRuleFamily(family.ruleIds)">
+                  <button
+                    type="button"
+                    @click="selectLuxianRuleFamily(family.ruleIds)"
+                  >
                     {{ isLuxianRuleFamilySelected(family.ruleIds) ? '取消本组' : '选择本组' }}
                   </button>
                 </div>
@@ -337,7 +365,7 @@
                       :value="rule.ruleId"
                       :checked="selectedLuxianCustomerRuleIds.includes(rule.ruleId)"
                       @change="toggleLuxianRule(rule.ruleId)"
-                    />
+                    >
                     <span>{{ rule.ruleId }}</span>
                     <em>{{ rule.name }}</em>
                   </label>
@@ -366,7 +394,10 @@
             class="customer-sample-internal-collapse"
             @change="handleInternalDiagnosticChange"
           >
-            <a-collapse-panel key="sheet2" header="内部验收诊断">
+            <a-collapse-panel
+              key="sheet2"
+              header="内部验收诊断"
+            >
               <div class="border-b border-slate-200/80 px-5 pb-4">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div class="min-w-0">
@@ -384,7 +415,10 @@
               </div>
 
               <a-spin :spinning="exactReviewLoading">
-                <div v-if="exactReviewAcceptance" class="space-y-4 px-5 py-4">
+                <div
+                  v-if="exactReviewAcceptance"
+                  class="space-y-4 px-5 py-4"
+                >
                   <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div
                       v-for="item in exactReviewStatusCards"
@@ -407,7 +441,9 @@
                   <div
                     class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
                   >
-                    <div class="font-semibold text-amber-950">blocked_with_reason 口径</div>
+                    <div class="font-semibold text-amber-950">
+                      blocked_with_reason 口径
+                    </div>
                     <div class="mt-1">
                       {{ exactReviewAcceptance.explanations.blocked_with_reason }}
                     </div>
@@ -480,7 +516,10 @@
                   </div>
                 </div>
 
-                <div v-else class="px-5 py-6 text-[13px] leading-6 text-rose-600">
+                <div
+                  v-else
+                  class="px-5 py-6 text-[13px] leading-6 text-rose-600"
+                >
                   {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
                 </div>
               </a-spin>
@@ -495,7 +534,9 @@
           <div class="border-b border-slate-200/80 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
-                <div class="text-[17px] font-semibold text-slate-900">样本病历同步进度</div>
+                <div class="text-[17px] font-semibold text-slate-900">
+                  样本病历同步进度
+                </div>
                 <div class="mt-1 text-[13px] leading-6 text-slate-500">
                   按样本池定向从源库拉取真实病历到本地 PG，并刷新 running bundle。
                 </div>
@@ -519,7 +560,9 @@
           </div>
           <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
             <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">病历进度</div>
+              <div class="text-[12px] text-slate-400">
+                病历进度
+              </div>
               <div class="mt-2 text-[26px] font-semibold leading-none text-slate-900">
                 已同步 {{ syncRecordProgress.completed }} / {{ syncRecordProgress.total }} 份
               </div>
@@ -528,7 +571,9 @@
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">文书就绪</div>
+              <div class="text-[12px] text-slate-400">
+                文书就绪
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncRecordProgress.ready }} 份
               </div>
@@ -544,7 +589,9 @@
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">源库匹配</div>
+              <div class="text-[12px] text-slate-400">
+                源库匹配
+              </div>
               <div class="mt-2 text-[20px] font-semibold leading-none text-slate-900">
                 {{ syncResolvedStats.matched }} 份匹配
               </div>
@@ -554,7 +601,9 @@
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">表/行进度</div>
+              <div class="text-[12px] text-slate-400">
+                表/行进度
+              </div>
               <div class="mt-2 text-[20px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }} 表
               </div>
@@ -581,10 +630,16 @@
                 {{ syncRecordProgress.total }} 份病历；文书就绪 {{ syncRecordProgress.ready }} 份。
                 明细文书、医嘱、检查检验等仍以表进度和文书就绪状态为准。
               </div>
-              <div v-if="syncRecordProgress.missingMr > 0" class="mt-1 text-amber-700">
+              <div
+                v-if="syncRecordProgress.missingMr > 0"
+                class="mt-1 text-amber-700"
+              >
                 有 {{ syncRecordProgress.missingMr }} 份病历尚未写入主记录，暂时不会出现在病历池中。
               </div>
-              <div v-if="syncJobDetail.error_message" class="mt-2 text-rose-600">
+              <div
+                v-if="syncJobDetail.error_message"
+                class="mt-2 text-rose-600"
+              >
                 {{ syncJobDetail.error_message }}
               </div>
             </div>
@@ -600,9 +655,14 @@
             <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-3">
-                  <div class="text-[18px] font-semibold text-slate-900">病历池</div>
+                  <div class="text-[18px] font-semibold text-slate-900">
+                    病历池
+                  </div>
                   <div class="customer-sample-inline-metrics">
-                    <span v-for="item in summaryCards" :key="item.label">
+                    <span
+                      v-for="item in summaryCards"
+                      :key="item.label"
+                    >
                       {{ item.label }} <strong>{{ item.value }}</strong>
                     </span>
                   </div>
@@ -668,10 +728,19 @@
                     :options="parallelOptions"
                   />
                 </div>
-                <a-button type="primary" class="!rounded-full" @click="loadRecords()">
+                <a-button
+                  type="primary"
+                  class="!rounded-full"
+                  @click="loadRecords()"
+                >
                   查询
                 </a-button>
-                <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
+                <a-button
+                  class="!rounded-full"
+                  @click="resetFilters"
+                >
+                  重置
+                </a-button>
               </div>
             </div>
 
@@ -696,6 +765,7 @@
       v-if="selectedRecordStats.selectedCount > 0"
       class="customer-sample-selection-run-bar"
       data-testid="customer-sample-selection-run-bar"
+      aria-live="polite"
     >
       <div class="customer-sample-selection-run-summary">
         <strong>已选 {{ selectedRecordStats.selectedCount }} 份病历</strong>
@@ -707,7 +777,12 @@
         </span>
       </div>
       <div class="customer-sample-selection-run-actions">
-        <a-button class="!rounded-lg" @click="clearSelectedRecords"> 取消选择 </a-button>
+        <a-button
+          class="!rounded-lg"
+          @click="clearSelectedRecords"
+        >
+          取消选择
+        </a-button>
         <a-button
           type="primary"
           class="!rounded-lg"
@@ -720,10 +795,18 @@
       </div>
     </div>
 
-    <div v-if="customerSampleGuideOpen" class="customer-sample-tour-layer">
+    <div
+      v-if="customerSampleGuideOpen"
+      class="customer-sample-tour-layer"
+    >
       <div class="customer-sample-tour-scrim" />
-      <div class="customer-sample-tour-card" :style="customerSampleTourCardStyle">
-        <div class="customer-sample-tour-kicker">客户演示主流程</div>
+      <div
+        class="customer-sample-tour-card"
+        :style="customerSampleTourCardStyle"
+      >
+        <div class="customer-sample-tour-kicker">
+          客户演示主流程
+        </div>
         <div class="customer-sample-tour-count">
           {{ customerSampleGuideStepIndex + 1 }} / {{ customerSampleGuideSteps.length }}
         </div>
@@ -781,7 +864,9 @@
     >
       <div class="space-y-4 pt-2">
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">样本池名称</div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            样本池名称
+          </div>
           <a-input
             v-model:value="importForm.poolName"
             placeholder="例如：手工问题样本池-第二轮"
@@ -789,7 +874,9 @@
           />
         </div>
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">备注</div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            备注
+          </div>
           <a-textarea
             v-model:value="importForm.description"
             :rows="3"
@@ -802,7 +889,11 @@
             class="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-700"
           >
             <span>Excel 模板</span>
-            <a-button type="link" class="!px-0" @click="handleDownloadTemplate">
+            <a-button
+              type="link"
+              class="!px-0"
+              @click="handleDownloadTemplate"
+            >
               下载模板
             </a-button>
           </div>
@@ -816,8 +907,12 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">点击或拖拽上传 Excel 模板</p>
-            <p class="ant-upload-hint">支持 .xls / .xlsx，默认读取第一个工作表。</p>
+            <p class="ant-upload-text">
+              点击或拖拽上传 Excel 模板
+            </p>
+            <p class="ant-upload-hint">
+              支持 .xls / .xlsx，默认读取第一个工作表。
+            </p>
             <p class="mt-2 text-[12px] text-slate-400">
               优先填写就诊ID，可补充住院流水号、病案号和患者姓名。
             </p>
@@ -826,32 +921,46 @@
       </div>
     </a-modal>
 
-    <a-drawer :open="detailOpen" width="720" title="病历关联问题" @close="detailOpen = false">
-      <div v-if="activeRecord" class="space-y-5">
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 病历概况 </template>
+    <a-drawer
+      :open="detailOpen"
+      width="720"
+      title="病历关联问题"
+      @close="detailOpen = false"
+    >
+      <div
+        v-if="activeRecord"
+        class="space-y-5"
+      >
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            病历概况
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">科室：</span
-              >{{ activeRecord.department || '-' }}
+              <span class="font-medium text-slate-500">科室：</span>{{ activeRecord.department || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">患者：</span
-              >{{ activeRecord.patient_name || '-' }}
+              <span class="font-medium text-slate-500">患者：</span>{{ activeRecord.patient_name || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">住院号：</span
-              >{{ activeRecord.mr_no || '-' }}
+              <span class="font-medium text-slate-500">住院号：</span>{{ activeRecord.mr_no || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span
-              >{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 识别范围 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            识别范围
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
               <span class="font-medium text-slate-500">文书范围：</span>
@@ -868,38 +977,42 @@
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 病历关联 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            病历关联
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">关联结果：</span
-              >{{ matchStatusLabel(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">下一步：</span
-              >{{ matchStatusHint(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">下一步：</span>{{ matchStatusHint(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span
-              >{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">同步状态：</span
-              >{{ activeRecord.sync_status || '-' }}
+              <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">文书就绪：</span
-              >{{ bundleStatusLabel(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">处理建议：</span
-              >{{ bundleStatusHint(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">处理建议：</span>{{ bundleStatusHint(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 关联人工问题 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            关联人工问题
+          </template>
           <div class="space-y-3">
             <div
               v-for="sample in activeRecord.sample_items"
@@ -951,7 +1064,9 @@
         </header>
 
         <div class="editable-copy-notice">
-          <div class="editable-copy-notice-title">原始同步病历保持只读</div>
+          <div class="editable-copy-notice-title">
+            原始同步病历保持只读
+          </div>
           <div>
             {{
               editableCopyReadonly
@@ -962,7 +1077,10 @@
         </div>
 
         <a-spin :spinning="editableCopyLoading">
-          <div v-if="editableCopyDraft" class="editable-copy-content">
+          <div
+            v-if="editableCopyDraft"
+            class="editable-copy-content"
+          >
             <section class="editable-copy-section">
               <h3>{{ editableCopyReadonly ? '病历信息' : '副本信息' }}</h3>
               <div class="editable-copy-form-grid">
@@ -1024,24 +1142,29 @@
                   }}
                 </span>
               </div>
-              <div v-if="!editableCopyReadonly" class="editable-copy-document-toolbar">
+              <div
+                v-if="!editableCopyReadonly"
+                class="editable-copy-document-toolbar"
+              >
                 <a-select
                   v-model:value="editableCopyNewDocumentType"
                   :options="testRecordDocumentTypeOptions"
                   class="editable-copy-document-type-select"
                 />
-                <a-button @click="addEditableCopyDocument()"> 新增文书 </a-button>
-                <a-button @click="addEditableCopyOrderDocument()"> 新增医嘱 </a-button>
+                <a-button @click="addEditableCopyDocument()">
+                  新增文书
+                </a-button>
+                <a-button @click="addEditableCopyOrderDocument()">
+                  新增医嘱
+                </a-button>
               </div>
 
               <div class="editable-copy-document-workbench">
                 <aside class="editable-copy-document-directory">
                   <div class="editable-copy-document-directory-head">
                     <strong>文书目录</strong>
-                    <span
-                      >{{ editableCopyFilteredDocuments.length }} /
-                      {{ editableCopyDraft.documents.length }}</span
-                    >
+                    <span>{{ editableCopyFilteredDocuments.length }} /
+                      {{ editableCopyDraft.documents.length }}</span>
                   </div>
                   <a-input
                     v-model:value="editableCopyDocumentQuery"
@@ -1083,7 +1206,10 @@
                     class="editable-copy-document-directory-list"
                     :class="{ 'is-tree': editableCopyReadonly }"
                   >
-                    <template v-for="group in editableCopyDocumentGroups" :key="group.key">
+                    <template
+                      v-for="group in editableCopyDocumentGroups"
+                      :key="group.key"
+                    >
                       <div class="editable-copy-document-group-title">
                         <span>
                           <i v-if="editableCopyReadonly" />
@@ -1129,7 +1255,10 @@
                   </div>
                 </aside>
 
-                <article v-if="editableCopyActiveDocument" class="editable-copy-document-editor">
+                <article
+                  v-if="editableCopyActiveDocument"
+                  class="editable-copy-document-editor"
+                >
                   <div class="editable-copy-document-editor-head">
                     <div>
                       <span>{{
@@ -1140,11 +1269,20 @@
                       <h4>{{ editableCopyActiveDocument.title || '未命名文书' }}</h4>
                     </div>
                     <div class="editable-copy-document-actions">
-                      <span v-if="editableCopyReadonly" class="editable-copy-readonly-pill">
+                      <span
+                        v-if="editableCopyReadonly"
+                        class="editable-copy-readonly-pill"
+                      >
                         只读原文
                       </span>
-                      <label v-else class="editable-copy-document-toggle">
-                        <input v-model="editableCopyActiveDocument.enabled" type="checkbox" />
+                      <label
+                        v-else
+                        class="editable-copy-document-toggle"
+                      >
+                        <input
+                          v-model="editableCopyActiveDocument.enabled"
+                          type="checkbox"
+                        >
                         <span>写入副本</span>
                       </label>
                       <a-button
@@ -1210,7 +1348,10 @@
                             <td>{{ order.status }}</td>
                           </tr>
                           <tr v-if="!editableCopyVisibleOrderRows.length">
-                            <td colspan="5" class="editable-copy-order-empty">
+                            <td
+                              colspan="5"
+                              class="editable-copy-order-empty"
+                            >
                               暂无{{
                                 editableCopyOrderTypeFilter === 'long' ? '长期医嘱' : '临时医嘱'
                               }}
@@ -1259,9 +1400,15 @@
               </div>
             </section>
 
-            <section v-if="!editableCopyReadonly" class="editable-copy-section">
+            <section
+              v-if="!editableCopyReadonly"
+              class="editable-copy-section"
+            >
               <h3>验证说明</h3>
-              <a-textarea v-model:value="editableCopyDraft.manualIssueText" :rows="3" />
+              <a-textarea
+                v-model:value="editableCopyDraft.manualIssueText"
+                :rows="3"
+              />
             </section>
           </div>
         </a-spin>
@@ -1309,12 +1456,99 @@
     />
 
     <a-drawer
+      :open="luxianAggregateOpen"
+      title="泸县0609总任务"
+      width="min(960px, calc(100vw - 24px))"
+      placement="right"
+      class="customer-sample-luxian-aggregate-drawer"
+      @close="closeLuxianAggregateDrawer"
+    >
+      <div class="customer-sample-luxian-aggregate">
+        <div class="customer-sample-luxian-aggregate-head">
+          <div>
+            <strong>按 7 个质控族并发执行</strong>
+            <p>前端展示为一个总任务，后端按质控族拆成子任务执行；每个子任务可单独查看结果。</p>
+          </div>
+          <a-button
+            size="small"
+            :loading="luxianAggregateLoading"
+            @click="() => refreshLuxianAggregateJobs()"
+          >
+            刷新
+          </a-button>
+        </div>
+
+        <div class="customer-sample-luxian-aggregate-summary">
+          <div>
+            <span>总进度</span>
+            <strong>
+              已完成 {{ luxianAggregateSummary.completed }} /
+              {{ luxianAggregateSummary.total }} 个质控族
+            </strong>
+          </div>
+          <div>
+            <span>运行中</span>
+            <strong>{{ luxianAggregateSummary.running }} 个</strong>
+          </div>
+          <div>
+            <span>异常</span>
+            <strong>{{ luxianAggregateSummary.failed }} 个</strong>
+          </div>
+        </div>
+
+        <div class="customer-sample-luxian-aggregate-list">
+          <article
+            v-for="item in luxianAggregateJobs"
+            :key="item.family.key"
+            class="customer-sample-luxian-aggregate-item"
+          >
+            <div class="customer-sample-luxian-aggregate-main">
+              <div class="customer-sample-luxian-aggregate-title">
+                <strong>{{ item.family.name }}</strong>
+                <em :class="getBatchJobStatusTagClass(item.status || 'queued')">
+                  {{ getBatchJobStatusText(item.status || 'queued') }}
+                </em>
+              </div>
+              <div class="customer-sample-luxian-aggregate-meta">
+                <span>{{ item.family.ruleIds.length }} 个客户质控点</span>
+                <span :title="item.jobId ? `子任务编号：${item.jobId}` : '任务创建中'">
+                  {{ item.jobId ? '子任务已生成' : '任务创建中' }}
+                </span>
+              </div>
+              <div
+                v-if="item.errorMessage"
+                class="customer-sample-luxian-aggregate-error"
+              >
+                {{ item.errorMessage }}
+              </div>
+              <div
+                v-else
+                class="customer-sample-luxian-aggregate-result"
+              >
+                {{ luxianAggregateResultSummary(item) }}
+              </div>
+            </div>
+            <div class="customer-sample-luxian-aggregate-actions">
+              <a-button
+                size="small"
+                :disabled="!item.jobId"
+                @click="openLuxianAggregateChildJob(item)"
+              >
+                查看结果
+              </a-button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </a-drawer>
+
+    <a-drawer
       :open="taskHistoryOpen"
       title="质控记录"
-      :width="720"
+      width="min(920px, calc(100vw - 24px))"
       placement="right"
       class="customer-sample-task-history-drawer"
-      @close="taskHistoryOpen = false"
+      @close="closeTaskHistoryDrawer"
     >
       <div class="customer-sample-task-history">
         <div class="customer-sample-task-history-head">
@@ -1322,17 +1556,27 @@
             <strong>历史质控任务</strong>
             <p>按发起时间倒序展示最近任务，可直接查看结果抽屉。</p>
           </div>
-          <a-button size="small" :loading="taskHistoryLoading" @click="loadTaskHistory">
+          <a-button
+            size="small"
+            :loading="taskHistoryLoading"
+            @click="loadTaskHistory"
+          >
             刷新
           </a-button>
         </div>
 
         <a-spin :spinning="taskHistoryLoading">
-          <div v-if="taskHistoryJobs.length === 0" class="customer-sample-task-history-empty">
+          <div
+            v-if="taskHistoryJobs.length === 0"
+            class="customer-sample-task-history-empty"
+          >
             暂无质控记录。发起验证后，最近任务会显示在这里。
           </div>
 
-          <div v-else class="customer-sample-task-history-list">
+          <div
+            v-else
+            class="customer-sample-task-history-list"
+          >
             <article
               v-for="job in taskHistoryJobs"
               :key="job.id"
@@ -1350,12 +1594,44 @@
                   <span>{{ taskHistoryScopeText(job) }}</span>
                   <span>{{ taskHistoryRecordText(job) }}</span>
                 </div>
-                <div class="customer-sample-task-history-summary">
-                  {{ taskHistoryResultSummary(job) }}
+                <div class="customer-sample-task-history-overview">
+                  <strong>{{ taskHistoryOverviewText(job) }}</strong>
+                  <span>{{ taskHistorySecondaryText(job) }}</span>
+                  <span
+                    v-if="taskHistoryIssueSummaryText(job)"
+                    class="customer-sample-task-history-issue-line"
+                  >
+                    {{ taskHistoryIssueSummaryText(job) }}
+                  </span>
+                </div>
+                <div
+                  v-if="taskHistoryStatusChips(job).length"
+                  class="customer-sample-task-history-status-grid"
+                >
+                  <span
+                    v-for="chip in taskHistoryStatusChips(job)"
+                    :key="chip.key"
+                    :class="chip.className"
+                  >
+                    <em>{{ chip.label }}</em>
+                    <strong>{{ chip.value }}</strong>
+                  </span>
                 </div>
               </div>
               <div class="customer-sample-task-history-actions">
-                <a-button size="small" @click="openTaskHistoryJob(job)"> 查看结果 </a-button>
+                <a-button
+                  size="small"
+                  @click="openTaskHistoryJob(job)"
+                >
+                  查看结果
+                </a-button>
+                <a-button
+                  v-if="job.status === 'completed'"
+                  size="small"
+                  @click="handleExportTaskHistoryJob(job)"
+                >
+                  导出HTML
+                </a-button>
               </div>
             </article>
           </div>
@@ -1420,7 +1696,11 @@ import {
 } from '@/services/sichuan-rule-workspace-service'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
-import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
+import type {
+  SichuanBatchJob,
+  SichuanBatchIssueItem,
+  SichuanBatchJobStatus,
+} from '@/views/workstation-v4/semantic-rules/types'
 import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 const poolLoading = ref(false)
@@ -1446,11 +1726,80 @@ const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
 const SAMPLE_RULE_SET_RUN_TIMEOUT_MS = 90000
 const RUN_DUPLICATE_GUARD_MS = 120000
-const LUXIAN_FAMILY_RUN_CONCURRENCY = 3
 const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
 const CUSTOMER_TEST_POOL_ID = 'customer-created-test-records-v1'
 const LUXIAN_RULE_FAMILY_PREVIEW_LIMIT = 5
+const TASK_HISTORY_ISSUE_PREVIEW_LIMIT = 3
+const HTML_EXPORT_MISMATCH_MESSAGE =
+  '后端未返回 HTML 明细文件，请确认客户机后端已更新到支持 HTML 导出的版本。'
 let customerSampleGuidePositionTimer: ReturnType<typeof setTimeout> | null = null
+
+async function normalizeBatchExportBlob(
+  blob: Blob,
+  format: 'xlsx' | 'csv' | 'html',
+): Promise<Blob> {
+  if (format !== 'html') return blob
+  const contentType = String(blob.type || '').toLowerCase()
+  if (
+    contentType.includes('spreadsheet') ||
+    contentType.includes('officedocument') ||
+    contentType.includes('zip')
+  ) {
+    throw new Error(HTML_EXPORT_MISMATCH_MESSAGE)
+  }
+  if (blob.size <= 0) {
+    return new Blob([], { type: 'text/html;charset=utf-8' })
+  }
+  const preview = await blob.slice(0, 96).text()
+  if (/^\s*PK/u.test(preview) || preview.includes('[Content_Types].xml')) {
+    throw new Error(HTML_EXPORT_MISMATCH_MESSAGE)
+  }
+  const text = await blob.text()
+  return new Blob([text.startsWith('\ufeff') ? text : `\ufeff${text}`], {
+    type: 'text/html;charset=utf-8',
+  })
+}
+
+const TASK_HISTORY_ATTENTION_STATUSES = new Set([
+  'non_compliant',
+  'data_gap',
+  'uncertain',
+  'not_executed',
+  'technical_error',
+])
+
+const LUXIAN_0609_HISTORY_BRIEF_BY_ID: Record<string, string> = {
+  'LX0609-001': '入院记录未在24小时内完成',
+  'LX0609-002': '首次病程记录时间超过8小时',
+  'LX0609-003': '手术记录未在术后24小时内完成',
+  'LX0609-005': '入院48小时内无主治医师首次查房记录',
+  'LX0609-007': '病情稳定患者3天内无查房病程记录',
+  'LX0609-008': '病重患者2天内无查房病程记录',
+  'LX0609-009': '病危患者未每天记录查房病程',
+  'LX0609-012': '检查阳性结果未在24小时内分析',
+  'LX0609-014': '细菌培养结果未在病程中记录',
+  'LX0609-016': '首次病程与入院记录存在复制风险',
+  'LX0609-017': '多次病程记录高度重复',
+  'LX0609-018': '主诉不能导出第一诊断',
+  'LX0609-019': '取材情况未在病程或手术记录中记录',
+  'LX0609-020': '会诊后未记录会诊意见执行情况',
+  'LX0609-021': '会诊申请目的不明确',
+  'LX0609-022': '会诊意见不明确',
+  'LX0609-024': '恶性肿瘤手术记录未描述淋巴结清扫',
+  'LX0609-026': '化疗记录与医嘱不一致',
+  'LX0609-038': '缺少麻醉记录单',
+  'LX0609-041': '缺少输血知情同意书',
+  'LX0609-043': '输血前常规检查不完整',
+  'LX0609-044': '输血前评估记录不完整',
+  'LX0609-047': '缺少输血后评价',
+  'LX0609-049': '输血医嘱与收费不一致',
+}
+
+type TaskHistoryIssueSummary = {
+  key: string
+  ruleId: string
+  text: string
+}
 
 type LuxianRuleOption = {
   ruleId: string
@@ -1473,6 +1822,7 @@ type SamplePoolRunPayload = {
   validation_mode: ManualSampleValidationMode
   rule_set_key: string
   selected_rule_ids?: string[]
+  group_by_luxian_family?: boolean
 }
 
 type LuxianFamilyRunScope = {
@@ -1481,9 +1831,12 @@ type LuxianFamilyRunScope = {
   ruleIds: string[]
 }
 
-type LuxianFamilyRunSuccess = {
+type LuxianAggregateJob = {
   family: LuxianFamilyRunScope
-  data: ManualSamplePoolRunResult
+  jobId: string
+  status: SichuanBatchJobStatus
+  detail?: SichuanBatchJob
+  errorMessage?: string
 }
 
 type EditableCopyDraft = {
@@ -1881,12 +2234,32 @@ const taskHistoryOpen = ref(false)
 const taskHistoryLoading = ref(false)
 const taskHistoryJobs = ref<SichuanBatchJob[]>([])
 const taskHistoryTotal = ref(0)
+const luxianAggregateOpen = ref(false)
+const luxianAggregateLoading = ref(false)
+const luxianAggregateJobs = ref<LuxianAggregateJob[]>([])
+const luxianAggregateParentJobId = ref('')
+const luxianAggregateSummary = computed(() => {
+  const total = luxianAggregateJobs.value.length
+  const completed = luxianAggregateJobs.value.filter((item) => item.status === 'completed').length
+  const failed = luxianAggregateJobs.value.filter((item) =>
+    ['failed', 'canceled'].includes(item.status),
+  ).length
+  const running = luxianAggregateJobs.value.filter((item) => isBatchJobRunning(item.status)).length
+  return {
+    total,
+    completed,
+    failed,
+    running,
+  }
+})
 const batchResultFocusRecord = ref<{
   visitId: string
   recordId: string
   label: string
 } | null>(null)
 let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
+let taskHistoryPollTimer: ReturnType<typeof setInterval> | null = null
+let luxianAggregatePollTimer: ReturnType<typeof setInterval> | null = null
 let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
 const syncJobDetail = ref<ManualSamplePoolSyncJob>()
 const exactReviewAcceptance = ref<Sheet2ExactReviewAcceptancePackage | null>(null)
@@ -3552,26 +3925,6 @@ function buildLuxianFamilyRunScopes(ruleIds: string[]): LuxianFamilyRunScope[] {
   return scopes
 }
 
-async function runWithLimitedConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = []
-  let nextIndex = 0
-  const workerCount = Math.max(1, Math.min(limit, items.length))
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex
-        nextIndex += 1
-        results[index] = await worker(items[index])
-      }
-    }),
-  )
-  return results
-}
-
 function shouldRunLuxianFamiliesInParallel(ruleIds: string[]): boolean {
   return isLuxian0609Mode.value && buildLuxianFamilyRunScopes(ruleIds).length > 1
 }
@@ -4734,57 +5087,42 @@ async function runLuxianFamilyScopedJobs(options: {
   basePayload: SamplePoolRunPayload
 }) {
   const familyScopes = buildLuxianFamilyRunScopes(selectedLuxianCustomerRuleIds.value)
-  const createdJobs: LuxianFamilyRunSuccess[] = []
-  try {
-    const results = await runWithLimitedConcurrency(
-      familyScopes,
-      LUXIAN_FAMILY_RUN_CONCURRENCY,
-      async (family) => {
-        const scopedPayload: SamplePoolRunPayload = {
-          ...options.basePayload,
-          max_parallel_records: 1,
-          selected_rule_ids: family.ruleIds,
-        }
-        const result = await runManualSamplePool(
-          selectedPoolId.value,
-          scopedPayload,
-          requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
-        )
-        if (!result.success || !result.data) {
-          throw new Error(`${family.name}：${result.message || '创建样本验证任务失败'}`)
-        }
-        return {
-          family,
-          data: result.data,
-        }
-      },
-    )
-    createdJobs.push(...results)
-  } catch (error) {
+  const scopedPayload: SamplePoolRunPayload = {
+    ...options.basePayload,
+    group_by_luxian_family: true,
+    selected_rule_ids: selectedLuxianCustomerRuleIds.value,
+  }
+  const result = await runManualSamplePool(
+    selectedPoolId.value,
+    scopedPayload,
+    requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
+  )
+  if (!result.success || !result.data) {
     runLoading.value = false
     message.destroy(options.runKey)
     lastRunSubmission.value = undefined
-    message.error(error instanceof Error ? error.message : '创建分组验证任务失败')
+    message.error(result.message || '创建泸县0609总任务失败')
     return
   }
 
   runLoading.value = false
-  const jobIds = createdJobs.map((item) => item.data.job_id).filter(Boolean)
+  const jobId = String(result.data.job_id || '').trim()
+  const childJobIds = Array.isArray(result.data.child_job_ids)
+    ? result.data.child_job_ids.map((item) => String(item)).filter(Boolean)
+    : []
   lastRunSubmission.value = {
     key: options.runKey,
     startedAt: options.startedAt,
-    jobId: jobIds[0],
-    jobIds,
+    jobId,
+    jobIds: [jobId, ...childJobIds],
   }
   message.success({
-    content: `已按 ${createdJobs.length} 个质控族并发创建任务，单个子任务病历并发限制为 1，正在打开 ${createdJobs[0]?.family.name || '首个'} 任务进度`,
+    content: `已创建泸县0609总任务，${familyScopes.length} 个质控族已并发入队`,
     key: options.runKey,
     duration: 4,
   })
   selectedRowKeys.value = []
-  if (jobIds[0]) {
-    await openBatchJob(jobIds[0])
-  }
+  await openLuxianAggregateParentJob(jobId, result.data)
   void loadPools()
 }
 
@@ -4919,6 +5257,11 @@ async function loadTaskHistory() {
     }
     taskHistoryJobs.value = result.data.items || []
     taskHistoryTotal.value = Number(result.data.total || taskHistoryJobs.value.length || 0)
+    if (taskHistoryJobs.value.some((job) => isBatchJobRunning(job.status))) {
+      startTaskHistoryPolling()
+    } else {
+      stopTaskHistoryPolling()
+    }
   } finally {
     taskHistoryLoading.value = false
   }
@@ -4926,14 +5269,212 @@ async function loadTaskHistory() {
 
 async function openTaskHistoryDrawer() {
   taskHistoryOpen.value = true
-  if (taskHistoryJobs.value.length === 0) {
-    await loadTaskHistory()
-  }
+  await loadTaskHistory()
+}
+
+function closeTaskHistoryDrawer() {
+  taskHistoryOpen.value = false
+  stopTaskHistoryPolling()
 }
 
 async function openTaskHistoryJob(job: SichuanBatchJob) {
   taskHistoryOpen.value = false
+  stopTaskHistoryPolling()
   await openBatchJob(job.id)
+}
+
+function resolveLuxianFamilyFromChildJob(
+  job: SichuanBatchJob,
+  fallbackIndex = 0,
+): LuxianFamilyRunScope {
+  const filters = job.filters && typeof job.filters === 'object' ? job.filters : {}
+  const ruleIds = normalizeLuxianRuleIds(
+    Array.isArray(filters.scoped_customer_rule_ids)
+      ? filters.scoped_customer_rule_ids.map((item) => String(item))
+      : Array.isArray(filters.selected_rule_ids)
+        ? filters.selected_rule_ids.map((item) => String(item))
+        : [],
+  )
+  const familyKey = String(
+    job.family_key || filters.family_key || `family-${fallbackIndex + 1}`,
+  ).trim()
+  const familyName = String(
+    job.family_name || filters.family_name || `质控族 ${fallbackIndex + 1}`,
+  ).trim()
+  return {
+    key: familyKey,
+    name: familyName,
+    ruleIds,
+  }
+}
+
+function buildLuxianAggregateJobsFromParentJob(parentJob: SichuanBatchJob): LuxianAggregateJob[] {
+  const childJobs = Array.isArray(parentJob.child_jobs)
+    ? parentJob.child_jobs
+    : Array.isArray(parentJob.children)
+      ? parentJob.children
+      : []
+  if (childJobs.length > 0) {
+    return childJobs
+      .map((childJob, index) => ({
+        family: resolveLuxianFamilyFromChildJob(childJob, index),
+        jobId: String(childJob.id || '').trim(),
+        status: childJob.status,
+        detail: childJob,
+        errorMessage: '',
+      }))
+      .filter((item) => item.jobId)
+  }
+  const filters =
+    parentJob.filters && typeof parentJob.filters === 'object' ? parentJob.filters : {}
+  const familyScopes = Array.isArray(filters.family_scopes)
+    ? (filters.family_scopes as Array<Record<string, unknown>>)
+    : []
+  const childJobIds = Array.isArray(parentJob.child_job_ids)
+    ? parentJob.child_job_ids.map((item) => String(item)).filter(Boolean)
+    : []
+  return childJobIds.map((jobId, index) => {
+    const familyScope = familyScopes[index] || {}
+    return {
+      family: {
+        key: String(familyScope.key || `family-${index + 1}`),
+        name: String(familyScope.name || `质控族 ${index + 1}`),
+        ruleIds: normalizeLuxianRuleIds(
+          Array.isArray(familyScope.rule_ids)
+            ? familyScope.rule_ids.map((item) => String(item))
+            : [],
+        ),
+      },
+      jobId,
+      status: 'queued' as SichuanBatchJobStatus,
+    }
+  })
+}
+
+async function openLuxianAggregateParentJob(
+  parentJobId: string,
+  initialRunResult?: ManualSamplePoolRunResult,
+) {
+  stopLuxianAggregatePolling()
+  luxianAggregateParentJobId.value = parentJobId
+  if (Array.isArray(initialRunResult?.child_jobs) && initialRunResult.child_jobs.length > 0) {
+    luxianAggregateJobs.value = buildLuxianAggregateJobsFromParentJob({
+      id: parentJobId,
+      status: 'queued',
+      scope: 'all',
+      rule_code: '',
+      rule_name: '',
+      filters: {
+        family_scopes: initialRunResult.family_scopes || [],
+      },
+      child_job_ids: initialRunResult.child_job_ids || [],
+      child_jobs: initialRunResult.child_jobs,
+    })
+  } else {
+    luxianAggregateJobs.value = (initialRunResult?.child_job_ids || []).map((jobId, index) => {
+      const familyScope = Array.isArray(initialRunResult?.family_scopes)
+        ? initialRunResult.family_scopes[index]
+        : undefined
+      return {
+        family: {
+          key: String(familyScope?.key || `family-${index + 1}`),
+          name: String(familyScope?.name || `质控族 ${index + 1}`),
+          ruleIds: normalizeLuxianRuleIds(
+            Array.isArray(familyScope?.rule_ids)
+              ? familyScope.rule_ids.map((item) => String(item))
+              : [],
+          ),
+        },
+        jobId: String(jobId),
+        status: 'queued' as SichuanBatchJobStatus,
+      }
+    })
+  }
+  luxianAggregateOpen.value = true
+  void refreshLuxianAggregateJobs(parentJobId)
+  startLuxianAggregatePolling()
+}
+
+async function refreshLuxianAggregateJobs(parentJobId?: string) {
+  const effectiveParentJobId = parentJobId || luxianAggregateParentJobId.value
+  if (!luxianAggregateJobs.value.length && !effectiveParentJobId) return
+  luxianAggregateLoading.value = true
+  try {
+    if (effectiveParentJobId) {
+      const parentResult = await getSichuanWorkspaceBatchJob(effectiveParentJobId)
+      if (parentResult.success && parentResult.data) {
+        const aggregateJobs = buildLuxianAggregateJobsFromParentJob(parentResult.data)
+        if (aggregateJobs.length > 0) {
+          luxianAggregateJobs.value = aggregateJobs
+        }
+      }
+    }
+    const nextJobs = await Promise.all(
+      luxianAggregateJobs.value.map(async (item) => {
+        if (!item.jobId) return item
+        const result = await getSichuanWorkspaceBatchJob(item.jobId)
+        if (!result.success || !result.data) {
+          return {
+            ...item,
+            errorMessage: result.message || '获取子任务状态失败',
+          }
+        }
+        return {
+          ...item,
+          status: result.data.status,
+          detail: result.data,
+          errorMessage: '',
+        }
+      }),
+    )
+    luxianAggregateJobs.value = nextJobs
+    if (nextJobs.every((item) => !isBatchJobRunning(item.status))) {
+      stopLuxianAggregatePolling()
+      await loadPools()
+      await loadRecords()
+    }
+  } finally {
+    luxianAggregateLoading.value = false
+  }
+}
+
+function startLuxianAggregatePolling() {
+  stopLuxianAggregatePolling()
+  luxianAggregatePollTimer = setInterval(() => {
+    if (!luxianAggregateOpen.value) {
+      stopLuxianAggregatePolling()
+      return
+    }
+    void refreshLuxianAggregateJobs()
+  }, 3000)
+}
+
+function stopLuxianAggregatePolling() {
+  if (luxianAggregatePollTimer) {
+    clearInterval(luxianAggregatePollTimer)
+    luxianAggregatePollTimer = null
+  }
+}
+
+function closeLuxianAggregateDrawer() {
+  stopLuxianAggregatePolling()
+  luxianAggregateOpen.value = false
+  luxianAggregateParentJobId.value = ''
+}
+
+async function openLuxianAggregateChildJob(item: LuxianAggregateJob) {
+  const jobId = String(item.jobId || '').trim()
+  if (!jobId) return
+  luxianAggregateOpen.value = false
+  stopLuxianAggregatePolling()
+  await openBatchJob(jobId)
+}
+
+function luxianAggregateResultSummary(item: LuxianAggregateJob): string {
+  if (item.detail) return taskHistoryResultSummary(item.detail)
+  if (item.status === 'queued') return '任务已创建，等待后台执行。'
+  if (item.status === 'running') return '任务执行中，等待结果回写。'
+  return item.errorMessage || '暂无结果摘要。'
 }
 
 function taskHistoryRuleSetText(job: SichuanBatchJob): string {
@@ -4976,15 +5517,287 @@ function taskHistoryRecordText(job: SichuanBatchJob): string {
   return '病历数未返回'
 }
 
-function taskHistoryResultSummary(job: SichuanBatchJob): string {
-  if (job.status === 'failed') {
-    return job.error_message || '任务失败，点击查看详情。'
-  }
+function taskHistoryDisplayCounts(job: SichuanBatchJob): Record<string, number> {
   const displayCounts =
     job.summary?.display_status_counts ||
     job.summary?.status_breakdown ||
     job.summary?.postprocess_summary?.display_status_counts ||
     {}
+  return {
+    non_compliant: Number(displayCounts.non_compliant || 0),
+    compliant: Number(displayCounts.compliant || 0),
+    not_applicable: Number(displayCounts.not_applicable || 0),
+    data_gap: Number(displayCounts.data_gap || 0),
+    uncertain: Number(displayCounts.uncertain || 0),
+    not_executed: Number(displayCounts.not_executed || 0),
+    technical_error: Number(displayCounts.technical_error || 0),
+  }
+}
+
+function taskHistoryStatusChips(job: SichuanBatchJob) {
+  const counts = taskHistoryDisplayCounts(job)
+  const chips = [
+    {
+      key: 'non_compliant',
+      label: '不合规',
+      value: counts.non_compliant,
+      className: 'is-danger',
+    },
+    {
+      key: 'data_gap',
+      label: '数据不足',
+      value: counts.data_gap,
+      className: 'is-warning',
+    },
+    {
+      key: 'uncertain',
+      label: '待复核',
+      value: counts.uncertain,
+      className: 'is-review',
+    },
+    {
+      key: 'technical_error',
+      label: '技术异常',
+      value: counts.technical_error,
+      className: 'is-danger',
+    },
+    {
+      key: 'not_executed',
+      label: '未执行',
+      value: counts.not_executed,
+      className: 'is-neutral',
+    },
+    {
+      key: 'not_applicable',
+      label: '不适用',
+      value: counts.not_applicable,
+      className: 'is-muted',
+    },
+    {
+      key: 'compliant',
+      label: '合规',
+      value: counts.compliant,
+      className: 'is-ok',
+    },
+  ].filter((chip) => chip.value > 0)
+
+  if (chips.length) return chips
+
+  const issueRecords = Number(job.summary?.issue_records || job.issue_records || 0)
+  const compliantRecords = Number(job.summary?.compliant_records || job.compliant_records || 0)
+  return [
+    issueRecords > 0
+      ? {
+          key: 'issue_records',
+          label: '有问题病历',
+          value: issueRecords,
+          className: 'is-danger',
+        }
+      : undefined,
+    compliantRecords > 0
+      ? {
+          key: 'compliant_records',
+          label: '合规病历',
+          value: compliantRecords,
+          className: 'is-ok',
+        }
+      : undefined,
+  ].filter(Boolean) as Array<{ key: string; label: string; value: number; className: string }>
+}
+
+function taskHistoryOverviewText(job: SichuanBatchJob): string {
+  if (job.status === 'failed') return '任务失败，需要查看错误原因'
+  if (isBatchJobRunning(job.status)) {
+    const progressPercent = Number(
+      job.summary?.progress_percent || job.progress?.progress_percent || 0,
+    )
+    return progressPercent > 0
+      ? `任务执行中，已完成 ${progressPercent}%`
+      : '任务执行中，等待结果回写'
+  }
+
+  const counts = taskHistoryDisplayCounts(job)
+  const issueCount =
+    counts.non_compliant + counts.data_gap + counts.uncertain + counts.technical_error
+  if (issueCount > 0) {
+    const parts = [
+      counts.non_compliant > 0 ? `不合规 ${counts.non_compliant}` : '',
+      counts.data_gap > 0 ? `数据不足 ${counts.data_gap}` : '',
+      counts.uncertain > 0 ? `待复核 ${counts.uncertain}` : '',
+      counts.technical_error > 0 ? `技术异常 ${counts.technical_error}` : '',
+    ].filter(Boolean)
+    return `发现需关注结果：${parts.join('，')}`
+  }
+
+  const issueRecords = Number(job.summary?.issue_records || job.issue_records || 0)
+  const compliantRecords = Number(job.summary?.compliant_records || job.compliant_records || 0)
+  if (issueRecords > 0) return `发现有问题病历 ${issueRecords} 份`
+  if (compliantRecords > 0 || counts.compliant > 0) return '本次未发现明确不合规'
+  return '暂无结果摘要，点击查看详情'
+}
+
+function readTaskHistoryString(value: unknown, key: string): string {
+  if (!value || typeof value !== 'object') return ''
+  const fieldValue = (value as Record<string, unknown>)[key]
+  return typeof fieldValue === 'string' ? fieldValue.trim() : ''
+}
+
+function normalizeTaskHistoryIssueStatus(item: SichuanBatchIssueItem): string {
+  return String(item.result_status || item.status || '')
+    .trim()
+    .toLowerCase()
+}
+
+function isTaskHistoryAttentionItem(item: SichuanBatchIssueItem): boolean {
+  const status = normalizeTaskHistoryIssueStatus(item)
+  if (TASK_HISTORY_ATTENTION_STATUSES.has(status)) return true
+  return item.is_compliant === false && status !== 'compliant' && status !== 'not_applicable'
+}
+
+function normalizeTaskHistoryRuleId(value: unknown): string {
+  return normalizeLuxianRuleIds([String(value || '')])[0] || ''
+}
+
+function resolveTaskHistoryRuleId(item: SichuanBatchIssueItem): string {
+  return (
+    normalizeTaskHistoryRuleId(item.qc_point_id) ||
+    normalizeTaskHistoryRuleId(item.rule_code) ||
+    normalizeTaskHistoryRuleId(item.rule_id)
+  )
+}
+
+function cleanTaskHistoryIssueSentence(value: string): string {
+  const cleaned = String(value || '')
+    .replace(/质控结论[:：]/gu, '')
+    .replace(/关键证据[:：]/gu, '')
+    .replace(/处理建议[:：]/gu, '')
+    .replace(/证据模板[:：][^。；;]*[。；;]?/gu, '')
+    .replace(/映射执行规则[:：][^。；;]*[。；;]?/gu, '')
+    .replace(/来源未标注\s*[·-]?\s*evidence[:：]?/giu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  const firstSentence = cleaned.split(/[。；;\n]/u).find((part) => part.trim()) || cleaned
+  const normalized = firstSentence.trim()
+  return normalized.length > 34 ? `${normalized.slice(0, 34)}...` : normalized
+}
+
+function resolveLuxianHistoryRuleBrief(ruleId: string, fallbackRuleName = ''): string {
+  const normalizedRuleId = normalizeTaskHistoryRuleId(ruleId)
+  if (!normalizedRuleId) return cleanTaskHistoryIssueSentence(fallbackRuleName)
+  if (LUXIAN_0609_HISTORY_BRIEF_BY_ID[normalizedRuleId]) {
+    return LUXIAN_0609_HISTORY_BRIEF_BY_ID[normalizedRuleId]
+  }
+  const catalogRule = luxianRuleFamilies.value
+    .flatMap((family) => family.rules)
+    .find((rule) => rule.ruleId === normalizedRuleId)
+  const rawName = fallbackRuleName || catalogRule?.name || normalizedRuleId
+  return cleanTaskHistoryIssueSentence(
+    rawName
+      .replace(normalizedRuleId, '')
+      .replace(/^[\s·:：-]+/u, '')
+      .trim(),
+  )
+}
+
+function resolveTaskHistoryIssueText(item: SichuanBatchIssueItem, ruleId: string): string {
+  const decisionConclusion = readTaskHistoryString(item.decision, 'conclusion')
+  const issueDescription =
+    Array.isArray(item.issues) && item.issues.length
+      ? String(item.issues[0]?.description || '').trim()
+      : ''
+  const rawText =
+    item.findings ||
+    decisionConclusion ||
+    issueDescription ||
+    readTaskHistoryString(item.review, 'conclusion') ||
+    readTaskHistoryString(item.audit, 'conclusion') ||
+    item.rule_name ||
+    ''
+  const cleaned = cleanTaskHistoryIssueSentence(rawText)
+  return cleaned || resolveLuxianHistoryRuleBrief(ruleId, item.rule_name)
+}
+
+function collectTaskHistoryIssueItems(job: SichuanBatchJob): SichuanBatchIssueItem[] {
+  const items: SichuanBatchIssueItem[] = []
+  if (Array.isArray(job.items)) {
+    items.push(...job.items)
+  }
+  for (const ruleResult of job.rule_results || []) {
+    if (Array.isArray(ruleResult.items)) {
+      items.push(...ruleResult.items)
+    }
+  }
+  return items.filter(isTaskHistoryAttentionItem)
+}
+
+function taskHistoryIssueSummaries(job: SichuanBatchJob): TaskHistoryIssueSummary[] {
+  const seen = new Set<string>()
+  const summaries: TaskHistoryIssueSummary[] = []
+  for (const item of collectTaskHistoryIssueItems(job)) {
+    const ruleId = resolveTaskHistoryRuleId(item)
+    if (!ruleId) continue
+    const text = resolveTaskHistoryIssueText(item, ruleId)
+    if (!text) continue
+    const key = `${ruleId}|${text}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    summaries.push({ key, ruleId, text })
+  }
+  if (summaries.length) return summaries
+
+  const counts = taskHistoryDisplayCounts(job)
+  const attentionCount =
+    counts.non_compliant +
+    counts.data_gap +
+    counts.uncertain +
+    counts.not_executed +
+    counts.technical_error
+  if (attentionCount <= 0) return []
+
+  const filters = job.filters || {}
+  const selectedRuleIds = normalizeLuxianRuleIds(
+    Array.isArray(filters.selected_rule_ids)
+      ? filters.selected_rule_ids.map((item) => String(item))
+      : Array.isArray(filters.scoped_customer_rule_ids)
+        ? filters.scoped_customer_rule_ids.map((item) => String(item))
+        : [],
+  )
+  return selectedRuleIds.slice(0, attentionCount).map((ruleId) => ({
+    key: ruleId,
+    ruleId,
+    text: resolveLuxianHistoryRuleBrief(ruleId),
+  }))
+}
+
+function taskHistoryIssueSummaryText(job: SichuanBatchJob): string {
+  const summaries = taskHistoryIssueSummaries(job)
+  if (!summaries.length) return ''
+  const visible = summaries.slice(0, TASK_HISTORY_ISSUE_PREVIEW_LIMIT)
+  const suffix = summaries.length > visible.length ? ` 等 ${summaries.length} 个问题点` : ''
+  return `问题点：${visible.map((item) => `${item.ruleId} ${item.text}`).join('；')}${suffix}`
+}
+
+function taskHistorySecondaryText(job: SichuanBatchJob): string {
+  const counts = taskHistoryDisplayCounts(job)
+  const totalResults = Object.values(counts).reduce((sum, value) => sum + value, 0)
+  const totalRecords = Number(
+    job.summary?.total_records || job.total_records || job.record_ids?.length || 0,
+  )
+  const ruleCount = Number(job.customer_rule_count || job.summary?.customer_rule_count || 0)
+  const parts = [
+    totalRecords > 0 ? `${totalRecords} 份病历` : '',
+    ruleCount > 0 ? `${ruleCount} 个客户质控点` : '',
+    totalResults > 0 ? `${totalResults} 条结果` : '',
+  ].filter(Boolean)
+  if (parts.length) return parts.join(' · ')
+  return taskHistoryResultSummary(job)
+}
+
+function taskHistoryResultSummary(job: SichuanBatchJob): string {
+  if (job.status === 'failed') {
+    return job.error_message || '任务失败，点击查看详情。'
+  }
+  const displayCounts = taskHistoryDisplayCounts(job)
   const statusLabels: Record<string, string> = {
     non_compliant: '不合规',
     compliant: '合规',
@@ -5072,6 +5885,13 @@ async function openBatchJob(
     message.error(result.message || '获取任务详情失败')
     return
   }
+  if (String(result.data.job_kind || '').toLowerCase() === 'parent') {
+    batchResultOpen.value = false
+    batchJobDetail.value = null
+    batchResultFocusRecord.value = null
+    await openLuxianAggregateParentJob(jobId)
+    return
+  }
   batchJobDetail.value = result.data
   if (isBatchJobRunning(result.data.status)) {
     startBatchJobPolling(jobId)
@@ -5093,6 +5913,24 @@ function stopBatchJobPolling() {
   if (batchJobPollTimer) {
     clearInterval(batchJobPollTimer)
     batchJobPollTimer = null
+  }
+}
+
+function startTaskHistoryPolling() {
+  if (taskHistoryPollTimer) return
+  taskHistoryPollTimer = setInterval(() => {
+    if (!taskHistoryOpen.value) {
+      stopTaskHistoryPolling()
+      return
+    }
+    void loadTaskHistory()
+  }, 5000)
+}
+
+function stopTaskHistoryPolling() {
+  if (taskHistoryPollTimer) {
+    clearInterval(taskHistoryPollTimer)
+    taskHistoryPollTimer = null
   }
 }
 
@@ -5181,8 +6019,7 @@ async function handleCancelBatchJob(jobId: string) {
   }
 }
 
-async function handleExportBatchReport(format: 'xlsx' | 'csv' = 'xlsx') {
-  const jobId = String(batchJobDetail.value?.id || '').trim()
+async function downloadBatchReport(jobId: string, format: 'xlsx' | 'csv' | 'html') {
   if (!jobId) {
     message.warning('当前任务详情未加载完成，暂时无法导出报告')
     return
@@ -5192,12 +6029,13 @@ async function handleExportBatchReport(format: 'xlsx' | 'csv' = 'xlsx') {
     message.error(result.message || '导出验证任务失败')
     return
   }
-  const blob = new Blob([result.data], {
-    type:
-      format === 'csv'
-        ? 'text/csv;charset=utf-8'
-        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
+  let blob: Blob
+  try {
+    blob = await normalizeBatchExportBlob(result.data, format)
+  } catch (error: any) {
+    message.error(error?.message || '导出验证任务失败')
+    return
+  }
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -5206,6 +6044,17 @@ async function handleExportBatchReport(format: 'xlsx' | 'csv' = 'xlsx') {
   link.click()
   document.body.removeChild(link)
   window.URL.revokeObjectURL(url)
+  message.success(format === 'html' ? 'HTML 质控明细已开始下载' : '质控报告已开始下载')
+}
+
+async function handleExportBatchReport(format: 'xlsx' | 'csv' | 'html' = 'html') {
+  const jobId = String(batchJobDetail.value?.id || '').trim()
+  await downloadBatchReport(jobId, format)
+}
+
+async function handleExportTaskHistoryJob(job: SichuanBatchJob) {
+  const jobId = String(job?.id || '').trim()
+  await downloadBatchReport(jobId, 'html')
 }
 
 function getBatchJobStatusText(status?: string): string {
@@ -5277,6 +6126,8 @@ onUnmounted(() => {
     customerSampleGuidePositionTimer = null
   }
   stopBatchJobPolling()
+  stopTaskHistoryPolling()
+  stopLuxianAggregatePolling()
   stopSyncJobPolling()
 })
 </script>
@@ -5478,18 +6329,51 @@ onUnmounted(() => {
 .customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn) {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  color: rgba(29, 29, 31, 0.72);
+  gap: 8px;
+  height: 40px;
+  padding: 0 13px 0 11px;
+  border-color: rgba(0, 102, 204, 0.26);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(234, 242, 255, 0.92) 100%);
+  color: #0057b8;
+  font-weight: 700;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 5px 12px rgba(0, 102, 204, 0.1);
+  transition:
+    border-color 220ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 220ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 220ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn:hover),
 .customer-sample-toolbar-actions :deep(.customer-sample-task-history-action.ant-btn:focus) {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(234, 242, 255, 0.72);
+  border-color: rgba(0, 102, 204, 0.42);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(223, 236, 255, 0.96) 100%);
+  color: #0066cc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 18px rgba(0, 102, 204, 0.15);
+  transform: translateY(-1px);
+}
+
+.customer-sample-task-history-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.1);
   color: #0066cc;
 }
 
-.customer-sample-toolbar-actions :deep(.customer-sample-task-history-action svg) {
+.customer-sample-task-history-label {
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.customer-sample-task-history-icon svg {
   flex: 0 0 auto;
   stroke-width: 2.2;
 }
@@ -5501,8 +6385,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0, 102, 204, 0.1);
-  color: #0066cc;
+  background: #0066cc;
+  color: #fff;
   font-size: 11px;
   font-weight: 750;
   padding: 0 5px;
@@ -5687,11 +6571,11 @@ onUnmounted(() => {
 }
 
 .customer-sample-selection-run-bar {
-  position: absolute;
-  right: 24px;
-  bottom: 18px;
-  left: 24px;
-  z-index: 32;
+  position: fixed;
+  right: max(24px, calc((100vw - 1440px) / 2 + 24px));
+  bottom: 22px;
+  left: max(24px, calc((100vw - 1440px) / 2 + 24px));
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5703,7 +6587,7 @@ onUnmounted(() => {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow:
-    0 10px 26px rgba(15, 23, 42, 0.12),
+    0 14px 34px rgba(15, 23, 42, 0.14),
     0 1px 2px rgba(15, 23, 42, 0.06);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
@@ -5755,6 +6639,11 @@ onUnmounted(() => {
   min-height: 100%;
   flex-direction: column;
   gap: 14px;
+}
+
+.customer-sample-task-history-drawer :deep(.ant-drawer-body),
+.customer-sample-luxian-aggregate-drawer :deep(.ant-drawer-body) {
+  overflow-x: hidden;
 }
 
 .customer-sample-task-history-head {
@@ -5864,17 +6753,282 @@ onUnmounted(() => {
   padding: 3px 8px;
 }
 
-.customer-sample-task-history-summary {
-  margin-top: 8px;
-  color: rgba(29, 29, 31, 0.68);
+.customer-sample-task-history-overview {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-radius: 12px;
+  background: rgba(0, 102, 204, 0.045);
+  padding: 10px 12px;
+}
+
+.customer-sample-task-history-overview strong {
+  color: #1d1d1f;
   font-size: 13px;
+  font-weight: 750;
   line-height: 20px;
+}
+
+.customer-sample-task-history-overview span {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.customer-sample-task-history-overview .customer-sample-task-history-issue-line {
+  color: rgba(29, 29, 31, 0.76);
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.customer-sample-task-history-status-grid {
+  margin-top: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.customer-sample-task-history-status-grid span {
+  display: inline-flex;
+  min-width: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(250, 250, 252, 0.9);
+  padding: 6px 8px;
+}
+
+.customer-sample-task-history-status-grid em {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.customer-sample-task-history-status-grid strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 16px;
+}
+
+.customer-sample-task-history-status-grid .is-danger {
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(254, 242, 242, 0.86);
+}
+
+.customer-sample-task-history-status-grid .is-danger strong {
+  color: #dc2626;
+}
+
+.customer-sample-task-history-status-grid .is-warning {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.9);
+}
+
+.customer-sample-task-history-status-grid .is-warning strong {
+  color: #b45309;
+}
+
+.customer-sample-task-history-status-grid .is-review {
+  border-color: rgba(124, 58, 237, 0.16);
+  background: rgba(245, 243, 255, 0.86);
+}
+
+.customer-sample-task-history-status-grid .is-review strong {
+  color: #6d28d9;
+}
+
+.customer-sample-task-history-status-grid .is-ok {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(234, 242, 255, 0.86);
+}
+
+.customer-sample-task-history-status-grid .is-ok strong {
+  color: #0066cc;
+}
+
+.customer-sample-task-history-status-grid .is-muted,
+.customer-sample-task-history-status-grid .is-neutral {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(250, 250, 252, 0.92);
 }
 
 .customer-sample-task-history-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
+  gap: 8px;
+}
+
+.customer-sample-luxian-aggregate {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.customer-sample-luxian-aggregate-head,
+.customer-sample-luxian-aggregate-summary,
+.customer-sample-luxian-aggregate-item {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.customer-sample-luxian-aggregate-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.customer-sample-luxian-aggregate-head strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.customer-sample-luxian-aggregate-head p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.customer-sample-luxian-aggregate-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.customer-sample-luxian-aggregate-summary div {
+  border-radius: 12px;
+  background: rgba(0, 102, 204, 0.06);
+  padding: 10px 12px;
+}
+
+.customer-sample-luxian-aggregate-summary span {
+  display: block;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.customer-sample-luxian-aggregate-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.customer-sample-luxian-aggregate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.customer-sample-luxian-aggregate-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.customer-sample-luxian-aggregate-main {
+  min-width: 0;
+}
+
+.customer-sample-luxian-aggregate-title,
+.customer-sample-luxian-aggregate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-sample-luxian-aggregate-title strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.customer-sample-luxian-aggregate-title em {
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 2px 8px;
+}
+
+.customer-sample-luxian-aggregate-meta {
+  margin-top: 8px;
+}
+
+.customer-sample-luxian-aggregate-meta span {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 3px 8px;
+}
+
+.customer-sample-luxian-aggregate-result,
+.customer-sample-luxian-aggregate-error {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.customer-sample-luxian-aggregate-result {
+  color: rgba(29, 29, 31, 0.68);
+}
+
+.customer-sample-luxian-aggregate-error {
+  color: #c2410c;
+}
+
+.customer-sample-luxian-aggregate-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .customer-sample-task-history-head,
+  .customer-sample-task-history-item,
+  .customer-sample-luxian-aggregate-head,
+  .customer-sample-luxian-aggregate-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .customer-sample-task-history-actions,
+  .customer-sample-luxian-aggregate-actions {
+    width: 100%;
+  }
+
+  .customer-sample-task-history-actions :deep(.ant-btn),
+  .customer-sample-luxian-aggregate-actions :deep(.ant-btn) {
+    width: 100%;
+  }
+
+  .customer-sample-luxian-aggregate-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 .customer-sample-luxian-scope {

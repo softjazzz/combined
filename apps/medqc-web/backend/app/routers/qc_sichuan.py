@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from datetime import datetime, timezone
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
@@ -286,6 +286,30 @@ def _is_workspace_batch_job(job: Optional[Dict[str, Any]]) -> bool:
     if not isinstance(job, dict):
         return False
     return is_workspace_batch_draft_id(job.get("draft_id"))
+
+
+def _workspace_batch_response_item(job: Dict[str, Any]) -> Dict[str, Any]:
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    selected_rule_ids = list(filters.get("selected_rule_ids") or [])
+    rule_ids = list(filters.get("rule_ids") or [])
+    return {
+        **job,
+        "execution_mode": "batch",
+        "rule_count": int(summary.get("rule_count") or filters.get("rule_count") or job.get("rule_count") or 0),
+        "customer_rule_count": int(filters.get("customer_rule_count") or job.get("customer_rule_count") or 0),
+        "execution_rule_count": int(filters.get("execution_rule_count") or job.get("execution_rule_count") or 0),
+        "draft_ids": selected_rule_ids or rule_ids,
+        "rule_set_key": str(filters.get("rule_set_key") or ""),
+        "rule_set_name": str(filters.get("rule_set_name") or ""),
+        "rule_set_version": str(filters.get("rule_set_version") or ""),
+        "execution_strategy": str((summary.get("execution_strategy") or filters.get("execution_strategy")) or ""),
+        "quality_profile": str((summary.get("quality_profile") or filters.get("quality_profile")) or ""),
+        "bucket_strategy": str((summary.get("bucket_strategy") or filters.get("bucket_strategy")) or ""),
+        "batch_output_mode": str((summary.get("batch_output_mode") or filters.get("batch_output_mode")) or ""),
+        "max_refine_candidates": int((summary.get("max_refine_candidates") or filters.get("max_refine_candidates") or 0) or 0),
+        "refine_summary": summary.get("refine_summary"),
+    }
 
 
 def _normalize_quality_profile(value: Any) -> str:
@@ -1146,6 +1170,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
     if not job:
+        return
+    if str(job.get("job_kind") or "").strip().lower() == "parent":
+        logger.info("跳过泸县0609父任务执行，仅执行其规则族子任务: job_id=%s", job_id)
         return
 
     try:
@@ -2734,7 +2761,7 @@ async def list_workspace_batch_jobs(
 
     list_kwargs = {
         "created_by": _current_user_id(current_user),
-        "draft_id": "sichuan-rule-library",
+        "draft_id": None,
         "status": status,
         "scope": scope,
         "executor_type": executor_filter,
@@ -2754,24 +2781,7 @@ async def list_workspace_batch_jobs(
             **list_kwargs,
             q=q,
         )
-    items = [
-        {
-            **item,
-            "execution_mode": "batch",
-            "rule_count": int((item.get("summary") or {}).get("rule_count") or 0),
-            "draft_ids": list(((item.get("filters") or {}).get("rule_ids") or [])),
-            "rule_set_key": str(((item.get("filters") or {}).get("rule_set_key")) or ""),
-            "rule_set_name": str(((item.get("filters") or {}).get("rule_set_name")) or ""),
-            "rule_set_version": str(((item.get("filters") or {}).get("rule_set_version")) or ""),
-            "execution_strategy": str(((item.get("summary") or {}).get("execution_strategy") or (item.get("filters") or {}).get("execution_strategy")) or ""),
-            "quality_profile": str(((item.get("summary") or {}).get("quality_profile") or (item.get("filters") or {}).get("quality_profile")) or ""),
-            "bucket_strategy": str(((item.get("summary") or {}).get("bucket_strategy") or (item.get("filters") or {}).get("bucket_strategy")) or ""),
-            "batch_output_mode": str(((item.get("summary") or {}).get("batch_output_mode") or (item.get("filters") or {}).get("batch_output_mode")) or ""),
-            "max_refine_candidates": int(((item.get("summary") or {}).get("max_refine_candidates") or (item.get("filters") or {}).get("max_refine_candidates") or 0) or 0),
-            "refine_summary": (item.get("summary") or {}).get("refine_summary"),
-        }
-        for item in result.items
-    ]
+    items = [_workspace_batch_response_item(item) for item in result.items if _is_workspace_batch_job(item)]
     return success_response(
         data={
             "items": items,
@@ -2795,21 +2805,7 @@ async def get_workspace_batch_job(
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
-        data={
-            **job,
-            "execution_mode": "batch",
-            "rule_count": int((job.get("summary") or {}).get("rule_count") or 0),
-            "draft_ids": list(((job.get("filters") or {}).get("rule_ids") or [])),
-            "rule_set_key": str(((job.get("filters") or {}).get("rule_set_key")) or ""),
-            "rule_set_name": str(((job.get("filters") or {}).get("rule_set_name")) or ""),
-            "rule_set_version": str(((job.get("filters") or {}).get("rule_set_version")) or ""),
-            "execution_strategy": str(((job.get("summary") or {}).get("execution_strategy") or (job.get("filters") or {}).get("execution_strategy")) or ""),
-            "quality_profile": str(((job.get("summary") or {}).get("quality_profile") or (job.get("filters") or {}).get("quality_profile")) or ""),
-            "bucket_strategy": str(((job.get("summary") or {}).get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy")) or ""),
-            "batch_output_mode": str(((job.get("summary") or {}).get("batch_output_mode") or (job.get("filters") or {}).get("batch_output_mode")) or ""),
-            "max_refine_candidates": int(((job.get("summary") or {}).get("max_refine_candidates") or (job.get("filters") or {}).get("max_refine_candidates") or 0) or 0),
-            "refine_summary": (job.get("summary") or {}).get("refine_summary"),
-        },
+        data=_workspace_batch_response_item(job),
         message="获取四川规则批量任务详情成功",
         trace_id=get_trace_id(request),
     )
@@ -2842,11 +2838,24 @@ async def retry_workspace_batch_job(
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    submit_detached_task(
-        "sichuan_workspace_batch_job_retry",
-        _run_sichuan_workspace_batch_job,
-        job_id,
-    )
+    if str(job.get("job_kind") or "").strip().lower() == "parent":
+        child_jobs = list(job.get("child_jobs") or job.get("children") or [])
+        if not child_jobs:
+            child_jobs = workspace.get_child_batch_jobs(parent_job_id=job_id, created_by=_current_user_id(current_user))
+        for child_job in child_jobs:
+            child_job_id = str(child_job.get("id") or "").strip()
+            if child_job_id:
+                submit_detached_task(
+                    "sichuan_workspace_child_batch_job_retry",
+                    _run_sichuan_workspace_batch_job,
+                    child_job_id,
+                )
+    else:
+        submit_detached_task(
+            "sichuan_workspace_batch_job_retry",
+            _run_sichuan_workspace_batch_job,
+            job_id,
+        )
     return success_response(
         data=job,
         message="批量任务已重新入队",
@@ -2885,7 +2894,16 @@ async def export_workspace_batch_job(
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    if str(format or "").lower() == "csv":
+    normalized_format = str(format or "").lower()
+    if normalized_format == "html":
+        content = workspace.export_batch_job_html(job=job)
+        filename = f"sichuan_rules_{job_id}_{timestamp}.html"
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    if normalized_format == "csv":
         content = workspace.export_batch_job_csv(job=job)
         filename = f"sichuan_rules_{job_id}_{timestamp}.csv"
         return StreamingResponse(

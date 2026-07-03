@@ -77,12 +77,23 @@ class _InMemorySichuanWorkspaceService:
         filters: Dict[str, Any],
         record_ids: List[str],
         total_records: int,
+        draft_ids: Optional[List[str]] = None,
+        execution_mode: str = "single",
+        run_mode: str = "serial",
+        rule_count: int = 1,
+        job_kind: str = "leaf",
+        parent_job_id: Optional[str] = None,
+        child_job_ids: Optional[List[str]] = None,
+        child_summary: Optional[Dict[str, Any]] = None,
+        family_key: Optional[str] = None,
+        family_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         job_id = self._next_job_id()
         now = _now_iso()
         job = {
             "id": job_id,
             "draft_id": str(draft.get("id") or ""),
+            "draft_ids": list(draft_ids or [str(draft.get("id") or "")]),
             "rule_code": str(draft.get("rule_code") or ""),
             "rule_name": str(draft.get("name") or ""),
             "scene": str(draft.get("scene") or "final"),
@@ -101,6 +112,15 @@ class _InMemorySichuanWorkspaceService:
             "finished_at": None,
             "updated_at": now,
             "total_records": int(total_records or 0),
+            "execution_mode": execution_mode,
+            "run_mode": run_mode,
+            "rule_count": int(rule_count or 0),
+            "job_kind": job_kind,
+            "parent_job_id": parent_job_id,
+            "child_job_ids": list(child_job_ids or []),
+            "child_summary": child_summary or {},
+            "family_key": family_key,
+            "family_name": family_name,
             "success_count": 0,
             "failed_count": 0,
             "issue_records": 0,
@@ -237,6 +257,9 @@ class _InMemorySichuanWorkspaceService:
         out.write(f"{job.get('id')},{job.get('status')}\n")
         return out
 
+    def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
+        return f"<!doctype html><html><body><h1>质控明细</h1><p>{job.get('id')}</p></body></html>"
+
     def export_batch_job_workbook(self, *, job: Dict[str, Any]) -> BytesIO:
         return BytesIO(b"PK\x03\x04fake-xlsx")
 
@@ -253,7 +276,7 @@ def sichuan_workspace_stub(client, monkeypatch):
     client.app.dependency_overrides[get_current_user] = lambda: user
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
-    async def _fake_run(job_id: str) -> None:
+    def _fake_complete(job_id: str) -> None:
         current = workspace.get_batch_job_for_processing(job_id=job_id)
         if not current:
             return
@@ -310,7 +333,16 @@ def sichuan_workspace_stub(client, monkeypatch):
         }
         workspace.complete_batch_job(job_id=job_id, summary=summary, items=items, failed_records=[])
 
+    async def _fake_run(job_id: str) -> None:
+        _fake_complete(job_id)
+
     monkeypatch.setattr(qc_sichuan, "_run_sichuan_workspace_batch_job", _fake_run)
+
+    def _run_detached_immediately(_task_name: str, task_func, *args, **kwargs):
+        if args:
+            _fake_complete(str(args[0]))
+
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", _run_detached_immediately)
 
     yield workspace
     client.app.dependency_overrides.pop(get_current_user, None)
@@ -356,6 +388,12 @@ def test_sichuan_workspace_batch_create_poll_debug_export_flow(client, sichuan_w
     assert export_resp.status_code == 200
     assert "text/csv" in str(export_resp.headers.get("content-type") or "")
     assert "任务ID" in export_resp.text
+
+    html_export_resp = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{job_id}/export?format=html")
+    assert html_export_resp.status_code == 200
+    assert "text/html" in str(html_export_resp.headers.get("content-type") or "")
+    assert "sichuan_rules_" in str(html_export_resp.headers.get("content-disposition") or "")
+    assert "质控明细" in html_export_resp.text
 
 
 def test_sichuan_workspace_batch_cancel_and_retry_flow(client, sichuan_workspace_stub):

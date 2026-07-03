@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    text,
     update,
 )
 from sqlalchemy.orm import Session
@@ -240,10 +242,45 @@ def _batch_jobs_table() -> Table:
         sa.Column("compliant_records", sa.Integer, nullable=False, default=0),
         sa.Column("total_tokens", sa.Integer, nullable=False, default=0),
         sa.Column("total_processing_time", sa.Float, nullable=False, default=0.0),
+        sa.Column("job_kind", sa.String(20), nullable=False, default="leaf"),
+        sa.Column("parent_job_id", sa.String(36), index=True),
+        sa.Column("child_job_ids_json", sa.Text),
+        sa.Column("child_summary_json", sa.Text),
+        sa.Column("family_key", sa.String(64)),
+        sa.Column("family_name", sa.String(64)),
         schema=schema,
     )
     metadata.create_all(bind=engine, checkfirst=True)
+    _sync_batch_job_parent_columns(schema=schema)
     return table
+
+
+def _sync_batch_job_parent_columns(*, schema: Optional[str]) -> None:
+    if engine is None:
+        return
+    table_prefix = f"{schema}." if schema else ""
+    column_sql = {
+        "job_kind": "VARCHAR(20) DEFAULT 'leaf'",
+        "parent_job_id": "VARCHAR(36)",
+        "child_job_ids_json": "TEXT",
+        "child_summary_json": "TEXT",
+        "family_key": "VARCHAR(64)",
+        "family_name": "VARCHAR(64)",
+    }
+    with engine.begin() as conn:
+        for column_name, column_type in column_sql.items():
+            conn.execute(
+                text(
+                    f"ALTER TABLE {table_prefix}custom_qc_batch_jobs "
+                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_type}"
+                )
+            )
+        conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS idx_custom_qc_batch_jobs_parent_job_id "
+                f"ON {table_prefix}custom_qc_batch_jobs(parent_job_id)"
+            )
+        )
 
 
 @lru_cache(maxsize=8)
@@ -308,6 +345,8 @@ def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
     summary = _safe_json_loads(row.get("summary_json"), None)
     items = _safe_json_loads(row.get("items_json"), [])
     failed_records = _safe_json_loads(row.get("failed_records_json"), [])
+    child_job_ids = _safe_json_loads(row.get("child_job_ids_json"), [])
+    child_summary = _safe_json_loads(row.get("child_summary_json"), {})
     filters_dict = filters if isinstance(filters, dict) else {}
     summary_dict = summary if isinstance(summary, dict) else None
     draft_ids = _normalize_string_list(filters_dict.get("draft_ids"))
@@ -377,6 +416,12 @@ def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
         "compliant_records": int(row.get("compliant_records") or 0),
         "total_tokens": int(row.get("total_tokens") or 0),
         "total_processing_time": float(row.get("total_processing_time") or 0.0),
+        "job_kind": _safe_text(row.get("job_kind"), "leaf") or "leaf",
+        "parent_job_id": _safe_text(row.get("parent_job_id")),
+        "child_job_ids": child_job_ids if isinstance(child_job_ids, list) else [],
+        "child_summary": child_summary if isinstance(child_summary, dict) else {},
+        "family_key": _safe_text(row.get("family_key")),
+        "family_name": _safe_text(row.get("family_name")),
     }
 
 
@@ -444,6 +489,14 @@ def _map_item_status_label(status: Any, is_compliant: Any) -> str:
     key = _safe_text(status).lower()
     if key == "non_compliant":
         return "不合规"
+    if key == "data_gap":
+        return "数据不足"
+    if key == "not_applicable":
+        return "不适用"
+    if key == "not_executed":
+        return "未执行"
+    if key == "technical_error":
+        return "技术异常"
     if key == "uncertain":
         return "待复核"
     if key == "compliant":
@@ -482,6 +535,199 @@ def _build_filter_text(filters: Dict[str, Any]) -> str:
     return "；".join(parts)
 
 
+_HTML_EXPORT_SENSITIVE_TOKENS = {
+    "prompt",
+    "raw_response",
+    "embedding",
+    "medical_text",
+    "record_content",
+    "documents",
+    "bundle",
+    "llm_raw_output",
+}
+
+_HTML_EXPORT_INTERNAL_LABELS = (
+    "LLM 语义规则",
+    "LLM语义规则",
+    "证据模板",
+    "映射执行规则",
+    "来源未标注",
+    "raw_response",
+    "prompt",
+    "embedding",
+    "medical_text",
+    "record_content",
+    "documents",
+    "bundle",
+    "llm_raw_output",
+)
+
+
+def _html_escape(value: Any) -> str:
+    return html.escape(_safe_text(value), quote=True)
+
+
+def _truncate_export_text(value: Any, limit: int = 360) -> str:
+    text_value = re.sub(r"\s+", " ", _safe_text(value)).strip()
+    if len(text_value) <= limit:
+        return text_value
+    return text_value[:limit].rstrip() + "..."
+
+
+def _sanitize_export_text(value: Any, limit: int = 420) -> str:
+    text_value = _safe_text(value)
+    if not text_value:
+        return ""
+    # 旧证据字符串经常把内部模板、规则映射和可读证据拼在一起；导出时只保留客户可理解的证据段。
+    for marker in ("执行证据：", "关键证据：", "证据："):
+        if marker in text_value:
+            text_value = text_value.split(marker, 1)[1]
+            break
+    text_value = text_value.replace("来源未标注 · evidence：", "")
+    parts = re.split(r"[；;\n]+", text_value)
+    kept: List[str] = []
+    for part in parts:
+        normalized = _safe_text(part)
+        if not normalized:
+            continue
+        if any(label in normalized for label in _HTML_EXPORT_INTERNAL_LABELS):
+            continue
+        kept.append(normalized)
+    if kept:
+        text_value = "；".join(kept)
+    for token in _HTML_EXPORT_SENSITIVE_TOKENS:
+        text_value = re.sub(re.escape(token), "", text_value, flags=re.IGNORECASE)
+    return _truncate_export_text(text_value, limit=limit)
+
+
+def _extract_export_customer_evidence_text(value: Any) -> str:
+    raw = _safe_text(value)
+    if not raw:
+        return ""
+    for marker in ("执行证据：", "关键证据：", "证据："):
+        if marker in raw:
+            raw = raw.split(marker, 1)[1]
+            break
+    return _sanitize_export_text(raw, limit=720)
+
+
+def _normalize_export_evidence_label(value: str) -> str:
+    label = _safe_text(value)
+    label_map = {
+        "authored_at": "记录时间",
+        "record_time": "记录时间",
+        "submit_time": "提交时间",
+        "submitted_at": "提交时间",
+        "admission_time": "入院时间",
+        "discharge_time": "出院时间",
+        "deadline": "截止时间",
+        "elapsed": "间隔",
+        "delta": "差值",
+    }
+    return label_map.get(label, label)
+
+
+def _parse_export_evidence_parts(value: Any, *, limit: int = 8) -> List[Dict[str, str]]:
+    text_value = _extract_export_customer_evidence_text(value)
+    if not text_value:
+        return []
+    parts: List[Dict[str, str]] = []
+    for raw_part in re.split(r"[；;\n]+", text_value):
+        raw_part = _safe_text(raw_part)
+        if len(raw_part) < 4 or "：" not in raw_part:
+            continue
+        segments = [segment.strip() for segment in raw_part.split("：") if segment.strip()]
+        if len(segments) < 2:
+            continue
+        first = _normalize_export_evidence_label(segments[0])
+        second_is_field = len(segments) >= 3 and re.match(r"^[a-z_]+$", segments[1] or "", flags=re.IGNORECASE)
+        label = f"{first} · {_normalize_export_evidence_label(segments[1])}" if second_is_field else first
+        value_text = "：".join(segments[2:] if second_is_field else segments[1:]).strip()
+        if not label or not value_text:
+            continue
+        if any(internal in label for internal in _HTML_EXPORT_INTERNAL_LABELS):
+            continue
+        parts.append({"label": label, "value": _truncate_export_text(value_text, 180)})
+        if len(parts) >= limit:
+            break
+    return parts
+
+
+def _export_item_status_key(item: Dict[str, Any]) -> str:
+    status_key = _safe_text((item or {}).get("status")).lower()
+    is_compliant = (item or {}).get("is_compliant")
+    if status_key:
+        if status_key == "failed":
+            return "technical_error"
+        return status_key
+    if is_compliant is True:
+        return "compliant"
+    if is_compliant is False:
+        return "non_compliant"
+    return "uncertain"
+
+
+def _status_tone_class(status_key: str) -> str:
+    if status_key == "non_compliant":
+        return "danger"
+    if status_key in {"data_gap", "uncertain", "technical_error", "not_executed"}:
+        return "warning"
+    if status_key == "compliant":
+        return "success"
+    if status_key == "not_applicable":
+        return "neutral"
+    return "muted"
+
+
+def _extract_structured_evidence(item: Dict[str, Any]) -> List[Dict[str, str]]:
+    evidence_candidates: List[Any] = []
+    for key in ("evidence_items", "evidence_chain", "evidence_chains", "evidences", "evidence_details"):
+        raw = item.get(key)
+        if isinstance(raw, list):
+            evidence_candidates.extend(raw)
+    rows: List[Dict[str, str]] = []
+    for raw in evidence_candidates:
+        if not isinstance(raw, dict):
+            continue
+        quote = _sanitize_export_text(raw.get("quote") or raw.get("text") or raw.get("snippet") or raw.get("value"), 220)
+        source = _safe_text(
+            raw.get("source_document")
+            or raw.get("source_table")
+            or raw.get("document_type")
+            or raw.get("source")
+            or raw.get("source_field")
+        )
+        field = _safe_text(raw.get("source_field") or raw.get("field"))
+        threshold = _safe_text(raw.get("threshold"))
+        actual = _safe_text(raw.get("actual_value") or raw.get("actual"))
+        delta = _safe_text(raw.get("delta") or raw.get("difference"))
+        if not any([quote, source, field, threshold, actual, delta]):
+            continue
+        rows.append(
+            {
+                "source": source,
+                "field": field,
+                "quote": quote,
+                "threshold": threshold,
+                "actual": actual,
+                "delta": delta,
+            }
+        )
+    return rows[:4]
+
+
+def _format_rule_code_list(values: Any, limit: int = 8) -> str:
+    if not isinstance(values, list):
+        return "-"
+    cleaned = [_safe_text(item) for item in values if _safe_text(item)]
+    if not cleaned:
+        return "-"
+    preview = "、".join(cleaned[:limit])
+    if len(cleaned) > limit:
+        preview += f" +{len(cleaned) - limit}"
+    return preview
+
+
 @dataclass
 class WorkspaceListResult:
     items: List[Dict[str, Any]]
@@ -504,6 +750,107 @@ class CustomQCWorkspaceService:
             raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
         self._draft_table = _drafts_table()
         self._batch_job_table = _batch_jobs_table()
+
+    def _aggregate_parent_job(self, session: Session, parent_job: Dict[str, Any]) -> Dict[str, Any]:
+        if str(parent_job.get("job_kind") or "").strip().lower() != "parent":
+            return parent_job
+        child_job_ids = [
+            str(item or "").strip()
+            for item in list(parent_job.get("child_job_ids") or [])
+            if str(item or "").strip()
+        ]
+        if child_job_ids:
+            child_rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .where(self._batch_job_table.c.id.in_(child_job_ids))
+                    .order_by(asc(self._batch_job_table.c.created_at))
+                )
+                .mappings()
+                .all()
+            )
+        else:
+            child_rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .where(self._batch_job_table.c.parent_job_id == parent_job.get("id"))
+                    .order_by(asc(self._batch_job_table.c.created_at))
+                )
+                .mappings()
+                .all()
+            )
+        child_jobs = [_row_to_batch_job(dict(row)) for row in child_rows]
+        if not child_jobs:
+            return parent_job
+
+        statuses = [str(item.get("status") or "queued").strip().lower() for item in child_jobs]
+        completed = sum(1 for item in statuses if item == "completed")
+        failed = sum(1 for item in statuses if item == "failed")
+        canceled = sum(1 for item in statuses if item == "canceled")
+        running = sum(1 for item in statuses if item == "running")
+        queued = sum(1 for item in statuses if item == "queued")
+        if running or queued:
+            aggregate_status = "running" if running else "queued"
+        elif failed:
+            aggregate_status = "failed"
+        elif canceled == len(child_jobs):
+            aggregate_status = "canceled"
+        else:
+            aggregate_status = "completed"
+
+        status_breakdown: Dict[str, int] = {}
+        total_tokens = 0
+        total_processing_time = 0.0
+        issue_records = 0
+        compliant_records = 0
+        failed_count = 0
+        success_count = 0
+        for child in child_jobs:
+            child_summary = child.get("summary") or {}
+            for key, value in dict(child_summary.get("status_breakdown") or {}).items():
+                status_breakdown[str(key)] = status_breakdown.get(str(key), 0) + int(value or 0)
+            total_tokens += int(child.get("total_tokens") or child_summary.get("total_tokens") or 0)
+            total_processing_time += float(child.get("total_processing_time") or child_summary.get("total_processing_time") or 0.0)
+            issue_records += int(child.get("issue_records") or child_summary.get("issue_records") or 0)
+            compliant_records += int(child.get("compliant_records") or child_summary.get("compliant_records") or 0)
+            failed_count += int(child.get("failed_count") or child_summary.get("failed_count") or 0)
+            success_count += int(child.get("success_count") or child_summary.get("success_count") or 0)
+
+        parent_summary = dict(parent_job.get("summary") or {})
+        parent_summary.update(
+            {
+                "child_job_count": len(child_jobs),
+                "completed_child_count": completed,
+                "failed_child_count": failed,
+                "canceled_child_count": canceled,
+                "running_child_count": running,
+                "queued_child_count": queued,
+                "status_breakdown": status_breakdown,
+                "progress": {
+                    **(parent_summary.get("progress") if isinstance(parent_summary.get("progress"), dict) else {}),
+                    "step_key": aggregate_status,
+                    "processed_records": completed + failed + canceled,
+                    "total_records": len(child_jobs),
+                    "completed_children": completed,
+                    "total_children": len(child_jobs),
+                },
+            }
+        )
+        return {
+            **parent_job,
+            "status": aggregate_status,
+            "summary": parent_summary,
+            "progress": parent_summary.get("progress") or {},
+            "children": child_jobs,
+            "child_jobs": child_jobs,
+            "cancellable": any(status in {"queued", "running"} for status in statuses),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "issue_records": issue_records,
+            "compliant_records": compliant_records,
+            "total_tokens": total_tokens,
+            "total_processing_time": total_processing_time,
+        }
 
     def _next_rule_code(self, session: Session) -> str:
         max_num = 0
@@ -1187,6 +1534,12 @@ class CustomQCWorkspaceService:
         execution_mode: str = "single",
         run_mode: str = "serial",
         rule_count: int = 1,
+        job_kind: str = "leaf",
+        parent_job_id: Optional[str] = None,
+        child_job_ids: Optional[Sequence[str]] = None,
+        child_summary: Optional[Dict[str, Any]] = None,
+        family_key: Optional[str] = None,
+        family_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         session = _session()
         try:
@@ -1244,10 +1597,46 @@ class CustomQCWorkspaceService:
                 "compliant_records": 0,
                 "total_tokens": 0,
                 "total_processing_time": 0.0,
+                "job_kind": _safe_text(job_kind, "leaf") or "leaf",
+                "parent_job_id": _safe_text(parent_job_id) or None,
+                "child_job_ids_json": _safe_json_dumps(list(child_job_ids or [])),
+                "child_summary_json": _safe_json_dumps(child_summary or {}),
+                "family_key": _safe_text(family_key) or None,
+                "family_name": _safe_text(family_name) or None,
             }
             session.execute(self._batch_job_table.insert().values(**row_payload))
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by) or _row_to_batch_job(row_payload)
+        finally:
+            session.close()
+
+    def update_parent_child_jobs(
+        self,
+        *,
+        parent_job_id: str,
+        created_by: str,
+        child_job_ids: Sequence[str],
+        child_summary: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(
+                    and_(
+                        self._batch_job_table.c.id == parent_job_id,
+                        self._batch_job_table.c.created_by == created_by,
+                    )
+                )
+                .values(
+                    child_job_ids_json=_safe_json_dumps(list(child_job_ids or [])),
+                    child_summary_json=_safe_json_dumps(child_summary or {}),
+                    updated_at=now,
+                )
+            )
+            session.commit()
+            return self.get_batch_job(job_id=parent_job_id, created_by=created_by)
         finally:
             session.close()
 
@@ -1259,7 +1648,9 @@ class CustomQCWorkspaceService:
                     and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
                 )
             ).mappings().first()
-            return _row_to_batch_job(dict(row)) if row else None
+            if not row:
+                return None
+            return self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
         finally:
             session.close()
 
@@ -1269,7 +1660,9 @@ class CustomQCWorkspaceService:
             row = session.execute(
                 select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
             ).mappings().first()
-            return _row_to_batch_job(dict(row)) if row else None
+            if not row:
+                return None
+            return self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
         finally:
             session.close()
 
@@ -1285,12 +1678,20 @@ class CustomQCWorkspaceService:
         cache_hit: Optional[bool] = None,
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
+        include_children: bool = False,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
         session = _session()
         try:
             clauses = [self._batch_job_table.c.created_by == created_by]
+            if not include_children:
+                clauses.append(
+                    or_(
+                        self._batch_job_table.c.parent_job_id.is_(None),
+                        self._batch_job_table.c.parent_job_id == "",
+                    )
+                )
             if draft_id:
                 clauses.append(self._batch_job_table.c.draft_id == draft_id)
             status_value = _safe_text(status).lower()
@@ -1335,7 +1736,7 @@ class CustomQCWorkspaceService:
                     .mappings()
                     .all()
                 )
-                items = [_row_to_batch_job(dict(row)) for row in rows]
+                items = [self._aggregate_parent_job(session, _row_to_batch_job(dict(row))) for row in rows]
                 return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
             rows = (
@@ -1347,7 +1748,7 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
-            all_items = [_row_to_batch_job(dict(row)) for row in rows]
+            all_items = [self._aggregate_parent_job(session, _row_to_batch_job(dict(row))) for row in rows]
 
             filtered_items = all_items
             if executor_value in {"program", "llm"}:
@@ -1425,6 +1826,31 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
+            if str(current.get("job_kind") or "").strip().lower() == "parent":
+                child_ids = [
+                    str(item or "").strip()
+                    for item in list(current.get("child_job_ids") or [])
+                    if str(item or "").strip()
+                ]
+                child_where = self._batch_job_table.c.parent_job_id == job_id
+                if child_ids:
+                    child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
+                session.execute(
+                    update(self._batch_job_table)
+                    .where(
+                        and_(
+                            child_where,
+                            self._batch_job_table.c.created_by == created_by,
+                            self._batch_job_table.c.status.in_(["queued", "running"]),
+                        )
+                    )
+                    .values(
+                        status="canceled",
+                        error_message="parent_cancelled: 总任务已取消",
+                        finished_at=now,
+                        updated_at=now,
+                    )
+                )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by)
         finally:
@@ -1444,42 +1870,81 @@ class CustomQCWorkspaceService:
             rule_count = int(current.get("rule_count") or 1)
             total_records = int(current.get("total_records") or 0)
             now = _now_utc()
+            reset_values = dict(
+                status="queued",
+                summary_json=_safe_json_dumps(
+                    {
+                        "rule_count": max(1, rule_count),
+                        "progress": {
+                            "step_key": "queued",
+                            "rule_index": 0,
+                            "rule_count": max(1, rule_count),
+                            "processed_records": 0,
+                            "total_records": total_records,
+                        },
+                        "updated_at": now.isoformat(),
+                    }
+                ),
+                items_json=None,
+                failed_records_json=None,
+                error_message=None,
+                started_at=None,
+                finished_at=None,
+                updated_at=now,
+                success_count=0,
+                failed_count=0,
+                issue_records=0,
+                compliant_records=0,
+                total_tokens=0,
+                total_processing_time=0.0,
+            )
             session.execute(
                 update(self._batch_job_table)
                 .where(
                     and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
                 )
-                .values(
-                    status="queued",
-                    summary_json=_safe_json_dumps(
-                        {
-                            "rule_count": max(1, rule_count),
-                            "progress": {
-                                "step_key": "queued",
-                                "rule_index": 0,
-                                "rule_count": max(1, rule_count),
-                                "processed_records": 0,
-                                "total_records": total_records,
-                            },
-                            "updated_at": now.isoformat(),
-                        }
-                    ),
-                    items_json=None,
-                    failed_records_json=None,
-                    error_message=None,
-                    started_at=None,
-                    finished_at=None,
-                    updated_at=now,
-                    success_count=0,
-                    failed_count=0,
-                    issue_records=0,
-                    compliant_records=0,
-                    total_tokens=0,
-                    total_processing_time=0.0,
-                )
+                .values(**reset_values)
             )
+            if str(current.get("job_kind") or "").strip().lower() == "parent":
+                child_ids = [
+                    str(item or "").strip()
+                    for item in list(current.get("child_job_ids") or [])
+                    if str(item or "").strip()
+                ]
+                child_where = self._batch_job_table.c.parent_job_id == job_id
+                if child_ids:
+                    child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
+                session.execute(
+                    update(self._batch_job_table)
+                    .where(
+                        and_(
+                            child_where,
+                            self._batch_job_table.c.created_by == created_by,
+                        )
+                    )
+                    .values(**reset_values)
+                )
             session.commit()
             return self.get_batch_job(job_id=job_id, created_by=created_by)
+        finally:
+            session.close()
+
+    def get_child_batch_jobs(self, *, parent_job_id: str, created_by: Optional[str] = None) -> List[Dict[str, Any]]:
+        session = _session()
+        try:
+            clauses = [self._batch_job_table.c.parent_job_id == parent_job_id]
+            if created_by:
+                clauses.append(self._batch_job_table.c.created_by == created_by)
+            rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .where(and_(*clauses))
+                    .order_by(asc(self._batch_job_table.c.created_at))
+                )
+                .mappings()
+                .all()
+            )
+            return [_row_to_batch_job(dict(row)) for row in rows]
         finally:
             session.close()
 
@@ -1939,6 +2404,310 @@ class CustomQCWorkspaceService:
             ])
         output.seek(0)
         return output
+
+    def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+        child_jobs = job.get("child_jobs") or job.get("children") or []
+        export_jobs = [child for child in child_jobs if isinstance(child, dict)] or [job]
+
+        all_items: List[Dict[str, Any]] = []
+        failed_records: List[Dict[str, Any]] = []
+        for source_job in export_jobs:
+            for item in source_job.get("items") or []:
+                if isinstance(item, dict):
+                    all_items.append(item)
+            for item in source_job.get("failed_records") or []:
+                if isinstance(item, dict):
+                    failed_records.append(item)
+
+        status_counts: Dict[str, int] = {}
+        for source in (
+            summary.get("display_status_counts"),
+            summary.get("status_breakdown"),
+        ):
+            if isinstance(source, dict):
+                for key, value in source.items():
+                    status_counts[_safe_text(key).lower()] = status_counts.get(_safe_text(key).lower(), 0) + _to_int(value)
+        if not status_counts:
+            for item in all_items:
+                key = _export_item_status_key(item)
+                status_counts[key] = status_counts.get(key, 0) + 1
+
+        record_groups: Dict[str, Dict[str, Any]] = {}
+        for item in all_items:
+            record_id = _safe_text(item.get("record_id") or item.get("visit_id") or item.get("mr_no") or "未返回病历号")
+            group = record_groups.setdefault(
+                record_id,
+                {
+                    "record_id": record_id,
+                    "patient_name": _safe_text(item.get("patient_name"), "-"),
+                    "department": _safe_text(item.get("department"), "-"),
+                    "items": [],
+                    "status_counts": {},
+                },
+            )
+            if group.get("patient_name") in {"", "-"} and _safe_text(item.get("patient_name")):
+                group["patient_name"] = _safe_text(item.get("patient_name"))
+            if group.get("department") in {"", "-"} and _safe_text(item.get("department")):
+                group["department"] = _safe_text(item.get("department"))
+            group["items"].append(item)
+            status_key = _export_item_status_key(item)
+            group["status_counts"][status_key] = group["status_counts"].get(status_key, 0) + 1
+
+        status_order = [
+            "non_compliant",
+            "data_gap",
+            "uncertain",
+            "not_executed",
+            "technical_error",
+            "not_applicable",
+            "compliant",
+        ]
+        status_cards = []
+        for key in status_order:
+            value = _to_int(status_counts.get(key))
+            status_cards.append(
+                f'<div class="metric metric-{_status_tone_class(key)}"><span>{_html_escape(_map_item_status_label(key, None))}</span><strong>{value}</strong></div>'
+            )
+
+        selected_rule_ids = (
+            filters.get("selected_rule_ids")
+            or filters.get("scoped_customer_rule_ids")
+            or summary.get("selected_rule_ids")
+            or summary.get("scoped_customer_rule_ids")
+            or []
+        )
+        customer_rule_count = _to_int(
+            job.get("customer_rule_count"),
+            _to_int(summary.get("customer_rule_count"), _to_int(summary.get("rule_count"), _to_int(job.get("rule_count")))),
+        )
+        execution_rule_count = _to_int(
+            job.get("execution_rule_count"),
+            _to_int(summary.get("execution_rule_count"), _to_int(summary.get("rule_count"), _to_int(job.get("rule_count")))),
+        )
+        total_records = _to_int(summary.get("total_records"), _to_int(job.get("total_records"), len(record_groups)))
+        rule_set_name = _safe_text(
+            summary.get("rule_set_name") or filters.get("rule_set_name") or job.get("rule_set_name") or job.get("rule_name"),
+            "质控任务",
+        )
+        generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        toc_rows = []
+        record_sections = []
+        for index, group in enumerate(record_groups.values(), start=1):
+            anchor = f"record-{index}"
+            issue_count = sum(
+                _to_int(group["status_counts"].get(key))
+                for key in ("non_compliant", "data_gap", "uncertain", "not_executed", "technical_error")
+            )
+            toc_rows.append(
+                "<tr>"
+                f'<td><a href="#{anchor}">{_html_escape(group.get("record_id"))}</a></td>'
+                f"<td>{_html_escape(group.get('patient_name'))}</td>"
+                f"<td>{_html_escape(group.get('department'))}</td>"
+                f"<td>{len(group.get('items') or [])}</td>"
+                f"<td>{issue_count}</td>"
+                "</tr>"
+            )
+
+            item_cards = []
+            sorted_items = sorted(
+                group.get("items") or [],
+                key=lambda item: (
+                    0 if _export_item_status_key(item) in {"non_compliant", "data_gap", "uncertain", "technical_error", "not_executed"} else 1,
+                    _safe_text(item.get("rule_code")),
+                ),
+            )
+            for item in sorted_items:
+                status_key = _export_item_status_key(item)
+                status_label = _map_item_status_label(status_key, item.get("is_compliant"))
+                conclusion = _sanitize_export_text(item.get("findings") or item.get("conclusion") or item.get("summary"), 520)
+                suggestion = _sanitize_export_text(item.get("suggestion") or item.get("recommendation"), 360)
+                evidence_part_rows = []
+                for part in _parse_export_evidence_parts(item.get("evidence")):
+                    evidence_part_rows.append(
+                        '<div class="evidence-fact">'
+                        f"<span>{_html_escape(part.get('label') or '-')}</span>"
+                        f"<strong>{_html_escape(part.get('value') or '-')}</strong>"
+                        "</div>"
+                    )
+                evidence_rows = []
+                for evidence in _extract_structured_evidence(item):
+                    evidence_rows.append(
+                        "<div class=\"evidence-row\">"
+                        f"<div><span>来源</span><strong>{_html_escape(evidence.get('source') or '-')}</strong></div>"
+                        f"<div><span>字段</span><strong>{_html_escape(evidence.get('field') or '-')}</strong></div>"
+                        f"<div class=\"evidence-quote\"><span>片段</span><strong>{_html_escape(evidence.get('quote') or '-')}</strong></div>"
+                        f"<div><span>阈值</span><strong>{_html_escape(evidence.get('threshold') or '-')}</strong></div>"
+                        f"<div><span>实际</span><strong>{_html_escape(evidence.get('actual') or '-')}</strong></div>"
+                        f"<div><span>差值</span><strong>{_html_escape(evidence.get('delta') or '-')}</strong></div>"
+                        "</div>"
+                    )
+                if not evidence_rows and not evidence_part_rows:
+                    legacy_evidence = _sanitize_export_text(
+                        item.get("evidence")
+                        or item.get("evidence_text")
+                        or item.get("evidence_summary")
+                        or item.get("quote"),
+                        520,
+                    )
+                    if legacy_evidence:
+                        evidence_rows.append(f'<p class="legacy-evidence">{_html_escape(legacy_evidence)}</p>')
+                    else:
+                        evidence_rows.append('<p class="legacy-evidence muted">未返回可导出的证据摘要。</p>')
+                missing_sources = item.get("missing_sources") or item.get("missing_fields") or item.get("data_gap")
+                missing_text = ""
+                if isinstance(missing_sources, list):
+                    missing_text = "、".join(_safe_text(value) for value in missing_sources if _safe_text(value))
+                elif missing_sources:
+                    missing_text = _safe_text(missing_sources)
+                missing_block = (
+                    f'<div class="missing-block">缺失字段/来源：{_html_escape(_truncate_export_text(missing_text, 220))}</div>'
+                    if missing_text
+                    else ""
+                )
+                item_cards.append(
+                    f'<article class="issue-card issue-{_status_tone_class(status_key)}">'
+                    '<div class="issue-head">'
+                    f"<h4>{_html_escape(item.get('rule_code'))} · {_html_escape(item.get('rule_name'))}</h4>"
+                    f'<span class="status-pill status-{_status_tone_class(status_key)}">{_html_escape(status_label)}</span>'
+                    "</div>"
+                    '<div class="issue-meta">'
+                    f"<span>{_html_escape(item.get('document_type') or '文书未标注')}</span>"
+                    f"<span>{_html_escape(item.get('defect_level') or '缺陷等级未标注')}</span>"
+                    f"<span>复核状态：{_html_escape(item.get('review_status') or '待复核')}</span>"
+                    "</div>"
+                    '<div class="issue-grid">'
+                    f'<section><label>质控结论</label><p>{_html_escape(conclusion or "-")}</p></section>'
+                    f'<section><label>关键证据</label>{"".join(evidence_part_rows)}{"".join(evidence_rows)}{missing_block}</section>'
+                    f'<section><label>处理建议</label><p>{_html_escape(suggestion or "请结合病历原文人工复核。")}</p></section>'
+                    "</div>"
+                    "</article>"
+                )
+
+            record_sections.append(
+                f'<section id="{anchor}" class="record-section">'
+                '<div class="record-head">'
+                "<div>"
+                f"<h3>{_html_escape(group.get('record_id'))} · {_html_escape(group.get('patient_name'))}</h3>"
+                f"<p>{_html_escape(group.get('department'))} · {len(group.get('items') or [])} 条质控结果</p>"
+                "</div>"
+                f'<span class="record-issue-count">需关注 {issue_count}</span>'
+                "</div>"
+                f"{''.join(item_cards)}"
+                "</section>"
+            )
+
+        if not record_sections:
+            record_sections.append('<section class="empty-state">当前任务暂无可导出的质控明细。</section>')
+
+        failed_block = ""
+        if failed_records:
+            failed_rows = []
+            for item in failed_records:
+                failed_rows.append(
+                    "<tr>"
+                    f"<td>{_html_escape(item.get('record_id') or item.get('visit_id'))}</td>"
+                    f"<td>{_html_escape(item.get('patient_name'))}</td>"
+                    f"<td>{_html_escape(item.get('department'))}</td>"
+                    f"<td>{_html_escape(_sanitize_export_text(item.get('error'), 240))}</td>"
+                    "</tr>"
+                )
+            failed_block = (
+                '<section class="failed-section"><h2>执行失败病历</h2>'
+                '<table><thead><tr><th>病历号</th><th>患者</th><th>科室</th><th>失败原因</th></tr></thead>'
+                f"<tbody>{''.join(failed_rows)}</tbody></table></section>"
+            )
+
+        html_text = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{_html_escape(rule_set_name)} - 质控明细</title>
+  <style>
+    body {{ margin: 0; background: #f5f5f7; color: #1d1d1f; font-family: "Source Han Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif; }}
+    .page {{ max-width: 1180px; margin: 0 auto; padding: 28px; }}
+    .hero, .panel, .record-section, .failed-section {{ border: 1px solid rgba(0,0,0,.08); border-radius: 18px; background: rgba(255,255,255,.94); box-shadow: 0 10px 30px rgba(15,23,42,.06); }}
+    .hero {{ padding: 24px; }}
+    .eyebrow {{ margin: 0 0 8px; color: rgba(29,29,31,.58); font-size: 13px; }}
+    h1 {{ margin: 0; font-size: 26px; line-height: 34px; }}
+    h2 {{ margin: 0 0 14px; font-size: 18px; }}
+    h3 {{ margin: 0; font-size: 17px; }}
+    h4 {{ margin: 0; font-size: 15px; line-height: 22px; }}
+    .hero-meta, .issue-meta {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; color: rgba(29,29,31,.62); font-size: 13px; }}
+    .hero-meta span, .issue-meta span {{ border-radius: 999px; background: #f3f6fb; padding: 5px 10px; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }}
+    .metric {{ border-radius: 14px; border: 1px solid rgba(0,0,0,.08); padding: 12px; background: #fff; }}
+    .metric span {{ display: block; color: rgba(29,29,31,.56); font-size: 12px; }}
+    .metric strong {{ display: block; margin-top: 6px; font-size: 22px; }}
+    .metric-danger strong {{ color: #dc2626; }} .metric-warning strong {{ color: #b45309; }} .metric-success strong {{ color: #0066cc; }}
+    .panel, .failed-section {{ margin-top: 18px; padding: 18px; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{ border-bottom: 1px solid rgba(0,0,0,.08); padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ color: rgba(29,29,31,.58); font-weight: 700; }}
+    a {{ color: #0066cc; text-decoration: none; }}
+    .record-section {{ margin-top: 18px; padding: 18px; scroll-margin-top: 18px; }}
+    .record-head {{ display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 14px; }}
+    .record-head p {{ margin: 6px 0 0; color: rgba(29,29,31,.58); }}
+    .record-issue-count {{ border-radius: 999px; background: #fff7ed; color: #b45309; padding: 6px 10px; font-size: 13px; font-weight: 700; }}
+    .issue-card {{ border: 1px solid rgba(0,0,0,.08); border-left-width: 5px; border-radius: 14px; background: #fff; padding: 14px; margin-top: 12px; }}
+    .issue-danger {{ border-left-color: #ef4444; }} .issue-warning {{ border-left-color: #f59e0b; }} .issue-success {{ border-left-color: #0066cc; }} .issue-neutral, .issue-muted {{ border-left-color: #94a3b8; }}
+    .issue-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }}
+    .status-pill {{ flex: 0 0 auto; border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 700; }}
+    .status-danger {{ background: #fef2f2; color: #dc2626; }} .status-warning {{ background: #fff7ed; color: #b45309; }} .status-success {{ background: #eaf2ff; color: #0066cc; }} .status-neutral, .status-muted {{ background: #f1f5f9; color: #475569; }}
+    .issue-grid {{ display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 12px; margin-top: 12px; }}
+    section label {{ display: block; margin-bottom: 6px; color: rgba(29,29,31,.58); font-size: 12px; font-weight: 700; }}
+    section p {{ margin: 0; font-size: 13px; line-height: 21px; }}
+    .evidence-fact {{ display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center; border: 1px solid #d7e7ff; border-radius: 10px; background: #f3f8ff; padding: 8px 10px; font-size: 12px; }}
+    .evidence-fact + .evidence-fact, .evidence-fact + .evidence-row, .evidence-fact + .legacy-evidence {{ margin-top: 8px; }}
+    .evidence-fact span {{ color: #375f8f; font-weight: 600; }}
+    .evidence-fact strong {{ color: #111827; font-weight: 700; line-height: 18px; }}
+    .evidence-row {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-radius: 12px; background: #f8fafc; padding: 10px; font-size: 12px; }}
+    .evidence-row + .evidence-row {{ margin-top: 8px; }}
+    .evidence-row span {{ display: block; color: rgba(29,29,31,.52); }}
+    .evidence-row strong {{ display: block; margin-top: 3px; font-weight: 600; line-height: 18px; }}
+    .evidence-quote {{ grid-column: span 3; }}
+    .legacy-evidence {{ border-radius: 12px; background: #f8fafc; padding: 10px; }}
+    .missing-block {{ margin-top: 8px; border-radius: 10px; background: #fff7ed; color: #9a3412; padding: 8px 10px; font-size: 12px; }}
+    .notice {{ margin-top: 18px; color: rgba(29,29,31,.58); font-size: 12px; line-height: 20px; }}
+    .empty-state {{ margin-top: 18px; border-radius: 16px; background: #fff; padding: 28px; color: rgba(29,29,31,.58); text-align: center; }}
+    @media print {{ .page {{ padding: 0; }} .hero, .panel, .record-section, .failed-section {{ box-shadow: none; }} }}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">质控明细导出 · 生成时间 {generated_at}</p>
+      <h1>{_html_escape(rule_set_name)}</h1>
+      <div class="hero-meta">
+        <span>任务ID：{_html_escape(job.get("id"))}</span>
+        <span>状态：{_html_escape(_map_job_status_label(job.get("status")))}</span>
+        <span>病历数：{total_records}</span>
+        <span>客户质控点数：{customer_rule_count}</span>
+        <span>底层执行规则数：{execution_rule_count}</span>
+        <span>选择质控点：{_html_escape(_format_rule_code_list(selected_rule_ids))}</span>
+      </div>
+      <div class="metrics">{"".join(status_cards)}</div>
+      <p class="notice">本文件仅用于质控明细查看和人工复核，不作为病历归档、医保结算、绩效扣分或正式质控结论依据。文件不包含完整病历全文、模型原始输出或向量数据。</p>
+    </section>
+
+    <section class="panel">
+      <h2>病历目录</h2>
+      <table>
+        <thead><tr><th>病历号</th><th>患者</th><th>科室</th><th>结果数</th><th>需关注</th></tr></thead>
+        <tbody>{"".join(toc_rows) or '<tr><td colspan="5">暂无病历结果</td></tr>'}</tbody>
+      </table>
+    </section>
+
+    {"".join(record_sections)}
+    {failed_block}
+  </main>
+</body>
+</html>
+"""
+        return "\ufeff" + html_text
 
     def publish_draft(self, *, draft_id: str, created_by: str) -> Dict[str, Any]:
         session = _session()

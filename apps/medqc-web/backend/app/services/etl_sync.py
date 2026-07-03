@@ -52,9 +52,65 @@ _SCENE_ANCHOR_TABLES = {
 # 源库字段与本地 CDM 列名不一致时的同步映射（目标列 -> 源候选列）。
 # 仅在目标列存在、本条记录未携带目标列时生效。
 _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    "first_course_record": {
+        # 泸县源库首程记录常以 submit_time 表示文书完成/记录时间，record_time 可能为空。
+        "record_datetime": (
+            "record_datetime",
+            "record_time",
+            "submit_datetime",
+            "submit_time",
+            "physician_sign_datetime",
+            "physician_sign_time",
+            "last_modified_datetime",
+            "last_modified_time",
+        ),
+        "physician_sign_datetime": ("physician_sign_datetime", "physician_sign_time"),
+    },
     "mr_surgery": {
         "surgery_begin_datetime": ("surgery_begin_time",),
         "surgery_end_datetime": ("surgery_end_time",),
+    },
+    "inpat_drug_order": {
+        "prescribed_datetime": (
+            "prescribed_datetime",
+            "prescribed_time",
+            "start_time",
+            "order_start_time",
+            "order_time",
+        ),
+        "order_status": ("order_status", "status"),
+        "generic_name": ("generic_name", "drug_name", "order_item_name", "order_item"),
+        "drug_specification": ("drug_specification", "specification"),
+        "drug_frequency": ("drug_frequency", "frequency"),
+        "drug_apply_method": ("drug_apply_method", "route"),
+        "single_dose": ("single_dose", "dose", "dosage"),
+        "single_dose_unit": ("single_dose_unit", "dose_unit"),
+    },
+    "inpat_nondrug_order": {
+        "prescribed_datetime": (
+            "prescribed_datetime",
+            "prescribed_time",
+            "start_time",
+            "order_start_time",
+            "order_time",
+        ),
+        "order_status": ("order_status", "status"),
+        "order_name": ("order_name", "item_name", "order_item_name", "order_item"),
+    },
+    "inpat_bill_item": {
+        "billing_datetime": ("billing_datetime", "billing_time", "charge_time", "bill_time"),
+    },
+    "blood_application": {
+        "apply_datetime": ("apply_datetime", "apply_time", "application_datetime", "application_time", "request_time"),
+    },
+    "mr_bloodtrans": {
+        "transfution_datetime": (
+            "transfution_datetime",
+            "transfution_time",
+            "transfusion_datetime",
+            "transfusion_time",
+            "blood_transfusion_time",
+        ),
     },
     "labtest_item_report": {
         "document_id": ("document_id", "sys_index_id", "print_order_id"),
@@ -78,6 +134,20 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
             "content",
         ),
     },
+}
+
+_GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
+    "admission_datetime": ("admission_datetime", "admission_time"),
+    "discharge_datetime": ("discharge_datetime", "discharge_time"),
+    "last_modified_datetime": ("last_modified_datetime", "last_modified_time"),
+    "submit_datetime": ("submit_datetime", "submit_time"),
+    "record_datetime": ("record_datetime", "record_time", "round_time"),
+    "report_datetime": ("report_datetime", "report_time", "result_datetime", "result_time", "exam_datetime", "exam_time"),
+    "request_datetime": ("request_datetime", "request_time", "apply_datetime", "apply_time", "application_time"),
+    "review_datetime": ("review_datetime", "review_time", "audit_time", "verify_time"),
+    "mr_datetime": ("mr_datetime", "mr_time", "submit_datetime", "submit_time"),
+    "diagnosis_datetime": ("diagnosis_datetime", "diagnosis_time"),
+    "settle_datetime": ("settle_datetime", "settle_time", "settlement_time"),
 }
 
 
@@ -436,9 +506,56 @@ def _apply_sync_column_aliases(
     existing_columns: set[str],
 ) -> Dict[str, Any]:
     normalized: Dict[str, Any] = {str(k).lower(): v for k, v in record.items()}
+    _apply_sync_alias_map(
+        normalized=normalized,
+        existing_columns=existing_columns,
+        alias_map=_build_generic_column_aliases(existing_columns),
+    )
     alias_map = _TABLE_COLUMN_ALIASES.get(str(table_name or "").strip().lower(), {})
-    if not alias_map:
-        return normalized
+    if alias_map:
+        _apply_sync_alias_map(
+            normalized=normalized,
+            existing_columns=existing_columns,
+            alias_map=alias_map,
+        )
+    _apply_sync_derived_fields(
+        table_name=table_name,
+        normalized=normalized,
+        existing_columns=existing_columns,
+    )
+    return normalized
+
+
+def _build_generic_column_aliases(existing_columns: set[str]) -> Dict[str, Tuple[str, ...]]:
+    alias_map: Dict[str, Tuple[str, ...]] = {}
+    for column_name in existing_columns:
+        candidates: List[str] = list(_GLOBAL_COLUMN_ALIASES.get(column_name, ()))
+        if column_name.endswith("_datetime"):
+            base_name = column_name[: -len("_datetime")]
+            candidates.extend((f"{base_name}_time", f"{base_name}_date"))
+        elif column_name.endswith("_updatetime"):
+            base_name = column_name[: -len("_updatetime")]
+            candidates.extend((f"{base_name}_uptime", f"{base_name}_update_time"))
+        if not candidates:
+            continue
+        seen: set[str] = set()
+        unique_candidates: List[str] = []
+        for candidate in candidates:
+            normalized_candidate = str(candidate or "").strip().lower()
+            if not normalized_candidate or normalized_candidate in seen:
+                continue
+            seen.add(normalized_candidate)
+            unique_candidates.append(normalized_candidate)
+        alias_map[column_name] = tuple(unique_candidates)
+    return alias_map
+
+
+def _apply_sync_alias_map(
+    *,
+    normalized: Dict[str, Any],
+    existing_columns: set[str],
+    alias_map: Dict[str, Tuple[str, ...]],
+) -> None:
     for target_col, source_cols in alias_map.items():
         if target_col not in existing_columns:
             continue
@@ -451,12 +568,6 @@ def _apply_sync_column_aliases(
                 continue
             normalized[target_col] = alias_value
             break
-    _apply_sync_derived_fields(
-        table_name=table_name,
-        normalized=normalized,
-        existing_columns=existing_columns,
-    )
-    return normalized
 
 
 def _first_non_empty(record: Dict[str, Any], field_names: Tuple[str, ...]) -> str:

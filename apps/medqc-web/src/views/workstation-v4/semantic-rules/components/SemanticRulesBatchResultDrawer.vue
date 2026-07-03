@@ -9,9 +9,21 @@
   >
     <div class="drawer-shell">
       <div class="drawer-head">
-        <div>
-          <p class="drawer-eyebrow">批量任务结果</p>
-          <h2 class="drawer-title">任务详情</h2>
+        <div class="drawer-title-group">
+          <a-button
+            class="drawer-back-button"
+            @click="close"
+          >
+            返回样本验证
+          </a-button>
+          <div>
+            <p class="drawer-eyebrow">
+              批量任务结果
+            </p>
+            <h2 class="drawer-title">
+              任务详情
+            </h2>
+          </div>
         </div>
         <div class="drawer-actions">
           <a-button
@@ -22,14 +34,30 @@
           >
             停止任务
           </a-button>
+          <a-dropdown v-if="batchJobDetail?.status === 'completed'">
+            <a-button :loading="batchJobDetailLoading">
+              导出报告
+            </a-button>
+            <template #overlay>
+              <a-menu @click="handleExportMenuClick">
+                <a-menu-item key="html">
+                  导出 HTML 明细
+                </a-menu-item>
+                <a-menu-item key="xlsx">
+                  导出 Excel
+                </a-menu-item>
+                <a-menu-item key="csv">
+                  导出 CSV
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
           <a-button
-            v-if="batchJobDetail?.status === 'completed'"
-            :loading="batchJobDetailLoading"
-            @click="exportBatchJobReport('xlsx')"
+            type="text"
+            @click="close"
           >
-            导出报告
+            关闭
           </a-button>
-          <a-button type="text" @click="close"> 关闭 </a-button>
         </div>
       </div>
 
@@ -40,7 +68,10 @@
           :class="`status-hero--${statusHero.tone}`"
         >
           <div class="status-hero-main">
-            <div v-if="statusHero.pulse" class="status-hero-pulse" />
+            <div
+              v-if="statusHero.pulse"
+              class="status-hero-pulse"
+            />
             <div>
               <div class="status-hero-title-row">
                 <span class="status-hero-title">{{ statusHero.title }}</span>
@@ -56,10 +87,16 @@
                   {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
                 </div>
               </div>
-              <div v-if="statusHero.description" class="status-hero-desc">
+              <div
+                v-if="statusHero.description"
+                class="status-hero-desc"
+              >
                 {{ statusHero.description }}
               </div>
-              <div v-if="isRunningBatchJob" class="status-hero-live">
+              <div
+                v-if="isRunningBatchJob"
+                class="status-hero-live"
+              >
                 <span>
                   已完成 {{ progressSummary?.processedRecords ?? 0 }} /
                   {{ progressSummary?.totalRecords ?? 0 }} 份病历
@@ -70,7 +107,10 @@
                 <span>{{ liveElapsedLabel }}</span>
                 <span v-if="streamUpdatedAtText">最近更新：{{ streamUpdatedAtText }}</span>
               </div>
-              <div v-if="isRunningBatchJob" class="status-hero-flow">
+              <div
+                v-if="isRunningBatchJob"
+                class="status-hero-flow"
+              >
                 <div
                   class="status-hero-flow-bar"
                   :style="{ width: `${progressSummary?.percent ?? 0}%` }"
@@ -79,29 +119,46 @@
             </div>
           </div>
           <div class="status-hero-side">
-            <div class="status-hero-percent">{{ progressSummary?.percent ?? 0 }}%</div>
+            <div class="status-hero-percent">
+              {{ progressSummary?.percent ?? 0 }}%
+            </div>
             <div class="status-hero-side-label">
               {{ progressSummary?.stepLabel || '准备中' }}
             </div>
           </div>
         </div>
 
-        <div class="drawer-summary summary-grid-primary">
-          <div v-for="item in focusedSummaryCards" :key="item.key" class="summary-card">
+        <div
+          v-if="focusedSummaryCards.length && !isLuxian0609BatchJob"
+          class="drawer-summary summary-grid-primary"
+        >
+          <div
+            v-for="item in focusedSummaryCards"
+            :key="item.key"
+            class="summary-card"
+          >
             <div class="summary-label">
               {{ item.label }}
             </div>
             <div class="summary-value">
               {{ item.value }}
             </div>
-            <div v-if="item.desc" class="summary-desc">
+            <div
+              v-if="item.desc"
+              class="summary-desc"
+            >
               {{ item.desc }}
             </div>
           </div>
         </div>
 
-        <div v-if="isFocusedRecordMode" class="drawer-card focus-record-card">
-          <div class="drawer-section-title">当前仅查看单份病历结果</div>
+        <div
+          v-if="isFocusedRecordMode"
+          class="drawer-card focus-record-card"
+        >
+          <div class="drawer-section-title">
+            当前仅查看单份病历结果
+          </div>
           <div class="focus-record-meta">
             <span v-if="props.focusRecordLabel">{{ props.focusRecordLabel }}</span>
             <span v-if="props.focusVisitId">visit_id：{{ props.focusVisitId }}</span>
@@ -109,24 +166,35 @@
           </div>
         </div>
 
-        <div v-if="isLuxian0609BatchJob" class="drawer-card luxian-scope-card">
+        <div
+          v-if="isLuxian0609BatchJob"
+          class="drawer-card luxian-scope-card"
+        >
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
-              <div class="drawer-section-title">泸县0609验证范围</div>
+              <div class="drawer-section-title">
+                泸县0609验证范围
+              </div>
               <span class="summary-mode-badge">
                 {{ luxianScopeModeLabel }}
               </span>
             </div>
           </div>
           <div class="luxian-scope-grid">
-            <div v-for="item in luxianScopeCards" :key="item.key" class="luxian-scope-stat">
+            <div
+              v-for="item in luxianScopeCards"
+              :key="item.key"
+              class="luxian-scope-stat"
+            >
               <span>{{ item.label }}</span>
               <strong>{{ item.value }}</strong>
               <small>{{ item.desc }}</small>
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">用户选择的 LX0609 质控点</div>
+            <div class="luxian-scope-label">
+              用户选择的 LX0609 质控点
+            </div>
             <div class="luxian-scope-chips">
               <span
                 v-for="ruleId in luxianSelectedRuleIdsPreview"
@@ -135,7 +203,10 @@
               >
                 {{ ruleId }}
               </span>
-              <span v-if="!luxianSelectedRuleIds.length" class="luxian-scope-muted">
+              <span
+                v-if="!luxianSelectedRuleIds.length"
+                class="luxian-scope-muted"
+              >
                 {{ isLuxianScopedRun ? '未返回' : '未限定，执行全量 0609 质控点' }}
               </span>
               <span
@@ -147,13 +218,17 @@
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">病历-规则映射摘要</div>
+            <div class="luxian-scope-label">
+              病历-规则映射摘要
+            </div>
             <div class="luxian-scope-map">
               {{ luxianRecordRuleMapSummary }}
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">状态分布</div>
+            <div class="luxian-scope-label">
+              状态分布
+            </div>
             <div class="luxian-status-grid">
               <span
                 v-for="item in luxianStatusDistribution"
@@ -173,16 +248,29 @@
               <div class="drawer-section-title">
                 {{ issueSectionTitle }}
               </div>
-              <span v-if="isFastScreenResult" class="summary-mode-badge">
+              <span
+                v-if="isFastScreenResult"
+                class="summary-mode-badge"
+              >
                 快速初筛结果（摘要版）
               </span>
             </div>
             <div class="drawer-section-actions">
-              <a-radio-group v-model:value="issueViewMode" size="small">
-                <a-radio-button value="business"> 业务视图 </a-radio-button>
-                <a-radio-button value="advanced"> 高级视图 </a-radio-button>
+              <a-radio-group
+                v-model:value="issueViewMode"
+                size="small"
+              >
+                <a-radio-button value="business">
+                  业务视图
+                </a-radio-button>
+                <a-radio-button value="advanced">
+                  高级视图
+                </a-radio-button>
               </a-radio-group>
-              <a-switch v-model:checked="showAllStatuses" size="small" />
+              <a-switch
+                v-model:checked="showAllStatuses"
+                size="small"
+              />
               <span class="drawer-section-meta">
                 {{ showAllStatuses ? '全部状态' : '仅问题项' }}
               </span>
@@ -220,13 +308,53 @@
                 class="issue-filter-item"
                 :options="issueDefectLevelOptions"
               />
-              <a-button size="small" @click="resetIssueFilters"> 重置 </a-button>
+              <a-button
+                size="small"
+                @click="resetIssueFilters"
+              >
+                重置
+              </a-button>
             </div>
           </div>
-          <div v-if="selectedClusterKey || activeRuleFilterLabel" class="aggregation-active-tip">
-            <span v-if="selectedClusterKey"
-              >聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span
-            >
+          <div
+            v-if="issueRecordGroups.length > 1"
+            class="issue-record-switcher"
+          >
+            <div class="issue-record-switcher-head">
+              <span>按病历查看</span>
+              <small>本次涉及 {{ issueRecordGroups.length }} 份病历，可先定位病历再看质控点。</small>
+            </div>
+            <div class="issue-record-tabs">
+              <button
+                type="button"
+                class="issue-record-tab"
+                :class="{ 'issue-record-tab--active': selectedIssueRecordKey === ALL_RECORDS_KEY }"
+                @click="selectedIssueRecordKey = ALL_RECORDS_KEY"
+              >
+                <strong>全部病历</strong>
+                <span>{{ issueRecordTotalCount }} 条结果</span>
+              </button>
+              <button
+                v-for="group in issueRecordGroups"
+                :key="group.key"
+                type="button"
+                class="issue-record-tab"
+                :class="{ 'issue-record-tab--active': selectedIssueRecordKey === group.key }"
+                @click="selectedIssueRecordKey = group.key"
+              >
+                <strong>{{ group.label }}</strong>
+                <span>
+                  {{ group.total }} 条 · 不合规 {{ group.nonCompliant }} · 数据不足
+                  {{ group.dataGap }}
+                </span>
+              </button>
+            </div>
+          </div>
+          <div
+            v-if="selectedClusterKey || activeRuleFilterLabel"
+            class="aggregation-active-tip"
+          >
+            <span v-if="selectedClusterKey">聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span>
             <span v-if="selectedClusterKey && activeRuleFilterLabel">·</span>
             <span v-if="activeRuleFilterLabel">规则：{{ activeRuleFilterLabel }}</span>
             <a-button
@@ -254,408 +382,524 @@
             <span class="stream-result-tip-dot" />
             <span>{{ incrementalResultTip }}</span>
           </div>
-          <div v-if="businessIssueCards.length" class="issue-conclusion-list">
-            <TransitionGroup name="issue-stream" tag="div" class="issue-conclusion-list-inner">
+          <div
+            v-if="businessIssueCards.length"
+            class="issue-conclusion-list"
+          >
+            <div
+              v-for="group in businessIssueCardGroups"
+              :key="group.key"
+              class="issue-record-result-group"
+            >
               <div
-                v-for="item in businessIssueCards"
-                :key="`conclusion-${resolveIssueStableKey(item)}`"
-                class="issue-conclusion-card"
-                :class="item.issue_card_class"
+                v-if="shouldShowIssueRecordGroupHeader"
+                class="issue-record-result-head"
               >
-                <div class="issue-conclusion-head">
-                  <div class="issue-conclusion-head-main">
-                    <div class="issue-conclusion-title-row">
-                      <span class="issue-conclusion-title">
-                        <span class="issue-rule-code">
-                          {{ item.rule_code || item.rule_id || '未知规则' }}
-                        </span>
-                        ·
-                        {{ item.rule_name || '未知质控点' }}
-                      </span>
-                    </div>
-                    <div class="issue-conclusion-meta">
-                      <span>{{ item.record_id || '-' }}</span>
-                      <span>{{
-                        item.target_document_type || item.document_type || '未知文书域'
-                      }}</span>
-                      <span>{{ item.defect_level || '未分级' }}</span>
-                      <span v-if="item.refined">单条精审</span>
-                    </div>
-                  </div>
-                  <a-tag class="aggregation-count-tag">
-                    {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
-                  </a-tag>
+                <div>
+                  <strong>{{ group.label }}</strong>
+                  <span>{{ group.meta || '未返回科室/住院号' }}</span>
                 </div>
-                <div class="issue-at-a-glance">
-                  <div class="issue-glance-block issue-glance-block--conclusion">
-                    <div class="issue-glance-label">质控结论</div>
-                    <strong>{{ truncateText(item.findings, 112) }}</strong>
-                  </div>
-                  <div class="issue-glance-block">
-                    <div class="issue-glance-label">关键证据</div>
-                    <span>{{ item.evidence_summary }}</span>
-                  </div>
-                  <div class="issue-glance-block">
-                    <div class="issue-glance-label">处理建议</div>
-                    <span>{{ truncateText(item.suggestion, 96) }}</span>
-                  </div>
+                <div class="issue-record-result-stats">
+                  <span>结果 {{ group.total }}</span>
+                  <span>不合规 {{ group.nonCompliant }}</span>
+                  <span>数据不足 {{ group.dataGap }}</span>
                 </div>
-                <div v-if="resolveCopyEvidenceCompare(item)" class="copy-evidence-compare">
-                  <div class="copy-evidence-column">
-                    <div class="copy-evidence-label">
-                      {{ resolveCopyEvidenceCompare(item)?.left.label }}
-                    </div>
-                    <blockquote>{{ resolveCopyEvidenceCompare(item)?.left.quote }}</blockquote>
-                  </div>
-                  <div class="copy-evidence-column">
-                    <div class="copy-evidence-label">
-                      {{ resolveCopyEvidenceCompare(item)?.right.label }}
-                    </div>
-                    <blockquote>{{ resolveCopyEvidenceCompare(item)?.right.quote }}</blockquote>
-                  </div>
-                </div>
-                <div v-if="hasEvidenceChain(item)" class="evidence-chain-strip">
-                  <span>
-                    状态口径：{{ resolveEvidenceStatusText(item.result_status || item.status) }}
-                  </span>
-                  <span v-if="resolveTriggerFacts(item).length">
-                    触发事实 {{ resolveTriggerFacts(item).length }} 条
-                  </span>
-                  <span v-if="resolveEvidenceChainItems(item).length">
-                    证据 {{ resolveEvidenceChainItems(item).length }} 条
-                  </span>
-                  <span v-if="resolveMissingSources(item).length">
-                    缺少数据 {{ resolveMissingSources(item).length }} 项
-                  </span>
-                </div>
+              </div>
+              <TransitionGroup
+                name="issue-stream"
+                tag="div"
+                class="issue-conclusion-list-inner"
+              >
                 <div
-                  v-if="isIssueExpanded(item) && hasEvidenceChain(item)"
-                  class="evidence-chain-panel"
+                  v-for="item in group.items"
+                  :key="`conclusion-${resolveIssueStableKey(item)}`"
+                  class="issue-conclusion-card"
+                  :class="item.issue_card_class"
                 >
-                  <div class="evidence-chain-panel-head">
-                    <div>
-                      <div class="evidence-chain-title">证据链</div>
-                      <div class="evidence-chain-subtitle">
-                        按触发事实、依赖数据、来源证据和判断口径展示
+                  <div class="issue-conclusion-head">
+                    <div class="issue-conclusion-head-main">
+                      <div class="issue-conclusion-title-row">
+                        <span class="issue-conclusion-title">
+                          <span class="issue-rule-code">
+                            {{ item.rule_code || item.rule_id || '未知规则' }}
+                          </span>
+                          ·
+                          {{ item.rule_name || '未知质控点' }}
+                        </span>
+                      </div>
+                      <div class="issue-conclusion-meta">
+                        <span>{{ item.record_id || '-' }}</span>
+                        <span>{{
+                          item.target_document_type || item.document_type || '未知文书域'
+                        }}</span>
+                        <span>{{ item.defect_level || '未分级' }}</span>
+                        <span v-if="item.refined">单条精审</span>
                       </div>
                     </div>
-                    <a-tag class="evidence-chain-tag">
-                      {{ resolveExecutorTypeText(item.executor_type) }}
+                    <a-tag class="aggregation-count-tag">
+                      {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
                     </a-tag>
                   </div>
-                  <div class="evidence-chain-grid">
-                    <div v-if="resolveTriggerFacts(item).length" class="evidence-chain-block">
-                      <div class="evidence-chain-block-title">触发事实</div>
+                  <div class="issue-at-a-glance">
+                    <div class="issue-glance-block issue-glance-block--conclusion">
+                      <div class="issue-glance-label">
+                        质控结论
+                      </div>
+                      <strong>{{ truncateText(item.customer_findings_text, 112) }}</strong>
+                    </div>
+                    <div class="issue-glance-block">
+                      <div class="issue-glance-label">
+                        关键证据
+                      </div>
                       <div
-                        v-for="fact in resolveTriggerFacts(item)"
-                        :key="fact.key"
-                        class="evidence-chain-line"
+                        v-if="item.evidence_summary_parts.length"
+                        class="issue-evidence-facts"
                       >
-                        <span>{{ fact.label }}</span>
-                        <strong>{{ fact.value }}</strong>
+                        <div
+                          v-for="part in item.evidence_summary_parts"
+                          :key="part.key"
+                          class="issue-evidence-fact"
+                          :class="`issue-evidence-fact--${part.kind}`"
+                        >
+                          <span>{{ part.label }}：</span>
+                          <strong>{{ part.value }}</strong>
+                        </div>
+                      </div>
+                      <span v-else>
+                        {{ item.evidence_summary }}
+                      </span>
+                    </div>
+                    <div class="issue-glance-block">
+                      <div class="issue-glance-label">
+                        处理建议
+                      </div>
+                      <span>{{ truncateText(item.customer_suggestion_text, 96) }}</span>
+                    </div>
+                  </div>
+                  <div
+                    v-if="resolveCopyEvidenceCompare(item)"
+                    class="copy-evidence-compare"
+                  >
+                    <div class="copy-evidence-column">
+                      <div class="copy-evidence-label">
+                        {{ resolveCopyEvidenceCompare(item)?.left.label }}
+                      </div>
+                      <blockquote>{{ resolveCopyEvidenceCompare(item)?.left.quote }}</blockquote>
+                    </div>
+                    <div class="copy-evidence-column">
+                      <div class="copy-evidence-label">
+                        {{ resolveCopyEvidenceCompare(item)?.right.label }}
+                      </div>
+                      <blockquote>{{ resolveCopyEvidenceCompare(item)?.right.quote }}</blockquote>
+                    </div>
+                  </div>
+                  <div
+                    v-if="hasEvidenceChain(item)"
+                    class="evidence-chain-strip"
+                  >
+                    <span>
+                      状态口径：{{ resolveEvidenceStatusText(item.result_status || item.status) }}
+                    </span>
+                    <span v-if="resolveTriggerFacts(item).length">
+                      触发事实 {{ resolveTriggerFacts(item).length }} 条
+                    </span>
+                    <span v-if="resolveEvidenceChainItems(item).length">
+                      证据 {{ resolveEvidenceChainItems(item).length }} 条
+                    </span>
+                    <span v-if="resolveMissingSources(item).length">
+                      缺少数据 {{ resolveMissingSources(item).length }} 项
+                    </span>
+                  </div>
+                  <div
+                    v-if="isIssueExpanded(item) && hasEvidenceChain(item)"
+                    class="evidence-chain-panel"
+                  >
+                    <div class="evidence-chain-panel-head">
+                      <div>
+                        <div class="evidence-chain-title">
+                          证据链
+                        </div>
+                        <div class="evidence-chain-subtitle">
+                          按触发事实、依赖数据、来源证据和判断口径展示
+                        </div>
+                      </div>
+                      <a-tag class="evidence-chain-tag">
+                        {{ resolveExecutorTypeText(item.executor_type) }}
+                      </a-tag>
+                    </div>
+                    <div class="evidence-chain-grid">
+                      <div
+                        v-if="resolveTriggerFacts(item).length"
+                        class="evidence-chain-block"
+                      >
+                        <div class="evidence-chain-block-title">
+                          触发事实
+                        </div>
+                        <div
+                          v-for="fact in resolveTriggerFacts(item)"
+                          :key="fact.key"
+                          class="evidence-chain-line"
+                        >
+                          <span>{{ fact.label }}</span>
+                          <strong>{{ fact.value }}</strong>
+                        </div>
+                      </div>
+                      <div class="evidence-chain-block">
+                        <div class="evidence-chain-block-title">
+                          数据依赖
+                        </div>
+                        <div
+                          v-for="row in resolveDependencyRows(item)"
+                          :key="row.key"
+                          class="evidence-chain-line"
+                        >
+                          <span>{{ row.label }}</span>
+                          <strong>{{ row.value }}</strong>
+                        </div>
+                      </div>
+                      <div
+                        v-if="resolveDecisionRows(item).length"
+                        class="evidence-chain-block"
+                      >
+                        <div class="evidence-chain-block-title">
+                          判断过程
+                        </div>
+                        <div
+                          v-for="row in resolveDecisionRows(item)"
+                          :key="row.key"
+                          class="evidence-chain-line"
+                        >
+                          <span>{{ row.label }}</span>
+                          <strong>{{ row.value }}</strong>
+                        </div>
+                      </div>
+                      <div
+                        v-if="resolveReviewRows(item).length"
+                        class="evidence-chain-block"
+                      >
+                        <div class="evidence-chain-block-title">
+                          人工复核
+                        </div>
+                        <div
+                          v-for="row in resolveReviewRows(item)"
+                          :key="row.key"
+                          class="evidence-chain-line"
+                        >
+                          <span>{{ row.label }}</span>
+                          <strong>{{ row.value }}</strong>
+                        </div>
                       </div>
                     </div>
-                    <div class="evidence-chain-block">
-                      <div class="evidence-chain-block-title">数据依赖</div>
-                      <div
-                        v-for="row in resolveDependencyRows(item)"
-                        :key="row.key"
-                        class="evidence-chain-line"
-                      >
-                        <span>{{ row.label }}</span>
-                        <strong>{{ row.value }}</strong>
+                    <div
+                      v-if="resolveEvidenceChainItems(item).length"
+                      class="evidence-chain-evidence-list"
+                    >
+                      <div class="evidence-chain-block-title">
+                        关键证据
                       </div>
-                    </div>
-                    <div v-if="resolveDecisionRows(item).length" class="evidence-chain-block">
-                      <div class="evidence-chain-block-title">判断过程</div>
                       <div
-                        v-for="row in resolveDecisionRows(item)"
-                        :key="row.key"
-                        class="evidence-chain-line"
+                        v-for="evidence in resolveEvidenceChainItems(item)"
+                        :key="evidence.key"
+                        class="evidence-chain-evidence"
                       >
-                        <span>{{ row.label }}</span>
-                        <strong>{{ row.value }}</strong>
-                      </div>
-                    </div>
-                    <div v-if="resolveReviewRows(item).length" class="evidence-chain-block">
-                      <div class="evidence-chain-block-title">人工复核</div>
-                      <div
-                        v-for="row in resolveReviewRows(item)"
-                        :key="row.key"
-                        class="evidence-chain-line"
-                      >
-                        <span>{{ row.label }}</span>
-                        <strong>{{ row.value }}</strong>
+                        <div class="evidence-chain-evidence-meta">
+                          <span>{{ evidence.source }}</span>
+                          <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                          <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                        </div>
+                        <div class="evidence-chain-quote">
+                          {{ evidence.quote }}
+                        </div>
                       </div>
                     </div>
                   </div>
                   <div
-                    v-if="resolveEvidenceChainItems(item).length"
-                    class="evidence-chain-evidence-list"
+                    v-if="isIssueExpanded(item)"
+                    class="issue-conclusion-summary"
                   >
-                    <div class="evidence-chain-block-title">关键证据</div>
+                    <div class="issue-conclusion-row">
+                      <span class="issue-conclusion-label">结论</span>
+                      <div class="issue-conclusion-structured">
+                        <template v-if="resolveStructuredText(item.customer_findings_text).summary">
+                          <p
+                            v-for="(paragraph, index) in resolveStructuredText(
+                              item.customer_findings_text,
+                            ).summary"
+                            :key="`finding-summary-${resolveIssueStableKey(item)}-${index}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                        </template>
+                        <div
+                          v-for="(section, sectionIndex) in resolveStructuredText(
+                            item.customer_findings_text,
+                          ).sections"
+                          :key="`finding-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                          class="issue-conclusion-section"
+                        >
+                          <div class="issue-conclusion-section-title">
+                            {{ section.title }}
+                          </div>
+                          <p
+                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                            :key="`finding-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                          <ol
+                            v-if="section.points.length"
+                            class="issue-conclusion-points"
+                          >
+                            <li
+                              v-for="(point, index) in section.points"
+                              :key="`finding-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                            >
+                              {{ point }}
+                            </li>
+                          </ol>
+                        </div>
+                        <ol
+                          v-if="resolveStructuredText(item.customer_findings_text).points.length"
+                          class="issue-conclusion-points"
+                        >
+                          <li
+                            v-for="(point, index) in resolveStructuredText(
+                              item.customer_findings_text,
+                            ).points"
+                            :key="`finding-point-${resolveIssueStableKey(item)}-${index}`"
+                          >
+                            {{ point }}
+                          </li>
+                        </ol>
+                        <span
+                          v-if="
+                            !resolveStructuredText(item.customer_findings_text).summary.length &&
+                              !resolveStructuredText(item.customer_findings_text).sections.length &&
+                              !resolveStructuredText(item.customer_findings_text).points.length
+                          "
+                        >
+                          无
+                        </span>
+                      </div>
+                    </div>
+                    <div class="issue-conclusion-row">
+                      <span class="issue-conclusion-label">证据</span>
+                      <div class="issue-conclusion-structured">
+                        <template v-if="item.customer_evidence_structured.summary">
+                          <p
+                            v-for="(paragraph, index) in item.customer_evidence_structured.summary"
+                            :key="`evidence-summary-${resolveIssueStableKey(item)}-${index}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                        </template>
+                        <div
+                          v-for="(section, sectionIndex) in item.customer_evidence_structured
+                            .sections"
+                          :key="`evidence-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                          class="issue-conclusion-section"
+                        >
+                          <div class="issue-conclusion-section-title">
+                            {{ section.title }}
+                          </div>
+                          <p
+                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                            :key="`evidence-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                          <ol
+                            v-if="section.points.length"
+                            class="issue-conclusion-points"
+                          >
+                            <li
+                              v-for="(point, index) in section.points"
+                              :key="`evidence-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                            >
+                              {{ point }}
+                            </li>
+                          </ol>
+                        </div>
+                        <ol
+                          v-if="item.customer_evidence_structured.points.length"
+                          class="issue-conclusion-points"
+                        >
+                          <li
+                            v-for="(point, index) in item.customer_evidence_structured.points"
+                            :key="`evidence-point-${resolveIssueStableKey(item)}-${index}`"
+                          >
+                            {{ point }}
+                          </li>
+                        </ol>
+                        <span
+                          v-if="
+                            !item.customer_evidence_structured.summary.length &&
+                              !item.customer_evidence_structured.sections.length &&
+                              !item.customer_evidence_structured.points.length
+                          "
+                        >
+                          无
+                        </span>
+                      </div>
+                    </div>
+                    <div class="issue-conclusion-row">
+                      <span class="issue-conclusion-label">建议</span>
+                      <div class="issue-conclusion-structured">
+                        <template
+                          v-if="resolveStructuredText(item.customer_suggestion_text).summary"
+                        >
+                          <p
+                            v-for="(paragraph, index) in resolveStructuredText(
+                              item.customer_suggestion_text,
+                            ).summary"
+                            :key="`suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                        </template>
+                        <div
+                          v-for="(section, sectionIndex) in resolveStructuredText(
+                            item.customer_suggestion_text,
+                          ).sections"
+                          :key="`suggestion-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                          class="issue-conclusion-section"
+                        >
+                          <div class="issue-conclusion-section-title">
+                            {{ section.title }}
+                          </div>
+                          <p
+                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                            :key="`suggestion-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                          <ol
+                            v-if="section.points.length"
+                            class="issue-conclusion-points"
+                          >
+                            <li
+                              v-for="(point, index) in section.points"
+                              :key="`suggestion-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                            >
+                              {{ point }}
+                            </li>
+                          </ol>
+                        </div>
+                        <ol
+                          v-if="resolveStructuredText(item.customer_suggestion_text).points.length"
+                          class="issue-conclusion-points"
+                        >
+                          <li
+                            v-for="(point, index) in resolveStructuredText(
+                              item.customer_suggestion_text,
+                            ).points"
+                            :key="`suggestion-point-${resolveIssueStableKey(item)}-${index}`"
+                          >
+                            {{ point }}
+                          </li>
+                        </ol>
+                        <span
+                          v-if="
+                            !resolveStructuredText(item.customer_suggestion_text).summary.length &&
+                              !resolveStructuredText(item.customer_suggestion_text).sections.length &&
+                              !resolveStructuredText(item.customer_suggestion_text).points.length
+                          "
+                        >
+                          无
+                        </span>
+                      </div>
+                    </div>
                     <div
-                      v-for="evidence in resolveEvidenceChainItems(item)"
-                      :key="evidence.key"
-                      class="evidence-chain-evidence"
+                      v-if="item.rewrite_example"
+                      class="issue-conclusion-row"
                     >
-                      <div class="evidence-chain-evidence-meta">
-                        <span>{{ evidence.source }}</span>
-                        <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
-                        <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
-                      </div>
-                      <div class="evidence-chain-quote">
-                        {{ evidence.quote }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div v-if="isIssueExpanded(item)" class="issue-conclusion-summary">
-                  <div class="issue-conclusion-row">
-                    <span class="issue-conclusion-label">结论</span>
-                    <div class="issue-conclusion-structured">
-                      <template v-if="resolveStructuredText(item.findings).summary">
-                        <p
-                          v-for="(paragraph, index) in resolveStructuredText(item.findings).summary"
-                          :key="`finding-summary-${resolveIssueStableKey(item)}-${index}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                      </template>
+                      <span class="issue-conclusion-label">改写示例</span>
                       <div
-                        v-for="(section, sectionIndex) in resolveStructuredText(item.findings)
-                          .sections"
-                        :key="`finding-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                        class="issue-conclusion-section"
+                        v-if="isIssueExpanded(item)"
+                        class="issue-conclusion-structured"
                       >
-                        <div class="issue-conclusion-section-title">
-                          {{ section.title }}
-                        </div>
-                        <p
-                          v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                          :key="`finding-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                          class="issue-conclusion-summary-text"
+                        <template v-if="resolveStructuredText(item.rewrite_example).summary">
+                          <p
+                            v-for="(paragraph, index) in resolveStructuredText(item.rewrite_example)
+                              .summary"
+                            :key="`rewrite-summary-${resolveIssueStableKey(item)}-${index}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                        </template>
+                        <div
+                          v-for="(section, sectionIndex) in resolveStructuredText(
+                            item.rewrite_example,
+                          ).sections"
+                          :key="`rewrite-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                          class="issue-conclusion-section"
                         >
-                          {{ paragraph }}
-                        </p>
-                        <ol v-if="section.points.length" class="issue-conclusion-points">
+                          <div class="issue-conclusion-section-title">
+                            {{ section.title }}
+                          </div>
+                          <p
+                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                            :key="`rewrite-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                            class="issue-conclusion-summary-text"
+                          >
+                            {{ paragraph }}
+                          </p>
+                          <ol
+                            v-if="section.points.length"
+                            class="issue-conclusion-points"
+                          >
+                            <li
+                              v-for="(point, index) in section.points"
+                              :key="`rewrite-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                            >
+                              {{ point }}
+                            </li>
+                          </ol>
+                        </div>
+                        <ol
+                          v-if="resolveStructuredText(item.rewrite_example).points.length"
+                          class="issue-conclusion-points"
+                        >
                           <li
-                            v-for="(point, index) in section.points"
-                            :key="`finding-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                            v-for="(point, index) in resolveStructuredText(item.rewrite_example)
+                              .points"
+                            :key="`rewrite-point-${resolveIssueStableKey(item)}-${index}`"
                           >
                             {{ point }}
                           </li>
                         </ol>
                       </div>
-                      <ol
-                        v-if="resolveStructuredText(item.findings).points.length"
-                        class="issue-conclusion-points"
-                      >
-                        <li
-                          v-for="(point, index) in resolveStructuredText(item.findings).points"
-                          :key="`finding-point-${resolveIssueStableKey(item)}-${index}`"
-                        >
-                          {{ point }}
-                        </li>
-                      </ol>
-                      <span
-                        v-if="
-                          !resolveStructuredText(item.findings).summary.length &&
-                          !resolveStructuredText(item.findings).sections.length &&
-                          !resolveStructuredText(item.findings).points.length
-                        "
-                      >
-                        无
+                      <span v-else>
+                        {{ truncateText(item.rewrite_example, 96) }}
                       </span>
                     </div>
                   </div>
-                  <div class="issue-conclusion-row">
-                    <span class="issue-conclusion-label">证据</span>
-                    <div class="issue-conclusion-structured">
-                      <template v-if="item.customer_evidence_structured.summary">
-                        <p
-                          v-for="(paragraph, index) in item.customer_evidence_structured.summary"
-                          :key="`evidence-summary-${resolveIssueStableKey(item)}-${index}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                      </template>
-                      <div
-                        v-for="(section, sectionIndex) in item.customer_evidence_structured
-                          .sections"
-                        :key="`evidence-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                        class="issue-conclusion-section"
-                      >
-                        <div class="issue-conclusion-section-title">
-                          {{ section.title }}
-                        </div>
-                        <p
-                          v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                          :key="`evidence-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                        <ol v-if="section.points.length" class="issue-conclusion-points">
-                          <li
-                            v-for="(point, index) in section.points"
-                            :key="`evidence-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                      </div>
-                      <ol
-                        v-if="item.customer_evidence_structured.points.length"
-                        class="issue-conclusion-points"
-                      >
-                        <li
-                          v-for="(point, index) in item.customer_evidence_structured.points"
-                          :key="`evidence-point-${resolveIssueStableKey(item)}-${index}`"
-                        >
-                          {{ point }}
-                        </li>
-                      </ol>
-                      <span
-                        v-if="
-                          !item.customer_evidence_structured.summary.length &&
-                          !item.customer_evidence_structured.sections.length &&
-                          !item.customer_evidence_structured.points.length
-                        "
-                      >
-                        无
-                      </span>
-                    </div>
-                  </div>
-                  <div class="issue-conclusion-row">
-                    <span class="issue-conclusion-label">建议</span>
-                    <div class="issue-conclusion-structured">
-                      <template v-if="resolveStructuredText(item.suggestion).summary">
-                        <p
-                          v-for="(paragraph, index) in resolveStructuredText(item.suggestion)
-                            .summary"
-                          :key="`suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                      </template>
-                      <div
-                        v-for="(section, sectionIndex) in resolveStructuredText(item.suggestion)
-                          .sections"
-                        :key="`suggestion-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                        class="issue-conclusion-section"
-                      >
-                        <div class="issue-conclusion-section-title">
-                          {{ section.title }}
-                        </div>
-                        <p
-                          v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                          :key="`suggestion-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                        <ol v-if="section.points.length" class="issue-conclusion-points">
-                          <li
-                            v-for="(point, index) in section.points"
-                            :key="`suggestion-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                      </div>
-                      <ol
-                        v-if="resolveStructuredText(item.suggestion).points.length"
-                        class="issue-conclusion-points"
-                      >
-                        <li
-                          v-for="(point, index) in resolveStructuredText(item.suggestion).points"
-                          :key="`suggestion-point-${resolveIssueStableKey(item)}-${index}`"
-                        >
-                          {{ point }}
-                        </li>
-                      </ol>
-                      <span
-                        v-if="
-                          !resolveStructuredText(item.suggestion).summary.length &&
-                          !resolveStructuredText(item.suggestion).sections.length &&
-                          !resolveStructuredText(item.suggestion).points.length
-                        "
-                      >
-                        无
-                      </span>
-                    </div>
-                  </div>
-                  <div v-if="item.rewrite_example" class="issue-conclusion-row">
-                    <span class="issue-conclusion-label">改写示例</span>
-                    <div v-if="isIssueExpanded(item)" class="issue-conclusion-structured">
-                      <template v-if="resolveStructuredText(item.rewrite_example).summary">
-                        <p
-                          v-for="(paragraph, index) in resolveStructuredText(item.rewrite_example)
-                            .summary"
-                          :key="`rewrite-summary-${resolveIssueStableKey(item)}-${index}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                      </template>
-                      <div
-                        v-for="(section, sectionIndex) in resolveStructuredText(
-                          item.rewrite_example,
-                        ).sections"
-                        :key="`rewrite-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                        class="issue-conclusion-section"
-                      >
-                        <div class="issue-conclusion-section-title">
-                          {{ section.title }}
-                        </div>
-                        <p
-                          v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                          :key="`rewrite-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                          class="issue-conclusion-summary-text"
-                        >
-                          {{ paragraph }}
-                        </p>
-                        <ol v-if="section.points.length" class="issue-conclusion-points">
-                          <li
-                            v-for="(point, index) in section.points"
-                            :key="`rewrite-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                      </div>
-                      <ol
-                        v-if="resolveStructuredText(item.rewrite_example).points.length"
-                        class="issue-conclusion-points"
-                      >
-                        <li
-                          v-for="(point, index) in resolveStructuredText(item.rewrite_example)
-                            .points"
-                          :key="`rewrite-point-${resolveIssueStableKey(item)}-${index}`"
-                        >
-                          {{ point }}
-                        </li>
-                      </ol>
-                    </div>
-                    <span v-else>
-                      {{ truncateText(item.rewrite_example, 96) }}
-                    </span>
+                  <div class="issue-conclusion-actions">
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="toggleIssueExpanded(item)"
+                    >
+                      {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
+                    </a-button>
+                    <a-button
+                      type="link"
+                      size="small"
+                      @click="openIssueDeepReview(item)"
+                    >
+                      深度复核
+                    </a-button>
                   </div>
                 </div>
-                <div class="issue-conclusion-actions">
-                  <a-button type="link" size="small" @click="toggleIssueExpanded(item)">
-                    {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
-                  </a-button>
-                  <a-button type="link" size="small" @click="openIssueDeepReview(item)">
-                    深度复核
-                  </a-button>
-                </div>
-              </div>
-            </TransitionGroup>
+              </TransitionGroup>
+            </div>
           </div>
           <div
             v-else-if="isWaitingFirstResult && issueViewMode === 'business'"
@@ -667,10 +911,17 @@
               <span />
               <span />
             </div>
-            <div class="stream-waiting-text">正在等待首份病历结果</div>
-            <div class="stream-waiting-subtext">模型仍在处理首份病历，结果会自动出现在这里。</div>
+            <div class="stream-waiting-text">
+              正在等待首份病历结果
+            </div>
+            <div class="stream-waiting-subtext">
+              模型仍在处理首份病历，结果会自动出现在这里。
+            </div>
           </div>
-          <a-empty v-else-if="issueViewMode === 'business'" :description="emptyIssueText" />
+          <a-empty
+            v-else-if="issueViewMode === 'business'"
+            :description="emptyIssueText"
+          />
           <a-pagination
             v-if="
               issueViewMode === 'business' && displayIssueItems.length > issuePagination.pageSize
@@ -703,10 +954,18 @@
           ghost
           class="drawer-advanced-collapse"
         >
-          <a-collapse-panel key="execution" header="技术详情：执行统计">
-            <div v-if="progressSummary" class="drawer-card drawer-card--nested">
+          <a-collapse-panel
+            key="execution"
+            header="技术详情：执行统计"
+          >
+            <div
+              v-if="progressSummary"
+              class="drawer-card drawer-card--nested"
+            >
               <div class="drawer-section-head">
-                <div class="drawer-section-title">任务进度</div>
+                <div class="drawer-section-title">
+                  任务进度
+                </div>
                 <div class="drawer-section-meta">
                   {{ progressSummary.stepLabel }}
                 </div>
@@ -717,39 +976,56 @@
                 :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
               />
               <div class="progress-meta">
-                <span
-                  >已处理 {{ progressSummary.processedRecords }} /
-                  {{ progressSummary.totalRecords }} 份病历</span
-                >
+                <span>已处理 {{ progressSummary.processedRecords }} /
+                  {{ progressSummary.totalRecords }} 份病历</span>
                 <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
               </div>
             </div>
 
-            <div v-if="advancedSummaryCards.length" class="drawer-summary summary-grid-secondary">
-              <div v-for="item in advancedSummaryCards" :key="item.key" class="summary-card">
+            <div
+              v-if="advancedSummaryCards.length"
+              class="drawer-summary summary-grid-secondary"
+            >
+              <div
+                v-for="item in advancedSummaryCards"
+                :key="item.key"
+                class="summary-card"
+              >
                 <div class="summary-label">
                   {{ item.label }}
                 </div>
                 <div class="summary-value">
                   {{ item.value }}
                 </div>
-                <div v-if="item.desc" class="summary-desc">
+                <div
+                  v-if="item.desc"
+                  class="summary-desc"
+                >
                   {{ item.desc }}
                 </div>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel v-if="resultAggregation" key="aggregation" header="技术详情：结果聚合">
+          <a-collapse-panel
+            v-if="resultAggregation"
+            key="aggregation"
+            header="技术详情：结果聚合"
+          >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">结果聚合</div>
+                <div class="drawer-section-title">
+                  结果聚合
+                </div>
                 <div class="drawer-section-meta">
                   簇数 {{ resultAggregation.cluster_count || 0 }} · 重复命中
                   {{ resultAggregation.duplicate_hits || 0 }}
                 </div>
               </div>
-              <div v-if="aggregationBreakdownSections.length" class="aggregation-breakdown-grid">
+              <div
+                v-if="aggregationBreakdownSections.length"
+                class="aggregation-breakdown-grid"
+              >
                 <div
                   v-for="section in aggregationBreakdownSections"
                   :key="section.key"
@@ -763,7 +1039,10 @@
                       {{ section.total }}
                     </div>
                   </div>
-                  <div v-if="section.items.length" class="aggregation-breakdown-items">
+                  <div
+                    v-if="section.items.length"
+                    class="aggregation-breakdown-items"
+                  >
                     <div
                       v-for="item in section.items"
                       :key="`${section.key}-${item.label}`"
@@ -775,7 +1054,12 @@
                       </a-tag>
                     </div>
                   </div>
-                  <div v-else class="aggregation-breakdown-empty">暂无分解数据</div>
+                  <div
+                    v-else
+                    class="aggregation-breakdown-empty"
+                  >
+                    暂无分解数据
+                  </div>
                 </div>
               </div>
               <div class="aggregation-list">
@@ -790,9 +1074,14 @@
                     <span class="aggregation-item-title">
                       {{ resolveCustomerEvidenceText(cluster.cluster_key) }}
                     </span>
-                    <a-tag class="aggregation-count-tag"> {{ cluster.records || 0 }} 次 </a-tag>
+                    <a-tag class="aggregation-count-tag">
+                      {{ cluster.records || 0 }} 次
+                    </a-tag>
                   </div>
-                  <div v-if="cluster.sample_evidence" class="aggregation-evidence">
+                  <div
+                    v-if="cluster.sample_evidence"
+                    class="aggregation-evidence"
+                  >
                     {{ resolveCustomerEvidenceText(cluster.sample_evidence) }}
                   </div>
                   <div class="aggregation-meta">
@@ -800,20 +1089,35 @@
                   </div>
                 </div>
               </div>
-              <div v-if="selectedClusterKey" class="aggregation-active-tip">
+              <div
+                v-if="selectedClusterKey"
+                class="aggregation-active-tip"
+              >
                 已按聚合簇过滤：{{ resolveCustomerEvidenceText(selectedClusterKey) }}
-                <a-button type="link" size="small" @click.stop="clearClusterFilter">
+                <a-button
+                  type="link"
+                  size="small"
+                  @click.stop="clearClusterFilter"
+                >
                   清除
                 </a-button>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel key="rules" header="技术详情：规则结果">
+          <a-collapse-panel
+            key="rules"
+            header="技术详情：规则结果"
+          >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">规则结果概览</div>
-                <div v-if="activeRuleFilterLabel" class="drawer-section-meta">
+                <div class="drawer-section-title">
+                  规则结果概览
+                </div>
+                <div
+                  v-if="activeRuleFilterLabel"
+                  class="drawer-section-meta"
+                >
                   已按规则过滤：{{ activeRuleFilterLabel }}
                 </div>
               </div>
@@ -830,10 +1134,16 @@
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel v-if="batchJobDebugSnapshot" key="debug" header="技术详情：调试快照">
+          <a-collapse-panel
+            v-if="batchJobDebugSnapshot"
+            key="debug"
+            header="技术详情：调试快照"
+          >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">执行调试快照</div>
+                <div class="drawer-section-title">
+                  执行调试快照
+                </div>
                 <div class="debug-toolbar">
                   <a-select
                     :value="selectedDebugRuleJobId || undefined"
@@ -856,16 +1166,16 @@
                   <span class="debug-current-rule-value">
                     {{
                       batchJobDebugSnapshot.current_rule?.rule_code ||
-                      currentDebugRule?.rule_code ||
-                      '未定位'
+                        currentDebugRule?.rule_code ||
+                        '未定位'
                     }}
                   </span>
                 </div>
                 <div class="debug-current-rule-sub">
                   {{
                     batchJobDebugSnapshot.current_rule?.rule_name ||
-                    currentDebugRule?.rule_name ||
-                    '暂无规则名称'
+                      currentDebugRule?.rule_name ||
+                      '暂无规则名称'
                   }}
                 </div>
               </div>
@@ -891,8 +1201,13 @@
                   <span class="debug-meta-value">{{ batchJobDebugSnapshot.status }}</span>
                 </div>
               </div>
-              <div v-if="debugProgressEntries.length" class="debug-pill-block">
-                <div class="debug-pill-title">current_rule.progress</div>
+              <div
+                v-if="debugProgressEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.progress
+                </div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugProgressEntries"
@@ -903,8 +1218,13 @@
                   </span>
                 </div>
               </div>
-              <div v-if="debugDetailEntries.length" class="debug-pill-block">
-                <div class="debug-pill-title">current_rule.debug</div>
+              <div
+                v-if="debugDetailEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.debug
+                </div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugDetailEntries"
@@ -945,18 +1265,25 @@
             <span>{{ selectedDeepReviewIssue.record_id || '-' }}</span>
             <span>{{
               selectedDeepReviewIssue.target_document_type ||
-              selectedDeepReviewIssue.document_type ||
-              '未知文书域'
+                selectedDeepReviewIssue.document_type ||
+                '未知文书域'
             }}</span>
             <span>{{ selectedDeepReviewIssue.rule_family || 'general' }}</span>
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
           </div>
-          <div v-if="hasEvidenceChain(selectedDeepReviewIssue)" class="deep-review-chain">
+          <div
+            v-if="hasEvidenceChain(selectedDeepReviewIssue)"
+            class="deep-review-chain"
+          >
             <div class="evidence-chain-panel-head">
               <div>
-                <div class="evidence-chain-title">证据链</div>
-                <div class="evidence-chain-subtitle">触发事实、依赖数据、来源证据和判断阈值</div>
+                <div class="evidence-chain-title">
+                  证据链
+                </div>
+                <div class="evidence-chain-subtitle">
+                  触发事实、依赖数据、来源证据和判断阈值
+                </div>
               </div>
               <a-tag class="evidence-chain-tag">
                 {{
@@ -971,7 +1298,9 @@
                 v-if="resolveTriggerFacts(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">触发事实</div>
+                <div class="evidence-chain-block-title">
+                  触发事实
+                </div>
                 <div
                   v-for="fact in resolveTriggerFacts(selectedDeepReviewIssue)"
                   :key="fact.key"
@@ -982,7 +1311,9 @@
                 </div>
               </div>
               <div class="evidence-chain-block">
-                <div class="evidence-chain-block-title">数据依赖</div>
+                <div class="evidence-chain-block-title">
+                  数据依赖
+                </div>
                 <div
                   v-for="row in resolveDependencyRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -996,7 +1327,9 @@
                 v-if="resolveDecisionRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">判断过程</div>
+                <div class="evidence-chain-block-title">
+                  判断过程
+                </div>
                 <div
                   v-for="row in resolveDecisionRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1010,7 +1343,9 @@
                 v-if="resolveAuditRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">执行审计</div>
+                <div class="evidence-chain-block-title">
+                  执行信息
+                </div>
                 <div
                   v-for="row in resolveAuditRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1025,7 +1360,9 @@
               v-if="resolveEvidenceChainItems(selectedDeepReviewIssue).length"
               class="evidence-chain-evidence-list"
             >
-              <div class="evidence-chain-block-title">关键证据</div>
+              <div class="evidence-chain-block-title">
+                关键证据
+              </div>
               <div
                 v-for="evidence in resolveEvidenceChainItems(selectedDeepReviewIssue)"
                 :key="evidence.key"
@@ -1042,10 +1379,17 @@
               </div>
             </div>
           </div>
-          <a-alert v-if="deepReviewError" type="warning" show-icon :message="deepReviewError" />
+          <a-alert
+            v-if="deepReviewError"
+            type="warning"
+            show-icon
+            :message="deepReviewError"
+          />
           <a-spin :spinning="deepReviewLoading">
             <div class="deep-review-section">
-              <div class="deep-review-label">复核结论</div>
+              <div class="deep-review-label">
+                复核结论
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('findings')).summary.length"
@@ -1077,7 +1421,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-findings-point-${sectionIndex}-${index}`"
@@ -1102,7 +1449,9 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">复核证据</div>
+              <div class="deep-review-label">
+                复核证据
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('evidence')).summary.length"
@@ -1134,7 +1483,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-evidence-point-${sectionIndex}-${index}`"
@@ -1159,7 +1511,9 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">复核建议</div>
+              <div class="deep-review-label">
+                复核建议
+              </div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('suggestion')).summary.length"
@@ -1191,7 +1545,10 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol v-if="section.points.length" class="issue-conclusion-points">
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-suggestion-point-${sectionIndex}-${index}`"
@@ -1255,7 +1612,7 @@ const props = defineProps<{
   ) => Promise<SichuanBatchJobDebugSnapshot | null>
   batchJobDetailLoading: boolean
   close: () => void
-  exportBatchJobReport: (format?: 'xlsx' | 'csv') => void
+  exportBatchJobReport: (format?: 'xlsx' | 'csv' | 'html') => void
   cancelBatchJob?: (jobId: string) => Promise<void> | void
   cancelBatchJobLoading?: boolean
   getBatchJobStatusTagClass: (status?: string) => string
@@ -1265,6 +1622,13 @@ const props = defineProps<{
   focusRecordId?: string
   focusRecordLabel?: string
 }>()
+
+type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
+
+function handleExportMenuClick(event: { key?: unknown }) {
+  const format = String(event?.key || 'html') as BatchJobExportFormat
+  props.exportBatchJobReport(['xlsx', 'csv', 'html'].includes(format) ? format : 'html')
+}
 
 const scopeLabelMap: Record<string, string> = {
   running: '运行病历',
@@ -1301,6 +1665,19 @@ const LUXIAN_0609_STATUS_ORDER = [
   'not_executed',
   'technical_error',
 ]
+const ALL_RECORDS_KEY = '__all_records__'
+
+interface IssueRecordGroup<T extends SichuanBatchIssueItem = SichuanBatchIssueItem> {
+  key: string
+  label: string
+  meta: string
+  total: number
+  nonCompliant: number
+  dataGap: number
+  uncertain: number
+  technicalError: number
+  items: T[]
+}
 
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -1429,7 +1806,11 @@ const issueColumns = computed(() => {
       key: 'findings',
       width: 320,
       customRender: ({ text }: { text?: string }) =>
-        h('span', { title: text || '' }, truncateText(text, 80)),
+        h(
+          'span',
+          { title: sanitizeCustomerVisibleText(text) },
+          truncateText(sanitizeCustomerVisibleText(text), 80),
+        ),
     },
     {
       title: '证据摘要',
@@ -1449,7 +1830,11 @@ const issueColumns = computed(() => {
       key: 'suggestion',
       width: 260,
       customRender: ({ text }: { text?: string }) =>
-        h('span', { title: text || '' }, truncateText(text, 68)),
+        h(
+          'span',
+          { title: sanitizeCustomerVisibleText(text) },
+          truncateText(sanitizeCustomerVisibleText(text), 68),
+        ),
     },
     {
       title: '文书域',
@@ -1514,6 +1899,7 @@ const resolvedRuleResults = computed(() => {
 
 const selectedClusterKey = ref('')
 const selectedDebugRuleJobId = ref('')
+const selectedIssueRecordKey = ref(ALL_RECORDS_KEY)
 const issuePagination = reactive({
   current: 1,
   pageSize: 8,
@@ -1702,6 +2088,7 @@ watch(
   () => {
     selectedClusterKey.value = ''
     selectedDebugRuleJobId.value = ''
+    selectedIssueRecordKey.value = ALL_RECORDS_KEY
     issueViewMode.value = 'business'
     advancedSectionKeys.value = []
     expandedIssueKeys.value = []
@@ -1719,6 +2106,7 @@ watch(
     showAllStatuses.value,
     selectedDebugRuleJobId.value,
     selectedClusterKey.value,
+    selectedIssueRecordKey.value,
   ],
   () => {
     issuePagination.current = 1
@@ -1861,7 +2249,74 @@ const selectedCluster = computed(() => {
   )
 })
 
-const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
+function resolveIssueRecordKey(item: Pick<SichuanBatchIssueItem, 'visit_id' | 'record_id'>) {
+  const visitId = String(item.visit_id || '').trim()
+  const recordId = String(item.record_id || '').trim()
+  return visitId || recordId || 'unknown-record'
+}
+
+function resolveIssueRecordLabel(item: SichuanBatchIssueItem) {
+  const patientName = String(item.patient_name || '').trim()
+  const recordId = String(item.record_id || '').trim()
+  const visitId = String(item.visit_id || '').trim()
+  if (patientName && recordId && patientName !== recordId) return `${patientName} · ${recordId}`
+  if (patientName) return patientName
+  if (recordId) return `病历 ${recordId}`
+  if (visitId) return `病历 ${visitId}`
+  return '未返回病历标识'
+}
+
+function resolveIssueRecordMeta(item: SichuanBatchIssueItem) {
+  const values = [
+    String(item.department || '').trim(),
+    String(item.visit_id || '').trim() ? `visit_id ${String(item.visit_id).trim()}` : '',
+    String(item.record_id || '').trim() ? `记录 ${String(item.record_id).trim()}` : '',
+  ].filter(Boolean)
+  return Array.from(new Set(values)).join(' · ')
+}
+
+function createIssueRecordGroup<T extends SichuanBatchIssueItem>(
+  key: string,
+  item: T,
+): IssueRecordGroup<T> {
+  return {
+    key,
+    label: resolveIssueRecordLabel(item),
+    meta: resolveIssueRecordMeta(item),
+    total: 0,
+    nonCompliant: 0,
+    dataGap: 0,
+    uncertain: 0,
+    technicalError: 0,
+    items: [],
+  }
+}
+
+function buildIssueRecordGroups<T extends SichuanBatchIssueItem>(
+  items: T[],
+): Array<IssueRecordGroup<T>> {
+  const map = new Map<string, IssueRecordGroup<T>>()
+  items.forEach((item) => {
+    const key = resolveIssueRecordKey(item)
+    if (!map.has(key)) {
+      map.set(key, createIssueRecordGroup(key, item))
+    }
+    const group = map.get(key)
+    if (!group) return
+    group.items.push(item)
+    group.total += 1
+    const status = normalizeLuxianStatusKey(
+      item.result_status || item.status || item.display_status,
+    )
+    if (status === 'non_compliant') group.nonCompliant += 1
+    if (status === 'data_gap') group.dataGap += 1
+    if (status === 'uncertain') group.uncertain += 1
+    if (status === 'technical_error') group.technicalError += 1
+  })
+  return Array.from(map.values())
+}
+
+const displayIssueItemsBeforeRecordFilter = computed<SichuanBatchIssueItem[]>(() => {
   const items = issueItems.value.filter((item) => {
     if (!selectedDebugRuleJobId.value) return true
     const itemRuleJobId = String(item.rule_job_id || '').trim()
@@ -1872,6 +2327,25 @@ const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
   return items.filter((item) => matchIssueItemWithCluster(item, cluster))
 })
 
+const issueRecordGroups = computed(() =>
+  buildIssueRecordGroups(displayIssueItemsBeforeRecordFilter.value),
+)
+
+const issueRecordTotalCount = computed(() =>
+  issueRecordGroups.value.reduce((sum, group) => sum + group.total, 0),
+)
+
+const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
+  if (selectedIssueRecordKey.value === ALL_RECORDS_KEY) {
+    return displayIssueItemsBeforeRecordFilter.value
+  }
+  const exists = issueRecordGroups.value.some((group) => group.key === selectedIssueRecordKey.value)
+  if (!exists) return displayIssueItemsBeforeRecordFilter.value
+  return displayIssueItemsBeforeRecordFilter.value.filter(
+    (item) => resolveIssueRecordKey(item) === selectedIssueRecordKey.value,
+  )
+})
+
 const businessIssueCards = computed(() => {
   const startIndex = (issuePagination.current - 1) * issuePagination.pageSize
   return displayIssueItems.value
@@ -1880,13 +2354,22 @@ const businessIssueCards = computed(() => {
       const customerEvidenceText = resolveCustomerEvidenceText(item.evidence)
       return {
         ...item,
+        customer_findings_text: sanitizeCustomerVisibleText(item.findings),
+        customer_suggestion_text: sanitizeCustomerVisibleText(item.suggestion),
         customer_evidence_text: customerEvidenceText,
         customer_evidence_structured: resolveStructuredText(customerEvidenceText),
         evidence_summary: resolveIssueEvidenceSummary(item),
+        evidence_summary_parts: resolveIssueEvidenceSummaryParts(item),
         issue_card_class: resolveIssueCardClass(item),
       }
     })
 })
+
+const businessIssueCardGroups = computed(() => buildIssueRecordGroups(businessIssueCards.value))
+
+const shouldShowIssueRecordGroupHeader = computed(
+  () => issueRecordGroups.value.length > 1 || selectedIssueRecordKey.value !== ALL_RECORDS_KEY,
+)
 
 const linkedIssueRowKey = computed(() => {
   if (!selectedCluster.value) return ''
@@ -2636,7 +3119,7 @@ const executionSummaryCards = computed(() => {
   const packMetrics = summary?.pack_metrics || {}
   const cards = [
     { key: 'program', label: 'Program执行', value: executionSummary.value.programCount, desc: '' },
-    { key: 'llm', label: 'LLM执行', value: executionSummary.value.llmCount, desc: '' },
+    { key: 'llm', label: '语义规则', value: executionSummary.value.llmCount, desc: '' },
     { key: 'hit', label: '缓存命中', value: executionSummary.value.cacheHit, desc: '' },
     { key: 'miss', label: '缓存未命中', value: executionSummary.value.cacheMiss, desc: '' },
   ]
@@ -2682,29 +3165,41 @@ const advancedSummaryCards = computed(() => {
 })
 
 const issueFocusSummary = computed(() => {
-  const total = issueItems.value.length
+  const currentItems = displayIssueItems.value
+  const total = currentItems.length
   if (!total) {
     return showAllStatuses.value ? '当前没有可展示的规则结果。' : '当前没有需要复核或整改的问题项。'
   }
-  const nonCompliantCount = issueItems.value.filter((item) => isConfirmedDefectItem(item)).length
-  const uncertainCount = issueItems.value.filter((item) => isNeedsReviewItem(item)).length
-  const dataQualityGapCount = issueItems.value.filter((item) => isDataQualityGapItem(item)).length
+  const selectedRecord = issueRecordGroups.value.find(
+    (group) => group.key === selectedIssueRecordKey.value,
+  )
+  const scopePrefix =
+    selectedRecord && selectedIssueRecordKey.value !== ALL_RECORDS_KEY
+      ? `${selectedRecord.label}：`
+      : ''
+  const nonCompliantCount = currentItems.filter((item) => isConfirmedDefectItem(item)).length
+  const uncertainCount = currentItems.filter((item) => isNeedsReviewItem(item)).length
+  const dataQualityGapCount = currentItems.filter((item) => isDataQualityGapItem(item)).length
   const rejectedBySystemCount = ruleLevelSummary.value.rejectedBySystemCount
-  const technicalErrorCount = ruleLevelSummary.value.technicalErrorCount
+  const technicalErrorCount = currentItems.filter(
+    (item) =>
+      normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+      'technical_error',
+  ).length
   if (isLuxian0609BatchJob.value) {
     const modeText = isLuxianScopedRun.value ? '选定质控点验证' : '全量 0609 规则集'
-    return `当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
+    return `${scopePrefix}当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
   }
   if (isPostprocessedFormalResult.value) {
-    return `当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
+    return `${scopePrefix}当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始语义判断不会直接计入确认缺陷。`
   }
   if (issueViewMode.value === 'business') {
     if (isFastScreenResult.value) {
-      return `当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
+      return `${scopePrefix}当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
     }
-    return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
+    return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
   }
-  return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
+  return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
 })
 
 const issueSectionTitle = computed(() =>
@@ -2871,9 +3366,12 @@ function truncateText(text?: string, limit = 80) {
 }
 
 function resolveDeepReviewText(field: 'findings' | 'evidence' | 'suggestion') {
-  return String(
+  const text = String(
     resolvedDeepReviewResult.value?.[field] || selectedDeepReviewIssue.value?.[field] || '',
   )
+  if (field === 'evidence') return resolveCustomerEvidenceText(text)
+  if (field === 'findings') return sanitizeCustomerVisibleText(text)
+  return sanitizeCustomerVisibleText(text)
 }
 
 type EvidenceDisplayRow = {
@@ -2888,6 +3386,13 @@ type EvidenceDisplayItem = {
   recordTime: string
   fieldPath: string
   quote: string
+}
+
+type EvidenceSummaryPart = {
+  key: string
+  label: string
+  value: string
+  kind: 'time' | 'source' | 'delta' | 'field' | 'text'
 }
 
 type CopyEvidenceCompare = {
@@ -2922,6 +3427,77 @@ function normalizeEvidenceText(value: unknown, limit = 120) {
   return text.length > limit ? `${text.slice(0, limit)}...` : text
 }
 
+function normalizeEvidencePartValue(value: string, limit = 96) {
+  return normalizeEvidenceText(
+    value
+      .replace(/\s+/g, ' ')
+      .replace(/[；;，,。\s]+$/gu, '')
+      .trim(),
+    limit,
+  )
+}
+
+function normalizeEvidencePartLabel(value: string) {
+  const label = value
+    .replace(/\s+/g, '')
+    .replace(/[；;，,。]+$/gu, '')
+    .trim()
+  const map: Record<string, string> = {
+    authored_at: '记录时间',
+    record_time: '记录时间',
+    submit_time: '提交时间',
+    submitted_at: '提交时间',
+    admission_time: '入院时间',
+    discharge_time: '出院时间',
+    deadline: '截止时间',
+    elapsed: '间隔',
+    delta: '差值',
+  }
+  return map[label] || label
+}
+
+function resolveEvidencePartKind(label: string, value: string): EvidenceSummaryPart['kind'] {
+  const text = `${label} ${value}`
+  if (/间隔|差值|超时|超过|小时|天/.test(text)) return 'delta'
+  if (/时间|日期|入院|出院|记录|提交|截止/.test(label)) return 'time'
+  if (/来源|文书|字段/.test(label)) return 'source'
+  if (/^[a-z_]+$/i.test(label)) return 'field'
+  return 'text'
+}
+
+function parseEvidenceSummaryParts(text?: string | null): EvidenceSummaryPart[] {
+  const raw = sanitizeCustomerVisibleText(text)
+  if (!raw) return []
+  return raw
+    .split(/[；;\n]/u)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 4)
+    .map((part, index): EvidenceSummaryPart | null => {
+      const segments = part
+        .split(/：/u)
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+      if (segments.length < 2) return null
+
+      const first = normalizeEvidencePartLabel(segments[0] || '')
+      const second = normalizeEvidencePartLabel(segments[1] || '')
+      const secondIsTechnicalField = /^[a-z_]+$/i.test(segments[1] || '')
+      const label = secondIsTechnicalField ? `${first} · ${second}` : first
+      const value = normalizeEvidencePartValue(
+        secondIsTechnicalField ? segments.slice(2).join('：') : segments.slice(1).join('：'),
+      )
+      if (!label || !value) return null
+      return {
+        key: `evidence-part-${index}-${label}`,
+        label,
+        value,
+        kind: resolveEvidencePartKind(label, value),
+      }
+    })
+    .filter((part): part is EvidenceSummaryPart => Boolean(part))
+    .slice(0, 6)
+}
+
 const INTERNAL_EVIDENCE_LABELS = [
   '证据模板',
   '触发门控',
@@ -2929,6 +3505,7 @@ const INTERNAL_EVIDENCE_LABELS = [
   '触发说明',
   '触发关键词',
   '匹配关键词',
+  '来源线索',
   '映射执行规则',
   '应包含证据要素',
   '质控点',
@@ -2965,8 +3542,17 @@ function resolveLabeledEvidenceValue(text: string, label: string) {
 function removeInternalEvidenceSegments(text: string) {
   let output = text
   output = output
+    .replace(/来源未标注\s*[·:：]\s*evidence[：:]?\s*/giu, '')
+    .replace(/\bevidence[：:]\s*/giu, '')
+    .replace(/\btrigger_status[：:]\s*unknown[。；;]*/giu, '')
+    .replace(/\bunknown\b/giu, '')
+    .replace(/LLM\s*语义规则/giu, '语义规则')
+    .replace(/LLM\s*返回(?:了)?非结构化结果[，,。；;]*/giu, '自动判定未形成可靠结构化结论，')
+    .replace(/请查看原始输出[。；;]*/gu, '')
     .replace(/本质控点按现有文书和结构化数据直接复核[。；;]*/gu, '')
     .replace(/判定依据[：:]\s*本质控点按现有文书和结构化数据直接复核[。；;]*/gu, '')
+    .replace(/判定依据[：:]\s*已发现相关事件[，,]进入规则复核[。；;]*/gu, '')
+    .replace(/已发现相关事件[，,]进入规则复核[。；;]*/gu, '')
   INTERNAL_EVIDENCE_LABELS.forEach((label) => {
     const labelPattern = new RegExp(`${escapeRegExp(label)}[：:]\\s*`, 'u')
     let match = labelPattern.exec(output)
@@ -2986,6 +3572,14 @@ function removeInternalEvidenceSegments(text: string) {
     }
   })
   return output.replace(/\s+/g, ' ').trim()
+}
+
+function sanitizeCustomerVisibleText(text?: string | null) {
+  const cleaned = removeInternalEvidenceSegments(String(text || ''))
+    .replace(/来源未标注\s*[·:：]\s*/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned
 }
 
 function normalizeCustomerDataGapText(text?: string | null) {
@@ -3019,6 +3613,22 @@ function resolveCustomerEvidenceText(text?: string | null) {
   ).find(Boolean)
   if (priorityEvidence) return priorityEvidence
   return removeInternalEvidenceSegments(raw)
+}
+
+function isGenericCustomerEvidenceText(text: string) {
+  const normalized = text.replace(/\s+/g, '')
+  return (
+    !normalized ||
+    /^判定依据[:：]?未发现与本质控点直接相关的适用事件[。.]?$/.test(text.trim()) ||
+    normalized === '未发现与本质控点直接相关的适用事件' ||
+    normalized === '本质控点按现有文书和结构化数据直接复核'
+  )
+}
+
+function resolveRichCustomerEvidenceText(item: Partial<SichuanBatchIssueItem>) {
+  const evidenceText = resolveCustomerEvidenceText(item.evidence)
+  if (!evidenceText || isGenericCustomerEvidenceText(evidenceText)) return ''
+  return evidenceText
 }
 
 function resolveEvidenceDataGapText(text?: string | null) {
@@ -3188,7 +3798,7 @@ function resolveDependencyRows(item: Partial<SichuanBatchIssueItem>): EvidenceDi
 }
 
 function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayItem[] {
-  return toRecordList(item.evidence_items)
+  const evidenceItems = toRecordList(item.evidence_items)
     .map((evidence, index) => {
       const source =
         normalizeEvidenceText(evidence.source_document_name, 40) ||
@@ -3207,6 +3817,27 @@ function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): Eviden
       }
     })
     .filter((item) => item.quote)
+  const richEvidenceText = resolveRichCustomerEvidenceText(item)
+  if (richEvidenceText) {
+    const currentQuoteText = evidenceItems.map((evidence) => evidence.quote).join(' ')
+    const shouldPrepend =
+      richEvidenceText.length > 36 &&
+      richEvidenceText.length > currentQuoteText.length + 16 &&
+      !currentQuoteText.includes(richEvidenceText.slice(0, 24))
+    if (shouldPrepend) {
+      return [
+        {
+          key: 'customer-evidence-summary',
+          source: '质控结果',
+          recordTime: '',
+          fieldPath: '关键证据',
+          quote: normalizeEvidenceText(richEvidenceText, 320),
+        },
+        ...evidenceItems,
+      ]
+    }
+  }
+  return evidenceItems
 }
 
 function formatEvidenceSummaryItem(evidence: EvidenceDisplayItem) {
@@ -3328,6 +3959,11 @@ function resolveIssueEvidenceSummary(item: Partial<SichuanBatchIssueItem>) {
   }
   const evidences = resolveEvidenceChainItems(item)
   if (evidences.length) {
+    const richEvidenceText = resolveRichCustomerEvidenceText(item)
+    const evidenceSummaryText = evidences.slice(0, 2).map(formatEvidenceSummaryItem).join('；')
+    if (richEvidenceText && richEvidenceText.length > evidenceSummaryText.length + 16) {
+      return truncateText(richEvidenceText, 180)
+    }
     return truncateText(evidences.slice(0, 2).map(formatEvidenceSummaryItem).join('；'), 180)
   }
   const triggerFact = resolveTriggerFacts(item)[0]
@@ -3339,6 +3975,20 @@ function resolveIssueEvidenceSummary(item: Partial<SichuanBatchIssueItem>) {
     return truncateText(decision.value, 118)
   }
   return truncateText(resolveCustomerEvidenceText(item.evidence), 140)
+}
+
+function resolveIssueEvidenceSummaryParts(item: Partial<SichuanBatchIssueItem>) {
+  const evidenceCandidates = [
+    resolveRichCustomerEvidenceText(item),
+    resolveEvidenceChainItems(item).slice(0, 2).map(formatEvidenceSummaryItem).join('；'),
+    resolveCustomerEvidenceText(item.evidence),
+    resolveIssueEvidenceSummary(item),
+  ].filter(Boolean)
+  for (const evidenceText of evidenceCandidates) {
+    const parts = parseEvidenceSummaryParts(evidenceText)
+    if (parts.length >= 2) return parts
+  }
+  return []
 }
 
 function resolveDecisionRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
@@ -3408,7 +4058,7 @@ function resolveAuditRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplay
   if (!audit) return []
   const rows: EvidenceDisplayRow[] = [
     { key: 'visit-id', label: '住院号', value: normalizeEvidenceText(audit.visit_id, 48) },
-    { key: 'model-name', label: '模型/执行器', value: normalizeEvidenceText(audit.model_name, 80) },
+    { key: 'model-name', label: '执行方式', value: normalizeEvidenceText(audit.model_name, 80) },
     { key: 'executed-at', label: '执行时间', value: normalizeEvidenceText(audit.executed_at, 48) },
     { key: 'elapsed', label: '耗时', value: normalizeEvidenceText(audit.elapsed_ms, 32) },
     {
@@ -3517,7 +4167,7 @@ function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'statu
   if (kind === 'executor') {
     const map: Record<string, string> = {
       program: '程序规则',
-      llm: 'LLM 规则',
+      llm: '语义规则',
     }
     return map[normalizedKey.toLowerCase()] || normalizedKey
   }
@@ -3691,6 +4341,25 @@ onUnmounted(() => {
   padding: 18px 22px;
   border-bottom: 1px solid #e2e8f0;
   background: #fff;
+}
+
+.drawer-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.drawer-back-button {
+  flex: 0 0 auto;
+  border-color: rgba(0, 102, 204, 0.2);
+  color: #005bb5;
+  font-weight: 650;
+}
+
+.drawer-back-button::before {
+  content: '←';
+  margin-right: 6px;
 }
 
 .drawer-eyebrow {
@@ -4111,11 +4780,140 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+.issue-record-switcher {
+  margin: 10px 0 12px;
+  border: 1px solid rgba(0, 102, 204, 0.12);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.82);
+  padding: 12px;
+}
+
+.issue-record-switcher-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.issue-record-switcher-head span {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 20px;
+}
+
+.issue-record-switcher-head small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.issue-record-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.issue-record-tab {
+  flex: 0 0 auto;
+  min-width: 178px;
+  max-width: 240px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #475569;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.issue-record-tab strong,
+.issue-record-tab span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-record-tab strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 19px;
+}
+
+.issue-record-tab span {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.issue-record-tab--active {
+  border-color: rgba(0, 102, 204, 0.34);
+  background: rgba(0, 102, 204, 0.08);
+  box-shadow: 0 6px 16px rgba(0, 102, 204, 0.08);
+}
+
 .issue-conclusion-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.issue-record-result-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.issue-record-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(241, 245, 249, 0.74);
+  padding: 10px 12px;
+}
+
+.issue-record-result-head strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 19px;
+}
+
+.issue-record-result-head span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.issue-record-result-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.issue-record-result-stats span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
 }
 
 .issue-conclusion-list-inner {
@@ -4363,6 +5161,46 @@ onUnmounted(() => {
 
 .issue-glance-block strong {
   font-weight: 750;
+}
+
+.issue-evidence-facts {
+  display: grid;
+  gap: 6px;
+}
+
+.issue-evidence-fact {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 6px 8px;
+}
+
+.issue-evidence-fact span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.issue-evidence-fact strong {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.issue-evidence-fact--delta {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 235, 0.72);
+}
+
+.issue-evidence-fact--time {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: rgba(239, 246, 255, 0.64);
 }
 
 .copy-evidence-compare {

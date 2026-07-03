@@ -220,6 +220,40 @@ def test_aggregator_should_not_show_lx0609_003_positive_time_result_as_defect():
     assert aggregated[0]["metadata"]["customer_display_guard"] == "lx0609_003_positive_time_result"
 
 
+def test_aggregator_should_not_show_stable_round_defect_when_critical_context_exists():
+    rules = [
+        _wrapper(
+            "LX0609-007",
+            name="查房记录：病情稳定患者3天内无查房病程记录",
+            mapped_rule_ids=["LXE-18"],
+            trigger_condition="病情稳定患者应每3天记录查房病程。",
+        )
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=[
+            {
+                "rule_id": "LXE-18",
+                "rule_name": "稳定患者查房频次",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "患者住院期间发生抢救，提示病情危重，但仍按稳定患者查房频次判定缺陷。",
+                "evidence": "执行证据：【上级查房记录】今日主治医师查看患者。",
+                "suggestion": "补写病程记录。",
+                "confidence": 0.82,
+                "metadata": {},
+            }
+        ],
+        gate_decisions={},
+    )
+
+    assert aggregated[0]["status"] == "uncertain"
+    assert "不能直接按“病情稳定患者3天内无查房病程记录”判为缺陷" in aggregated[0]["findings"]
+    assert "病危/病重医嘱" in aggregated[0]["suggestion"]
+    assert aggregated[0]["metadata"]["customer_display_guard"] == "stable_round_has_critical_context"
+
+
 def test_aggregator_should_not_show_recorded_pathology_specimen_as_defect_for_019_and_024():
     rules = [
         _wrapper(
@@ -474,6 +508,75 @@ def test_aggregator_should_not_show_consultation_signature_only_as_execution_def
     assert aggregated[0]["metadata"]["customer_display_guard"] == "consultation_signature_only_not_execution_defect"
 
 
+def test_aggregator_should_not_show_consultation_signature_only_as_purpose_defect():
+    rules = [
+        _wrapper(
+            "LX0609-021",
+            name="会诊记录：会诊申请单会诊目的不明确",
+            mapped_rule_ids=["SC-068"],
+            trigger_condition="会诊申请单应明确会诊目的。",
+        )
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=[
+            {
+                "rule_id": "SC-068",
+                "rule_name": "会诊申请目的",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "会诊记录缺少申请医师签名。",
+                "evidence": "执行证据：【会诊记录】申请医师签名：",
+                "suggestion": "补全申请会诊医师签名。",
+                "confidence": 0.8,
+                "metadata": {},
+            }
+        ],
+        gate_decisions={},
+    )
+
+    assert aggregated[0]["status"] == "uncertain"
+    assert "不能直接判定为会诊目的不明确" in aggregated[0]["findings"]
+    assert "补全申请会诊医师签名" not in aggregated[0]["suggestion"]
+    assert aggregated[0]["metadata"]["customer_display_guard"] == "consultation_signature_only_not_purpose_defect"
+
+
+def test_aggregator_should_not_show_anesthesia_consent_as_record_sheet_defect():
+    rules = [
+        _wrapper(
+            "LX0609-038",
+            name="麻醉记录单：无麻醉记录单（局麻除外）",
+            mapped_rule_ids=["SC-090"],
+            trigger_condition="非局麻手术应有麻醉记录单。",
+        )
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=[
+            {
+                "rule_id": "SC-090",
+                "rule_name": "麻醉知情同意书存在性",
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "缺少适用文书，未执行该规则：知情同意书。",
+                "evidence": "执行证据：知情同意书未见。",
+                "suggestion": "补齐知情同意书。",
+                "confidence": 0.8,
+                "metadata": {},
+            }
+        ],
+        gate_decisions={},
+    )
+
+    assert aggregated[0]["status"] == "uncertain"
+    assert "不能直接判定为无麻醉记录单" in aggregated[0]["findings"]
+    assert "麻醉记录单" in aggregated[0]["evidence"]
+    assert "知情同意书" not in aggregated[0]["evidence"]
+    assert aggregated[0]["metadata"]["customer_display_guard"] == "anesthesia_consent_not_record_sheet_defect"
+
+
 def test_aggregator_should_make_any_unstructured_uncertain_customer_readable():
     rules = [
         _wrapper(
@@ -670,6 +773,7 @@ def test_evidence_formatter_should_add_family_slots_without_changing_decision():
     assert "触发状态" not in formatted["evidence"]
     assert "触发说明" not in formatted["evidence"]
     assert "trigger_status" not in formatted["evidence"]
+    assert "来源线索" not in formatted["evidence"]
     assert formatted["metadata"]["evidence_template_family"] == "输血类"
 
 

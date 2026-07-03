@@ -30,6 +30,31 @@ interface BatchJobQueryState {
 
 const BATCH_JOB_POLL_INTERVAL_MS = 3000
 const DEBUG_SNAPSHOT_POLL_EVERY_N_TICKS = 3
+const HTML_EXPORT_MISMATCH_MESSAGE =
+  '后端未返回 HTML 明细文件，请确认客户机后端已更新到支持 HTML 导出的版本。'
+
+async function normalizeExportBlob(blob: Blob, format: 'xlsx' | 'csv' | 'html'): Promise<Blob> {
+  if (format !== 'html') return blob
+  const contentType = String(blob.type || '').toLowerCase()
+  if (
+    contentType.includes('spreadsheet') ||
+    contentType.includes('officedocument') ||
+    contentType.includes('zip')
+  ) {
+    throw new Error(HTML_EXPORT_MISMATCH_MESSAGE)
+  }
+  if (blob.size <= 0) {
+    return new Blob([], { type: 'text/html;charset=utf-8' })
+  }
+  const preview = await blob.slice(0, 96).text()
+  if (/^\s*PK/u.test(preview) || preview.includes('[Content_Types].xml')) {
+    throw new Error(HTML_EXPORT_MISMATCH_MESSAGE)
+  }
+  const text = await blob.text()
+  return new Blob([text.startsWith('\ufeff') ? text : `\ufeff${text}`], {
+    type: 'text/html;charset=utf-8',
+  })
+}
 
 export function useSichuanBatchJobs() {
   const batchJobLoading = ref(false)
@@ -235,7 +260,7 @@ export function useSichuanBatchJobs() {
     }
   }
 
-  async function exportBatchJobReport(format: 'xlsx' | 'csv' = 'xlsx') {
+  async function exportBatchJobReport(format: 'xlsx' | 'csv' | 'html' = 'html') {
     if (!activeBatchJob.value) {
       message.info('请先选择一个批量任务')
       return
@@ -248,7 +273,13 @@ export function useSichuanBatchJobs() {
       message.error(response.message || '导出任务报告失败')
       return
     }
-    const blob = response.data
+    let blob: Blob
+    try {
+      blob = await normalizeExportBlob(response.data, format)
+    } catch (error: any) {
+      message.error(error?.message || '导出任务报告失败')
+      return
+    }
     const url = window.URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url

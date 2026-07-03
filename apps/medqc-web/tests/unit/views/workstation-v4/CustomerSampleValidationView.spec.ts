@@ -40,6 +40,7 @@ const {
     warning: vi.fn(),
     info: vi.fn(),
     loading: vi.fn(),
+    destroy: vi.fn(),
   },
   listManualSamplePools: vi.fn(),
   getSheet2ExactReviewAcceptancePackage: vi.fn(),
@@ -1013,6 +1014,32 @@ describe('CustomerSampleValidationView', () => {
                 data_gap: 1,
               },
             },
+            items: [
+              {
+                rule_code: 'LX0609-002',
+                rule_name: '首次病程：入院后 8 小时内无首次病程记录',
+                record_id: 'V001',
+                status: 'non_compliant',
+                is_compliant: false,
+                findings: '首次病程记录未在入院后8小时内完成。',
+              },
+              {
+                rule_code: 'LX0609-018',
+                rule_name: '主诉能导出第一诊断',
+                record_id: 'V001',
+                status: 'non_compliant',
+                is_compliant: false,
+                findings: '主诉不能导出第一诊断。',
+              },
+              {
+                rule_code: 'LX0609-005',
+                rule_name: '上级医生查房记录',
+                record_id: 'V001',
+                status: 'data_gap',
+                is_compliant: false,
+                findings: '缺少主治医师首次查房记录时间，需人工复核。',
+              },
+            ],
           },
         ],
         total: 1,
@@ -1245,15 +1272,152 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('历史质控任务')
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).toContain('LX0609-001、LX0609-002、LX0609-005')
-    expect(wrapper.text()).toContain('不合规 2，数据不足 1')
+    expect(wrapper.text()).toContain('发现需关注结果：不合规 2，数据不足 1')
+    expect(wrapper.text()).toContain('1 份病历 · 3 个客户质控点 · 3 条结果')
+    expect(wrapper.text()).toContain('问题点：LX0609-002 首次病程记录未在入院后8小时内完成')
+    expect(wrapper.text()).toContain('LX0609-018 主诉不能导出第一诊断')
+    expect(wrapper.text()).toContain('LX0609-005 缺少主治医师首次查房记录时间')
+    expect(wrapper.find('.customer-sample-task-history-status-grid').text()).toContain('不合规')
+    expect(wrapper.find('.customer-sample-task-history-status-grid').text()).toContain('数据不足')
+    expect(wrapper.text()).toContain('导出HTML')
 
-    const viewResultButton = wrapper.find('.customer-sample-task-history-item button')
-    expect(viewResultButton.exists()).toBe(true)
-    await viewResultButton.trigger('click')
+    const exportHtmlButton = wrapper
+      .findAll('.customer-sample-task-history-item button')
+      .find((button) => button.text().includes('导出HTML'))
+    expect(exportHtmlButton).toBeTruthy()
+    await exportHtmlButton!.trigger('click')
+    await flushPromises()
+
+    expect(exportSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
+      job_id: 'job-history-1',
+      format: 'html',
+    })
+    expect(message.success).toHaveBeenCalledWith('HTML 质控明细已开始下载')
+
+    const viewResultButton = wrapper
+      .findAll('.customer-sample-task-history-item button')
+      .find((button) => button.text().includes('查看结果'))
+    expect(viewResultButton).toBeTruthy()
+    await viewResultButton!.trigger('click')
     await flushPromises()
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
     expect(latestBatchResultDrawerProps?.open).toBe(true)
+  })
+
+  it('导出 HTML 时如果后端返回 Excel 二进制，不应保存成乱码 HTML', async () => {
+    exportSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+      success: true,
+      data: new Blob(['PK\x03\x04docProps/app.xml'], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    })
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    await historyButton?.trigger('click')
+    await flushPromises()
+
+    const exportHtmlButton = wrapper
+      .findAll('.customer-sample-task-history-item button')
+      .find((button) => button.text().includes('导出HTML'))
+    expect(exportHtmlButton).toBeTruthy()
+    await exportHtmlButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.error).toHaveBeenCalledWith(
+      '后端未返回 HTML 明细文件，请确认客户机后端已更新到支持 HTML 导出的版本。',
+    )
+    expect(message.success).not.toHaveBeenCalledWith('HTML 质控明细已开始下载')
+  })
+
+  it('质控记录存在执行中任务时应自动刷新到终态', async () => {
+    vi.useFakeTimers()
+    listSichuanWorkspaceBatchJobs
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            {
+              id: 'job-running-history',
+              rule_code: 'LX0609',
+              rule_name: '泸县0609质控点验证',
+              scope: 'running',
+              status: 'running',
+              rule_set_key: 'luxian_0609_qc_v1',
+              rule_set_name: '泸县0609质控点验证 v1',
+              customer_rule_count: 49,
+              record_ids: ['V001'],
+              created_at: '2026-07-02T13:59:35Z',
+              filters: {
+                selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+              },
+              summary: {
+                display_status_counts: {
+                  non_compliant: 3,
+                  data_gap: 1,
+                },
+              },
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            {
+              id: 'job-running-history',
+              rule_code: 'LX0609',
+              rule_name: '泸县0609质控点验证',
+              scope: 'running',
+              status: 'completed',
+              rule_set_key: 'luxian_0609_qc_v1',
+              rule_set_name: '泸县0609质控点验证 v1',
+              customer_rule_count: 49,
+              record_ids: ['V001'],
+              created_at: '2026-07-02T13:59:35Z',
+              filters: {
+                selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+              },
+              summary: {
+                display_status_counts: {
+                  non_compliant: 3,
+                  data_gap: 1,
+                },
+              },
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    expect(historyButton).toBeTruthy()
+    await historyButton?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('执行中')
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.text()).not.toContain('执行中')
   })
 
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
@@ -1910,9 +2074,9 @@ describe('CustomerSampleValidationView', () => {
   it('点击查看结果后打开批量任务结果抽屉', async () => {
     const wrapper = await mountView()
 
-    const resultLink = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
-      (node) => node.text() === '查看结果',
-    )
+    const resultLink = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '查看结果')
     expect(resultLink).toBeTruthy()
     await resultLink!.trigger('click')
     await flushPromises()
@@ -1955,12 +2119,13 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
-    const resultLink = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
-      (node) => node.text() === '查看结果',
-    )
+    const resultLink = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '查看结果')
     expect(resultLink).toBeTruthy()
     await resultLink!.trigger('click')
     await flushPromises()
+    await nextTick()
 
     const detail = latestBatchResultDrawerProps?.batchJobDetail as {
       customer_rule_count?: number
@@ -2625,33 +2790,86 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledTimes(2)
-    const submittedPayloads = runManualSamplePool.mock.calls.map((call) => call[1]) as Array<{
+    expect(runManualSamplePool).toHaveBeenCalledTimes(1)
+    const submittedPayload = runManualSamplePool.mock.calls[0][1] as {
       max_parallel_records?: number
       selected_rule_ids?: string[]
-    }>
-    expect(submittedPayloads).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          max_parallel_records: 1,
-          selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004', 'LX0609-005', 'LX0609-006'],
-        }),
-        expect.objectContaining({
-          max_parallel_records: 1,
-          selected_rule_ids: [
-            'LX0609-007',
-            'LX0609-008',
-            'LX0609-009',
-            'LX0609-016',
-            'LX0609-017',
-            'LX0609-018',
-          ],
-        }),
-      ]),
+      group_by_luxian_family?: boolean
+    }
+    expect(submittedPayload).toEqual(
+      expect.objectContaining({
+        max_parallel_records: 4,
+        group_by_luxian_family: true,
+        selected_rule_ids: [
+          'LX0609-001',
+          'LX0609-002',
+          'LX0609-004',
+          'LX0609-005',
+          'LX0609-006',
+          'LX0609-007',
+          'LX0609-008',
+          'LX0609-009',
+          'LX0609-016',
+          'LX0609-017',
+          'LX0609-018',
+        ],
+      }),
     )
   })
 
   it('LX0609 质控点范围支持一次性选择全部规则族', async () => {
+    const allRuleIds = Array.from(
+      { length: 49 },
+      (_, index) => `LX0609-${String(index + 1).padStart(3, '0')}`,
+    )
+    runManualSamplePool.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'parent-job-1',
+        job_kind: 'parent',
+        child_job_ids: ['child-basic', 'child-tumor'],
+        family_scopes: [
+          { key: 'basic_timeliness', name: '基础时限', rule_ids: ['LX0609-001'] },
+          { key: 'tumor_pathology', name: '肿瘤病理', rule_ids: ['LX0609-013'] },
+        ],
+        child_jobs: [
+          {
+            id: 'child-basic',
+            rule_code: 'LX0609',
+            rule_name: '基础时限',
+            scope: 'running',
+            status: 'queued',
+            family_key: 'basic_timeliness',
+            family_name: '基础时限',
+            filters: { scoped_customer_rule_ids: ['LX0609-001'] },
+          },
+          {
+            id: 'child-tumor',
+            rule_code: 'LX0609',
+            rule_name: '肿瘤病理',
+            scope: 'running',
+            status: 'queued',
+            family_key: 'tumor_pathology',
+            family_name: '肿瘤病理',
+            filters: { scoped_customer_rule_ids: ['LX0609-013'] },
+          },
+        ],
+        sample_item_count: 1,
+        selected_record_count: 1,
+        record_count: 1,
+        rule_count: 59,
+        customer_rule_count: 49,
+        execution_rule_count: 59,
+        selected_rule_ids: allRuleIds,
+        scoped_customer_rule_ids: allRuleIds,
+        record_ids: ['V001'],
+        rule_ids: ['SC-023'],
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_set_name: '泸县0609质控点验证 v1',
+      },
+    })
     const wrapper = await mountView()
     await flushPromises()
 
@@ -2678,14 +2896,21 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledTimes(7)
-    const submittedRuleIds = runManualSamplePool.mock.calls.flatMap((call) => {
-      const payload = call[1] as { selected_rule_ids?: string[] }
-      return payload.selected_rule_ids || []
-    })
-    expect(submittedRuleIds.sort()).toEqual(
-      Array.from({ length: 49 }, (_, index) => `LX0609-${String(index + 1).padStart(3, '0')}`),
-    )
+    expect(runManualSamplePool).toHaveBeenCalledTimes(1)
+    const submittedPayload = runManualSamplePool.mock.calls[0][1] as {
+      max_parallel_records?: number
+      selected_rule_ids?: string[]
+      group_by_luxian_family?: boolean
+    }
+    expect(submittedPayload.max_parallel_records).toBe(4)
+    expect(submittedPayload.group_by_luxian_family).toBe(true)
+    expect((submittedPayload.selected_rule_ids || []).sort()).toEqual(allRuleIds)
+    expect(wrapper.text()).toContain('按 7 个质控族并发执行')
+    expect(wrapper.text()).toContain('基础时限')
+    expect(wrapper.text()).toContain('肿瘤病理')
+    expect(wrapper.text()).toContain('子任务已生成')
+    expect(wrapper.text()).not.toContain('child-basic')
+    expect(wrapper.text()).not.toContain('child-tumor')
   })
 
   it('创建测试病历时带入当前已选 LX0609 质控点范围', async () => {

@@ -160,8 +160,16 @@ class _WorkspaceServiceStub:
         execution_mode=None,
         run_mode=None,
         rule_count=None,
+        job_kind="leaf",
+        parent_job_id=None,
+        child_job_ids=None,
+        child_summary=None,
+        family_key=None,
+        family_name=None,
     ):
+        job_id = f"job-sample-pool-{len(self.create_batch_job_calls) + 1}"
         call = {
+            "id": job_id,
             "draft": draft,
             "created_by": created_by,
             "scope": scope,
@@ -172,9 +180,23 @@ class _WorkspaceServiceStub:
             "execution_mode": execution_mode,
             "run_mode": run_mode,
             "rule_count": rule_count,
+            "job_kind": job_kind,
+            "parent_job_id": parent_job_id,
+            "child_job_ids": list(child_job_ids or []),
+            "child_summary": child_summary or {},
+            "family_key": family_key,
+            "family_name": family_name,
         }
         self.create_batch_job_calls.append(call)
-        return {"id": "job-sample-pool-1"}
+        return {"id": job_id, **call}
+
+    def update_parent_child_jobs(self, *, parent_job_id, created_by, child_job_ids, child_summary=None):
+        return {
+            "id": parent_job_id,
+            "created_by": created_by,
+            "child_job_ids": list(child_job_ids or []),
+            "child_summary": child_summary or {},
+        }
 
 
 class _SyncServiceStub:
@@ -890,6 +912,63 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
         "V002": expected_execution_rule_ids,
     }
     assert response["data"]["rule_ids"] == expected_execution_rule_ids
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_and_child_jobs(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            rule_set_key="luxian_0609_qc_v1",
+            selected_rule_ids=["LX0609-001", "LX0609-020", "LX0609-021"],
+            group_by_luxian_family=True,
+        ),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert response["data"]["job_kind"] == "parent"
+    assert len(response["data"]["child_job_ids"]) == 2
+    assert len(workspace_service.create_batch_job_calls) == 3
+
+    parent_call = workspace_service.create_batch_job_calls[0]
+    child_calls = workspace_service.create_batch_job_calls[1:]
+    assert parent_call["job_kind"] == "parent"
+    assert parent_call["parent_job_id"] is None
+    assert parent_call["filters"]["group_by_luxian_family"] is True
+    assert parent_call["filters"]["scoped_customer_rule_ids"] == [
+        "LX0609-001",
+        "LX0609-020",
+        "LX0609-021",
+    ]
+
+    assert [call["job_kind"] for call in child_calls] == ["child", "child"]
+    assert {call["parent_job_id"] for call in child_calls} == {parent_call["id"]}
+    assert [call["family_name"] for call in child_calls] == ["基础时限", "会诊质量"]
+    assert [call["filters"]["scoped_customer_rule_ids"] for call in child_calls] == [
+        ["LX0609-001"],
+        ["LX0609-020", "LX0609-021"],
+    ]
+    assert all(call["filters"]["record_rule_map"] for call in child_calls)
+    assert sample_service.updated_pool_job == {
+        "pool_id": "pool-1",
+        "job_id": parent_call["id"],
+        "job_status": "queued",
+    }
+    assert [task["args"][0] for task in qc_sample_pools._submitted_tasks_for_test] == [
+        child_calls[0]["id"],
+        child_calls[1]["id"],
+    ]
 
 
 @pytest.mark.asyncio

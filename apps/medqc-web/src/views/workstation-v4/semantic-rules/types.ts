@@ -388,6 +388,14 @@ export interface SichuanBatchJob {
   id: string
   draft_id?: string
   draft_ids?: string[]
+  job_kind?: string
+  parent_job_id?: string
+  child_job_ids?: string[]
+  child_jobs?: SichuanBatchJob[]
+  children?: SichuanBatchJob[]
+  child_summary?: Record<string, unknown>
+  family_key?: string
+  family_name?: string
   rule_code: string
   rule_name: string
   scene?: string
@@ -444,7 +452,7 @@ export interface SichuanBatchJobQuery {
 
 export interface SichuanBatchJobExport {
   job_id: string
-  format?: 'xlsx' | 'csv'
+  format?: 'xlsx' | 'csv' | 'html'
 }
 
 export interface SemanticRuleWorkspaceQueryState {

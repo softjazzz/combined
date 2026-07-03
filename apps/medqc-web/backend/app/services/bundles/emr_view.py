@@ -283,6 +283,10 @@ def _normalize_source_document(
     doc_title = _safe_text(raw_doc.get("document_title"))
     content = _safe_text(raw_doc.get("content"))
     sort_time = _safe_text(raw_doc.get("display_time") or raw_doc.get("record_time"))
+    source_record_time = _safe_text(raw_doc.get("record_time"))
+    record_time_note = ""
+    if doc_type == "first_course_record" and not source_record_time and sort_time:
+        record_time_note = "源库 record_time 为空，当前使用提交时间、最后修改时间或更新时间等可用时间显示。"
     group_key = _infer_group_key(doc_type)
     label = _friendly_doc_label(doc_type, doc_title)
     doc_key = _build_doc_key(doc_type, doc_id, index)
@@ -301,7 +305,11 @@ def _normalize_source_document(
         "document_id": doc_id,
         "document_title": doc_title or label,
         "sort_time": sort_time,
-        "record_time": _safe_text(raw_doc.get("record_time")),
+        "record_time": source_record_time or (sort_time if doc_type == "first_course_record" else ""),
+        "record_time_source": "source_record_time"
+        if source_record_time
+        else ("fallback_display_time" if doc_type == "first_course_record" and sort_time else ""),
+        "record_time_note": record_time_note,
         "has_content": bool(content),
         "content": content or None,
         "length": len(content),

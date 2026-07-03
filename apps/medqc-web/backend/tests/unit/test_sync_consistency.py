@@ -700,6 +700,10 @@ def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
                 "differential_diagnosis",
                 "treatment_plan",
                 "record_content",
+                "record_datetime",
+                "submit_datetime",
+                "physician_sign_datetime",
+                "last_modified_datetime",
             ],
             ["institute_id", "patient_id", "visit_id", "document_id"],
         ),
@@ -717,6 +721,10 @@ def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
                 "diagnose_based_on": "诊断依据原文",
                 "differential_diagnosis": "鉴别诊断原文",
                 "treatment_plan": "诊疗计划原文",
+                "record_time": "2026-06-02 10:00:00+08",
+                "submit_time": "2026-06-02 10:06:00+08",
+                "physician_sign_time": "2026-06-02 10:05:00+08",
+                "last_modified_time": "2026-06-02 10:07:00+08",
                 "source_only_column": "不应落库",
             }
         ],
@@ -728,7 +736,200 @@ def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
     assert executed_params[0]["diagnose_based_on"] == "诊断依据原文"
     assert executed_params[0]["differential_diagnosis"] == "鉴别诊断原文"
     assert executed_params[0]["treatment_plan"] == "诊疗计划原文"
+    assert executed_params[0]["record_datetime"] == "2026-06-02 10:00:00+08"
+    assert executed_params[0]["submit_datetime"] == "2026-06-02 10:06:00+08"
+    assert executed_params[0]["physician_sign_datetime"] == "2026-06-02 10:05:00+08"
+    assert executed_params[0]["last_modified_datetime"] == "2026-06-02 10:07:00+08"
     assert "source_only_column" not in executed_params[0]
+
+
+def test_upsert_to_local_maps_first_course_submit_time_to_record_datetime_when_record_time_empty(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "record_datetime",
+                "submit_datetime",
+                "update_time",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="first_course_record",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "F1",
+                "record_time": "",
+                "submit_time": "2026-05-29 03:45:59+00",
+                "update_time": "2026-06-10 00:26:37+00",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["record_datetime"] == "2026-05-29 03:45:59+00"
+    assert executed_params[0]["submit_datetime"] == "2026-05-29 03:45:59+00"
+
+
+def test_upsert_to_local_maps_generic_time_aliases(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "admission_datetime",
+                "discharge_datetime",
+                "mr_datetime",
+                "last_modified_datetime",
+            ],
+            ["institute_id", "patient_id", "visit_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="mr",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "admission_time": "2026-06-01 08:00:00+08",
+                "discharge_time": "2026-06-05 10:00:00+08",
+                "mr_time": "2026-06-06 09:00:00+08",
+                "last_modified_time": "2026-06-06 09:30:00+08",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["admission_datetime"] == "2026-06-01 08:00:00+08"
+    assert executed_params[0]["discharge_datetime"] == "2026-06-05 10:00:00+08"
+    assert executed_params[0]["mr_datetime"] == "2026-06-06 09:00:00+08"
+    assert executed_params[0]["last_modified_datetime"] == "2026-06-06 09:30:00+08"
+
+
+def test_upsert_to_local_maps_inpatient_order_aliases(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "order_id",
+                "prescribed_datetime",
+                "order_status",
+                "generic_name",
+                "drug_specification",
+                "drug_frequency",
+                "drug_apply_method",
+                "single_dose",
+                "single_dose_unit",
+            ],
+            ["institute_id", "patient_id", "visit_id", "order_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="inpat_drug_order",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "order_id": "O1",
+                "start_time": "2026-06-02 12:00:00+08",
+                "status": "新开",
+                "drug_name": "头孢曲松钠",
+                "specification": "1g",
+                "frequency": "bid",
+                "route": "静滴",
+                "dose": "1",
+                "dose_unit": "g",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "order_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["prescribed_datetime"] == "2026-06-02 12:00:00+08"
+    assert executed_params[0]["order_status"] == "新开"
+    assert executed_params[0]["generic_name"] == "头孢曲松钠"
+    assert executed_params[0]["drug_specification"] == "1g"
+    assert executed_params[0]["drug_frequency"] == "bid"
+    assert executed_params[0]["drug_apply_method"] == "静滴"
+    assert executed_params[0]["single_dose"] == "1"
+    assert executed_params[0]["single_dose_unit"] == "g"
 
 
 def test_upsert_to_local_keeps_transfer_record_structured_fields(monkeypatch):

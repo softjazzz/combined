@@ -237,6 +237,14 @@ export type ManualSamplePoolSyncJob = {
 export type ManualSamplePoolRunResult = {
   pool_id: string
   job_id: string
+  job_kind?: string
+  child_job_ids?: string[]
+  child_jobs?: import('../semantic-rules/types').SichuanBatchJob[]
+  family_scopes?: Array<{
+    key: string
+    name: string
+    rule_ids: string[]
+  }>
   sample_item_count: number
   selected_record_count: number
   record_count: number

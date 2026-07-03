@@ -202,6 +202,32 @@ def test_build_documents_should_merge_only_discharge_diagnoses():
     assert discharge_doc["sections"][-1]["section_label"] == "出院记录诊断"
 
 
+def test_build_documents_should_expose_display_time_when_record_time_missing():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "first_course_record",
+                    "document_id": "first-1",
+                    "document_title": "首次病程记录",
+                    "record_time": "",
+                    "display_time": "2026-06-10 08:26:37",
+                    "content": "患者为70岁男性，起病缓，病程长。",
+                    "source_fields": [],
+                }
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    first_course_doc = next(doc for doc in documents if doc["doc_type"] == "first_course_record")
+    assert first_course_doc["sort_time"] == "2026-06-10 08:26:37"
+    assert first_course_doc["record_time"] == "2026-06-10 08:26:37"
+    assert first_course_doc["record_time_source"] == "fallback_display_time"
+    assert "源库未返回记录时间" in first_course_doc["record_time_note"]
+
+
 def test_pick_document_priority():
     docs = [
         {

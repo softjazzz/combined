@@ -117,13 +117,25 @@ def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
+def _item_source_table(item: dict[str, Any]) -> str:
+    return _safe_text(
+        item.get("source_table")
+        or item.get("document_type")
+        or item.get("type")
+        or item.get("doc_type")
+    ).lower()
+
+
 def _item_text(item: dict[str, Any]) -> str:
     """提取结构化行中可用于证据判断的主要文本。"""
     values: list[str] = []
     preferred_keys = (
         "content",
         "record_content",
+        "raw_text",
         "text_preview",
+        "content_preview",
+        "assembled_text",
         "document_title",
         "document_id",
         "order_name",
@@ -153,13 +165,13 @@ def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict
     merged = list(items)
     table_content_lengths: dict[str, int] = {}
     for item in merged:
-        source_table = _safe_text(item.get("source_table") or item.get("document_type")).lower()
+        source_table = _item_source_table(item)
         if not source_table:
             continue
         content_len = len(_item_text(item))
         table_content_lengths[source_table] = max(table_content_lengths.get(source_table, 0), content_len)
     for item in fallback_items:
-        source_table = _safe_text(item.get("source_table") or item.get("document_type")).lower()
+        source_table = _item_source_table(item)
         if not source_table:
             continue
         fallback_len = len(_item_text(item))
@@ -289,24 +301,60 @@ def _extract_risk_flags(*texts: str) -> list[str]:
     return flags
 
 
+def _resolve_event_authored_at(item: dict[str, Any], source_table: str, content: str) -> tuple[str, str, str]:
+    authored_at = _parse_datetime(item.get("display_time") or item.get("record_time"))
+    if authored_at:
+        return authored_at, "record_time", ""
+    authored_at = _extract_datetime_by_labels(content, ("记录时间", "记录日期", "书写时间", "完成时间"))
+    if authored_at:
+        return authored_at, "content_text", ""
+    if source_table == "first_course_record":
+        submit_at = _parse_datetime(item.get("submit_datetime") or item.get("submit_time"))
+        if submit_at:
+            return (
+                submit_at,
+                "submit_time_fallback",
+                "源库未返回首程 record_time，当前使用提交时间作为记录时间。",
+            )
+        fallback_at = _parse_datetime(
+            item.get("last_modified_time")
+            or item.get("last_modified_datetime")
+            or item.get("update_time")
+        )
+        if fallback_at:
+            return (
+                fallback_at,
+                "update_time_fallback",
+                "源库未返回首程 record_time/submit_time，暂以源库更新时间作为判定参考。",
+            )
+    return "", "", ""
+
+
 def _build_event(item: dict[str, Any]) -> dict[str, Any]:
-    content = _safe_text(item.get("content") or item.get("text_preview"))
+    content = _safe_text(
+        item.get("content")
+        or item.get("raw_text")
+        or item.get("text_preview")
+        or item.get("content_preview")
+        or item.get("assembled_text")
+    )
     title = _safe_text(item.get("document_title") or item.get("title") or item.get("document_type"))
     author_role, author_name, author_title = _classify_course_round_role(title, content)
-    authored_at = _parse_datetime(item.get("display_time") or item.get("record_time"))
-    if not authored_at:
-        authored_at = _extract_datetime_by_labels(content, ("记录时间", "记录日期", "书写时间", "完成时间"))
+    source_table = _item_source_table(item)
+    authored_at, time_basis, time_note = _resolve_event_authored_at(item, source_table, content)
     return {
         "document_id": _safe_text(item.get("document_id") or item.get("id")),
         "title": title,
         "authored_at": authored_at,
+        "time_basis": time_basis,
+        "time_note": time_note,
         "signed": any(token in content for token in ("签名", "签字", "审核医师", "审阅医师")),
         "author_role": author_role,
         "author_name": author_name,
         "author_title": author_title,
         "request_at": _extract_datetime_by_labels(content, ("会诊申请时间", "申请时间")),
         "surgery_end_at": _extract_datetime_by_labels(content, ("手术结束时间", "术毕时间", "手术时间", "手术日期")),
-        "source_table": _safe_text(item.get("source_table") or item.get("document_type")),
+        "source_table": source_table,
         "content_preview": content[:300],
         "raw_text": content,
         "content": content,
@@ -454,6 +502,8 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         "record_time": _safe_text(item.get("record_time")),
                         "display_time": display_time,
                         "submit_datetime": _safe_text(item.get("submit_datetime")),
+                        "last_modified_time": _safe_text(item.get("last_modified_time")),
+                        "update_time": _safe_text(item.get("update_time")),
                         "content": row_text,
                         "text_preview": row_text[:400],
                     }
@@ -539,6 +589,8 @@ def _fetch_detail_service_fallback_items(visit_id: str) -> list[dict[str, Any]]:
                 "record_time": _safe_text(doc.get("record_time") or doc.get("sort_time")),
                 "display_time": _safe_text(doc.get("sort_time") or doc.get("record_time")),
                 "submit_datetime": _safe_text(doc.get("submit_time") or doc.get("last_modified_time")),
+                "last_modified_time": _safe_text(doc.get("last_modified_time")),
+                "update_time": _safe_text(doc.get("update_time")),
                 "content": content,
                 "text_preview": content[:400],
             }
@@ -564,7 +616,15 @@ def _build_supplement_text(
                 lines.append(title)
             authored_at = _safe_text(event.get("authored_at"))
             if authored_at:
-                lines.append(f"记录时间：{authored_at}")
+                if event.get("time_basis") == "submit_time_fallback":
+                    lines.append(f"记录时间（源库 record_time 为空，使用提交时间）：{authored_at}")
+                elif event.get("time_basis") == "update_time_fallback":
+                    lines.append(f"记录时间（源库未返回，暂用更新时间）：{authored_at}")
+                else:
+                    lines.append(f"记录时间：{authored_at}")
+            time_note = _safe_text(event.get("time_note"))
+            if time_note:
+                lines.append(f"时间说明：{time_note}")
             request_at = _safe_text(event.get("request_at"))
             if request_at:
                 lines.append(f"会诊申请时间：{request_at}")
@@ -586,7 +646,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     documents: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in _SOURCE_TABLES}
     for raw_item in inventory_items:
         item = _safe_dict(raw_item)
-        source_table = _safe_text(item.get("source_table") or item.get("document_type")).lower()
+        source_table = _item_source_table(item)
         if source_table not in documents:
             continue
         documents[source_table].append(_build_event(item))

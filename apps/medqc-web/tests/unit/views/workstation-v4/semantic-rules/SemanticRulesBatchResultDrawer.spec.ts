@@ -91,6 +91,28 @@ const AButtonStub = defineComponent({
   },
 })
 
+const ADropdownStub = defineComponent({
+  name: 'ADropdownStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-dropdown-stub' }, [slots.default?.(), slots.overlay?.()])
+  },
+})
+
+const AMenuStub = defineComponent({
+  name: 'AMenuStub',
+  emits: ['click'],
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-menu-stub' }, slots.default?.())
+  },
+})
+
+const AMenuItemStub = defineComponent({
+  name: 'AMenuItemStub',
+  setup(_, { slots }) {
+    return () => h('button', { class: 'a-menu-item-stub' }, slots.default?.())
+  },
+})
+
 const ATagStub = defineComponent({
   name: 'ATagStub',
   setup(_, { slots }) {
@@ -184,6 +206,9 @@ const drawerStubs = {
   'a-table': ATableStub,
   'a-select': ASelectStub,
   'a-button': AButtonStub,
+  'a-dropdown': ADropdownStub,
+  'a-menu': AMenuStub,
+  'a-menu-item': AMenuItemStub,
   'a-tag': ATagStub,
   'a-progress': AProgressStub,
   'a-radio-group': ARadioGroupStub,
@@ -243,6 +268,9 @@ function buildProps() {
             rule_id: 'SC-001',
             rule_code: 'SC-001',
             record_id: 'record-1',
+            visit_id: 'visit-1',
+            patient_name: '张某某',
+            department: '神经内科',
             status: 'non_compliant',
             is_compliant: false,
             findings: '规则一命中',
@@ -263,6 +291,9 @@ function buildProps() {
             rule_id: 'SC-002',
             rule_code: 'SC-002',
             record_id: 'record-2',
+            visit_id: 'visit-2',
+            patient_name: '李某某',
+            department: '普外科',
             status: 'non_compliant',
             is_compliant: false,
             findings: '规则二命中',
@@ -336,6 +367,46 @@ function buildProps() {
 }
 
 describe('SemanticRulesBatchResultDrawer', () => {
+  it('应提供明确返回样本验证入口并复用关闭逻辑', async () => {
+    const props = buildProps()
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const backButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('返回样本验证'))
+    expect(backButton).toBeTruthy()
+
+    await backButton?.trigger('click')
+    expect(props.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('已完成任务应提供 HTML 明细、Excel 和 CSV 导出入口', async () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('导出 HTML 明细')
+    expect(wrapper.text()).toContain('导出 Excel')
+    expect(wrapper.text()).toContain('导出 CSV')
+    ;(
+      wrapper.vm as unknown as { handleExportMenuClick: (event: { key: string }) => void }
+    ).handleExportMenuClick({
+      key: 'html',
+    })
+
+    expect(props.exportBatchJobReport).toHaveBeenCalledWith('html')
+  })
+
   it('应展示当前任务摘要中的病历级与规则级统计口径', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props: buildProps(),
@@ -400,6 +471,33 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('总病历10')
     expect(wrapper.text()).toContain('规则一命中')
     expect(wrapper.text()).toContain('规则二命中')
+  })
+
+  it('多份病历同时质控时应按病历分组并支持筛选单份病历', async () => {
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: buildProps(),
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('按病历查看')
+    expect(wrapper.text()).toContain('本次涉及 2 份病历')
+    expect(wrapper.text()).toContain('张某某 · record-1')
+    expect(wrapper.text()).toContain('李某某 · record-2')
+
+    const recordButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('张某某 · record-1'))
+    expect(recordButton).toBeTruthy()
+    await recordButton?.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const issueCards = wrapper.findAll('.issue-conclusion-card')
+    expect(issueCards).toHaveLength(1)
+    expect(issueCards[0]?.text()).toContain('规则一命中')
+    expect(issueCards[0]?.text()).not.toContain('规则二命中')
+    expect(wrapper.text()).toContain('张某某 · record-1：当前共 1 条重点结果')
   })
 
   it('泸县0609任务即使带正式后处理字段，也应按客户质控点状态展示不合规', () => {
@@ -479,8 +577,12 @@ describe('SemanticRulesBatchResultDrawer', () => {
       rule_name: '首次病程：入院后 8 小时内无首次病程记录',
       status: 'non_compliant',
       result_status: 'non_compliant',
+      findings: 'LLM 返回非结构化结果，请查看原始输出。首次病程记录未在入院后8小时内完成。',
+      suggestion: '请查看原始输出后人工复核。',
       evidence:
+        '来源未标注 · evidence：' +
         '证据模板：时限类 质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录 ' +
+        'trigger_status: unknown ' +
         '触发状态：unknown 触发说明：未识别到可安全门控的触发族，进入常规执行 ' +
         '映射执行规则：CL-081、SC-021 应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段 ' +
         '执行证据：入院时间：2026-06-01 08:00:00；2026-06-01 首次病程记录记录时间：2026-06-01 19:00:00；间隔：11.0小时',
@@ -499,6 +601,10 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCard?.text()).not.toContain('触发状态')
     expect(issueCard?.text()).not.toContain('触发说明')
     expect(issueCard?.text()).not.toContain('unknown')
+    expect(issueCard?.text()).not.toContain('来源未标注')
+    expect(issueCard?.text()).not.toContain('evidence')
+    expect(issueCard?.text()).not.toContain('LLM')
+    expect(issueCard?.text()).not.toContain('原始输出')
 
     const expandButton = issueCard
       ?.findAll('button')
@@ -510,6 +616,82 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCard?.text()).toContain('首次病程记录记录时间：2026-06-01 19:00:00')
     expect(issueCard?.text()).not.toContain('映射执行规则')
     expect(issueCard?.text()).not.toContain('应包含证据要素')
+    expect(issueCard?.text()).not.toContain('证据模板')
+    expect(issueCard?.text()).not.toContain('trigger_status')
+    expect(issueCard?.text()).not.toContain('来源未标注')
+    expect(issueCard?.text()).not.toContain('evidence')
+    expect(issueCard?.text()).not.toContain('LLM')
+    expect(issueCard?.text()).not.toContain('原始输出')
+  })
+
+  it('稳定查房结果不应把病危病重门控线索展示为关键证据', () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-007',
+      rule_name: '查房记录：病情稳定患者3天内无查房病程记录',
+      status: 'non_compliant',
+      result_status: 'non_compliant',
+      evidence:
+        '证据模板：通用质控 质控点：LX0609-007 查房记录：病情稳定患者3天内无查房病程记录 ' +
+        '判定依据：已发现相关事件，进入规则复核。 来源线索：病危、危重 ' +
+        '执行证据：【日常病程记录】今日查房,患者一般情况可,咳嗽、呼吸困难好转,无咯血、发热',
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const issueCard = wrapper.findAll('.issue-conclusion-card')[0]
+    expect(issueCard?.text()).toContain('【日常病程记录】今日查房')
+    expect(issueCard?.text()).not.toContain('来源线索')
+    expect(issueCard?.text()).not.toContain('病危、危重')
+    expect(issueCard?.text()).not.toContain('已发现相关事件，进入规则复核')
+  })
+
+  it('客户结果卡应优先展示清洗后的完整执行证据，而不是过短的结构化片段', () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-002',
+      rule_name: '首次病程：入院后 8 小时内无首次病程记录',
+      status: 'non_compliant',
+      result_status: 'non_compliant',
+      findings: '首次病程记录未在入院后8小时内完成。',
+      evidence:
+        '证据模板：时限类\n' +
+        '映射执行规则：CL-081、SC-021\n' +
+        '执行证据：入院时间：2026-02-02 10:07:26；首次病程记录记录时间：2026-02-09 09:34:44；间隔：167.5小时',
+      evidence_items: [
+        {
+          evidence_id: 'E-001',
+          source_document_type: '首次病程记录',
+          field_path: 'authored_at',
+          quote: '首次病程记录记录时间：2026-02-09 09:34:44',
+        },
+      ],
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const issueCard = wrapper.findAll('.issue-conclusion-card')[0]
+    const evidenceFacts = issueCard?.findAll('.issue-evidence-fact') || []
+    expect(evidenceFacts.length).toBeGreaterThanOrEqual(3)
+    expect(evidenceFacts[0]?.text()).toContain('入院时间')
+    expect(evidenceFacts[1]?.text()).toContain('首次病程记录记录时间')
+    expect(evidenceFacts[2]?.text()).toContain('间隔')
+    expect(issueCard?.text()).toContain('2026-02-02 10:07:26')
+    expect(issueCard?.text()).toContain('间隔：167.5小时')
+    expect(issueCard?.text()).not.toContain('证据模板')
+    expect(issueCard?.text()).not.toContain('映射执行规则')
   })
 
   it('data_gap 结果摘要应展示数据缺口，不应展示门控关键词', () => {

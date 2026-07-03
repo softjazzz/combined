@@ -239,3 +239,78 @@ def test_build_programmatic_evidence_payload_should_fallback_to_detail_service_w
     timeline = payload["programmatic_timeline"]
     assert len(timeline["documents"]["surgery_record"]) == 1
     assert "手术医生签名" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_accept_bundle_document_type_field():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "type": "first_course_record",
+                    "label": "首次病程记录",
+                    "document_id": "F1",
+                    "record_time": "2026-06-10 08:26:37",
+                    "content": "患者为70岁男性，起病缓，病程长。入院后完善相关检查，结合病史、体格检查和辅助检查拟定诊疗计划。",
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    first_courses = payload["programmatic_timeline"]["documents"]["first_course_record"]
+    assert len(first_courses) == 1
+    assert first_courses[0]["source_table"] == "first_course_record"
+    assert "患者为70岁男性" in first_courses[0]["content"]
+
+
+def test_build_programmatic_evidence_payload_should_explain_first_course_update_time_fallback():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "type": "first_course_record",
+                    "label": "首次病程记录",
+                    "document_id": "F1",
+                    "record_time": "",
+                    "display_time": "",
+                    "update_time": "2026-06-10 00:26:37+00",
+                    "content": "患者为70岁男性，起病缓，病程长。入院后完善相关检查，结合病史拟定诊疗计划。",
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    first_course = payload["programmatic_timeline"]["documents"]["first_course_record"][0]
+    assert first_course["authored_at"] == "2026-06-10 00:26:37"
+    assert first_course["time_basis"] == "update_time_fallback"
+    assert "源库未返回首程 record_time/submit_time" in first_course["time_note"]
+    assert "记录时间（源库未返回，暂用更新时间）：2026-06-10 00:26:37" in payload["primary_document_text"]
+    assert "暂以源库更新时间作为判定参考" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_use_first_course_submit_time_before_update_time():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "type": "first_course_record",
+                    "label": "首次病程记录",
+                    "document_id": "F1",
+                    "record_time": "",
+                    "display_time": "",
+                    "submit_time": "2026-05-29 03:45:59+00",
+                    "update_time": "2026-06-10 00:26:37+00",
+                    "content": "患者为70岁男性，起病缓，病程长。结合病史拟定诊疗计划。",
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    first_course = payload["programmatic_timeline"]["documents"]["first_course_record"][0]
+    assert first_course["authored_at"] == "2026-05-29 03:45:59"
+    assert first_course["time_basis"] == "submit_time_fallback"
+    assert "使用提交时间作为记录时间" in first_course["time_note"]
+    assert "记录时间（源库 record_time 为空，使用提交时间）：2026-05-29 03:45:59" in payload["primary_document_text"]
+    assert "2026-06-10 00:26:37" not in payload["primary_document_text"]

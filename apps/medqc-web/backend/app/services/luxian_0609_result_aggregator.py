@@ -234,6 +234,24 @@ def _consultation_execution_missing(text: str) -> bool:
     )
 
 
+def _consultation_purpose_issue(text: str) -> bool:
+    return _has_any(
+        text,
+        "会诊目的不明确",
+        "目的不明确",
+        "未明确会诊目的",
+        "缺少会诊目的",
+        "会诊目的笼统",
+        "会诊目的仅写",
+        "申请目的：请会诊",
+        "会诊目的：请会诊",
+    )
+
+
+def _consultation_signature_only_issue(text: str) -> bool:
+    return "签名" in text and not _consultation_purpose_issue(text)
+
+
 def _consultation_positive_execution(text: str) -> bool:
     return _has_any(
         text,
@@ -266,6 +284,37 @@ def _has_reliable_two_course_copy_evidence(text: str) -> bool:
     return len(set(date_course_mentions)) >= 2
 
 
+def _anesthesia_consent_result_not_record_sheet(text: str) -> bool:
+    if not _has_any(text, "知情同意书", "同意书"):
+        return False
+    return not _has_any(
+        text,
+        "无麻醉记录",
+        "缺少麻醉记录",
+        "未见麻醉记录",
+        "麻醉记录单缺失",
+        "麻醉记录缺失",
+        "麻醉记录单未见",
+        "无麻醉记录单",
+    )
+
+
+def _stable_round_result_has_critical_context(text: str) -> bool:
+    if not text:
+        return False
+    return _has_any(
+        text,
+        "抢救",
+        "提示病情危重",
+        "病情危重",
+        "危重症",
+        "来源线索：病危",
+        "来源线索：危重",
+        "来源线索:病危",
+        "来源线索:危重",
+    )
+
+
 def _guard_customer_display_result(
     *,
     wrapper_id: str,
@@ -276,6 +325,24 @@ def _guard_customer_display_result(
     evidence = str(selected.get("evidence") or "")
     suggestion = str(selected.get("suggestion") or "")
     combined_text = f"{findings}\n{evidence}\n{suggestion}"
+
+    if wrapper_id == "LX0609-007" and status == "non_compliant":
+        if _stable_round_result_has_critical_context(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "病历中存在抢救或危重线索，不能直接按“病情稳定患者3天内无查房病程记录”判为缺陷。",
+                    "evidence": _extract_execution_evidence(evidence)
+                    or "当前结果包含抢救或危重相关线索，需先核对是否存在病危、病重医嘱及对应病程记录。",
+                    "suggestion": "请先核对病危/病重医嘱、抢救记录和查房病程时间轴，再决定适用稳定患者查房规则或病危病重查房规则。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "stable_round_has_critical_context"
+            guarded["metadata"] = metadata
+            return guarded
 
     if wrapper_id == "LX0609-003" and status == "non_compliant":
         if _has_any(combined_text, "未超过24小时", "未超24小时", "符合质控规则要求", "符合规则要求"):
@@ -303,6 +370,23 @@ def _guard_customer_display_result(
             guarded["metadata"] = metadata
             return guarded
 
+    if wrapper_id == "LX0609-038" and status == "non_compliant":
+        if _anesthesia_consent_result_not_record_sheet(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "当前证据主要指向麻醉知情同意书问题，不能直接判定为无麻醉记录单。",
+                    "evidence": "本质控点需要核对麻醉记录单；当前底层证据不足以支撑“无麻醉记录单”缺陷。",
+                    "suggestion": "请人工核对是否存在麻醉记录单；如需检查麻醉知情同意书，应使用对应质控点处理。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "anesthesia_consent_not_record_sheet_defect"
+            guarded["metadata"] = metadata
+            return guarded
+
     if wrapper_id in {"LX0609-019", "LX0609-024"} and status == "non_compliant":
         if _has_recorded_pathology_material(combined_text):
             guarded = dict(selected)
@@ -317,6 +401,23 @@ def _guard_customer_display_result(
             )
             metadata = dict(guarded.get("metadata") or {})
             metadata["customer_display_guard"] = "pathology_specimen_positive_recorded"
+            guarded["metadata"] = metadata
+            return guarded
+
+    if wrapper_id == "LX0609-021" and status == "non_compliant":
+        if _consultation_signature_only_issue(combined_text):
+            guarded = dict(selected)
+            guarded.update(
+                {
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "当前证据主要指向会诊申请或会诊记录签名缺项，不能直接判定为会诊目的不明确。",
+                    "evidence": _extract_execution_evidence(evidence) or "需核对会诊申请单中的会诊目的和医师签名字段。",
+                    "suggestion": "请人工区分会诊目的不明确、签名缺项和会诊执行记录缺陷，避免串用质控点。",
+                }
+            )
+            metadata = dict(guarded.get("metadata") or {})
+            metadata["customer_display_guard"] = "consultation_signature_only_not_purpose_defect"
             guarded["metadata"] = metadata
             return guarded
 
@@ -336,7 +437,7 @@ def _guard_customer_display_result(
             metadata["customer_display_guard"] = "consultation_execution_positive_recorded"
             guarded["metadata"] = metadata
             return guarded
-        if "签名" in combined_text and not _consultation_execution_missing(combined_text):
+        if _consultation_signature_only_issue(combined_text) and not _consultation_execution_missing(combined_text):
             guarded = dict(selected)
             guarded.update(
                 {

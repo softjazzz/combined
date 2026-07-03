@@ -66,8 +66,6 @@ def _gate_evidence_lines(gate_decision: Luxian0609GateDecision) -> list[str]:
         lines = ["判定依据：已发现相关事件，进入规则复核。"]
     else:
         lines = ["判定依据：本质控点按现有文书和结构化数据直接复核。"]
-    if gate_decision.matched_keywords:
-        lines.append(f"来源线索：{'、'.join(gate_decision.matched_keywords)}")
     if gate_decision.data_gap_fields:
         lines.append(f"缺失字段：{'、'.join(gate_decision.data_gap_fields)}")
     return lines

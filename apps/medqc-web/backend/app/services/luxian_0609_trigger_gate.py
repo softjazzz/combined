@@ -784,8 +784,6 @@ def decision_to_result(rule: dict[str, Any], decision: Luxian0609GateDecision) -
         evidence_lines = ["判定依据：未发现与本质控点直接相关的适用事件。"]
     else:
         evidence_lines = ["判定依据：已发现相关事件，但自动判定所需字段不完整。"]
-    if decision.matched_keywords:
-        evidence_lines.append(f"来源线索：{'、'.join(decision.matched_keywords)}")
     if decision.data_gap_fields:
         evidence_lines.append(f"缺失字段：{'、'.join(decision.data_gap_fields)}")
     evidence = "\n".join(evidence_lines)

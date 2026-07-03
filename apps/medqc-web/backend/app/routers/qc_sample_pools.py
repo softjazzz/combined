@@ -132,6 +132,101 @@ def _luxian_0609_customer_rule_count() -> int:
     return len(load_luxian_0609_rules())
 
 
+_LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
+    {
+        "key": "basic_timeliness",
+        "name": "基础时限",
+        "rule_ids": ["LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"],
+    },
+    {
+        "key": "course_quality",
+        "name": "查房病程",
+        "rule_ids": ["LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"],
+    },
+    {
+        "key": "exam_lab",
+        "name": "检查检验",
+        "rule_ids": ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"],
+    },
+    {
+        "key": "consultation_quality",
+        "name": "会诊质量",
+        "rule_ids": ["LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"],
+    },
+    {
+        "key": "surgery_anesthesia",
+        "name": "手术麻醉",
+        "rule_ids": [
+            "LX0609-003",
+            "LX0609-024",
+            "LX0609-025",
+            "LX0609-028",
+            "LX0609-029",
+            "LX0609-030",
+            "LX0609-031",
+            "LX0609-032",
+            "LX0609-033",
+            "LX0609-034",
+            "LX0609-035",
+            "LX0609-036",
+            "LX0609-037",
+            "LX0609-038",
+            "LX0609-039",
+            "LX0609-040",
+        ],
+    },
+    {
+        "key": "transfusion",
+        "name": "输血",
+        "rule_ids": [
+            "LX0609-041",
+            "LX0609-042",
+            "LX0609-043",
+            "LX0609-044",
+            "LX0609-045",
+            "LX0609-046",
+            "LX0609-047",
+            "LX0609-048",
+            "LX0609-049",
+        ],
+    },
+    {
+        "key": "tumor_pathology",
+        "name": "肿瘤病理",
+        "rule_ids": ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"],
+    },
+]
+
+
+def _build_luxian_0609_family_scopes(customer_rule_ids: list[str]) -> list[dict[str, Any]]:
+    selected_rule_ids = _normalize_rule_id_list(customer_rule_ids)
+    if not selected_rule_ids:
+        return []
+    selected = set(selected_rule_ids)
+    covered: set[str] = set()
+    scopes: list[dict[str, Any]] = []
+    for family in _LUXIAN_0609_RULE_FAMILY_DEFINITIONS:
+        family_rule_ids = [
+            rule_id
+            for rule_id in _normalize_rule_id_list(list(family.get("rule_ids") or []))
+            if rule_id in selected
+        ]
+        if not family_rule_ids:
+            continue
+        covered.update(family_rule_ids)
+        scopes.append(
+            {
+                "key": str(family["key"]),
+                "name": str(family["name"]),
+                "rule_ids": family_rule_ids,
+            }
+        )
+    orphan_rule_ids = [rule_id for rule_id in selected_rule_ids if rule_id not in covered]
+    if orphan_rule_ids:
+        scopes.append({"key": "other", "name": "其他质控点", "rule_ids": orphan_rule_ids})
+    return scopes
+
+
 class SamplePoolImportRequest(BaseModel):
     pool_name: str = Field(..., description="样本池名称")
     source_file: str = Field(..., description="Excel 文件路径")
@@ -151,6 +246,7 @@ class SamplePoolRunRequest(BaseModel):
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
     selected_rule_ids: list[str] = Field(default_factory=list, description="仅验证这些客户质控点 ID")
+    group_by_luxian_family: bool = Field(default=False, description="泸县0609按规则族创建父子任务")
     validation_mode: str = Field(default="customer", description="验证模式：customer/sc/programmatic/formal_fast_screen_full")
     rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key")
 
@@ -812,6 +908,161 @@ async def run_sample_pool_intrinsic_validation(
     }
     if record_rule_map:
         job_filters["record_rule_map"] = record_rule_map
+
+    luxian_family_scopes: list[dict[str, Any]] = []
+    if payload.group_by_luxian_family and rule_set_key == "luxian_0609_qc_v1":
+        luxian_scope_rule_ids = requested_selected_rule_ids
+        if not luxian_scope_rule_ids:
+            luxian_scope_rule_ids = _normalize_rule_id_list(
+                [
+                    str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
+                    for wrapper in load_luxian_0609_rules()
+                ]
+            )
+        luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
+
+    if len(luxian_family_scopes) > 1:
+        created_by = _current_user_id(current_user)
+        parent_filters = {
+            **job_filters,
+            "group_by_luxian_family": True,
+            "family_scopes": luxian_family_scopes,
+            "selected_rule_ids": [
+                rule_id
+                for family_scope in luxian_family_scopes
+                for rule_id in list(family_scope.get("rule_ids") or [])
+            ],
+            "scoped_customer_rule_ids": [
+                rule_id
+                for family_scope in luxian_family_scopes
+                for rule_id in list(family_scope.get("rule_ids") or [])
+            ],
+        }
+        parent_job = workspace.create_batch_job(
+            draft=pseudo_draft,
+            created_by=created_by,
+            scope=effective_scope,
+            filters=parent_filters,
+            record_ids=record_ids,
+            total_records=record_count,
+            draft_ids=parent_filters["scoped_customer_rule_ids"],
+            execution_mode="multi",
+            run_mode="parallel",
+            rule_count=len(parent_filters["scoped_customer_rule_ids"]),
+            job_kind="parent",
+            child_summary={
+                "mode": "luxian_0609_family_parallel",
+                "family_count": len(luxian_family_scopes),
+            },
+        )
+        parent_job_id = str(parent_job.get("id") or "").strip()
+        allowed_execution_rule_ids = {str(rule_id or "").strip().upper() for rule_id in list(rule_ids or [])}
+        child_jobs: list[dict[str, Any]] = []
+        child_job_ids: list[str] = []
+        for family_scope in luxian_family_scopes:
+            family_rule_ids = _normalize_rule_id_list(list(family_scope.get("rule_ids") or []))
+            family_execution_rule_ids, invalid_family_rule_ids = _resolve_luxian_0609_execution_rule_ids(family_rule_ids)
+            if invalid_family_rule_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{family_scope.get('name') or '规则族'}包含无效质控点: {', '.join(invalid_family_rule_ids)}",
+                )
+            if allowed_execution_rule_ids:
+                family_execution_rule_ids = [
+                    rule_id for rule_id in family_execution_rule_ids if rule_id in allowed_execution_rule_ids
+                ]
+            if not family_execution_rule_ids:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{family_scope.get('name') or '规则族'}当前没有可执行的映射规则",
+                )
+            family_record_rule_map = {record_id: list(family_execution_rule_ids) for record_id in record_ids}
+            child_filters = {
+                **job_filters,
+                "rule_ids": family_execution_rule_ids,
+                "rule_count": len(family_execution_rule_ids),
+                "customer_rule_count": len(family_rule_ids),
+                "execution_rule_count": len(family_execution_rule_ids),
+                "selected_rule_ids": family_rule_ids,
+                "scoped_customer_rule_ids": family_rule_ids,
+                "record_rule_map": family_record_rule_map,
+                "group_by_luxian_family": False,
+                "parent_job_id": parent_job_id,
+                "family_key": str(family_scope.get("key") or "").strip(),
+                "family_name": str(family_scope.get("name") or "").strip(),
+                "max_parallel_records": 1,
+            }
+            child_job = workspace.create_batch_job(
+                draft=pseudo_draft,
+                created_by=created_by,
+                scope=effective_scope,
+                filters=child_filters,
+                record_ids=record_ids,
+                total_records=record_count,
+                draft_ids=family_execution_rule_ids,
+                execution_mode="multi",
+                run_mode="parallel",
+                rule_count=len(family_execution_rule_ids),
+                job_kind="child",
+                parent_job_id=parent_job_id,
+                family_key=str(family_scope.get("key") or "").strip(),
+                family_name=str(family_scope.get("name") or "").strip(),
+            )
+            child_jobs.append(child_job)
+            child_job_ids.append(str(child_job.get("id") or "").strip())
+
+        parent_job = workspace.update_parent_child_jobs(
+            parent_job_id=parent_job_id,
+            created_by=created_by,
+            child_job_ids=child_job_ids,
+            child_summary={
+                "mode": "luxian_0609_family_parallel",
+                "family_count": len(luxian_family_scopes),
+                "families": [
+                    {
+                        "key": str(family_scope.get("key") or "").strip(),
+                        "name": str(family_scope.get("name") or "").strip(),
+                        "rule_ids": list(family_scope.get("rule_ids") or []),
+                        "job_id": child_job_ids[index] if index < len(child_job_ids) else "",
+                    }
+                    for index, family_scope in enumerate(luxian_family_scopes)
+                ],
+            },
+        ) or parent_job
+        service.update_pool_latest_job(pool_id=pool_id, job_id=parent_job_id, job_status="queued")
+        for child_job_id in child_job_ids:
+            submit_detached_task(
+                "sample_pool_luxian_family_child_batch_job",
+                _run_sichuan_workspace_batch_job,
+                child_job_id,
+            )
+        return success_response(
+            data={
+                "pool_id": pool_id,
+                "job_id": parent_job_id,
+                "job_kind": "parent",
+                "child_job_ids": child_job_ids,
+                "child_jobs": child_jobs,
+                "family_scopes": luxian_family_scopes,
+                "sample_item_count": len(runnable_items),
+                "selected_record_count": len(requested_record_ids),
+                "record_count": record_count,
+                "rule_count": len(rule_ids),
+                "customer_rule_count": len(parent_filters["scoped_customer_rule_ids"]),
+                "execution_rule_count": len(rule_ids),
+                "selected_rule_ids": parent_filters["selected_rule_ids"],
+                "scoped_customer_rule_ids": parent_filters["scoped_customer_rule_ids"],
+                "record_rule_map": parent_filters.get("record_rule_map"),
+                "record_ids": record_ids,
+                "rule_ids": rule_ids,
+                "validation_mode": validation_mode,
+                "rule_set_key": rule_set_key,
+                "rule_set_name": rule_set_name,
+                "rule_set_version": rule_set_version,
+            },
+            message="泸县0609总任务已创建，规则族子任务已并发入队",
+            trace_id=get_trace_id(request),
+        )
 
     job = workspace.create_batch_job(
         draft=pseudo_draft,
