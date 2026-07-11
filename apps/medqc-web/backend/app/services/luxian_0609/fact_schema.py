@@ -28,6 +28,7 @@ _API_KEY_PATTERN = re.compile(r"(?i)(api[_ -]?key\s*[:=]\s*)[^\s,;]+")
 _CREDENTIAL_PATTERN = re.compile(r"(?i)(authorization\s*:|bearer\s+|api[_ -]?key\s*[:=])")
 
 _FINAL_STATUS_VALUES = {
+    "ai_suggested",
     "ai_suggested_compliant",
     "ai_suggested_non_compliant",
     "compliant",

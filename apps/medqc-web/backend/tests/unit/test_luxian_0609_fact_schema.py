@@ -339,6 +339,13 @@ def test_normalized_clinical_text_is_not_subject_to_broad_name_regex() -> None:
         {"result": "AI_SUGGESTED_NON_COMPLIANT"},
         {"result": "ai-suggested-compliant"},
         {"result": "AI SUGGESTED COMPLIANT"},
+        {"decision_hint": "ai_suggested"},
+        {"decision_hint": "AI_SUGGESTED"},
+        {"decision_hint": "ai-suggested"},
+        {"decision_hint": "ai suggested"},
+        {"nested": [{"aiSuggestedHint": 1}]},
+        {"nested": [{"ai_suggested_hint": 1}]},
+        {"nested": [{"ai-suggested-hint": 1}]},
         {"recommended_status": 1},
         {"nested": [{"quality-status": 1}]},
     ],
@@ -346,6 +353,17 @@ def test_normalized_clinical_text_is_not_subject_to_broad_name_regex() -> None:
 def test_fact_normalized_value_cannot_hide_final_status(normalized_value) -> None:
     with pytest.raises(ValueError):
         _fact(normalized_value=normalized_value)
+
+
+def test_plain_suggested_clinical_text_remains_allowed() -> None:
+    normalized_value = {
+        "clinical_note": "suggested follow-up after discharge",
+        "clinical_advice": "建议复查血常规",
+    }
+    fact = _fact(normalized_value=normalized_value)
+    projection = _projection(normalized_value=normalized_value)
+    assert fact.to_dict()["normalized_value"] == normalized_value
+    assert projection.to_dict()["normalized_value"] == normalized_value
 
 
 def test_projection_is_versioned_traceable_deduplicated_and_changes_fact_identity() -> None:
@@ -399,6 +417,13 @@ def test_projection_reason_rejects_direct_identifier_or_free_text() -> None:
         {"result": "AI_SUGGESTED_NON_COMPLIANT"},
         {"result": "ai-suggested-compliant"},
         {"result": "AI SUGGESTED COMPLIANT"},
+        {"decision_hint": "ai_suggested"},
+        {"decision_hint": "AI_SUGGESTED"},
+        {"decision_hint": "ai-suggested"},
+        {"decision_hint": "ai suggested"},
+        {"nested": [{"aiSuggestedHint": 1}]},
+        {"nested": [{"ai_suggested_hint": 1}]},
+        {"nested": [{"ai-suggested-hint": 1}]},
         {"recommended_status": 1},
         {"aiSuggestedStatus": 1},
         {"quality-status": 1},
