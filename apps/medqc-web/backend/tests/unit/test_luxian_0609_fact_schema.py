@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -280,14 +281,71 @@ def test_normalized_value_canonicalization_is_stable_across_dict_order() -> None
     assert left.canonical_json() == right.canonical_json()
 
 
+def test_fact_normalized_value_is_deeply_immutable_and_defensively_copied() -> None:
+    source = {"a": [1, {"b": [2]}]}
+    fact = _fact(normalized_value=source)
+    expected_identity = fact.identity_json()
+
+    source["a"].append(3)
+    source["a"][1]["b"].append(4)
+    assert fact.identity_json() == expected_identity
+
+    with pytest.raises(TypeError):
+        fact.normalized_value["a"] = ()
+    with pytest.raises(AttributeError):
+        fact.normalized_value["a"].append(5)
+    with pytest.raises(TypeError):
+        fact.normalized_value["a"][1]["b"] = ()
+
+    exported = fact.to_dict()
+    exported["normalized_value"]["a"].append(6)
+    exported["normalized_value"]["a"][1]["b"].append(7)
+    assert fact.identity_json() == expected_identity
+    assert fact.fact_id == hashlib.sha256(expected_identity.encode("utf-8")).hexdigest()
+
+
+def test_projection_normalized_value_is_deeply_immutable_and_defensively_copied() -> None:
+    source = {"metric": [1, {"nested": [2]}]}
+    projection = _projection(normalized_value=source)
+    expected_json = projection.canonical_json()
+
+    source["metric"].append(3)
+    source["metric"][1]["nested"].append(4)
+    assert projection.canonical_json() == expected_json
+
+    with pytest.raises(TypeError):
+        projection.normalized_value["metric"] = ()
+    with pytest.raises(AttributeError):
+        projection.normalized_value["metric"].append(5)
+    with pytest.raises(TypeError):
+        projection.normalized_value["metric"][1]["nested"] = ()
+
+    exported = projection.to_dict()
+    exported["normalized_value"]["metric"].append(6)
+    exported["normalized_value"]["metric"][1]["nested"].append(7)
+    assert projection.canonical_json() == expected_json
+
+
 def test_normalized_clinical_text_is_not_subject_to_broad_name_regex() -> None:
     fact = _fact(normalized_value={"diagnosis": "李氏综合征", "finding": "张力正常"})
     assert fact.to_dict()["normalized_value"]["diagnosis"] == "李氏综合征"
 
 
-def test_fact_normalized_value_cannot_hide_final_status() -> None:
+@pytest.mark.parametrize(
+    "normalized_value",
+    [
+        {"result": "non_compliant"},
+        {"result": "AI says non_compliant now"},
+        {"result": "AI_SUGGESTED_NON_COMPLIANT"},
+        {"result": "ai-suggested-compliant"},
+        {"result": "AI SUGGESTED COMPLIANT"},
+        {"recommended_status": 1},
+        {"nested": [{"quality-status": 1}]},
+    ],
+)
+def test_fact_normalized_value_cannot_hide_final_status(normalized_value) -> None:
     with pytest.raises(ValueError):
-        _fact(normalized_value={"result": "non_compliant"})
+        _fact(normalized_value=normalized_value)
 
 
 def test_projection_is_versioned_traceable_deduplicated_and_changes_fact_identity() -> None:
@@ -337,6 +395,14 @@ def test_projection_reason_rejects_direct_identifier_or_free_text() -> None:
         {"status": "non_compliant"},
         {"compliant": True},
         {"ai_suggested_non_compliant": 0},
+        {"result": "AI says non_compliant now"},
+        {"result": "AI_SUGGESTED_NON_COMPLIANT"},
+        {"result": "ai-suggested-compliant"},
+        {"result": "AI SUGGESTED COMPLIANT"},
+        {"recommended_status": 1},
+        {"aiSuggestedStatus": 1},
+        {"quality-status": 1},
+        {"nested": [{"result": "AI says non-compliant now"}]},
         {"nested": [{"result": "ai_suggested_non_compliant"}]},
         {"prompt": "hidden"},
         {"raw_response": "hidden"},

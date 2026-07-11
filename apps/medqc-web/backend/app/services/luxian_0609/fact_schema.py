@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
 
@@ -206,6 +207,11 @@ def _normalized_key(value: str) -> str:
     return re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", value.lower())
 
 
+def _contains_final_status_token(value: str) -> bool:
+    normalized = _normalized_key(value)
+    return any(token in normalized for token in _FINAL_STATUS_KEYS)
+
+
 def _validate_json_value(
     value: Any,
     *,
@@ -223,7 +229,7 @@ def _validate_json_value(
                 raise ValueError(f"{path} contains direct identifier")
             if _CREDENTIAL_PATTERN.search(value):
                 raise ValueError(f"{path} contains credential material")
-            if value.strip().lower() in _FINAL_STATUS_VALUES:
+            if _contains_final_status_token(value):
                 raise ValueError(f"{path} contains forbidden final status")
         return value
     if isinstance(value, float):
@@ -252,7 +258,9 @@ def _validate_json_value(
             if not key or len(key) > 96:
                 raise ValueError(f"{path} contains invalid key")
             normalized_key = _normalized_key(key)
-            if normalized_key in _FINAL_STATUS_KEYS:
+            if "status" in normalized_key or any(
+                token in normalized_key for token in _FINAL_STATUS_KEYS
+            ):
                 raise ValueError(f"{path} contains forbidden final status key")
             if normalized_key in _DIRECT_IDENTIFIER_KEYS:
                 raise ValueError(f"{path} contains direct identifier key")
@@ -282,7 +290,25 @@ def _canonicalize_json_value(value: Any, *, path: str, projection_boundary: bool
     canonical = _canonical_json(validated)
     if len(canonical) > _MAX_JSON_LENGTH:
         raise ValueError(f"{path} exceeds maximum canonical JSON length")
-    return json.loads(canonical)
+    return _freeze_json_value(json.loads(canonical))
+
+
+def _freeze_json_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return MappingProxyType(
+            {key: _freeze_json_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_json_value(item) for item in value)
+    return value
+
+
+def _thaw_json_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _thaw_json_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json_value(item) for item in value]
+    return value
 
 
 def _redact_quote(value: Any, *, redaction_terms: Iterable[str]) -> str:
@@ -435,17 +461,13 @@ class RuleProjection:
                 projection_reason,
                 max_length=128,
             ),
-            normalized_value=_canonicalize_json_value(
-                normalized_value,
-                path="projection.normalized_value",
-                projection_boundary=True,
-            ),
+            normalized_value=normalized_value,
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "derived_from_fact_ids": list(self.derived_from_fact_ids),
-            "normalized_value": self.normalized_value,
+            "normalized_value": _thaw_json_value(self.normalized_value),
             "projection_reason": self.projection_reason,
             "projection_type": self.projection_type,
             "projection_version": self.projection_version,
@@ -645,7 +667,7 @@ class FactV2:
             "fact_schema_version": values["fact_schema_version"],
             "fact_type": values["fact_type"],
             "family": values["family"],
-            "normalized_value": values["normalized_value"],
+            "normalized_value": _thaw_json_value(values["normalized_value"]),
             "record_time": time_dict(values["record_time"]),
             "source_document_id": values["source_document_id"],
             "source_document_type": values["source_document_type"],
