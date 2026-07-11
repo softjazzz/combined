@@ -14,6 +14,7 @@ _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+_TYPED_SHA256_SNAPSHOT_REF_PATTERN = re.compile(r"^sha256:[a-f0-9]{64}$")
 _FORBIDDEN_METADATA_MARKERS = (
     "api_key",
     "authorization",
@@ -76,6 +77,17 @@ def _validate_code(field_name: str, value: Any, *, max_length: int = 96) -> str:
     return text
 
 
+def _validate_snapshot_ref(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("snapshot_ref must be str")
+    text = value.strip()
+    if text.lower().startswith("sha256:"):
+        if not _TYPED_SHA256_SNAPSHOT_REF_PATTERN.fullmatch(text):
+            raise ValueError("invalid typed snapshot_ref")
+        return text
+    return _validate_code("snapshot_ref", text, max_length=128)
+
+
 def _normalize_source_key(value: Any) -> str:
     if not isinstance(value, str):
         raise TypeError("source_key must be str")
@@ -120,7 +132,7 @@ class SourceManifestEntry:
         source_key = _normalize_source_key(self.source_key)
         status = _coerce_query_status(self.query_status)
         query_version = _validate_code("query_version", self.query_version)
-        snapshot_ref = _validate_code("snapshot_ref", self.snapshot_ref, max_length=128)
+        snapshot_ref = _validate_snapshot_ref(self.snapshot_ref)
         error_code = _validate_code("error_code", self.error_code, max_length=64) if self.error_code else ""
         reason_code = _validate_code("reason_code", self.reason_code, max_length=64) if self.reason_code else ""
         if isinstance(self.record_count, bool):
@@ -171,7 +183,7 @@ class SourceManifestEntry:
         status = _coerce_query_status(query_status)
         normalized_source_key = _normalize_source_key(source_key)
         normalized_query_version = _validate_code("query_version", query_version)
-        normalized_snapshot_ref = _validate_code("snapshot_ref", snapshot_ref, max_length=128)
+        normalized_snapshot_ref = _validate_snapshot_ref(snapshot_ref)
         normalized_error_code = (
             _validate_code("error_code", error_code, max_length=64) if error_code else ""
         )

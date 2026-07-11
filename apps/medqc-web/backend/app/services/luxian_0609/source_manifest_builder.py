@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+from itertools import islice
 import json
 import math
 from typing import Any, Iterable, Mapping
@@ -13,6 +14,10 @@ SOURCE_SNAPSHOT_SCHEMA_VERSION = "1.0"
 MAX_DOCUMENT_DEPTH = 12
 MAX_DOCUMENT_ITEMS = 10_000
 MAX_SOURCE_CANONICAL_BYTES = 1_000_000
+# Shadow 防御预算：覆盖 LX0609 预期来源规模，同时阻止横向拆分绕过。
+MAX_OBSERVED_SOURCES = 128
+MAX_TOTAL_DOCUMENTS = 50_000
+MAX_TOTAL_CANONICAL_BYTES = 8_000_000
 
 
 def _canonical_json(value: Any) -> str:
@@ -60,7 +65,7 @@ def _observation_validation_entry(
         query_status=status,
         record_count=validation_count,
         query_version=query_version,
-        snapshot_ref="0" * 64,
+        snapshot_ref="sha256:" + ("0" * 64),
         error_code=error_code,
         reason_code=reason_code,
     )
@@ -168,6 +173,7 @@ def _collect_observed_documents(
     )
     documents = _safe_mapping(timeline.get("documents"), field_name="documents")
     collected = {source_key: [] for source_key in observed_source_keys}
+    total_document_count = 0
     for raw_source_key, raw_documents in documents.items():
         normalized_source_key = _payload_source_key(raw_source_key)
         if normalized_source_key not in observed_source_keys:
@@ -176,6 +182,9 @@ def _collect_observed_documents(
             raise TypeError("observed source documents must be a list")
         if len(raw_documents) > MAX_DOCUMENT_ITEMS:
             raise ValueError("observed source contains too many documents")
+        total_document_count += len(raw_documents)
+        if total_document_count > MAX_TOTAL_DOCUMENTS:
+            raise ValueError("observed sources contain too many documents")
         if (
             len(collected[normalized_source_key]) + len(raw_documents)
             > MAX_DOCUMENT_ITEMS
@@ -192,7 +201,8 @@ def _source_snapshot_ref(
     *,
     observation: SourceQueryObservation,
     documents: list[dict[str, Any]],
-) -> str:
+    remaining_total_canonical_bytes: int,
+) -> tuple[str, int]:
     canonical_documents: list[str] = []
     total_bytes = 0
     for document in documents:
@@ -213,9 +223,13 @@ def _source_snapshot_ref(
         "source_key": observation.source_key,
     }
     canonical_material = _canonical_json(snapshot_material)
-    if len(canonical_material.encode("utf-8")) > MAX_SOURCE_CANONICAL_BYTES:
+    canonical_bytes = canonical_material.encode("utf-8")
+    canonical_size = len(canonical_bytes)
+    if canonical_size > MAX_SOURCE_CANONICAL_BYTES:
         raise ValueError("observed source material exceeds maximum size")
-    return hashlib.sha256(canonical_material.encode("utf-8")).hexdigest()
+    if canonical_size > remaining_total_canonical_bytes:
+        raise ValueError("observed sources exceed total canonical size")
+    return f"sha256:{hashlib.sha256(canonical_bytes).hexdigest()}", canonical_size
 
 
 def _validate_observation_documents(
@@ -244,9 +258,17 @@ def build_luxian_0609_source_manifest_shadow(
 ) -> DocumentManifest:
     """从显式查询观测构造 shadow manifest，不推断任何来源状态。"""
 
-    normalized_observations = tuple(observations)
+    try:
+        observation_iterator = iter(observations)
+    except TypeError:
+        raise TypeError("observations must be iterable") from None
+    normalized_observations = tuple(
+        islice(observation_iterator, MAX_OBSERVED_SOURCES + 1)
+    )
     if not normalized_observations:
         raise ValueError("at least one source observation is required")
+    if len(normalized_observations) > MAX_OBSERVED_SOURCES:
+        raise ValueError("too many source observations")
     if not all(
         isinstance(observation, SourceQueryObservation)
         for observation in normalized_observations
@@ -261,6 +283,7 @@ def build_luxian_0609_source_manifest_shadow(
         observed_source_keys=set(source_keys),
     )
     entries: list[SourceManifestEntry] = []
+    total_canonical_bytes = 0
     for observation in sorted(
         normalized_observations,
         key=lambda item: item.source_key,
@@ -270,16 +293,21 @@ def build_luxian_0609_source_manifest_shadow(
             observation=observation,
             document_count=len(source_documents),
         )
+        snapshot_ref, source_canonical_bytes = _source_snapshot_ref(
+            observation=observation,
+            documents=source_documents,
+            remaining_total_canonical_bytes=(
+                MAX_TOTAL_CANONICAL_BYTES - total_canonical_bytes
+            ),
+        )
+        total_canonical_bytes += source_canonical_bytes
         entries.append(
             SourceManifestEntry.create(
                 source_key=observation.source_key,
                 query_status=observation.query_status,
                 record_count=record_count,
                 query_version=observation.query_version,
-                snapshot_ref=_source_snapshot_ref(
-                    observation=observation,
-                    documents=source_documents,
-                ),
+                snapshot_ref=snapshot_ref,
                 error_code=observation.error_code,
                 reason_code=observation.reason_code,
             )

@@ -249,6 +249,34 @@ def test_controlled_metadata_rejects_stack_sql_credentials_and_direct_identifier
         _entry(**kwargs)
 
 
+def test_typed_sha256_snapshot_accepts_phone_shaped_digest_without_phi_false_positive() -> None:
+    phone_shaped_digest = "a" * 20 + "185" + "3186" + "6038" + "b" * 33
+    entry = _entry(snapshot_ref=f"sha256:{phone_shaped_digest}")
+    assert entry.snapshot_ref == f"sha256:{phone_shaped_digest}"
+
+
+@pytest.mark.parametrize(
+    "snapshot_ref",
+    [
+        "sha256:abc",
+        "sha256:" + ("g" * 64),
+        "sha256:" + ("A" * 64),
+        "sha256:" + ("a" * 64) + "tail",
+        "SHA256:" + ("a" * 64),
+    ],
+)
+def test_typed_sha256_snapshot_format_is_strict(snapshot_ref: str) -> None:
+    with pytest.raises(ValueError):
+        _entry(snapshot_ref=snapshot_ref)
+
+
+def test_free_text_snapshot_phone_and_credential_remain_rejected() -> None:
+    with pytest.raises(ValueError):
+        _entry(snapshot_ref="138" + "0000" + "0000")
+    with pytest.raises(ValueError):
+        _entry(snapshot_ref="Author" + "ization:Bearer-token")
+
+
 @pytest.mark.parametrize(
     "visit_ref",
     ["510000" + "000000" + "000000", "138" + "0000" + "0000"],

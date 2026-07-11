@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.services.luxian_0609.source_manifest import QueryStatus
+from app.services.luxian_0609 import source_manifest_builder as builder_module
 from app.services.luxian_0609.source_manifest_builder import (
     MAX_DOCUMENT_DEPTH,
     MAX_DOCUMENT_ITEMS,
@@ -78,6 +79,19 @@ def test_builder_constructs_all_four_explicit_query_states() -> None:
 
 
 @pytest.mark.unit
+def test_builder_accepts_phone_shaped_internal_digest_reproduction() -> None:
+    manifest = _build(
+        documents={"surgery_record": [{"content": "合法结构化内容-142"}]}
+    )
+    assert manifest.entries[0].snapshot_ref == (
+        "sha256:4897d44bd098ed42bacf6aabab464d65b8bc5d"
+        + "185"
+        + "3186"
+        + "6038cec422a9aa2facc"
+    )
+
+
+@pytest.mark.unit
 def test_builder_merges_normalized_source_keys_without_deduplicating_documents() -> None:
     document = {"content": "same material", "structured": {"flag": True}}
     once = _build(documents={"surgery_record": [document]})
@@ -103,6 +117,137 @@ def test_merged_source_aliases_enforce_cumulative_document_limit() -> None:
                 "surgery_record": [{} for _ in range(half_plus_one)],
             }
         )
+
+
+@pytest.mark.unit
+def test_global_document_budget_rejects_single_source_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_TOTAL_DOCUMENTS", 1)
+    with pytest.raises(ValueError):
+        _build(
+            documents={"surgery_record": [{"value": 1}, {"value": 2}]}
+        )
+
+
+@pytest.mark.unit
+def test_global_document_budget_rejects_multi_source_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_TOTAL_DOCUMENTS", 3)
+    observations = (
+        _observation("surgery_record"),
+        _observation("daily_course_record"),
+    )
+    _build(
+        documents={"surgery_record": [{"value": 1}, {"value": 2}]},
+        observations=(observations[0],),
+    )
+    _build(
+        documents={"daily_course_record": [{"value": 3}, {"value": 4}]},
+        observations=(observations[1],),
+    )
+    with pytest.raises(ValueError):
+        _build(
+            documents={
+                "surgery_record": [{"value": 1}, {"value": 2}],
+                "daily_course_record": [{"value": 3}, {"value": 4}],
+            },
+            observations=observations,
+        )
+
+
+@pytest.mark.unit
+def test_global_canonical_byte_budget_rejects_multi_source_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_SOURCE_CANONICAL_BYTES", 10_000)
+    monkeypatch.setattr(builder_module, "MAX_TOTAL_CANONICAL_BYTES", 450)
+    observations = (
+        _observation("surgery_record"),
+        _observation("daily_course_record"),
+    )
+    _build(
+        documents={"surgery_record": [{"content": "a" * 80}]},
+        observations=(observations[0],),
+    )
+    _build(
+        documents={"daily_course_record": [{"content": "b" * 80}]},
+        observations=(observations[1],),
+    )
+    with pytest.raises(ValueError):
+        _build(
+            documents={
+                "surgery_record": [{"content": "a" * 80}],
+                "daily_course_record": [{"content": "b" * 80}],
+            },
+            observations=observations,
+        )
+
+
+@pytest.mark.unit
+def test_global_canonical_byte_budget_rejects_single_source_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_SOURCE_CANONICAL_BYTES", 10_000)
+    monkeypatch.setattr(builder_module, "MAX_TOTAL_CANONICAL_BYTES", 100)
+    with pytest.raises(ValueError):
+        _build(documents={"surgery_record": [{"content": "a" * 80}]})
+
+
+@pytest.mark.unit
+def test_observation_count_budget_rejects_before_building_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_OBSERVED_SOURCES", 1)
+    with pytest.raises(ValueError):
+        _build(
+            observations=(
+                _observation("surgery_record", "empty"),
+                _observation("daily_course_record", "empty"),
+            )
+        )
+
+
+@pytest.mark.unit
+def test_observation_budget_stops_consuming_generator_at_first_overflow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builder_module, "MAX_OBSERVED_SOURCES", 2)
+    consumed = 0
+
+    def observations():
+        nonlocal consumed
+        for index in range(100):
+            consumed += 1
+            yield _observation(f"source_{index}", "empty")
+
+    with pytest.raises(ValueError):
+        build_luxian_0609_source_manifest_shadow(
+            visit_ref="visit-ref-001",
+            evidence_payload=_payload(),
+            observations=observations(),
+            manifest_schema_version="1.0",
+            created_at=CREATED_AT,
+        )
+    assert consumed == 3
+
+
+@pytest.mark.unit
+def test_normal_multi_source_build_is_stable_across_observation_order() -> None:
+    documents = {
+        "surgery_record": [{"content": "surgery"}],
+        "daily_course_record": [{"content": "course"}],
+    }
+    observations = (
+        _observation("surgery_record"),
+        _observation("daily_course_record"),
+        _observation("bloodtrans_record", "empty"),
+    )
+    left = _build(documents=documents, observations=observations)
+    right = _build(documents=documents, observations=tuple(reversed(observations)))
+    assert left.source_snapshot_hash == right.source_snapshot_hash
+    assert left.fingerprint() == right.fingerprint()
 
 
 @pytest.mark.unit
