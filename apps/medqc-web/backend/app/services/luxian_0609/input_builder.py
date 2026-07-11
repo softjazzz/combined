@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .source_manifest import DocumentManifest
+
 
 _FAMILY_SOURCE_TABLES: dict[str, tuple[str, ...]] = {
     "basic_timeliness": (
@@ -117,6 +119,7 @@ def build_luxian_0609_input_profile(
     visit_id: str,
     medical_text: str,
     evidence_payload: dict[str, Any] | None,
+    source_manifest_shadow: DocumentManifest | None = None,
 ) -> dict[str, Any]:
     """Build an observable input profile for future LX0609 fact-gate work.
 
@@ -139,7 +142,7 @@ def build_luxian_0609_input_profile(
         if bool(profile.get("ready_for_trimmed_context"))
     ]
 
-    return {
+    profile = {
         "mode": "full_text_compat",
         "basis": "programmatic_evidence_payload",
         "visit_id": _safe_text(visit_id),
@@ -154,3 +157,18 @@ def build_luxian_0609_input_profile(
         "available_family_contexts": available_families,
         "family_profiles": family_profiles,
     }
+    if source_manifest_shadow is None:
+        return profile
+    if not isinstance(source_manifest_shadow, DocumentManifest):
+        raise TypeError("source_manifest_shadow must be DocumentManifest or None")
+    if source_manifest_shadow.visit_ref != profile["visit_id"]:
+        raise ValueError("source manifest visit_ref does not match input profile visit_id")
+    profile["source_manifest_shadow"] = {
+        "mode": "shadow_only",
+        "manifest_schema_version": source_manifest_shadow.manifest_schema_version,
+        "visit_ref": source_manifest_shadow.visit_ref,
+        "fingerprint": source_manifest_shadow.fingerprint(),
+        "source_snapshot_hash": source_manifest_shadow.source_snapshot_hash,
+        "entries": [entry.to_dict() for entry in source_manifest_shadow.entries],
+    }
+    return profile
