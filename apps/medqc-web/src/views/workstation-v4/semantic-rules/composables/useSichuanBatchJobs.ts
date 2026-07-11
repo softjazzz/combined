@@ -325,7 +325,7 @@ export function useSichuanBatchJobs() {
           : '批量质控已取消'
     const description =
       currentStatus === 'completed'
-        ? `任务“${job.rule_name || job.rule_code}”已完成。命中问题 ${issueCount} 条，待复核 ${uncertainCount} 条，可直接回到抽屉查看结果。`
+        ? `任务“${job.rule_name || job.rule_code}”已完成。命中问题 ${issueCount} 条，AI判断 ${uncertainCount} 条，可直接回到抽屉查看结果。`
         : currentStatus === 'failed'
           ? `任务“${job.rule_name || job.rule_code}”执行失败。请回到抽屉查看失败原因并决定是否重试。`
           : `任务“${job.rule_name || job.rule_code}”已被停止，不会继续产生新的结果。`

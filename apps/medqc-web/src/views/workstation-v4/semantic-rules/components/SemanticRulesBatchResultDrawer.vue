@@ -2,27 +2,18 @@
   <a-drawer
     :open="open"
     placement="right"
-    :width="1100"
+    :width="'min(1480px, 96vw)'"
     :closable="false"
     :body-style="{ padding: 0 }"
     @close="close"
   >
     <div class="drawer-shell">
-      <div class="drawer-head">
+      <div class="drawer-head result-review-header">
         <div class="drawer-title-group">
-          <a-button
-            class="drawer-back-button"
-            @click="close"
-          >
-            返回样本验证
-          </a-button>
+          <a-button class="drawer-back-button" @click="close"> 返回样本验证 </a-button>
           <div>
-            <p class="drawer-eyebrow">
-              批量任务结果
-            </p>
-            <h2 class="drawer-title">
-              任务详情
-            </h2>
+            <p class="drawer-eyebrow">批量任务结果</p>
+            <h2 class="drawer-title">任务详情</h2>
           </div>
         </div>
         <div class="drawer-actions">
@@ -35,43 +26,102 @@
             停止任务
           </a-button>
           <a-dropdown v-if="batchJobDetail?.status === 'completed'">
-            <a-button :loading="batchJobDetailLoading">
-              导出报告
-            </a-button>
+            <a-button :loading="batchJobDetailLoading"> 导出 HTML 明细 </a-button>
             <template #overlay>
               <a-menu @click="handleExportMenuClick">
-                <a-menu-item key="html">
-                  导出 HTML 明细
-                </a-menu-item>
-                <a-menu-item key="xlsx">
-                  导出 Excel
-                </a-menu-item>
-                <a-menu-item key="csv">
-                  导出 CSV
-                </a-menu-item>
+                <a-menu-item key="html"> 导出 HTML 明细 </a-menu-item>
+                <a-menu-item key="xlsx"> 导出 Excel </a-menu-item>
+                <a-menu-item key="csv"> 导出 CSV </a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
           <a-button
-            type="text"
-            @click="close"
+            v-if="batchJobDetail?.status === 'completed' && isLuxian0609BatchJob"
+            type="primary"
+            :loading="reviewBatchJobLoading"
+            @click="handleReviewBatchJobResult"
           >
-            关闭
+            复核本次结果
           </a-button>
+          <a-button type="text" @click="close"> 关闭 </a-button>
         </div>
       </div>
 
       <div class="drawer-body">
+        <div v-if="showResultReviewOverview" class="result-review-overview result-overview-card">
+          <div class="result-overview-card-main">
+            <div class="result-overview-identity">
+              <div class="result-overview-icon">
+                <span>质</span>
+              </div>
+              <div class="result-review-overview-copy">
+                <div class="result-review-overview-title-row">
+                  <h3>{{ resultReviewOverviewTitle }}</h3>
+                  <span
+                    class="result-review-status-chip"
+                    :class="getBatchJobStatusTagClass(batchJobDetail?.status || 'queued')"
+                  >
+                    {{ getBatchJobStatusText(batchJobDetail?.status || 'queued') }}
+                  </span>
+                </div>
+                <div class="result-review-overview-meta">
+                  <span v-if="batchJobDetail?.created_at">
+                    创建时间：{{ formatDateTime(batchJobDetail.created_at) }}
+                  </span>
+                  <span v-if="batchJobDetail?.finished_at">
+                    完成时间：{{ formatDateTime(batchJobDetail.finished_at) }}
+                  </span>
+                  <span>规则集：泸县0609质控点验证 v1</span>
+                  <span>执行病历：{{ resultReviewRecordCount }} 份</span>
+                </div>
+                <p class="result-review-overview-desc">
+                  {{ resultReviewOutcomeText }}
+                </p>
+                <p class="result-review-overview-scope">
+                  {{ resultReviewScopeText }}
+                </p>
+              </div>
+            </div>
+            <div class="result-review-overview-stats">
+              <div>
+                <span>病历</span>
+                <strong>{{ resultReviewRecordCount }}</strong>
+                <small>份</small>
+              </div>
+              <div>
+                <span>客户质控点</span>
+                <strong>{{ resultReviewCustomerRuleCount }}</strong>
+                <small>个</small>
+              </div>
+              <div>
+                <span>结果</span>
+                <strong>{{ resultReviewResultCount }}</strong>
+                <small>条</small>
+              </div>
+            </div>
+            <div class="result-overview-status-block">
+              <span class="result-overview-status-label">状态分布</span>
+              <div class="result-review-status-pills">
+                <span
+                  v-for="item in resultReviewStatusPills"
+                  :key="item.key"
+                  class="result-review-status-pill"
+                  :class="item.className"
+                >
+                  {{ item.label }} <strong>{{ item.value }}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div
-          v-if="batchJobDetail && statusHero"
+          v-if="batchJobDetail && statusHero && !showResultReviewOverview"
           class="status-hero"
           :class="`status-hero--${statusHero.tone}`"
         >
           <div class="status-hero-main">
-            <div
-              v-if="statusHero.pulse"
-              class="status-hero-pulse"
-            />
+            <div v-if="statusHero.pulse" class="status-hero-pulse" />
             <div>
               <div class="status-hero-title-row">
                 <span class="status-hero-title">{{ statusHero.title }}</span>
@@ -87,16 +137,10 @@
                   {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
                 </div>
               </div>
-              <div
-                v-if="statusHero.description"
-                class="status-hero-desc"
-              >
+              <div v-if="statusHero.description" class="status-hero-desc">
                 {{ statusHero.description }}
               </div>
-              <div
-                v-if="isRunningBatchJob"
-                class="status-hero-live"
-              >
+              <div v-if="isRunningBatchJob" class="status-hero-live">
                 <span>
                   已完成 {{ progressSummary?.processedRecords ?? 0 }} /
                   {{ progressSummary?.totalRecords ?? 0 }} 份病历
@@ -107,10 +151,7 @@
                 <span>{{ liveElapsedLabel }}</span>
                 <span v-if="streamUpdatedAtText">最近更新：{{ streamUpdatedAtText }}</span>
               </div>
-              <div
-                v-if="isRunningBatchJob"
-                class="status-hero-flow"
-              >
+              <div v-if="isRunningBatchJob" class="status-hero-flow">
                 <div
                   class="status-hero-flow-bar"
                   :style="{ width: `${progressSummary?.percent ?? 0}%` }"
@@ -119,9 +160,7 @@
             </div>
           </div>
           <div class="status-hero-side">
-            <div class="status-hero-percent">
-              {{ progressSummary?.percent ?? 0 }}%
-            </div>
+            <div class="status-hero-percent">{{ progressSummary?.percent ?? 0 }}%</div>
             <div class="status-hero-side-label">
               {{ progressSummary?.stepLabel || '准备中' }}
             </div>
@@ -132,33 +171,24 @@
           v-if="focusedSummaryCards.length && !isLuxian0609BatchJob"
           class="drawer-summary summary-grid-primary"
         >
-          <div
-            v-for="item in focusedSummaryCards"
-            :key="item.key"
-            class="summary-card"
-          >
+          <div v-for="item in focusedSummaryCards" :key="item.key" class="summary-card">
             <div class="summary-label">
               {{ item.label }}
             </div>
             <div class="summary-value">
               {{ item.value }}
             </div>
-            <div
-              v-if="item.desc"
-              class="summary-desc"
-            >
+            <div v-if="item.desc" class="summary-desc">
               {{ item.desc }}
             </div>
           </div>
         </div>
 
         <div
-          v-if="isFocusedRecordMode"
+          v-if="isFocusedRecordMode && !showResultReviewOverview"
           class="drawer-card focus-record-card"
         >
-          <div class="drawer-section-title">
-            当前仅查看单份病历结果
-          </div>
+          <div class="drawer-section-title">当前仅查看单份病历结果</div>
           <div class="focus-record-meta">
             <span v-if="props.focusRecordLabel">{{ props.focusRecordLabel }}</span>
             <span v-if="props.focusVisitId">visit_id：{{ props.focusVisitId }}</span>
@@ -167,34 +197,26 @@
         </div>
 
         <div
-          v-if="isLuxian0609BatchJob"
+          v-if="isLuxian0609BatchJob && !showResultReviewOverview"
           class="drawer-card luxian-scope-card"
         >
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
-              <div class="drawer-section-title">
-                泸县0609验证范围
-              </div>
+              <div class="drawer-section-title">泸县0609验证范围</div>
               <span class="summary-mode-badge">
                 {{ luxianScopeModeLabel }}
               </span>
             </div>
           </div>
           <div class="luxian-scope-grid">
-            <div
-              v-for="item in luxianScopeCards"
-              :key="item.key"
-              class="luxian-scope-stat"
-            >
+            <div v-for="item in luxianScopeCards" :key="item.key" class="luxian-scope-stat">
               <span>{{ item.label }}</span>
               <strong>{{ item.value }}</strong>
               <small>{{ item.desc }}</small>
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">
-              用户选择的 LX0609 质控点
-            </div>
+            <div class="luxian-scope-label">用户选择的 LX0609 质控点</div>
             <div class="luxian-scope-chips">
               <span
                 v-for="ruleId in luxianSelectedRuleIdsPreview"
@@ -203,10 +225,7 @@
               >
                 {{ ruleId }}
               </span>
-              <span
-                v-if="!luxianSelectedRuleIds.length"
-                class="luxian-scope-muted"
-              >
+              <span v-if="!luxianSelectedRuleIds.length" class="luxian-scope-muted">
                 {{ isLuxianScopedRun ? '未返回' : '未限定，执行全量 0609 质控点' }}
               </span>
               <span
@@ -218,17 +237,13 @@
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">
-              病历-规则映射摘要
-            </div>
+            <div class="luxian-scope-label">病历-规则映射摘要</div>
             <div class="luxian-scope-map">
               {{ luxianRecordRuleMapSummary }}
             </div>
           </div>
           <div class="luxian-scope-section">
-            <div class="luxian-scope-label">
-              状态分布
-            </div>
+            <div class="luxian-scope-label">状态分布</div>
             <div class="luxian-status-grid">
               <span
                 v-for="item in luxianStatusDistribution"
@@ -242,41 +257,71 @@
           </div>
         </div>
 
-        <div class="drawer-card">
+        <div v-if="luxianReviewReport" class="drawer-card luxian-review-card">
+          <div class="drawer-section-head">
+            <div class="drawer-section-title-group">
+              <div class="drawer-section-title">结果复核建议</div>
+              <span class="summary-mode-badge">
+                {{ luxianReviewSummaryText }}
+              </span>
+            </div>
+          </div>
+          <div v-if="luxianReviewFindings.length" class="luxian-review-list">
+            <article
+              v-for="finding in luxianReviewFindings"
+              :key="finding.id || `${finding.record_id}-${finding.rule_id}-${finding.risk_type}`"
+              class="luxian-review-item"
+            >
+              <div class="luxian-review-item-head">
+                <strong>{{ finding.rule_id || '未返回质控点' }}</strong>
+                <span>{{ finding.severity || '建议' }}</span>
+                <em v-if="finding.suggested_status">
+                  建议口径：{{ mapStructuredStatusLabel(finding.suggested_status) }}
+                </em>
+              </div>
+              <p>
+                {{
+                  sanitizeCustomerVisibleText(
+                    finding.customer_message || finding.reason || '建议质控员确认该质控点结论。',
+                  )
+                }}
+              </p>
+              <small v-if="finding.record_id || finding.patient_name">
+                {{ [finding.record_id, finding.patient_name].filter(Boolean).join(' · ') }}
+              </small>
+            </article>
+          </div>
+          <div v-else class="luxian-review-empty">已完成复核，暂无高风险复核建议。</div>
+        </div>
+
+        <div
+          class="drawer-card issue-review-workbench-card"
+          :class="{
+            'issue-review-workbench-card--single': isSingleRecordIssueMode,
+            'issue-review-workbench-card--multi': isMultiRecordIssueMode,
+          }"
+        >
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
               <div class="drawer-section-title">
                 {{ issueSectionTitle }}
               </div>
-              <span
-                v-if="isFastScreenResult"
-                class="summary-mode-badge"
-              >
+              <span v-if="isFastScreenResult" class="summary-mode-badge">
                 快速初筛结果（摘要版）
               </span>
             </div>
             <div class="drawer-section-actions">
-              <a-radio-group
-                v-model:value="issueViewMode"
-                size="small"
-              >
-                <a-radio-button value="business">
-                  业务视图
-                </a-radio-button>
-                <a-radio-button value="advanced">
-                  高级视图
-                </a-radio-button>
+              <a-radio-group v-model:value="issueViewMode" size="small">
+                <a-radio-button value="business"> 业务视图 </a-radio-button>
+                <a-radio-button value="advanced"> 高级视图 </a-radio-button>
               </a-radio-group>
-              <a-switch
-                v-model:checked="showAllStatuses"
-                size="small"
-              />
+              <a-switch v-model:checked="showAllStatuses" size="small" />
               <span class="drawer-section-meta">
                 {{ showAllStatuses ? '全部状态' : '仅问题项' }}
               </span>
             </div>
           </div>
-          <div class="issue-toolbar">
+          <div class="issue-toolbar" :class="{ 'issue-toolbar--single': isSingleRecordIssueMode }">
             <div class="issue-focus-summary">
               {{ issueFocusSummary }}
             </div>
@@ -308,32 +353,17 @@
                 class="issue-filter-item"
                 :options="issueDefectLevelOptions"
               />
-              <a-button
-                size="small"
-                @click="resetIssueFilters"
-              >
-                重置
-              </a-button>
+              <a-button size="small" @click="resetIssueFilters"> 重置 </a-button>
             </div>
           </div>
-          <div
-            v-if="issueRecordGroups.length > 1"
-            class="issue-record-switcher"
-          >
+          <div v-if="isMultiRecordIssueMode" class="issue-record-switcher">
             <div class="issue-record-switcher-head">
-              <span>按病历查看</span>
-              <small>本次涉及 {{ issueRecordGroups.length }} 份病历，可先定位病历再看质控点。</small>
+              <span>先选病历，再看质控点</span>
+              <small
+                >本次涉及 {{ issueRecordGroups.length }} 份病历，默认按病历分组展示结果。</small
+              >
             </div>
             <div class="issue-record-tabs">
-              <button
-                type="button"
-                class="issue-record-tab"
-                :class="{ 'issue-record-tab--active': selectedIssueRecordKey === ALL_RECORDS_KEY }"
-                @click="selectedIssueRecordKey = ALL_RECORDS_KEY"
-              >
-                <strong>全部病历</strong>
-                <span>{{ issueRecordTotalCount }} 条结果</span>
-              </button>
               <button
                 v-for="group in issueRecordGroups"
                 :key="group.key"
@@ -348,13 +378,21 @@
                   {{ group.dataGap }}
                 </span>
               </button>
+              <button
+                type="button"
+                class="issue-record-tab issue-record-tab--all"
+                :class="{ 'issue-record-tab--active': selectedIssueRecordKey === ALL_RECORDS_KEY }"
+                @click="selectedIssueRecordKey = ALL_RECORDS_KEY"
+              >
+                <strong>全部病历</strong>
+                <span>{{ issueRecordTotalCount }} 条结果</span>
+              </button>
             </div>
           </div>
-          <div
-            v-if="selectedClusterKey || activeRuleFilterLabel"
-            class="aggregation-active-tip"
-          >
-            <span v-if="selectedClusterKey">聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span>
+          <div v-if="selectedClusterKey || activeRuleFilterLabel" class="aggregation-active-tip">
+            <span v-if="selectedClusterKey"
+              >聚合簇：{{ resolveCustomerEvidenceText(selectedClusterKey) }}</span
+            >
             <span v-if="selectedClusterKey && activeRuleFilterLabel">·</span>
             <span v-if="activeRuleFilterLabel">规则：{{ activeRuleFilterLabel }}</span>
             <a-button
@@ -383,556 +421,1113 @@
             <span>{{ incrementalResultTip }}</span>
           </div>
           <div
-            v-if="businessIssueCards.length"
-            class="issue-conclusion-list"
+            v-if="issueViewMode === 'business'"
+            class="issue-business-workbench issue-review-layout"
+            :class="{
+              'issue-business-workbench--single': isSingleRecordIssueMode,
+              'issue-business-workbench--multi': isMultiRecordIssueMode,
+            }"
           >
-            <div
-              v-for="group in businessIssueCardGroups"
-              :key="group.key"
-              class="issue-record-result-group"
+            <aside
+              v-if="isSingleRecordIssueMode && displayIssueItems.length"
+              class="issue-review-nav issue-group-list"
             >
-              <div
-                v-if="shouldShowIssueRecordGroupHeader"
-                class="issue-record-result-head"
-              >
-                <div>
-                  <strong>{{ group.label }}</strong>
-                  <span>{{ group.meta || '未返回科室/住院号' }}</span>
-                </div>
-                <div class="issue-record-result-stats">
-                  <span>结果 {{ group.total }}</span>
-                  <span>不合规 {{ group.nonCompliant }}</span>
-                  <span>数据不足 {{ group.dataGap }}</span>
-                </div>
+              <div class="issue-review-nav-head">
+                <strong>质控点审阅列表</strong>
+                <span>单份病历 · {{ displayIssueItems.length }} 条结果</span>
               </div>
-              <TransitionGroup
-                name="issue-stream"
-                tag="div"
-                class="issue-conclusion-list-inner"
+              <div
+                v-for="group in singleIssueNavGroups"
+                :key="group.key"
+                class="issue-review-nav-group"
+                :class="group.className"
               >
-                <div
+                <span>{{ group.title }}</span>
+                <em>{{ group.items.length }}</em>
+              </div>
+              <template v-for="group in singleIssueNavGroups" :key="`items-${group.key}`">
+                <button
                   v-for="item in group.items"
-                  :key="`conclusion-${resolveIssueStableKey(item)}`"
-                  class="issue-conclusion-card"
-                  :class="item.issue_card_class"
+                  :key="`review-nav-${resolveIssueStableKey(item)}`"
+                  type="button"
+                  class="issue-review-nav-item"
+                  :class="[
+                    resolveIssueReviewNavClass(item),
+                    {
+                      'issue-review-nav-item--active':
+                        selectedBusinessIssueKey === resolveIssueStableKey(item),
+                    },
+                  ]"
+                  @click="selectBusinessIssue(item)"
                 >
-                  <div class="issue-conclusion-head">
-                    <div class="issue-conclusion-head-main">
-                      <div class="issue-conclusion-title-row">
-                        <span class="issue-conclusion-title">
-                          <span class="issue-rule-code">
-                            {{ item.rule_code || item.rule_id || '未知规则' }}
-                          </span>
-                          ·
-                          {{ item.rule_name || '未知质控点' }}
-                        </span>
-                      </div>
-                      <div class="issue-conclusion-meta">
-                        <span>{{ item.record_id || '-' }}</span>
-                        <span>{{
-                          item.target_document_type || item.document_type || '未知文书域'
-                        }}</span>
-                        <span>{{ item.defect_level || '未分级' }}</span>
-                        <span v-if="item.refined">单条精审</span>
-                      </div>
+                  <div>
+                    <strong class="issue-review-nav-code">{{
+                      item.rule_code || item.rule_id || '未知规则'
+                    }}</strong>
+                    <span class="issue-review-nav-title">{{
+                      truncateText(item.rule_name || '未知质控点', 44)
+                    }}</span>
+                  </div>
+                  <em>{{ resolveIssueResultKindText(item) }}</em>
+                </button>
+              </template>
+            </aside>
+            <div class="issue-business-main">
+              <div
+                v-if="isSingleRecordIssueMode && selectedBusinessIssueCard"
+                class="issue-conclusion-card issue-detail-panel"
+                :class="selectedBusinessIssueCard.issue_card_class"
+              >
+                <div class="issue-detail-head">
+                  <div>
+                    <div class="issue-detail-title-row">
+                      <span class="issue-rule-code">
+                        {{
+                          selectedBusinessIssueCard.rule_code ||
+                          selectedBusinessIssueCard.rule_id ||
+                          '未知规则'
+                        }}
+                      </span>
+                      <span class="issue-detail-title-separator">·</span>
+                      <strong>{{ selectedBusinessIssueCard.rule_name || '未知质控点' }}</strong>
                     </div>
+                    <div class="issue-conclusion-meta">
+                      <span>{{ selectedBusinessIssueCard.record_id || '-' }}</span>
+                      <span>{{
+                        selectedBusinessIssueCard.target_document_type ||
+                        selectedBusinessIssueCard.document_type ||
+                        '未知文书域'
+                      }}</span>
+                      <span>{{ resolveIssueSeverityText(selectedBusinessIssueCard) }}</span>
+                    </div>
+                  </div>
+                  <div class="issue-conclusion-status">
+                    <span
+                      class="issue-result-kind"
+                      :class="resolveIssueResultKindClass(selectedBusinessIssueCard)"
+                    >
+                      {{ resolveIssueResultKindText(selectedBusinessIssueCard) }}
+                    </span>
                     <a-tag class="aggregation-count-tag">
-                      {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
+                      {{
+                        resolveDisplayStatusText(selectedBusinessIssueCard) ||
+                        resolveStatusText(selectedBusinessIssueCard.status)
+                      }}
                     </a-tag>
                   </div>
-                  <div class="issue-at-a-glance">
-                    <div class="issue-glance-block issue-glance-block--conclusion">
-                      <div class="issue-glance-label">
-                        质控结论
-                      </div>
-                      <strong>{{ truncateText(item.customer_findings_text, 112) }}</strong>
+                </div>
+                <div class="issue-review-reading-path">
+                  <div class="issue-review-reading-step is-active">
+                    <span>1</span>
+                    <strong>先看结论</strong>
+                    <em>{{ resolveIssueResultKindText(selectedBusinessIssueCard) }}</em>
+                  </div>
+                  <div class="issue-review-reading-step">
+                    <span>2</span>
+                    <strong>核对证据</strong>
+                    <em>{{
+                      resolveCopyEvidenceCompare(selectedBusinessIssueCard)
+                        ? '前后记录对照'
+                        : '来源片段与字段'
+                    }}</em>
+                  </div>
+                  <div class="issue-review-reading-step">
+                    <span>3</span>
+                    <strong>处理建议</strong>
+                    <em>复核或补充记录</em>
+                  </div>
+                </div>
+                <div v-if="selectedIssuePatientContext" class="issue-patient-context-card">
+                  <div class="issue-patient-avatar">
+                    {{ selectedIssuePatientContext.initial }}
+                  </div>
+                  <div class="issue-patient-context-main">
+                    <div class="issue-patient-context-kicker">当前病历</div>
+                    <div class="issue-patient-context-id">
+                      {{ selectedIssuePatientContext.recordId }}
                     </div>
-                    <div class="issue-glance-block">
-                      <div class="issue-glance-label">
+                    <div class="issue-patient-context-meta">
+                      <span>
+                        <em>姓名</em>
+                        {{ selectedIssuePatientContext.patientName }}
+                      </span>
+                      <span>
+                        <em>科室</em>
+                        {{ selectedIssuePatientContext.department }}
+                      </span>
+                      <span>
+                        <em>文书域</em>
+                        {{ selectedIssuePatientContext.documentType }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="issue-detail-body">
+                  <section class="issue-detail-section issue-detail-section--conclusion">
+                    <div class="issue-detail-section-title">
+                      <span>01</span>
+                      质控结论
+                    </div>
+                    <div class="issue-detail-text">
+                      <template
+                        v-if="hasStructuredText(selectedBusinessIssueCard.customer_findings_text)"
+                      >
+                        <p
+                          v-for="(paragraph, index) in resolveStructuredText(
+                            selectedBusinessIssueCard.customer_findings_text,
+                          ).summary"
+                          :key="`selected-findings-summary-${index}`"
+                        >
+                          {{ paragraph }}
+                        </p>
+                        <div
+                          v-for="(section, sectionIndex) in resolveStructuredText(
+                            selectedBusinessIssueCard.customer_findings_text,
+                          ).sections"
+                          :key="`selected-findings-section-${sectionIndex}`"
+                          class="structured-text-section"
+                        >
+                          <strong>{{ section.title }}</strong>
+                          <p
+                            v-for="(paragraph, index) in section.paragraphs"
+                            :key="`selected-findings-section-${sectionIndex}-p-${index}`"
+                          >
+                            {{ paragraph }}
+                          </p>
+                          <ul v-if="section.points.length">
+                            <li
+                              v-for="(point, index) in section.points"
+                              :key="`selected-findings-section-${sectionIndex}-point-${index}`"
+                            >
+                              {{ point }}
+                            </li>
+                          </ul>
+                        </div>
+                        <ul
+                          v-if="
+                            resolveStructuredText(selectedBusinessIssueCard.customer_findings_text)
+                              .points.length
+                          "
+                        >
+                          <li
+                            v-for="(point, index) in resolveStructuredText(
+                              selectedBusinessIssueCard.customer_findings_text,
+                            ).points"
+                            :key="`selected-findings-point-${index}`"
+                          >
+                            {{ point }}
+                          </li>
+                        </ul>
+                      </template>
+                      <p v-else>
+                        {{ selectedBusinessIssueCard.customer_findings_text || '未返回结论' }}
+                      </p>
+                    </div>
+                  </section>
+                  <div class="issue-detail-main-grid">
+                    <section class="issue-detail-section evidence-table-card">
+                      <div class="issue-detail-section-title">
+                        <span>02</span>
                         关键证据
                       </div>
                       <div
-                        v-if="item.evidence_summary_parts.length"
-                        class="issue-evidence-facts"
+                        v-if="resolveEvidenceChainItems(selectedBusinessIssueCard, 1600).length"
+                        class="structured-evidence-list"
                       >
                         <div
-                          v-for="part in item.evidence_summary_parts"
-                          :key="part.key"
-                          class="issue-evidence-fact"
-                          :class="`issue-evidence-fact--${part.kind}`"
+                          v-for="evidence in resolveEvidenceChainItems(
+                            selectedBusinessIssueCard,
+                            1600,
+                          )"
+                          :key="evidence.key"
+                          class="structured-evidence-card"
                         >
-                          <span>{{ part.label }}：</span>
+                          <div class="structured-evidence-card-head">
+                            <strong>{{ evidence.source }}</strong>
+                            <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                            <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                          </div>
+                          <blockquote>{{ evidence.quote }}</blockquote>
+                        </div>
+                      </div>
+                      <div
+                        v-else-if="selectedBusinessIssueCard.evidence_summary_parts.length"
+                        class="evidence-table"
+                      >
+                        <div
+                          v-for="part in selectedBusinessIssueCard.evidence_summary_parts"
+                          :key="part.key"
+                          class="evidence-table-row"
+                          :class="`evidence-table-row--${part.kind}`"
+                        >
+                          <span>{{ part.label }}</span>
                           <strong>{{ part.value }}</strong>
                         </div>
                       </div>
-                      <span v-else>
-                        {{ item.evidence_summary }}
-                      </span>
-                    </div>
-                    <div class="issue-glance-block">
-                      <div class="issue-glance-label">
+                      <p v-else>
+                        {{ selectedBusinessIssueCard.evidence_summary }}
+                      </p>
+                    </section>
+                    <section class="suggestion-panel">
+                      <div class="issue-detail-section-title">
+                        <span>03</span>
                         处理建议
                       </div>
-                      <span>{{ truncateText(item.customer_suggestion_text, 96) }}</span>
-                    </div>
-                  </div>
-                  <div
-                    v-if="resolveCopyEvidenceCompare(item)"
-                    class="copy-evidence-compare"
-                  >
-                    <div class="copy-evidence-column">
-                      <div class="copy-evidence-label">
-                        {{ resolveCopyEvidenceCompare(item)?.left.label }}
-                      </div>
-                      <blockquote>{{ resolveCopyEvidenceCompare(item)?.left.quote }}</blockquote>
-                    </div>
-                    <div class="copy-evidence-column">
-                      <div class="copy-evidence-label">
-                        {{ resolveCopyEvidenceCompare(item)?.right.label }}
-                      </div>
-                      <blockquote>{{ resolveCopyEvidenceCompare(item)?.right.quote }}</blockquote>
-                    </div>
-                  </div>
-                  <div
-                    v-if="hasEvidenceChain(item)"
-                    class="evidence-chain-strip"
-                  >
-                    <span>
-                      状态口径：{{ resolveEvidenceStatusText(item.result_status || item.status) }}
-                    </span>
-                    <span v-if="resolveTriggerFacts(item).length">
-                      触发事实 {{ resolveTriggerFacts(item).length }} 条
-                    </span>
-                    <span v-if="resolveEvidenceChainItems(item).length">
-                      证据 {{ resolveEvidenceChainItems(item).length }} 条
-                    </span>
-                    <span v-if="resolveMissingSources(item).length">
-                      缺少数据 {{ resolveMissingSources(item).length }} 项
-                    </span>
-                  </div>
-                  <div
-                    v-if="isIssueExpanded(item) && hasEvidenceChain(item)"
-                    class="evidence-chain-panel"
-                  >
-                    <div class="evidence-chain-panel-head">
-                      <div>
-                        <div class="evidence-chain-title">
-                          证据链
-                        </div>
-                        <div class="evidence-chain-subtitle">
-                          按触发事实、依赖数据、来源证据和判断口径展示
-                        </div>
-                      </div>
-                      <a-tag class="evidence-chain-tag">
-                        {{ resolveExecutorTypeText(item.executor_type) }}
-                      </a-tag>
-                    </div>
-                    <div class="evidence-chain-grid">
-                      <div
-                        v-if="resolveTriggerFacts(item).length"
-                        class="evidence-chain-block"
-                      >
-                        <div class="evidence-chain-block-title">
-                          触发事实
-                        </div>
-                        <div
-                          v-for="fact in resolveTriggerFacts(item)"
-                          :key="fact.key"
-                          class="evidence-chain-line"
-                        >
-                          <span>{{ fact.label }}</span>
-                          <strong>{{ fact.value }}</strong>
-                        </div>
-                      </div>
-                      <div class="evidence-chain-block">
-                        <div class="evidence-chain-block-title">
-                          数据依赖
-                        </div>
-                        <div
-                          v-for="row in resolveDependencyRows(item)"
-                          :key="row.key"
-                          class="evidence-chain-line"
-                        >
-                          <span>{{ row.label }}</span>
-                          <strong>{{ row.value }}</strong>
-                        </div>
-                      </div>
-                      <div
-                        v-if="resolveDecisionRows(item).length"
-                        class="evidence-chain-block"
-                      >
-                        <div class="evidence-chain-block-title">
-                          判断过程
-                        </div>
-                        <div
-                          v-for="row in resolveDecisionRows(item)"
-                          :key="row.key"
-                          class="evidence-chain-line"
-                        >
-                          <span>{{ row.label }}</span>
-                          <strong>{{ row.value }}</strong>
-                        </div>
-                      </div>
-                      <div
-                        v-if="resolveReviewRows(item).length"
-                        class="evidence-chain-block"
-                      >
-                        <div class="evidence-chain-block-title">
-                          人工复核
-                        </div>
-                        <div
-                          v-for="row in resolveReviewRows(item)"
-                          :key="row.key"
-                          class="evidence-chain-line"
-                        >
-                          <span>{{ row.label }}</span>
-                          <strong>{{ row.value }}</strong>
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      v-if="resolveEvidenceChainItems(item).length"
-                      class="evidence-chain-evidence-list"
-                    >
-                      <div class="evidence-chain-block-title">
-                        关键证据
-                      </div>
-                      <div
-                        v-for="evidence in resolveEvidenceChainItems(item)"
-                        :key="evidence.key"
-                        class="evidence-chain-evidence"
-                      >
-                        <div class="evidence-chain-evidence-meta">
-                          <span>{{ evidence.source }}</span>
-                          <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
-                          <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
-                        </div>
-                        <div class="evidence-chain-quote">
-                          {{ evidence.quote }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    v-if="isIssueExpanded(item)"
-                    class="issue-conclusion-summary"
-                  >
-                    <div class="issue-conclusion-row">
-                      <span class="issue-conclusion-label">结论</span>
-                      <div class="issue-conclusion-structured">
-                        <template v-if="resolveStructuredText(item.customer_findings_text).summary">
-                          <p
-                            v-for="(paragraph, index) in resolveStructuredText(
-                              item.customer_findings_text,
-                            ).summary"
-                            :key="`finding-summary-${resolveIssueStableKey(item)}-${index}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                        </template>
-                        <div
-                          v-for="(section, sectionIndex) in resolveStructuredText(
-                            item.customer_findings_text,
-                          ).sections"
-                          :key="`finding-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                          class="issue-conclusion-section"
-                        >
-                          <div class="issue-conclusion-section-title">
-                            {{ section.title }}
-                          </div>
-                          <p
-                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                            :key="`finding-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                          <ol
-                            v-if="section.points.length"
-                            class="issue-conclusion-points"
-                          >
-                            <li
-                              v-for="(point, index) in section.points"
-                              :key="`finding-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                            >
-                              {{ point }}
-                            </li>
-                          </ol>
-                        </div>
-                        <ol
-                          v-if="resolveStructuredText(item.customer_findings_text).points.length"
-                          class="issue-conclusion-points"
-                        >
-                          <li
-                            v-for="(point, index) in resolveStructuredText(
-                              item.customer_findings_text,
-                            ).points"
-                            :key="`finding-point-${resolveIssueStableKey(item)}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                        <span
-                          v-if="
-                            !resolveStructuredText(item.customer_findings_text).summary.length &&
-                              !resolveStructuredText(item.customer_findings_text).sections.length &&
-                              !resolveStructuredText(item.customer_findings_text).points.length
-                          "
-                        >
-                          无
-                        </span>
-                      </div>
-                    </div>
-                    <div class="issue-conclusion-row">
-                      <span class="issue-conclusion-label">证据</span>
-                      <div class="issue-conclusion-structured">
-                        <template v-if="item.customer_evidence_structured.summary">
-                          <p
-                            v-for="(paragraph, index) in item.customer_evidence_structured.summary"
-                            :key="`evidence-summary-${resolveIssueStableKey(item)}-${index}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                        </template>
-                        <div
-                          v-for="(section, sectionIndex) in item.customer_evidence_structured
-                            .sections"
-                          :key="`evidence-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                          class="issue-conclusion-section"
-                        >
-                          <div class="issue-conclusion-section-title">
-                            {{ section.title }}
-                          </div>
-                          <p
-                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                            :key="`evidence-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                          <ol
-                            v-if="section.points.length"
-                            class="issue-conclusion-points"
-                          >
-                            <li
-                              v-for="(point, index) in section.points"
-                              :key="`evidence-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                            >
-                              {{ point }}
-                            </li>
-                          </ol>
-                        </div>
-                        <ol
-                          v-if="item.customer_evidence_structured.points.length"
-                          class="issue-conclusion-points"
-                        >
-                          <li
-                            v-for="(point, index) in item.customer_evidence_structured.points"
-                            :key="`evidence-point-${resolveIssueStableKey(item)}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                        <span
-                          v-if="
-                            !item.customer_evidence_structured.summary.length &&
-                              !item.customer_evidence_structured.sections.length &&
-                              !item.customer_evidence_structured.points.length
-                          "
-                        >
-                          无
-                        </span>
-                      </div>
-                    </div>
-                    <div class="issue-conclusion-row">
-                      <span class="issue-conclusion-label">建议</span>
-                      <div class="issue-conclusion-structured">
+                      <div class="issue-detail-text">
                         <template
-                          v-if="resolveStructuredText(item.customer_suggestion_text).summary"
+                          v-if="
+                            hasStructuredText(selectedBusinessIssueCard.customer_suggestion_text)
+                          "
                         >
                           <p
                             v-for="(paragraph, index) in resolveStructuredText(
-                              item.customer_suggestion_text,
+                              selectedBusinessIssueCard.customer_suggestion_text,
                             ).summary"
-                            :key="`suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
-                            class="issue-conclusion-summary-text"
+                            :key="`selected-suggestion-summary-${index}`"
                           >
                             {{ paragraph }}
                           </p>
-                        </template>
-                        <div
-                          v-for="(section, sectionIndex) in resolveStructuredText(
-                            item.customer_suggestion_text,
-                          ).sections"
-                          :key="`suggestion-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                          class="issue-conclusion-section"
-                        >
-                          <div class="issue-conclusion-section-title">
-                            {{ section.title }}
+                          <div
+                            v-for="(section, sectionIndex) in resolveStructuredText(
+                              selectedBusinessIssueCard.customer_suggestion_text,
+                            ).sections"
+                            :key="`selected-suggestion-section-${sectionIndex}`"
+                            class="structured-text-section"
+                          >
+                            <strong>{{ section.title }}</strong>
+                            <p
+                              v-for="(paragraph, index) in section.paragraphs"
+                              :key="`selected-suggestion-section-${sectionIndex}-p-${index}`"
+                            >
+                              {{ paragraph }}
+                            </p>
+                            <ul v-if="section.points.length">
+                              <li
+                                v-for="(point, index) in section.points"
+                                :key="`selected-suggestion-section-${sectionIndex}-point-${index}`"
+                              >
+                                {{ point }}
+                              </li>
+                            </ul>
                           </div>
-                          <p
-                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                            :key="`suggestion-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                          <ol
-                            v-if="section.points.length"
-                            class="issue-conclusion-points"
+                          <ul
+                            v-if="
+                              resolveStructuredText(
+                                selectedBusinessIssueCard.customer_suggestion_text,
+                              ).points.length
+                            "
                           >
                             <li
-                              v-for="(point, index) in section.points"
-                              :key="`suggestion-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                              v-for="(point, index) in resolveStructuredText(
+                                selectedBusinessIssueCard.customer_suggestion_text,
+                              ).points"
+                              :key="`selected-suggestion-point-${index}`"
                             >
                               {{ point }}
                             </li>
-                          </ol>
-                        </div>
-                        <ol
-                          v-if="resolveStructuredText(item.customer_suggestion_text).points.length"
-                          class="issue-conclusion-points"
-                        >
-                          <li
-                            v-for="(point, index) in resolveStructuredText(
-                              item.customer_suggestion_text,
-                            ).points"
-                            :key="`suggestion-point-${resolveIssueStableKey(item)}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
-                        <span
-                          v-if="
-                            !resolveStructuredText(item.customer_suggestion_text).summary.length &&
-                              !resolveStructuredText(item.customer_suggestion_text).sections.length &&
-                              !resolveStructuredText(item.customer_suggestion_text).points.length
-                          "
-                        >
-                          无
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      v-if="item.rewrite_example"
-                      class="issue-conclusion-row"
-                    >
-                      <span class="issue-conclusion-label">改写示例</span>
-                      <div
-                        v-if="isIssueExpanded(item)"
-                        class="issue-conclusion-structured"
-                      >
-                        <template v-if="resolveStructuredText(item.rewrite_example).summary">
-                          <p
-                            v-for="(paragraph, index) in resolveStructuredText(item.rewrite_example)
-                              .summary"
-                            :key="`rewrite-summary-${resolveIssueStableKey(item)}-${index}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
+                          </ul>
                         </template>
-                        <div
-                          v-for="(section, sectionIndex) in resolveStructuredText(
-                            item.rewrite_example,
-                          ).sections"
-                          :key="`rewrite-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
-                          class="issue-conclusion-section"
-                        >
-                          <div class="issue-conclusion-section-title">
-                            {{ section.title }}
-                          </div>
-                          <p
-                            v-for="(paragraph, paragraphIndex) in section.paragraphs"
-                            :key="`rewrite-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
-                            class="issue-conclusion-summary-text"
-                          >
-                            {{ paragraph }}
-                          </p>
-                          <ol
-                            v-if="section.points.length"
-                            class="issue-conclusion-points"
-                          >
-                            <li
-                              v-for="(point, index) in section.points"
-                              :key="`rewrite-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
-                            >
-                              {{ point }}
-                            </li>
-                          </ol>
-                        </div>
-                        <ol
-                          v-if="resolveStructuredText(item.rewrite_example).points.length"
-                          class="issue-conclusion-points"
-                        >
-                          <li
-                            v-for="(point, index) in resolveStructuredText(item.rewrite_example)
-                              .points"
-                            :key="`rewrite-point-${resolveIssueStableKey(item)}-${index}`"
-                          >
-                            {{ point }}
-                          </li>
-                        </ol>
+                        <p v-else>
+                          {{
+                            selectedBusinessIssueCard.customer_suggestion_text ||
+                            '请结合病历原文确认。'
+                          }}
+                        </p>
                       </div>
-                      <span v-else>
-                        {{ truncateText(item.rewrite_example, 96) }}
-                      </span>
-                    </div>
-                  </div>
-                  <div class="issue-conclusion-actions">
-                    <a-button
-                      type="link"
-                      size="small"
-                      @click="toggleIssueExpanded(item)"
-                    >
-                      {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
-                    </a-button>
-                    <a-button
-                      type="link"
-                      size="small"
-                      @click="openIssueDeepReview(item)"
-                    >
-                      深度复核
-                    </a-button>
+                    </section>
                   </div>
                 </div>
-              </TransitionGroup>
+                <div
+                  v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)"
+                  class="copy-evidence-compare"
+                >
+                  <div class="copy-evidence-head">
+                    <strong>重复内容对照</strong>
+                    <span
+                      >用于核对两份病程/查房记录是否只是复制粘贴；重点看本次记录是否有新增病情变化、分析和诊疗计划。</span
+                    >
+                  </div>
+                  <div
+                    v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.legacyNotice"
+                    class="copy-evidence-legacy-note"
+                  >
+                    {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.legacyNotice }}
+                  </div>
+                  <template
+                    v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.pairs?.length"
+                  >
+                    <div
+                      v-for="pair in resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.pairs"
+                      :key="pair.key"
+                      class="copy-evidence-pair"
+                    >
+                      <div class="copy-evidence-pair-head">
+                        <strong>重复片段 {{ pair.index }}</strong>
+                        <span v-if="pair.similarity">{{ pair.similarity }}</span>
+                      </div>
+                      <div class="copy-evidence-pair-grid">
+                        <div class="copy-evidence-column">
+                          <div class="copy-evidence-label">
+                            {{ pair.leftLabel }}
+                          </div>
+                          <blockquote>{{ pair.leftQuote }}</blockquote>
+                        </div>
+                        <div class="copy-evidence-column">
+                          <div class="copy-evidence-label">
+                            {{ pair.rightLabel }}
+                          </div>
+                          <blockquote>{{ pair.rightQuote }}</blockquote>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                  <template
+                    v-else-if="!resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.legacyNotice"
+                  >
+                    <div class="copy-evidence-column">
+                      <div class="copy-evidence-label">
+                        {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.left.label }}
+                      </div>
+                      <blockquote>
+                        {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.left.quote }}
+                      </blockquote>
+                    </div>
+                    <div class="copy-evidence-column">
+                      <div class="copy-evidence-label">
+                        {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.right.label }}
+                      </div>
+                      <blockquote>
+                        {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.right.quote }}
+                      </blockquote>
+                    </div>
+                  </template>
+                  <div
+                    v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.metric"
+                    class="copy-evidence-column copy-evidence-column--metric"
+                  >
+                    <div class="copy-evidence-label">重复度指标</div>
+                    <blockquote>
+                      {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.metric }}
+                    </blockquote>
+                  </div>
+                  <div
+                    v-if="resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.differenceGap"
+                    class="copy-evidence-column copy-evidence-column--gap"
+                  >
+                    <div class="copy-evidence-label">缺少差异说明</div>
+                    <blockquote>
+                      {{ resolveCopyEvidenceCompare(selectedBusinessIssueCard)?.differenceGap }}
+                    </blockquote>
+                  </div>
+                </div>
+                <div
+                  v-if="hasEvidenceChain(selectedBusinessIssueCard)"
+                  class="evidence-chain-strip"
+                >
+                  <span>
+                    状态口径：{{
+                      resolveEvidenceStatusText(
+                        selectedBusinessIssueCard.result_status || selectedBusinessIssueCard.status,
+                      )
+                    }}
+                  </span>
+                  <span v-if="resolveEvidenceChainItems(selectedBusinessIssueCard, 1600).length">
+                    证据 {{ resolveEvidenceChainItems(selectedBusinessIssueCard, 1600).length }} 条
+                  </span>
+                  <span v-if="resolveMissingSources(selectedBusinessIssueCard).length">
+                    缺少数据 {{ resolveMissingSources(selectedBusinessIssueCard).length }} 项
+                  </span>
+                </div>
+                <div
+                  v-if="
+                    isIssueExpanded(selectedBusinessIssueCard) &&
+                    hasEvidenceChain(selectedBusinessIssueCard)
+                  "
+                  class="evidence-chain-panel"
+                >
+                  <div class="evidence-chain-panel-head">
+                    <div>
+                      <div class="evidence-chain-title">完整说明</div>
+                      <div class="evidence-chain-subtitle">
+                        展示来源证据、判断过程和质控确认口径
+                      </div>
+                    </div>
+                  </div>
+                  <div class="evidence-chain-grid">
+                    <div
+                      v-if="resolveTriggerFacts(selectedBusinessIssueCard).length"
+                      class="evidence-chain-block"
+                    >
+                      <div class="evidence-chain-block-title">触发事实</div>
+                      <div
+                        v-for="fact in resolveTriggerFacts(selectedBusinessIssueCard)"
+                        :key="fact.key"
+                        class="evidence-chain-line"
+                      >
+                        <span>{{ fact.label }}</span>
+                        <strong>{{ fact.value }}</strong>
+                      </div>
+                    </div>
+                    <div class="evidence-chain-block">
+                      <div class="evidence-chain-block-title">数据依赖</div>
+                      <div
+                        v-for="row in resolveDependencyRows(selectedBusinessIssueCard)"
+                        :key="row.key"
+                        class="evidence-chain-line"
+                      >
+                        <span>{{ row.label }}</span>
+                        <strong>{{ row.value }}</strong>
+                      </div>
+                    </div>
+                    <div
+                      v-if="resolveDecisionRows(selectedBusinessIssueCard).length"
+                      class="evidence-chain-block"
+                    >
+                      <div class="evidence-chain-block-title">判断过程</div>
+                      <div
+                        v-for="row in resolveDecisionRows(selectedBusinessIssueCard)"
+                        :key="row.key"
+                        class="evidence-chain-line"
+                      >
+                        <span>{{ row.label }}</span>
+                        <strong>{{ row.value }}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="issue-conclusion-actions">
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="toggleIssueExpanded(selectedBusinessIssueCard)"
+                  >
+                    {{
+                      isIssueExpanded(selectedBusinessIssueCard) ? '收起完整说明' : '展开完整说明'
+                    }}
+                  </a-button>
+                  <a-button
+                    type="link"
+                    size="small"
+                    @click="openIssueDeepReview(selectedBusinessIssueCard)"
+                  >
+                    深度复核
+                  </a-button>
+                  <a-button
+                    v-if="canShowResultTrace"
+                    type="link"
+                    size="small"
+                    @click="openIssueTrace(selectedBusinessIssueCard)"
+                  >
+                    诊断追踪
+                  </a-button>
+                </div>
+              </div>
+              <div v-else-if="businessIssueCards.length" class="issue-conclusion-list">
+                <div
+                  v-for="group in businessIssueCardGroups"
+                  :key="group.key"
+                  class="issue-record-result-group"
+                >
+                  <div v-if="shouldShowIssueRecordGroupHeader" class="issue-record-result-head">
+                    <div>
+                      <strong>{{ group.label }}</strong>
+                      <span>{{ group.meta || '未返回科室/住院号' }}</span>
+                    </div>
+                    <div class="issue-record-result-stats">
+                      <span>结果 {{ group.total }}</span>
+                      <span>不合规 {{ group.nonCompliant }}</span>
+                      <span>数据不足 {{ group.dataGap }}</span>
+                    </div>
+                  </div>
+                  <TransitionGroup
+                    name="issue-stream"
+                    tag="div"
+                    class="issue-conclusion-list-inner"
+                  >
+                    <div
+                      v-for="item in group.items"
+                      :key="`conclusion-${resolveIssueStableKey(item)}`"
+                      class="issue-conclusion-card"
+                      :class="item.issue_card_class"
+                    >
+                      <div class="issue-conclusion-head">
+                        <div class="issue-conclusion-head-main">
+                          <div class="issue-conclusion-title-row">
+                            <span class="issue-conclusion-title">
+                              <span class="issue-rule-code">
+                                {{ item.rule_code || item.rule_id || '未知规则' }}
+                              </span>
+                              ·
+                              {{ item.rule_name || '未知质控点' }}
+                            </span>
+                          </div>
+                          <div class="issue-conclusion-meta">
+                            <span>{{ item.record_id || '-' }}</span>
+                            <span>{{
+                              item.target_document_type || item.document_type || '未知文书域'
+                            }}</span>
+                            <span>{{ resolveIssueSeverityText(item) }}</span>
+                            <span v-if="item.refined">单条精审</span>
+                          </div>
+                        </div>
+                        <div class="issue-conclusion-status">
+                          <span
+                            class="issue-result-kind"
+                            :class="resolveIssueResultKindClass(item)"
+                          >
+                            {{ resolveIssueResultKindText(item) }}
+                          </span>
+                          <a-tag class="aggregation-count-tag">
+                            {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
+                          </a-tag>
+                        </div>
+                      </div>
+                      <div class="issue-at-a-glance">
+                        <div class="issue-glance-block issue-glance-block--conclusion">
+                          <div class="issue-glance-label">质控结论</div>
+                          <div class="issue-glance-text">
+                            <template v-if="hasStructuredText(item.customer_findings_text)">
+                              <p
+                                v-for="(paragraph, index) in resolveStructuredText(
+                                  item.customer_findings_text,
+                                ).summary.slice(0, 2)"
+                                :key="`glance-findings-summary-${resolveIssueStableKey(item)}-${index}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                              <ul
+                                v-if="
+                                  resolveStructuredText(item.customer_findings_text).points.length
+                                "
+                              >
+                                <li
+                                  v-for="(point, index) in resolveStructuredText(
+                                    item.customer_findings_text,
+                                  ).points.slice(0, 2)"
+                                  :key="`glance-findings-point-${resolveIssueStableKey(item)}-${index}`"
+                                >
+                                  {{ point }}
+                                </li>
+                              </ul>
+                            </template>
+                            <p v-else>
+                              {{ item.customer_findings_text || '未返回结论' }}
+                            </p>
+                          </div>
+                        </div>
+                        <div class="issue-glance-block">
+                          <div class="issue-glance-label">关键证据</div>
+                          <div
+                            v-if="item.evidence_summary_parts.length"
+                            class="issue-evidence-facts"
+                          >
+                            <div
+                              v-for="part in item.evidence_summary_parts"
+                              :key="part.key"
+                              class="issue-evidence-fact"
+                              :class="`issue-evidence-fact--${part.kind}`"
+                            >
+                              <span>{{ part.label }}：</span>
+                              <strong>{{ part.value }}</strong>
+                            </div>
+                          </div>
+                          <div
+                            v-else-if="resolveEvidenceChainItems(item).length"
+                            class="issue-evidence-facts issue-evidence-facts--structured"
+                          >
+                            <div
+                              v-for="evidence in resolveEvidenceChainItems(item).slice(0, 3)"
+                              :key="evidence.key"
+                              class="issue-evidence-fact"
+                            >
+                              <span>
+                                {{
+                                  [evidence.source, evidence.fieldPath]
+                                    .filter(Boolean)
+                                    .join(' · ') || '来源证据'
+                                }}
+                              </span>
+                              <strong>{{ evidence.quote }}</strong>
+                            </div>
+                          </div>
+                          <span v-else>
+                            {{ item.evidence_summary }}
+                          </span>
+                        </div>
+                        <div class="issue-glance-block">
+                          <div class="issue-glance-label">处理建议</div>
+                          <div class="issue-glance-text">
+                            <template v-if="hasStructuredText(item.customer_suggestion_text)">
+                              <p
+                                v-for="(paragraph, index) in resolveStructuredText(
+                                  item.customer_suggestion_text,
+                                ).summary.slice(0, 2)"
+                                :key="`glance-suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                              <ul
+                                v-if="
+                                  resolveStructuredText(item.customer_suggestion_text).points.length
+                                "
+                              >
+                                <li
+                                  v-for="(point, index) in resolveStructuredText(
+                                    item.customer_suggestion_text,
+                                  ).points.slice(0, 2)"
+                                  :key="`glance-suggestion-point-${resolveIssueStableKey(item)}-${index}`"
+                                >
+                                  {{ point }}
+                                </li>
+                              </ul>
+                            </template>
+                            <p v-else>
+                              {{ item.customer_suggestion_text || '请结合病历原文确认。' }}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="resolveCopyEvidenceCompare(item)" class="copy-evidence-compare">
+                        <div class="copy-evidence-head">
+                          <strong>重复内容对照</strong>
+                          <span
+                            >用于核对前后记录是否只是复制粘贴，重点看本次记录有没有新增病情变化、分析和诊疗计划。</span
+                          >
+                        </div>
+                        <div
+                          v-if="resolveCopyEvidenceCompare(item)?.legacyNotice"
+                          class="copy-evidence-legacy-note"
+                        >
+                          {{ resolveCopyEvidenceCompare(item)?.legacyNotice }}
+                        </div>
+                        <template v-if="resolveCopyEvidenceCompare(item)?.pairs?.length">
+                          <div
+                            v-for="pair in resolveCopyEvidenceCompare(item)?.pairs"
+                            :key="pair.key"
+                            class="copy-evidence-pair"
+                          >
+                            <div class="copy-evidence-pair-head">
+                              <strong>重复片段 {{ pair.index }}</strong>
+                              <span v-if="pair.similarity">{{ pair.similarity }}</span>
+                            </div>
+                            <div class="copy-evidence-pair-grid">
+                              <div class="copy-evidence-column">
+                                <div class="copy-evidence-label">
+                                  {{ pair.leftLabel }}
+                                </div>
+                                <blockquote>{{ pair.leftQuote }}</blockquote>
+                              </div>
+                              <div class="copy-evidence-column">
+                                <div class="copy-evidence-label">
+                                  {{ pair.rightLabel }}
+                                </div>
+                                <blockquote>{{ pair.rightQuote }}</blockquote>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                        <template v-else-if="!resolveCopyEvidenceCompare(item)?.legacyNotice">
+                          <div class="copy-evidence-column">
+                            <div class="copy-evidence-label">
+                              {{ resolveCopyEvidenceCompare(item)?.left.label }}
+                            </div>
+                            <blockquote>
+                              {{ resolveCopyEvidenceCompare(item)?.left.quote }}
+                            </blockquote>
+                          </div>
+                          <div class="copy-evidence-column">
+                            <div class="copy-evidence-label">
+                              {{ resolveCopyEvidenceCompare(item)?.right.label }}
+                            </div>
+                            <blockquote>
+                              {{ resolveCopyEvidenceCompare(item)?.right.quote }}
+                            </blockquote>
+                          </div>
+                        </template>
+                        <div
+                          v-if="resolveCopyEvidenceCompare(item)?.metric"
+                          class="copy-evidence-column copy-evidence-column--metric"
+                        >
+                          <div class="copy-evidence-label">重复度指标</div>
+                          <blockquote>{{ resolveCopyEvidenceCompare(item)?.metric }}</blockquote>
+                        </div>
+                        <div
+                          v-if="resolveCopyEvidenceCompare(item)?.differenceGap"
+                          class="copy-evidence-column copy-evidence-column--gap"
+                        >
+                          <div class="copy-evidence-label">缺少差异说明</div>
+                          <blockquote>
+                            {{ resolveCopyEvidenceCompare(item)?.differenceGap }}
+                          </blockquote>
+                        </div>
+                      </div>
+                      <div v-if="hasEvidenceChain(item)" class="evidence-chain-strip">
+                        <span>
+                          状态口径：{{
+                            resolveEvidenceStatusText(item.result_status || item.status)
+                          }}
+                        </span>
+                        <span v-if="resolveTriggerFacts(item).length">
+                          触发事实 {{ resolveTriggerFacts(item).length }} 条
+                        </span>
+                        <span v-if="resolveEvidenceChainItems(item).length">
+                          证据 {{ resolveEvidenceChainItems(item).length }} 条
+                        </span>
+                        <span v-if="resolveMissingSources(item).length">
+                          缺少数据 {{ resolveMissingSources(item).length }} 项
+                        </span>
+                      </div>
+                      <div
+                        v-if="isIssueExpanded(item) && hasEvidenceChain(item)"
+                        class="evidence-chain-panel"
+                      >
+                        <div class="evidence-chain-panel-head">
+                          <div>
+                            <div class="evidence-chain-title">证据链</div>
+                            <div class="evidence-chain-subtitle">
+                              按触发事实、依赖数据、来源证据和判断口径展示
+                            </div>
+                          </div>
+                          <a-tag class="evidence-chain-tag">
+                            {{ resolveExecutorTypeText(item.executor_type) }}
+                          </a-tag>
+                        </div>
+                        <div class="evidence-chain-grid">
+                          <div v-if="resolveTriggerFacts(item).length" class="evidence-chain-block">
+                            <div class="evidence-chain-block-title">触发事实</div>
+                            <div
+                              v-for="fact in resolveTriggerFacts(item)"
+                              :key="fact.key"
+                              class="evidence-chain-line"
+                            >
+                              <span>{{ fact.label }}</span>
+                              <strong>{{ fact.value }}</strong>
+                            </div>
+                          </div>
+                          <div class="evidence-chain-block">
+                            <div class="evidence-chain-block-title">数据依赖</div>
+                            <div
+                              v-for="row in resolveDependencyRows(item)"
+                              :key="row.key"
+                              class="evidence-chain-line"
+                            >
+                              <span>{{ row.label }}</span>
+                              <strong>{{ row.value }}</strong>
+                            </div>
+                          </div>
+                          <div v-if="resolveDecisionRows(item).length" class="evidence-chain-block">
+                            <div class="evidence-chain-block-title">判断过程</div>
+                            <div
+                              v-for="row in resolveDecisionRows(item)"
+                              :key="row.key"
+                              class="evidence-chain-line"
+                            >
+                              <span>{{ row.label }}</span>
+                              <strong>{{ row.value }}</strong>
+                            </div>
+                          </div>
+                          <div v-if="resolveReviewRows(item).length" class="evidence-chain-block">
+                            <div class="evidence-chain-block-title">质控确认</div>
+                            <div
+                              v-for="row in resolveReviewRows(item)"
+                              :key="row.key"
+                              class="evidence-chain-line"
+                            >
+                              <span>{{ row.label }}</span>
+                              <strong>{{ row.value }}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div
+                          v-if="resolveEvidenceChainItems(item, 1200).length"
+                          class="evidence-chain-evidence-list"
+                        >
+                          <div class="evidence-chain-block-title">关键证据</div>
+                          <div
+                            v-for="evidence in resolveEvidenceChainItems(item, 1200)"
+                            :key="evidence.key"
+                            class="evidence-chain-evidence"
+                          >
+                            <div class="evidence-chain-evidence-meta">
+                              <span>{{ evidence.source }}</span>
+                              <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                              <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                            </div>
+                            <div class="evidence-chain-quote">
+                              {{ evidence.quote }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="isIssueExpanded(item)" class="issue-conclusion-summary">
+                        <div class="issue-conclusion-row">
+                          <span class="issue-conclusion-label">结论</span>
+                          <div class="issue-conclusion-structured">
+                            <template v-if="hasStructuredText(item.customer_findings_text)">
+                              <p
+                                v-for="(paragraph, index) in resolveStructuredText(
+                                  item.customer_findings_text,
+                                ).summary"
+                                :key="`findings-summary-${index}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                              <div
+                                v-for="(section, sectionIndex) in resolveStructuredText(
+                                  item.customer_findings_text,
+                                ).sections"
+                                :key="`findings-section-${sectionIndex}`"
+                                class="structured-text-section"
+                              >
+                                <strong>{{ section.title }}</strong>
+                                <p
+                                  v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                                  :key="`findings-section-${sectionIndex}-p-${paragraphIndex}`"
+                                >
+                                  {{ paragraph }}
+                                </p>
+                                <ul v-if="section.points.length">
+                                  <li
+                                    v-for="(point, pointIndex) in section.points"
+                                    :key="`findings-section-${sectionIndex}-point-${pointIndex}`"
+                                  >
+                                    {{ point }}
+                                  </li>
+                                </ul>
+                              </div>
+                              <ul
+                                v-if="
+                                  resolveStructuredText(item.customer_findings_text).points.length
+                                "
+                              >
+                                <li
+                                  v-for="(point, index) in resolveStructuredText(
+                                    item.customer_findings_text,
+                                  ).points"
+                                  :key="`findings-point-${index}`"
+                                >
+                                  {{ point }}
+                                </li>
+                              </ul>
+                            </template>
+                            <span v-else>无</span>
+                          </div>
+                        </div>
+                        <div class="issue-conclusion-row">
+                          <span class="issue-conclusion-label">证据</span>
+                          <div class="issue-conclusion-structured">
+                            <div
+                              v-if="resolveEvidenceChainItems(item, 1200).length"
+                              class="structured-evidence-list structured-evidence-list--inline"
+                            >
+                              <div
+                                v-for="evidence in resolveEvidenceChainItems(item, 1200)"
+                                :key="`expanded-${evidence.key}`"
+                                class="structured-evidence-card"
+                              >
+                                <div class="structured-evidence-card-head">
+                                  <strong>{{ evidence.source }}</strong>
+                                  <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                                  <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                                </div>
+                                <blockquote>{{ evidence.quote }}</blockquote>
+                              </div>
+                            </div>
+                            <template v-else-if="hasStructuredText(item.customer_evidence_text)">
+                              <p
+                                v-for="(paragraph, index) in resolveStructuredText(
+                                  item.customer_evidence_text,
+                                ).summary"
+                                :key="`evidence-summary-${index}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                              <div
+                                v-for="(section, sectionIndex) in resolveStructuredText(
+                                  item.customer_evidence_text,
+                                ).sections"
+                                :key="`evidence-section-${sectionIndex}`"
+                                class="structured-text-section"
+                              >
+                                <strong>{{ section.title }}</strong>
+                                <p
+                                  v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                                  :key="`evidence-section-${sectionIndex}-p-${paragraphIndex}`"
+                                >
+                                  {{ paragraph }}
+                                </p>
+                                <ul v-if="section.points.length">
+                                  <li
+                                    v-for="(point, pointIndex) in section.points"
+                                    :key="`evidence-section-${sectionIndex}-point-${pointIndex}`"
+                                  >
+                                    {{ point }}
+                                  </li>
+                                </ul>
+                              </div>
+                              <ul
+                                v-if="
+                                  resolveStructuredText(item.customer_evidence_text).points.length
+                                "
+                              >
+                                <li
+                                  v-for="(point, index) in resolveStructuredText(
+                                    item.customer_evidence_text,
+                                  ).points"
+                                  :key="`evidence-point-${index}`"
+                                >
+                                  {{ point }}
+                                </li>
+                              </ul>
+                            </template>
+                            <span v-else>无</span>
+                          </div>
+                        </div>
+                        <div class="issue-conclusion-row">
+                          <span class="issue-conclusion-label">建议</span>
+                          <div class="issue-conclusion-structured">
+                            <template v-if="hasStructuredText(item.customer_suggestion_text)">
+                              <p
+                                v-for="(paragraph, index) in resolveStructuredText(
+                                  item.customer_suggestion_text,
+                                ).summary"
+                                :key="`suggestion-summary-${index}`"
+                              >
+                                {{ paragraph }}
+                              </p>
+                              <div
+                                v-for="(section, sectionIndex) in resolveStructuredText(
+                                  item.customer_suggestion_text,
+                                ).sections"
+                                :key="`suggestion-section-${sectionIndex}`"
+                                class="structured-text-section"
+                              >
+                                <strong>{{ section.title }}</strong>
+                                <p
+                                  v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                                  :key="`suggestion-section-${sectionIndex}-p-${paragraphIndex}`"
+                                >
+                                  {{ paragraph }}
+                                </p>
+                                <ul v-if="section.points.length">
+                                  <li
+                                    v-for="(point, pointIndex) in section.points"
+                                    :key="`suggestion-section-${sectionIndex}-point-${pointIndex}`"
+                                  >
+                                    {{ point }}
+                                  </li>
+                                </ul>
+                              </div>
+                              <ul
+                                v-if="
+                                  resolveStructuredText(item.customer_suggestion_text).points.length
+                                "
+                              >
+                                <li
+                                  v-for="(point, index) in resolveStructuredText(
+                                    item.customer_suggestion_text,
+                                  ).points"
+                                  :key="`suggestion-point-${index}`"
+                                >
+                                  {{ point }}
+                                </li>
+                              </ul>
+                            </template>
+                            <span v-else>无</span>
+                          </div>
+                        </div>
+                        <div v-if="item.rewrite_example" class="issue-conclusion-row">
+                          <span class="issue-conclusion-label">改写示例</span>
+                          <div class="issue-conclusion-structured">
+                            {{ item.rewrite_example }}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="issue-conclusion-actions">
+                        <a-button type="link" size="small" @click="toggleIssueExpanded(item)">
+                          {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
+                        </a-button>
+                        <a-button type="link" size="small" @click="openIssueDeepReview(item)">
+                          深度复核
+                        </a-button>
+                        <a-button
+                          v-if="canShowResultTrace"
+                          type="link"
+                          size="small"
+                          @click="openIssueTrace(item)"
+                        >
+                          诊断追踪
+                        </a-button>
+                      </div>
+                    </div>
+                  </TransitionGroup>
+                </div>
+              </div>
+              <div v-else-if="isWaitingFirstResult" class="stream-waiting-card">
+                <div class="stream-waiting-scan" />
+                <div class="stream-waiting-lines">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div class="stream-waiting-text">正在等待首份病历结果</div>
+                <div class="stream-waiting-subtext">
+                  模型仍在处理首份病历，结果会自动出现在这里。
+                </div>
+              </div>
+              <a-empty v-else :description="emptyIssueText" />
+              <section
+                v-if="!showAllStatuses && noIssueEvidenceItems.length"
+                class="no-issue-evidence-panel"
+              >
+                <div class="no-issue-evidence-head">
+                  <div>
+                    <strong>未提示问题的依据</strong>
+                    <span>
+                      本次另有
+                      {{
+                        noIssueEvidenceTotalCount
+                      }}
+                      条合规或不适用结果，以下展示可帮助核对系统为什么未列为问题。
+                    </span>
+                  </div>
+                  <a-button type="link" size="small" @click="showAllStatuses = true">
+                    查看全部状态
+                  </a-button>
+                </div>
+                <div class="no-issue-evidence-list">
+                  <details
+                    v-for="item in noIssueEvidenceItems"
+                    :key="`no-issue-${resolveIssueStableKey(item)}`"
+                    class="no-issue-evidence-item"
+                  >
+                    <summary>
+                      <span class="issue-rule-code">
+                        {{ item.rule_code || item.rule_id || '未知规则' }}
+                      </span>
+                      <strong>{{ item.rule_name || '未知质控点' }}</strong>
+                      <em>{{ item.no_issue_status_text }}</em>
+                    </summary>
+                    <div class="no-issue-evidence-body">
+                      <span>{{ item.no_issue_basis_label }}</span>
+                      <p>{{ item.no_issue_basis_text }}</p>
+                    </div>
+                  </details>
+                </div>
+              </section>
+              <a-pagination
+                v-if="
+                  !isSingleRecordIssueMode && displayIssueItems.length > issuePagination.pageSize
+                "
+                v-model:current="issuePagination.current"
+                :page-size="issuePagination.pageSize"
+                :total="displayIssueItems.length"
+                size="small"
+                class="issue-pagination"
+                :show-size-changer="false"
+              />
             </div>
           </div>
-          <div
-            v-else-if="isWaitingFirstResult && issueViewMode === 'business'"
-            class="stream-waiting-card"
-          >
-            <div class="stream-waiting-scan" />
-            <div class="stream-waiting-lines">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div class="stream-waiting-text">
-              正在等待首份病历结果
-            </div>
-            <div class="stream-waiting-subtext">
-              模型仍在处理首份病历，结果会自动出现在这里。
-            </div>
-          </div>
-          <a-empty
-            v-else-if="issueViewMode === 'business'"
-            :description="emptyIssueText"
-          />
-          <a-pagination
-            v-if="
-              issueViewMode === 'business' && displayIssueItems.length > issuePagination.pageSize
-            "
-            v-model:current="issuePagination.current"
-            :page-size="issuePagination.pageSize"
-            :total="displayIssueItems.length"
-            size="small"
-            class="issue-pagination"
-            :show-size-changer="false"
-          />
           <a-table
             v-if="issueViewMode === 'advanced'"
             :columns="issueColumns"
@@ -954,18 +1549,10 @@
           ghost
           class="drawer-advanced-collapse"
         >
-          <a-collapse-panel
-            key="execution"
-            header="技术详情：执行统计"
-          >
-            <div
-              v-if="progressSummary"
-              class="drawer-card drawer-card--nested"
-            >
+          <a-collapse-panel key="execution" header="技术详情：执行统计">
+            <div v-if="progressSummary" class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">
-                  任务进度
-                </div>
+                <div class="drawer-section-title">任务进度</div>
                 <div class="drawer-section-meta">
                   {{ progressSummary.stepLabel }}
                 </div>
@@ -976,56 +1563,39 @@
                 :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
               />
               <div class="progress-meta">
-                <span>已处理 {{ progressSummary.processedRecords }} /
-                  {{ progressSummary.totalRecords }} 份病历</span>
+                <span
+                  >已处理 {{ progressSummary.processedRecords }} /
+                  {{ progressSummary.totalRecords }} 份病历</span
+                >
                 <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
               </div>
             </div>
 
-            <div
-              v-if="advancedSummaryCards.length"
-              class="drawer-summary summary-grid-secondary"
-            >
-              <div
-                v-for="item in advancedSummaryCards"
-                :key="item.key"
-                class="summary-card"
-              >
+            <div v-if="advancedSummaryCards.length" class="drawer-summary summary-grid-secondary">
+              <div v-for="item in advancedSummaryCards" :key="item.key" class="summary-card">
                 <div class="summary-label">
                   {{ item.label }}
                 </div>
                 <div class="summary-value">
                   {{ item.value }}
                 </div>
-                <div
-                  v-if="item.desc"
-                  class="summary-desc"
-                >
+                <div v-if="item.desc" class="summary-desc">
                   {{ item.desc }}
                 </div>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel
-            v-if="resultAggregation"
-            key="aggregation"
-            header="技术详情：结果聚合"
-          >
+          <a-collapse-panel v-if="resultAggregation" key="aggregation" header="技术详情：结果聚合">
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">
-                  结果聚合
-                </div>
+                <div class="drawer-section-title">结果聚合</div>
                 <div class="drawer-section-meta">
                   簇数 {{ resultAggregation.cluster_count || 0 }} · 重复命中
                   {{ resultAggregation.duplicate_hits || 0 }}
                 </div>
               </div>
-              <div
-                v-if="aggregationBreakdownSections.length"
-                class="aggregation-breakdown-grid"
-              >
+              <div v-if="aggregationBreakdownSections.length" class="aggregation-breakdown-grid">
                 <div
                   v-for="section in aggregationBreakdownSections"
                   :key="section.key"
@@ -1039,10 +1609,7 @@
                       {{ section.total }}
                     </div>
                   </div>
-                  <div
-                    v-if="section.items.length"
-                    class="aggregation-breakdown-items"
-                  >
+                  <div v-if="section.items.length" class="aggregation-breakdown-items">
                     <div
                       v-for="item in section.items"
                       :key="`${section.key}-${item.label}`"
@@ -1054,12 +1621,7 @@
                       </a-tag>
                     </div>
                   </div>
-                  <div
-                    v-else
-                    class="aggregation-breakdown-empty"
-                  >
-                    暂无分解数据
-                  </div>
+                  <div v-else class="aggregation-breakdown-empty">暂无分解数据</div>
                 </div>
               </div>
               <div class="aggregation-list">
@@ -1074,14 +1636,9 @@
                     <span class="aggregation-item-title">
                       {{ resolveCustomerEvidenceText(cluster.cluster_key) }}
                     </span>
-                    <a-tag class="aggregation-count-tag">
-                      {{ cluster.records || 0 }} 次
-                    </a-tag>
+                    <a-tag class="aggregation-count-tag"> {{ cluster.records || 0 }} 次 </a-tag>
                   </div>
-                  <div
-                    v-if="cluster.sample_evidence"
-                    class="aggregation-evidence"
-                  >
+                  <div v-if="cluster.sample_evidence" class="aggregation-evidence">
                     {{ resolveCustomerEvidenceText(cluster.sample_evidence) }}
                   </div>
                   <div class="aggregation-meta">
@@ -1089,35 +1646,20 @@
                   </div>
                 </div>
               </div>
-              <div
-                v-if="selectedClusterKey"
-                class="aggregation-active-tip"
-              >
+              <div v-if="selectedClusterKey" class="aggregation-active-tip">
                 已按聚合簇过滤：{{ resolveCustomerEvidenceText(selectedClusterKey) }}
-                <a-button
-                  type="link"
-                  size="small"
-                  @click.stop="clearClusterFilter"
-                >
+                <a-button type="link" size="small" @click.stop="clearClusterFilter">
                   清除
                 </a-button>
               </div>
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel
-            key="rules"
-            header="技术详情：规则结果"
-          >
+          <a-collapse-panel key="rules" header="技术详情：规则结果">
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">
-                  规则结果概览
-                </div>
-                <div
-                  v-if="activeRuleFilterLabel"
-                  class="drawer-section-meta"
-                >
+                <div class="drawer-section-title">规则结果概览</div>
+                <div v-if="activeRuleFilterLabel" class="drawer-section-meta">
                   已按规则过滤：{{ activeRuleFilterLabel }}
                 </div>
               </div>
@@ -1134,16 +1676,10 @@
             </div>
           </a-collapse-panel>
 
-          <a-collapse-panel
-            v-if="batchJobDebugSnapshot"
-            key="debug"
-            header="技术详情：调试快照"
-          >
+          <a-collapse-panel v-if="batchJobDebugSnapshot" key="debug" header="技术详情：调试快照">
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
-                <div class="drawer-section-title">
-                  执行调试快照
-                </div>
+                <div class="drawer-section-title">执行调试快照</div>
                 <div class="debug-toolbar">
                   <a-select
                     :value="selectedDebugRuleJobId || undefined"
@@ -1166,16 +1702,16 @@
                   <span class="debug-current-rule-value">
                     {{
                       batchJobDebugSnapshot.current_rule?.rule_code ||
-                        currentDebugRule?.rule_code ||
-                        '未定位'
+                      currentDebugRule?.rule_code ||
+                      '未定位'
                     }}
                   </span>
                 </div>
                 <div class="debug-current-rule-sub">
                   {{
                     batchJobDebugSnapshot.current_rule?.rule_name ||
-                      currentDebugRule?.rule_name ||
-                      '暂无规则名称'
+                    currentDebugRule?.rule_name ||
+                    '暂无规则名称'
                   }}
                 </div>
               </div>
@@ -1201,13 +1737,8 @@
                   <span class="debug-meta-value">{{ batchJobDebugSnapshot.status }}</span>
                 </div>
               </div>
-              <div
-                v-if="debugProgressEntries.length"
-                class="debug-pill-block"
-              >
-                <div class="debug-pill-title">
-                  current_rule.progress
-                </div>
+              <div v-if="debugProgressEntries.length" class="debug-pill-block">
+                <div class="debug-pill-title">current_rule.progress</div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugProgressEntries"
@@ -1218,13 +1749,8 @@
                   </span>
                 </div>
               </div>
-              <div
-                v-if="debugDetailEntries.length"
-                class="debug-pill-block"
-              >
-                <div class="debug-pill-title">
-                  current_rule.debug
-                </div>
+              <div v-if="debugDetailEntries.length" class="debug-pill-block">
+                <div class="debug-pill-title">current_rule.debug</div>
                 <div class="debug-pill-list">
                   <span
                     v-for="item in debugDetailEntries"
@@ -1265,25 +1791,18 @@
             <span>{{ selectedDeepReviewIssue.record_id || '-' }}</span>
             <span>{{
               selectedDeepReviewIssue.target_document_type ||
-                selectedDeepReviewIssue.document_type ||
-                '未知文书域'
+              selectedDeepReviewIssue.document_type ||
+              '未知文书域'
             }}</span>
             <span>{{ selectedDeepReviewIssue.rule_family || 'general' }}</span>
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
           </div>
-          <div
-            v-if="hasEvidenceChain(selectedDeepReviewIssue)"
-            class="deep-review-chain"
-          >
+          <div v-if="hasEvidenceChain(selectedDeepReviewIssue)" class="deep-review-chain">
             <div class="evidence-chain-panel-head">
               <div>
-                <div class="evidence-chain-title">
-                  证据链
-                </div>
-                <div class="evidence-chain-subtitle">
-                  触发事实、依赖数据、来源证据和判断阈值
-                </div>
+                <div class="evidence-chain-title">证据链</div>
+                <div class="evidence-chain-subtitle">触发事实、依赖数据、来源证据和判断阈值</div>
               </div>
               <a-tag class="evidence-chain-tag">
                 {{
@@ -1298,9 +1817,7 @@
                 v-if="resolveTriggerFacts(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">
-                  触发事实
-                </div>
+                <div class="evidence-chain-block-title">触发事实</div>
                 <div
                   v-for="fact in resolveTriggerFacts(selectedDeepReviewIssue)"
                   :key="fact.key"
@@ -1311,9 +1828,7 @@
                 </div>
               </div>
               <div class="evidence-chain-block">
-                <div class="evidence-chain-block-title">
-                  数据依赖
-                </div>
+                <div class="evidence-chain-block-title">数据依赖</div>
                 <div
                   v-for="row in resolveDependencyRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1327,9 +1842,7 @@
                 v-if="resolveDecisionRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">
-                  判断过程
-                </div>
+                <div class="evidence-chain-block-title">判断过程</div>
                 <div
                   v-for="row in resolveDecisionRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1343,9 +1856,7 @@
                 v-if="resolveAuditRows(selectedDeepReviewIssue).length"
                 class="evidence-chain-block"
               >
-                <div class="evidence-chain-block-title">
-                  执行信息
-                </div>
+                <div class="evidence-chain-block-title">执行信息</div>
                 <div
                   v-for="row in resolveAuditRows(selectedDeepReviewIssue)"
                   :key="row.key"
@@ -1357,14 +1868,12 @@
               </div>
             </div>
             <div
-              v-if="resolveEvidenceChainItems(selectedDeepReviewIssue).length"
+              v-if="resolveEvidenceChainItems(selectedDeepReviewIssue, 1600).length"
               class="evidence-chain-evidence-list"
             >
-              <div class="evidence-chain-block-title">
-                关键证据
-              </div>
+              <div class="evidence-chain-block-title">关键证据</div>
               <div
-                v-for="evidence in resolveEvidenceChainItems(selectedDeepReviewIssue)"
+                v-for="evidence in resolveEvidenceChainItems(selectedDeepReviewIssue, 1600)"
                 :key="evidence.key"
                 class="evidence-chain-evidence"
               >
@@ -1379,17 +1888,10 @@
               </div>
             </div>
           </div>
-          <a-alert
-            v-if="deepReviewError"
-            type="warning"
-            show-icon
-            :message="deepReviewError"
-          />
+          <a-alert v-if="deepReviewError" type="warning" show-icon :message="deepReviewError" />
           <a-spin :spinning="deepReviewLoading">
             <div class="deep-review-section">
-              <div class="deep-review-label">
-                复核结论
-              </div>
+              <div class="deep-review-label">复核结论</div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('findings')).summary.length"
@@ -1421,10 +1923,7 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol
-                    v-if="section.points.length"
-                    class="issue-conclusion-points"
-                  >
+                  <ol v-if="section.points.length" class="issue-conclusion-points">
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-findings-point-${sectionIndex}-${index}`"
@@ -1449,9 +1948,7 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">
-                复核证据
-              </div>
+              <div class="deep-review-label">复核证据</div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('evidence')).summary.length"
@@ -1483,10 +1980,7 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol
-                    v-if="section.points.length"
-                    class="issue-conclusion-points"
-                  >
+                  <ol v-if="section.points.length" class="issue-conclusion-points">
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-evidence-point-${sectionIndex}-${index}`"
@@ -1511,9 +2005,7 @@
               </div>
             </div>
             <div class="deep-review-section">
-              <div class="deep-review-label">
-                复核建议
-              </div>
+              <div class="deep-review-label">复核建议</div>
               <div class="deep-review-content">
                 <template
                   v-if="resolveStructuredText(resolveDeepReviewText('suggestion')).summary.length"
@@ -1545,10 +2037,7 @@
                   >
                     {{ paragraph }}
                   </p>
-                  <ol
-                    v-if="section.points.length"
-                    class="issue-conclusion-points"
-                  >
+                  <ol v-if="section.points.length" class="issue-conclusion-points">
                     <li
                       v-for="(point, index) in section.points"
                       :key="`deep-review-suggestion-point-${sectionIndex}-${index}`"
@@ -1576,6 +2065,53 @@
         </div>
       </template>
     </a-modal>
+    <a-modal
+      :open="resultTraceModalOpen"
+      title="诊断追踪"
+      width="900px"
+      :footer="null"
+      @cancel="closeIssueTrace"
+    >
+      <div class="result-trace-modal">
+        <a-alert
+          type="info"
+          show-icon
+          message="仅供管理员或实施人员排查使用"
+          description="这里展示的是脱敏后的结果链路：最终客户点结果、聚合/后处理、门控依赖和可安全展示的底层线索，不返回模型原始输出或完整病历正文。"
+        />
+        <a-alert v-if="resultTraceError" type="warning" show-icon :message="resultTraceError" />
+        <a-spin :spinning="resultTraceLoading">
+          <div v-if="resultTraceData" class="result-trace-sections">
+            <section
+              v-for="section in resultTraceSections"
+              :key="section.key"
+              class="result-trace-section"
+            >
+              <div class="result-trace-section-head">
+                <div>
+                  <h4>{{ section.title }}</h4>
+                  <p>{{ section.description }}</p>
+                </div>
+                <a-tag v-if="section.badge">
+                  {{ section.badge }}
+                </a-tag>
+              </div>
+              <div v-if="section.rows.length" class="result-trace-grid">
+                <div
+                  v-for="row in section.rows"
+                  :key="`${section.key}-${row.key}`"
+                  class="result-trace-row"
+                >
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
+              </div>
+              <div v-else class="result-trace-empty">当前结果未保存该层级的可展示诊断数据。</div>
+            </section>
+          </div>
+        </a-spin>
+      </div>
+    </a-modal>
   </a-drawer>
 </template>
 
@@ -1585,10 +2121,16 @@ import { message, Modal } from 'ant-design-vue'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJobDebugSnapshot,
+  SichuanBatchJobResultTrace,
   SichuanBatchJob,
   SichuanBatchResultAggregation,
+  Luxian0609ReviewFinding,
+  Luxian0609ReviewReport,
 } from '@/views/workstation-v4/semantic-rules/types'
-import { evaluateSichuanRuleForVisit } from '@/services/sichuan-rule-workspace-service'
+import {
+  evaluateSichuanRuleForVisit,
+  getSichuanWorkspaceBatchJobResultTrace,
+} from '@/services/sichuan-rule-workspace-service'
 import type {
   StructuredQCFilterState,
   StructuredQCIssue,
@@ -1613,6 +2155,8 @@ const props = defineProps<{
   batchJobDetailLoading: boolean
   close: () => void
   exportBatchJobReport: (format?: 'xlsx' | 'csv' | 'html') => void
+  reviewBatchJobResult?: () => Promise<void> | void
+  reviewBatchJobLoading?: boolean
   cancelBatchJob?: (jobId: string) => Promise<void> | void
   cancelBatchJobLoading?: boolean
   getBatchJobStatusTagClass: (status?: string) => string
@@ -1628,6 +2172,14 @@ type BatchJobExportFormat = 'xlsx' | 'csv' | 'html'
 function handleExportMenuClick(event: { key?: unknown }) {
   const format = String(event?.key || 'html') as BatchJobExportFormat
   props.exportBatchJobReport(['xlsx', 'csv', 'html'].includes(format) ? format : 'html')
+}
+
+async function handleReviewBatchJobResult() {
+  if (!props.reviewBatchJobResult) {
+    message.warning('当前页面暂未接入复核功能')
+    return
+  }
+  await props.reviewBatchJobResult()
 }
 
 const scopeLabelMap: Record<string, string> = {
@@ -1650,6 +2202,7 @@ const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
 const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 const LUXIAN_0609_FOCUS_STATUSES: StructuredQCStatus[] = [
   'non_compliant',
+  'ai_suggested_non_compliant',
   'uncertain',
   'data_gap',
   'not_executed',
@@ -1658,12 +2211,25 @@ const LUXIAN_0609_FOCUS_STATUSES: StructuredQCStatus[] = [
 ]
 const LUXIAN_0609_STATUS_ORDER = [
   'non_compliant',
+  'ai_suggested_non_compliant',
   'compliant',
+  'ai_suggested_compliant',
   'not_applicable',
   'data_gap',
   'uncertain',
   'not_executed',
   'technical_error',
+]
+const ISSUE_RESULT_DISPLAY_STATUS_ORDER = [
+  'non_compliant',
+  'ai_suggested_non_compliant',
+  'technical_error',
+  'data_gap',
+  'uncertain',
+  'not_executed',
+  'not_applicable',
+  'ai_suggested_compliant',
+  'compliant',
 ]
 const ALL_RECORDS_KEY = '__all_records__'
 
@@ -1698,6 +2264,12 @@ function optionalNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function formatTokenNumber(value: unknown): string {
+  const parsed = optionalNumber(value)
+  if (parsed === null) return '-'
+  return Math.round(parsed).toLocaleString('zh-CN')
+}
+
 function normalizeLuxianStatusKey(status?: string) {
   const normalized = String(status || '')
     .trim()
@@ -1705,6 +2277,7 @@ function normalizeLuxianStatusKey(status?: string) {
   if (normalized === 'technical_error_internal' || normalized === 'error') return 'technical_error'
   if (normalized === 'unsupported' || normalized === 'not_run') return 'not_executed'
   if (normalized === 'data_quality_gap') return 'data_gap'
+  if (normalized === 'needs_manual_review') return 'ai_suggested_non_compliant'
   return normalized
 }
 
@@ -1900,6 +2473,7 @@ const resolvedRuleResults = computed(() => {
 const selectedClusterKey = ref('')
 const selectedDebugRuleJobId = ref('')
 const selectedIssueRecordKey = ref(ALL_RECORDS_KEY)
+const selectedBusinessIssueKey = ref('')
 const issuePagination = reactive({
   current: 1,
   pageSize: 8,
@@ -1911,8 +2485,71 @@ const selectedDeepReviewIssue = ref<SichuanBatchIssueItem | null>(null)
 const deepReviewLoading = ref(false)
 const deepReviewError = ref('')
 const deepReviewResult = ref<Record<string, unknown> | null>(null)
+const resultTraceModalOpen = ref(false)
+const resultTraceLoading = ref(false)
+const resultTraceError = ref('')
+const resultTraceData = ref<SichuanBatchJobResultTrace | null>(null)
 
 const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
+const canShowResultTrace = computed(() => issueViewMode.value === 'advanced')
+
+type ResultTraceRow = {
+  key: string
+  label: string
+  value: string
+}
+
+type ResultTraceSection = {
+  key: string
+  title: string
+  description: string
+  badge?: string
+  rows: ResultTraceRow[]
+}
+
+const resultTraceSections = computed<ResultTraceSection[]>(() => {
+  const trace = resultTraceData.value
+  if (!trace) return []
+  return [
+    {
+      key: 'final_result',
+      title: '最终客户点结果',
+      description: '页面最终展示给客户的质控点结论和状态。',
+      badge: stringifyTraceValue(
+        trace.final_result?.status || trace.final_result?.display_status || '',
+      ),
+      rows: traceObjectRows(trace.final_result),
+    },
+    {
+      key: 'aggregation_trace',
+      title: '聚合与后处理',
+      description: '用于判断状态是否被客户点聚合、规则保护或后处理改写。',
+      rows: traceObjectRows(trace.aggregation_trace),
+    },
+    {
+      key: 'decision',
+      title: '门控、依赖与判定',
+      description: '规则触发、依赖字段和判定过程的可展示诊断信息。',
+      rows: [
+        ...traceObjectRows(trace.trigger, '触发'),
+        ...traceObjectRows(trace.dependencies, '依赖'),
+        ...traceObjectRows(trace.decision, '判定'),
+      ],
+    },
+    {
+      key: 'source_execution_results',
+      title: '底层执行线索',
+      description: '底层规则或映射结果的脱敏摘要；如果为空，说明该任务未保存可展示的底层明细。',
+      rows: traceListRows(trace.source_execution_results),
+    },
+    {
+      key: 'safety',
+      title: '安全过滤',
+      description: '确认诊断追踪没有返回模型原始输出、完整病历正文或向量等敏感字段。',
+      rows: traceObjectRows(trace.safety),
+    },
+  ]
+})
 
 const structuredResult = computed(() =>
   mapBatchJobToStructuredQC(props.batchJobDetail, batchJobDebugSnapshot.value),
@@ -1964,88 +2601,89 @@ const sourceIssueMap = computed(() => {
   return map
 })
 
+function mapStructuredIssueToBatchIssueItem(item: StructuredQCIssue): SichuanBatchIssueItem {
+  const sourceIssue =
+    sourceIssueMap.value.get(
+      resolveIssueSourceKey({
+        rule_job_id: item.ruleJobId || undefined,
+        rule_id: item.ruleId || item.ruleCode,
+        rule_code: item.ruleCode || item.ruleId,
+        record_id: item.recordId || '-',
+        visit_id: item.visitId || '',
+      }),
+    ) || ({} as Partial<SichuanBatchIssueItem>)
+  return {
+    ...sourceIssue,
+    rule_job_id: item.ruleJobId || undefined,
+    rule_id: item.ruleId || item.ruleCode,
+    rule_code: item.ruleCode || item.ruleId,
+    rule_name: item.ruleName,
+    record_id: item.recordId || '-',
+    visit_id: item.visitId || '',
+    patient_name: item.patientName || '',
+    department: item.department || '',
+    status: item.status,
+    is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
+    display_status: item.displayStatus || sourceIssue.display_status,
+    display_bucket: item.displayBucket || sourceIssue.display_bucket,
+    postprocess_label: item.postprocessLabel || sourceIssue.postprocess_label,
+    postprocess_reason: item.postprocessReason || sourceIssue.postprocess_reason,
+    evidence_problem_type: item.evidenceProblemType || sourceIssue.evidence_problem_type,
+    can_show_as_defect: item.canShowAsDefect,
+    can_show_to_doctor: item.canShowToDoctor,
+    internal_only: item.internalOnly,
+    postprocess_mode: item.postprocessMode || sourceIssue.postprocess_mode,
+    first_pass_status: item.firstPassStatus || sourceIssue.first_pass_status,
+    first_pass_display_status: item.firstPassDisplayStatus || sourceIssue.first_pass_display_status,
+    adjudicated_display_status:
+      item.adjudicatedDisplayStatus || sourceIssue.adjudicated_display_status,
+    adjudicator_reason: item.adjudicatorReason || sourceIssue.adjudicator_reason,
+    adjudicator_supporting_quote:
+      item.adjudicatorSupportingQuote || sourceIssue.adjudicator_supporting_quote,
+    adjudicator_confidence: item.adjudicatorConfidence || sourceIssue.adjudicator_confidence,
+    rule_requirement_match: item.ruleRequirementMatch || sourceIssue.rule_requirement_match,
+    findings: item.findings,
+    evidence: item.evidence,
+    suggestion: item.suggestion,
+    confidence: item.confidence,
+    executor_type: item.executorType,
+    rule_version: item.metadata.ruleVersion,
+    prompt_version: item.metadata.promptVersion,
+    model_version: item.metadata.modelVersion,
+    evidence_source: item.metadata.evidenceSource,
+    cache_hit: item.metadata.cacheHit === null ? undefined : item.metadata.cacheHit,
+    trace_id: item.metadata.traceId,
+    cache_key: item.metadata.cacheKey,
+    execution_domain: item.executionDomain,
+    rule_family: item.ruleFamily,
+    doc_scope: item.metadata.docScope,
+    cost_class: item.metadata.costClass,
+    document_type: item.documentType,
+    defect_level: item.defectLevel,
+    qc_point_id: item.qcPointId || sourceIssue.qc_point_id,
+    rule_set_key: item.ruleSetKey || sourceIssue.rule_set_key,
+    rule_set_version: item.ruleSetVersion || sourceIssue.rule_set_version,
+    schema_version: item.schemaVersion || sourceIssue.schema_version,
+    result_status: item.resultStatus || sourceIssue.result_status,
+    trigger: item.trigger || sourceIssue.trigger,
+    dependencies: item.dependencies || sourceIssue.dependencies,
+    evidence_items:
+      item.evidenceItems && item.evidenceItems.length > 0
+        ? item.evidenceItems
+        : sourceIssue.evidence_items,
+    decision: item.decision || sourceIssue.decision,
+    review: item.review || sourceIssue.review,
+    audit: item.audit || sourceIssue.audit,
+    llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
+    refined: item.metadata.refined === null ? undefined : item.metadata.refined,
+    refine_reason: item.metadata.refineReason,
+    screening_status: item.metadata.screeningStatus,
+    final_decision_source: item.metadata.finalDecisionSource,
+  }
+}
+
 const issueItems = computed<SichuanBatchIssueItem[]>(() => {
-  return structuredIssues.value.map((item) => {
-    const sourceIssue =
-      sourceIssueMap.value.get(
-        resolveIssueSourceKey({
-          rule_job_id: item.ruleJobId || undefined,
-          rule_id: item.ruleId || item.ruleCode,
-          rule_code: item.ruleCode || item.ruleId,
-          record_id: item.recordId || '-',
-          visit_id: item.visitId || '',
-        }),
-      ) || ({} as Partial<SichuanBatchIssueItem>)
-    return {
-      ...sourceIssue,
-      rule_job_id: item.ruleJobId || undefined,
-      rule_id: item.ruleId || item.ruleCode,
-      rule_code: item.ruleCode || item.ruleId,
-      rule_name: item.ruleName,
-      record_id: item.recordId || '-',
-      visit_id: item.visitId || '',
-      patient_name: item.patientName || '',
-      department: item.department || '',
-      status: item.status,
-      is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
-      display_status: item.displayStatus || sourceIssue.display_status,
-      display_bucket: item.displayBucket || sourceIssue.display_bucket,
-      postprocess_label: item.postprocessLabel || sourceIssue.postprocess_label,
-      postprocess_reason: item.postprocessReason || sourceIssue.postprocess_reason,
-      evidence_problem_type: item.evidenceProblemType || sourceIssue.evidence_problem_type,
-      can_show_as_defect: item.canShowAsDefect,
-      can_show_to_doctor: item.canShowToDoctor,
-      internal_only: item.internalOnly,
-      postprocess_mode: item.postprocessMode || sourceIssue.postprocess_mode,
-      first_pass_status: item.firstPassStatus || sourceIssue.first_pass_status,
-      first_pass_display_status:
-        item.firstPassDisplayStatus || sourceIssue.first_pass_display_status,
-      adjudicated_display_status:
-        item.adjudicatedDisplayStatus || sourceIssue.adjudicated_display_status,
-      adjudicator_reason: item.adjudicatorReason || sourceIssue.adjudicator_reason,
-      adjudicator_supporting_quote:
-        item.adjudicatorSupportingQuote || sourceIssue.adjudicator_supporting_quote,
-      adjudicator_confidence: item.adjudicatorConfidence || sourceIssue.adjudicator_confidence,
-      rule_requirement_match: item.ruleRequirementMatch || sourceIssue.rule_requirement_match,
-      findings: item.findings,
-      evidence: item.evidence,
-      suggestion: item.suggestion,
-      confidence: item.confidence,
-      executor_type: item.executorType,
-      rule_version: item.metadata.ruleVersion,
-      prompt_version: item.metadata.promptVersion,
-      model_version: item.metadata.modelVersion,
-      evidence_source: item.metadata.evidenceSource,
-      cache_hit: item.metadata.cacheHit === null ? undefined : item.metadata.cacheHit,
-      trace_id: item.metadata.traceId,
-      cache_key: item.metadata.cacheKey,
-      execution_domain: item.executionDomain,
-      rule_family: item.ruleFamily,
-      doc_scope: item.metadata.docScope,
-      cost_class: item.metadata.costClass,
-      document_type: item.documentType,
-      defect_level: item.defectLevel,
-      qc_point_id: item.qcPointId || sourceIssue.qc_point_id,
-      rule_set_key: item.ruleSetKey || sourceIssue.rule_set_key,
-      rule_set_version: item.ruleSetVersion || sourceIssue.rule_set_version,
-      schema_version: item.schemaVersion || sourceIssue.schema_version,
-      result_status: item.resultStatus || sourceIssue.result_status,
-      trigger: item.trigger || sourceIssue.trigger,
-      dependencies: item.dependencies || sourceIssue.dependencies,
-      evidence_items:
-        item.evidenceItems && item.evidenceItems.length > 0
-          ? item.evidenceItems
-          : sourceIssue.evidence_items,
-      decision: item.decision || sourceIssue.decision,
-      review: item.review || sourceIssue.review,
-      audit: item.audit || sourceIssue.audit,
-      llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
-      refined: item.metadata.refined === null ? undefined : item.metadata.refined,
-      refine_reason: item.metadata.refineReason,
-      screening_status: item.metadata.screeningStatus,
-      final_decision_source: item.metadata.finalDecisionSource,
-    }
-  })
+  return structuredIssues.value.map(mapStructuredIssueToBatchIssueItem)
 })
 
 const resolvedDeepReviewResult = computed(() => {
@@ -2089,6 +2727,7 @@ watch(
     selectedClusterKey.value = ''
     selectedDebugRuleJobId.value = ''
     selectedIssueRecordKey.value = ALL_RECORDS_KEY
+    selectedBusinessIssueKey.value = ''
     issueViewMode.value = 'business'
     advancedSectionKeys.value = []
     expandedIssueKeys.value = []
@@ -2107,6 +2746,7 @@ watch(
     selectedDebugRuleJobId.value,
     selectedClusterKey.value,
     selectedIssueRecordKey.value,
+    selectedBusinessIssueKey.value,
   ],
   () => {
     issuePagination.current = 1
@@ -2308,12 +2948,34 @@ function buildIssueRecordGroups<T extends SichuanBatchIssueItem>(
     const status = normalizeLuxianStatusKey(
       item.result_status || item.status || item.display_status,
     )
-    if (status === 'non_compliant') group.nonCompliant += 1
+    if (status === 'non_compliant') {
+      group.nonCompliant += 1
+    }
     if (status === 'data_gap') group.dataGap += 1
-    if (status === 'uncertain') group.uncertain += 1
+    if (status === 'uncertain' || status === 'ai_suggested_non_compliant') group.uncertain += 1
     if (status === 'technical_error') group.technicalError += 1
   })
   return Array.from(map.values())
+}
+
+function resolveIssueResultSortRank(item: Partial<SichuanBatchIssueItem>): number {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  const index = ISSUE_RESULT_DISPLAY_STATUS_ORDER.indexOf(status)
+  return index >= 0 ? index : ISSUE_RESULT_DISPLAY_STATUS_ORDER.length
+}
+
+function sortIssueItemsForBusinessDisplay<T extends SichuanBatchIssueItem>(items: T[]): T[] {
+  return [...items].sort((left, right) => {
+    const statusRank = resolveIssueResultSortRank(left) - resolveIssueResultSortRank(right)
+    if (statusRank !== 0) return statusRank
+    const leftRule = String(left.rule_code || left.rule_id || '').trim()
+    const rightRule = String(right.rule_code || right.rule_id || '').trim()
+    if (leftRule !== rightRule) return leftRule.localeCompare(rightRule, 'zh-Hans-CN')
+    return String(left.record_id || left.visit_id || '').localeCompare(
+      String(right.record_id || right.visit_id || ''),
+      'zh-Hans-CN',
+    )
+  })
 }
 
 const displayIssueItemsBeforeRecordFilter = computed<SichuanBatchIssueItem[]>(() => {
@@ -2335,41 +2997,264 @@ const issueRecordTotalCount = computed(() =>
   issueRecordGroups.value.reduce((sum, group) => sum + group.total, 0),
 )
 
+const isMultiRecordIssueMode = computed(() => issueRecordGroups.value.length > 1)
+const isSingleRecordIssueMode = computed(
+  () => issueViewMode.value === 'business' && issueRecordGroups.value.length <= 1,
+)
+
 const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
+  let items = displayIssueItemsBeforeRecordFilter.value
   if (selectedIssueRecordKey.value === ALL_RECORDS_KEY) {
-    return displayIssueItemsBeforeRecordFilter.value
+    return sortIssueItemsForBusinessDisplay(items)
   }
   const exists = issueRecordGroups.value.some((group) => group.key === selectedIssueRecordKey.value)
-  if (!exists) return displayIssueItemsBeforeRecordFilter.value
-  return displayIssueItemsBeforeRecordFilter.value.filter(
-    (item) => resolveIssueRecordKey(item) === selectedIssueRecordKey.value,
-  )
+  if (exists) {
+    items = items.filter((item) => resolveIssueRecordKey(item) === selectedIssueRecordKey.value)
+  } else if (issueRecordGroups.value.length > 1) {
+    const fallbackKey = issueRecordGroups.value[0]?.key
+    if (fallbackKey) {
+      items = items.filter((item) => resolveIssueRecordKey(item) === fallbackKey)
+    }
+  }
+  return sortIssueItemsForBusinessDisplay(items)
 })
 
+const noIssueEvidenceSourceItems = computed<SichuanBatchIssueItem[]>(() => {
+  const baseFilter: StructuredQCFilterState = {
+    ...issueFilter.value,
+    statusList: ['compliant', 'not_applicable'] satisfies StructuredQCStatus[],
+  }
+  let items = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter)
+  if (!showAllStatuses.value) {
+    items = items.filter((item) => !item.internalOnly)
+  }
+  let mappedItems = items.map(mapStructuredIssueToBatchIssueItem)
+  if (selectedDebugRuleJobId.value) {
+    mappedItems = mappedItems.filter((item) => {
+      const itemRuleJobId = String(item.rule_job_id || '').trim()
+      return itemRuleJobId === selectedDebugRuleJobId.value
+    })
+  }
+  const cluster = selectedCluster.value
+  if (cluster) {
+    mappedItems = mappedItems.filter((item) => matchIssueItemWithCluster(item, cluster))
+  }
+  if (
+    selectedIssueRecordKey.value &&
+    selectedIssueRecordKey.value !== ALL_RECORDS_KEY &&
+    issueRecordGroups.value.some((group) => group.key === selectedIssueRecordKey.value)
+  ) {
+    mappedItems = mappedItems.filter(
+      (item) => resolveIssueRecordKey(item) === selectedIssueRecordKey.value,
+    )
+  }
+  return sortIssueItemsForBusinessDisplay(mappedItems)
+})
+
+const noIssueEvidenceTotalCount = computed(() => noIssueEvidenceSourceItems.value.length)
+
+const noIssueEvidenceItems = computed(() =>
+  noIssueEvidenceSourceItems.value.slice(0, 8).map(enrichNoIssueEvidenceItem),
+)
+
+function enrichBusinessIssueCard(item: SichuanBatchIssueItem) {
+  const customerEvidenceText = resolveCustomerEvidenceText(item.evidence)
+  return {
+    ...item,
+    customer_findings_text: sanitizeCustomerVisibleText(item.findings),
+    customer_suggestion_text: sanitizeCustomerVisibleText(item.suggestion),
+    customer_evidence_text: customerEvidenceText,
+    customer_evidence_structured: resolveStructuredText(customerEvidenceText),
+    evidence_summary: resolveIssueEvidenceSummary(item),
+    evidence_summary_parts: resolveIssueEvidenceSummaryParts(item),
+    issue_card_class: resolveIssueCardClass(item),
+  }
+}
+
+function resolveNoIssueEvidenceBasisLabel(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  if (status === 'not_applicable') return '不适用依据'
+  if (status === 'compliant') return '未发现问题依据'
+  return '判定依据'
+}
+
+function resolveNoIssueEvidenceBasisText(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  const structuredEvidence = resolveEvidenceChainItems(item, 320)
+    .slice(0, 2)
+    .map(formatEvidenceSummaryItem)
+    .join('；')
+  const evidenceText =
+    structuredEvidence ||
+    resolveIssueEvidenceSummary(item) ||
+    sanitizeCustomerVisibleText(item.findings) ||
+    sanitizeCustomerVisibleText(item.evidence)
+  if (evidenceText && !isGenericCustomerEvidenceText(evidenceText)) {
+    return truncateText(evidenceText, 220)
+  }
+  if (status === 'not_applicable') {
+    return '本次未发现该质控点适用的强触发事实，因此未列为问题项。'
+  }
+  return '本次已完成该质控点检查，未发现需要整改、补资料或质控确认的结果。'
+}
+
+function enrichNoIssueEvidenceItem(item: SichuanBatchIssueItem) {
+  return {
+    ...item,
+    no_issue_status_text:
+      resolveDisplayStatusText(item) ||
+      resolveStatusText(item.result_status || item.status || item.display_status),
+    no_issue_basis_label: resolveNoIssueEvidenceBasisLabel(item),
+    no_issue_basis_text: resolveNoIssueEvidenceBasisText(item),
+  }
+}
+
+const allBusinessIssueCards = computed(() => displayIssueItems.value.map(enrichBusinessIssueCard))
+
 const businessIssueCards = computed(() => {
+  if (isSingleRecordIssueMode.value) {
+    const selected =
+      allBusinessIssueCards.value.find(
+        (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
+      ) || allBusinessIssueCards.value[0]
+    return selected ? [selected] : []
+  }
   const startIndex = (issuePagination.current - 1) * issuePagination.pageSize
   return displayIssueItems.value
     .slice(startIndex, startIndex + issuePagination.pageSize)
-    .map((item) => {
-      const customerEvidenceText = resolveCustomerEvidenceText(item.evidence)
-      return {
-        ...item,
-        customer_findings_text: sanitizeCustomerVisibleText(item.findings),
-        customer_suggestion_text: sanitizeCustomerVisibleText(item.suggestion),
-        customer_evidence_text: customerEvidenceText,
-        customer_evidence_structured: resolveStructuredText(customerEvidenceText),
-        evidence_summary: resolveIssueEvidenceSummary(item),
-        evidence_summary_parts: resolveIssueEvidenceSummaryParts(item),
-        issue_card_class: resolveIssueCardClass(item),
-      }
-    })
+    .map(enrichBusinessIssueCard)
+})
+
+const selectedBusinessIssueCard = computed(() => businessIssueCards.value[0] || null)
+
+const selectedIssuePatientContext = computed(() => {
+  const item = selectedBusinessIssueCard.value
+  if (!item) return null
+  const recordId = String(item.record_id || item.visit_id || item.patient_id || '-').trim() || '-'
+  const patientName = String(item.patient_name || '').trim() || '未返回患者'
+  const department = String(item.department || '').trim() || '未返回科室'
+  const documentType =
+    String(item.target_document_type || item.document_type || '').trim() || '未知文书域'
+  const initial = patientName && patientName !== '未返回患者' ? patientName.slice(0, 1) : '病'
+  return {
+    recordId,
+    patientName,
+    department,
+    documentType,
+    initial,
+  }
 })
 
 const businessIssueCardGroups = computed(() => buildIssueRecordGroups(businessIssueCards.value))
 
 const shouldShowIssueRecordGroupHeader = computed(
-  () => issueRecordGroups.value.length > 1 || selectedIssueRecordKey.value !== ALL_RECORDS_KEY,
+  () =>
+    isMultiRecordIssueMode.value ||
+    (selectedIssueRecordKey.value !== ALL_RECORDS_KEY && !isSingleRecordIssueMode.value),
 )
+
+const singleIssueContext = computed(() => {
+  if (!isSingleRecordIssueMode.value) return null
+  return buildIssueRecordGroups(displayIssueItems.value)[0] || issueRecordGroups.value[0] || null
+})
+
+const singleIssueNavGroups = computed(() => {
+  const groups = [
+    {
+      key: 'non_compliant',
+      title: '优先处理：确定问题',
+      className: 'issue-review-nav-group--danger',
+      items: [] as SichuanBatchIssueItem[],
+    },
+    {
+      key: 'data_gap',
+      title: '需补资料：数据不足',
+      className: 'issue-review-nav-group--warning',
+      items: [] as SichuanBatchIssueItem[],
+    },
+    {
+      key: 'uncertain',
+      title: 'AI判断：建议确认',
+      className: 'issue-review-nav-group--review',
+      items: [] as SichuanBatchIssueItem[],
+    },
+    {
+      key: 'not_applicable',
+      title: '无需处理：不适用',
+      className: 'issue-review-nav-group--muted',
+      items: [] as SichuanBatchIssueItem[],
+    },
+    {
+      key: 'other',
+      title: '其他结果',
+      className: 'issue-review-nav-group--muted',
+      items: [] as SichuanBatchIssueItem[],
+    },
+  ]
+  const groupMap = new Map(groups.map((group) => [group.key, group]))
+  displayIssueItems.value.forEach((item) => {
+    const status = normalizeLuxianStatusKey(
+      item.result_status || item.status || item.display_status,
+    )
+    const group =
+      groupMap.get(
+        status === 'technical_error'
+          ? 'non_compliant'
+          : status === 'ai_suggested_non_compliant'
+            ? 'uncertain'
+            : status === 'ai_suggested_compliant'
+              ? 'not_applicable'
+              : status === 'not_executed'
+                ? 'uncertain'
+                : status,
+      ) || groupMap.get('other')
+    group?.items.push(item)
+  })
+  return groups.filter((group) => group.items.length > 0)
+})
+
+function selectBusinessIssue(item: SichuanBatchIssueItem) {
+  selectedBusinessIssueKey.value = resolveIssueStableKey(item)
+}
+
+function resolveIssueReviewNavClass(item: SichuanBatchIssueItem) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  if (status === 'non_compliant') return 'issue-review-nav-item--danger'
+  if (status === 'technical_error') return 'issue-review-nav-item--error'
+  if (status === 'data_gap' || status === 'uncertain' || status === 'ai_suggested_non_compliant')
+    return 'issue-review-nav-item--warning'
+  if (status === 'not_executed' || status === 'not_applicable')
+    return 'issue-review-nav-item--muted'
+  if (status === 'compliant' || status === 'ai_suggested_compliant')
+    return 'issue-review-nav-item--ok'
+  return ''
+}
+
+function syncSelectedIssueRecord(groups = issueRecordGroups.value) {
+  if (groups.length > 1) {
+    const hasSelected = groups.some((group) => group.key === selectedIssueRecordKey.value)
+    if (!hasSelected || selectedIssueRecordKey.value === ALL_RECORDS_KEY) {
+      selectedIssueRecordKey.value = groups[0]?.key || ALL_RECORDS_KEY
+    }
+    return
+  }
+  if (selectedIssueRecordKey.value !== ALL_RECORDS_KEY) {
+    selectedIssueRecordKey.value = ALL_RECORDS_KEY
+  }
+}
+
+function syncSelectedBusinessIssue(items = displayIssueItems.value) {
+  if (!items.length) {
+    selectedBusinessIssueKey.value = ''
+    return
+  }
+  const hasSelected = items.some(
+    (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
+  )
+  if (!hasSelected) {
+    selectedBusinessIssueKey.value = resolveIssueStableKey(items[0])
+  }
+}
 
 const linkedIssueRowKey = computed(() => {
   if (!selectedCluster.value) return ''
@@ -2609,6 +3494,22 @@ const luxianGenericRuleCount = computed(() => {
   )
 })
 
+watch(
+  issueRecordGroups,
+  (groups) => {
+    syncSelectedIssueRecord(groups)
+  },
+  { immediate: true },
+)
+
+watch(
+  displayIssueItems,
+  (items) => {
+    syncSelectedBusinessIssue(items)
+  },
+  { immediate: true },
+)
+
 const luxianRecordRuleMapSummary = computed(() => {
   const entries = luxianRecordRuleMapEntries.value
   if (!entries.length)
@@ -2668,13 +3569,134 @@ const luxianStatusDistribution = computed(() => {
     className:
       key === 'non_compliant' || key === 'technical_error'
         ? 'is-danger'
-        : key === 'data_gap' || key === 'uncertain' || key === 'not_executed'
+        : key === 'data_gap' ||
+            key === 'uncertain' ||
+            key === 'ai_suggested_non_compliant' ||
+            key === 'not_executed'
           ? 'is-warning'
-          : key === 'compliant'
+          : key === 'compliant' || key === 'ai_suggested_compliant'
             ? 'is-success'
             : 'is-muted',
   }))
 })
+
+const showResultReviewOverview = computed(
+  () => isLuxian0609BatchJob.value && issueViewMode.value === 'business',
+)
+
+const resultReviewOverviewTitle = computed(() => {
+  const name = String(props.batchJobDetail?.rule_name || '').trim()
+  if (name) return name
+  const code = String(props.batchJobDetail?.rule_code || '').trim()
+  return code || '泸县0609质控点验证任务'
+})
+
+const resultReviewOutcomeText = computed(() => {
+  const heroTitle = String(statusHero.value?.title || '').trim()
+  if (heroTitle) return heroTitle
+  return '当前展示泸县0609质控点验证结果。'
+})
+
+const resultReviewScopeText = computed(() => {
+  if (isLuxianScopedRun.value) {
+    const countText = luxianSelectedRuleIds.value.length
+      ? `已限定 ${luxianSelectedRuleIds.value.length} 个 LX0609 质控点`
+      : '已限定质控点，具体 ID 未返回'
+    return `${countText}；${luxianRecordRuleMapSummary.value}`
+  }
+  return `未限定，执行全量 0609 质控点；${luxianRecordRuleMapSummary.value}`
+})
+
+const resultReviewRecordCount = computed(() => {
+  const summary = props.batchJobDetail?.summary
+  const filters = batchJobFilters.value
+  const authoritativeCount =
+    optionalNumber(summary?.total_records) ??
+    optionalNumber(filters.dedup_record_count) ??
+    optionalNumber(props.batchJobDetail?.total_records)
+  if (authoritativeCount !== null) return authoritativeCount
+  if (issueRecordGroups.value.length > 0) return issueRecordGroups.value.length
+  const selectedRecordIds = Array.isArray(filters.selected_record_ids)
+    ? filters.selected_record_ids
+    : []
+  return selectedRecordIds.length
+})
+
+const resultReviewResultCount = computed(() => {
+  if (displayIssueItemsBeforeRecordFilter.value.length > 0) {
+    return displayIssueItemsBeforeRecordFilter.value.length
+  }
+  return Number(
+    props.batchJobDetail?.summary?.processed_rule_count ??
+      props.batchJobDetail?.summary?.rule_count ??
+      props.batchJobDetail?.rule_count ??
+      0,
+  )
+})
+
+const resultReviewCustomerRuleCount = computed(() => {
+  if (luxianCustomerRuleCount.value > 0) return luxianCustomerRuleCount.value
+  if (luxianSelectedRuleIds.value.length > 0) return luxianSelectedRuleIds.value.length
+  return resultReviewResultCount.value
+})
+
+const resultReviewStatusPills = computed(() =>
+  luxianStatusDistribution.value.filter(
+    (item) =>
+      item.value > 0 ||
+      [
+        'non_compliant',
+        'ai_suggested_non_compliant',
+        'data_gap',
+        'uncertain',
+        'not_applicable',
+      ].includes(item.key),
+  ),
+)
+
+const resultReviewSingleRecordSummary = computed(() => {
+  const context = singleIssueContext.value
+  if (!context) return issueFocusSummary.value
+  const parts = [
+    `${context.total} 条质控点结果`,
+    context.nonCompliant > 0 ? `确定问题 ${context.nonCompliant}` : '',
+    context.dataGap > 0 ? `数据不足 ${context.dataGap}` : '',
+    context.uncertain > 0 ? `AI判断 ${context.uncertain}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+})
+
+const luxianReviewReport = computed<Luxian0609ReviewReport | null>(() => {
+  const report = props.batchJobDetail?.summary?.review_report
+  return report && typeof report === 'object' ? report : null
+})
+
+const luxianReviewFindings = computed<Luxian0609ReviewFinding[]>(
+  () => luxianReviewReport.value?.findings?.slice(0, 8) || [],
+)
+
+const luxianReviewSummaryText = computed(() => {
+  const summary = luxianReviewReport.value?.summary
+  const total = Number(summary?.total_findings || 0)
+  if (!total) return '暂无高风险建议'
+  return `共 ${total} 条建议：P0 ${Number(summary?.p0 || 0)} · P1 ${Number(summary?.p1 || 0)} · P2 ${Number(summary?.p2 || 0)}`
+})
+
+function mapStructuredStatusLabel(status?: string): string {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'non_compliant') return '不合规'
+  if (normalized === 'ai_suggested_non_compliant') return 'AI判断：疑似问题'
+  if (normalized === 'ai_suggested_compliant') return 'AI判断：未见问题'
+  if (normalized === 'compliant') return '合规'
+  if (normalized === 'not_applicable') return '不适用'
+  if (normalized === 'data_gap') return '数据不足'
+  if (normalized === 'uncertain') return 'AI判断'
+  if (normalized === 'not_executed') return '未执行'
+  if (normalized === 'technical_error') return '技术异常'
+  return status || 'AI判断'
+}
 
 function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
   if (isLuxian0609BatchJob.value) {
@@ -2693,7 +3715,9 @@ function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
   if (isLuxian0609BatchJob.value) {
     return (
       normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
-      'uncertain'
+        'uncertain' ||
+      normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+        'ai_suggested_non_compliant'
     )
   }
   if (isPostprocessedFormalResult.value) {
@@ -2861,8 +3885,8 @@ const statusHero = computed(() => {
             : '任务已完成，本次未发现泸县0609质控点问题',
         description:
           focusCount > 0
-            ? `请查看下方客户质控点明细：不合规 ${issueRecords} 条，数据不足 ${dataQualityGapRecords} 条，待复核 ${uncertainRecords} 条。`
-            : '当前所选 LX0609 质控点未返回不合规、数据不足或待复核结果。',
+            ? `请查看下方客户质控点明细：不合规 ${issueRecords} 条，数据不足 ${dataQualityGapRecords} 条，AI判断 ${uncertainRecords} 条。`
+            : '当前所选 LX0609 质控点未返回不合规、数据不足或 AI 判断结果。',
         meta,
         pulse: false,
       }
@@ -2874,7 +3898,7 @@ const statusHero = computed(() => {
         focusCount > 0
           ? isPostprocessedFormalResult.value
             ? '请优先查看下方四层准入明细，确认缺陷可直接处理，数据缺口需排查链路。'
-            : '请优先查看下方“问题/待复核明细”，直接判断需要复核或整改的质控点。'
+            : '请优先查看下方“问题/AI判断明细”，直接判断需要确认或整改的质控点。'
           : '本次批量质控已执行完毕，当前规则集下没有发现需要处理的问题。',
       meta,
       pulse: false,
@@ -2900,7 +3924,12 @@ const statusHero = computed(() => {
 
 const primarySummaryCards = computed(() => {
   const summary = props.batchJobDetail?.summary
-  const totalRecords = Number(summary?.total_records ?? props.batchJobDetail?.total_records ?? 0)
+  const totalRecords = Number(
+    optionalNumber(summary?.total_records) ??
+      optionalNumber(batchJobFilters.value.dedup_record_count) ??
+      optionalNumber(props.batchJobDetail?.total_records) ??
+      0,
+  )
   const successCount = Number(summary?.success_count ?? props.batchJobDetail?.success_count ?? 0)
   const failedRecordCount = Number(
     summary?.failed_record_count ?? props.batchJobDetail?.failed_count ?? 0,
@@ -2938,7 +3967,7 @@ const primarySummaryCards = computed(() => {
       : [
           {
             key: 'uncertain',
-            label: '待复核规则',
+            label: 'AI判断规则',
             value: uncertainRecords,
             desc: '',
           },
@@ -2989,7 +4018,7 @@ const primarySummaryCards = computed(() => {
     },
     {
       key: 'uncertain-records',
-      label: '涉及待复核病历',
+      label: '涉及AI判断病历',
       value: ruleLevelSummary.value.docUncertainCount,
       desc: '病历级去重统计',
     },
@@ -3011,7 +4040,7 @@ const focusedSummaryCards = computed(() => {
       },
       {
         key: 'uncertain',
-        label: '待复核规则',
+        label: 'AI判断规则',
         value: issueItems.value.filter((item) => isNeedsReviewItem(item)).length,
         desc: '',
       },
@@ -3142,11 +4171,57 @@ const executionSummaryCards = computed(() => {
   return cards
 })
 
+const performanceProfile = computed(
+  () => props.batchJobDetail?.summary?.performance_profile || null,
+)
+
+const performanceProfileCards = computed(() => {
+  const profile = performanceProfile.value
+  if (!profile) return []
+  const unattributedTokens = optionalNumber(profile.unattributed_tokens)
+  const breakdownComplete =
+    profile.token_breakdown_complete === true ||
+    (unattributedTokens !== null && unattributedTokens === 0)
+  return [
+    {
+      key: 'tokens-total',
+      label: '总 Token',
+      value: formatTokenNumber(profile.tokens_total ?? props.batchJobDetail?.summary?.total_tokens),
+      desc: '本次任务模型服务返回的 token 总量',
+    },
+    {
+      key: 'prompt-tokens',
+      label: '输入 Token',
+      value: formatTokenNumber(profile.prompt_tokens),
+      desc: '可归因到输入上下文的 token',
+    },
+    {
+      key: 'completion-tokens',
+      label: '输出 Token',
+      value: formatTokenNumber(profile.completion_tokens),
+      desc: '可归因到模型输出的 token',
+    },
+    {
+      key: 'unattributed-tokens',
+      label: '未归因 Token',
+      value: formatTokenNumber(profile.unattributed_tokens),
+      desc: '模型服务未拆分到输入/输出的 token',
+    },
+    {
+      key: 'token-breakdown-complete',
+      label: 'Token 拆分',
+      value: breakdownComplete ? '完整' : '有未归因',
+      desc: breakdownComplete ? '输入/输出 token 已覆盖总量' : '需结合未归因 token 评估成本',
+    },
+  ]
+})
+
 const advancedSummaryCards = computed(() => {
   const cards = [
     ...primarySummaryCards.value.filter(
       (item) => !['total', 'issues', 'uncertain', 'failed-records'].includes(item.key),
     ),
+    ...performanceProfileCards.value,
     ...executionSummaryCards.value,
     {
       key: 'rule-results',
@@ -3156,7 +4231,7 @@ const advancedSummaryCards = computed(() => {
     },
     {
       key: 'issue-items',
-      label: isPostprocessedFormalResult.value ? '四层准入明细' : '问题/待复核明细',
+      label: isPostprocessedFormalResult.value ? '四层准入明细' : '问题/AI判断明细',
       value: issueItems.value.length,
       desc: '',
     },
@@ -3188,18 +4263,18 @@ const issueFocusSummary = computed(() => {
   ).length
   if (isLuxian0609BatchJob.value) {
     const modeText = isLuxianScopedRun.value ? '选定质控点验证' : '全量 0609 规则集'
-    return `${scopePrefix}当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
+    return `${scopePrefix}当前展示泸县0609${modeText}结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，AI判断 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
   }
   if (isPostprocessedFormalResult.value) {
     return `${scopePrefix}当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始语义判断不会直接计入确认缺陷。`
   }
   if (issueViewMode.value === 'business') {
     if (isFastScreenResult.value) {
-      return `${scopePrefix}当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
+      return `${scopePrefix}当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，AI判断 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
     }
-    return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
+    return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，AI判断 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
   }
-  return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
+  return `${scopePrefix}当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，AI判断 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
 })
 
 const issueSectionTitle = computed(() =>
@@ -3207,15 +4282,15 @@ const issueSectionTitle = computed(() =>
     ? 'LX0609 客户质控点结果'
     : isPostprocessedFormalResult.value
       ? '确认缺陷/数据缺口/系统驳回'
-      : '问题/待复核明细',
+      : '问题/AI判断明细',
 )
 
 const emptyIssueText = computed(() =>
   isLuxian0609BatchJob.value
-    ? '暂无 LX0609 不合规、数据不足或待复核结果'
+    ? '暂无 LX0609 不合规、数据不足或 AI 判断结果'
     : isPostprocessedFormalResult.value
       ? '暂无确认缺陷、数据缺口或系统驳回项'
-      : '暂无问题/待复核明细',
+      : '暂无问题/AI判断明细',
 )
 
 watch(
@@ -3289,6 +4364,118 @@ function toggleIssueExpanded(item: SichuanBatchIssueItem) {
   expandedIssueKeys.value = expandedIssueKeys.value.includes(key)
     ? expandedIssueKeys.value.filter((itemKey) => itemKey !== key)
     : [...expandedIssueKeys.value, key]
+}
+
+function stringifyTraceValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-'
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '-'
+    return value
+      .map((item) => stringifyTraceValue(item))
+      .filter((item) => item && item !== '-')
+      .join('；')
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function humanizeTraceKey(key: string): string {
+  const keyMap: Record<string, string> = {
+    rule_id: '规则ID',
+    rule_code: '规则编码',
+    qc_point_id: '客户质控点',
+    rule_name: '质控点名称',
+    record_id: '病历号',
+    visit_id: '就诊ID',
+    patient_name: '患者',
+    department: '科室',
+    status: '状态',
+    display_status: '展示状态',
+    result_status: '结果状态',
+    is_compliant: '合规布尔值',
+    defect_level: '缺陷等级',
+    findings: '质控结论',
+    evidence: '证据摘要',
+    suggestion: '处理建议',
+    target_document_type: '目标文书',
+    document_type: '文书类型',
+    rule_family: '规则族',
+    trace_id: 'Trace ID',
+    model_version: '模型版本',
+    executor_type: '执行器',
+    final_status: '最终状态',
+    final_decision_source: '最终状态来源',
+    postprocess_label: '后处理标签',
+    postprocess_reason: '后处理原因',
+    first_pass_status: '初判状态',
+    adjudicated_display_status: '裁决后展示状态',
+    adjudicator_reason: '裁决原因',
+    customer_display_guard: '客户展示保护',
+    rule_requirement_match: '规则口径匹配',
+    source_execution_count: '底层结果数',
+    sensitive_fields_removed: '已移除敏感字段',
+    raw_output_returned: '是否返回原始输出',
+    note: '说明',
+  }
+  return keyMap[key] || key.replace(/_/g, ' ')
+}
+
+function traceObjectRows(value?: Record<string, unknown>, prefix = ''): ResultTraceRow[] {
+  if (!value || typeof value !== 'object') return []
+  return Object.entries(value)
+    .filter(([, item]) => item !== null && item !== undefined && stringifyTraceValue(item) !== '-')
+    .map(([key, item]) => ({
+      key: prefix ? `${prefix}-${key}` : key,
+      label: prefix ? `${prefix} · ${humanizeTraceKey(key)}` : humanizeTraceKey(key),
+      value: stringifyTraceValue(item),
+    }))
+}
+
+function traceListRows(value?: Array<Record<string, unknown>>): ResultTraceRow[] {
+  if (!Array.isArray(value) || value.length === 0) return []
+  return value.flatMap((item, index) =>
+    traceObjectRows(item, `底层结果 ${index + 1}`).map((row) => ({
+      ...row,
+      key: `${index}-${row.key}`,
+    })),
+  )
+}
+
+async function openIssueTrace(item: SichuanBatchIssueItem) {
+  const jobId = props.batchJobDetail?.id
+  if (!jobId) {
+    message.warning('当前任务缺少任务 ID，无法查看诊断追踪。')
+    return
+  }
+  resultTraceModalOpen.value = true
+  resultTraceLoading.value = true
+  resultTraceError.value = ''
+  resultTraceData.value = null
+  const response = await getSichuanWorkspaceBatchJobResultTrace(jobId, {
+    record_id: String(item.record_id || '').trim() || undefined,
+    visit_id: String(item.visit_id || '').trim() || undefined,
+    rule_id: String(item.qc_point_id || item.rule_id || item.rule_code || '').trim() || undefined,
+  })
+  resultTraceLoading.value = false
+  if (!response.success || !response.data) {
+    resultTraceError.value = response.message || '诊断追踪获取失败'
+    message.warning(resultTraceError.value)
+    return
+  }
+  resultTraceData.value = response.data
+}
+
+function closeIssueTrace() {
+  resultTraceModalOpen.value = false
+  resultTraceLoading.value = false
+  resultTraceError.value = ''
+  resultTraceData.value = null
 }
 
 async function openIssueDeepReview(item: SichuanBatchIssueItem) {
@@ -3404,6 +4591,18 @@ type CopyEvidenceCompare = {
     label: string
     quote: string
   }
+  pairs?: Array<{
+    key: string
+    index: number
+    leftLabel: string
+    leftQuote: string
+    rightLabel: string
+    rightQuote: string
+    similarity?: string
+  }>
+  metric?: string
+  differenceGap?: string
+  legacyNotice?: string
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {
@@ -3577,6 +4776,16 @@ function removeInternalEvidenceSegments(text: string) {
 function sanitizeCustomerVisibleText(text?: string | null) {
   const cleaned = removeInternalEvidenceSegments(String(text || ''))
     .replace(/来源未标注\s*[·:：]\s*/gu, '')
+    .replace(/待人工复核/gu, 'AI判断后建议确认')
+    .replace(/待人工核对/gu, 'AI判断后建议确认')
+    .replace(/建议人工复核/gu, '建议结合原文确认')
+    .replace(/建议人工核对/gu, '建议结合原文确认')
+    .replace(/需人工复核/gu, '需结合原文确认')
+    .replace(/需人工核对/gu, '需结合原文确认')
+    .replace(/需要人工复核/gu, '需要结合原文确认')
+    .replace(/需要人工核对/gu, '需要结合原文确认')
+    .replace(/人工复核/gu, '结合原文确认')
+    .replace(/人工核对/gu, '结合原文确认')
     .replace(/\s+/g, ' ')
     .trim()
   return cleaned
@@ -3661,10 +4870,12 @@ function resolveEvidenceStatusText(status?: string) {
     .toLowerCase()
   const map: Record<string, string> = {
     non_compliant: '不合规',
+    ai_suggested_non_compliant: 'AI判断：疑似问题',
     compliant: '合规',
+    ai_suggested_compliant: 'AI判断：未见问题',
     not_applicable: '不适用',
     data_gap: '数据不足',
-    uncertain: '待复核',
+    uncertain: 'AI判断',
     not_executed: '未执行',
     technical_error: '技术异常',
     failed: '失败',
@@ -3673,14 +4884,57 @@ function resolveEvidenceStatusText(status?: string) {
   return map[normalized] || resolveStatusText(normalized)
 }
 
+function resolveIssueSeverityText(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  if (status === 'data_gap') return '数据不足，需补充资料'
+  if (status === 'ai_suggested_non_compliant' || status === 'uncertain') return 'AI判断'
+  if (status === 'ai_suggested_compliant') return 'AI未见问题'
+  if (status === 'not_applicable') return '不适用'
+  if (status === 'not_executed') return '未执行'
+  if (status === 'technical_error') return '技术异常'
+  return item.defect_level || '未分级'
+}
+
 function resolveIssueCardClass(item: Partial<SichuanBatchIssueItem>) {
   const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
   return {
     'issue-conclusion-card--danger': status === 'non_compliant' || status === 'technical_error',
     'issue-conclusion-card--warning':
-      status === 'data_gap' || status === 'uncertain' || status === 'not_executed',
-    'issue-conclusion-card--success': status === 'compliant',
+      status === 'data_gap' ||
+      status === 'uncertain' ||
+      status === 'ai_suggested_non_compliant' ||
+      status === 'not_executed',
+    'issue-conclusion-card--success': status === 'compliant' || status === 'ai_suggested_compliant',
     'issue-conclusion-card--muted': status === 'not_applicable',
+  }
+}
+
+function resolveIssueResultKindText(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  if (status === 'non_compliant') return '确定问题'
+  if (status === 'ai_suggested_non_compliant') return 'AI判断'
+  if (status === 'ai_suggested_compliant') return 'AI未见问题'
+  if (status === 'technical_error') return '技术异常'
+  if (status === 'data_gap') return '数据不足'
+  if (status === 'uncertain') return 'AI判断'
+  if (status === 'not_executed') return '未执行'
+  if (status === 'not_applicable') return '不适用'
+  if (status === 'compliant') return '合规'
+  return '结果项'
+}
+
+function resolveIssueResultKindClass(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  return {
+    'issue-result-kind--danger': status === 'non_compliant',
+    'issue-result-kind--error': status === 'technical_error',
+    'issue-result-kind--review':
+      status === 'data_gap' ||
+      status === 'uncertain' ||
+      status === 'ai_suggested_non_compliant' ||
+      status === 'not_executed',
+    'issue-result-kind--muted': status === 'not_applicable',
+    'issue-result-kind--ok': status === 'compliant' || status === 'ai_suggested_compliant',
   }
 }
 
@@ -3797,7 +5051,10 @@ function resolveDependencyRows(item: Partial<SichuanBatchIssueItem>): EvidenceDi
       ]
 }
 
-function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayItem[] {
+function resolveEvidenceChainItems(
+  item: Partial<SichuanBatchIssueItem>,
+  quoteLimit = 260,
+): EvidenceDisplayItem[] {
   const evidenceItems = toRecordList(item.evidence_items)
     .map((evidence, index) => {
       const source =
@@ -3812,7 +5069,7 @@ function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): Eviden
         fieldPath: normalizeCustomerEvidenceLabel(evidence.field_path),
         quote: normalizeEvidenceText(
           resolveCustomerEvidenceText(String(evidence.quote || '')),
-          260,
+          quoteLimit,
         ),
       }
     })
@@ -3831,7 +5088,7 @@ function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): Eviden
           source: '质控结果',
           recordTime: '',
           fieldPath: '关键证据',
-          quote: normalizeEvidenceText(richEvidenceText, 320),
+          quote: normalizeEvidenceText(richEvidenceText, Math.max(quoteLimit, 320)),
         },
         ...evidenceItems,
       ]
@@ -3871,6 +5128,18 @@ function evidenceRoleText(evidence: Record<string, unknown>) {
     .join(' ')
 }
 
+function normalizeCopyEvidenceSourceLabel(value: unknown) {
+  const text = normalizeEvidenceText(value, 32)
+  const mapping: Record<string, string> = {
+    daily_course_record: '日常病程记录',
+    senior_course_record: '上级医师查房记录',
+    first_course_record: '首次病程记录',
+    admission_record: '入院记录',
+    copy_compare: '复制病历比对',
+  }
+  return mapping[text] || text
+}
+
 function resolveCopyEvidenceCompare(
   item: Partial<SichuanBatchIssueItem>,
 ): CopyEvidenceCompare | null {
@@ -3881,13 +5150,76 @@ function resolveCopyEvidenceCompare(
       if (!quote) return null
       const roleText = evidenceRoleText(evidence)
       const source =
-        normalizeEvidenceText(evidence.source_document_name, 32) ||
-        normalizeEvidenceText(evidence.source_document_type, 32) ||
+        normalizeCopyEvidenceSourceLabel(evidence.source_document_name) ||
+        normalizeCopyEvidenceSourceLabel(evidence.source_document_type) ||
         `文书片段 ${index + 1}`
-      return { quote, roleText, source }
+      return {
+        quote,
+        roleText,
+        source,
+        evidenceId: normalizeEvidenceText(evidence.evidence_id, 32),
+        actualValue: normalizeEvidenceText(evidence.actual_value, 64),
+      }
     })
-    .filter((row): row is { quote: string; roleText: string; source: string } => Boolean(row))
+    .filter(
+      (
+        row,
+      ): row is {
+        quote: string
+        roleText: string
+        source: string
+        evidenceId: string
+        actualValue: string
+      } => Boolean(row),
+    )
 
+  const metricEvidence = evidenceRows.find((row) =>
+    /COPY-METRIC|复制病历比对指标|重复度判定|相似度|覆盖率/.test(
+      [row.evidenceId, row.roleText, row.source, row.quote].join(' '),
+    ),
+  )
+  const metric = metricEvidence?.quote
+  const differenceEvidence = evidenceRows.find((row) =>
+    /COPY-MISSING-DIFFERENCE|差异不足|缺少差异|新增内容|病情变化/.test(
+      [row.evidenceId, row.roleText, row.source, row.quote].join(' '),
+    ),
+  )
+  const differenceGap = differenceEvidence?.quote
+  const pairMap = new Map<
+    string,
+    {
+      index: number
+      previous?: (typeof evidenceRows)[number]
+      current?: (typeof evidenceRows)[number]
+    }
+  >()
+  evidenceRows.forEach((row) => {
+    const match = row.evidenceId.match(/^COPY-PAIR-(\d+)-(PREVIOUS|CURRENT)$/)
+    if (!match) return
+    const key = match[1] || ''
+    const existing = pairMap.get(key) || { index: Number(key) || pairMap.size + 1 }
+    if (match[2] === 'PREVIOUS') {
+      existing.previous = row
+    } else {
+      existing.current = row
+    }
+    pairMap.set(key, existing)
+  })
+  const pairs = Array.from(pairMap.values())
+    .filter((pair) => pair.previous?.quote && pair.current?.quote)
+    .sort((a, b) => a.index - b.index)
+    .map((pair) => ({
+      key: `copy-pair-${pair.index}`,
+      index: pair.index,
+      leftLabel: pair.previous?.source || `前次记录片段 ${pair.index}`,
+      leftQuote: pair.previous?.quote || '',
+      rightLabel: pair.current?.source || `本次记录片段 ${pair.index}`,
+      rightQuote: pair.current?.quote || '',
+      similarity: pair.current?.actualValue || pair.previous?.actualValue || '',
+    }))
+  const legacyNotice = pairs.length
+    ? ''
+    : '当前任务结果只保存了单组对照片段。请重新发起质控，生成多片段对照、相似度指标和差异不足说明。'
   const admissionEvidence = evidenceRows.find((row) =>
     /入院记录|admission|source|原文/.test(row.roleText),
   )
@@ -3904,6 +5236,10 @@ function resolveCopyEvidenceCompare(
         label: courseEvidence.source || '病程记录片段',
         quote: courseEvidence.quote,
       },
+      pairs,
+      metric,
+      differenceGap,
+      legacyNotice,
     }
   }
 
@@ -3922,18 +5258,48 @@ function resolveCopyEvidenceCompare(
         label: '病程记录片段',
         quote: truncateText(parts[2], 180),
       },
+      pairs,
+      metric,
+      differenceGap,
+      legacyNotice,
     }
   }
-  if (evidenceRows.length >= 2) {
+  const snippetRows = evidenceRows.filter(
+    (row) =>
+      row.evidenceId !== 'COPY-METRIC' &&
+      row.evidenceId !== 'COPY-MISSING-DIFFERENCE' &&
+      !/^COPY-PAIR-\d+-(PREVIOUS|CURRENT)$/.test(row.evidenceId),
+  )
+  if (snippetRows.length >= 2) {
     return {
       left: {
-        label: evidenceRows[0].source,
-        quote: evidenceRows[0].quote,
+        label: snippetRows[0].source,
+        quote: snippetRows[0].quote,
       },
       right: {
-        label: evidenceRows[1].source,
-        quote: evidenceRows[1].quote,
+        label: snippetRows[1].source,
+        quote: snippetRows[1].quote,
       },
+      pairs,
+      metric,
+      differenceGap,
+      legacyNotice,
+    }
+  }
+  if (pairs.length) {
+    return {
+      left: {
+        label: pairs[0].leftLabel,
+        quote: pairs[0].leftQuote,
+      },
+      right: {
+        label: pairs[0].rightLabel,
+        quote: pairs[0].rightQuote,
+      },
+      pairs,
+      metric,
+      differenceGap,
+      legacyNotice,
     }
   }
   return null
@@ -4034,7 +5400,7 @@ function resolveReviewRows(item: Partial<SichuanBatchIssueItem>): EvidenceDispla
   if (!review) return []
   const reviewStatus = normalizeEvidenceText(review.review_status, 32)
   const statusMap: Record<string, string> = {
-    pending: '待人工复核',
+    pending: '待确认',
     not_required: '无需复核',
     reviewed: '已复核',
   }
@@ -4092,7 +5458,7 @@ function resolveStructuredText(text?: string | null) {
   const prepared = raw
     .replace(/(【[^】]{1,40}】)/g, '\n$1\n')
     .replace(/(\*\*[^*]{1,60}\*\*[：:]?)/g, '\n$1\n')
-    .replace(/(^|[。；;]\s*)(\d+[.、]\s*)/g, '$1\n$2')
+    .replace(/(^|[。；;：:]\s*)(\d+[.、]\s*)/g, '$1\n$2')
 
   const lines = prepared
     .split('\n')
@@ -4161,6 +5527,13 @@ function resolveStructuredText(text?: string | null) {
   return { summary, sections, points: rootPoints }
 }
 
+function hasStructuredText(text?: string | null) {
+  const structured = resolveStructuredText(text)
+  return Boolean(
+    structured.summary.length || structured.sections.length || structured.points.length,
+  )
+}
+
 function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'status', key: string) {
   const normalizedKey = String(key || '').trim()
   if (!normalizedKey) return '未命名'
@@ -4186,8 +5559,10 @@ function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'statu
   if (kind === 'status') {
     const map: Record<string, string> = {
       non_compliant: '不合规',
-      uncertain: '待复核',
+      ai_suggested_non_compliant: 'AI判断：疑似问题',
+      uncertain: 'AI判断',
       compliant: '合规',
+      ai_suggested_compliant: 'AI判断：未见问题',
       not_applicable: '不适用',
       failed: '失败',
     }
@@ -4201,7 +5576,9 @@ function resolveStatusText(status?: string) {
     .trim()
     .toLowerCase()
   if (normalized === 'non_compliant') return '不合规'
-  if (normalized === 'uncertain') return '待复核'
+  if (normalized === 'ai_suggested_non_compliant') return 'AI判断：疑似问题'
+  if (normalized === 'uncertain') return 'AI判断'
+  if (normalized === 'ai_suggested_compliant') return 'AI判断：未见问题'
   if (normalized === 'not_applicable') return '不适用'
   if (normalized === 'data_gap') return '数据不足'
   if (normalized === 'not_executed') return '未执行'
@@ -4265,9 +5642,9 @@ function resolveIssueRowClassName(record: SichuanBatchIssueItem) {
   const currentKey = resolveIssueStableKey(record)
   if (linkedKey && currentKey === linkedKey) return 'issue-row-highlight issue-row-linked'
   if (
-    String(record.status || '')
-      .trim()
-      .toLowerCase() === 'uncertain'
+    ['uncertain', 'ai_suggested_non_compliant'].includes(
+      normalizeLuxianStatusKey(record.result_status || record.status || record.display_status),
+    )
   )
     return 'issue-row-uncertain'
   if (!selectedCluster.value) return ''
@@ -4330,17 +5707,26 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  max-height: 100vh;
+  min-height: 0;
   background: #f8fafc;
 }
 
 .drawer-head {
   display: flex;
+  flex: 0 0 auto;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 18px 22px;
   border-bottom: 1px solid #e2e8f0;
   background: #fff;
+}
+
+.result-review-header {
+  min-height: 82px;
+  padding-right: 24px;
+  padding-left: 24px;
 }
 
 .drawer-title-group {
@@ -4385,12 +5771,18 @@ onUnmounted(() => {
 }
 
 .drawer-body {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.drawer-body > * {
+  flex: 0 0 auto;
 }
 
 .status-hero {
@@ -4575,11 +5967,243 @@ onUnmounted(() => {
   text-align: center;
 }
 
+.result-review-overview {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+  padding: 18px 20px;
+}
+
+.result-overview-card {
+  border-color: rgba(191, 219, 254, 0.86);
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.98) 44%), #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.result-overview-card-main {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) auto minmax(430px, 0.92fr);
+  gap: 20px;
+  align-items: center;
+}
+
+.result-overview-identity {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.result-overview-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 18px;
+  font-weight: 850;
+  box-shadow: inset 0 0 0 6px rgba(255, 255, 255, 0.62);
+}
+
+.result-overview-status-block {
+  min-width: 0;
+  border-left: 1px solid rgba(203, 213, 225, 0.72);
+  padding-left: 20px;
+}
+
+.result-overview-status-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.result-overview-status-block .result-review-status-pills {
+  margin-top: 0;
+}
+
+.result-review-overview-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+
+.result-review-overview-copy {
+  min-width: 0;
+}
+
+.result-review-overview-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.result-review-overview-title-row h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 26px;
+}
+
+.result-review-status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  background: #ecfdf5;
+  color: #047857;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.result-review-overview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.result-review-overview-desc,
+.result-review-overview-scope {
+  margin: 8px 0 0;
+  color: #334155;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.result-review-overview-scope {
+  margin-top: 6px;
+  color: #64748b;
+}
+
+.result-review-overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(106px, 1fr));
+  gap: 0;
+}
+
+.result-review-overview-stats div {
+  min-width: 104px;
+  border-left: 1px solid rgba(203, 213, 225, 0.78);
+  padding: 0 20px;
+}
+
+.result-review-overview-stats span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.result-review-overview-stats strong {
+  margin-right: 4px;
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 850;
+  line-height: 34px;
+}
+
+.result-review-overview-stats small {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.result-review-status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.result-review-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.result-review-status-pill strong {
+  font-size: 15px;
+}
+
+.result-review-status-pill.is-danger {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.result-review-status-pill.is-warning {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.result-review-status-pill.is-success {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.result-review-status-pill.is-muted {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
 .drawer-card {
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   background: #fff;
   padding: 14px 16px;
+}
+
+.issue-review-workbench-card {
+  overflow: hidden;
+  padding: 0;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.issue-review-workbench-card--single {
+  border-color: rgba(226, 232, 240, 0.82);
+  background: #fff;
+}
+
+.issue-review-workbench-card > .drawer-section-head {
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.issue-review-workbench-card--single > .drawer-section-head,
+.issue-review-workbench-card--single > .issue-toolbar {
+  display: none;
 }
 
 .drawer-card--nested {
@@ -4745,6 +6369,63 @@ onUnmounted(() => {
   color: #64748b;
 }
 
+.luxian-review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8fbff;
+  border-color: #bfdbfe;
+}
+
+.luxian-review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.luxian-review-item {
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.luxian-review-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.luxian-review-item-head strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.luxian-review-item-head span,
+.luxian-review-item-head em {
+  border-radius: 999px;
+  background: #eff6ff;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  color: #1d4ed8;
+}
+
+.luxian-review-item p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.luxian-review-item small,
+.luxian-review-empty {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .summary-label {
   font-size: 12px;
   color: #94a3b8;
@@ -4778,6 +6459,85 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.issue-toolbar--single {
+  display: none;
+}
+
+.single-issue-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, auto);
+  gap: 18px;
+  align-items: center;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 0;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.96)), #fff;
+  padding: 18px 20px;
+}
+
+.single-issue-hero-main {
+  min-width: 0;
+}
+
+.single-issue-hero-main span {
+  display: block;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+}
+
+.single-issue-hero-main strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 30px;
+}
+
+.single-issue-hero-main p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.single-issue-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.single-issue-hero-stats div {
+  min-width: 96px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+}
+
+.single-issue-hero-stats span,
+.single-issue-hero-stats strong {
+  display: block;
+}
+
+.single-issue-hero-stats span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.single-issue-hero-stats strong {
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 32px;
 }
 
 .issue-record-switcher {
@@ -4859,6 +6619,194 @@ onUnmounted(() => {
   border-color: rgba(0, 102, 204, 0.34);
   background: rgba(0, 102, 204, 0.08);
   box-shadow: 0 6px 16px rgba(0, 102, 204, 0.08);
+}
+
+.issue-record-tab--all {
+  min-width: 132px;
+  max-width: 160px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.issue-business-workbench {
+  margin-bottom: 12px;
+}
+
+.issue-review-layout {
+  background: #f8fbff;
+}
+
+.issue-business-workbench--single {
+  display: grid;
+  grid-template-columns: minmax(300px, 350px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  padding: 18px;
+}
+
+.issue-group-list {
+  align-self: start;
+}
+
+.issue-business-main {
+  min-width: 0;
+}
+
+.issue-review-nav {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(640px, calc(100vh - 180px));
+  overflow: auto;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.035);
+}
+
+.issue-review-nav-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 2px 8px;
+}
+
+.issue-review-nav-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 18px;
+}
+
+.issue-review-nav-head span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.issue-review-nav-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.025);
+  padding: 6px 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.issue-review-nav-group:first-of-type {
+  margin-top: 2px;
+}
+
+.issue-review-nav-group em {
+  border-radius: 999px;
+  background: #f1f5f9;
+  padding: 1px 7px;
+  color: #475569;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+}
+
+.issue-review-nav-group--danger {
+  color: #dc2626;
+}
+
+.issue-review-nav-group--warning {
+  color: #b45309;
+}
+
+.issue-review-nav-group--review {
+  color: #7c3aed;
+}
+
+.issue-review-nav-group--muted {
+  color: #64748b;
+}
+
+.issue-review-nav-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 10px;
+  background: #fff;
+  padding: 11px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.issue-review-nav-item strong,
+.issue-review-nav-item span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-review-nav-item strong {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+}
+
+.issue-review-nav-item span {
+  margin-top: 1px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.issue-review-nav-item em {
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.94);
+  color: #475569;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.issue-review-nav-item--active {
+  border-color: rgba(0, 102, 204, 0.42);
+  background: rgba(239, 246, 255, 0.98);
+  box-shadow: 0 8px 20px rgba(0, 102, 204, 0.1);
+}
+
+.issue-review-nav-item--danger {
+  border-color: rgba(239, 68, 68, 0.16);
+}
+
+.issue-review-nav-item--error {
+  border-color: rgba(185, 28, 28, 0.16);
+}
+
+.issue-review-nav-item--warning {
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.issue-review-nav-item--muted {
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.issue-review-nav-item--ok {
+  border-color: rgba(16, 185, 129, 0.16);
 }
 
 .issue-conclusion-list {
@@ -5015,6 +6963,114 @@ onUnmounted(() => {
   color: #64748b;
 }
 
+.no-issue-evidence-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.no-issue-evidence-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.no-issue-evidence-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.no-issue-evidence-head strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 20px;
+}
+
+.no-issue-evidence-head span {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.no-issue-evidence-list {
+  display: grid;
+  gap: 8px;
+}
+
+.no-issue-evidence-item {
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.no-issue-evidence-item summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.no-issue-evidence-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.no-issue-evidence-item summary strong {
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-issue-evidence-item summary em {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.66);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 20px;
+  padding: 0 8px;
+}
+
+.no-issue-evidence-body {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  padding: 10px 12px 12px;
+}
+
+.no-issue-evidence-body span {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.no-issue-evidence-body p {
+  margin: 0;
+  color: rgba(29, 29, 31, 0.82);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
 .issue-stream-enter-active,
 .issue-stream-leave-active {
   transition: all 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -5046,6 +7102,7 @@ onUnmounted(() => {
 
 .issue-conclusion-card--danger {
   border-color: rgba(239, 68, 68, 0.22);
+  background: linear-gradient(90deg, rgba(254, 242, 242, 0.76), #fff 34%);
 }
 
 .issue-conclusion-card--danger::before {
@@ -5054,6 +7111,7 @@ onUnmounted(() => {
 
 .issue-conclusion-card--warning {
   border-color: rgba(245, 158, 11, 0.24);
+  background: linear-gradient(90deg, rgba(255, 251, 235, 0.72), #fff 36%);
 }
 
 .issue-conclusion-card--warning::before {
@@ -5068,12 +7126,563 @@ onUnmounted(() => {
   background: #94a3b8;
 }
 
+.issue-business-workbench--single .issue-conclusion-card {
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.issue-business-workbench--single .issue-conclusion-card--danger,
+.issue-business-workbench--single .issue-conclusion-card--warning {
+  background: #fff;
+}
+
+.issue-business-workbench--single .issue-conclusion-card::before {
+  width: 4px;
+}
+
+.issue-business-workbench--single .issue-at-a-glance {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.72fr);
+  gap: 12px;
+}
+
+.issue-business-workbench--single .issue-glance-block {
+  min-height: 0;
+  border-color: rgba(226, 232, 240, 0.9);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.issue-business-workbench--single .issue-glance-block--conclusion {
+  grid-column: 1 / -1;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.issue-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 560px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: #fff;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.issue-detail-panel::before {
+  width: 3px;
+  background: rgba(29, 29, 31, 0.18);
+}
+
+.issue-detail-panel.issue-conclusion-card--danger {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--danger::before {
+  background: #ef4444;
+}
+
+.issue-detail-panel.issue-conclusion-card--warning {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--warning::before {
+  background: #f59e0b;
+}
+
+.issue-detail-panel.issue-conclusion-card--muted {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--muted::before {
+  background: rgba(29, 29, 31, 0.2);
+}
+
+.issue-detail-panel.issue-conclusion-card--success {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--success::before {
+  background: #10b981;
+}
+
+.issue-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82);
+  padding: 20px 22px 15px;
+}
+
+.issue-detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-detail-title-row strong {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.issue-detail-body {
+  display: grid;
+  gap: 16px;
+  padding: 0 22px 20px;
+}
+
+.issue-review-reading-path {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 22px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+  padding: 10px;
+}
+
+.issue-review-reading-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-areas:
+    'num title'
+    'num desc';
+  column-gap: 8px;
+  align-items: center;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.issue-review-reading-step.is-active {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.14);
+}
+
+.issue-review-reading-step span {
+  grid-area: num;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.issue-review-reading-step.is-active span {
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
+.issue-review-reading-step strong {
+  grid-area: title;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-review-reading-step em {
+  grid-area: desc;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-patient-context-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin: 0 22px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0.94));
+  padding: 14px 16px;
+  box-shadow: 0 6px 20px rgba(0, 102, 204, 0.055);
+}
+
+.issue-patient-avatar {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 102, 204, 0.18);
+  background: #ffffff;
+  color: #0066cc;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.08);
+}
+
+.issue-patient-context-main {
+  display: grid;
+  grid-template-columns: minmax(160px, auto) minmax(0, 1fr);
+  gap: 4px 16px;
+  align-items: center;
+  min-width: 0;
+}
+
+.issue-patient-context-kicker {
+  grid-column: 1;
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.issue-patient-context-id {
+  grid-column: 1;
+  display: block;
+  color: #1d1d1f;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 26px;
+  letter-spacing: 0;
+}
+
+.issue-patient-context-meta {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.issue-patient-context-meta span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 4px 10px;
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-patient-context-meta em {
+  color: rgba(29, 29, 31, 0.46);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.issue-detail-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.issue-detail-section {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  padding: 14px 16px;
+}
+
+.issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+
+.issue-detail-panel.issue-conclusion-card--warning .issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+
+.issue-detail-panel.issue-conclusion-card--muted .issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+
+.issue-detail-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.issue-detail-section-title span {
+  display: inline-flex;
+  min-width: 24px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.issue-detail-section p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.issue-detail-text {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issue-detail-text ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(29, 29, 31, 0.82);
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.issue-detail-text li {
+  padding-left: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.evidence-table-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.evidence-table-card .issue-detail-section-title {
+  margin: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 12px 16px;
+}
+
+.evidence-table {
+  display: grid;
+  gap: 0;
+}
+
+.evidence-table-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(148px, 0.42fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 13px 16px;
+}
+
+.evidence-table-row:last-child {
+  border-bottom: 0;
+}
+
+.evidence-table-row span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.evidence-table-row strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 22px;
+  word-break: break-word;
+}
+
+.evidence-table-row--threshold,
+.evidence-table-row--gap,
+.evidence-table-row--duration {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.evidence-table-card > p {
+  margin: 0;
+  padding: 14px 16px;
+}
+
+.structured-evidence-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.structured-evidence-list--inline {
+  padding: 0;
+}
+
+.structured-evidence-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+  padding: 10px 12px;
+}
+
+.structured-evidence-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.structured-evidence-card-head strong,
+.structured-evidence-card-head span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.structured-evidence-card-head strong {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.structured-evidence-card-head span {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.62);
+}
+
+.structured-evidence-card blockquote {
+  margin: 0;
+  border-left: 3px solid rgba(0, 102, 204, 0.16);
+  padding-left: 10px;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.suggestion-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+  padding: 14px 16px;
+}
+
+.suggestion-panel p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.issue-detail-panel .copy-evidence-compare,
+.issue-detail-panel .evidence-chain-strip,
+.issue-detail-panel .evidence-chain-panel,
+.issue-detail-panel .issue-conclusion-actions {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+
+.issue-detail-panel .issue-conclusion-actions {
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  padding: 12px 0 14px;
+}
+
 .issue-conclusion-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.issue-conclusion-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.issue-result-kind {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.issue-result-kind--danger {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.issue-result-kind--error {
+  border-color: rgba(127, 29, 29, 0.18);
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.issue-result-kind--review {
+  border-color: rgba(245, 158, 11, 0.2);
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.issue-result-kind--muted {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.issue-result-kind--ok {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .issue-conclusion-head-main {
@@ -5163,6 +7772,38 @@ onUnmounted(() => {
   font-weight: 750;
 }
 
+.issue-glance-text {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-glance-text p {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.issue-glance-text ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.issue-glance-text li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .issue-evidence-facts {
   display: grid;
   gap: 6px;
@@ -5207,7 +7848,43 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 2px 0 12px;
+  margin: 2px 22px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.58), rgba(255, 255, 255, 0.92));
+  padding: 12px;
+}
+
+.copy-evidence-head {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+}
+
+.copy-evidence-head strong {
+  color: #92400e;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.copy-evidence-head span {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.copy-evidence-legacy-note {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.72);
+  padding: 8px 10px;
+  color: #0052a3;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
 }
 
 .copy-evidence-column {
@@ -5216,6 +7893,56 @@ onUnmounted(() => {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.88);
   padding: 10px 12px;
+}
+
+.copy-evidence-column--metric {
+  grid-column: 1 / -1;
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(255, 251, 235, 0.86);
+}
+
+.copy-evidence-column--gap {
+  grid-column: 1 / -1;
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(239, 246, 255, 0.72);
+}
+
+.copy-evidence-pair {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  padding: 10px;
+}
+
+.copy-evidence-pair-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.copy-evidence-pair-head span {
+  flex: none;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 2px 8px;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.copy-evidence-pair-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .copy-evidence-label {
@@ -5228,8 +7955,9 @@ onUnmounted(() => {
 
 .copy-evidence-column blockquote {
   margin: 0;
-  border-left: 3px solid rgba(245, 158, 11, 0.6);
-  padding: 2px 0 2px 10px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.72);
+  padding: 8px 10px;
   color: #0f172a;
   font-size: 13px;
   line-height: 1.7;
@@ -5408,14 +8136,49 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.issue-conclusion-structured p {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.issue-conclusion-structured ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+}
+
+.issue-conclusion-structured li {
+  line-height: 1.75;
+}
+
+.structured-text-section {
+  display: grid;
+  gap: 6px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.72);
+  padding: 8px 10px;
+}
+
+.structured-text-section > strong {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
 .issue-conclusion-summary-text {
   color: #0f172a;
   margin: 0;
 }
 
 .issue-conclusion-section {
-  border-left: 3px solid #dbeafe;
-  padding-left: 10px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.68);
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -5535,6 +8298,85 @@ onUnmounted(() => {
   color: #0f172a;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.result-trace-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.result-trace-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.result-trace-section {
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+
+.result-trace-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.result-trace-section-head h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.result-trace-section-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.result-trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.result-trace-row {
+  border-radius: 8px;
+  background: #f8fafc;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.result-trace-row span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.result-trace-row strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.result-trace-empty {
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  padding: 12px;
 }
 
 .drawer-section-meta {
@@ -5860,6 +8702,681 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
+/* Result review follows workstation-v4 light medical back-office tokens. */
+.drawer-shell {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.result-review-header {
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.result-review-header .drawer-back-button,
+.result-review-header :deep(.ant-btn:not(.ant-btn-primary)) {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.result-review-header :deep(.ant-btn-primary) {
+  border-color: #0066cc;
+  border-radius: 8px;
+  background: #0066cc;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.result-review-header .drawer-back-button {
+  color: #0066cc;
+}
+
+.result-overview-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.045),
+    0 6px 22px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.result-overview-icon {
+  border-color: rgba(0, 102, 204, 0.16);
+  border-radius: 12px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  box-shadow: none;
+}
+
+.result-review-overview-title-row h3,
+.issue-detail-title-row strong,
+.issue-patient-context-id,
+.issue-review-nav-head strong,
+.issue-review-nav-item strong,
+.issue-detail-section p,
+.suggestion-panel p,
+.result-review-overview-stats strong {
+  color: #1d1d1f;
+}
+
+.result-review-overview-title-row h3 {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.result-review-overview-meta,
+.result-review-overview-desc,
+.result-review-overview-scope,
+.result-overview-status-label,
+.result-review-overview-stats span,
+.result-review-overview-stats small,
+.issue-review-nav-head span,
+.issue-review-nav-item span,
+.issue-detail-section-title,
+.evidence-table-row span {
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.result-review-overview-stats div,
+.result-overview-status-block {
+  border-left-color: rgba(0, 0, 0, 0.08);
+}
+
+.result-review-overview-stats strong {
+  font-size: 28px;
+  line-height: 32px;
+}
+
+.result-review-status-chip,
+.result-review-status-pill,
+.issue-result-kind,
+.aggregation-count-tag {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.result-review-status-chip {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #087f5b;
+}
+
+.result-review-status-pill {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(29, 29, 31, 0.72);
+}
+
+.result-review-status-pill.is-danger {
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+  color: #c92a2a;
+}
+
+.result-review-status-pill.is-warning {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.08);
+  color: #b45309;
+}
+
+.result-review-status-pill.is-success {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.08);
+  color: #087f5b;
+}
+
+.issue-review-workbench-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.04),
+    0 6px 22px rgba(0, 0, 0, 0.035);
+  backdrop-filter: blur(18px);
+}
+
+.issue-review-workbench-card--single {
+  padding: 16px;
+  overflow: visible;
+}
+
+.issue-review-layout {
+  background: transparent;
+  gap: 16px;
+}
+
+.issue-review-nav,
+.issue-detail-panel {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+.issue-review-nav-item {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  transition:
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.issue-review-nav-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.06),
+    0 6px 22px rgba(0, 0, 0, 0.04);
+}
+
+.issue-review-nav-item--active {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: rgba(0, 102, 204, 0.08);
+  box-shadow: none;
+}
+
+.issue-review-nav-item--danger {
+  border-color: rgba(239, 68, 68, 0.16);
+}
+
+.issue-review-nav-item--warning {
+  border-color: rgba(245, 158, 11, 0.16);
+}
+
+.issue-review-nav-item--muted,
+.issue-review-nav-item--ok {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-review-nav-group {
+  color: rgba(29, 29, 31, 0.72);
+}
+
+.issue-review-nav-group em,
+.issue-review-nav-item em {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.72);
+  font-weight: 600;
+}
+
+.issue-detail-panel {
+  overflow: visible;
+}
+
+.issue-detail-panel::before,
+.issue-detail-panel.issue-conclusion-card::before,
+.issue-business-workbench--single .issue-conclusion-card::before {
+  display: none;
+}
+
+.issue-detail-panel.issue-conclusion-card--danger {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--warning {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-panel.issue-conclusion-card--muted,
+.issue-detail-panel.issue-conclusion-card--success {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-head {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-rule-code {
+  border-color: rgba(0, 102, 204, 0.12);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.issue-detail-section,
+.evidence-table-card,
+.suggestion-panel {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.issue-patient-context-card {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0.94));
+}
+
+.issue-patient-avatar {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: #ffffff;
+  color: #0066cc;
+}
+
+.issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.issue-detail-panel.issue-conclusion-card--danger .issue-detail-section--conclusion {
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.045);
+}
+
+.issue-detail-panel.issue-conclusion-card--warning .issue-detail-section--conclusion {
+  border-color: rgba(245, 158, 11, 0.18);
+  background: rgba(245, 158, 11, 0.055);
+}
+
+.evidence-table-card .issue-detail-section-title {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.evidence-table-row {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.evidence-table-row--threshold,
+.evidence-table-row--gap,
+.evidence-table-row--duration {
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.evidence-table-row strong {
+  color: #1d1d1f;
+}
+
+.suggestion-panel {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.045);
+}
+
+.issue-result-kind--danger,
+.issue-result-kind--error {
+  border-color: rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.08);
+  color: #c92a2a;
+}
+
+.issue-result-kind--review {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.08);
+  color: #b45309;
+}
+
+.issue-result-kind--muted {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.issue-result-kind--ok {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #087f5b;
+}
+
+/* Reduce chroma density: keep status color in compact tags only. */
+.issue-review-nav-group--danger,
+.issue-review-nav-group--warning,
+.issue-review-nav-group--review,
+.issue-review-nav-group--muted {
+  color: rgba(29, 29, 31, 0.7);
+}
+
+.issue-review-nav-item--danger,
+.issue-review-nav-item--error,
+.issue-review-nav-item--warning,
+.issue-review-nav-item--muted,
+.issue-review-nav-item--ok {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-review-nav-item--active {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: rgba(0, 102, 204, 0.055);
+}
+
+.issue-detail-panel.issue-conclusion-card--danger,
+.issue-detail-panel.issue-conclusion-card--warning,
+.issue-detail-panel.issue-conclusion-card--muted,
+.issue-detail-panel.issue-conclusion-card--success {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--danger .issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--warning .issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--muted .issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.62);
+}
+
+.evidence-table-row--threshold,
+.evidence-table-row--gap,
+.evidence-table-row--duration {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.suggestion-panel {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.copy-evidence-compare {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.copy-evidence-head strong,
+.copy-evidence-pair-head {
+  color: #1d1d1f;
+}
+
+.copy-evidence-column--metric,
+.copy-evidence-column--gap {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.copy-evidence-pair {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.copy-evidence-pair-head span {
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.62);
+}
+
+.issue-evidence-fact--delta,
+.issue-evidence-fact--time {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+/* Final low-chroma pass: reserve strong color for primary action and confirmed problem only. */
+.result-review-status-pill.is-warning,
+.result-review-status-pill.is-success,
+.result-review-status-pill.is-muted,
+.issue-result-kind--review,
+.issue-result-kind--ok,
+.issue-result-kind--muted,
+.aggregation-count-tag,
+.evidence-chain-strip span,
+.evidence-chain-tag {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.035);
+  color: rgba(29, 29, 31, 0.68);
+}
+
+.result-review-status-pill.is-danger,
+.issue-result-kind--danger,
+.issue-result-kind--error {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.055);
+  color: #b42318;
+}
+
+.issue-review-reading-step.is-active {
+  background: rgba(0, 102, 204, 0.045);
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.12);
+}
+
+.copy-evidence-legacy-note,
+.evidence-chain-panel,
+.deep-review-chain {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+  color: rgba(29, 29, 31, 0.7);
+  box-shadow: none;
+}
+
+.evidence-chain-block,
+.evidence-chain-evidence {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.evidence-chain-title,
+.evidence-chain-block-title,
+.evidence-chain-line strong,
+.evidence-chain-evidence-meta strong {
+  color: #1d1d1f;
+}
+
+/* Workstation-v4 result detail polish: quiet medical review surface. */
+.issue-business-workbench--single {
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 18px;
+  background: #f5f5f7;
+  padding: 16px;
+}
+
+.issue-review-nav {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: none;
+}
+
+.issue-review-nav-group {
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 2px 6px;
+  color: rgba(29, 29, 31, 0.64);
+}
+
+.issue-review-nav-group--danger,
+.issue-review-nav-group--warning,
+.issue-review-nav-group--review,
+.issue-review-nav-group--muted {
+  color: rgba(29, 29, 31, 0.72);
+}
+
+.issue-review-nav-item {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: none;
+}
+
+.issue-review-nav-item--active {
+  border-color: rgba(0, 102, 204, 0.2);
+  background: rgba(0, 102, 204, 0.055);
+  box-shadow: none;
+}
+
+.issue-review-nav-item--danger,
+.issue-review-nav-item--error,
+.issue-review-nav-item--warning,
+.issue-review-nav-item--muted,
+.issue-review-nav-item--ok {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.issue-review-nav-item .issue-review-nav-code,
+.issue-review-nav-item .issue-review-nav-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-review-nav-item .issue-review-nav-code {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 17px;
+}
+
+.issue-review-nav-item .issue-review-nav-title {
+  margin-top: 3px;
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.issue-detail-panel,
+.issue-detail-panel.issue-conclusion-card--danger,
+.issue-detail-panel.issue-conclusion-card--warning,
+.issue-detail-panel.issue-conclusion-card--muted,
+.issue-detail-panel.issue-conclusion-card--success {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.04),
+    0 6px 22px rgba(0, 0, 0, 0.035);
+}
+
+.issue-detail-panel::before,
+.issue-detail-panel.issue-conclusion-card--danger::before,
+.issue-detail-panel.issue-conclusion-card--warning::before,
+.issue-detail-panel.issue-conclusion-card--muted::before,
+.issue-detail-panel.issue-conclusion-card--success::before {
+  display: none;
+}
+
+.issue-detail-head {
+  padding: 18px 22px 14px;
+}
+
+.issue-detail-title-row strong {
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.issue-review-reading-path {
+  margin: 0 22px;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.issue-review-reading-step {
+  background: transparent;
+}
+
+.issue-review-reading-step.is-active {
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.1);
+}
+
+.issue-patient-context-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.issue-patient-avatar {
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.06);
+  box-shadow: none;
+}
+
+.issue-patient-context-meta span {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.issue-detail-section,
+.evidence-table-card,
+.suggestion-panel,
+.copy-evidence-compare,
+.evidence-chain-panel,
+.deep-review-chain {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--danger .issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--warning .issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--muted .issue-detail-section--conclusion,
+.issue-detail-panel.issue-conclusion-card--success .issue-detail-section--conclusion {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+
+.issue-detail-section--conclusion p {
+  color: #1d1d1f;
+  font-weight: 650;
+}
+
+.evidence-table-card .issue-detail-section-title {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.evidence-table-row,
+.evidence-table-row--threshold,
+.evidence-table-row--gap,
+.evidence-table-row--duration {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+
+.evidence-table-row span {
+  color: rgba(29, 29, 31, 0.58);
+  font-weight: 650;
+}
+
+.evidence-table-row strong {
+  color: #1d1d1f;
+  font-weight: 700;
+}
+
+.suggestion-panel {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.suggestion-panel p,
+.suggestion-panel li {
+  color: rgba(29, 29, 31, 0.82);
+  font-weight: 550;
+}
+
+.copy-evidence-head,
+.copy-evidence-pair-head {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.copy-evidence-pair,
+.copy-evidence-column,
+.copy-evidence-column--metric,
+.copy-evidence-column--gap,
+.evidence-chain-block,
+.evidence-chain-evidence {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.copy-evidence-column blockquote,
+.evidence-chain-quote {
+  color: rgba(29, 29, 31, 0.82);
+}
+
 @media (max-width: 767px) {
   .status-hero {
     flex-direction: column;
@@ -5881,6 +9398,21 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .single-issue-hero,
+  .issue-business-workbench--single {
+    grid-template-columns: 1fr;
+  }
+
+  .single-issue-hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .issue-review-nav {
+    position: relative;
+    top: auto;
+    max-height: none;
+  }
+
   .issue-at-a-glance {
     grid-template-columns: 1fr;
   }
@@ -5889,9 +9421,18 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .copy-evidence-pair-grid {
+    grid-template-columns: 1fr;
+  }
+
   .issue-conclusion-title-row {
     flex-direction: column;
     gap: 6px;
+  }
+
+  .issue-conclusion-status {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .issue-conclusion-row {

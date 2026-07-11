@@ -59,6 +59,8 @@ export type ManualSamplePoolRecord = {
   matched_patient_id?: string
   matched_visit_id?: string
   patient_name: string
+  patient_sex?: string
+  patient_age?: string | number
   mr_no: string
   department: string
   match_status: string

@@ -27,7 +27,7 @@ describe('formal qc subitem anchors mapping', () => {
                 anchor_id: 'SC-070-consultation-not-implemented',
                 subitem_name: '会诊意见落实与医嘱/执行闭环',
                 display_status: 'needs_review',
-                display_bucket: '待复核',
+                display_bucket: 'AI判断',
                 can_show_as_defect: false,
               },
             ],
@@ -44,7 +44,7 @@ describe('formal qc subitem anchors mapping', () => {
           anchor_evidence: '会诊意见建议康复治疗；医嘱/执行闭环待人工复核。',
           anchor_decision_reason: '找到会诊意见及执行/病程相关片段，是否未落实需人工核对。',
           display_status: 'needs_review',
-          display_bucket: '待复核',
+          display_bucket: 'AI判断',
           can_show_as_defect: false,
           internal_only: false,
         },
@@ -61,7 +61,7 @@ describe('formal qc subitem anchors mapping', () => {
     )
   })
 
-  it('子锚点显示为待复核或数据缺口，且不作为确认缺陷计数', () => {
+  it('子锚点显示为 AI 判断或数据缺口，且不作为确认缺陷计数', () => {
     const result = mapSichuanEvaluationToStructuredQC({
       evaluation_results: [],
       subitem_anchor_results: [

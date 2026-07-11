@@ -220,13 +220,132 @@ def _contains_all(text: str, *needles: str) -> bool:
 def _first_time(docs: list[dict[str, Any]]) -> tuple[datetime | None, dict[str, Any] | None]:
     candidates: list[tuple[datetime, dict[str, Any]]] = []
     for item in docs:
-        parsed = _parse_dt(item.get("authored_at") or item.get("record_time") or item.get("display_time"))
+        parsed = _document_time(item)
         if parsed:
             candidates.append((parsed, item))
     if not candidates:
         return None, None
     candidates.sort(key=lambda pair: pair[0])
     return candidates[0]
+
+
+def _document_time(item: dict[str, Any]) -> datetime | None:
+    for key in ("authored_at", "record_time", "display_time", "submit_datetime", "submit_time", "update_time"):
+        parsed = _parse_dt(item.get(key))
+        if parsed:
+            return parsed
+    return None
+
+
+def _has_positive_critical_order_context(text: str) -> bool:
+    if not text:
+        return False
+    critical_keywords = ("病危医嘱", "病重医嘱", "下达病危", "下达病重", "告病危", "告病重")
+    negated_markers = ("未下达", "无", "未见", "未予", "没有")
+    for keyword in critical_keywords:
+        start = 0
+        while True:
+            position = text.find(keyword, start)
+            if position < 0:
+                break
+            window = text[max(0, position - 8): position + len(keyword) + 8]
+            if not any(marker in window for marker in negated_markers):
+                return True
+            start = position + len(keyword)
+    return False
+
+
+def _course_round_events(timeline: dict[str, Any]) -> list[tuple[datetime, str, dict[str, Any]]]:
+    events: list[tuple[datetime, str, dict[str, Any]]] = []
+    for key in ("first_course_record", "daily_course_record", "senior_course_record"):
+        for item in _documents(timeline, key):
+            parsed = _document_time(item)
+            if parsed:
+                events.append((parsed, key, item))
+    events.sort(key=lambda item: item[0])
+    return events
+
+
+def _evaluate_stable_round_3d(rule: dict[str, Any], timeline: dict[str, Any], text: str) -> dict[str, Any]:
+    if _has_positive_critical_order_context(text):
+        return _text_result(
+            rule,
+            status="not_applicable",
+            findings="病历中存在病危或病重医嘱，不属于病情稳定患者，本规则不适用。",
+            evidence_parts=["发现病危/病重医嘱，应转入病危、病重查房规则复核。"],
+            suggestion="请按病重或病危患者查房病程记录要求复核。",
+        )
+
+    events = _course_round_events(timeline)
+    if len(events) < 2:
+        return _text_result(
+            rule,
+            status="data_gap",
+            findings="病程或查房记录时间轴不足，无法判断稳定患者是否超过3天无查房病程记录。",
+            evidence_parts=["未取得至少2条带记录时间的病程/查房记录。"],
+            suggestion="请补齐病程记录、上级医师查房记录及记录时间后重新质控。",
+            confidence=0.9,
+        )
+
+    max_gap: tuple[float, tuple[datetime, str, dict[str, Any]], tuple[datetime, str, dict[str, Any]]] | None = None
+    for previous, current in zip(events, events[1:]):
+        gap_hours = _hours_between(previous[0], current[0])
+        if max_gap is None or gap_hours > max_gap[0]:
+            max_gap = (gap_hours, previous, current)
+
+    gap_hours, previous, current = max_gap
+    previous_title = _norm(previous[2].get("title")) or previous[1]
+    current_title = _norm(current[2].get("title")) or current[1]
+    gap_days = gap_hours / 24
+    evidence_text = (
+        f"未见病危/病重医嘱；{previous_title}记录时间：{previous[0]:%Y-%m-%d %H:%M:%S}；"
+        f"{current_title}记录时间：{current[0]:%Y-%m-%d %H:%M:%S}；间隔：{gap_days:.1f}天"
+    )
+    evidence_items = [
+        {
+            "evidence_id": "E-001",
+            "source_table": previous[1],
+            "source_document_type": previous_title,
+            "source_document_name": previous_title,
+            "source_document_id": _norm(previous[2].get("document_id")),
+            "record_time": previous[0].isoformat(sep=" "),
+            "field_path": "record_time",
+            "quote": f"{previous_title}记录时间：{previous[0]:%Y-%m-%d %H:%M:%S}",
+            "normalized_value": previous[0].isoformat(sep=" "),
+            "evidence_role": "previous_course_record",
+        },
+        {
+            "evidence_id": "E-002",
+            "source_table": current[1],
+            "source_document_type": current_title,
+            "source_document_name": current_title,
+            "source_document_id": _norm(current[2].get("document_id")),
+            "record_time": current[0].isoformat(sep=" "),
+            "field_path": "record_time",
+            "quote": f"{current_title}记录时间：{current[0]:%Y-%m-%d %H:%M:%S}",
+            "normalized_value": current[0].isoformat(sep=" "),
+            "evidence_role": "next_course_record",
+        },
+    ]
+
+    if gap_hours > 72:
+        return _text_result(
+            rule,
+            status="non_compliant",
+            findings="病情稳定患者相邻病程或查房记录间隔超过3天。",
+            evidence_parts=[evidence_text],
+            suggestion="请核对住院期间病程和查房记录时间轴，超过3天无记录的区间需纳入缺陷复核。",
+            evidence_items=evidence_items,
+        )
+
+    return _text_result(
+        rule,
+        status="compliant",
+        findings="病情稳定患者病程或查房记录间隔未超过3天。",
+        evidence_parts=[evidence_text],
+        suggestion="",
+        evidence_items=evidence_items,
+    )
 
 
 def _role_text(item: dict[str, Any]) -> str:
@@ -663,6 +782,10 @@ def _consultation_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any
             )
         )
     else:
+        consult_text = _document_text(opinion[1]) if opinion else ""
+        quote = "未检索到与会诊意见对应的后续病程执行记录。"
+        if _contains(consult_text, "已遵执行", "遵执行", "我科随访"):
+            quote = "会诊记录内仅见“已遵执行/我科随访”等笼统表述，未检索到后续病程中归纳会诊意见并记录具体落实措施。"
         items.append(
             {
                 "evidence_id": "E-003",
@@ -672,7 +795,7 @@ def _consultation_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any
                 "source_document_id": "",
                 "record_time": "",
                 "field_path": "会诊意见执行情况",
-                "quote": "未检索到与会诊意见对应的后续病程执行记录。",
+                "quote": quote,
                 "normalized_value": "",
                 "evidence_role": "consultation_execution_gap",
             }
@@ -699,7 +822,7 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[
             suggestion="核对手术结束时间与手术记录提交时间，超过24小时需按缺陷复核。",
         )
 
-    if rule_id == "LX0609-007" and _contains(text, "病重医嘱"):
+    if rule_id == "LX0609-007" and _has_positive_critical_order_context(text):
         return _text_result(
             rule,
             status="not_applicable",
@@ -1053,4 +1176,6 @@ def evaluate_luxian_0609_programmatic_rules(
             results.append(_evaluate_round(rule, timeline, role="attending", hours=48))
         elif rule_id == "LX0609-006":
             results.append(_evaluate_round(rule, timeline, role="senior", hours=72))
+        elif rule_id == "LX0609-007":
+            results.append(_evaluate_stable_round_3d(rule, timeline, combined_text))
     return results

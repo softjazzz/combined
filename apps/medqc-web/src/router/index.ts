@@ -1008,6 +1008,15 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '创建测试病历', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'customer-sample-validation/tasks',
+        name: 'WorkstationV4CustomerSampleValidationTasks',
+        component: () =>
+          import(
+            '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
+          ),
+        meta: { title: '质控记录', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'custom-qc-experience',
         name: 'WorkstationV4CustomQCExperience',
         component: () => import('@/views/workstation-v4/CustomQCExperienceView.vue'),

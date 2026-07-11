@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .luxian_0609_trigger_gate import Luxian0609GateDecision
@@ -59,16 +60,42 @@ def _detect_family(rule: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
 
 def _gate_evidence_lines(gate_decision: Luxian0609GateDecision) -> list[str]:
     if gate_decision.status == "absent":
-        lines = ["判定依据：未发现与本质控点直接相关的适用事件。"]
+        lines = ["适用性：未发现与本质控点直接相关的触发事实。"]
     elif gate_decision.status == "data_gap":
-        lines = ["判定依据：已发现相关事件，但自动判定所需字段不完整。"]
+        lines = ["数据不足：已发现相关事件，但缺少自动判定所需字段。"]
     elif gate_decision.status == "present":
-        lines = ["判定依据：已发现相关事件，进入规则复核。"]
+        lines = []
     else:
-        lines = ["判定依据：本质控点按现有文书和结构化数据直接复核。"]
+        lines = []
     if gate_decision.data_gap_fields:
         lines.append(f"缺失字段：{'、'.join(gate_decision.data_gap_fields)}")
     return lines
+
+
+_INTERNAL_EVIDENCE_LINE_PATTERNS = (
+    re.compile(r"^判定依据：本质控点按现有文书和结构化数据直接复核。?$"),
+    re.compile(r"^判定依据：已发现相关事件，进入规则复核。?$"),
+    re.compile(r"^判定依据：已发现相关事件，但自动判定所需字段不完整。?$"),
+    re.compile(r"^触发状态[:：].*"),
+    re.compile(r"^触发说明[:：].*"),
+    re.compile(r"^映射执行规则[:：].*"),
+    re.compile(r"^证据模板[:：].*"),
+    re.compile(r"^应包含证据要素[:：].*"),
+)
+
+
+def _clean_customer_evidence_line(line: str) -> str:
+    rendered = _text(line).strip()
+    if not rendered:
+        return ""
+    for pattern in _INTERNAL_EVIDENCE_LINE_PATTERNS:
+        if pattern.search(rendered):
+            return ""
+    rendered = rendered.replace("判定依据：已发现相关事件，但自动判定所需字段不完整。", "数据不足：缺少自动判定所需字段。")
+    rendered = rendered.replace("判定依据：本质控点按现有文书和结构化数据直接复核。", "")
+    rendered = rendered.replace("判定依据：已发现相关事件，进入规则复核。", "")
+    rendered = re.sub(r"(缺失字段：[^。\n；]+)(?:\s*\1)+", r"\1", rendered)
+    return rendered.strip(" \n；。")
 
 
 def format_luxian_0609_evidence(
@@ -86,22 +113,24 @@ def format_luxian_0609_evidence(
     current_findings = _text(normalized.get("findings")).strip()
     current_suggestion = _text(normalized.get("suggestion")).strip()
 
-    lines = [f"证据模板：{family}"]
-    lines.append(f"质控点：{wrapper_rule.get('rule_id')} {wrapper_rule.get('name') or wrapper_rule.get('rule_name') or ''}".strip())
+    lines: list[str] = []
     if gate_decision is not None:
         lines.extend(_gate_evidence_lines(gate_decision))
-    mapped_rule_ids = list(wrapper_rule.get("mapped_rule_ids") or [])
-    if mapped_rule_ids:
-        lines.append(f"映射执行规则：{'、'.join(str(item) for item in mapped_rule_ids)}")
-    lines.append(f"应包含证据要素：{'、'.join(expected_slots)}")
     if current_evidence:
-        lines.append(f"执行证据：{current_evidence}")
+        lines.append(current_evidence)
     elif current_findings:
-        lines.append(f"执行证据：{current_findings}")
+        lines.append(current_findings)
     else:
-        lines.append("执行证据：当前结果未返回具体证据片段，需人工复核。")
+        lines.append("当前结果未返回具体证据片段，建议质控员确认。")
 
-    normalized["evidence"] = "\n".join(lines)
+    cleaned_lines: list[str] = []
+    for line in lines:
+        for part in _text(line).splitlines():
+            rendered = _clean_customer_evidence_line(part)
+            if rendered and rendered not in cleaned_lines:
+                cleaned_lines.append(rendered)
+
+    normalized["evidence"] = "\n".join(cleaned_lines)
     if not current_findings:
         status = str(normalized.get("status") or "").strip()
         if status == "not_applicable":
@@ -113,7 +142,7 @@ def format_luxian_0609_evidence(
         elif status == "compliant":
             normalized["findings"] = "已检查该质控点，当前证据支持符合要求。"
         else:
-            normalized["findings"] = "该质控点需要人工复核。"
+            normalized["findings"] = "该质控点需要质控员确认。"
     if not current_suggestion:
         normalized["suggestion"] = "请结合证据要素复核相关文书和结构化数据。"
 

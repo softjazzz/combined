@@ -82,6 +82,24 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
         return default
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None or value == "":
+            return default
+        return int(float(value))
+    except Exception:
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
 def _as_date(value: Optional[str]) -> Optional[date]:
     if not value:
         return None
@@ -339,12 +357,12 @@ def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
+def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dict[str, Any]:
     filters = _safe_json_loads(row.get("filters_json"), {})
     record_ids = _safe_json_loads(row.get("record_ids_json"), [])
     summary = _safe_json_loads(row.get("summary_json"), None)
-    items = _safe_json_loads(row.get("items_json"), [])
-    failed_records = _safe_json_loads(row.get("failed_records_json"), [])
+    items = _safe_json_loads(row.get("items_json"), []) if include_items else []
+    failed_records = _safe_json_loads(row.get("failed_records_json"), []) if include_items else []
     child_job_ids = _safe_json_loads(row.get("child_job_ids_json"), [])
     child_summary = _safe_json_loads(row.get("child_summary_json"), {})
     filters_dict = filters if isinstance(filters, dict) else {}
@@ -459,6 +477,40 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _normalize_export_performance_profile(summary: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+    raw_profile = summary.get("performance_profile") if isinstance(summary.get("performance_profile"), dict) else {}
+    tokens_total = _to_int(
+        raw_profile.get("tokens_total"),
+        _to_int(summary.get("total_tokens"), _to_int(job.get("total_tokens"))),
+    )
+    prompt_tokens = _to_int(raw_profile.get("prompt_tokens"))
+    completion_tokens = _to_int(raw_profile.get("completion_tokens"))
+    unattributed_tokens = _to_int(raw_profile.get("unattributed_tokens"))
+    if unattributed_tokens <= 0 and tokens_total > 0:
+        unattributed_tokens = max(0, tokens_total - prompt_tokens - completion_tokens)
+    token_breakdown_complete = raw_profile.get("token_breakdown_complete")
+    if token_breakdown_complete is None:
+        token_breakdown_complete = unattributed_tokens == 0
+    return {
+        "tokens_total": tokens_total,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "unattributed_tokens": unattributed_tokens,
+        "token_breakdown_complete": bool(token_breakdown_complete),
+        "wall_clock_time_seconds": _to_float(raw_profile.get("wall_clock_time_seconds")),
+        "total_processing_time_seconds": _to_float(
+            raw_profile.get("total_processing_time_seconds"),
+            _to_float(summary.get("total_processing_time"), _to_float(job.get("total_processing_time"))),
+        ),
+        "llm_call_count": _to_int(raw_profile.get("llm_call_count")),
+        "actual_llm_pack_call_count": _to_int(raw_profile.get("actual_llm_pack_call_count")),
+    }
+
+
+def _format_export_integer(value: Any) -> str:
+    return f"{_to_int(value):,}"
+
+
 def _map_scene_label(scene: Any) -> str:
     mapping = {
         "running": "运行病历",
@@ -489,6 +541,10 @@ def _map_item_status_label(status: Any, is_compliant: Any) -> str:
     key = _safe_text(status).lower()
     if key == "non_compliant":
         return "不合规"
+    if key == "ai_suggested_non_compliant":
+        return "AI判断：疑似问题"
+    if key == "ai_suggested_compliant":
+        return "AI判断：未见问题"
     if key == "data_gap":
         return "数据不足"
     if key == "not_applicable":
@@ -498,7 +554,7 @@ def _map_item_status_label(status: Any, is_compliant: Any) -> str:
     if key == "technical_error":
         return "技术异常"
     if key == "uncertain":
-        return "待复核"
+        return "AI判断"
     if key == "compliant":
         return "合规"
     if key == "failed":
@@ -597,6 +653,20 @@ def _sanitize_export_text(value: Any, limit: int = 420) -> str:
         text_value = "；".join(kept)
     for token in _HTML_EXPORT_SENSITIVE_TOKENS:
         text_value = re.sub(re.escape(token), "", text_value, flags=re.IGNORECASE)
+    review_replacements = (
+        ("待人工复核", "AI判断后建议确认"),
+        ("待人工核对", "AI判断后建议确认"),
+        ("建议人工复核", "建议结合原文确认"),
+        ("建议人工核对", "建议结合原文确认"),
+        ("需人工复核", "需结合原文确认"),
+        ("需人工核对", "需结合原文确认"),
+        ("需要人工复核", "需要结合原文确认"),
+        ("需要人工核对", "需要结合原文确认"),
+        ("人工复核", "结合原文确认"),
+        ("人工核对", "结合原文确认"),
+    )
+    for source, target in review_replacements:
+        text_value = text_value.replace(source, target)
     return _truncate_export_text(text_value, limit=limit)
 
 
@@ -670,9 +740,15 @@ def _export_item_status_key(item: Dict[str, Any]) -> str:
 def _status_tone_class(status_key: str) -> str:
     if status_key == "non_compliant":
         return "danger"
-    if status_key in {"data_gap", "uncertain", "technical_error", "not_executed"}:
+    if status_key in {
+        "ai_suggested_non_compliant",
+        "data_gap",
+        "uncertain",
+        "technical_error",
+        "not_executed",
+    }:
         return "warning"
-    if status_key == "compliant":
+    if status_key in {"compliant", "ai_suggested_compliant"}:
         return "success"
     if status_key == "not_applicable":
         return "neutral"
@@ -751,7 +827,153 @@ class CustomQCWorkspaceService:
         self._draft_table = _drafts_table()
         self._batch_job_table = _batch_jobs_table()
 
-    def _aggregate_parent_job(self, session: Session, parent_job: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _aggregate_child_input_profiles(child_profiles: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        input_profiles = [
+            dict(profile.get("input_profile") or {})
+            for profile in child_profiles
+            if isinstance(profile.get("input_profile"), dict) and profile.get("input_profile")
+        ]
+        if not input_profiles:
+            return {}
+
+        source_table_counts: Dict[str, int] = {}
+        source_table_text_lengths: Dict[str, int] = {}
+        available_family_contexts = set()
+        family_profiles: Dict[str, Dict[str, Any]] = {}
+        for profile in input_profiles:
+            for key, value in dict(profile.get("source_table_counts") or {}).items():
+                source_table_counts[str(key)] = source_table_counts.get(str(key), 0) + _safe_int(value)
+            for key, value in dict(profile.get("source_table_text_lengths") or {}).items():
+                source_table_text_lengths[str(key)] = source_table_text_lengths.get(str(key), 0) + _safe_int(value)
+            for family in list(profile.get("available_family_contexts") or []):
+                if str(family or "").strip():
+                    available_family_contexts.add(str(family).strip())
+            for family, family_profile in dict(profile.get("family_profiles") or {}).items():
+                family_key = str(family or "").strip()
+                if not family_key or not isinstance(family_profile, dict):
+                    continue
+                target = family_profiles.setdefault(
+                    family_key,
+                    {
+                        "family": family_key,
+                        "ready_record_count": 0,
+                        "document_count": 0,
+                        "text_char_count": 0,
+                        "present_source_table_count": 0,
+                        "missing_source_table_count": 0,
+                    },
+                )
+                for numeric_key in (
+                    "ready_record_count",
+                    "document_count",
+                    "text_char_count",
+                    "present_source_table_count",
+                    "missing_source_table_count",
+                ):
+                    target[numeric_key] = _safe_int(target.get(numeric_key)) + _safe_int(
+                        family_profile.get(numeric_key)
+                    )
+
+        return {
+            "schema_version": "luxian_0609_parent_input_perf_summary_v1",
+            "basis": "child_job_input_profile_summary",
+            "child_input_profile_count": len(input_profiles),
+            "record_count_sum": sum(_safe_int(profile.get("record_count")) for profile in input_profiles),
+            "document_count_sum": sum(_safe_int(profile.get("document_count")) for profile in input_profiles),
+            "primary_text_char_count_sum": sum(
+                _safe_int(profile.get("primary_text_char_count")) for profile in input_profiles
+            ),
+            "medical_text_char_count_sum": sum(
+                _safe_int(profile.get("medical_text_char_count")) for profile in input_profiles
+            ),
+            "source_table_counts": dict(sorted(source_table_counts.items())),
+            "source_table_text_lengths": dict(sorted(source_table_text_lengths.items())),
+            "available_family_contexts": sorted(available_family_contexts),
+            "family_profiles": dict(sorted(family_profiles.items())),
+        }
+
+    @staticmethod
+    def _aggregate_child_performance_profiles(child_jobs: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        child_profiles = [
+            dict((child.get("summary") or {}).get("performance_profile") or {})
+            for child in child_jobs
+            if isinstance((child.get("summary") or {}).get("performance_profile"), dict)
+        ]
+        child_profiles = [profile for profile in child_profiles if profile]
+        if not child_profiles:
+            return {}
+
+        status_breakdown: Dict[str, int] = {}
+        for child in child_jobs:
+            for key, value in dict((child.get("summary") or {}).get("status_breakdown") or {}).items():
+                status_breakdown[str(key)] = status_breakdown.get(str(key), 0) + _safe_int(value)
+
+        profile = {
+            "schema_version": "luxian_0609_parent_job_perf_v1",
+            "basis": "child_job_performance_profiles",
+            "child_job_count": len(child_jobs),
+            "profiled_child_job_count": len(child_profiles),
+            "total_records": sum(_safe_int(profile.get("total_records")) for profile in child_profiles),
+            "customer_rule_count": sum(_safe_int(profile.get("customer_rule_count")) for profile in child_profiles),
+            "execution_rule_count": sum(_safe_int(profile.get("execution_rule_count")) for profile in child_profiles),
+            "result_count": sum(_safe_int(profile.get("result_count")) for profile in child_profiles),
+            "wall_clock_time_seconds": sum(
+                _safe_float(profile.get("wall_clock_time_seconds")) for profile in child_profiles
+            ),
+            "sum_rule_duration_seconds": sum(
+                _safe_float(profile.get("sum_rule_duration_seconds")) for profile in child_profiles
+            ),
+            "llm_call_count": sum(_safe_int(profile.get("llm_call_count")) for profile in child_profiles),
+            "program_call_count": sum(_safe_int(profile.get("program_call_count")) for profile in child_profiles),
+            "actual_llm_pack_call_count": sum(
+                _safe_int(profile.get("actual_llm_pack_call_count")) for profile in child_profiles
+            ),
+            "retry_count": sum(_safe_int(profile.get("retry_count")) for profile in child_profiles),
+            "provider_error_count": sum(_safe_int(profile.get("provider_error_count")) for profile in child_profiles),
+            "timeout_count": sum(_safe_int(profile.get("timeout_count")) for profile in child_profiles),
+            "rate_limit_count": sum(_safe_int(profile.get("rate_limit_count")) for profile in child_profiles),
+            "pack_retry_attempts": sum(_safe_int(profile.get("pack_retry_attempts")) for profile in child_profiles),
+            "tokens_total": sum(_safe_int(profile.get("tokens_total")) for profile in child_profiles),
+            "prompt_tokens": sum(_safe_int(profile.get("prompt_tokens")) for profile in child_profiles),
+            "completion_tokens": sum(_safe_int(profile.get("completion_tokens")) for profile in child_profiles),
+            "unattributed_tokens": sum(
+                _safe_int(
+                    profile.get("unattributed_tokens"),
+                    max(
+                        0,
+                        _safe_int(profile.get("tokens_total"))
+                        - _safe_int(profile.get("prompt_tokens"))
+                        - _safe_int(profile.get("completion_tokens")),
+                    ),
+                )
+                for profile in child_profiles
+            ),
+            "context_tokens_estimate": sum(
+                _safe_int(profile.get("context_tokens_estimate")) for profile in child_profiles
+            ),
+            "status_breakdown": dict(sorted(status_breakdown.items())),
+            "children": [
+                {
+                    "job_id": str(child.get("id") or ""),
+                    "status": str(child.get("status") or ""),
+                    "rule_family": str((child.get("filters") or {}).get("luxian_rule_family") or ""),
+                    "performance_profile": dict((child.get("summary") or {}).get("performance_profile") or {}),
+                }
+                for child in child_jobs
+            ],
+            "input_profile": CustomQCWorkspaceService._aggregate_child_input_profiles(child_profiles),
+        }
+        profile["token_breakdown_complete"] = _safe_int(profile.get("unattributed_tokens")) == 0
+        return profile
+
+    def _aggregate_parent_job(
+        self,
+        session: Session,
+        parent_job: Dict[str, Any],
+        *,
+        include_items: bool = True,
+    ) -> Dict[str, Any]:
         if str(parent_job.get("job_kind") or "").strip().lower() != "parent":
             return parent_job
         child_job_ids = [
@@ -779,7 +1001,7 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
-        child_jobs = [_row_to_batch_job(dict(row)) for row in child_rows]
+        child_jobs = [_row_to_batch_job(dict(row), include_items=include_items) for row in child_rows]
         if not child_jobs:
             return parent_job
 
@@ -817,6 +1039,7 @@ class CustomQCWorkspaceService:
             success_count += int(child.get("success_count") or child_summary.get("success_count") or 0)
 
         parent_summary = dict(parent_job.get("summary") or {})
+        parent_performance_profile = self._aggregate_child_performance_profiles(child_jobs)
         parent_summary.update(
             {
                 "child_job_count": len(child_jobs),
@@ -836,6 +1059,8 @@ class CustomQCWorkspaceService:
                 },
             }
         )
+        if parent_performance_profile:
+            parent_summary["performance_profile"] = parent_performance_profile
         return {
             **parent_job,
             "status": aggregate_status,
@@ -1654,6 +1879,42 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def update_batch_job_review_report(
+        self,
+        *,
+        job_id: str,
+        created_by: str,
+        review_report: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+            ).mappings().first()
+            if not row:
+                return None
+            current_summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
+            now = _now_utc()
+            next_summary = {
+                **current_summary,
+                "review_report": review_report,
+                "reviewed_at": review_report.get("reviewed_at") or now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+            session.execute(
+                update(self._batch_job_table)
+                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by))
+                .values(summary_json=_safe_json_dumps(next_summary), updated_at=now)
+            )
+            session.commit()
+            return self.get_batch_job(job_id=job_id, created_by=created_by)
+        finally:
+            session.close()
+
     def get_batch_job_for_processing(self, *, job_id: str) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
@@ -1736,7 +1997,14 @@ class CustomQCWorkspaceService:
                     .mappings()
                     .all()
                 )
-                items = [self._aggregate_parent_job(session, _row_to_batch_job(dict(row))) for row in rows]
+                items = [
+                    self._aggregate_parent_job(
+                        session,
+                        _row_to_batch_job(dict(row), include_items=False),
+                        include_items=False,
+                    )
+                    for row in rows
+                ]
                 return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
             rows = (
@@ -1748,7 +2016,14 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
-            all_items = [self._aggregate_parent_job(session, _row_to_batch_job(dict(row))) for row in rows]
+            all_items = [
+                self._aggregate_parent_job(
+                    session,
+                    _row_to_batch_job(dict(row), include_items=False),
+                    include_items=False,
+                )
+                for row in rows
+            ]
 
             filtered_items = all_items
             if executor_value in {"program", "llm"}:
@@ -2166,7 +2441,7 @@ class CustomQCWorkspaceService:
         for item in items:
             status_key = _safe_text((item or {}).get("status")).lower()
             is_compliant = (item or {}).get("is_compliant")
-            if status_key in {"non_compliant", "uncertain"} or is_compliant is False:
+            if status_key in {"non_compliant", "ai_suggested_non_compliant", "uncertain"} or is_compliant is False:
                 issue_items.append(item or {})
 
         # 1) 管理摘要（面向行政管理）
@@ -2191,7 +2466,7 @@ class CustomQCWorkspaceService:
             ("完成病历数", _to_int(summary.get("success_count"), _to_int(job.get("success_count")))),
             ("执行失败病历数", _to_int(summary.get("failed_record_count"), _to_int(job.get("failed_count")))),
             ("发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))),
-            ("待复核病历数", _to_int(summary.get("uncertain_records"), _to_int(status_breakdown.get("uncertain")))),
+            ("AI判断病历数", _to_int(summary.get("uncertain_records"), _to_int(status_breakdown.get("uncertain")))),
             ("合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))),
             ("执行规则数", _to_int(summary.get("rule_count"), 1)),
         ]
@@ -2252,7 +2527,7 @@ class CustomQCWorkspaceService:
         ws_items.column_dimensions["L"].width = 10
         ws_items.column_dimensions["M"].width = 10
 
-        # 3) 全部明细（含合规、待复核、不合规）
+        # 3) 全部明细（含合规、AI判断、不合规）
         ws_all = workbook.create_sheet("全部明细")
         ws_all.append(
             [
@@ -2314,6 +2589,7 @@ class CustomQCWorkspaceService:
         # 5) 技术信息（默认不看，给研发定位问题）
         ws_tech = workbook.create_sheet("技术信息")
         ws_tech.append(["技术字段", "值"])
+        performance_profile = _normalize_export_performance_profile(summary, job)
         tech_rows = [
             ("任务ID", _safe_text(job.get("id"), "-")),
             ("规则编码", _safe_text(job.get("rule_code"), "-")),
@@ -2322,7 +2598,11 @@ class CustomQCWorkspaceService:
             ("场景(raw)", _safe_text(job.get("scene"), "-")),
             ("范围(raw)", _safe_text(job.get("scope"), "-")),
             ("状态(raw)", _safe_text(job.get("status"), "-")),
-            ("总 token", _to_int(summary.get("total_tokens"), _to_int(job.get("total_tokens")))),
+            ("总 token", performance_profile["tokens_total"]),
+            ("输入 token", performance_profile["prompt_tokens"]),
+            ("输出 token", performance_profile["completion_tokens"]),
+            ("未归因 token", performance_profile["unattributed_tokens"]),
+            ("token 拆分完整", "是" if performance_profile["token_breakdown_complete"] else "否"),
             ("总耗时(秒)", round(_to_float(summary.get("total_processing_time"), _to_float(job.get("total_processing_time"))), 4)),
             ("筛选条件(raw)", _safe_json_dumps(job.get("filters") or {})),
             ("summary(raw)", _safe_json_dumps(summary)),
@@ -2355,7 +2635,7 @@ class CustomQCWorkspaceService:
         for item in items:
             status_key = _safe_text((item or {}).get("status")).lower()
             is_compliant = (item or {}).get("is_compliant")
-            if status_key in {"non_compliant", "uncertain"} or is_compliant is False:
+            if status_key in {"non_compliant", "ai_suggested_non_compliant", "uncertain"} or is_compliant is False:
                 issue_items.append(item or {})
 
         writer.writerow(["管理摘要"])
@@ -2370,7 +2650,7 @@ class CustomQCWorkspaceService:
         writer.writerow(["当前状态", _map_job_status_label(job.get("status"))])
         writer.writerow(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))])
         writer.writerow(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))])
-        writer.writerow(["待复核病历数", _to_int(summary.get("uncertain_records"))])
+        writer.writerow(["AI判断病历数", _to_int(summary.get("uncertain_records"))])
         writer.writerow(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))])
         writer.writerow(["执行规则数", _to_int(summary.get("rule_count"), 1)])
         writer.writerow([])
@@ -2457,11 +2737,13 @@ class CustomQCWorkspaceService:
 
         status_order = [
             "non_compliant",
+            "ai_suggested_non_compliant",
             "data_gap",
             "uncertain",
             "not_executed",
             "technical_error",
             "not_applicable",
+            "ai_suggested_compliant",
             "compliant",
         ]
         status_cards = []
@@ -2492,6 +2774,17 @@ class CustomQCWorkspaceService:
             "质控任务",
         )
         generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        performance_profile = _normalize_export_performance_profile(summary, job)
+        performance_block = (
+            '<div class="performance-metrics">'
+            f'<div class="performance-metric"><span>总 Token</span><strong>{_format_export_integer(performance_profile["tokens_total"])}</strong></div>'
+            f'<div class="performance-metric"><span>输入 Token</span><strong>{_format_export_integer(performance_profile["prompt_tokens"])}</strong></div>'
+            f'<div class="performance-metric"><span>输出 Token</span><strong>{_format_export_integer(performance_profile["completion_tokens"])}</strong></div>'
+            f'<div class="performance-metric performance-metric-warn"><span>未归因 Token</span><strong>{_format_export_integer(performance_profile["unattributed_tokens"])}</strong></div>'
+            f'<div class="performance-metric"><span>Token 拆分</span><strong>{"完整" if performance_profile["token_breakdown_complete"] else "有未归因"}</strong></div>'
+            "</div>"
+            '<p class="performance-note">未归因 Token 表示模型服务返回了总量，但未能拆分到输入或输出的部分；用于性能剖析和成本排查。</p>'
+        )
 
         toc_rows = []
         record_sections = []
@@ -2499,7 +2792,14 @@ class CustomQCWorkspaceService:
             anchor = f"record-{index}"
             issue_count = sum(
                 _to_int(group["status_counts"].get(key))
-                for key in ("non_compliant", "data_gap", "uncertain", "not_executed", "technical_error")
+                for key in (
+                    "non_compliant",
+                    "ai_suggested_non_compliant",
+                    "data_gap",
+                    "uncertain",
+                    "not_executed",
+                    "technical_error",
+                )
             )
             toc_rows.append(
                 "<tr>"
@@ -2515,7 +2815,17 @@ class CustomQCWorkspaceService:
             sorted_items = sorted(
                 group.get("items") or [],
                 key=lambda item: (
-                    0 if _export_item_status_key(item) in {"non_compliant", "data_gap", "uncertain", "technical_error", "not_executed"} else 1,
+                    0
+                    if _export_item_status_key(item)
+                    in {
+                        "non_compliant",
+                        "ai_suggested_non_compliant",
+                        "data_gap",
+                        "uncertain",
+                        "technical_error",
+                        "not_executed",
+                    }
+                    else 1,
                     _safe_text(item.get("rule_code")),
                 ),
             )
@@ -2576,12 +2886,12 @@ class CustomQCWorkspaceService:
                     '<div class="issue-meta">'
                     f"<span>{_html_escape(item.get('document_type') or '文书未标注')}</span>"
                     f"<span>{_html_escape(item.get('defect_level') or '缺陷等级未标注')}</span>"
-                    f"<span>复核状态：{_html_escape(item.get('review_status') or '待复核')}</span>"
+                    f"<span>复核状态：{_html_escape(item.get('review_status') or '未处理')}</span>"
                     "</div>"
                     '<div class="issue-grid">'
                     f'<section><label>质控结论</label><p>{_html_escape(conclusion or "-")}</p></section>'
                     f'<section><label>关键证据</label>{"".join(evidence_part_rows)}{"".join(evidence_rows)}{missing_block}</section>'
-                    f'<section><label>处理建议</label><p>{_html_escape(suggestion or "请结合病历原文人工复核。")}</p></section>'
+                    f'<section><label>处理建议</label><p>{_html_escape(suggestion or "请结合病历原文确认。")}</p></section>'
                     "</div>"
                     "</article>"
                 )
@@ -2601,6 +2911,41 @@ class CustomQCWorkspaceService:
 
         if not record_sections:
             record_sections.append('<section class="empty-state">当前任务暂无可导出的质控明细。</section>')
+
+        review_block = ""
+        review_report = summary.get("review_report") if isinstance(summary.get("review_report"), dict) else {}
+        if review_report:
+            review_summary = review_report.get("summary") if isinstance(review_report.get("summary"), dict) else {}
+            review_findings = review_report.get("findings") if isinstance(review_report.get("findings"), list) else []
+            review_rows = []
+            for finding in review_findings[:12]:
+                if not isinstance(finding, dict):
+                    continue
+                review_rows.append(
+                    "<tr>"
+                    f"<td>{_html_escape(finding.get('severity') or '-')}</td>"
+                    f"<td>{_html_escape(finding.get('record_id') or '-')}</td>"
+                    f"<td>{_html_escape(finding.get('rule_id') or '-')}</td>"
+                    f"<td>{_html_escape(_sanitize_export_text(finding.get('customer_message') or finding.get('reason'), 220))}</td>"
+                    f"<td>{_html_escape(_map_item_status_label(finding.get('suggested_status'), None))}</td>"
+                    "</tr>"
+                )
+            review_table_html = (
+                '<table class="review-table"><thead><tr><th>级别</th><th>病历</th><th>质控点</th><th>复核建议</th><th>建议口径</th></tr></thead>'
+                f"<tbody>{''.join(review_rows)}</tbody></table>"
+                if review_rows
+                else '<p class="muted">已完成复核，暂无高风险复核建议。</p>'
+            )
+            review_block = (
+                '<section class="panel review-section"><h2>结果复核建议</h2>'
+                '<div class="review-summary">'
+                f"<span>建议总数 <strong>{_to_int(review_summary.get('total_findings'))}</strong></span>"
+                f"<span>P0 <strong>{_to_int(review_summary.get('p0'))}</strong></span>"
+                f"<span>P1 <strong>{_to_int(review_summary.get('p1'))}</strong></span>"
+                f"<span>P2 <strong>{_to_int(review_summary.get('p2'))}</strong></span>"
+                "</div>"
+                f"{review_table_html}</section>"
+            )
 
         failed_block = ""
         if failed_records:
@@ -2643,7 +2988,17 @@ class CustomQCWorkspaceService:
     .metric span {{ display: block; color: rgba(29,29,31,.56); font-size: 12px; }}
     .metric strong {{ display: block; margin-top: 6px; font-size: 22px; }}
     .metric-danger strong {{ color: #dc2626; }} .metric-warning strong {{ color: #b45309; }} .metric-success strong {{ color: #0066cc; }}
+    .performance-metrics {{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }}
+    .performance-metric {{ border-radius: 14px; border: 1px solid #dbe5f3; background: #f8fafc; padding: 10px 12px; }}
+    .performance-metric span {{ display: block; color: rgba(29,29,31,.56); font-size: 12px; }}
+    .performance-metric strong {{ display: block; margin-top: 5px; font-size: 18px; }}
+    .performance-metric-warn strong {{ color: #b45309; }}
+    .performance-note {{ margin: 8px 0 0; color: rgba(29,29,31,.56); font-size: 12px; line-height: 20px; }}
     .panel, .failed-section {{ margin-top: 18px; padding: 18px; }}
+    .review-section {{ border-color: #bfdbfe; background: #f8fbff; }}
+    .review-summary {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }}
+    .review-summary span {{ border-radius: 999px; background: #eff6ff; color: #1d4ed8; padding: 6px 10px; font-size: 13px; }}
+    .review-summary strong {{ margin-left: 4px; }}
     table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
     th, td {{ border-bottom: 1px solid rgba(0,0,0,.08); padding: 10px 8px; text-align: left; vertical-align: top; }}
     th {{ color: rgba(29,29,31,.58); font-weight: 700; }}
@@ -2690,7 +3045,8 @@ class CustomQCWorkspaceService:
         <span>选择质控点：{_html_escape(_format_rule_code_list(selected_rule_ids))}</span>
       </div>
       <div class="metrics">{"".join(status_cards)}</div>
-      <p class="notice">本文件仅用于质控明细查看和人工复核，不作为病历归档、医保结算、绩效扣分或正式质控结论依据。文件不包含完整病历全文、模型原始输出或向量数据。</p>
+      {performance_block}
+      <p class="notice">本文件仅用于质控明细查看和质控确认，不作为病历归档、医保结算、绩效扣分或正式质控结论依据。文件不包含完整病历全文、模型原始输出或向量数据。</p>
     </section>
 
     <section class="panel">
@@ -2701,6 +3057,7 @@ class CustomQCWorkspaceService:
       </table>
     </section>
 
+    {review_block}
     {"".join(record_sections)}
     {failed_block}
   </main>

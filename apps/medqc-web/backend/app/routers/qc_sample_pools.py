@@ -25,7 +25,13 @@ from ..services.customer_rule_sets import (
     get_customer_luxian_rule_set,
 )
 from ..services.detached_task_runner import submit_detached_task
-from ..services.luxian_0609_rule_catalog import load_luxian_0609_rules
+from ..services.luxian_0609 import (
+    build_family_scopes as _build_luxian_0609_family_scopes,
+    customer_rule_count as _luxian_0609_customer_rule_count,
+    load_luxian_0609_rules,
+    normalize_customer_rule_ids as _normalize_rule_id_list,
+    resolve_execution_scope as _resolve_luxian_0609_execution_scope,
+)
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
@@ -85,146 +91,6 @@ def _resolve_sample_validation_execution_strategy(*, validation_mode: str, rule_
     if normalized_rule_ids and normalized_rule_ids.issubset(_FAST_SCREEN_FULL_RULE_ID_SET):
         return EXECUTION_STRATEGY_FAST_SCREEN
     return EXECUTION_STRATEGY_STANDARD
-
-
-def _normalize_rule_id_list(rule_ids: list[str]) -> list[str]:
-    return sorted(
-        {
-            str(rule_id or "").strip().upper()
-            for rule_id in list(rule_ids or [])
-            if str(rule_id or "").strip()
-        }
-    )
-
-
-def _resolve_luxian_0609_execution_rule_ids(customer_rule_ids: list[str]) -> tuple[list[str], list[str]]:
-    """Map LX0609 customer-facing ids to executable SC/LX/CL rule ids."""
-
-    normalized_customer_ids = _normalize_rule_id_list(customer_rule_ids)
-    if not normalized_customer_ids:
-        return [], []
-    wrappers_by_id = {
-        str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper(): wrapper
-        for wrapper in load_luxian_0609_rules()
-    }
-    invalid_rule_ids = [rule_id for rule_id in normalized_customer_ids if rule_id not in wrappers_by_id]
-    execution_rule_ids: list[str] = []
-    for customer_rule_id in normalized_customer_ids:
-        wrapper = wrappers_by_id.get(customer_rule_id) or {}
-        mapped_rule_ids = [
-            rule_id
-            for rule_id in (
-                str(item or "").strip().upper()
-                for item in list(wrapper.get("mapped_rule_ids") or [])
-            )
-            if rule_id
-        ]
-        if not mapped_rule_ids:
-            primary_rule_id = str(wrapper.get("primary_execution_rule_id") or "").strip()
-            mapped_rule_ids = _normalize_rule_id_list([primary_rule_id])
-        for mapped_rule_id in mapped_rule_ids:
-            if mapped_rule_id and mapped_rule_id not in execution_rule_ids:
-                execution_rule_ids.append(mapped_rule_id)
-    return execution_rule_ids, invalid_rule_ids
-
-
-def _luxian_0609_customer_rule_count() -> int:
-    return len(load_luxian_0609_rules())
-
-
-_LUXIAN_0609_RULE_FAMILY_DEFINITIONS = [
-    {
-        "key": "basic_timeliness",
-        "name": "基础时限",
-        "rule_ids": ["LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"],
-    },
-    {
-        "key": "course_quality",
-        "name": "查房病程",
-        "rule_ids": ["LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"],
-    },
-    {
-        "key": "exam_lab",
-        "name": "检查检验",
-        "rule_ids": ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"],
-    },
-    {
-        "key": "consultation_quality",
-        "name": "会诊质量",
-        "rule_ids": ["LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"],
-    },
-    {
-        "key": "surgery_anesthesia",
-        "name": "手术麻醉",
-        "rule_ids": [
-            "LX0609-003",
-            "LX0609-024",
-            "LX0609-025",
-            "LX0609-028",
-            "LX0609-029",
-            "LX0609-030",
-            "LX0609-031",
-            "LX0609-032",
-            "LX0609-033",
-            "LX0609-034",
-            "LX0609-035",
-            "LX0609-036",
-            "LX0609-037",
-            "LX0609-038",
-            "LX0609-039",
-            "LX0609-040",
-        ],
-    },
-    {
-        "key": "transfusion",
-        "name": "输血",
-        "rule_ids": [
-            "LX0609-041",
-            "LX0609-042",
-            "LX0609-043",
-            "LX0609-044",
-            "LX0609-045",
-            "LX0609-046",
-            "LX0609-047",
-            "LX0609-048",
-            "LX0609-049",
-        ],
-    },
-    {
-        "key": "tumor_pathology",
-        "name": "肿瘤病理",
-        "rule_ids": ["LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"],
-    },
-]
-
-
-def _build_luxian_0609_family_scopes(customer_rule_ids: list[str]) -> list[dict[str, Any]]:
-    selected_rule_ids = _normalize_rule_id_list(customer_rule_ids)
-    if not selected_rule_ids:
-        return []
-    selected = set(selected_rule_ids)
-    covered: set[str] = set()
-    scopes: list[dict[str, Any]] = []
-    for family in _LUXIAN_0609_RULE_FAMILY_DEFINITIONS:
-        family_rule_ids = [
-            rule_id
-            for rule_id in _normalize_rule_id_list(list(family.get("rule_ids") or []))
-            if rule_id in selected
-        ]
-        if not family_rule_ids:
-            continue
-        covered.update(family_rule_ids)
-        scopes.append(
-            {
-                "key": str(family["key"]),
-                "name": str(family["name"]),
-                "rule_ids": family_rule_ids,
-            }
-        )
-    orphan_rule_ids = [rule_id for rule_id in selected_rule_ids if rule_id not in covered]
-    if orphan_rule_ids:
-        scopes.append({"key": "other", "name": "其他质控点", "rule_ids": orphan_rule_ids})
-    return scopes
 
 
 class SamplePoolImportRequest(BaseModel):
@@ -288,7 +154,15 @@ class TestRecordDocument(BaseModel):
 
 class TestRecordGoldenAnswer(BaseModel):
     qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-001")
-    expected_status: Literal["non_compliant", "compliant", "not_applicable", "data_gap", "uncertain"] = Field(
+    expected_status: Literal[
+        "non_compliant",
+        "ai_suggested_non_compliant",
+        "ai_suggested_compliant",
+        "compliant",
+        "not_applicable",
+        "data_gap",
+        "uncertain",
+    ] = Field(
         ..., description="人工预期状态"
     )
     trigger_facts: list[str] = Field(default_factory=list, description="触发事实")
@@ -803,20 +677,22 @@ async def run_sample_pool_intrinsic_validation(
     if requested_selected_rule_ids:
         if rule_set_key != "luxian_0609_qc_v1":
             raise HTTPException(status_code=422, detail="selected_rule_ids 当前仅支持泸县0609质控点验证")
-        execution_rule_ids, invalid_rule_ids = _resolve_luxian_0609_execution_rule_ids(requested_selected_rule_ids)
+        allowed_rule_ids = {str(rule_id or "").strip().upper() for rule_id in list(rule_ids or [])}
+        execution_rule_ids, invalid_rule_ids, gate_only_customer_rule_ids = _resolve_luxian_0609_execution_scope(
+            requested_selected_rule_ids,
+            allowed_rule_ids=allowed_rule_ids,
+        )
         if invalid_rule_ids:
             raise HTTPException(
                 status_code=422,
                 detail=f"所选质控点不属于当前规则集: {', '.join(invalid_rule_ids)}",
             )
-        allowed_rule_ids = {str(rule_id or "").strip().upper() for rule_id in list(rule_ids or [])}
-        execution_rule_ids = [rule_id for rule_id in execution_rule_ids if rule_id in allowed_rule_ids]
-        if not execution_rule_ids:
-            raise HTTPException(status_code=422, detail="所选质控点当前没有可执行的映射规则")
         rule_ids = execution_rule_ids
-        record_rule_map = {record_id: list(execution_rule_ids) for record_id in record_ids}
+        record_rule_map = {record_id: list(execution_rule_ids) for record_id in record_ids} if execution_rule_ids else {}
+    else:
+        gate_only_customer_rule_ids = []
 
-    if not rule_ids:
+    if not rule_ids and not gate_only_customer_rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
     customer_rule_count = (
         len(requested_selected_rule_ids)
@@ -881,6 +757,8 @@ async def run_sample_pool_intrinsic_validation(
         "rule_count": len(rule_ids),
         "customer_rule_count": customer_rule_count,
         "execution_rule_count": len(rule_ids),
+        "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
+        "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
         "execution_strategy": execution_strategy,
         "quality_profile": "throughput_v1",
         "bucket_strategy": "fixed_packs",
@@ -961,28 +839,35 @@ async def run_sample_pool_intrinsic_validation(
         child_job_ids: list[str] = []
         for family_scope in luxian_family_scopes:
             family_rule_ids = _normalize_rule_id_list(list(family_scope.get("rule_ids") or []))
-            family_execution_rule_ids, invalid_family_rule_ids = _resolve_luxian_0609_execution_rule_ids(family_rule_ids)
+            family_execution_rule_ids, invalid_family_rule_ids, family_gate_only_rule_ids = (
+                _resolve_luxian_0609_execution_scope(
+                    family_rule_ids,
+                    allowed_rule_ids=allowed_execution_rule_ids,
+                )
+            )
             if invalid_family_rule_ids:
                 raise HTTPException(
                     status_code=422,
                     detail=f"{family_scope.get('name') or '规则族'}包含无效质控点: {', '.join(invalid_family_rule_ids)}",
                 )
-            if allowed_execution_rule_ids:
-                family_execution_rule_ids = [
-                    rule_id for rule_id in family_execution_rule_ids if rule_id in allowed_execution_rule_ids
-                ]
-            if not family_execution_rule_ids:
+            if not family_execution_rule_ids and not family_gate_only_rule_ids:
                 raise HTTPException(
                     status_code=422,
                     detail=f"{family_scope.get('name') or '规则族'}当前没有可执行的映射规则",
                 )
-            family_record_rule_map = {record_id: list(family_execution_rule_ids) for record_id in record_ids}
+            family_record_rule_map = (
+                {record_id: list(family_execution_rule_ids) for record_id in record_ids}
+                if family_execution_rule_ids
+                else {}
+            )
             child_filters = {
                 **job_filters,
                 "rule_ids": family_execution_rule_ids,
                 "rule_count": len(family_execution_rule_ids),
                 "customer_rule_count": len(family_rule_ids),
                 "execution_rule_count": len(family_execution_rule_ids),
+                "gate_only_customer_rule_ids": family_gate_only_rule_ids,
+                "gate_only_customer_rule_count": len(family_gate_only_rule_ids),
                 "selected_rule_ids": family_rule_ids,
                 "scoped_customer_rule_ids": family_rule_ids,
                 "record_rule_map": family_record_rule_map,
@@ -1002,7 +887,7 @@ async def run_sample_pool_intrinsic_validation(
                 draft_ids=family_execution_rule_ids,
                 execution_mode="multi",
                 run_mode="parallel",
-                rule_count=len(family_execution_rule_ids),
+                rule_count=len(family_rule_ids),
                 job_kind="child",
                 parent_job_id=parent_job_id,
                 family_key=str(family_scope.get("key") or "").strip(),
@@ -1050,6 +935,8 @@ async def run_sample_pool_intrinsic_validation(
                 "rule_count": len(rule_ids),
                 "customer_rule_count": len(parent_filters["scoped_customer_rule_ids"]),
                 "execution_rule_count": len(rule_ids),
+                "gate_only_customer_rule_ids": parent_filters.get("gate_only_customer_rule_ids") or [],
+                "gate_only_customer_rule_count": int(parent_filters.get("gate_only_customer_rule_count") or 0),
                 "selected_rule_ids": parent_filters["selected_rule_ids"],
                 "scoped_customer_rule_ids": parent_filters["scoped_customer_rule_ids"],
                 "record_rule_map": parent_filters.get("record_rule_map"),
@@ -1092,6 +979,8 @@ async def run_sample_pool_intrinsic_validation(
             "rule_count": len(rule_ids),
             "customer_rule_count": customer_rule_count,
             "execution_rule_count": len(rule_ids),
+            "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
+            "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
             "selected_rule_ids": requested_selected_rule_ids,
             "scoped_customer_rule_ids": requested_selected_rule_ids,
             "record_rule_map": record_rule_map,

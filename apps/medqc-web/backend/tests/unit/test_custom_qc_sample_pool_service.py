@@ -1438,6 +1438,8 @@ def test_list_pool_records_should_backfill_patient_name_and_department_from_matc
         lambda **kwargs: {
             "V001": {
                 "patient_name": "张三",
+                "patient_sex": "女",
+                "patient_age": "67",
                 "mr_no": "147640",
                 "department": "普外科",
             }
@@ -1449,6 +1451,8 @@ def test_list_pool_records_should_backfill_patient_name_and_department_from_matc
     assert result.total == 1
     record = result.items[0]
     assert record["patient_name"] == "张三"
+    assert record["patient_sex"] == "女"
+    assert record["patient_age"] == "67"
     assert record["department"] == "普外科"
     assert record["mr_no"] == "147640"
 

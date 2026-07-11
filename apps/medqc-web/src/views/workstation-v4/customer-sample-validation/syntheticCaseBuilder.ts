@@ -42,7 +42,7 @@ export const expectedStatusOptions = [
   { label: '无缺陷', value: 'compliant' },
   { label: '不适用', value: 'not_applicable' },
   { label: '数据不足', value: 'data_gap' },
-  { label: '需人工复核', value: 'uncertain' },
+  { label: '需质控确认', value: 'uncertain' },
 ]
 
 export const syntheticCaseBuilderModeOptions: Array<{

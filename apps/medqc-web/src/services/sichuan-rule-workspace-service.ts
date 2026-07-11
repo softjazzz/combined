@@ -2,9 +2,11 @@ import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 import type {
   SichuanBatchJobDebugSnapshot,
+  SichuanBatchJobResultTrace,
   SichuanBatchJob,
   SichuanBatchJobExport,
   SichuanBatchJobQuery,
+  Luxian0609ReviewReport,
 } from '@/views/workstation-v4/semantic-rules/types'
 
 type ServiceResult<T> = {
@@ -116,6 +118,20 @@ export async function retrySichuanWorkspaceBatchJob(jobId: string) {
   )
 }
 
+export async function reviewSichuanWorkspaceBatchJob(jobId: string) {
+  return requestEnvelope<{
+    job: SichuanBatchJob
+    review_report: Luxian0609ReviewReport
+  }>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/review`,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '复核泸县0609任务结果失败',
+  )
+}
+
 export async function getSichuanWorkspaceBatchJobDebugSnapshot(
   jobId: string,
   params?: {
@@ -131,6 +147,26 @@ export async function getSichuanWorkspaceBatchJobDebugSnapshot(
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务调试快照失败',
+  )
+}
+
+export async function getSichuanWorkspaceBatchJobResultTrace(
+  jobId: string,
+  params: {
+    record_id?: string
+    visit_id?: string
+    rule_id?: string
+    item_index?: number
+  },
+) {
+  return requestEnvelope<SichuanBatchJobResultTrace>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/trace`,
+      params,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '获取质控诊断追踪失败',
   )
 }
 

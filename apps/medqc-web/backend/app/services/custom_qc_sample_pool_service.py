@@ -3676,6 +3676,8 @@ class CustomQCSamplePoolService:
                         "matched_patient_id": item["matched_patient_id"],
                         "matched_visit_id": item["matched_visit_id"],
                         "patient_name": item["patient_name"],
+                        "patient_sex": "",
+                        "patient_age": "",
                         "mr_no": item["mr_no"],
                         "department": item["department"],
                         "match_status": item["match_status"],
@@ -3732,6 +3734,10 @@ class CustomQCSamplePoolService:
                 display = record_display_map.get(visit_id) or {}
                 if not _safe_text(row.get("patient_name")):
                     row["patient_name"] = _safe_text(display.get("patient_name"))
+                if not _safe_text(row.get("patient_sex")):
+                    row["patient_sex"] = _safe_text(display.get("patient_sex"))
+                if not _safe_text(row.get("patient_age")):
+                    row["patient_age"] = _safe_text(display.get("patient_age"))
                 if not _safe_text(row.get("department")):
                     row["department"] = _safe_text(display.get("department"))
                 if not _safe_text(row.get("mr_no")):
@@ -3778,6 +3784,10 @@ class CustomQCSamplePoolService:
             session.query(
                 MedicalRecordFrontpage.visit_id,
                 MedicalRecordFrontpage.name,
+                MedicalRecordFrontpage.sex,
+                MedicalRecordFrontpage.age,
+                MedicalRecordFrontpage.age_year,
+                MedicalRecordFrontpage.age_month,
                 MedicalRecordFrontpage.mr_no,
                 MedicalRecordFrontpage.inpat_no,
                 MedicalRecordFrontpage.admission_dept_name,
@@ -3793,6 +3803,12 @@ class CustomQCSamplePoolService:
                 continue
             display_map[visit_id] = {
                 "patient_name": _safe_text(getattr(row, "name", "")),
+                "patient_sex": _safe_text(getattr(row, "sex", "")),
+                "patient_age": _safe_text(
+                    getattr(row, "age", "")
+                    or getattr(row, "age_year", "")
+                    or getattr(row, "age_month", "")
+                ),
                 "mr_no": _safe_text(getattr(row, "mr_no", "") or getattr(row, "inpat_no", "")),
                 "department": _safe_text(
                     getattr(row, "admission_dept_name", "") or getattr(row, "discharge_dept_name", "")

@@ -676,7 +676,81 @@ def test_apply_copy_content_semantic_fallback_should_force_non_compliant(service
     assert normalized["is_compliant"] is False
     assert float(normalized["confidence"]) >= 0.86
     assert "后一天被前一天句子覆盖率" in normalized["evidence"]
+    evidence_items = list(normalized.get("evidence_items") or [])
+    evidence_ids = [item.get("evidence_id") for item in evidence_items]
+    assert evidence_ids[:2] == ["COPY-PREVIOUS", "COPY-CURRENT"]
+    assert "COPY-METRIC" in evidence_ids
+    assert "COPY-MISSING-DIFFERENCE" in evidence_ids
+    assert any(str(item.get("evidence_id") or "").startswith("COPY-PAIR-1-") for item in evidence_items)
+    assert "日常病程记录" in evidence_items[0]["source_document_name"]
+    assert "上级医师查房记录" in evidence_items[1]["source_document_name"]
+    assert "患者神清，精神可" in evidence_items[0]["quote"]
+    assert any("全文相似度" in str(item.get("quote") or "") for item in evidence_items)
     assert (normalized.get("metadata") or {}).get("decision_fallback") == "copy_content_similarity_plus_semantic_check"
+
+
+def test_apply_copy_content_semantic_fallback_should_handle_lx0609_017(service):
+    rule_input = RuleExecutionInput(
+        rule_id="LX0609-017",
+        document_type="病程/查房记录",
+        execution_domain="course",
+        primary_medical_text="2026-07-02 上级医师查房记录正文",
+        supporting_evidence=[],
+        timeline_facts=[],
+        source_documents=[
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_title": "2026-07-02 上级医师查房记录",
+                "display_time": "2026-07-02 15:25:14",
+                "content": (
+                    "患者今日精神一般，诉咳嗽、咳痰较前无明显缓解，活动后气促，夜间可平卧。"
+                    "查体：体温36.6℃，脉搏86次/分，呼吸20次/分，血压128/76mmHg，神志清楚，"
+                    "双肺呼吸音粗，可闻及少量湿啰音，心律齐，腹软无压痛，双下肢无水肿。"
+                    "结合目前病情，继续予抗感染、祛痰、平喘、吸氧等治疗，密切观察体温、咳痰量及血氧饱和度变化，"
+                    "必要时复查血常规、CRP及胸部影像。今日已向患者及家属交代病情，嘱其注意休息，避免受凉。"
+                ),
+                "hit": True,
+            },
+            {
+                "document_type": "daily_course_record",
+                "source_table": "daily_course_record",
+                "document_title": "2026-07-01 日常病程记录",
+                "display_time": "2026-07-01 15:20:31",
+                "content": (
+                    "患者今日精神一般，诉咳嗽、咳痰较前无明显缓解，活动后气促，夜间可平卧。"
+                    "查体：体温36.6℃，脉搏86次/分，呼吸20次/分，血压128/76mmHg，神志清楚，"
+                    "双肺呼吸音粗，可闻及少量湿啰音，心律齐，腹软无压痛，双下肢无水肿。"
+                    "结合目前病情，继续予抗感染、祛痰、平喘、吸氧等治疗，密切观察体温、咳痰量及血氧饱和度变化，"
+                    "必要时复查血常规、CRP及胸部影像。今日已向患者及家属交代病情，嘱其注意休息，避免受凉。"
+                ),
+                "hit": True,
+            },
+        ],
+    )
+    engine_result = {
+        "rule_id": "LX0609-017",
+        "status": "uncertain",
+        "is_compliant": False,
+        "findings": "病程记录重复度未形成可靠自动结论，需人工复核。",
+        "evidence": "原始证据",
+        "suggestion": "",
+        "confidence": 0.5,
+        "semantic_checks": {},
+        "llm_raw_output": "",
+        "metadata": {},
+    }
+
+    normalized = service._apply_copy_content_semantic_fallback(
+        rule_input=rule_input,
+        engine_result=engine_result,
+    )
+
+    assert normalized["status"] == "non_compliant"
+    evidence_ids = [item.get("evidence_id") for item in list(normalized.get("evidence_items") or [])]
+    assert evidence_ids[:2] == ["COPY-PREVIOUS", "COPY-CURRENT"]
+    assert "COPY-METRIC" in evidence_ids
+    assert "COPY-MISSING-DIFFERENCE" in evidence_ids
 
 
 def test_apply_copy_content_semantic_fallback_should_force_non_compliant_without_llm_output(service):
@@ -727,6 +801,11 @@ def test_apply_copy_content_semantic_fallback_should_force_non_compliant_without
     assert normalized["status"] == "non_compliant"
     assert normalized["is_compliant"] is False
     assert "程序比对已显示高度重复" in normalized["findings"]
+    evidence_items = list(normalized.get("evidence_items") or [])
+    assert evidence_items[0]["evidence_role"] == "source_previous_snippet"
+    assert evidence_items[1]["evidence_role"] == "target_current_snippet"
+    assert any(item.get("source_document_type") == "复制病历比对指标" for item in evidence_items)
+    assert any(item.get("evidence_id") == "COPY-MISSING-DIFFERENCE" for item in evidence_items)
     assert (normalized.get("metadata") or {}).get("decision_fallback") == "copy_content_similarity_without_llm_output"
 
 

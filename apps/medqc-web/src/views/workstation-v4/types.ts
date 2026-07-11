@@ -264,7 +264,9 @@ export interface WorkstationSnapshotState {
 
 export type StructuredQCStatus =
   | 'non_compliant'
+  | 'ai_suggested_non_compliant'
   | 'uncertain'
+  | 'ai_suggested_compliant'
   | 'compliant'
   | 'not_applicable'
   | 'data_gap'

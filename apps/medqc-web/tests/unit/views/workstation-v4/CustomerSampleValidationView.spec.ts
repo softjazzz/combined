@@ -26,6 +26,7 @@ const {
   getSichuanWorkspaceBatchJob,
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
+  reviewSichuanWorkspaceBatchJob,
   routeQuery,
   routerPush,
   routerReplace,
@@ -59,6 +60,7 @@ const {
   getSichuanWorkspaceBatchJob: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
+  reviewSichuanWorkspaceBatchJob: vi.fn(),
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
@@ -103,6 +105,7 @@ vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob,
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
+  reviewSichuanWorkspaceBatchJob,
 }))
 
 vi.mock('xlsx', () => ({
@@ -934,6 +937,18 @@ async function selectRuleSet(wrapper: ReturnType<typeof mount>, ruleSetKey: stri
   await flushPromises()
 }
 
+async function expandLuxianFamily(wrapper: ReturnType<typeof mount>, familyName: string) {
+  const family = wrapper
+    .findAll('.customer-sample-luxian-rule-group')
+    .find((node) => node.text().includes(familyName))
+  expect(family).toBeTruthy()
+  const expandButton = family!.findAll('button').find((node) => node.text() === '查看质控点')
+  if (expandButton) {
+    await expandButton.trigger('click')
+    await nextTick()
+  }
+}
+
 describe('CustomerSampleValidationView', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -1215,6 +1230,55 @@ describe('CustomerSampleValidationView', () => {
       data: { id: 'job-2', status: 'completed' },
     })
     exportSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: new Blob() })
+    reviewSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: {
+        job: {
+          id: 'job-history-1',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'completed',
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+          customer_rule_count: 3,
+          execution_rule_count: 4,
+          record_ids: ['V001'],
+          created_at: '2026-06-30T10:30:00Z',
+          filters: {
+            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-005'],
+          },
+          summary: {
+            total_records: 1,
+            success_count: 1,
+            failed_count: 0,
+            issue_records: 1,
+            compliant_records: 0,
+            total_tokens: 0,
+            total_processing_time: 0,
+            review_report: {
+              review_status: 'completed',
+              summary: { total_findings: 1, p0: 0, p1: 1, p2: 0 },
+              findings: [
+                {
+                  id: 'review-1',
+                  rule_id: 'LX0609-020',
+                  severity: 'P1',
+                  suggested_status: 'not_applicable',
+                  customer_message: '当前病历未见会诊文书证据，本项不宜作为会诊执行问题展示。',
+                },
+              ],
+            },
+          },
+          items: [],
+        },
+        review_report: {
+          review_status: 'completed',
+          summary: { total_findings: 1, p0: 0, p1: 1, p2: 0 },
+          findings: [],
+        },
+      },
+    })
     exportLuxian0609EvaluationReport.mockResolvedValue({
       success: true,
       data: new Blob(['report']),
@@ -1269,7 +1333,8 @@ describe('CustomerSampleValidationView', () => {
       page: 1,
       page_size: 20,
     })
-    expect(wrapper.text()).toContain('历史质控任务')
+    expect(wrapper.text()).toContain('质控任务中心')
+    expect(wrapper.text()).toContain('最近质控记录')
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).toContain('LX0609-001、LX0609-002、LX0609-005')
     expect(wrapper.text()).toContain('发现需关注结果：不合规 2，数据不足 1')
@@ -1294,6 +1359,16 @@ describe('CustomerSampleValidationView', () => {
     })
     expect(message.success).toHaveBeenCalledWith('HTML 质控明细已开始下载')
 
+    const reviewButton = wrapper
+      .findAll('.customer-sample-task-history-item button')
+      .find((button) => button.text().includes('复核'))
+    expect(reviewButton).toBeTruthy()
+    await reviewButton!.trigger('click')
+    await flushPromises()
+
+    expect(reviewSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
+    expect(wrapper.text()).toContain('复核建议：P0 0，P1 1，P2 0')
+
     const viewResultButton = wrapper
       .findAll('.customer-sample-task-history-item button')
       .find((button) => button.text().includes('查看结果'))
@@ -1303,6 +1378,120 @@ describe('CustomerSampleValidationView', () => {
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
     expect(latestBatchResultDrawerProps?.open).toBe(true)
+  })
+
+  it('任务中心应识别压缩列表里的数组型状态分布', async () => {
+    listSichuanWorkspaceBatchJobs.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [
+          {
+            id: 'job-compact-aggregation',
+            rule_code: 'LX0609',
+            rule_name: '泸县0609质控点验证',
+            scope: 'running',
+            status: 'completed',
+            rule_set_key: 'luxian_0609_qc_v1',
+            rule_set_name: '泸县0609质控点验证 v1',
+            customer_rule_count: 6,
+            execution_rule_count: 6,
+            record_ids: ['V001'],
+            created_at: '2026-07-05T15:34:38Z',
+            filters: {
+              selected_rule_ids: [
+                'LX0609-007',
+                'LX0609-008',
+                'LX0609-009',
+                'LX0609-016',
+                'LX0609-017',
+                'LX0609-018',
+              ],
+            },
+            summary: {
+              total_records: 1,
+              success_count: 1,
+              failed_count: 0,
+              issue_records: 1,
+              compliant_records: 0,
+              total_tokens: 0,
+              total_processing_time: 0,
+              result_aggregation: {
+                cluster_count: 0,
+                duplicate_hits: 0,
+                clusters: [],
+                status_breakdown: [
+                  { key: 'not_applicable', count: 3 },
+                  { key: 'uncertain', count: 2 },
+                  { key: 'data_gap', count: 1 },
+                ],
+              },
+              history_issue_summaries: [
+                {
+                  rule_id: 'LX0609-016',
+                  status: 'data_gap',
+                  text: '首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。',
+                },
+              ],
+            },
+            items: [],
+            rule_results: [],
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    await historyButton?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('结果回写：6 / 6 条')
+    expect(wrapper.text()).toContain('数据不足')
+    expect(wrapper.text()).toContain('AI判断')
+    expect(wrapper.text()).toContain('不适用')
+    expect(wrapper.text()).not.toContain('结果回写：0 / 6 条')
+  })
+
+  it('打开质控任务中心加载历史时不应提前显示空态', async () => {
+    let resolveHistory!: (value: unknown) => void
+    listSichuanWorkspaceBatchJobs.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveHistory = resolve
+      }),
+    )
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    expect(historyButton).toBeTruthy()
+    await historyButton?.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('正在加载最近质控记录')
+    expect(wrapper.text()).not.toContain('暂无质控记录。发起验证后，最近任务会显示在这里。')
+
+    resolveHistory({
+      success: true,
+      data: {
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('暂无质控记录。发起验证后，最近任务会显示在这里。')
   })
 
   it('导出 HTML 时如果后端返回 Excel 二进制，不应保存成乱码 HTML', async () => {
@@ -1411,6 +1600,8 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('执行中')
+    expect(wrapper.text()).toContain('历史质控记录（不含当前任务）')
+    expect(wrapper.text()).toContain('不代表当前正在执行的质控结果')
 
     await vi.advanceTimersByTimeAsync(5000)
     await flushPromises()
@@ -1433,18 +1624,16 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('内部覆盖详情')
     expect(wrapper.text()).toContain('基础时限5 条')
     expect(wrapper.text()).toContain('手术麻醉16 条')
-    expect(wrapper.text()).toContain('展开剩余 11 条')
-    expect(wrapper.text()).toContain('展开剩余 4 条')
+    expect(wrapper.text()).toContain('全选7个质控族')
+    expect(wrapper.text()).toContain('7个质控族')
+    expect(wrapper.text()).toContain('49 个质控点')
+    expect(wrapper.text()).toContain('查看质控点')
+    expect(wrapper.text()).not.toContain('LX0609-041')
     expect(wrapper.text()).not.toContain('LX0609-049')
     expect(wrapper.text()).not.toContain('闸门未过 3/9')
     expect(wrapper.text()).not.toContain('证据待补强 10')
 
-    const transfusionExpandButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('展开剩余 4 条'))
-    expect(transfusionExpandButton).toBeTruthy()
-    await transfusionExpandButton!.trigger('click')
-    await nextTick()
+    await expandLuxianFamily(wrapper, '输血')
 
     expect(wrapper.text()).toContain('LX0609-049')
     expect(wrapper.text()).toContain('输血医嘱：输血医嘱与收费不一致')
@@ -1585,11 +1774,12 @@ describe('CustomerSampleValidationView', () => {
 
     const runBar = wrapper.find('[data-testid="customer-sample-selection-run-bar"]')
     expect(runBar.exists()).toBe(true)
-    expect(runBar.text()).toContain('已选 1 份病历')
+    expect(runBar.text()).toContain('已选择 1 份病历')
     expect(runBar.text()).toContain('可质控 1 份')
-    expect(runBar.text()).toContain('开始0609质控')
+    expect(runBar.text()).toContain('当前范围：全量0609')
+    expect(runBar.text()).toContain('开始质控')
 
-    const clearButton = runBar.findAll('button').find((node) => node.text() === '取消选择')
+    const clearButton = runBar.findAll('button').find((node) => node.text() === '清空选择')
     expect(clearButton).toBeTruthy()
     await clearButton!.trigger('click')
     await nextTick()
@@ -1841,7 +2031,7 @@ describe('CustomerSampleValidationView', () => {
       ['就诊ID', '推荐必填', '最可靠的匹配字段，对应源库 visit_id。'],
       ['住院流水号', '可选', '对应源库 inpat_no，例如 IP0000135258。'],
       ['病案号', '可选', '对应源库 mr_no，例如 362948。'],
-      ['患者姓名', '可选', '只用于人工核对，不作为唯一匹配键。'],
+      ['患者姓名', '可选', '只用于辅助确认，不作为唯一匹配键。'],
       ['备注', '可选', '客户自定义来源或批次说明。'],
     ])
     expect(bookAppendSheet).toHaveBeenCalledWith(expect.anything(), expect.anything(), '样本ID')
@@ -2215,7 +2405,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['LX0609_SYN_001'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
@@ -2235,6 +2425,8 @@ describe('CustomerSampleValidationView', () => {
             matched_visit_id: 'CUSTOMER_TEST_202606231530ABCDEF',
             mr_no: 'CUSTOMER_TEST_202606231530ABCDEF',
             patient_name: '测试患者丙',
+            patient_sex: '女',
+            patient_age: '68',
             department: '消化内科',
             created_at: backendCreatedAt,
             sample_items: [
@@ -2260,6 +2452,11 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).not.toContain('会诊质量质控病历')
     expect(wrapper.text()).not.toContain('会诊质量质控病历｜LX020/021/022')
     expect(wrapper.find('.customer-sample-patient-name').text()).toBe('测试患者丙 · 会诊质量质控')
+    expect(wrapper.find('.customer-sample-patient-avatar').exists()).toBe(true)
+    expect(wrapper.find('.customer-sample-patient-avatar').attributes('alt')).toBe('测试患者丙头像')
+    expect(wrapper.find('.customer-sample-patient-avatar').attributes('src')).toContain(
+      'patient-icon-elder-woman',
+    )
     expect(wrapper.find('.customer-sample-created-time').text()).toBe(
       expectedCompactLocalTime(backendCreatedAt).slice(0, 10),
     )
@@ -2344,7 +2541,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.find('.customer-sample-patient-name').text()).not.toContain('邹才林 · 邹才林')
   })
 
-  it('病历池列表将按质控点创建的长规则串折叠为验证范围摘要', async () => {
+  it('病历池列表隐藏验证范围长规则串并保留精简操作', async () => {
     const selectedRuleIds = [
       'LX0609-003',
       'LX0609-024',
@@ -2401,12 +2598,17 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
 
     expect(wrapper.find('.customer-sample-patient-name').text()).toBe('王某某 · 手术麻醉质控')
-    expect(wrapper.find('.customer-sample-family-chip').text()).toBe('手术麻醉16个质控点')
+    expect(wrapper.find('.customer-sample-family-chip').exists()).toBe(false)
     expect(wrapper.find('.customer-sample-rule-count-chip').exists()).toBe(false)
     expect(wrapper.find('.customer-sample-rule-id-chip').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('按质控点创建 · 手术麻醉')
+    expect(wrapper.text()).not.toContain('手术麻醉16个质控点')
     expect(wrapper.text()).not.toContain('LX0609-028、LX0609-029、LX0609-030')
-    expect(wrapper.find('.record-actions').text()).not.toContain('查看详情')
+    const actionCellText = wrapper.find('.customer-sample-action-cell').text()
+    expect(actionCellText).toContain('查看病历')
+    expect(actionCellText).toContain('查看结果')
+    expect(actionCellText).toContain('创建副本')
+    expect(actionCellText).not.toContain('查看详情')
   })
 
   it('合成样本可勾选 LX0609 质控点并只提交 selected_rule_ids', async () => {
@@ -2431,6 +2633,7 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
+    await expandLuxianFamily(wrapper, '会诊质量')
     const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
     const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
     expect(lx020.exists()).toBe(true)
@@ -2450,7 +2653,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['LX0609_SYN_001'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
         selected_rule_ids: ['LX0609-020', 'LX0609-021'],
@@ -2645,6 +2848,7 @@ describe('CustomerSampleValidationView', () => {
   it('编辑副本保存并验证时只运行新测试病历和已选 LX0609 质控点', async () => {
     const wrapper = await mountView()
 
+    await expandLuxianFamily(wrapper, '会诊质量')
     const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
     const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
     await lx020.setValue(true)
@@ -2725,6 +2929,7 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
+    await expandLuxianFamily(wrapper, '肿瘤病理')
     const lx013 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-013"]')
     expect(lx013.exists()).toBe(true)
     await lx013.setValue(true)
@@ -2744,7 +2949,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-0426',
       {
         record_ids: ['VISIT_0426_001'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
         selected_rule_ids: ['LX0609-013'],
@@ -2798,7 +3003,7 @@ describe('CustomerSampleValidationView', () => {
     }
     expect(submittedPayload).toEqual(
       expect.objectContaining({
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         group_by_luxian_family: true,
         selected_rule_ids: [
           'LX0609-001',
@@ -2875,18 +3080,14 @@ describe('CustomerSampleValidationView', () => {
 
     const selectAllButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('勾选全部7个质控族'))
+      .find((node) => node.text().includes('全选7个质控族'))
     expect(selectAllButton).toBeTruthy()
     await selectAllButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.text()).toContain('当前范围：已勾选全部 49 个质控点')
+    expect(wrapper.text()).toContain('当前将运行：全部 49 个质控点')
     expect(wrapper.text()).toContain('取消全部勾选')
-
-    const checkedRules = wrapper
-      .findAll('input.luxian-rule-checkbox')
-      .filter((input) => (input.element as HTMLInputElement).checked)
-    expect(checkedRules.length).toBeGreaterThanOrEqual(5)
+    expect(wrapper.text()).toContain('已选 5/5')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
@@ -2902,13 +3103,15 @@ describe('CustomerSampleValidationView', () => {
       selected_rule_ids?: string[]
       group_by_luxian_family?: boolean
     }
-    expect(submittedPayload.max_parallel_records).toBe(4)
+    expect(submittedPayload.max_parallel_records).toBe(2)
     expect(submittedPayload.group_by_luxian_family).toBe(true)
     expect((submittedPayload.selected_rule_ids || []).sort()).toEqual(allRuleIds)
-    expect(wrapper.text()).toContain('按 7 个质控族并发执行')
+    expect(wrapper.text()).toContain('质控任务中心')
+    expect(wrapper.text()).toContain('最近质控记录')
     expect(wrapper.text()).toContain('基础时限')
     expect(wrapper.text()).toContain('肿瘤病理')
-    expect(wrapper.text()).toContain('子任务已生成')
+    expect(wrapper.text()).toContain('最新任务')
+    expect(wrapper.text()).toContain('查看结果')
     expect(wrapper.text()).not.toContain('child-basic')
     expect(wrapper.text()).not.toContain('child-tumor')
   })
@@ -2974,7 +3177,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['V001'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
@@ -2996,7 +3199,7 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalledWith(
       expect.objectContaining({
         content:
-          '任务已创建，正在打开进度。luxian_0609_qc_v1 / 泸县0609质控点验证 v1，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+          '任务已创建，正在打开进度。luxian_0609_qc_v1 / 泸县0609质控点验证 v1，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 2 份病历',
       }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
@@ -3022,7 +3225,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['V001'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'sc',
         rule_set_key: '',
       },
@@ -3074,7 +3277,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['V008'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'programmatic',
         rule_set_key: 'sample_programmatic_gate_v1',
       },
@@ -3141,7 +3344,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['V084'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',
       },
@@ -3150,7 +3353,7 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalledWith(
       expect.objectContaining({
         content:
-          '任务已创建，正在打开进度。sc_content_full_v1 / 内涵质控全量 v1，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
+          '任务已创建，正在打开进度。sc_content_full_v1 / 内涵质控全量 v1，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 2 份病历',
       }),
     )
   })
@@ -3310,7 +3513,7 @@ describe('CustomerSampleValidationView', () => {
       'pool-1',
       {
         record_ids: ['V084'],
-        max_parallel_records: 4,
+        max_parallel_records: 2,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',
       },
@@ -3318,7 +3521,7 @@ describe('CustomerSampleValidationView', () => {
     )
     expect(message.info).toHaveBeenCalledWith('请求等待较久，正在确认后台任务状态')
     expect(message.success).toHaveBeenCalledWith(
-      expect.objectContaining({ content: '任务已创建，正在打开进度' }),
+      expect.objectContaining({ content: '任务已创建，正在打开任务中心' }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-timeout')
     expect(message.error).not.toHaveBeenCalledWith('创建客户样本验证任务失败')

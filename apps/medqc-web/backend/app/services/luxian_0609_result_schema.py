@@ -29,7 +29,7 @@ _STATUS_MAP = {
     "hit": "non_compliant",
     "not_hit": "compliant",
     "data_quality_gap": "data_gap",
-    "needs_manual_review": "uncertain",
+    "needs_manual_review": "ai_suggested_non_compliant",
     "unsupported": "not_executed",
     "rejected_by_gate": "not_applicable",
 }
@@ -65,7 +65,9 @@ def _normalize_status(value: Any, *, is_compliant: Any = None) -> str:
         status = _STATUS_MAP[status]
     if status in {
         "non_compliant",
+        "ai_suggested_non_compliant",
         "compliant",
+        "ai_suggested_compliant",
         "not_applicable",
         "data_gap",
         "uncertain",

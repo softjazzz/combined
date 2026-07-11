@@ -915,6 +915,39 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
 
 
 @pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_allow_gate_only_luxian_0609_point(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            max_parallel_records=1,
+            rule_set_key="luxian_0609_qc_v1",
+            selected_rule_ids=["LX0609-028"],
+        ),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert response["success"] is True
+    assert created["filters"]["selected_rule_ids"] == ["LX0609-028"]
+    assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-028"]
+    assert created["filters"]["customer_rule_count"] == 1
+    assert created["filters"]["execution_rule_count"] == 0
+    assert created["filters"]["gate_only_customer_rule_ids"] == ["LX0609-028"]
+    assert "record_rule_map" not in created["filters"]
+    assert response["data"]["gate_only_customer_rule_ids"] == ["LX0609-028"]
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_and_child_jobs(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()

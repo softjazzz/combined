@@ -100,6 +100,42 @@ export interface SemanticRuleTestResult {
 export type SichuanBatchJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled'
 export type SichuanBatchExecutionMode = 'single' | 'batch'
 
+export interface Luxian0609ReviewFinding {
+  id?: string
+  rule_id?: string
+  rule_name?: string
+  record_id?: string
+  patient_name?: string
+  department?: string
+  severity?: 'P0' | 'P1' | 'P2' | string
+  risk_type?: string
+  current_status?: string
+  suggested_status?: string
+  reason?: string
+  customer_message?: string
+  evidence_preview?: string
+  auto_applied?: boolean
+  llm_review?: {
+    recommendation?: string
+    reason?: string
+    confidence?: number
+  } | null
+}
+
+export interface Luxian0609ReviewReport {
+  review_status?: string
+  reviewed_at?: string
+  scope?: string
+  summary?: {
+    total_findings?: number
+    p0?: number
+    p1?: number
+    p2?: number
+  }
+  findings?: Luxian0609ReviewFinding[]
+  llm_review_status?: string
+}
+
 export interface SichuanBatchJobSummary {
   total_records: number
   success_count: number
@@ -111,6 +147,21 @@ export interface SichuanBatchJobSummary {
   total_tokens: number
   total_processing_time: number
   wall_clock_time?: number
+  performance_profile?: {
+    tokens_total?: number
+    prompt_tokens?: number
+    completion_tokens?: number
+    unattributed_tokens?: number
+    token_breakdown_complete?: boolean
+    wall_clock_time_seconds?: number
+    total_processing_time_seconds?: number
+    llm_call_count?: number
+    program_call_count?: number
+    actual_llm_pack_call_count?: number
+    context_tokens_estimate?: number
+    input_profile?: Record<string, unknown>
+    [key: string]: unknown
+  }
   rule_count?: number
   customer_rule_count?: number
   execution_rule_count?: number
@@ -201,6 +252,12 @@ export interface SichuanBatchJobSummary {
     updated_at?: string
   }
   updated_at?: string
+  review_report?: Luxian0609ReviewReport | null
+  history_issue_summaries?: Array<{
+    rule_id?: string
+    status?: string
+    text?: string
+  }>
 }
 
 export interface SichuanBatchAggregationCluster {
@@ -382,6 +439,27 @@ export interface SichuanBatchJobDebugSnapshot {
   recent_items: SichuanBatchIssueItem[]
   recent_failed_records: SichuanBatchFailedItem[]
   updated_at?: string
+}
+
+export interface SichuanBatchJobResultTrace {
+  job_id?: string
+  job_status?: string
+  rule_set_key?: string
+  rule_set_name?: string
+  final_result?: Record<string, unknown>
+  aggregation_trace?: Record<string, unknown>
+  trigger?: Record<string, unknown>
+  dependencies?: Record<string, unknown>
+  decision?: Record<string, unknown>
+  audit?: Record<string, unknown>
+  review?: Record<string, unknown>
+  evidence_items?: Array<Record<string, unknown>>
+  source_execution_results?: Array<Record<string, unknown>>
+  safety?: {
+    sensitive_fields_removed?: string[]
+    raw_output_returned?: boolean
+    note?: string
+  }
 }
 
 export interface SichuanBatchJob {

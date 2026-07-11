@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.routers import qc_sichuan
+from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.sichuan_qc_service import SichuanQCService
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 
 
@@ -476,7 +478,311 @@ async def test_workspace_batch_should_keep_uncertain_items_in_detail(monkeypatch
         "non_compliant",
         "uncertain",
     }
+    performance_profile = dict(workspace.summary.get("performance_profile") or {})
+    assert performance_profile.get("schema_version") == "luxian_0609_job_perf_v1"
+    assert int(performance_profile.get("result_count") or 0) == 4
+    assert int(performance_profile.get("program_call_count") or 0) == 4
+    assert int(performance_profile.get("llm_call_count") or 0) == 0
+    assert performance_profile.get("llm_call_count_basis") == "result_participation_count"
+    assert int(performance_profile.get("actual_llm_pack_call_count") or 0) >= 1
+    assert float(performance_profile.get("sum_rule_duration_seconds") or 0) > 0
+    profiled_rules = {str(item.get("rule_id") or "") for item in list(performance_profile.get("rules") or [])}
+    assert {"SC-001", "SC-002"}.issubset(profiled_rules)
+    assert all(isinstance(item.get("performance_profile"), dict) for item in workspace.items)
+    assert all(
+        str((item.get("performance_profile") or {}).get("final_status") or "")
+        in {"non_compliant", "uncertain"}
+        for item in workspace.items
+    )
     assert service.evaluate_rule_for_visit_calls == 0
+
+
+def test_batch_performance_profile_includes_deduplicated_luxian_input_profile():
+    input_profile = {
+        "mode": "full_text_compat",
+        "basis": "programmatic_evidence_payload",
+        "visit_id": "visit-001",
+        "evidence_payload_available": True,
+        "primary_text_char_count": 120,
+        "medical_text_char_count": 300,
+        "document_count": 3,
+        "source_table_count": 2,
+        "source_table_counts": {
+            "admission_record": 1,
+            "first_course_record": 1,
+            "daily_course_record": 1,
+        },
+        "source_table_text_lengths": {
+            "admission_record": 80,
+            "first_course_record": 90,
+            "daily_course_record": 130,
+        },
+        "available_family_contexts": ["basic_timeliness", "course_quality"],
+        "family_profiles": {
+            "basic_timeliness": {
+                "document_count": 2,
+                "text_char_count": 170,
+                "ready_for_trimmed_context": True,
+                "present_source_tables": ["admission_record", "first_course_record"],
+                "missing_source_tables": ["rescue_record"],
+            },
+            "transfusion": {
+                "document_count": 0,
+                "text_char_count": 0,
+                "ready_for_trimmed_context": False,
+                "present_source_tables": [],
+                "missing_source_tables": ["blood_application", "bloodtrans_record"],
+            },
+        },
+    }
+    items = [
+        {
+            "rule_id": "LX0609-001",
+            "record_id": "visit-001",
+            "visit_id": "visit-001",
+            "status": "non_compliant",
+            "metadata": {
+                "executor_type": "program",
+                "api_time": 0.01,
+                "luxian_0609_input_profile": input_profile,
+            },
+        },
+        {
+            "rule_id": "LX0609-002",
+            "record_id": "visit-001",
+            "visit_id": "visit-001",
+            "status": "non_compliant",
+            "metadata": {
+                "executor_type": "program",
+                "api_time": 0.02,
+                "luxian_0609_input_profile": input_profile,
+            },
+        },
+    ]
+
+    profile = qc_sichuan._build_batch_performance_profile(
+        job_id="job-input-profile",
+        items=items,
+        total_records=1,
+        customer_rule_count=2,
+        execution_rule_count=2,
+        wall_clock_time=0.1,
+        first_result_latency=0.01,
+    )
+
+    input_summary = dict(profile.get("input_profile") or {})
+    assert input_summary.get("schema_version") == "luxian_0609_input_perf_summary_v1"
+    assert int(input_summary.get("record_count") or 0) == 1
+    assert int(input_summary.get("document_count") or 0) == 3
+    assert int(input_summary.get("primary_text_char_count") or 0) == 120
+    assert int((input_summary.get("source_table_counts") or {}).get("first_course_record") or 0) == 1
+    assert input_summary.get("available_family_contexts") == ["basic_timeliness", "course_quality"]
+    family_profiles = dict(input_summary.get("family_profiles") or {})
+    assert int((family_profiles.get("basic_timeliness") or {}).get("ready_record_count") or 0) == 1
+    assert int((family_profiles.get("transfusion") or {}).get("ready_record_count") or 0) == 0
+    assert all(isinstance((item.get("input_profile") or {}), dict) for item in profile.get("results") or [])
+
+
+def test_document_evaluation_result_propagates_luxian_input_profile():
+    service = SichuanQCService.__new__(SichuanQCService)
+    service.client = SimpleNamespace(model="unit-model")
+    input_profile = {
+        "visit_id": "visit-001",
+        "document_count": 2,
+        "source_table_counts": {"admission_record": 1, "first_course_record": 1},
+    }
+
+    result = service._build_document_evaluation_result(
+        document_id="visit-001",
+        document_type="终末病历",
+        rules=[{"rule_id": "LX0609-001", "rule_code": "LX0609-001"}],
+        orchestrated={
+            "results": [
+                {
+                    "rule_id": "LX0609-001",
+                    "rule_name": "入院记录时限",
+                    "status": "non_compliant",
+                    "is_compliant": False,
+                }
+            ],
+            "total_tokens": 120,
+            "total_prompt_tokens": 90,
+            "total_completion_tokens": 30,
+            "luxian_0609_input_profile": input_profile,
+        },
+    )
+
+    assert result["luxian_0609_input_profile"] == input_profile
+    assert result["token_usage"] == {
+        "total_tokens": 120,
+        "prompt_tokens": 90,
+        "completion_tokens": 30,
+    }
+
+
+def test_parent_performance_profile_aggregates_child_profiles():
+    child_jobs = [
+        {
+            "id": "child-basic",
+            "status": "completed",
+            "filters": {"luxian_rule_family": "basic_timeliness"},
+            "summary": {
+                "status_breakdown": {"non_compliant": 1},
+                "performance_profile": {
+                    "schema_version": "luxian_0609_job_perf_v1",
+                    "total_records": 1,
+                    "customer_rule_count": 3,
+                    "execution_rule_count": 4,
+                    "result_count": 3,
+                    "wall_clock_time_seconds": 10.0,
+                    "sum_rule_duration_seconds": 8.0,
+                    "llm_call_count": 2,
+                    "program_call_count": 1,
+                    "actual_llm_pack_call_count": 1,
+                    "tokens_total": 1000,
+                    "prompt_tokens": 800,
+                    "completion_tokens": 200,
+                    "input_profile": {
+                        "record_count": 1,
+                        "document_count": 2,
+                        "primary_text_char_count": 200,
+                        "medical_text_char_count": 500,
+                        "source_table_counts": {"admission_record": 1},
+                        "source_table_text_lengths": {"admission_record": 200},
+                        "available_family_contexts": ["basic_timeliness"],
+                        "family_profiles": {
+                            "basic_timeliness": {
+                                "ready_record_count": 1,
+                                "document_count": 2,
+                                "text_char_count": 500,
+                                "present_source_table_count": 1,
+                                "missing_source_table_count": 0,
+                            }
+                        },
+                    },
+                },
+            },
+        },
+        {
+            "id": "child-surgery",
+            "status": "completed",
+            "filters": {"luxian_rule_family": "surgery_anesthesia"},
+            "summary": {
+                "status_breakdown": {"not_applicable": 2},
+                "performance_profile": {
+                    "schema_version": "luxian_0609_job_perf_v1",
+                    "total_records": 1,
+                    "customer_rule_count": 2,
+                    "execution_rule_count": 5,
+                    "result_count": 2,
+                    "wall_clock_time_seconds": 7.0,
+                    "sum_rule_duration_seconds": 4.0,
+                    "llm_call_count": 1,
+                    "program_call_count": 2,
+                    "actual_llm_pack_call_count": 1,
+                    "tokens_total": 500,
+                    "prompt_tokens": 400,
+                    "completion_tokens": 100,
+                    "input_profile": {
+                        "record_count": 1,
+                        "document_count": 3,
+                        "primary_text_char_count": 300,
+                        "medical_text_char_count": 600,
+                        "source_table_counts": {"operation_record": 1},
+                        "source_table_text_lengths": {"operation_record": 300},
+                        "available_family_contexts": ["surgery_anesthesia"],
+                        "family_profiles": {
+                            "surgery_anesthesia": {
+                                "ready_record_count": 1,
+                                "document_count": 3,
+                                "text_char_count": 600,
+                                "present_source_table_count": 1,
+                                "missing_source_table_count": 1,
+                            }
+                        },
+                    },
+                },
+            },
+        },
+    ]
+
+    profile = CustomQCWorkspaceService._aggregate_child_performance_profiles(child_jobs)
+
+    assert profile["schema_version"] == "luxian_0609_parent_job_perf_v1"
+    assert profile["profiled_child_job_count"] == 2
+    assert profile["customer_rule_count"] == 5
+    assert profile["execution_rule_count"] == 9
+    assert profile["result_count"] == 5
+    assert profile["tokens_total"] == 1500
+    assert profile["prompt_tokens"] == 1200
+    assert profile["completion_tokens"] == 300
+    assert profile["status_breakdown"] == {"non_compliant": 1, "not_applicable": 2}
+    input_profile = dict(profile.get("input_profile") or {})
+    assert input_profile["schema_version"] == "luxian_0609_parent_input_perf_summary_v1"
+    assert input_profile["available_family_contexts"] == ["basic_timeliness", "surgery_anesthesia"]
+    assert input_profile["source_table_counts"] == {"admission_record": 1, "operation_record": 1}
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_summary_status_breakdown_uses_result_level_counts(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub(
+        status_by_rule={
+            "SC-001": "non_compliant",
+            "SC-002": "not_applicable",
+            "SC-003": "compliant",
+        }
+    )
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    result_status_breakdown = dict(workspace.summary.get("status_breakdown") or {})
+    assert int(result_status_breakdown.get("non_compliant") or 0) == 2
+    assert int(result_status_breakdown.get("not_applicable") or 0) == 2
+
+    record_status_breakdown = dict(workspace.summary.get("record_status_breakdown") or {})
+    assert int(record_status_breakdown.get("non_compliant") or 0) == 2
+    assert int(record_status_breakdown.get("not_applicable") or 0) == 0
+
+    aggregation_status = {
+        str(item.get("key") or ""): int(item.get("count") or 0)
+        for item in ((workspace.summary.get("result_aggregation") or {}).get("status_breakdown") or [])
+    }
+    assert aggregation_status.get("not_applicable") == 2
+
+
+def test_result_aggregation_should_hide_internal_evidence_phrases():
+    aggregation = qc_sichuan._build_result_aggregation(
+        [
+            {
+                "rule_id": "LX0609-007",
+                "rule_name": "查房记录：病情稳定患者3天内无查房病程记录",
+                "status": "not_applicable",
+                "evidence": (
+                    "适用性：未发现与本质控点直接相关的触发事实\n"
+                    "判定依据：未发现与本质控点直接相关的适用事件\n"
+                    "映射执行规则：SC-051、CL-231\n"
+                    "证据模板：通用质控"
+                ),
+            }
+        ]
+    )
+
+    clusters = aggregation.get("clusters") or []
+    assert len(clusters) == 1
+    serialized = json.dumps(clusters, ensure_ascii=False)
+    assert "未发现与本质控点直接相关的触发事实" in serialized
+    assert "判定依据" not in serialized
+    assert "映射执行规则" not in serialized
+    assert "证据模板" not in serialized
 
 
 @pytest.mark.asyncio

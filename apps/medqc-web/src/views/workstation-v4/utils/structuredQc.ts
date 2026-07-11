@@ -15,7 +15,9 @@ import type {
 
 const STATUS_LABEL_MAP: Record<StructuredQCStatus, string> = {
   non_compliant: '不合规',
-  uncertain: '待复核',
+  ai_suggested_non_compliant: 'AI判断：疑似问题',
+  uncertain: 'AI判断',
+  ai_suggested_compliant: 'AI判断：未见问题',
   compliant: '合规',
   not_applicable: '不适用',
   data_gap: '数据不足',
@@ -39,7 +41,7 @@ const DISPLAY_STATUS_SET = new Set<StructuredQCDisplayStatus>([
 
 const DEFAULT_FILTER: StructuredQCFilterState = {
   keyword: '',
-  statusList: ['non_compliant', 'uncertain'],
+  statusList: ['non_compliant', 'ai_suggested_non_compliant', 'uncertain', 'data_gap'],
   documentType: '',
   executionDomain: '',
   defectLevel: '',
@@ -67,9 +69,12 @@ function normalizeStatus(status: unknown, isCompliant: unknown): StructuredQCSta
   if (normalized === 'data_quality_gap') return 'data_gap'
   if (normalized === 'technical_error_internal') return 'technical_error'
   if (normalized === 'unsupported' || normalized === 'not_run') return 'not_executed'
+  if (normalized === 'needs_manual_review') return 'ai_suggested_non_compliant'
   if (
     normalized === 'non_compliant' ||
+    normalized === 'ai_suggested_non_compliant' ||
     normalized === 'uncertain' ||
+    normalized === 'ai_suggested_compliant' ||
     normalized === 'compliant' ||
     normalized === 'not_applicable' ||
     normalized === 'data_gap' ||
@@ -91,7 +96,10 @@ function normalizeDisplayStatus(
   const normalized = toText(value).toLowerCase() as StructuredQCDisplayStatus
   if (DISPLAY_STATUS_SET.has(normalized)) return normalized
   if (fallbackStatus === 'non_compliant') return ''
-  if (fallbackStatus === 'uncertain') return ''
+  if (fallbackStatus === 'uncertain' || fallbackStatus === 'ai_suggested_non_compliant') {
+    return 'qc_review_candidate'
+  }
+  if (fallbackStatus === 'ai_suggested_compliant') return 'compliant'
   if (fallbackStatus === 'compliant' || fallbackStatus === 'not_applicable') return fallbackStatus
   return ''
 }
@@ -124,8 +132,11 @@ function normalizeSuggestion(
         : '请根据规则要求补充或修正相关记录。'
     }
   }
-  if (status === 'uncertain' && isNoChangeSuggestion(suggestionText)) {
-    return '证据不足，建议人工复核相关文书并补充佐证。'
+  if (
+    (status === 'uncertain' || status === 'ai_suggested_non_compliant') &&
+    isNoChangeSuggestion(suggestionText)
+  ) {
+    return '证据不足，建议结合原文确认相关文书并补充佐证。'
   }
   return suggestionText
 }
@@ -168,7 +179,7 @@ function normalizeSubitemAnchor(
     toText(raw.display_bucket) ||
     toText(raw.displayBucket) ||
     fallback.displayBucket ||
-    (displayStatus === 'data_quality_gap' ? '数据缺口' : '待复核')
+    (displayStatus === 'data_quality_gap' ? '数据缺口' : 'AI判断')
   return {
     parentRuleId,
     anchorId: anchorId || subitemId,
@@ -330,7 +341,7 @@ function collectTopLevelSubitemAnchors(
 
 export function getSubitemAnchorDisplayLabel(anchor: StructuredQCSubitemAnchor): string {
   if (anchor.displayStatus === 'data_quality_gap') return '数据缺口'
-  return '专项检查项（待复核）'
+  return '专项检查项（AI判断）'
 }
 
 export function shouldCountSubitemAnchorAsDefect(_anchor: StructuredQCSubitemAnchor): boolean {
@@ -364,12 +375,14 @@ function buildOverview(
       summary.needs_review_count ??
       summary.uncertain_count ??
       summary.uncertain_records,
-    counter.uncertain || 0,
+    (counter.uncertain || 0) + (counter.ai_suggested_non_compliant || 0),
   )
   const failedCount = toNumber(summary.failed_count, counter.failed || 0)
   const issueCount = toNumber(
     summary.confirmed_defect_count ?? summary.issues_found ?? summary.issue_records,
-    (counter.non_compliant || 0) + (counter.uncertain || 0),
+    (counter.non_compliant || 0) +
+      (counter.ai_suggested_non_compliant || 0) +
+      (counter.uncertain || 0),
   )
   const complianceRateRaw = summary.compliance_rate
   const complianceRate =
@@ -433,6 +446,7 @@ export function createDefaultStructuredQCFilter(): StructuredQCFilterState {
 export function isProblemStatus(status: StructuredQCStatus): boolean {
   return (
     status === 'non_compliant' ||
+    status === 'ai_suggested_non_compliant' ||
     status === 'uncertain' ||
     status === 'data_gap' ||
     status === 'not_executed' ||

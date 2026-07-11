@@ -58,10 +58,15 @@ from .effect_priority_qc import (
 from .qc_rule_sets import should_refine_rule_by_default
 from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
-from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY, load_luxian_0609_rules
-from .luxian_0609_result_aggregator import aggregate_luxian_0609_results, summarize_luxian_0609_results
-from .luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
-from .luxian_0609_trigger_gate import evaluate_luxian_0609_trigger_gates, filter_executable_rules_by_gate
+from .luxian_0609 import (
+    LUXIAN_0609_RULE_SET_KEY,
+    load_luxian_0609_rules,
+)
+from .luxian_0609.execution import (
+    aggregate_luxian_0609_orchestrated_results,
+    attach_luxian_0609_execution_metadata,
+    prepare_luxian_0609_execution,
+)
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -71,7 +76,7 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
-_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275"}
+_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275", "LX0609-017"}
 _COPY_FIRST_COURSE_RULE_IDS = {"CL-273", "CL-274", "CL-276"}
 _COPY_SIGNAL_RULE_IDS = _COPY_ROUND_RULE_IDS | _COPY_FIRST_COURSE_RULE_IDS
 _COPY_SIMILARITY_THRESHOLD = 0.5
@@ -1041,17 +1046,6 @@ class SichuanQCService:
         settings = get_settings()
         normalized_rule_set_key = str(rule_set_key or "").strip()
         is_luxian_0609 = normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
-        luxian_aggregation_enabled = bool(
-            is_luxian_0609 and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
-        )
-        luxian_trigger_gate_enabled = bool(
-            luxian_aggregation_enabled and settings.LUXIAN_0609_TRIGGER_GATE_ENABLED
-        )
-        luxian_evidence_formatter_enabled = bool(
-            is_luxian_0609 and settings.LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED
-        )
-        luxian_wrapper_rules: List[Dict[str, Any]] = []
-        luxian_gate_decisions = {}
         quality_profile_normalized = normalize_quality_profile(quality_profile)
         batch_output_mode_normalized = normalize_batch_output_mode(
             batch_output_mode,
@@ -1059,7 +1053,7 @@ class SichuanQCService:
         )
         max_refine_candidates_normalized = normalize_max_refine_candidates(max_refine_candidates)
         model_version = str(self.client.model or "")
-        llm_concurrency = 6
+        llm_concurrency = 4
 
         async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
             return await self.rule_engine.evaluate(rule, medical_record=medical_record)
@@ -1073,20 +1067,15 @@ class SichuanQCService:
             medical_record["evidence_payload"] = dict(evidence_payload)
 
         executable_rules = prepared_rules
-        if luxian_aggregation_enabled:
-            luxian_wrapper_rules = load_luxian_0609_rules()
-            if luxian_trigger_gate_enabled:
-                luxian_gate_decisions = evaluate_luxian_0609_trigger_gates(
-                    rules=luxian_wrapper_rules,
-                    visit_id=str(document_id or ""),
-                    medical_text=content,
-                    evidence_payload=evidence_payload,
-                )
-                executable_rules = filter_executable_rules_by_gate(
-                    executable_rules=prepared_rules,
-                    wrapper_rules=luxian_wrapper_rules,
-                    decisions=luxian_gate_decisions,
-                )
+        executable_rules, luxian_context = await prepare_luxian_0609_execution(
+            rule_set_key=normalized_rule_set_key,
+            prepared_rules=prepared_rules,
+            visit_id=str(document_id or ""),
+            medical_text=content,
+            evidence_payload=evidence_payload,
+            llm_client=self.adjudicator_client,
+            settings=settings,
+        )
 
         orchestrated = await self.rule_orchestrator.evaluate_rules(
             rules=executable_rules,
@@ -1110,14 +1099,11 @@ class SichuanQCService:
         orchestrated["quality_profile"] = quality_profile_normalized
         orchestrated["batch_output_mode"] = batch_output_mode_normalized
         if is_luxian_0609:
-            orchestrated["rule_set_key"] = normalized_rule_set_key
-            orchestrated["luxian_0609_execution_rule_count"] = len(prepared_rules)
-            orchestrated["luxian_0609_executed_rule_count"] = len(executable_rules)
-            if luxian_trigger_gate_enabled:
-                orchestrated["luxian_0609_trigger_gate"] = {
-                    rule_id: decision.to_metadata()
-                    for rule_id, decision in luxian_gate_decisions.items()
-                }
+            attach_luxian_0609_execution_metadata(
+                orchestrated=orchestrated,
+                rule_set_key=normalized_rule_set_key,
+                context=luxian_context,
+            )
 
         if enable_selective_refine:
             refined = await self._apply_selective_refine(
@@ -1130,35 +1116,16 @@ class SichuanQCService:
             orchestrated = refined
             orchestrated.setdefault("quality_profile", quality_profile_normalized)
             orchestrated.setdefault("batch_output_mode", batch_output_mode_normalized)
-            if not luxian_aggregation_enabled:
+            if not luxian_context.enabled:
                 return orchestrated
-        if luxian_aggregation_enabled:
-            orchestrated.setdefault("results", [])
-            orchestrated["results"].extend(
-                evaluate_luxian_0609_programmatic_rules(
-                    wrapper_rules=luxian_wrapper_rules,
-                    evidence_payload=evidence_payload,
-                )
+        if luxian_context.enabled:
+            aggregate_luxian_0609_orchestrated_results(
+                orchestrated=orchestrated,
+                context=luxian_context,
+                visit_id=str(document_id or ""),
+                model_name=model_version,
+                evidence_payload=evidence_payload,
             )
-            customer_results = aggregate_luxian_0609_results(
-                wrapper_rules=luxian_wrapper_rules,
-                execution_results=list(orchestrated.get("results") or []),
-                gate_decisions=luxian_gate_decisions,
-                format_evidence=luxian_evidence_formatter_enabled,
-                audit_context={
-                    "visit_id": str(document_id or ""),
-                    "model_name": model_version,
-                    "evidence_payload": evidence_payload,
-                },
-            )
-            orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
-            orchestrated["results"] = customer_results
-            orchestrated["display_rule_ids"] = [
-                str(rule.get("rule_id") or rule.get("rule_code") or "")
-                for rule in luxian_wrapper_rules
-            ]
-            orchestrated["display_rule_count"] = len(customer_results)
-            orchestrated["luxian_0609_summary"] = summarize_luxian_0609_results(customer_results)
             orchestrated.setdefault(
                 "refine_summary",
                 {
@@ -1271,6 +1238,8 @@ class SichuanQCService:
         refine_reasons_by_rule: Dict[str, str] = {}
         refine_details: List[Dict[str, Any]] = []
         extra_tokens = 0
+        extra_prompt_tokens = 0
+        extra_completion_tokens = 0
         extra_api_time = 0.0
 
         for candidate in candidates:
@@ -1290,6 +1259,10 @@ class SichuanQCService:
                 refined["metadata"] = metadata
                 refined_by_rule[rule_id] = refined
                 extra_tokens += int(metadata.get("tokens_used") or 0)
+                extra_prompt_tokens += int(metadata.get("prompt_tokens") or metadata.get("input_tokens") or 0)
+                extra_completion_tokens += int(
+                    metadata.get("completion_tokens") or metadata.get("output_tokens") or 0
+                )
                 extra_api_time += float(metadata.get("api_time") or 0.0)
                 refine_details.append(
                     {
@@ -1332,6 +1305,10 @@ class SichuanQCService:
         refined = dict(orchestrated)
         refined["results"] = merged_results
         refined["total_tokens"] = int(orchestrated.get("total_tokens") or 0) + extra_tokens
+        refined["total_prompt_tokens"] = int(orchestrated.get("total_prompt_tokens") or 0) + extra_prompt_tokens
+        refined["total_completion_tokens"] = (
+            int(orchestrated.get("total_completion_tokens") or 0) + extra_completion_tokens
+        )
         refined["total_api_time"] = float(orchestrated.get("total_api_time") or 0.0) + extra_api_time
         refined["refine_details"] = refine_details
         refined["refine_summary"] = {
@@ -1482,7 +1459,7 @@ class SichuanQCService:
             f"不适用 {not_applicable_count} 条，数据缺口 {data_gap_count} 条，合规率 {compliance_rate:.1f}%"
         )
 
-        return {
+        result = {
             "document_id": document_id,
             "document_type": document_type,
             "total_rules": total_rules,
@@ -1535,6 +1512,10 @@ class SichuanQCService:
             "trace": orchestrated.get("trace") or [],
             "luxian_0609_summary": orchestrated.get("luxian_0609_summary") or {},
         }
+        luxian_input_profile = orchestrated.get("luxian_0609_input_profile")
+        if isinstance(luxian_input_profile, dict) and luxian_input_profile:
+            result["luxian_0609_input_profile"] = luxian_input_profile
+        return result
 
     async def _evaluate_rules_with_engine(
         self,
@@ -2045,6 +2026,89 @@ class SichuanQCService:
         ).source_to_target_sentence_coverage
 
     @classmethod
+    def _compact_copy_quote(cls, value: Any, *, max_len: int = 180) -> str:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 1].rstrip() + "…"
+
+    @classmethod
+    def _select_copy_compare_snippets(
+        cls,
+        source_text: str,
+        target_text: str,
+        *,
+        threshold: float = _ROUND_SENTENCE_MATCH_THRESHOLD,
+    ) -> Tuple[str, str]:
+        pairs = cls._select_copy_compare_snippet_pairs(
+            source_text,
+            target_text,
+            threshold=threshold,
+            max_pairs=1,
+        )
+        if pairs:
+            return (str(pairs[0].get("source_quote") or ""), str(pairs[0].get("target_quote") or ""))
+        return (
+            cls._compact_copy_quote(source_text),
+            cls._compact_copy_quote(target_text),
+        )
+
+    @classmethod
+    def _select_copy_compare_snippet_pairs(
+        cls,
+        source_text: str,
+        target_text: str,
+        *,
+        threshold: float = _ROUND_SENTENCE_MATCH_THRESHOLD,
+        max_pairs: int = 3,
+    ) -> List[Dict[str, Any]]:
+        source_sentences = split_sentences(source_text)
+        target_sentences = split_sentences(target_text)
+        candidates: List[Dict[str, Any]] = []
+        for source_sentence in source_sentences:
+            source_normalized = cls._normalize_round_similarity_text(source_sentence)
+            if len(source_normalized) < 12:
+                continue
+            for target_sentence in target_sentences:
+                target_normalized = cls._normalize_round_similarity_text(target_sentence)
+                if len(target_normalized) < 12:
+                    continue
+                ratio = SequenceMatcher(None, source_sentence, target_sentence).ratio()
+                if ratio < threshold:
+                    continue
+                candidates.append(
+                    {
+                        "source_sentence": source_sentence,
+                        "target_sentence": target_sentence,
+                        "source_normalized": source_normalized,
+                        "target_normalized": target_normalized,
+                        "similarity": ratio,
+                    }
+                )
+        selected: List[Dict[str, Any]] = []
+        used_source: set[str] = set()
+        used_target: set[str] = set()
+        for candidate in sorted(candidates, key=lambda item: float(item.get("similarity") or 0.0), reverse=True):
+            source_key = str(candidate.get("source_normalized") or "")
+            target_key = str(candidate.get("target_normalized") or "")
+            if source_key in used_source or target_key in used_target:
+                continue
+            selected.append(
+                {
+                    "source_quote": cls._compact_copy_quote(candidate.get("source_sentence") or "", max_len=220),
+                    "target_quote": cls._compact_copy_quote(candidate.get("target_sentence") or "", max_len=220),
+                    "similarity": round(float(candidate.get("similarity") or 0.0), 4),
+                }
+            )
+            used_source.add(source_key)
+            used_target.add(target_key)
+            if len(selected) >= max_pairs:
+                break
+        if selected:
+            return selected
+        return []
+
+    @classmethod
     def _build_copy_content_similarity_signals(
         cls,
         *,
@@ -2127,14 +2191,34 @@ class SichuanQCService:
             if later_is_primary
             else float(match.get("target_to_source_sentence_coverage") or 0.0)
         )
+        compare_content = str(compare_document.get("content") or compare_document.get("text_preview") or "").strip()
+        compare_pairs = cls._select_copy_compare_snippet_pairs(
+            primary_content,
+            compare_content,
+            threshold=_ROUND_SENTENCE_MATCH_THRESHOLD,
+        )
+        if compare_pairs:
+            primary_quote = str(compare_pairs[0].get("source_quote") or "")
+            compare_quote = str(compare_pairs[0].get("target_quote") or "")
+        else:
+            primary_quote, compare_quote = cls._select_copy_compare_snippets(
+                primary_content,
+                compare_content,
+                threshold=_ROUND_SENTENCE_MATCH_THRESHOLD,
+            )
         return {
             "signal_type": "adjacent_round_similarity",
             "primary_source_table": primary_source_table,
             "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+            "primary_document_id": str(primary_document.get("document_id") or primary_document.get("id") or ""),
             "primary_display_time": primary_time,
+            "primary_quote": primary_quote,
             "compare_source_table": str(compare_document.get("source_table") or compare_document.get("document_type") or ""),
             "compare_document_title": str(compare_document.get("document_title") or compare_document.get("source_table") or ""),
+            "compare_document_id": str(compare_document.get("document_id") or compare_document.get("id") or ""),
             "compare_display_time": compare_time,
+            "compare_quote": compare_quote,
+            "compare_pairs": compare_pairs,
             "similarity_ratio": round(float(match.get("full_similarity_ratio") or 0.0), 4),
             "threshold_hint": _COPY_SIMILARITY_THRESHOLD,
             "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
@@ -3857,7 +3941,7 @@ class SichuanQCService:
     ) -> Dict[str, Any]:
         normalized = dict(engine_result or {})
         rule_id = str(rule_input.rule_id or "").strip().upper()
-        if rule_id not in {"CL-037", "CL-275"}:
+        if rule_id not in _COPY_ROUND_RULE_IDS:
             return normalized
 
         source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
@@ -3899,11 +3983,14 @@ class SichuanQCService:
         has_new_plan = semantic_checks.get("has_new_plan")
         llm_raw_output = str(normalized.get("llm_raw_output") or "").strip()
         allow_program_only_fallback = (
-            rule_id == "CL-275"
+            rule_id in {"CL-275", "LX0609-017"}
             and not llm_raw_output
             and has_new_analysis is None
             and has_new_plan is None
-            and later_to_earlier_cover >= 0.9
+            and (
+                later_to_earlier_cover >= 0.9
+                or similarity_ratio >= 0.9
+            )
             and similarity_ratio >= 0.55
         )
         if not allow_program_only_fallback and (
@@ -3911,6 +3998,10 @@ class SichuanQCService:
         ):
             return normalized
 
+        evidence_items = self._build_copy_content_evidence_items(
+            similarity_signal=similarity_signal,
+            semantic_checks=semantic_checks,
+        )
         metadata = dict(normalized.get("metadata") or {})
         metadata["llm_fallback"] = True
         metadata["decision_fallback"] = (
@@ -3953,9 +4044,171 @@ class SichuanQCService:
                 "suggestion": "请避免直接复用既往病程/查房正文，补充本次记录的新增病情分析、诊疗判断及具体后续计划。",
                 "confidence": max(float(normalized.get("confidence") or 0.0), 0.86),
                 "metadata": metadata,
+                "evidence_items": evidence_items
+                + [
+                    dict(item)
+                    for item in list(normalized.get("evidence_items") or [])
+                    if isinstance(item, dict)
+                ],
             }
         )
         return normalized
+
+    @classmethod
+    def _build_copy_content_evidence_items(
+        cls,
+        *,
+        similarity_signal: Dict[str, Any],
+        semantic_checks: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        later_is_primary = bool(similarity_signal.get("later_is_primary"))
+        primary_doc = {
+            "source_table": str(similarity_signal.get("primary_source_table") or ""),
+            "title": str(similarity_signal.get("primary_document_title") or ""),
+            "document_id": str(similarity_signal.get("primary_document_id") or ""),
+            "time": str(similarity_signal.get("primary_display_time") or ""),
+            "quote": str(similarity_signal.get("primary_quote") or ""),
+        }
+        compare_doc = {
+            "source_table": str(similarity_signal.get("compare_source_table") or ""),
+            "title": str(similarity_signal.get("compare_document_title") or ""),
+            "document_id": str(similarity_signal.get("compare_document_id") or ""),
+            "time": str(similarity_signal.get("compare_display_time") or ""),
+            "quote": str(similarity_signal.get("compare_quote") or ""),
+        }
+        previous_doc = compare_doc if later_is_primary else primary_doc
+        current_doc = primary_doc if later_is_primary else compare_doc
+        similarity_ratio = float(similarity_signal.get("similarity_ratio") or 0.0)
+        later_cover = float(similarity_signal.get("later_to_earlier_sentence_coverage") or 0.0)
+        full_threshold = float(similarity_signal.get("threshold_hint") or _COPY_SIMILARITY_THRESHOLD)
+        coverage_threshold = float(
+            similarity_signal.get("coverage_threshold_hint") or _ROUND_LATER_COVERAGE_THRESHOLD
+        )
+        semantic_parts: List[str] = []
+        if semantic_checks.get("has_new_analysis") is False:
+            semantic_parts.append("未见明确新增病情分析")
+        if semantic_checks.get("has_new_plan") is False:
+            semantic_parts.append("未见明确新增后续计划")
+        semantic_text = "；".join(semantic_parts) or "未返回新增分析/计划结构化判断"
+        source_label_map = {
+            "daily_course_record": "日常病程记录",
+            "senior_course_record": "上级医师查房记录",
+            "first_course_record": "首次病程记录",
+            "admission_record": "入院记录",
+        }
+        previous_label = source_label_map.get(
+            previous_doc["source_table"],
+            previous_doc["title"] or previous_doc["source_table"] or "前次病程/查房记录",
+        )
+        current_label = source_label_map.get(
+            current_doc["source_table"],
+            current_doc["title"] or current_doc["source_table"] or "本次病程/查房记录",
+        )
+        evidence_items: List[Dict[str, Any]] = [
+            {
+                "evidence_id": "COPY-PREVIOUS",
+                "evidence_role": "source_previous_snippet",
+                "source_document_type": "前次病程/查房记录",
+                "source_document_name": previous_label,
+                "source_document": previous_label,
+                "source_document_id": previous_doc["document_id"],
+                "source_field": "正文片段",
+                "field_path": "前次病程/查房片段",
+                "record_time": previous_doc["time"],
+                "quote": previous_doc["quote"],
+            },
+            {
+                "evidence_id": "COPY-CURRENT",
+                "evidence_role": "target_current_snippet",
+                "source_document_type": "本次病程/查房记录",
+                "source_document_name": current_label,
+                "source_document": current_label,
+                "source_document_id": current_doc["document_id"],
+                "source_field": "正文片段",
+                "field_path": "本次病程/查房片段",
+                "record_time": current_doc["time"],
+                "quote": current_doc["quote"],
+            },
+        ]
+        compare_pairs = [
+            dict(item)
+            for item in list(similarity_signal.get("compare_pairs") or [])
+            if isinstance(item, dict)
+        ]
+        for index, pair in enumerate(compare_pairs[:3], start=1):
+            pair_similarity = float(pair.get("similarity") or 0.0)
+            previous_pair_quote = (
+                str(pair.get("target_quote") or pair.get("previous_quote") or pair.get("source_quote") or "")
+                if later_is_primary
+                else str(pair.get("source_quote") or pair.get("previous_quote") or pair.get("target_quote") or "")
+            )
+            current_pair_quote = (
+                str(pair.get("source_quote") or pair.get("current_quote") or pair.get("target_quote") or "")
+                if later_is_primary
+                else str(pair.get("target_quote") or pair.get("current_quote") or pair.get("source_quote") or "")
+            )
+            evidence_items.extend(
+                [
+                    {
+                        "evidence_id": f"COPY-PAIR-{index}-PREVIOUS",
+                        "evidence_role": "copy_compare_previous_pair",
+                        "source_document_type": "前次病程/查房记录",
+                        "source_document_name": previous_label,
+                        "source_document": previous_label,
+                        "source_document_id": previous_doc["document_id"],
+                        "source_field": f"重复片段 {index}",
+                        "field_path": f"前次记录重复片段 {index}",
+                        "record_time": previous_doc["time"],
+                        "quote": previous_pair_quote,
+                        "actual_value": f"片段相似度 {pair_similarity:.2f}",
+                    },
+                    {
+                        "evidence_id": f"COPY-PAIR-{index}-CURRENT",
+                        "evidence_role": "copy_compare_current_pair",
+                        "source_document_type": "本次病程/查房记录",
+                        "source_document_name": current_label,
+                        "source_document": current_label,
+                        "source_document_id": current_doc["document_id"],
+                        "source_field": f"重复片段 {index}",
+                        "field_path": f"本次记录重复片段 {index}",
+                        "record_time": current_doc["time"],
+                        "quote": current_pair_quote,
+                        "actual_value": f"片段相似度 {pair_similarity:.2f}",
+                    },
+                ]
+            )
+        evidence_items.extend(
+            [
+                {
+                    "evidence_id": "COPY-MISSING-DIFFERENCE",
+                    "evidence_role": "copy_missing_difference",
+                    "source_document_type": "差异不足说明",
+                    "source_document_name": "本次记录新增内容",
+                    "source_field": "病情变化/分析/计划",
+                    "field_path": "缺少差异说明",
+                    "quote": (
+                        f"{semantic_text}。未见本次记录相较前次记录补充明确病情变化、"
+                        "诊疗分析或后续计划调整，建议结合完整原文人工复核。"
+                    ),
+                },
+                {
+                "evidence_id": "COPY-METRIC",
+                "evidence_role": "copy_similarity_metric",
+                "source_document_type": "复制病历比对指标",
+                "source_document_name": "相似度与覆盖率",
+                "source_field": "相似度指标",
+                "field_path": "重复度判定",
+                "quote": (
+                    f"本次记录被前次记录句子覆盖率 {later_cover:.2f}，"
+                    f"全文相似度 {similarity_ratio:.2f}；{semantic_text}。"
+                ),
+                "threshold": f"全文相似度 >= {full_threshold:.2f} 或句子覆盖率 >= {coverage_threshold:.2f}",
+                "actual_value": f"全文相似度 {similarity_ratio:.2f}；句子覆盖率 {later_cover:.2f}",
+                "delta": round(max(similarity_ratio - full_threshold, later_cover - coverage_threshold), 4),
+                },
+            ]
+        )
+        return evidence_items
 
     def _apply_sc050_similarity_semantic_fallback(
         self,
@@ -4151,6 +4404,8 @@ class SichuanQCService:
             grouped_rules: Dict[str, Dict[str, Any]] = {}
             result_items: List[Dict[str, Any]] = []
             total_tokens = 0
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
             total_api_time = 0.0
             executor_breakdown_list: List[Dict[str, Any]] = []
             cache_breakdown_list: List[Dict[str, Any]] = []
@@ -4215,6 +4470,8 @@ class SichuanQCService:
                 )
                 result_items.extend(list(per_doc_orchestrated.get("results") or []))
                 total_tokens += int(per_doc_orchestrated.get("total_tokens") or 0)
+                total_prompt_tokens += int(per_doc_orchestrated.get("total_prompt_tokens") or 0)
+                total_completion_tokens += int(per_doc_orchestrated.get("total_completion_tokens") or 0)
                 total_api_time += float(per_doc_orchestrated.get("total_api_time") or 0.0)
                 executor_breakdown_list.append(dict(per_doc_orchestrated.get("executor_breakdown") or {}))
                 cache_breakdown_list.append(dict(per_doc_orchestrated.get("cache_breakdown") or {}))
@@ -4230,6 +4487,8 @@ class SichuanQCService:
             orchestrated = {
                 "results": result_items,
                 "total_tokens": total_tokens,
+                "total_prompt_tokens": total_prompt_tokens,
+                "total_completion_tokens": total_completion_tokens,
                 "total_api_time": total_api_time,
                 "executor_breakdown": self._sum_counter_dicts(executor_breakdown_list),
                 "cache_breakdown": self._sum_counter_dicts(cache_breakdown_list),
@@ -4260,43 +4519,23 @@ class SichuanQCService:
                 str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
                 and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
             ):
-                wrapper_rules = load_luxian_0609_rules()
-                gate_decisions = {}
-                if settings.LUXIAN_0609_TRIGGER_GATE_ENABLED:
-                    gate_decisions = evaluate_luxian_0609_trigger_gates(
-                        rules=wrapper_rules,
-                        visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
-                        medical_text=content,
-                        evidence_payload=evidence_payload,
-                    )
-                orchestrated.setdefault("results", [])
-                orchestrated["results"].extend(
-                    evaluate_luxian_0609_programmatic_rules(
-                        wrapper_rules=wrapper_rules,
-                        evidence_payload=evidence_payload,
-                    )
+                _, luxian_context = await prepare_luxian_0609_execution(
+                    rule_set_key=str(rule_set_key or "").strip(),
+                    prepared_rules=selected_rules,
+                    visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+                    medical_text=content,
+                    evidence_payload=evidence_payload,
+                    llm_client=self.adjudicator_client,
+                    settings=settings,
                 )
-                customer_results = aggregate_luxian_0609_results(
-                    wrapper_rules=wrapper_rules,
-                    execution_results=list(orchestrated.get("results") or []),
-                    gate_decisions=gate_decisions,
-                    format_evidence=bool(settings.LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED),
-                    audit_context={
-                        "visit_id": str((bundle or {}).get("visit_id") or document_id or ""),
-                        "model_name": model_version,
-                        "evidence_payload": evidence_payload,
-                    },
+                aggregate_luxian_0609_orchestrated_results(
+                    orchestrated=orchestrated,
+                    context=luxian_context,
+                    visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+                    model_name=model_version,
+                    evidence_payload=evidence_payload,
+                    execution_rule_count=len(selected_rules),
                 )
-                orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
-                orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
-                orchestrated["results"] = customer_results
-                orchestrated["display_rule_ids"] = [
-                    str(rule.get("rule_id") or rule.get("rule_code") or "")
-                    for rule in wrapper_rules
-                ]
-                orchestrated["display_rule_count"] = len(customer_results)
-                orchestrated["luxian_0609_execution_rule_count"] = len(selected_rules)
-                orchestrated["luxian_0609_summary"] = summarize_luxian_0609_results(customer_results)
         result = self._build_document_evaluation_result(
             document_id=document_id,
             document_type="终末病历" if scene == "final" else "运行病历",
@@ -4425,6 +4664,7 @@ class SichuanQCService:
                 "confidence": engine_result.get("confidence"),
                 "applicability": engine_result.get("applicability"),
                 "evidence_verified": engine_result.get("evidence_verified"),
+                "evidence_items": engine_result.get("evidence_items"),
                 "metadata": engine_result.get("metadata"),
             }
         ]

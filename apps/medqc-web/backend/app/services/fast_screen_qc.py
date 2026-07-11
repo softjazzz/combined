@@ -7,9 +7,13 @@ import hashlib
 import json
 import re
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Iterable
 
+from sqlalchemy import text
+
 from app.constants.doc_types import DOC_TYPE_FULL_MAP
+from app.database.connection import SessionLocal
 
 from .sc_rule_family import DEFAULT_RULE_FAMILY
 from .bundles import assemble_final_record_bundle
@@ -73,7 +77,15 @@ IMPLANT_TRIGGER_TERMS = (
     "钢板",
     "骨水泥",
     "支架",
+    "输尿管支架",
+    "双J管",
+    "双 J 管",
+    "D-J管",
+    "DJ管",
     "假体",
+    "补片",
+    "网片",
+    "人工补片",
     "融合器",
     "钉棒",
 )
@@ -625,6 +637,145 @@ def _build_pack_uncertain_result_item(
         },
         "target_document_type": document_type,
     }
+
+
+def _apply_copy_content_result_fallback_for_pack(
+    *,
+    qc_service: "SichuanQCService",
+    item: dict[str, Any],
+    documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_rule_id = _normalize_fast_screen_rule_id(item.get("rule_id") or item.get("rule_code"))
+    if normalized_rule_id != "LX0609-017":
+        return item
+
+    metadata = item.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        item["metadata"] = metadata
+    metadata["copy_compare_fallback_checked"] = True
+
+    course_source_tables = {"daily_course_record", "senior_course_record", "first_course_record"}
+    source_documents: list[dict[str, Any]] = []
+    candidate_documents: list[dict[str, Any]] = []
+    candidate_documents.extend([doc for doc in documents if isinstance(doc, dict)])
+    for key in ("source_documents", "document_inventory"):
+        candidate_documents.extend([doc for doc in _safe_list(bundle.get(key)) if isinstance(doc, dict)])
+    structured = _safe_dict(bundle.get("structured_context"))
+    for source_table, doc_list in _safe_dict(structured.get("documents")).items():
+        if str(source_table or "").strip() not in course_source_tables:
+            continue
+        for doc in _safe_list(doc_list):
+            if isinstance(doc, dict):
+                enriched = dict(doc)
+                enriched.setdefault("source_table", source_table)
+                candidate_documents.append(enriched)
+
+    seen_document_keys: set[tuple[str, str, str]] = set()
+    for doc in candidate_documents:
+        if not isinstance(doc, dict):
+            continue
+        source_table = str(doc.get("source_table") or doc.get("document_type") or "").strip()
+        document_type = str(doc.get("document_type") or doc.get("document_title") or doc.get("title") or "")
+        if source_table not in course_source_tables:
+            if "首次病程" in document_type:
+                source_table = "first_course_record"
+            elif "上级" in document_type or "查房" in document_type:
+                source_table = "senior_course_record"
+            elif "病程" in document_type:
+                source_table = "daily_course_record"
+        if source_table not in course_source_tables:
+            continue
+        content = str(doc.get("content") or doc.get("assembled_text") or doc.get("text_preview") or "").strip()
+        if not content:
+            continue
+        document_id = str(doc.get("document_id") or doc.get("id") or "")
+        document_title = str(doc.get("document_title") or doc.get("title") or document_type or source_table)
+        document_key = (source_table, document_id, content[:80])
+        if document_key in seen_document_keys:
+            continue
+        seen_document_keys.add(document_key)
+        source_documents.append(
+            {
+                "document_type": source_table,
+                "source_table": source_table,
+                "document_id": document_id,
+                "document_title": document_title,
+                "display_time": str(doc.get("display_time") or doc.get("record_time") or doc.get("submit_time") or ""),
+                "content": content,
+                "hit": bool(doc.get("hit")),
+            }
+        )
+    if len(source_documents) < 2:
+        source_documents.extend(
+            _load_copy_course_documents_for_visit(str(item.get("visit_id") or item.get("record_id") or ""))
+        )
+        deduped_documents: list[dict[str, Any]] = []
+        seen_loaded_keys: set[tuple[str, str, str]] = set()
+        for doc in source_documents:
+            key = (
+                str(doc.get("source_table") or ""),
+                str(doc.get("document_id") or ""),
+                str(doc.get("content") or "")[:80],
+            )
+            if key in seen_loaded_keys:
+                continue
+            seen_loaded_keys.add(key)
+            deduped_documents.append(doc)
+        source_documents = deduped_documents
+    metadata["copy_compare_source_document_count"] = len(source_documents)
+    if len(source_documents) < 2:
+        return item
+
+    patched = qc_service._apply_copy_content_semantic_fallback(
+        rule_input=SimpleNamespace(
+            rule_id="LX0609-017",
+            source_documents=source_documents,
+        ),
+        engine_result=item,
+    )
+    return dict(patched or item)
+
+
+def _load_copy_course_documents_for_visit(visit_id: str) -> list[dict[str, Any]]:
+    visit_id = str(visit_id or "").strip()
+    if not visit_id or SessionLocal is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    session = SessionLocal()
+    try:
+        for source_table in ("daily_course_record", "senior_course_record", "first_course_record"):
+            result = session.execute(
+                text(
+                    f"""
+                    SELECT document_id, document_title, record_time, record_content
+                    FROM cdm.{source_table}
+                    WHERE visit_id = :visit_id
+                      AND COALESCE(record_content, '') <> ''
+                    ORDER BY record_time NULLS LAST, document_id
+                    LIMIT 8
+                    """
+                ),
+                {"visit_id": visit_id},
+            )
+            for row in result.mappings():
+                rows.append(
+                    {
+                        "document_type": source_table,
+                        "source_table": source_table,
+                        "document_id": str(row.get("document_id") or ""),
+                        "document_title": str(row.get("document_title") or source_table),
+                        "display_time": str(row.get("record_time") or ""),
+                        "content": str(row.get("record_content") or ""),
+                        "hit": True,
+                    }
+                )
+    except Exception:
+        return []
+    finally:
+        session.close()
+    return rows
 
 
 def _pick_primary_document(
@@ -1689,7 +1840,7 @@ async def run_final_fast_screen(
     batch_output_mode: str = BATCH_OUTPUT_MODE_MINIMAL,
     context_token_budget: int = FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET,
     low_confidence_threshold: float = FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD,
-    pack_concurrency: int = 3,
+    pack_concurrency: int = 4,
     max_pack_retries: int = 2,
     cancellation_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
@@ -2103,6 +2254,12 @@ async def run_final_fast_screen(
                         guard_metadata["copy_rule_priority_guard"] = "first_course_missing"
                         guard_item["metadata"] = guard_metadata
                         item = guard_item
+                item = _apply_copy_content_result_fallback_for_pack(
+                    qc_service=qc_service,
+                    item=item,
+                    documents=documents,
+                    bundle=bundle,
+                )
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}

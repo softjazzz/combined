@@ -17,6 +17,27 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
         "summary": {
             "total_records": 2,
             "display_status_counts": {"non_compliant": 1, "data_gap": 1},
+            "performance_profile": {
+                "tokens_total": 80560,
+                "prompt_tokens": 42184,
+                "completion_tokens": 6847,
+                "unattributed_tokens": 31529,
+                "token_breakdown_complete": False,
+            },
+            "review_report": {
+                "review_status": "completed",
+                "summary": {"total_findings": 1, "p0": 0, "p1": 1, "p2": 0},
+                "findings": [
+                    {
+                        "severity": "P1",
+                        "record_id": "V002",
+                        "rule_id": "LX0609-002",
+                        "reason": "证据模板：内部调试原因",
+                        "customer_message": "首次病程记录时间缺失，建议人工复核。",
+                        "suggested_status": "data_gap",
+                    }
+                ],
+            },
         },
         "items": [
             {
@@ -63,6 +84,16 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
     assert "间隔" in html
     assert "26小时" in html
     assert "首次病程记录时间" in html
+    assert "未归因 Token" in html
+    assert "31,529" in html
+    assert "Token 拆分" in html
+    assert "有未归因" in html
+    assert "结果复核建议" in html
+    assert "建议总数" in html
+    assert "首次病程记录时间缺失，建议结合原文确认" in html
+    assert "人工复核" not in html
+    assert "人工核对" not in html
+    assert "数据不足" in html
     assert "证据模板" not in html
     assert "映射执行规则" not in html
     assert "raw_response" not in html

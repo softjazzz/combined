@@ -20,14 +20,20 @@ class Luxian0609GateDecision:
     reason: str
     data_gap_fields: tuple[str, ...] = field(default_factory=tuple)
     matched_keywords: tuple[str, ...] = field(default_factory=tuple)
+    source: str = "deterministic"
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_metadata(self) -> dict[str, Any]:
-        return {
+        metadata = {
             "trigger_gate_status": self.status,
             "trigger_gate_reason": self.reason,
             "data_gap_fields": list(self.data_gap_fields),
             "trigger_gate_matched_keywords": list(self.matched_keywords),
+            "trigger_gate_source": self.source,
         }
+        if self.extra:
+            metadata.update(dict(self.extra))
+        return metadata
 
 
 _FAMILY_KEYWORDS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
@@ -319,6 +325,11 @@ _TRANSFUSION_STRONG_ACTION_MARKERS = (
     "备血",
 )
 
+_INTRAOPERATIVE_TRANSFUSION_PATTERNS = (
+    re.compile(r"(术中|手术中|麻醉记录|手术记录).{0,40}(输血|输注.{0,12}(红细胞|血浆|血小板|血制品))"),
+    re.compile(r"(输血|输注.{0,12}(红细胞|血浆|血小板|血制品)).{0,40}(术中|手术中|麻醉记录|手术记录)"),
+)
+
 _IMAGING_REPORT_PATTERNS = (
     re.compile(r"(CT|MRI|磁共振).{0,24}(检查报告|报告时间|报告结果|报告结论|阳性报告|检查时间)"),
     re.compile(r"(检查报告|报告时间|报告结果|报告结论|检查时间).{0,24}(CT|MRI|磁共振)"),
@@ -359,11 +370,101 @@ _SURGERY_EMPTY_LABEL_VALUES = (
 )
 
 _SURGERY_NEGATIVE_CONTEXT = ("既往", "既往史", "曾行", "手术史", "痔疮手术")
+_SURGERY_CONTEXT_REQUIRED_MARKERS = (
+    "手术名称",
+    "术前诊断",
+    "术后诊断",
+    "术中所见",
+    "手术经过",
+    "手术记录",
+)
+_SURGERY_HISTORY_MARKERS = (
+    "既往史",
+    "个人史",
+    "家族史",
+    "病史",
+    "既往",
+    "曾行",
+    "术后复查",
+)
 
 _PATHOLOGY_TUMOR_STRONG_PATTERNS = (
     re.compile(r"病理(报告|检查|诊断|结果)"),
     re.compile(r"(腺癌|鳞癌|癌|恶性肿瘤|化疗|放疗|靶向治疗|免疫治疗|淋巴结转移)"),
     re.compile(r"(胃癌|肺癌|乳腺癌|结直肠癌|肝癌|肠癌|宫颈癌|卵巢癌|淋巴瘤)"),
+)
+
+_LX0609_019_PATHOLOGY_SPECIMEN_PATTERNS = (
+    re.compile(r"病理(报告|检查|诊断|结果)"),
+    re.compile(r"(活检|穿刺活检|取材|送检|送病理|送病检|标本|冰冻病理|术中冰冻)"),
+    re.compile(r"(手术记录|术中|手术).{0,50}(取材|标本|送检|送病理|送病检|病理)"),
+    re.compile(r"(取材|标本|送检|送病理|送病检|病理).{0,50}(手术记录|术中|手术)"),
+)
+
+_CHEMO_STRONG_PATTERNS = (
+    re.compile(r"(化疗医嘱|化疗记录|化学治疗记录|辅助化疗|新辅助化疗|化疗方案)"),
+    re.compile(r"(奥沙利铂|卡培他滨|顺铂|紫杉醇|多西他赛|吉西他滨|替吉奥|氟尿嘧啶|伊立替康|依托泊苷)"),
+    re.compile(r"\b(XELOX|FOLFOX|FOLFIRI|TP|GP|TC)\b", re.IGNORECASE),
+)
+
+_ANTIBIOTIC_ORDER_STRONG_PATTERNS = (
+    re.compile(r"(抗菌药物|抗生素|预防用药|预防使用抗菌药物|预防使用抗生素).{0,50}(医嘱|用药|开始|停止|术前|术后)"),
+    re.compile(r"(医嘱|用药|开始|停止|术前|术后).{0,50}(抗菌药物|抗生素|头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南)"),
+    re.compile(r"(头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南).{0,50}(医嘱|静滴|静脉|口服|预防|术前|术后)"),
+)
+
+_ANTIBIOTIC_NEGATIVE_MARKERS = (
+    "未见",
+    "未查见",
+    "未发现",
+    "无",
+    "未予",
+    "未使用",
+    "未用",
+    "未开立",
+    "未下达",
+    "未记录",
+    "否认",
+)
+
+_INCISION_I_II_EXPLICIT_PATTERNS = (
+    re.compile(r"(Ⅰ|I|一|1)\s*类切口|清洁切口"),
+    re.compile(r"(Ⅱ|II|二|2)\s*类切口|清洁[-－—]污染切口"),
+)
+
+_INCISION_I_II_SURGERY_PATTERNS = (
+    re.compile(r"(甲状腺|乳腺良性肿物|腹股沟疝|脂肪瘤).{0,30}(手术|切除|修补)"),
+    re.compile(r"(闭合骨折内固定|关节置换|白内障|择期颅脑肿瘤).{0,30}(手术|切除|置换|内固定)"),
+    re.compile(r"(胆囊切除|胃大部切除|胃切除|结肠切除|直肠切除|结直肠).{0,30}(手术|切除|吻合)"),
+    re.compile(r"(剖宫产|子宫|输卵管).{0,30}(手术|切除|修补|成形)"),
+    re.compile(r"(耳鼻喉|口腔|经尿道前列腺电切|前列腺电切|输尿管结石).{0,30}(手术|治疗|碎石|取石)"),
+)
+
+_INCISION_CONTAMINATED_EXCLUSION_MARKERS = (
+    "脓液",
+    "化脓",
+    "穿孔",
+    "破裂",
+    "坏疽",
+    "污染切口",
+    "感染切口",
+    "急性炎症",
+)
+
+_ANTIBIOTIC_START_TIME_PATTERNS = (
+    re.compile(r"(抗菌药物|抗生素|头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南).{0,80}(\d{4}[-/年]\d{1,2}|\d{1,2}:\d{2}|术前\s*\d+\s*分钟|开始|起始|下达|开立)"),
+    re.compile(r"(\d{4}[-/年]\d{1,2}|\d{1,2}:\d{2}|术前\s*\d+\s*分钟|开始|起始|下达|开立).{0,80}(抗菌药物|抗生素|头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南)"),
+)
+
+_ANTIBIOTIC_STOP_TIME_PATTERNS = (
+    re.compile(r"(抗菌药物|抗生素|头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南).{0,100}(停止|停用|结束|术后\s*\d+\s*(小时|天)|连用\s*\d+\s*天|使用\s*\d+\s*天|持续\s*\d+\s*天)"),
+    re.compile(r"(停止|停用|结束|术后\s*\d+\s*(小时|天)|连用\s*\d+\s*天|使用\s*\d+\s*天|持续\s*\d+\s*天).{0,100}(抗菌药物|抗生素|头孢|青霉素|左氧氟沙星|甲硝唑|阿莫西林|克林霉素|哌拉西林|亚胺培南|美罗培南)"),
+)
+
+_LEVEL_4_SURGERY_PATTERNS = (
+    re.compile(r"(四级|4级|Ⅳ级|IV级).{0,18}(手术|操作)"),
+    re.compile(r"(手术级别|手术等级|手术分级)[:：]?\s*(四级|4级|Ⅳ级|IV级)"),
+    re.compile(r"(重大手术|疑难复杂手术|高风险手术)"),
 )
 
 _LX0609_024_MALIGNANT_TUMOR_PATTERNS = (
@@ -376,6 +477,12 @@ _LX0609_024_MALIGNANT_TUMOR_PATTERNS = (
 _LX0609_024_TUMOR_SURGERY_PATTERNS = (
     re.compile(r"(癌|恶性肿瘤).{0,30}(根治术|切除术|清扫术|淋巴结清扫)"),
     re.compile(r"(根治术|癌根治|肿瘤切除|淋巴结清扫|D[23]淋巴结清扫|区域淋巴结清扫)"),
+    re.compile(r"(胃癌|肺癌|乳腺癌|结直肠癌|结肠癌|直肠癌|肝癌|胰腺癌|胆管癌|胆囊癌|食管癌|宫颈癌|卵巢癌|甲状腺癌|前列腺癌|膀胱癌|肾癌).{0,30}(根治术|切除术|清扫术|淋巴结清扫)"),
+)
+
+_LX0609_024_SPECIMEN_PATHOLOGY_PATTERNS = (
+    re.compile(r"(送检|送病理|送病检|标本|取材|活检|冰冻病理|术中冰冻).{0,80}(恶性|腺癌|鳞癌|癌|癌转移)"),
+    re.compile(r"(恶性|腺癌|鳞癌|癌|癌转移).{0,80}(送检|送病理|送病检|标本|取材|活检|冰冻病理|术中冰冻)"),
 )
 
 _LX0609_024_SURGERY_CONTEXT_MARKERS = (
@@ -464,8 +571,24 @@ def _has_culture_report_context(text: str) -> bool:
 
 
 def _has_transfusion_strong_trigger(text: str) -> bool:
-    if any(marker in text for marker in _TRANSFUSION_DOCUMENT_MARKERS):
-        return True
+    for marker in _TRANSFUSION_DOCUMENT_MARKERS:
+        start = 0
+        while True:
+            position = text.find(marker, start)
+            if position < 0:
+                break
+            line_start = text.rfind("\n", 0, position) + 1
+            line_end = text.find("\n", position)
+            if line_end < 0:
+                line_end = len(text)
+            line = text[line_start:line_end]
+            context = text[max(0, position - 80): position + len(marker) + 120]
+            if (
+                not any(negative in line for negative in _TRANSFUSION_CONTEXT_NEGATIVE_MARKERS)
+                and any(clinical_marker in context for clinical_marker in _TRANSFUSION_CLINICAL_CONTEXT_MARKERS)
+            ):
+                return True
+            start = position + len(marker)
 
     for product in _TRANSFUSION_BLOOD_PRODUCT_MARKERS:
         start = 0
@@ -528,6 +651,93 @@ def _has_pathology_tumor_clinical_context(text: str) -> bool:
     return False
 
 
+def _has_lx0609_019_pathology_specimen_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    matches = _find_regex_matches(text, _LX0609_019_PATHOLOGY_SPECIMEN_PATTERNS)
+    return bool(matches), matches[:8]
+
+
+def _has_pathology_report_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    patterns = (
+        re.compile(r"(病理报告|病理检查报告|病理诊断|病理结果|活检报告).{0,80}(报告时间|记录时间|诊断|结果|提示|出具)"),
+        re.compile(r"(报告时间|记录时间|诊断|结果|提示|出具).{0,80}(病理报告|病理检查报告|病理诊断|病理结果|活检报告)"),
+        re.compile(r"【[^】]*(病理|活检)[^】]*】.{0,120}(诊断|结果|报告|提示|标本|取材)"),
+    )
+    matches = _find_regex_matches(text, patterns)
+    if matches and "病理报告" in text and "病理报告" not in matches:
+        matches = ("病理报告", *matches)
+    return bool(matches), matches[:8]
+
+
+def _has_pathology_report_time_context(text: str) -> bool:
+    patterns = (
+        re.compile(r"(病理报告|病理检查报告|病理诊断|病理结果|活检报告).{0,80}(报告时间|记录时间|提交时间|出具时间|报告出具|出具).{0,30}\d{4}[-/年]\d{1,2}"),
+        re.compile(r"(报告时间|记录时间|提交时间|出具时间|报告出具|出具).{0,30}\d{4}[-/年]\d{1,2}.{0,80}(病理报告|病理检查报告|病理诊断|病理结果|活检报告)"),
+        re.compile(r"【[^】]*(病理|活检)[^】]*】.{0,80}(报告时间|记录时间|提交时间|出具时间|报告出具|出具).{0,30}\d{4}[-/年]\d{1,2}"),
+    )
+    return any(pattern.search(text) for pattern in patterns)
+
+
+def _rule_requires_pathology_report_time(rule: dict[str, Any]) -> bool:
+    dependency_text = _norm_text(rule.get("data_dependencies"))
+    return "病理报告时间" in dependency_text or "病理检查报告时间" in dependency_text
+
+
+def _has_chemo_clinical_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    matches = _find_regex_matches(text, _CHEMO_STRONG_PATTERNS)
+    return bool(matches), matches[:8]
+
+
+def _has_antibiotic_order_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    matches: list[str] = []
+    for pattern in _ANTIBIOTIC_ORDER_STRONG_PATTERNS:
+        for match in pattern.finditer(text):
+            value = match.group(0).strip()
+            if not value:
+                continue
+            context = text[max(0, match.start() - 12): min(len(text), match.end() + 12)]
+            if any(marker in context for marker in _ANTIBIOTIC_NEGATIVE_MARKERS):
+                continue
+            if value not in matches:
+                matches.append(value)
+    return bool(matches), matches[:8]
+
+
+def _has_lx0609_028_class_i_ii_incision_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    if not text.strip():
+        return False, ()
+
+    explicit_matches = _find_regex_matches(text, _INCISION_I_II_EXPLICIT_PATTERNS)
+    surgery_matches = _find_regex_matches(text, _INCISION_I_II_SURGERY_PATTERNS)
+    matches = tuple(dict.fromkeys((*explicit_matches, *surgery_matches)))[:8]
+    if not matches:
+        return False, ()
+
+    # If the same chart clearly describes contaminated/infected surgery, do not
+    # infer I/II incision only from a generic surgery name.
+    if not explicit_matches and any(marker in text for marker in _INCISION_CONTAMINATED_EXCLUSION_MARKERS):
+        return False, ()
+    return True, matches
+
+
+def _missing_lx0609_028_antibiotic_time_fields(text: str) -> tuple[str, ...]:
+    missing: list[str] = []
+    if not any(pattern.search(text) for pattern in _ANTIBIOTIC_START_TIME_PATTERNS):
+        missing.append("抗菌药物医嘱开始时间")
+    if not any(pattern.search(text) for pattern in _ANTIBIOTIC_STOP_TIME_PATTERNS):
+        missing.append("抗菌药物医嘱停止时间")
+    return tuple(missing)
+
+
+def _has_level_4_surgery_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    matches = _find_regex_matches(text, _LEVEL_4_SURGERY_PATTERNS)
+    return bool(matches), matches[:8]
+
+
+def _has_intraoperative_transfusion_context(text: str) -> tuple[bool, tuple[str, ...]]:
+    matches = _find_regex_matches(text, _INTRAOPERATIVE_TRANSFUSION_PATTERNS)
+    return bool(matches), matches[:8]
+
+
 def _find_regex_matches(text: str, patterns: tuple[re.Pattern[str], ...]) -> tuple[str, ...]:
     matches: list[str] = []
     for pattern in patterns:
@@ -539,19 +749,81 @@ def _find_regex_matches(text: str, patterns: tuple[re.Pattern[str], ...]) -> tup
     return tuple(matches)
 
 
+def _surgery_context_windows(text: str, *, radius: int = 520) -> list[str]:
+    windows: list[str] = []
+    for marker in _LX0609_024_SURGERY_CONTEXT_MARKERS:
+        start = 0
+        while True:
+            position = text.find(marker, start)
+            if position < 0:
+                break
+            window = text[position: min(len(text), position + radius)]
+            if window and window not in windows:
+                windows.append(window)
+            start = position + len(marker)
+    return windows
+
+
+def _window_has_current_surgery_anchor(window: str) -> bool:
+    return any(marker in window for marker in _SURGERY_CONTEXT_REQUIRED_MARKERS)
+
+
+def _window_looks_like_history_only(window: str) -> bool:
+    head = window[:160]
+    if not any(marker in head for marker in _SURGERY_HISTORY_MARKERS):
+        return False
+    return not _window_has_current_surgery_anchor(window)
+
+
+def _window_is_current_malignant_tumor_surgery(window: str) -> tuple[bool, tuple[str, ...]]:
+    if not window.strip():
+        return False, ()
+    if _window_looks_like_history_only(window):
+        return False, ()
+
+    malignant_markers = _find_regex_matches(window, _LX0609_024_MALIGNANT_TUMOR_PATTERNS)
+    tumor_surgery_markers = _find_regex_matches(window, _LX0609_024_TUMOR_SURGERY_PATTERNS)
+    specimen_pathology_markers = _find_regex_matches(window, _LX0609_024_SPECIMEN_PATHOLOGY_PATTERNS)
+    if tumor_surgery_markers and malignant_markers and _window_has_current_surgery_anchor(window):
+        return True, tuple(dict.fromkeys((*malignant_markers, *tumor_surgery_markers)))[:8]
+    if specimen_pathology_markers and _window_has_current_surgery_anchor(window):
+        return True, tuple(dict.fromkeys((*malignant_markers, *specimen_pathology_markers)))[:8]
+    if tumor_surgery_markers and any(marker in window for marker in ("手术名称", "术前诊断", "术后诊断", "术中所见")):
+        return True, tuple(dict.fromkeys((*malignant_markers, *tumor_surgery_markers)))[:8]
+    if malignant_markers and _window_has_current_surgery_anchor(window) and re.search(
+        r"(手术名称|拟行|实施|完成).{0,100}"
+        r"(根治|癌根治|淋巴结清扫|区域淋巴结清扫|肿瘤切除|胃切除|肺叶切除|乳腺切除|结肠切除|直肠切除|肝切除|胰十二指肠|甲状腺切除)",
+        window,
+    ):
+        return True, tuple(dict.fromkeys((*malignant_markers, *tumor_surgery_markers)))[:8]
+    return False, ()
+
+
 def _has_lx0609_024_malignant_tumor_surgery_context(text: str) -> tuple[bool, tuple[str, ...]]:
     if not text.strip():
         return False, ()
 
-    malignant_markers = _find_regex_matches(text, _LX0609_024_MALIGNANT_TUMOR_PATTERNS)
+    matched_markers: list[str] = []
+    for window in _surgery_context_windows(text):
+        applicable, markers = _window_is_current_malignant_tumor_surgery(window)
+        if applicable:
+            matched_markers.extend(markers)
+    if matched_markers:
+        return True, tuple(dict.fromkeys(matched_markers))[:8]
+
+    # Fall back only for compact texts that directly describe a malignant tumor
+    # operation without a formal "手术记录/手术名称" section. Do not let a remote
+    # history diagnosis such as "既往肺癌" trigger the current-surgery rule.
     tumor_surgery_markers = _find_regex_matches(text, _LX0609_024_TUMOR_SURGERY_PATTERNS)
-    has_surgery_context = (
-        _has_surgery_clinical_context(text, "手术")
-        or any(marker in text for marker in _LX0609_024_SURGERY_CONTEXT_MARKERS)
-        or bool(tumor_surgery_markers)
-    )
-    is_applicable = has_surgery_context and (bool(malignant_markers) or bool(tumor_surgery_markers))
-    return is_applicable, tuple(dict.fromkeys((*malignant_markers, *tumor_surgery_markers)))[:8]
+    malignant_markers = _find_regex_matches(text, _LX0609_024_MALIGNANT_TUMOR_PATTERNS)
+    if (
+        tumor_surgery_markers
+        and malignant_markers
+        and _window_has_current_surgery_anchor(text)
+        and not any(marker in text[:160] for marker in ("既往史", "手术史"))
+    ):
+        return True, tuple(dict.fromkeys((*malignant_markers, *tumor_surgery_markers)))[:8]
+    return False, ()
 
 
 def _has_positive_critical_order(text: str, order_keyword: str) -> bool:
@@ -613,7 +885,7 @@ def _record_text_has_first_course_content(text: str) -> bool:
             if position < 0:
                 break
             window = text[position: position + 600]
-            cleaned = re.sub(r"(首次病程记录|首次病程|记录时间|提交时间|文书类型|文书编号|正文|[:：\\s\\d\\-T]+)", "", window)
+            cleaned = re.sub(r"(首次病程记录|首次病程|记录时间|提交时间|文书类型|文书编号|正文|[:：\s\dT-]+)", "", window)
             if len(cleaned.strip()) >= 30:
                 return True
             start = position + len(marker)
@@ -657,6 +929,82 @@ def evaluate_luxian_0609_trigger_gates(
                 data_gap_fields=("首次病程记录正文",),
             )
             continue
+        if rule_id == "LX0609-013":
+            has_pathology_report, matched_markers = _has_pathology_report_context(record_text)
+            if not has_pathology_report:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现病理报告或病理检查结果强触发事实，本次不进入病理结果回看规则",
+                )
+                continue
+            if _rule_requires_pathology_report_time(rule) and not _has_pathology_report_time_context(record_text):
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_DATA_GAP,
+                    reason="已发现病理报告或病理检查结果事实，但缺少病理报告时间，无法完成自动判定",
+                    data_gap_fields=("病理报告时间",),
+                    matched_keywords=matched_markers,
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现病理报告或病理检查结果事实，进入病理结果记录复核",
+                matched_keywords=matched_markers,
+            )
+            continue
+        if rule_id == "LX0609-019":
+            has_pathology_specimen, matched_markers = _has_lx0609_019_pathology_specimen_context(record_text)
+            if not has_pathology_specimen:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现病理检查、活检取材或手术送检等适用事实，本次不进入取材记录规则",
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现病理检查或取材送检事实，进入取材记录复核",
+                matched_keywords=matched_markers,
+            )
+            continue
+        if rule_id == "LX0609-028":
+            has_class_i_ii_incision, incision_markers = _has_lx0609_028_class_i_ii_incision_context(record_text)
+            if not has_class_i_ii_incision:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现I类/II类切口或常见清洁、清洁-污染切口手术事实，本次不进入抗菌药物预防用药时限规则",
+                )
+                continue
+            has_antibiotic_order, antibiotic_markers = _has_antibiotic_order_context(record_text)
+            if not has_antibiotic_order:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="已发现I类/II类切口相关手术，但未发现抗菌药物医嘱或预防使用抗生素事实，本次不进入抗菌药物预防用药时限规则",
+                    matched_keywords=incision_markers,
+                )
+                continue
+            missing_time_fields = _missing_lx0609_028_antibiotic_time_fields(record_text)
+            if missing_time_fields:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_DATA_GAP,
+                    reason="已发现I类/II类切口相关手术及预防抗菌药物医嘱，但缺少完成时限判定所需的起止时间字段",
+                    data_gap_fields=missing_time_fields,
+                    matched_keywords=tuple(dict.fromkeys((*incision_markers, *antibiotic_markers)))[:8],
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现I类/II类切口相关手术及预防抗菌药物起止时间，进入抗菌药物使用时限复核",
+                matched_keywords=tuple(dict.fromkeys((*incision_markers, *antibiotic_markers)))[:8],
+            )
+            continue
         if rule_id == "LX0609-024":
             is_applicable, matched_markers = _has_lx0609_024_malignant_tumor_surgery_context(record_text)
             if not is_applicable:
@@ -670,6 +1018,54 @@ def evaluate_luxian_0609_trigger_gates(
                 rule_id=rule_id,
                 status=TRIGGER_PRESENT,
                 reason="已发现恶性肿瘤相关手术场景，进入淋巴结清扫记录复核",
+                matched_keywords=matched_markers,
+            )
+            continue
+        if rule_id == "LX0609-026":
+            has_chemo, matched_markers = _has_chemo_clinical_context(record_text)
+            if not has_chemo:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现明确化疗医嘱或化疗记录，本次不进入化疗记录一致性规则",
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现化疗医嘱或化疗记录，进入化疗记录一致性复核",
+                matched_keywords=matched_markers,
+            )
+            continue
+        if rule_id == "LX0609-040":
+            has_level_4, matched_markers = _has_level_4_surgery_context(record_text)
+            if not has_level_4:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现四级手术或重大手术适用证据，本次不进入MDT讨论规则",
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现四级手术或重大手术线索，进入MDT讨论记录复核",
+                matched_keywords=matched_markers,
+            )
+            continue
+        if rule_id == "LX0609-048":
+            has_intraop_transfusion, matched_markers = _has_intraoperative_transfusion_context(record_text)
+            if not has_intraop_transfusion:
+                decisions[rule_id] = Luxian0609GateDecision(
+                    rule_id=rule_id,
+                    status=TRIGGER_ABSENT,
+                    reason="未发现术中输血或麻醉/手术记录中的输血事实，本次不进入术中输血规则",
+                )
+                continue
+            decisions[rule_id] = Luxian0609GateDecision(
+                rule_id=rule_id,
+                status=TRIGGER_PRESENT,
+                reason="已发现术中输血事实，进入术中输血记录复核",
                 matched_keywords=matched_markers,
             )
             continue
@@ -770,20 +1166,24 @@ def decision_to_result(rule: dict[str, Any], decision: Luxian0609GateDecision) -
     rule_name = str(rule.get("name") or rule.get("rule_name") or rule_id)
     if status == TRIGGER_ABSENT:
         result_status = "not_applicable"
-        findings = "未发现该质控点所需触发事件，本次判定为不适用。"
+        findings = decision.reason if rule_id == "LX0609-028" and decision.reason else "未发现该质控点所需触发事件，本次判定为不适用。"
         suggestion = "无需整改；如病历存在相关事件，请补充结构化文书或医嘱后重新质控。"
         confidence = 0.88
     else:
         result_status = "data_gap"
         fields = "、".join(decision.data_gap_fields) or "必要结构化字段"
         findings = f"已发现触发事件，但缺少 {fields}，无法完成自动判定。"
-        suggestion = f"请补齐 {fields} 后重新执行质控，或由质控员人工复核。"
+        suggestion = f"请补齐 {fields} 后重新执行质控，或由质控员结合原文确认。"
         confidence = 0.72
 
     if status == TRIGGER_ABSENT:
-        evidence_lines = ["判定依据：未发现与本质控点直接相关的适用事件。"]
+        evidence_lines = [
+            f"适用性：{decision.reason}"
+            if rule_id == "LX0609-028" and decision.reason
+            else "适用性：未发现与本质控点直接相关的触发事实。"
+        ]
     else:
-        evidence_lines = ["判定依据：已发现相关事件，但自动判定所需字段不完整。"]
+        evidence_lines = ["数据不足：已发现相关事件，但缺少自动判定所需字段。"]
     if decision.data_gap_fields:
         evidence_lines.append(f"缺失字段：{'、'.join(decision.data_gap_fields)}")
     evidence = "\n".join(evidence_lines)

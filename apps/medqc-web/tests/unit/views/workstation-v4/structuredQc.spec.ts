@@ -103,7 +103,7 @@ describe('structuredQc mapper', () => {
     expect(result.issues[0]?.metadata.promptVersion).toBe('p1')
   })
 
-  it('默认过滤应只保留问题项（不合规+待复核）', () => {
+  it('默认过滤应只保留问题项（不合规+AI判断）', () => {
     const mapped = mapSichuanEvaluationToStructuredQC({
       evaluation_summary: { total_rules: 3, issues_found: 2 },
       evaluation_results: [

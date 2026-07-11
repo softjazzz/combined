@@ -24,11 +24,13 @@ from ..services.fast_screen_qc import (
 )
 from ..services.detached_task_runner import submit_detached_task
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
-from ..services.luxian_0609_rule_catalog import (
+from ..services.luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
     LUXIAN_0609_RULE_SET_NAME,
     filter_luxian_0609_rules_by_documents,
+    get_luxian_0609_rule,
     load_luxian_0609_rules,
+    review_luxian_0609_batch_job,
 )
 from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
@@ -288,13 +290,70 @@ def _is_workspace_batch_job(job: Optional[Dict[str, Any]]) -> bool:
     return is_workspace_batch_draft_id(job.get("draft_id"))
 
 
-def _workspace_batch_response_item(job: Dict[str, Any]) -> Dict[str, Any]:
+def _compact_workspace_summary(summary: Dict[str, Any], rule_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    compact_summary = dict(summary)
+    issue_summaries: List[Dict[str, Any]] = []
+    for rule_result in rule_results:
+        if not isinstance(rule_result, dict):
+            continue
+        for item in list(rule_result.get("items") or []):
+            if not isinstance(item, dict):
+                continue
+            status = str(item.get("status") or item.get("result_status") or "").strip().lower()
+            if status not in {
+                "non_compliant",
+                "ai_suggested_non_compliant",
+                "data_gap",
+                "uncertain",
+                "not_executed",
+                "technical_error",
+            }:
+                continue
+            rule_id = str(item.get("qc_point_id") or item.get("rule_code") or item.get("rule_id") or "").strip()
+            conclusion = ""
+            decision = item.get("decision") if isinstance(item.get("decision"), dict) else {}
+            if isinstance(decision, dict):
+                conclusion = str(decision.get("conclusion") or "").strip()
+            if not conclusion:
+                conclusion = str(item.get("findings") or item.get("rule_name") or "").strip()
+            issue_summaries.append(
+                {
+                    "rule_id": rule_id,
+                    "status": status,
+                    "text": conclusion[:80],
+                }
+            )
+            if len(issue_summaries) >= 6:
+                break
+        if len(issue_summaries) >= 6:
+            break
+    if issue_summaries:
+        compact_summary["history_issue_summaries"] = issue_summaries
+    compact_summary.pop("rule_results", None)
+    review_report = compact_summary.get("review_report")
+    if isinstance(review_report, dict):
+        compact_review = dict(review_report)
+        compact_review.pop("findings", None)
+        compact_summary["review_report"] = compact_review
+    return compact_summary
+
+
+def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
     selected_rule_ids = list(filters.get("selected_rule_ids") or [])
     rule_ids = list(filters.get("rule_ids") or [])
+    response_job = dict(job)
+    if compact:
+        rule_results = list(response_job.get("rule_results") or [])
+        response_job["summary"] = _compact_workspace_summary(summary, rule_results)
+        response_job["items"] = []
+        response_job["failed_records"] = []
+        response_job["rule_results"] = []
+        response_job["children"] = []
+        response_job["child_jobs"] = []
     return {
-        **job,
+        **response_job,
         "execution_mode": "batch",
         "rule_count": int(summary.get("rule_count") or filters.get("rule_count") or job.get("rule_count") or 0),
         "customer_rule_count": int(filters.get("customer_rule_count") or job.get("customer_rule_count") or 0),
@@ -377,14 +436,54 @@ def _build_cluster_key(item: Dict[str, Any]) -> str:
     status = str(item.get("status") or "").strip().lower()
     if status == "non_compliant":
         status_label = "不合规"
+    elif status == "ai_suggested_non_compliant":
+        status_label = "AI判断"
+    elif status == "ai_suggested_compliant":
+        status_label = "AI判断"
     elif status == "uncertain":
-        status_label = "待复核"
+        status_label = "AI判断"
     else:
         status_label = "其他"
-    evidence = str(item.get("evidence") or "").strip()
+    evidence = _sanitize_result_aggregation_text(str(item.get("evidence") or "").strip())
     findings = str(item.get("findings") or "").strip()
     base = evidence or findings or str(item.get("rule_name") or item.get("rule_code") or "命中项")
     return f"[{status_label}] {base[:64]}"
+
+
+_RESULT_AGGREGATION_INTERNAL_PATTERNS = (
+    re.compile(r"^证据模板[:：].*$"),
+    re.compile(r"^映射执行规则[:：].*$"),
+    re.compile(r"^应包含证据要素[:：].*$"),
+    re.compile(r"^触发状态[:：].*$"),
+    re.compile(r"^触发说明[:：].*$"),
+)
+
+
+def _sanitize_result_aggregation_text(text: str, *, limit: int = 120) -> str:
+    """清理任务聚合摘要中的内部执行话术，避免进入历史任务和导出摘要。"""
+    cleaned_lines: List[str] = []
+    seen: set[str] = set()
+    for raw_line in str(text or "").replace("；", "\n").splitlines():
+        line = " ".join(raw_line.strip().split())
+        if not line:
+            continue
+        if any(pattern.search(line) for pattern in _RESULT_AGGREGATION_INTERNAL_PATTERNS):
+            continue
+        if line.startswith("判定依据："):
+            if "未发现与本质控点直接相关的适用事件" in line:
+                line = "适用性：未发现与本质控点直接相关的触发事实。"
+            elif "自动判定所需字段不完整" in line:
+                line = "数据不足：已发现相关事件，但缺少自动判定所需字段。"
+            else:
+                continue
+        line = re.sub(r"^(来源未标注\s*[·:：]\s*)?evidence\s*[·:：]\s*", "", line, flags=re.IGNORECASE)
+        dedupe_key = line.rstrip("。；; ")
+        if not line or dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        cleaned_lines.append(line)
+    cleaned = "；".join(cleaned_lines)
+    return cleaned[:limit]
 
 
 def _to_breakdown_list(counter: Dict[str, int], top_n: int = 8) -> List[Dict[str, Any]]:
@@ -615,7 +714,7 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
             cluster_key,
             {
                 "cluster_key": cluster_key,
-                "sample_evidence": str(item.get("evidence") or "")[:120],
+                "sample_evidence": _sanitize_result_aggregation_text(str(item.get("evidence") or "")),
                 "records": 0,
                 "rules": {},
                 "document_types": {},
@@ -718,6 +817,439 @@ def _build_record_status_counts(
     }
 
 
+def _build_item_status_counts(items: List[Dict[str, Any]]) -> Dict[str, int]:
+    status_keys = [
+        "non_compliant",
+        "ai_suggested_non_compliant",
+        "ai_suggested_compliant",
+        "compliant",
+        "not_applicable",
+        "data_gap",
+        "uncertain",
+        "not_executed",
+        "technical_error",
+        "failed",
+    ]
+    counts = {key: 0 for key in status_keys}
+    for item in items:
+        status = str(item.get("status") or "").strip().lower()
+        display_status = str(item.get("display_status") or "").strip().lower()
+        if status in counts:
+            counts[status] += 1
+        elif display_status == "data_quality_gap":
+            counts["data_gap"] += 1
+        elif display_status == "technical_error_internal":
+            counts["technical_error"] += 1
+        elif display_status in {"unsupported", "not_run", "not_executed"}:
+            counts["not_executed"] += 1
+        elif display_status == "rejected_by_system":
+            counts["not_applicable"] += 1
+    return counts
+
+
+def _performance_int(value: Any) -> int:
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _performance_float(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _performance_dict(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _sum_int_maps(target: Dict[str, int], source: Any) -> None:
+    if not isinstance(source, dict):
+        return
+    for raw_key, raw_value in source.items():
+        key = str(raw_key or "").strip()
+        if not key:
+            continue
+        target[key] = int(target.get(key) or 0) + _performance_int(raw_value)
+
+
+def _summarize_luxian_input_profile(raw_profile: Any) -> Dict[str, Any]:
+    profile = _performance_dict(raw_profile)
+    if not profile:
+        return {}
+    family_profiles = _performance_dict(profile.get("family_profiles"))
+    summarized_families: Dict[str, Dict[str, Any]] = {}
+    for raw_family, raw_family_profile in family_profiles.items():
+        family = str(raw_family or "").strip()
+        family_profile = _performance_dict(raw_family_profile)
+        if not family or not family_profile:
+            continue
+        summarized_families[family] = {
+            "document_count": _performance_int(family_profile.get("document_count")),
+            "text_char_count": _performance_int(family_profile.get("text_char_count")),
+            "ready_for_trimmed_context": bool(family_profile.get("ready_for_trimmed_context") is True),
+            "present_source_table_count": len(list(family_profile.get("present_source_tables") or [])),
+            "missing_source_table_count": len(list(family_profile.get("missing_source_tables") or [])),
+        }
+    return {
+        "schema_version": "luxian_0609_input_profile_v1",
+        "mode": str(profile.get("mode") or "").strip(),
+        "basis": str(profile.get("basis") or "").strip(),
+        "visit_id": str(profile.get("visit_id") or "").strip(),
+        "evidence_payload_available": bool(profile.get("evidence_payload_available") is True),
+        "primary_text_char_count": _performance_int(profile.get("primary_text_char_count")),
+        "medical_text_char_count": _performance_int(profile.get("medical_text_char_count")),
+        "document_count": _performance_int(profile.get("document_count")),
+        "source_table_count": _performance_int(profile.get("source_table_count")),
+        "source_table_counts": {
+            str(key): _performance_int(value)
+            for key, value in _performance_dict(profile.get("source_table_counts")).items()
+            if str(key or "").strip()
+        },
+        "source_table_text_lengths": {
+            str(key): _performance_int(value)
+            for key, value in _performance_dict(profile.get("source_table_text_lengths")).items()
+            if str(key or "").strip()
+        },
+        "available_family_contexts": sorted(
+            str(item).strip()
+            for item in list(profile.get("available_family_contexts") or [])
+            if str(item or "").strip()
+        ),
+        "family_profiles": summarized_families,
+    }
+
+
+def _build_batch_input_profile_summary(result_profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    profiles_by_visit: Dict[str, Dict[str, Any]] = {}
+    for result_profile in result_profiles:
+        input_profile = _performance_dict(result_profile.get("input_profile"))
+        if not input_profile:
+            continue
+        visit_id = str(input_profile.get("visit_id") or result_profile.get("visit_id") or "").strip()
+        key = visit_id or f"profile-{len(profiles_by_visit) + 1}"
+        profiles_by_visit.setdefault(key, input_profile)
+
+    if not profiles_by_visit:
+        return {}
+
+    source_table_counts: Dict[str, int] = {}
+    source_table_text_lengths: Dict[str, int] = {}
+    family_contexts: set[str] = set()
+    family_summary: Dict[str, Dict[str, Any]] = {}
+    total_document_count = 0
+    total_primary_chars = 0
+    total_medical_chars = 0
+    evidence_payload_available_count = 0
+
+    for input_profile in profiles_by_visit.values():
+        total_document_count += _performance_int(input_profile.get("document_count"))
+        total_primary_chars += _performance_int(input_profile.get("primary_text_char_count"))
+        total_medical_chars += _performance_int(input_profile.get("medical_text_char_count"))
+        if input_profile.get("evidence_payload_available") is True:
+            evidence_payload_available_count += 1
+        _sum_int_maps(source_table_counts, input_profile.get("source_table_counts"))
+        _sum_int_maps(source_table_text_lengths, input_profile.get("source_table_text_lengths"))
+        family_contexts.update(
+            str(item).strip()
+            for item in list(input_profile.get("available_family_contexts") or [])
+            if str(item or "").strip()
+        )
+        for family_key, family_profile_raw in _performance_dict(input_profile.get("family_profiles")).items():
+            family_profile = _performance_dict(family_profile_raw)
+            family = str(family_key or "").strip()
+            if not family or not family_profile:
+                continue
+            summary = family_summary.setdefault(
+                family,
+                {
+                    "ready_record_count": 0,
+                    "document_count": 0,
+                    "text_char_count": 0,
+                    "present_source_table_count": 0,
+                    "missing_source_table_count": 0,
+                },
+            )
+            if family_profile.get("ready_for_trimmed_context") is True:
+                summary["ready_record_count"] = int(summary["ready_record_count"] or 0) + 1
+            summary["document_count"] = int(summary["document_count"] or 0) + _performance_int(
+                family_profile.get("document_count")
+            )
+            summary["text_char_count"] = int(summary["text_char_count"] or 0) + _performance_int(
+                family_profile.get("text_char_count")
+            )
+            summary["present_source_table_count"] = int(summary["present_source_table_count"] or 0) + _performance_int(
+                family_profile.get("present_source_table_count")
+            )
+            summary["missing_source_table_count"] = int(summary["missing_source_table_count"] or 0) + _performance_int(
+                family_profile.get("missing_source_table_count")
+            )
+
+    return {
+        "schema_version": "luxian_0609_input_perf_summary_v1",
+        "basis": "unique_visit_input_profile",
+        "record_count": len(profiles_by_visit),
+        "evidence_payload_available_count": evidence_payload_available_count,
+        "document_count": total_document_count,
+        "primary_text_char_count": total_primary_chars,
+        "medical_text_char_count": total_medical_chars,
+        "source_table_counts": dict(sorted(source_table_counts.items())),
+        "source_table_text_lengths": dict(sorted(source_table_text_lengths.items())),
+        "available_family_contexts": sorted(family_contexts),
+        "family_profiles": dict(sorted(family_summary.items())),
+    }
+
+
+def _build_result_performance_profile(item: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    executor_type = str(item.get("executor_type") or metadata.get("executor_type") or "llm").strip().lower()
+    tokens_total = _performance_int(metadata.get("tokens_used") or item.get("tokens_used"))
+    prompt_tokens = _performance_int(metadata.get("prompt_tokens") or item.get("prompt_tokens"))
+    completion_tokens = _performance_int(metadata.get("completion_tokens") or item.get("completion_tokens"))
+    input_tokens = _performance_int(metadata.get("input_tokens") or prompt_tokens)
+    output_tokens = _performance_int(metadata.get("output_tokens") or completion_tokens)
+    if tokens_total <= 0:
+        tokens_total = prompt_tokens + completion_tokens
+    unattributed_tokens = max(0, tokens_total - prompt_tokens - completion_tokens)
+    duration_seconds = _performance_float(
+        metadata.get("api_time")
+        or item.get("api_time")
+        or metadata.get("total_processing_time")
+        or item.get("total_processing_time")
+    )
+    provider_error_count = _performance_int(metadata.get("provider_error_count") or item.get("provider_error_count"))
+    timeout_count = _performance_int(metadata.get("timeout_count") or item.get("timeout_count"))
+    rate_limit_count = _performance_int(metadata.get("rate_limit_count") or item.get("rate_limit_count"))
+    pack_retry_attempts = _performance_int(metadata.get("pack_retry_attempts") or item.get("pack_retry_attempts"))
+    retry_count = provider_error_count + timeout_count + rate_limit_count + pack_retry_attempts
+    llm_call_count = 0
+    program_call_count = 0
+    if executor_type == "program":
+        program_call_count = 1
+    elif tokens_total > 0 or duration_seconds > 0 or _safe_bool(metadata.get("llm_fallback")):
+        llm_call_count = 1
+    input_profile = _summarize_luxian_input_profile(
+        item.get("luxian_0609_input_profile") or metadata.get("luxian_0609_input_profile")
+    )
+
+    profile = {
+        "schema_version": "luxian_0609_rule_perf_v1",
+        "rule_id": str(item.get("rule_id") or item.get("rule_code") or "").strip(),
+        "rule_code": str(item.get("rule_code") or "").strip(),
+        "rule_name": str(item.get("rule_name") or "").strip(),
+        "source_rule_id": str(item.get("source_rule_id") or metadata.get("selected_execution_rule_id") or "").strip(),
+        "record_id": str(item.get("record_id") or "").strip(),
+        "visit_id": str(item.get("visit_id") or "").strip(),
+        "final_status": str(item.get("status") or item.get("display_status") or "").strip().lower(),
+        "executor_type": executor_type or "llm",
+        "duration_seconds": round(max(0.0, duration_seconds), 4),
+        "llm_call_count": llm_call_count,
+        "program_call_count": program_call_count,
+        "retry_count": retry_count,
+        "provider_error_count": provider_error_count,
+        "timeout_count": timeout_count,
+        "rate_limit_count": rate_limit_count,
+        "pack_retry_attempts": pack_retry_attempts,
+        "tokens_total": tokens_total,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "unattributed_tokens": unattributed_tokens,
+        "token_breakdown_complete": unattributed_tokens == 0,
+        "context_tokens_estimate": _performance_int(
+            metadata.get("context_tokens_estimate") or item.get("context_tokens_estimate")
+        ),
+        "first_result_latency_seconds": round(
+            max(0.0, _performance_float(metadata.get("first_result_latency") or item.get("first_result_latency"))),
+            4,
+        ),
+        "pack_size": _performance_int(metadata.get("pack_size") or item.get("pack_size")),
+        "pack_id": str(metadata.get("pack_id") or item.get("pack_id") or "").strip(),
+        "cache_hit": bool(metadata.get("cache_hit") is True or item.get("cache_hit") is True),
+        "trace_id": str(metadata.get("trace_id") or item.get("trace_id") or "").strip(),
+    }
+    if input_profile:
+        profile["input_profile"] = input_profile
+    return profile
+
+
+def _attach_result_performance_profile(item: Dict[str, Any]) -> Dict[str, Any]:
+    profile = _build_result_performance_profile(item)
+    item["performance_profile"] = profile
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    metadata = dict(metadata)
+    metadata["performance_profile"] = profile
+    item["metadata"] = _sanitize_trace_value(metadata, set(), max_text=1200)
+    return item
+
+
+def _build_batch_performance_profile(
+    *,
+    job_id: str,
+    items: List[Dict[str, Any]],
+    total_records: int,
+    customer_rule_count: int,
+    execution_rule_count: int,
+    wall_clock_time: float,
+    first_result_latency: float,
+    actual_llm_pack_call_count: int = 0,
+) -> Dict[str, Any]:
+    result_profiles = [
+        dict(item.get("performance_profile") or _build_result_performance_profile(item))
+        for item in items
+        if isinstance(item, dict)
+    ]
+    rule_map: Dict[str, Dict[str, Any]] = {}
+    total_duration = 0.0
+    total_llm_calls = 0
+    total_program_calls = 0
+    total_retry_count = 0
+    total_provider_errors = 0
+    total_timeouts = 0
+    total_rate_limits = 0
+    total_pack_retries = 0
+    total_tokens = 0
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_unattributed_tokens = 0
+    total_context_tokens = 0
+
+    for profile in result_profiles:
+        rule_id = str(profile.get("rule_id") or profile.get("rule_code") or "unknown").strip() or "unknown"
+        duration = _performance_float(profile.get("duration_seconds"))
+        llm_calls = _performance_int(profile.get("llm_call_count"))
+        program_calls = _performance_int(profile.get("program_call_count"))
+        retry_count = _performance_int(profile.get("retry_count"))
+        provider_errors = _performance_int(profile.get("provider_error_count"))
+        timeouts = _performance_int(profile.get("timeout_count"))
+        rate_limits = _performance_int(profile.get("rate_limit_count"))
+        pack_retries = _performance_int(profile.get("pack_retry_attempts"))
+        tokens = _performance_int(profile.get("tokens_total"))
+        prompt_tokens = _performance_int(profile.get("prompt_tokens"))
+        completion_tokens = _performance_int(profile.get("completion_tokens"))
+        unattributed_tokens = _performance_int(
+            profile.get("unattributed_tokens") or max(0, tokens - prompt_tokens - completion_tokens)
+        )
+        context_tokens = _performance_int(profile.get("context_tokens_estimate"))
+        total_duration += duration
+        total_llm_calls += llm_calls
+        total_program_calls += program_calls
+        total_retry_count += retry_count
+        total_provider_errors += provider_errors
+        total_timeouts += timeouts
+        total_rate_limits += rate_limits
+        total_pack_retries += pack_retries
+        total_tokens += tokens
+        total_prompt_tokens += prompt_tokens
+        total_completion_tokens += completion_tokens
+        total_unattributed_tokens += unattributed_tokens
+        total_context_tokens += context_tokens
+
+        rule_profile = rule_map.setdefault(
+            rule_id,
+            {
+                "rule_id": rule_id,
+                "rule_name": str(profile.get("rule_name") or "").strip(),
+                "result_count": 0,
+                "status_breakdown": {},
+                "duration_seconds": 0.0,
+                "llm_call_count": 0,
+                "program_call_count": 0,
+                "retry_count": 0,
+                "provider_error_count": 0,
+                "timeout_count": 0,
+                "rate_limit_count": 0,
+                "pack_retry_attempts": 0,
+                "tokens_total": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "unattributed_tokens": 0,
+                "context_tokens_estimate": 0,
+            },
+        )
+        rule_profile["result_count"] = int(rule_profile["result_count"] or 0) + 1
+        status = str(profile.get("final_status") or "unknown").strip().lower() or "unknown"
+        status_breakdown = dict(rule_profile.get("status_breakdown") or {})
+        status_breakdown[status] = int(status_breakdown.get(status) or 0) + 1
+        rule_profile["status_breakdown"] = status_breakdown
+        rule_profile["duration_seconds"] = round(float(rule_profile["duration_seconds"] or 0.0) + duration, 4)
+        rule_profile["llm_call_count"] = int(rule_profile["llm_call_count"] or 0) + llm_calls
+        rule_profile["program_call_count"] = int(rule_profile["program_call_count"] or 0) + program_calls
+        rule_profile["retry_count"] = int(rule_profile["retry_count"] or 0) + retry_count
+        rule_profile["provider_error_count"] = int(rule_profile["provider_error_count"] or 0) + provider_errors
+        rule_profile["timeout_count"] = int(rule_profile["timeout_count"] or 0) + timeouts
+        rule_profile["rate_limit_count"] = int(rule_profile["rate_limit_count"] or 0) + rate_limits
+        rule_profile["pack_retry_attempts"] = int(rule_profile["pack_retry_attempts"] or 0) + pack_retries
+        rule_profile["tokens_total"] = int(rule_profile["tokens_total"] or 0) + tokens
+        rule_profile["prompt_tokens"] = int(rule_profile["prompt_tokens"] or 0) + prompt_tokens
+        rule_profile["completion_tokens"] = int(rule_profile["completion_tokens"] or 0) + completion_tokens
+        rule_profile["unattributed_tokens"] = int(rule_profile["unattributed_tokens"] or 0) + unattributed_tokens
+        rule_profile["context_tokens_estimate"] = int(rule_profile["context_tokens_estimate"] or 0) + context_tokens
+
+    rules = list(rule_map.values())
+    for rule_profile in rules:
+        result_count = max(1, int(rule_profile.get("result_count") or 0))
+        rule_profile["avg_duration_seconds"] = round(float(rule_profile.get("duration_seconds") or 0.0) / result_count, 4)
+        rule_profile["avg_tokens_total"] = round(float(rule_profile.get("tokens_total") or 0) / result_count, 2)
+        rule_profile["token_breakdown_complete"] = _performance_int(rule_profile.get("unattributed_tokens")) == 0
+    rules.sort(
+        key=lambda item: (
+            float(item.get("duration_seconds") or 0.0),
+            int(item.get("tokens_total") or 0),
+            int(item.get("retry_count") or 0),
+        ),
+        reverse=True,
+    )
+    slow_results = sorted(
+        result_profiles,
+        key=lambda item: (
+            _performance_float(item.get("duration_seconds")),
+            _performance_int(item.get("tokens_total")),
+            _performance_int(item.get("retry_count")),
+        ),
+        reverse=True,
+    )[:20]
+    input_profile_summary = _build_batch_input_profile_summary(result_profiles)
+
+    batch_profile = {
+        "schema_version": "luxian_0609_job_perf_v1",
+        "job_id": job_id,
+        "basis": "per_result_metadata",
+        "total_records": int(total_records or 0),
+        "customer_rule_count": int(customer_rule_count or 0),
+        "execution_rule_count": int(execution_rule_count or 0),
+        "result_count": len(result_profiles),
+        "wall_clock_time_seconds": round(max(0.0, float(wall_clock_time or 0.0)), 4),
+        "sum_rule_duration_seconds": round(total_duration, 4),
+        "first_result_latency_seconds": round(max(0.0, float(first_result_latency or 0.0)), 4),
+        "llm_call_count": total_llm_calls,
+        "llm_call_count_basis": "result_participation_count",
+        "actual_llm_pack_call_count": int(actual_llm_pack_call_count or 0),
+        "program_call_count": total_program_calls,
+        "retry_count": total_retry_count,
+        "provider_error_count": total_provider_errors,
+        "timeout_count": total_timeouts,
+        "rate_limit_count": total_rate_limits,
+        "pack_retry_attempts": total_pack_retries,
+        "tokens_total": total_tokens,
+        "prompt_tokens": total_prompt_tokens,
+        "completion_tokens": total_completion_tokens,
+        "unattributed_tokens": total_unattributed_tokens,
+        "token_breakdown_complete": total_unattributed_tokens == 0,
+        "context_tokens_estimate": total_context_tokens,
+        "rules": rules,
+        "slow_rules": rules[:12],
+        "slow_results": slow_results,
+        "results": result_profiles,
+    }
+    if input_profile_summary:
+        batch_profile["input_profile"] = input_profile_summary
+    return batch_profile
+
+
 def _build_debug_snapshot(
     job: Dict[str, Any],
     *,
@@ -774,6 +1306,322 @@ def _build_debug_snapshot(
         "recent_items": all_items[:max(1, int(item_limit or 30))],
         "recent_failed_records": all_failed[:max(1, int(item_limit or 30))],
         "updated_at": (job.get("summary") or {}).get("updated_at") or job.get("updated_at"),
+    }
+
+
+_TRACE_SENSITIVE_KEYS = {
+    "prompt",
+    "raw_response",
+    "raw_output",
+    "llm_raw_output",
+    "provider_response",
+    "embedding",
+    "medical_text",
+    "record_content",
+    "documents",
+    "bundle",
+    "internal_data",
+    "vector",
+}
+
+
+def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not current_user:
+        return set()
+    roles = current_user.get("roles")
+    normalized: set[str] = set()
+    if isinstance(roles, list):
+        normalized.update(str(role).strip().lower() for role in roles if str(role).strip())
+    role = str(current_user.get("role") or "").strip().lower()
+    if role:
+        normalized.add(role)
+    return normalized
+
+
+def _can_view_result_trace(current_user: Optional[Dict[str, Any]]) -> bool:
+    return bool(_extract_user_roles(current_user).intersection({"admin", "sync_admin", "super_admin"}))
+
+
+def _sanitize_trace_value(value: Any, removed_keys: set[str], *, max_text: int = 1200) -> Any:
+    if isinstance(value, dict):
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = str(key or "").strip().lower()
+            if normalized_key in _TRACE_SENSITIVE_KEYS:
+                removed_keys.add(str(key))
+                continue
+            sanitized[str(key)] = _sanitize_trace_value(item, removed_keys, max_text=max_text)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_trace_value(item, removed_keys, max_text=max_text) for item in value[:50]]
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) > max_text:
+            return f"{text[:max_text]}...（已截断）"
+        return text
+    return value
+
+
+def _trace_pick(item: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+    return {key: item.get(key) for key in keys if key in item and item.get(key) is not None}
+
+
+def _result_diagnostic_trace(
+    item: Dict[str, Any],
+    metadata: Dict[str, Any],
+    *,
+    evidence_items: Optional[List[Dict[str, Any]]] = None,
+    status: Optional[str] = None,
+) -> Dict[str, Any]:
+    existing = item.get("diagnostic_trace")
+    if not isinstance(existing, dict):
+        existing = metadata.get("diagnostic_trace") if isinstance(metadata.get("diagnostic_trace"), dict) else {}
+    source_evidence = (
+        item.get("source_evidence")
+        or existing.get("source_evidence")
+        or (evidence_items if evidence_items else None)
+        or item.get("evidence")
+        or ""
+    )
+    trigger_decision = (
+        item.get("trigger_decision")
+        or existing.get("trigger_decision")
+        or metadata.get("trigger_decision")
+        or {
+            key: metadata.get(key)
+            for key in (
+                "trigger_gate_status",
+                "trigger_gate_reason",
+                "trigger_gate_matched_keywords",
+                "data_gap_fields",
+            )
+            if metadata.get(key) is not None
+        }
+    )
+    source_results = (
+        existing.get("source_execution_results")
+        or metadata.get("source_execution_results")
+        or item.get("source_execution_results")
+        or []
+    )
+    if source_results and not isinstance(source_results, list):
+        source_results = [source_results]
+    source_rule_id = str(
+        item.get("source_rule_id")
+        or existing.get("source_rule_id")
+        or metadata.get("selected_execution_rule_id")
+        or item.get("rule_id")
+        or item.get("rule_code")
+        or ""
+    ).strip()
+    source_status = str(
+        item.get("source_status")
+        or existing.get("source_status")
+        or status
+        or item.get("status")
+        or ""
+    ).strip()
+    source_conclusion = str(
+        item.get("source_conclusion")
+        or existing.get("source_conclusion")
+        or item.get("findings")
+        or item.get("conclusion")
+        or ""
+    ).strip()
+    trace = {
+        **existing,
+        "source_rule_id": source_rule_id,
+        "source_status": source_status,
+        "source_conclusion": source_conclusion,
+        "source_evidence": source_evidence,
+        "trigger_decision": trigger_decision if isinstance(trigger_decision, dict) else {},
+        "aggregation_reason": str(
+            item.get("aggregation_reason")
+            or existing.get("aggregation_reason")
+            or metadata.get("aggregation_reason")
+            or metadata.get("aggregation_source")
+            or ""
+        ),
+        "postprocess_reason": str(
+            item.get("postprocess_reason")
+            or existing.get("postprocess_reason")
+            or metadata.get("postprocess_reason")
+            or ""
+        ),
+        "source_execution_results": source_results,
+    }
+    removed_keys: set[str] = set()
+    return _sanitize_trace_value(trace, removed_keys)
+
+
+def _flatten_batch_job_items(job: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items = [item for item in list(job.get("items") or []) if isinstance(item, dict)]
+    for child_key in ("children", "child_jobs"):
+        child_jobs = job.get(child_key)
+        if not isinstance(child_jobs, list):
+            continue
+        for child in child_jobs:
+            if isinstance(child, dict):
+                items.extend(_flatten_batch_job_items(child))
+    return items
+
+
+def _matches_trace_item(
+    item: Dict[str, Any],
+    *,
+    record_id: Optional[str] = None,
+    visit_id: Optional[str] = None,
+    rule_id: Optional[str] = None,
+) -> bool:
+    if record_id and str(item.get("record_id") or "").strip() != str(record_id).strip():
+        return False
+    if visit_id and str(item.get("visit_id") or "").strip() != str(visit_id).strip():
+        return False
+    if rule_id:
+        normalized_rule_id = str(rule_id).strip().upper()
+        item_rule_ids = {
+            str(item.get("rule_id") or "").strip().upper(),
+            str(item.get("rule_code") or "").strip().upper(),
+            str(item.get("qc_point_id") or "").strip().upper(),
+        }
+        if normalized_rule_id not in item_rule_ids:
+            return False
+    return True
+
+
+def _find_result_trace_item(
+    job: Dict[str, Any],
+    *,
+    record_id: Optional[str] = None,
+    visit_id: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    item_index: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    items = _flatten_batch_job_items(job)
+    if item_index is not None:
+        try:
+            return items[int(item_index)]
+        except (IndexError, ValueError):
+            return None
+    return next(
+        (
+            item
+            for item in items
+            if _matches_trace_item(item, record_id=record_id, visit_id=visit_id, rule_id=rule_id)
+        ),
+        None,
+    )
+
+
+def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> Dict[str, Any]:
+    removed_keys: set[str] = set()
+    audit = item.get("audit") if isinstance(item.get("audit"), dict) else {}
+    decision = item.get("decision") if isinstance(item.get("decision"), dict) else {}
+    trigger = item.get("trigger") if isinstance(item.get("trigger"), dict) else {}
+    dependencies = item.get("dependencies") if isinstance(item.get("dependencies"), dict) else {}
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    review = item.get("review") if isinstance(item.get("review"), dict) else {}
+    diagnostic_trace = _result_diagnostic_trace(
+        item,
+        metadata,
+        evidence_items=item.get("evidence_items") if isinstance(item.get("evidence_items"), list) else [],
+        status=str(item.get("status") or ""),
+    )
+
+    source_execution_results = (
+        audit.get("source_execution_results")
+        or audit.get("mapped_results")
+        or audit.get("bottom_results")
+        or decision.get("source_execution_results")
+        or decision.get("mapped_results")
+        or diagnostic_trace.get("source_execution_results")
+        or []
+    )
+    if not isinstance(source_execution_results, list):
+        source_execution_results = [source_execution_results]
+    if not trigger and isinstance(diagnostic_trace.get("trigger_decision"), dict):
+        trigger = dict(diagnostic_trace.get("trigger_decision") or {})
+
+    aggregation_trace = {
+        "final_status": item.get("status"),
+        "display_status": item.get("display_status"),
+        "result_status": item.get("result_status"),
+        "final_decision_source": item.get("final_decision_source") or metadata.get("final_decision_source"),
+        "postprocess_label": item.get("postprocess_label"),
+        "postprocess_reason": item.get("postprocess_reason") or diagnostic_trace.get("postprocess_reason"),
+        "aggregation_reason": item.get("aggregation_reason") or diagnostic_trace.get("aggregation_reason"),
+        "first_pass_status": item.get("first_pass_status"),
+        "adjudicated_display_status": item.get("adjudicated_display_status"),
+        "adjudicator_reason": item.get("adjudicator_reason"),
+        "customer_display_guard": (
+            metadata.get("customer_display_guard")
+            or audit.get("customer_display_guard")
+            or decision.get("customer_display_guard")
+        ),
+        "rule_requirement_match": item.get("rule_requirement_match"),
+        "source_execution_count": len(source_execution_results),
+    }
+
+    final_result = _trace_pick(
+        item,
+        [
+            "rule_id",
+            "rule_code",
+            "qc_point_id",
+            "rule_name",
+            "record_id",
+            "visit_id",
+            "patient_name",
+            "department",
+            "status",
+            "display_status",
+            "result_status",
+            "is_compliant",
+            "defect_level",
+            "findings",
+            "evidence",
+            "suggestion",
+            "target_document_type",
+            "document_type",
+            "rule_family",
+            "trace_id",
+            "model_version",
+            "executor_type",
+            "source_rule_id",
+            "source_status",
+            "source_conclusion",
+            "source_evidence",
+            "trigger_decision",
+            "aggregation_reason",
+            "postprocess_reason",
+        ],
+    )
+    performance_profile = item.get("performance_profile")
+    if not isinstance(performance_profile, dict):
+        performance_profile = metadata.get("performance_profile") if isinstance(metadata.get("performance_profile"), dict) else {}
+    if not performance_profile:
+        performance_profile = _build_result_performance_profile(item)
+    return {
+        "job_id": job.get("id"),
+        "job_status": job.get("status"),
+        "rule_set_key": job.get("rule_set_key"),
+        "rule_set_name": job.get("rule_set_name"),
+        "final_result": _sanitize_trace_value(final_result, removed_keys),
+        "aggregation_trace": _sanitize_trace_value(aggregation_trace, removed_keys),
+        "trigger": _sanitize_trace_value(trigger, removed_keys),
+        "dependencies": _sanitize_trace_value(dependencies, removed_keys),
+        "decision": _sanitize_trace_value(decision, removed_keys),
+        "audit": _sanitize_trace_value(audit, removed_keys),
+        "review": _sanitize_trace_value(review, removed_keys),
+        "evidence_items": _sanitize_trace_value(item.get("evidence_items") or [], removed_keys),
+        "source_execution_results": _sanitize_trace_value(source_execution_results, removed_keys),
+        "diagnostic_trace": _sanitize_trace_value(diagnostic_trace, removed_keys),
+        "performance_profile": _sanitize_trace_value(performance_profile, removed_keys),
+        "safety": {
+            "sensitive_fields_removed": sorted(removed_keys),
+            "raw_output_returned": False,
+            "note": "诊断追踪仅返回聚合链路和脱敏后的证据摘要，不返回模型原始输出或完整病历正文。",
+        },
     }
 
 
@@ -1182,7 +2030,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
         rule_ids = [str(item).strip() for item in (filters.get("rule_ids") or []) if str(item).strip()]
-        if not rule_ids:
+        gate_only_customer_rule_ids_for_validation = [
+            str(item).strip()
+            for item in (filters.get("gate_only_customer_rule_ids") or [])
+            if str(item).strip()
+        ]
+        if not rule_ids and not gate_only_customer_rule_ids_for_validation:
             raise ValueError("批量任务缺少 rule_ids")
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
@@ -1203,7 +2056,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
-        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 4)))
+        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 2)))
         qc_service.assert_sc_rule_source_ready(
             context=f"workspace_batch_job:{job_id}",
             block_batch=True,
@@ -1316,6 +2169,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for rule_id in list(filters.get("scoped_customer_rule_ids") or [])
             if str(rule_id or "").strip()
         }
+        gate_only_customer_rule_ids = {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(filters.get("gate_only_customer_rule_ids") or [])
+            if str(rule_id or "").strip()
+        }
         output_rule_states: Dict[str, Dict[str, Any]] = rule_states
         output_rule_ids: List[str] = list(valid_rule_ids)
         if use_luxian_customer_results:
@@ -1402,6 +2260,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 failed_record_ids=failed_record_ids,
                 not_applicable_record_ids=_record_ids_for_item_status("not_applicable"),
             )
+            result_status_counts = _build_item_status_counts(all_items)
             return {
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
@@ -1424,7 +2283,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "data_quality_gap_records": record_status_counts["data_gap"],
                 "not_applicable_records": record_status_counts["not_applicable"],
                 "compliant_records": record_status_counts["compliant"],
-                "status_breakdown": record_status_counts,
+                "record_status_breakdown": record_status_counts,
+                "status_breakdown": result_status_counts,
                 "total_tokens": int(total_tokens),
                 "total_processing_time": float(total_processing_time),
                 "executor_breakdown": {"program": executor_program, "llm": executor_llm},
@@ -1434,7 +2294,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
                 return _safe_bool(item.get("can_show_as_defect")) or str(item.get("display_status") or "") == "confirmed_defect"
-            return str(item.get("status") or "") == "non_compliant"
+            return str(item.get("status") or "") in {"non_compliant", "ai_suggested_non_compliant"}
 
         def _item_needs_review(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
@@ -1631,6 +2491,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_pack_metrics: Dict[str, Any] = {}
                 record_cot_summary: Dict[str, Any] = {}
                 record_refine_summary: Dict[str, Any] = {}
+                record_luxian_0609_input_profile: Dict[str, Any] = {}
                 bundle_scene = ""
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
@@ -1694,7 +2555,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     }
                     return True
 
-                if is_programmatic_mode:
+                if use_luxian_customer_results and not active_rule_ids:
+                    used_bundle_path = True
+                    bundle_fallback_reason = "仅包含适用性门控质控点，无需调用底层执行规则"
+                    eval_items = []
+                    record_pack_metrics = {
+                        "total_packs": 0,
+                        "avg_pack_size": 0.0,
+                        "fallback_packs": 0,
+                        "single_rule_retries": 0,
+                        "pack_parse_retry_count": 0,
+                        "context_tokens_estimate": 0,
+                    }
+
+                if is_programmatic_mode and not (use_luxian_customer_results and not active_rule_ids):
                     bundle_payload: Optional[Dict[str, Any]] = None
                     attempted_scenes: List[str] = []
                     if institute_id and patient_id and visit_id:
@@ -1760,6 +2634,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_pack_metrics = dict(result.get("pack_metrics") or {})
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
+                    record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     eval_items = list(result.get("evaluation_results") or [])
                 else:
                     bundle_scene = _resolve_workspace_bundle_scene(
@@ -1769,6 +2644,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
                 if (
                     not is_programmatic_mode
+                    and not (use_luxian_customer_results and not active_rule_ids)
                     and prefer_rule_level_visit_eval
                     and len(active_rule_ids) == 1
                     and institute_id
@@ -1778,6 +2654,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     used_bundle_path = await _evaluate_rule_level_visit_bundle()
                 elif (
                     not is_programmatic_mode
+                    and not (use_luxian_customer_results and not active_rule_ids)
                     and bundle_scene
                     and institute_id
                     and patient_id
@@ -1839,6 +2716,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         record_pack_metrics = dict(single_result.get("pack_metrics") or {})
                         record_cot_summary = dict(single_result.get("cot_summary") or {})
                         record_refine_summary = dict(single_result.get("refine_summary") or {})
+                        record_luxian_0609_input_profile = dict(
+                            single_result.get("luxian_0609_input_profile") or {}
+                        )
                     except Exception as bundle_exc:
                         if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
                             try:
@@ -1864,7 +2744,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 bundle_scene,
                                 exc_info=True,
                             )
-                elif current_scope in {"final", "all"}:
+                elif current_scope in {"final", "all"} and not (use_luxian_customer_results and not active_rule_ids):
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
 
                 if not used_bundle_path:
@@ -1893,6 +2773,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_pack_metrics = dict(result.get("pack_metrics") or {})
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
+                    record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     eval_items = list(result.get("evaluation_results") or [])
 
                 eval_map: Dict[str, Dict[str, Any]] = {}
@@ -1928,21 +2809,58 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     rule_job_id = str(state["rule_job_id"])
                     eval_item = eval_map.get(normalized_rule_id) or {}
                     if not eval_item:
-                        failed_by_rule[rule_id].append(
-                            {
-                                "rule_job_id": rule_job_id,
-                                "rule_id": rule_id,
-                                "rule_code": rule_code,
-                                "rule_name": rule_name,
-                                "record_id": record_id,
-                                "visit_id": str(record.get("visit_id") or ""),
-                                "patient_name": str(record.get("patient_name") or ""),
-                                "department": str(record.get("department") or ""),
-                                "error_phase": "result_missing",
-                                "error": "规则执行未返回结果",
-                            }
+                        is_gate_only_missing = (
+                            use_luxian_customer_results
+                            and normalized_rule_id in gate_only_customer_rule_ids
                         )
-                        continue
+                        if not is_gate_only_missing:
+                            failed_by_rule[rule_id].append(
+                                {
+                                    "rule_job_id": rule_job_id,
+                                    "rule_id": rule_id,
+                                    "rule_code": rule_code,
+                                    "rule_name": rule_name,
+                                    "record_id": record_id,
+                                    "visit_id": str(record.get("visit_id") or ""),
+                                    "patient_name": str(record.get("patient_name") or ""),
+                                    "department": str(record.get("department") or ""),
+                                    "error_phase": "result_missing",
+                                    "error": "规则执行未返回结果",
+                                }
+                            )
+                        if use_luxian_customer_results:
+                            if is_gate_only_missing:
+                                eval_item = {
+                                    "rule_id": rule_id,
+                                    "rule_name": rule_name,
+                                    "status": "not_applicable",
+                                    "is_compliant": True,
+                                    "findings": "未发现该质控点所需的明确触发事实，本次不进入缺陷判定。",
+                                    "evidence": "适用性：该质控点当前没有可执行底层映射规则，按适用性门控判定为不适用。",
+                                    "suggestion": "无需整改；如病历存在相关事件，请补充结构化文书或医嘱后重新质控。",
+                                    "confidence": 0,
+                                    "metadata": {
+                                        "executor_type": "program",
+                                        "result_fallback": "gate_only_not_applicable",
+                                    },
+                                }
+                            else:
+                                eval_item = {
+                                    "rule_id": rule_id,
+                                    "rule_name": rule_name,
+                                    "status": "not_executed",
+                                    "is_compliant": False,
+                                    "findings": "该质控点未返回执行结果。",
+                                    "evidence": "当前质控点没有返回可展示结果。",
+                                    "suggestion": "建议重新执行本质控点，或由质控员结合原文确认。",
+                                    "confidence": 0,
+                                    "metadata": {
+                                        "executor_type": "program",
+                                        "result_fallback": "missing_customer_result",
+                                    },
+                                }
+                        else:
+                            continue
                     eval_item = _guard_luxian_copy_result_for_batch(
                         rule_id=normalized_rule_id,
                         eval_item=eval_item,
@@ -1950,7 +2868,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     )
 
                     status = str(eval_item.get("status") or "").strip().lower()
-                    if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain"}:
+                    if status not in {
+                        "compliant",
+                        "non_compliant",
+                        "ai_suggested_non_compliant",
+                        "ai_suggested_compliant",
+                        "not_applicable",
+                        "data_gap",
+                        "uncertain",
+                        "not_executed",
+                        "technical_error",
+                    }:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
                     evidence_items = _consultation_evidence_items_for_batch(
                         rule_id=normalized_rule_id,
@@ -1976,6 +2904,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     metadata.setdefault("pack_size", int(record_pack_metrics.get("selected_pack_size") or 1))
                     metadata.setdefault("quality_profile", quality_profile)
                     metadata.setdefault("bucket_strategy", bucket_strategy)
+                    if record_luxian_0609_input_profile:
+                        metadata.setdefault("luxian_0609_input_profile", record_luxian_0609_input_profile)
                     if current_scope == "final" and not used_bundle_path:
                         metadata.setdefault("bundle_fallback", True)
                         if bundle_fallback_reason:
@@ -2005,6 +2935,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     else:
                         local_cache_miss += 1
 
+                    diagnostic_trace = _result_diagnostic_trace(
+                        eval_item,
+                        metadata,
+                        evidence_items=evidence_items,
+                        status=status,
+                    )
+                    metadata["diagnostic_trace"] = diagnostic_trace
+                    metadata["source_execution_results"] = diagnostic_trace.get("source_execution_results") or []
+                    metadata["trigger_decision"] = diagnostic_trace.get("trigger_decision") or {}
+                    metadata["postprocess_reason"] = diagnostic_trace.get("postprocess_reason") or ""
+
                     issue_item = {
                         "rule_job_id": rule_job_id,
                         "rule_id": str(eval_item.get("rule_id") or rule_id),
@@ -2023,6 +2964,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "evidence_items": evidence_items,
                         "suggestion": str(eval_item.get("suggestion") or ""),
                         "confidence": float(eval_item.get("confidence") or 0),
+                        "metadata": _sanitize_trace_value(metadata, set(), max_text=1200),
+                        "diagnostic_trace": diagnostic_trace,
+                        "source_rule_id": str(diagnostic_trace.get("source_rule_id") or ""),
+                        "source_status": str(diagnostic_trace.get("source_status") or ""),
+                        "source_conclusion": str(diagnostic_trace.get("source_conclusion") or ""),
+                        "source_evidence": diagnostic_trace.get("source_evidence") or "",
+                        "trigger_decision": diagnostic_trace.get("trigger_decision") or {},
+                        "postprocess_reason": str(diagnostic_trace.get("postprocess_reason") or ""),
                         "executor_type": executor_type,
                         "rule_version": str(metadata.get("rule_version") or ""),
                         "prompt_version": str(metadata.get("prompt_version") or ""),
@@ -2084,13 +3033,44 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             issue_item,
                             mode="formal_final_online",
                         )
-                    if not should_postprocess_formal_results and issue_item["status"] == "non_compliant":
+                        post_metadata = dict(issue_item.get("metadata") or {})
+                        post_diagnostic_trace = _result_diagnostic_trace(
+                            issue_item,
+                            post_metadata,
+                            evidence_items=issue_item.get("evidence_items")
+                            if isinstance(issue_item.get("evidence_items"), list)
+                            else [],
+                            status=str(issue_item.get("status") or ""),
+                        )
+                        post_metadata["diagnostic_trace"] = post_diagnostic_trace
+                        post_metadata["postprocess_reason"] = post_diagnostic_trace.get("postprocess_reason") or ""
+                        post_metadata.pop("aggregation_reason", None)
+                        issue_item["metadata"] = _sanitize_trace_value(post_metadata, set(), max_text=1200)
+                        issue_item["diagnostic_trace"] = post_diagnostic_trace
+                        issue_item["source_rule_id"] = str(post_diagnostic_trace.get("source_rule_id") or "")
+                        issue_item["source_status"] = str(post_diagnostic_trace.get("source_status") or "")
+                        issue_item["source_conclusion"] = str(post_diagnostic_trace.get("source_conclusion") or "")
+                        issue_item["source_evidence"] = post_diagnostic_trace.get("source_evidence") or ""
+                        issue_item["trigger_decision"] = post_diagnostic_trace.get("trigger_decision") or {}
+                        issue_item["postprocess_reason"] = str(post_diagnostic_trace.get("postprocess_reason") or "")
+                    if not should_postprocess_formal_results and issue_item["status"] in {
+                        "non_compliant",
+                        "ai_suggested_non_compliant",
+                    }:
                         has_issue = True
                     elif not should_postprocess_formal_results and issue_item["status"] == "uncertain":
                         has_uncertain = True
-                    if issue_item["status"] in {"non_compliant", "data_gap", "uncertain"}:
+                    if issue_item["status"] in {
+                        "non_compliant",
+                        "ai_suggested_non_compliant",
+                        "data_gap",
+                        "uncertain",
+                        "technical_error",
+                    }:
                         record_issue_items.append(issue_item)
-                    elif issue_item["status"] == "not_applicable":
+                    elif issue_item["status"] in {"not_applicable", "not_executed"} or (
+                        use_luxian_customer_results and issue_item["status"] in {"compliant", "ai_suggested_compliant"}
+                    ):
                         record_status_items.append(issue_item)
 
                 if should_postprocess_formal_results and record_issue_items:
@@ -2114,6 +3094,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     )
 
                 for final_item in [*record_issue_items, *record_status_items]:
+                    _attach_result_performance_profile(final_item)
                     final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
                     if final_rule_id not in items_by_rule:
                         continue
@@ -2427,6 +3408,18 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             failed_record_ids=failed_record_ids,
             not_applicable_record_ids=not_applicable_record_ids,
         )
+        result_status_counts = _build_item_status_counts(all_items)
+        final_wall_clock_time = max(0.0, time.perf_counter() - job_wall_started)
+        performance_profile = _build_batch_performance_profile(
+            job_id=job_id,
+            items=all_items,
+            total_records=total_records,
+            customer_rule_count=len(output_rule_ids),
+            execution_rule_count=len(rule_ids),
+            wall_clock_time=final_wall_clock_time,
+            first_result_latency=float(first_result_latency or 0.0),
+            actual_llm_pack_call_count=total_pack_count,
+        )
 
         summary = {
             "rule_set_key": rule_set_key,
@@ -2461,12 +3454,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "not_applicable_records": record_status_counts["not_applicable"],
             "rejected_by_system_records": len(rejected_by_system_record_ids),
             "technical_error_records": len(technical_error_record_ids),
-            "status_breakdown": record_status_counts,
+            "record_status_breakdown": record_status_counts,
+            "status_breakdown": result_status_counts,
             "total_tokens": int(total_tokens),
             "total_prompt_tokens": int(total_prompt_tokens),
             "total_completion_tokens": int(total_completion_tokens),
             "total_processing_time": float(total_processing_time),
-            "wall_clock_time": max(0.0, time.perf_counter() - job_wall_started),
+            "wall_clock_time": final_wall_clock_time,
             "first_result_latency": round(float(first_result_latency or 0.0), 4),
             "first_result_source": first_result_source,
             "rule_count": len(output_rule_ids),
@@ -2495,6 +3489,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "refined_rule_count": total_refined_rule_count,
             "cot_summary": cot_summary_total,
             "result_aggregation": _build_result_aggregation(all_items),
+            "performance_profile": performance_profile,
             "rule_results": rule_results,
             "stream_state": {
                 "enabled": enable_incremental_results,
@@ -2781,7 +3776,11 @@ async def list_workspace_batch_jobs(
             **list_kwargs,
             q=q,
         )
-    items = [_workspace_batch_response_item(item) for item in result.items if _is_workspace_batch_job(item)]
+    items = [
+        _workspace_batch_response_item(item, compact=True)
+        for item in result.items
+        if _is_workspace_batch_job(item)
+    ]
     return success_response(
         data={
             "items": items,
@@ -2807,6 +3806,37 @@ async def get_workspace_batch_job(
     return success_response(
         data=_workspace_batch_response_item(job),
         message="获取四川规则批量任务详情成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs/{job_id}/review")
+async def review_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    created_by = _current_user_id(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
+    if not _is_workspace_batch_job(job):
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    review_report = review_luxian_0609_batch_job(job)
+    if review_report.get("scope") != LUXIAN_0609_RULE_SET_KEY:
+        raise HTTPException(status_code=422, detail="当前复核 Loop 仅支持泸县0609质控任务")
+    updated_job = workspace.update_batch_job_review_report(
+        job_id=job_id,
+        created_by=created_by,
+        review_report=review_report,
+    )
+    if not _is_workspace_batch_job(updated_job):
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data={
+            "job": _workspace_batch_response_item(updated_job),
+            "review_report": review_report,
+        },
+        message="泸县0609结果复核完成",
         trace_id=get_trace_id(request),
     )
 
@@ -2878,6 +3908,38 @@ async def get_workspace_batch_job_debug(
     return success_response(
         data=_build_debug_snapshot(job, rule_job_id=rule_job_id, item_limit=item_limit),
         message="获取批量任务调试快照成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}/trace")
+async def get_workspace_batch_job_result_trace(
+    request: Request,
+    job_id: str,
+    record_id: Optional[str] = Query(None),
+    visit_id: Optional[str] = Query(None),
+    rule_id: Optional[str] = Query(None),
+    item_index: Optional[int] = Query(None, ge=0),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    if not _can_view_result_trace(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权查看诊断追踪")
+    workspace = _sichuan_workspace_service()
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not _is_workspace_batch_job(job):
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    trace_item = _find_result_trace_item(
+        job,
+        record_id=record_id,
+        visit_id=visit_id,
+        rule_id=rule_id,
+        item_index=item_index,
+    )
+    if not trace_item:
+        raise HTTPException(status_code=404, detail="未找到匹配的质控结果")
+    return success_response(
+        data=_build_result_trace_snapshot(job, trace_item),
+        message="获取质控诊断追踪成功",
         trace_id=get_trace_id(request),
     )
 
@@ -3555,8 +4617,6 @@ class TestRuleRequest(BaseModel):
 def _load_single_test_rule(qc_service: SichuanQCService, rule_id: str) -> tuple[Optional[Dict[str, Any]], bool]:
     normalized_rule_id = str(rule_id or "").strip().upper()
     if normalized_rule_id.startswith("LX0609-"):
-        from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
-
         rule = get_luxian_0609_rule(normalized_rule_id)
         if rule:
             # 泸县0609是客户专项包装规则，单条测试应按客户质控点口径执行。

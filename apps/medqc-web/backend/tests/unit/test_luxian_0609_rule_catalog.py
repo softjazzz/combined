@@ -5,9 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from app.services.luxian_0609_rule_catalog import (
+from app.services.luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
+    build_family_scopes,
+    customer_rule_count,
     load_luxian_0609_rules,
+    resolve_execution_scope,
 )
 
 
@@ -50,6 +53,7 @@ def test_luxian_0609_catalog_has_49_wrappers_and_examples():
     rules = load_luxian_0609_rules()
 
     assert len(rules) == 49
+    assert customer_rule_count() == 49
     assert rules[0]["rule_id"] == "LX0609-001"
     assert rules[-1]["rule_id"] == "LX0609-049"
 
@@ -62,6 +66,24 @@ def test_luxian_0609_catalog_has_49_wrappers_and_examples():
         assert rule.get("primary_execution_rule_id") == rule["mapped_rule_ids"][0]
         for mapped_rule_id in rule["mapped_rule_ids"]:
             assert mapped_rule_id.upper() in existing_rule_ids
+
+
+@pytest.mark.unit
+def test_luxian_0609_customer_rule_package_resolves_scope_and_families():
+    execution_rule_ids, invalid_rule_ids, gate_only_customer_rule_ids = resolve_execution_scope(
+        ["LX0609-020", "LX0609-021", "LX0609-028", "LX0609-999"],
+        allowed_rule_ids={"LX-017"},
+    )
+
+    assert execution_rule_ids == ["LX-017"]
+    assert invalid_rule_ids == ["LX0609-999"]
+    assert gate_only_customer_rule_ids == ["LX0609-021", "LX0609-028"]
+
+    scopes = build_family_scopes(["LX0609-020", "LX0609-021", "LX0609-028"])
+    assert scopes == [
+        {"key": "consultation_quality", "name": "会诊质量", "rule_ids": ["LX0609-020", "LX0609-021"]},
+        {"key": "surgery_anesthesia", "name": "手术麻醉", "rule_ids": ["LX0609-028"]},
+    ]
 
 
 @pytest.mark.unit
