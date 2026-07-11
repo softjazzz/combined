@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .shadow_fact_bundle import FactShadowBundle
 from .source_manifest import DocumentManifest
 
 
@@ -120,6 +121,7 @@ def build_luxian_0609_input_profile(
     medical_text: str,
     evidence_payload: dict[str, Any] | None,
     source_manifest_shadow: DocumentManifest | None = None,
+    fact_bundle_shadow: FactShadowBundle | None = None,
 ) -> dict[str, Any]:
     """Build an observable input profile for future LX0609 fact-gate work.
 
@@ -158,6 +160,8 @@ def build_luxian_0609_input_profile(
         "family_profiles": family_profiles,
     }
     if source_manifest_shadow is None:
+        if fact_bundle_shadow is not None:
+            raise ValueError("fact bundle shadow requires source manifest shadow")
         return profile
     if not isinstance(source_manifest_shadow, DocumentManifest):
         raise TypeError("source_manifest_shadow must be DocumentManifest or None")
@@ -170,5 +174,25 @@ def build_luxian_0609_input_profile(
         "fingerprint": source_manifest_shadow.fingerprint(),
         "source_snapshot_hash": source_manifest_shadow.source_snapshot_hash,
         "entries": [entry.to_dict() for entry in source_manifest_shadow.entries],
+    }
+    if fact_bundle_shadow is None:
+        return profile
+    if not isinstance(fact_bundle_shadow, FactShadowBundle):
+        raise TypeError("fact_bundle_shadow must be FactShadowBundle or None")
+    if fact_bundle_shadow.visit_ref != profile["visit_id"]:
+        raise ValueError("fact bundle visit_ref does not match input profile visit_id")
+    if fact_bundle_shadow.manifest_fingerprint != source_manifest_shadow.fingerprint():
+        raise ValueError("fact bundle manifest fingerprint mismatch")
+    if fact_bundle_shadow.source_snapshot_hash != source_manifest_shadow.source_snapshot_hash:
+        raise ValueError("fact bundle source snapshot mismatch")
+    profile["fact_bundle_shadow"] = {
+        "mode": "shadow_only",
+        "bundle_schema_version": fact_bundle_shadow.bundle_schema_version,
+        "fingerprint": fact_bundle_shadow.fingerprint(),
+        "manifest_fingerprint": fact_bundle_shadow.manifest_fingerprint,
+        "source_snapshot_hash": fact_bundle_shadow.source_snapshot_hash,
+        "fact_count": fact_bundle_shadow.fact_count,
+        "fact_ids": [item.fact.fact_id for item in fact_bundle_shadow.items],
+        "pair_refs": [item.pair_ref for item in fact_bundle_shadow.items],
     }
     return profile

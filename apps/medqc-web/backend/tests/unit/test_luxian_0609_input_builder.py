@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import hashlib
+
 import pytest
 
 from app.services.luxian_0609 import build_luxian_0609_input_profile
@@ -8,10 +11,16 @@ from app.services.luxian_0609.execution import (
     Luxian0609ExecutionContext,
     attach_luxian_0609_execution_metadata,
 )
+from app.services.luxian_0609.legacy_fact_adapter import LegacyFactV2Mapping
+from app.services.luxian_0609.shadow_fact_bundle import (
+    FactShadowPairInput,
+    build_luxian_0609_fact_shadow_bundle,
+)
 from app.services.luxian_0609.source_manifest_builder import (
     SourceQueryObservation,
     build_luxian_0609_source_manifest_shadow,
 )
+from app.services.luxian_0609_fact_extraction import Luxian0609Fact
 
 
 def _evidence_payload() -> dict:
@@ -55,6 +64,48 @@ def _shadow_manifest(visit_ref: str = "2207717"):
     )
 
 
+def _shadow_bundle(manifest=None, *, zero: bool = False):
+    manifest = manifest or _shadow_manifest()
+    pairs = ()
+    if not zero:
+        pairs = (
+            FactShadowPairInput(
+                pair_ref=hashlib.sha256(b"input-profile-pair").hexdigest(),
+                legacy_fact=Luxian0609Fact(
+                    fact_type="surgery_presence",
+                    family="surgery_anesthesia",
+                    source_document_type="手术记录",
+                    source_document_id="document-ref-001",
+                    quote="存在手术记录",
+                    confidence=0.9,
+                    extractor="structured",
+                    trace={"prompt": "must-not-leak"},
+                ),
+                mapping=LegacyFactV2Mapping(
+                    source_key="surgery_record",
+                    normalized_value={"present": True},
+                    trigger_scope="current_visit",
+                    current_visit_relevance="relevant",
+                    assertion="affirmed",
+                    assertion_context="current_narrative",
+                    event_status="performed",
+                    extractor_version="policy-v1",
+                    record_time_handling="absent",
+                    mapped_record_time=None,
+                    omit_reason_code="",
+                ),
+            ),
+        )
+    return build_luxian_0609_fact_shadow_bundle(
+        visit_ref=manifest.visit_ref,
+        manifest=manifest,
+        paired_inputs=pairs,
+        bundle_schema_version="1.0",
+        created_at="2026-07-12T09:00:00+08:00",
+        redaction_terms=(),
+    )
+
+
 @pytest.mark.unit
 def test_luxian_0609_input_profile_should_describe_available_family_contexts():
     profile = build_luxian_0609_input_profile(
@@ -75,6 +126,7 @@ def test_luxian_0609_input_profile_should_describe_available_family_contexts():
     assert "surgery_anesthesia" in profile["available_family_contexts"]
     assert profile["family_profiles"]["transfusion"]["ready_for_trimmed_context"] is False
     assert "source_manifest_shadow" not in profile
+    assert "fact_bundle_shadow" not in profile
 
 
 @pytest.mark.unit
@@ -89,6 +141,7 @@ def test_luxian_0609_input_profile_should_tolerate_missing_payload():
     assert profile["document_count"] == 0
     assert profile["available_family_contexts"] == []
     assert "source_manifest_shadow" not in profile
+    assert "fact_bundle_shadow" not in profile
 
 
 @pytest.mark.unit
@@ -114,6 +167,7 @@ def test_default_none_preserves_complete_legacy_profile_structure(
         medical_text=medical_text,
         evidence_payload=evidence_payload,
         source_manifest_shadow=None,
+        fact_bundle_shadow=None,
     )
     assert explicit_none == legacy_call
     assert set(explicit_none) == {
@@ -131,6 +185,129 @@ def test_default_none_preserves_complete_legacy_profile_structure(
         "available_family_contexts",
         "family_profiles",
     }
+
+
+@pytest.mark.unit
+def test_bundle_requires_explicit_manifest() -> None:
+    with pytest.raises(ValueError):
+        build_luxian_0609_input_profile(
+            visit_id="2207717",
+            medical_text="完整病历文本",
+            evidence_payload=_evidence_payload(),
+            fact_bundle_shadow=_shadow_bundle(),
+        )
+
+
+@pytest.mark.unit
+def test_matching_bundle_adds_only_safe_stable_summary() -> None:
+    manifest = _shadow_manifest()
+    bundle = _shadow_bundle(manifest)
+    manifest_only = build_luxian_0609_input_profile(
+        visit_id="2207717",
+        medical_text="完整病历文本",
+        evidence_payload=_evidence_payload(),
+        source_manifest_shadow=manifest,
+    )
+    with_bundle = build_luxian_0609_input_profile(
+        visit_id="2207717",
+        medical_text="完整病历文本",
+        evidence_payload=_evidence_payload(),
+        source_manifest_shadow=manifest,
+        fact_bundle_shadow=bundle,
+    )
+    summary = with_bundle.pop("fact_bundle_shadow")
+    assert with_bundle == manifest_only
+    assert summary == {
+        "mode": "shadow_only",
+        "bundle_schema_version": bundle.bundle_schema_version,
+        "fingerprint": bundle.fingerprint(),
+        "manifest_fingerprint": bundle.manifest_fingerprint,
+        "source_snapshot_hash": bundle.source_snapshot_hash,
+        "fact_count": 1,
+        "fact_ids": [item.fact.fact_id for item in bundle.items],
+        "pair_refs": [item.pair_ref for item in bundle.items],
+    }
+    serialized = str(summary)
+    for forbidden in (
+        "quote",
+        "normalized_value",
+        "source_document_id",
+        "source_document_type",
+        "record_time",
+        "must-not-leak",
+    ):
+        assert forbidden not in serialized
+
+
+@pytest.mark.unit
+def test_zero_fact_bundle_summary_has_empty_ids_and_no_status() -> None:
+    manifest = _shadow_manifest()
+    bundle = _shadow_bundle(manifest, zero=True)
+    profile = build_luxian_0609_input_profile(
+        visit_id="2207717",
+        medical_text="完整病历文本",
+        evidence_payload=_evidence_payload(),
+        source_manifest_shadow=manifest,
+        fact_bundle_shadow=bundle,
+    )
+    summary = profile["fact_bundle_shadow"]
+    assert summary["fact_count"] == 0
+    assert summary["fact_ids"] == []
+    assert summary["pair_refs"] == []
+    for forbidden in ("data_gap", "not_applicable", "compliant"):
+        assert forbidden not in summary
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "mismatch",
+    ["visit", "manifest_fingerprint", "source_snapshot"],
+)
+def test_bundle_visit_manifest_and_snapshot_mismatch_are_rejected(mismatch: str) -> None:
+    manifest = _shadow_manifest()
+    if mismatch == "visit":
+        bundle = _shadow_bundle(_shadow_manifest("different-visit"))
+    elif mismatch == "manifest_fingerprint":
+        bundle = replace(_shadow_bundle(manifest), manifest_fingerprint="f" * 64)
+    else:
+        other_manifest = replace(manifest, source_snapshot_hash="e" * 64)
+        bundle = _shadow_bundle(other_manifest)
+    with pytest.raises(ValueError):
+        build_luxian_0609_input_profile(
+            visit_id="2207717",
+            medical_text="完整病历文本",
+            evidence_payload=_evidence_payload(),
+            source_manifest_shadow=manifest,
+            fact_bundle_shadow=bundle,
+        )
+
+
+@pytest.mark.unit
+def test_bundle_summary_does_not_change_existing_profile_semantics() -> None:
+    manifest = _shadow_manifest()
+    baseline = build_luxian_0609_input_profile(
+        visit_id="2207717",
+        medical_text="完整病历文本",
+        evidence_payload=_evidence_payload(),
+        source_manifest_shadow=manifest,
+    )
+    with_bundle = build_luxian_0609_input_profile(
+        visit_id="2207717",
+        medical_text="完整病历文本",
+        evidence_payload=_evidence_payload(),
+        source_manifest_shadow=manifest,
+        fact_bundle_shadow=_shadow_bundle(manifest),
+    )
+    assert with_bundle["source_manifest_shadow"] == baseline["source_manifest_shadow"]
+    assert with_bundle["mode"] == "full_text_compat"
+    for field in (
+        "source_table_counts",
+        "source_table_text_lengths",
+        "family_profiles",
+        "available_family_contexts",
+        "document_count",
+    ):
+        assert with_bundle[field] == baseline[field]
 
 
 @pytest.mark.unit
