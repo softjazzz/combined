@@ -10,6 +10,7 @@ from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
+import re
 import threading
 import time
 from typing import Any, Iterable
@@ -91,6 +92,49 @@ _FACT_FAMILY_PROMPT_MARKERS = {
     "transfusion": "输血",
     "tumor_pathology": "肿瘤病理",
 }
+_FILTER_REPLAY_KEYS = {
+    "b2_limit",
+    "customer_rule_count",
+    "execution_rule_count",
+    "families",
+    "family_key",
+    "gate_only_customer_rule_ids",
+    "max_parallel_records",
+    "parallel_records",
+    "record_ids",
+    "record_rule_map",
+    "rule_ids",
+    "rule_set_key",
+    "rule_set_version",
+    "scoped_customer_rule_ids",
+    "selected_draft_ids",
+    "selected_record_ids",
+    "selected_rule_ids",
+    "source",
+    "validation_mode",
+}
+_SENSITIVE_REPORT_KEYS = {
+    "address",
+    "apikey",
+    "authorization",
+    "idcard",
+    "mobile",
+    "name",
+    "patientname",
+    "phone",
+    "身份证",
+    "患者姓名",
+}
+_ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+_PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+_AUTHORIZATION_PATTERN = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+")
+_API_KEY_PATTERN = re.compile(r"(?i)(api[_ -]?key\s*[:=]\s*)[^\s,;]+")
+
+
+class FullTextJobPayload(dict[str, Any]):
+    """Dict-compatible payload with in-memory-only report redaction terms."""
+
+    redaction_terms_by_record: dict[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -252,6 +296,10 @@ class LLMCallLedger:
                 invariant_errors.append(
                     f"usage_breakdown_invalid:{entry.get('call_id')}:{entry.get('usage_invariant_error')}"
                 )
+            if entry.get("capture_success") is False:
+                invariant_errors.append(
+                    f"telemetry_capture_failed:{entry.get('call_id')}:{entry.get('failure_phase')}"
+                )
             if entry.get("telemetry_context_missing"):
                 invariant_errors.append(f"telemetry_context_missing:{entry.get('call_id')}")
         if total["total_tokens"] != (
@@ -334,8 +382,17 @@ class LedgeredLLMClient:
             "cache_observation": "unavailable",
             "telemetry_context_missing": context is None,
         }
+        failure_phase = "upstream_generate"
+        upstream_success = False
         try:
-            response = await self._client.generate(prompt)
+            raw_response = await self._client.generate(prompt)
+            upstream_success = True
+            failure_phase = "response_normalization"
+            response = dict(raw_response or {})
+            failure_phase = "usage_parse"
+            input_tokens, output_tokens, total_tokens, unattributed_tokens, usage_error = _usage_breakdown(
+                response
+            )
         except Exception as exc:
             self.ledger.append(
                 {
@@ -345,15 +402,19 @@ class LedgeredLLMClient:
                     "total_tokens": 0,
                     "unattributed_tokens": 0,
                     "elapsed_sec": round(time.perf_counter() - started, 4),
-                    "success": False,
-                    "error_type": type(exc).__name__,
-                    "error_code": _safe_error_code(exc),
-                    "usage_invariant_error": "",
+                    "success": upstream_success,
+                    "capture_success": not upstream_success,
+                    "failure_phase": failure_phase,
+                    "error_type": type(exc).__name__ if not upstream_success else "",
+                    "error_code": _safe_error_code(exc) if not upstream_success else "",
+                    "capture_error_type": type(exc).__name__ if upstream_success else "",
+                    "capture_error_code": _safe_error_code(exc) if upstream_success else "",
+                    "usage_invariant_error": (
+                        f"telemetry_capture_failed:{failure_phase}" if upstream_success else ""
+                    ),
                 }
             )
             raise
-        response = dict(response or {})
-        input_tokens, output_tokens, total_tokens, unattributed_tokens, usage_error = _usage_breakdown(response)
         self.ledger.append(
             {
                 **base_entry,
@@ -363,8 +424,12 @@ class LedgeredLLMClient:
                 "unattributed_tokens": unattributed_tokens,
                 "elapsed_sec": round(time.perf_counter() - started, 4),
                 "success": True,
+                "capture_success": True,
+                "failure_phase": "",
                 "error_type": "",
                 "error_code": "",
+                "capture_error_type": "",
+                "capture_error_code": "",
                 "usage_invariant_error": usage_error,
             }
         )
@@ -409,6 +474,10 @@ def _telemetry_slice(telemetry: dict[str, Any], *, stages: Iterable[str]) -> dic
         if entry.get("usage_invariant_error"):
             errors.append(
                 f"usage_breakdown_invalid:{entry.get('call_id')}:{entry.get('usage_invariant_error')}"
+            )
+        if entry.get("capture_success") is False:
+            errors.append(
+                f"telemetry_capture_failed:{entry.get('call_id')}:{entry.get('failure_phase')}"
             )
         if entry.get("telemetry_context_missing"):
             errors.append(f"telemetry_context_missing:{entry.get('call_id')}")
@@ -489,11 +558,88 @@ def _short_text(value: Any, limit: int = 90) -> str:
     return text[: limit - 1] + "…"
 
 
-def _redacted_short_text(value: Any, *, patient_name: str = "", limit: int = 90) -> str:
-    text = _short_text(value, limit)
-    if patient_name:
-        text = text.replace(patient_name, "[REDACTED]")
+def _normalized_report_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", str(value or "").lower())
+
+
+def _is_sensitive_report_key(value: Any) -> bool:
+    return _normalized_report_key(value) in _SENSITIVE_REPORT_KEYS
+
+
+def _redact_report_text(value: Any, *, redaction_terms: Iterable[str] = ()) -> str:
+    text = str(value or "")
+    terms = sorted(
+        {str(term) for term in redaction_terms if str(term)},
+        key=len,
+        reverse=True,
+    )
+    for term in terms:
+        text = text.replace(term, "[REDACTED]")
+    text = _ID_CARD_PATTERN.sub("[REDACTED_ID]", text)
+    text = _PHONE_PATTERN.sub("[REDACTED_PHONE]", text)
+    text = _AUTHORIZATION_PATTERN.sub("[REDACTED_CREDENTIAL]", text)
+    text = _API_KEY_PATTERN.sub(r"\1[REDACTED_CREDENTIAL]", text)
     return text
+
+
+def _redacted_short_text(value: Any, *, patient_name: str = "", limit: int = 90) -> str:
+    return _short_text(
+        _redact_report_text(value, redaction_terms=[patient_name] if patient_name else []),
+        limit,
+    )
+
+
+def sanitize_report_payload(
+    value: Any,
+    *,
+    redaction_terms_by_record: dict[str, Iterable[str]] | None = None,
+) -> Any:
+    term_map = {
+        str(record_id): tuple(str(term) for term in terms if str(term))
+        for record_id, terms in (redaction_terms_by_record or {}).items()
+    }
+
+    def sanitize(item: Any, *, record_id: str = "") -> Any:
+        if isinstance(item, dict):
+            local_record_id = record_id
+            for key in ("record_id", "visit_id", "draft_id"):
+                candidate = item.get(key)
+                if candidate is not None and str(candidate):
+                    local_record_id = str(candidate)
+                    break
+            sanitized: dict[Any, Any] = {}
+            for key, nested in item.items():
+                if _is_sensitive_report_key(key):
+                    continue
+                if isinstance(key, tuple):
+                    sanitized_key = "::".join(str(part) for part in key)
+                elif isinstance(key, str):
+                    sanitized_key = _redact_report_text(
+                        key,
+                        redaction_terms=term_map.get(local_record_id, ()),
+                    )
+                else:
+                    sanitized_key = key
+                sanitized[sanitized_key] = sanitize(nested, record_id=local_record_id)
+            return sanitized
+        if isinstance(item, list):
+            return [sanitize(nested, record_id=record_id) for nested in item]
+        if isinstance(item, tuple):
+            return tuple(sanitize(nested, record_id=record_id) for nested in item)
+        if isinstance(item, str):
+            return _redact_report_text(item, redaction_terms=term_map.get(record_id, ()))
+        return item
+
+    return sanitize(value)
+
+
+def _sanitize_replay_filters(filters: dict[str, Any]) -> dict[str, Any]:
+    whitelisted = {
+        str(key): value
+        for key, value in filters.items()
+        if str(key) in _FILTER_REPLAY_KEYS
+    }
+    return sanitize_report_payload(whitelisted)
 
 
 def _extract_llm_text(response: dict[str, Any]) -> str:
@@ -613,12 +759,15 @@ def load_full_text_job(job_id: str) -> dict[str, Any]:
         raise RuntimeError(f"full_text job not found: {job_id}")
     items = _flatten_batch_items(job)
     rows: dict[tuple[str, str], dict[str, Any]] = {}
+    redaction_terms_by_record: dict[str, set[str]] = defaultdict(set)
     for item in items:
         record_id = _record_id(item)
         rule_id = _rule_id(item)
         if not record_id or not rule_id:
             continue
         patient_name = _as_str(item.get("patient_name"))
+        if patient_name:
+            redaction_terms_by_record[record_id].add(patient_name)
         rows[(record_id, rule_id)] = {
             "record_id": record_id,
             "rule_id": rule_id,
@@ -640,7 +789,8 @@ def load_full_text_job(job_id: str) -> dict[str, Any]:
         or _elapsed_between(job.get("started_at"), job.get("updated_at"))
         or float(job.get("total_processing_time") or 0)
     )
-    return {
+    payload = FullTextJobPayload(
+        {
         "job_id": job_id,
         "status": job.get("status"),
         "created_at": str(job.get("created_at") or ""),
@@ -653,8 +803,16 @@ def load_full_text_job(job_id: str) -> dict[str, Any]:
         "item_count": len(rows),
         "rows": rows,
         "status_counter": dict(Counter(row["status"] for row in rows.values())),
-        "filters": job.get("filters") if isinstance(job.get("filters"), dict) else {},
+        "filters": _sanitize_replay_filters(
+            job.get("filters") if isinstance(job.get("filters"), dict) else {}
+        ),
+        }
+    )
+    payload.redaction_terms_by_record = {
+        record_id: tuple(sorted(terms, key=len, reverse=True))
+        for record_id, terms in redaction_terms_by_record.items()
     }
+    return payload
 
 
 def _documents_for_visit(visit_id: str) -> list[dict[str, Any]]:
@@ -1206,7 +1364,16 @@ def _stringify_row_keys(rows: dict[tuple[str, str], dict[str, Any]] | None) -> d
     return {f"{key[0]}::{key[1]}": value for key, value in (rows or {}).items()}
 
 
-def write_markdown(payload: dict[str, Any], path: Path) -> None:
+def write_markdown(
+    payload: dict[str, Any],
+    path: Path,
+    *,
+    redaction_terms_by_record: dict[str, Iterable[str]] | None = None,
+) -> None:
+    payload = sanitize_report_payload(
+        payload,
+        redaction_terms_by_record=redaction_terms_by_record,
+    )
     full = payload["full_text"]
     trimmed = payload["fact_gate_trimmed"]
     b2 = payload.get("fact_gate_plus_trimmed_qc")
@@ -1327,6 +1494,7 @@ async def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     full = load_full_text_job(args.full_text_job_id)
+    redaction_terms_by_record = getattr(full, "redaction_terms_by_record", {})
     if args.mode == "full_text":
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output = {
@@ -1336,6 +1504,10 @@ async def main() -> None:
             "parallel_records": args.parallel_records,
             "full_text": {**full, "rows": _stringify_row_keys(full["rows"])},
         }
+        output = sanitize_report_payload(
+            output,
+            redaction_terms_by_record=redaction_terms_by_record,
+        )
         path = output_dir / f"full-text-summary-{timestamp}.json"
         path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
         print(json.dumps({"mode": "full_text", "json": str(path), "wall_sec": full["wall_elapsed_sec"]}, ensure_ascii=False, indent=2))
@@ -1392,6 +1564,10 @@ async def main() -> None:
                 "gate_rows": _stringify_row_keys(trimmed.get("gate_rows")),
             },
         }
+        output = sanitize_report_payload(
+            output,
+            redaction_terms_by_record=redaction_terms_by_record,
+        )
         path = output_dir / f"fact-gate-trimmed-summary-{timestamp}.json"
         path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
         print(
@@ -1434,6 +1610,10 @@ async def main() -> None:
         ),
         "comparison": comparison,
     }
+    payload = sanitize_report_payload(
+        payload,
+        redaction_terms_by_record=redaction_terms_by_record,
+    )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     json_path = output_dir / f"ab-result-{timestamp}.json"
     md_path = output_dir / f"ab-summary-{timestamp}.md"
@@ -1442,8 +1622,16 @@ async def main() -> None:
     json_text = json.dumps(payload, ensure_ascii=False, indent=2)
     json_path.write_text(json_text, encoding="utf-8")
     latest_json.write_text(json_text, encoding="utf-8")
-    write_markdown(payload, md_path)
-    write_markdown(payload, latest_md)
+    write_markdown(
+        payload,
+        md_path,
+        redaction_terms_by_record=redaction_terms_by_record,
+    )
+    write_markdown(
+        payload,
+        latest_md,
+        redaction_terms_by_record=redaction_terms_by_record,
+    )
     print(
         json.dumps(
             {

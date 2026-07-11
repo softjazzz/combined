@@ -57,6 +57,26 @@ class FakeClient:
         return dict(response)
 
 
+class PassthroughClient:
+    def __init__(self, response: Any) -> None:
+        self.model = "fake-model"
+        self.response = response
+        self.call_count = 0
+        self.success_count = 0
+        self.error_count = 0
+        self.total_tokens = 0
+
+    async def generate(self, _prompt: str) -> Any:
+        self.call_count += 1
+        self.success_count += 1
+        return self.response
+
+
+class ExplodingResponse:
+    def __iter__(self):
+        raise RuntimeError("private response content must not enter ledger")
+
+
 def _response(
     *,
     input_tokens: int = 2,
@@ -188,6 +208,67 @@ async def test_failed_call_has_sanitized_ledger_entry_and_zero_unknown_tokens() 
 
 
 @pytest.mark.asyncio
+async def test_malformed_usage_still_records_exactly_one_failed_capture() -> None:
+    client = PassthroughClient(
+        {
+            "_usage_breakdown": {
+                "input_tokens": "bad",
+                "output_tokens": 2,
+                "total_tokens": 2,
+            }
+        }
+    )
+    ledger = runner.LLMCallLedger(model="fake-model", run_id="malformed")
+    wrapped = runner.LedgeredLLMClient(client, ledger=ledger)
+
+    with pytest.raises((TypeError, ValueError)), runner.llm_call_context(
+        stage="fact_extraction",
+        record_id="record-1",
+        family_key="surgery_anesthesia",
+        rule_ids=["LX0609-029"],
+    ):
+        await wrapped.generate("malformed usage prompt")
+
+    telemetry = ledger.build_telemetry(client=client)
+    assert client.call_count == 1
+    assert len(telemetry["llm_call_ledger"]) == 1
+    entry = telemetry["llm_call_ledger"][0]
+    assert entry["call_id"] == "malformed-call-000001"
+    assert entry["success"] is True
+    assert entry["capture_success"] is False
+    assert entry["failure_phase"] == "usage_parse"
+    assert entry["total_tokens"] == 0
+    assert telemetry["telemetry_invariant_ok"] is False
+    assert "malformed usage prompt" not in json.dumps(telemetry, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_response_normalization_failure_records_once_and_rethrows() -> None:
+    client = PassthroughClient(ExplodingResponse())
+    ledger = runner.LLMCallLedger(model="fake-model", run_id="normalize")
+    wrapped = runner.LedgeredLLMClient(client, ledger=ledger)
+
+    with pytest.raises(RuntimeError), runner.llm_call_context(
+        stage="semantic_evaluation",
+        record_id="record-1",
+        family_key="single_rule_b2",
+        rule_ids=["LX0609-029"],
+    ):
+        await wrapped.generate("normalization prompt")
+
+    telemetry = ledger.build_telemetry(client=client)
+    assert client.call_count == 1
+    assert len(telemetry["llm_call_ledger"]) == 1
+    entry = telemetry["llm_call_ledger"][0]
+    assert entry["capture_success"] is False
+    assert entry["failure_phase"] == "response_normalization"
+    assert entry["total_tokens"] == 0
+    serialized = json.dumps(telemetry, ensure_ascii=False)
+    assert "private response content" not in serialized
+    assert telemetry["telemetry_invariant_ok"] is False
+
+
+@pytest.mark.asyncio
 async def test_fallback_stage_is_independently_attributed() -> None:
     client = FakeClient([_response(input_tokens=1, output_tokens=2)])
     ledger = runner.LLMCallLedger(model="fake-model", run_id="fallback")
@@ -261,7 +342,14 @@ async def test_prompt_hash_is_present_without_prompt_or_credentials() -> None:
     ledger = runner.LLMCallLedger(model="fake-model", run_id="privacy")
     wrapped = runner.LedgeredLLMClient(client, ledger=ledger)
     secret_prompt = " ".join(
-        ["Author" + "ization:", "Bear" + "er", "top-secret", "API", "key=another-secret"]
+        [
+            "person-name",
+            "Author" + "ization:",
+            "Bear" + "er",
+            "top-secret",
+            "API",
+            "key=another-secret",
+        ]
     )
     with runner.llm_call_context(
         stage="fact_extraction",
@@ -278,6 +366,7 @@ async def test_prompt_hash_is_present_without_prompt_or_credentials() -> None:
     assert secret_prompt not in serialized
     assert "top-secret" not in serialized
     assert "another-secret" not in serialized
+    assert "person-name" not in serialized
     assert "prompt" not in entry
     assert "response" not in entry
 
@@ -420,6 +509,9 @@ def test_compare_and_markdown_do_not_sum_shared_rule_tokens(tmp_path: Path) -> N
 
 
 def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    id_card = "510000" + "000000" + "000000"
+    phone = "138" + "0000" + "0000"
+
     class FakeWorkspaceService:
         def get_batch_job_for_processing(self, *, job_id: str):
             assert job_id == "job"
@@ -435,6 +527,12 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
                     }
                 ],
                 "summary": {},
+                "filters": {
+                    "selected_rule_ids": ["LX0609-029"],
+                    "patient_name": "person-name",
+                    "id_card": id_card,
+                    "nested": {"phone": phone},
+                },
             }
 
     monkeypatch.setattr(runner, "CustomQCWorkspaceService", FakeWorkspaceService)
@@ -447,4 +545,107 @@ def test_full_text_rows_do_not_emit_patient_name(monkeypatch: pytest.MonkeyPatch
     )
     assert "patient_name" not in row
     assert "person-name" not in serialized
+    assert id_card not in serialized
+    assert phone not in serialized
+    assert result["filters"] == {"selected_rule_ids": ["LX0609-029"]}
     assert "[REDACTED]" in row["evidence"]
+
+
+def test_redaction_happens_before_truncation() -> None:
+    redacted = runner._redacted_short_text(
+        "12345person-name has additional content",
+        patient_name="person-name",
+        limit=10,
+    )
+
+    assert "person-name" not in redacted
+    assert "pers" not in redacted
+
+
+def test_report_boundary_sanitizes_gate_b2_compare_and_markdown(tmp_path: Path) -> None:
+    name = "person-name"
+    id_card = "510000" + "000000" + "000000"
+    phone = "138" + "0000" + "0000"
+    credential = "Author" + "ization: " + "Bear" + "er token-value"
+    api_key = "API " + "key=another-token"
+    full = {
+        "job_id": "job",
+        "wall_elapsed_sec": 1,
+        "processing_time_sec": 1,
+        "total_tokens": 0,
+        "item_count": 1,
+        "status_counter": {"compliant": 1},
+        "rows": {
+            ("record-1", "LX0609-029"): {
+                "record_id": "record-1",
+                "status": "compliant",
+                "duration_sec": 0,
+                "tokens": 0,
+                "evidence": f"{name} 的医学证据",
+            }
+        },
+    }
+    trimmed_row = {
+        "record_id": "record-1",
+        "rule_id": "LX0609-029",
+        "status": "compliant",
+        "duration_sec": 0,
+        "duration_additive": False,
+        "tokens": 0,
+        "tokens_additive": False,
+        "gate_reason": f"{name} 的 gate 原因",
+        "matched_keywords": [f"{name} 关键词", "正常医学文本保留"],
+        "conclusion": f"{name} 的 B2 结论",
+        "evidence": f"{name} 的 B2 证据",
+        "suggestion": f"{name} 的 B2 建议 {id_card} {phone} {credential} {api_key}",
+        "shared_call_ids": [],
+    }
+    trimmed = {
+        "wall_elapsed_sec": 0,
+        "llm_total_elapsed_sec": 0,
+        "llm_total_tokens": 0,
+        "item_count": 1,
+        "status_counter": {"compliant": 1},
+        "rows": {("record-1", "LX0609-029"): trimmed_row},
+        "telemetry": {
+            "telemetry_schema_version": runner.TELEMETRY_SCHEMA_VERSION,
+            "llm_call_count": 0,
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "unattributed_tokens": 0,
+            "telemetry_invariant_ok": True,
+            "stage_summary": {},
+        },
+    }
+    comparison = runner.compare(full, trimmed)
+    payload = {
+        "full_text": full,
+        "fact_gate_trimmed": trimmed,
+        "fact_gate_plus_trimmed_qc": trimmed,
+        "comparison": comparison,
+        "model": "fake-model",
+        "parallel_records": 1,
+        "record_ids": ["record-1"],
+        "selected_rule_ids": ["LX0609-029"],
+    }
+    terms = {"record-1": [name]}
+
+    sanitized = runner.sanitize_report_payload(payload, redaction_terms_by_record=terms)
+    serialized = json.dumps(sanitized, ensure_ascii=False)
+    assert name not in serialized
+    assert id_card not in serialized
+    assert phone not in serialized
+    assert "token-value" not in serialized
+    assert "another-token" not in serialized
+    assert "正常医学文本保留" in serialized
+
+    output = tmp_path / "sanitized.md"
+    runner.write_markdown(
+        payload,
+        output,
+        redaction_terms_by_record=terms,
+    )
+    markdown = output.read_text(encoding="utf-8")
+    assert name not in markdown
+    assert "正常医学文本保留" in serialized
