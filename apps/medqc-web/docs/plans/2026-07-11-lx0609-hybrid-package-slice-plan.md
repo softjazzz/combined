@@ -118,24 +118,31 @@ Golden 文件可包含受控内部记录引用，但评审摘要、trace 和提�
 ### 工作内容
 
 - 将现有 input profile 升级为不改变主链路结果的 manifest/fact v2 shadow 产物。
-- 建立来源状态、事实最小字段、脱敏短引用和版本化序列化。
+- 建立来源状态、事实最小字段、脱敏短引用和版本化序列化；事实必须显式携带 `trigger_scope`、`current_visit_relevance`、`assertion/assertion_context`、`event_status`、`record_time/submit_time/update_time` 及各时间来源语义。
+- 通用事实为主；规则专用 `extensions`/projection 必须版本化、引用 `derived_from_fact_ids` 且可重建，禁止承载最终状态或 AI 建议状态。
 - 缓存键包含 snapshot、query、fact schema/extractor 版本，不使用患者姓名或完整正文。
 - 旧 facts 只通过显式适配器进入 v2，不静默补默认状态。
 
 ### 测试矩阵
 
-| 维度          | 场景                                                                    |
-| ------------- | ----------------------------------------------------------------------- |
-| source status | available 有记录、empty 零记录、unavailable 缺表/未同步、error 查询异常 |
-| schema        | 必填字段、非法置信度、稳定 fact_id、版本变化、短引用脱敏                |
-| snapshot      | 同快照缓存命中、快照变化失效、规则包版本变化失效                        |
-| 隐私          | 姓名、联系方式、完整正文、API key 不进入 trace/cache key                |
-| 兼容          | shadow 开关关闭时现有结果字节级不受影响                                 |
+| 维度               | 场景                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| source status      | available 有记录、empty 零记录、unavailable 缺表/未同步、error 查询异常                                 |
+| schema             | 必填字段、非法置信度、稳定 fact_id、版本变化、短引用脱敏                                                |
+| 本次住院关联性     | 同一关键词分别出现在本次住院、既往史、家族史和外部上下文；只有 current_visit + relevant 可直接触发 gate |
+| assertion/negation | 肯定、否认史、既往史否认、家族史与 uncertain；否认命中不得转为肯定事实                                  |
+| event status       | planned、ordered、performed、cancelled、unknown；计划和取消不得冒充已执行                               |
+| 时间语义           | record_time、submit_time、update_time 不同、缺失、时区和精度；禁止静默互相代填                          |
+| projection         | 通用事实派生规则 extension、版本变化、来源 fact 追溯、禁止写入最终/AI 建议状态                          |
+| snapshot           | 同快照缓存命中、快照变化失效、规则包/事实/projection 版本变化失效                                       |
+| 隐私               | 姓名、联系方式、完整正文、API key 不进入 trace/cache key                                                |
+| 兼容               | shadow 开关关闭时现有结果字节级不受影响                                                                 |
 
 ### 退出条件
 
 - 四种 source status 均有单测，`empty` 与 `unavailable` 不可互换。
-- facts v2 可从固定输入稳定重建，版本变化会失效缓存。
+- facts v2 可从固定输入稳定重建；本次住院/既往史/家族史、肯定/否认、计划/执行/取消和三类时间均能保持语义；版本变化会失效缓存。
+- rule-specific projection 可追溯到通用 fact，且任何 facts/extension 中均不存在最终状态和 `ai_suggested_*`。
 - shadow 不改变现有客户状态、scope 和调用数。
 
 ### 回滚条件
@@ -185,13 +192,14 @@ Golden 文件可包含受控内部记录引用，但评审摘要、trace 和提�
 | record_rule_map 限定不同病历 | 不扩大病历规则范围 | 同左            | 同左                                                     |
 | 父 030 缺失                  | 不受影响           | non-compliant   | 有独立手术事实和核查来源时继续，否则 suppressed/data gap |
 
-另需断言：三条程序化切片底层 LLM 调用数为 0；planner 在 bundle 构建前完成；被抑制子规则不计入合规分母。
+另需断言：三条程序化切片底层 LLM 调用数为 0；planner 在 bundle 构建前完成；被抑制子规则不计入合规分母；029/030/032 的 completely-evidenced/programmatic 结果只能是 `compliant/non_compliant`，不能降级为 `ai_suggested_*`；`data_gap/technical_error` 不得经 aggregator 转换为 AI 建议。
 
 ### 退出条件
 
 - accepted Golden 全部通过，pending 样本不进入准确率统计。
 - scope 三字段、customer/execution count 和 family 父子任务契约无回归。
 - 程序化切片 LLM 调用数/token 为 0，trace 能解释每个状态和抑制原因。
+- 阶段 2 的确定性状态与 AI 建议状态边界测试全部通过，source unavailable/error 对 AI 建议具有硬阻断优先级。
 - shadow 差异逐条完成归因，未出现 source unavailable 被判不合规。
 
 ### 回滚条件
@@ -238,18 +246,23 @@ Golden 文件可包含受控内部记录引用，但评审摘要、trace 和提�
 
 - planner 只把剩余高语义规则按“每病历 × 语义子族”分组。
 - LLM 只返回语义 facts、证据引用、置信度和矛盾；aggregator 决定最终状态。
+- aggregator 使用版本化 `confidence_policy_version`：来源充分且适用性确定时，达到建议阈值但未达到确定性阈值才生成 `ai_suggested_compliant/ai_suggested_non_compliant`；低于建议阈值或证据冲突进入 `evaluation_unknown` 和内部复核/fallback。
+- `data_gap/technical_error`、关键来源 unavailable/error 和 applicability 未确定均硬阻断 AI 建议；AI 建议不计入确定缺陷，客户展示分别为“AI判断未发现问题”和“AI判断存在问题”。
 - 先 shadow，后小流量灰度；`full_text` 只作 shadow 或明确灰区 fallback。
 
 ### 测试矩阵与退出条件
 
 - 同病历同子族多个规则只产生一次 LLM 调用。
 - gate 排除、程序化完成和 source unavailable 的规则调用数为 0。
+- 覆盖低于建议阈值、建议阈值边界、确定性阈值边界、证据冲突、data gap、technical error；断言状态和客户展示映射均符合 ADR。
+- 阈值只使用 accepted Golden 校准并保留独立验证集；阈值、证据要求、校准集版本和验证指标写入 `confidence_policy_version`。pending/full_text 不得参与阈值标注。
+- 发布前每个语义子族的 accepted Golden 必须同时覆盖建议合规、建议不合规、低置信和冲突样本；样本不足只允许 shadow。不得以减少 `evaluation_unknown` 或提高覆盖率作为降阈值理由。
 - 总 token 相对 full_text 至少下降 40%，wall time 至少下降 50%，不得高于 full_text token。
-- accepted Golden 无新增确定性误报；差异均有 fact、source、planner 和 aggregator 归因。
+- accepted Golden 无新增确定性误报；AI 建议的方向性指标达到经架构评审批准的门槛，差异均有 fact、source、planner、阈值版本和 aggregator 归因。
 
 ### 回滚条件
 
-- token 反增、状态差异无法归因、LLM 直接拥有最终状态、完整病历进入 trace、technical error 超过 1%。
+- token 反增、状态差异无法归因、LLM 直接拥有最终/AI 建议状态、为减少复核而降低阈值、data gap/technical error 被转成 AI 建议、Golden 校准指标跌破门槛、完整病历进入 trace、technical error 超过 1%。
 
 ## 9. 发布与回滚总门禁
 

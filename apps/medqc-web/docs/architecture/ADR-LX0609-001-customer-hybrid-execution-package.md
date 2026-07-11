@@ -92,12 +92,19 @@ Manifest 至少包含 `source_key`、`query_status`、`record_count`、`query_ve
 - `fact_id`：由受控来源引用、事实类型和版本稳定生成，不包含姓名或原文全文。
 - `visit_ref`：受控内部引用；禁止将患者姓名写入事实对象。
 - `family`、`fact_type`、`normalized_value`。
-- `source_key`、`source_document_id`、`source_document_type`、`record_time`。
+- `trigger_scope`：事实出现的临床范围，枚举为 `current_visit`、`prior_history`、`family_history`、`external_context`、`unknown`；只有 `current_visit` 可以直接参与本次住院规则 gate。
+- `current_visit_relevance`：`relevant`、`not_relevant`、`unknown`。它是结合来源、时序和上下文得到的本次住院关联性，不得仅因关键词出现而设为 `relevant`。
+- `assertion`：`affirmed`、`negated`、`uncertain`；另以 `assertion_context` 标明 `current_narrative`、`denial_history`、`past_history`、`family_history` 或 `other`。否认史、既往史和家族史中的命中不能当作本次住院肯定事实。
+- `event_status`：`planned`、`ordered`、`performed`、`cancelled`、`unknown`。计划、已开立、已执行和已取消必须分开，只有规则明确允许时才能互相投影。
+- `source_key`、`source_document_id`、`source_document_type`。
+- `record_time`、`submit_time`、`update_time`：`record_time` 表示来源记录声明的临床/文书记录时间，`submit_time` 表示首次提交时间，`update_time` 表示最后更新时间；分别保留 `record_time_source`、`submit_time_source`、`update_time_source` 和时区/精度，缺失时不得用另一个时间静默代填。
 - `quote`：最小必要短引用，进入持久化或报告前执行脱敏和长度限制。
 - `confidence`、`extractor`、`extractor_version`。
 - `fact_schema_version`、`source_snapshot_hash`、`created_at`。
 
-事实层只描述“发现了什么、来自哪里、可信度如何”，不输出最终 `compliant`、`non_compliant` 或 `not_applicable`。
+通用事实是事实层主契约。规则专用 extension/projection 只能放入带命名空间的 `extensions`，并必须包含 `projection_type`、`projection_version`、`derived_from_fact_ids`、`projection_reason`；它只能派生规则计算所需的结构值，不能把 `compliant`、`non_compliant`、`not_applicable` 或任何最终/建议状态塞回 facts。projection 必须可由通用事实和版本化逻辑重建，版本变化必须使相关缓存失效。
+
+事实层只描述“发现了什么、来自哪里、属于哪个时空与断言上下文、可信度如何”，不输出最终状态。Gate 必须同时核对 `trigger_scope`、`current_visit_relevance`、`assertion` 和 `event_status`，不得把既往史、家族史、否认或已取消计划当成本次已执行事件。
 
 ### 4. 两层状态机
 
@@ -114,29 +121,37 @@ Manifest 至少包含 `source_key`、`query_status`、`record_count`、`query_ve
 
 仅在 applicability 为 `applicable` 时运行：
 
-- `compliant`：证据充分且满足规则。
-- `non_compliant`：证据充分、规则适用且存在确定缺陷。
+- `compliant`：programmatic 计算或完全证据链能够确定满足规则。
+- `non_compliant`：programmatic 计算或完全证据链能够确定规则适用且存在缺陷。
+- `ai_suggested_compliant`：来源充分、适用性确定，语义证据支持“未发现问题”的置信度达到建议阈值但未达到确定性阈值，由 aggregator 生成。
+- `ai_suggested_non_compliant`：来源充分、适用性确定，语义证据支持“存在问题”的置信度达到建议阈值但未达到确定性阈值，由 aggregator 生成。
 - `data_gap`：规则适用，但完成评价所需数据为 `unavailable`、缺字段或无法可靠读取。
-- `evaluation_unknown`：语义结果低置信或相互矛盾，必须人工复核或受控 fallback。
+- `evaluation_unknown`：低于建议阈值、证据相互冲突或方向不稳定，进入受控 fallback 或内部复核队列，默认不作为客户主状态。
 - `technical_error`：执行、解析、超时或内部异常。
+
+Aggregator 依据版本化 `confidence_policy_version` 执行状态决策。对每个语义方向使用经 Golden 校准的 `suggestion_threshold` 和更高的 `deterministic_threshold`：低于建议阈值为 `evaluation_unknown`，达到建议阈值但未达到确定性阈值为对应 `ai_suggested_*`；只有满足完全证据要求或确定性 programmatic 判定时才输出 `compliant/non_compliant`。提高建议覆盖率不是目标，禁止为减少内部复核而降低阈值或放宽证据要求。
 
 #### 4.3 严格状态边界
 
 - `not_applicable`：必须能够证明“不属于规则场景”；不能用“没查到证据”替代。
 - `data_gap`：已经确认规则适用，但系统无法获得完成评价所需的数据；不能用它表达确定缺陷。
 - `non_compliant`：适用性成立、必要来源查询可靠、缺陷证据明确；任何关键来源为 `unavailable` 或 `error` 时不得输出。
+- `ai_suggested_*`：必须满足必要来源均已成功查询、适用性确定、至少一条支持该方向且可追溯到 source/fact 的短证据、无未解决关键矛盾，并达到版本化建议阈值；它们不计入“确定缺陷”或确定合规统计。`data_gap`、`technical_error` 及关键来源 `unavailable/error` 的优先级高于 AI 建议，绝不能转换为 `ai_suggested_*`。
+- `evaluation_unknown`：默认只进入内部复核/灰区 fallback；若 fallback 仍不能收敛，客户侧显示中性“暂无法判断”，不得硬转为 AI 建议、合规或不合规。
 - `technical_error`：系统失败状态，不能混入质量分母，也不能映射为客户缺陷。
 
 客户展示映射：
 
-| 内部状态                                 | 客户展示     | 是否计入缺陷 |
-| ---------------------------------------- | ------------ | ------------ |
-| `not_applicable`                         | 不适用       | 否           |
-| `compliant`                              | 合规         | 否           |
-| `non_compliant`                          | 不合规       | 是           |
-| `applicability_unknown`、`data_gap`      | 数据不足     | 否           |
-| `evaluation_unknown`                     | 建议人工复核 | 否           |
-| `applicability_error`、`technical_error` | 执行异常     | 否           |
+| 内部状态                                 | 客户展示            | 是否计入确定缺陷 |
+| ---------------------------------------- | ------------------- | ---------------- |
+| `not_applicable`                         | 不适用              | 否               |
+| `compliant`                              | 合规                | 否               |
+| `non_compliant`                          | 不合规              | 是               |
+| `ai_suggested_compliant`                 | AI判断未发现问题    | 否               |
+| `ai_suggested_non_compliant`             | AI判断存在问题      | 否               |
+| `applicability_unknown`、`data_gap`      | 数据不足            | 否               |
+| `evaluation_unknown`                     | 暂无法判断/内部复核 | 否               |
+| `applicability_error`、`technical_error` | 执行异常            | 否               |
 
 ### 5. 父子规则抑制
 
@@ -157,7 +172,7 @@ LLM 只能输出：
 - 最小证据引用和来源引用；
 - 置信度、矛盾项和“需要人工复核”建议。
 
-LLM 不拥有最终状态机，不得直接决定 `not_applicable`、`data_gap`、`non_compliant`，不得绕过 source manifest，也不得在 prompt 内实现父子规则抑制。最终状态由版本化 deterministic gate、programmatic rule 和 aggregator 计算。
+LLM 不拥有最终状态机，不得直接决定 `not_applicable`、`data_gap`、`compliant`、`non_compliant` 或 `ai_suggested_*`，不得绕过 source manifest，也不得在 prompt 内实现父子规则抑制。LLM 返回的置信度只是 aggregator 的一个输入；最终状态由版本化 deterministic gate、programmatic rule、证据要求和 aggregator 的阈值策略计算。
 
 ### 7. Planner 的位置与输出
 
@@ -195,6 +210,7 @@ Planner 输出至少包含：
 - `planner_version`；
 - `rule_package_version` 与单规则版本；
 - `aggregator_version`；
+- `confidence_policy_version`，包含建议/确定性阈值与证据要求版本；
 - `context_mode`；
 - `model_id`、`prompt_version`（仅 LLM 路径）；
 - 实际 `scoped_customer_rule_ids`。
@@ -223,6 +239,7 @@ Planner 输出至少包含：
 - 20 点、10 病历 shadow：相对现有 `full_text` 基线，wall time 至少下降 50%，总 token 至少下降 40%，且不得重现逐规则 B2 的 token 反增。
 - 语义路径：每病历每语义子族最多 1 次调用；被 gate 排除或程序化完成的规则调用数必须为 0。
 - 准确性：在每规则至少覆盖正例、负例、不适用、数据缺口/边界的 accepted Golden 前，不发布总体准确率；已有 accepted 样本上不得新增确定性误报，状态差异必须逐条完成归因。
+- AI 建议校准：每个语义子族必须用独立 accepted Golden 校准且保留验证集；`ai_suggested_non_compliant` 的阳性预测值和 `ai_suggested_compliant` 的阴性预测值门槛、置信区间与样本量由 `confidence_policy_version` 固化。样本不足时只能 shadow，不得通过降低阈值追求覆盖率。
 - 稳定性：`technical_error` 不高于 shadow 样本的 1%，且不得污染缺陷率与合规分母。
 - 隐私：评估产物中患者姓名、完整病历和密钥扫描命中为 0。
 
