@@ -432,6 +432,90 @@ def test_quote_is_redacted_before_truncation_and_terms_are_not_output() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("redaction_terms", ["person-name", b"person-name", bytearray(b"person-name")])
+def test_redaction_terms_reject_bare_text_and_binary_values(redaction_terms) -> None:
+    with pytest.raises(TypeError):
+        _adapt(redaction_terms=redaction_terms)
+
+
+@pytest.mark.unit
+def test_redaction_terms_reject_non_iterable() -> None:
+    with pytest.raises(TypeError):
+        _adapt(redaction_terms=42)
+
+
+@pytest.mark.unit
+def test_redaction_term_limit_allows_exact_max_and_counts_duplicates() -> None:
+    limit = adapter_module.MAX_REDACTION_TERMS
+    fact = _adapt(redaction_terms=["unused-term"] * limit)
+    assert fact.fact_type == "surgery_presence"
+
+    with pytest.raises(ValueError):
+        _adapt(redaction_terms=["unused-term"] * (limit + 1))
+
+
+@pytest.mark.unit
+def test_redaction_term_finite_generator_stops_at_max_plus_one() -> None:
+    limit = adapter_module.MAX_REDACTION_TERMS
+    consumed = 0
+
+    def terms():
+        nonlocal consumed
+        for index in range(5000):
+            consumed += 1
+            yield f"unused-{index}"
+
+    with pytest.raises(ValueError):
+        _adapt(redaction_terms=terms())
+    assert consumed == limit + 1
+
+
+@pytest.mark.unit
+def test_redaction_term_infinite_generator_stops_at_max_plus_one() -> None:
+    limit = adapter_module.MAX_REDACTION_TERMS
+    consumed = 0
+
+    def terms():
+        nonlocal consumed
+        while True:
+            consumed += 1
+            yield "unused-term"
+
+    with pytest.raises(ValueError):
+        _adapt(redaction_terms=terms())
+    assert consumed == limit + 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "invalid_term",
+    [object(), "x" * 129, "safe\nprivate-marker", "safe\rprivate-marker"],
+)
+def test_redaction_term_item_validation_is_fixed_and_does_not_echo(invalid_term) -> None:
+    with pytest.raises((TypeError, ValueError)) as exc_info:
+        _adapt(redaction_terms=(invalid_term,))
+    assert "private-marker" not in str(exc_info.value)
+    assert ("x" * 32) not in str(exc_info.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("container", [tuple, list, iter])
+def test_small_redaction_term_collections_keep_quote_and_non_quote_boundaries(container) -> None:
+    terms = container(["person-name"])
+    quote_fact = _adapt(
+        legacy_fact=_legacy(quote="person-name手术记录"),
+        redaction_terms=terms,
+    )
+    assert "person-name" not in quote_fact.canonical_json()
+
+    with pytest.raises(ValueError):
+        _adapt(
+            legacy_fact=_legacy(source_document_type="person-name手术记录"),
+            redaction_terms=container(["person-name"]),
+        )
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("confidence", [True, "0.9", float("nan"), float("inf"), -0.1, 1.1])
 def test_confidence_is_validated_by_fact_v2_without_clamping(confidence) -> None:
     with pytest.raises((TypeError, ValueError)):

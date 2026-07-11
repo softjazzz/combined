@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from itertools import islice
 import re
 from typing import Any, Iterable, Mapping
 
@@ -26,6 +27,7 @@ from .source_manifest import DocumentManifest, QueryStatus
 
 
 LEGACY_FACT_ADAPTER_VERSION = "legacy-shadow-adapter-v1"
+MAX_REDACTION_TERMS = 64
 _CONTROLLED_CODE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _OMIT_REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
@@ -101,11 +103,25 @@ def _validate_omit_reason_code(value: Any) -> str:
     return text
 
 
-def _materialize_redaction_terms(values: Iterable[str]) -> tuple[Any, ...]:
+def _materialize_redaction_terms(values: Iterable[str]) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes, bytearray)):
+        raise TypeError("redaction_terms must be a non-text iterable")
     try:
-        return tuple(values)
+        iterator = iter(values)
     except TypeError:
         raise TypeError("redaction_terms must be iterable") from None
+    terms = tuple(islice(iterator, MAX_REDACTION_TERMS + 1))
+    if len(terms) > MAX_REDACTION_TERMS:
+        raise ValueError("too many redaction_terms")
+    for term in terms:
+        if not isinstance(term, str):
+            raise TypeError("redaction_terms must contain str values")
+        normalized = term.strip()
+        if not normalized:
+            continue
+        if len(normalized) > 128 or "\n" in normalized or "\r" in normalized:
+            raise ValueError("invalid redaction term")
+    return terms
 
 
 def _contains_explicit_redaction_term(
@@ -192,7 +208,7 @@ def adapt_luxian_0609_legacy_fact_shadow(
     explicit_terms = tuple(
         term.strip()
         for term in raw_redaction_terms
-        if isinstance(term, str) and term.strip()
+        if term.strip()
     )
 
     source_entry = next(
