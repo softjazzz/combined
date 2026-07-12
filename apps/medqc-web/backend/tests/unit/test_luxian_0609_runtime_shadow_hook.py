@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from types import SimpleNamespace
 
+from app.core.settings import Settings
 from app.services.luxian_0609 import planner, runtime_shadow_hook
 from app.services.luxian_0609.runtime_shadow_assembler import RuntimePairExtractionInput, RuntimeStructuredFactSignal
 from app.services.luxian_0609.source_manifest_builder import SourceQueryObservation
@@ -39,6 +40,13 @@ def _call(**kwargs):
 def test_disabled_does_not_read_downstream_inputs():
     result = _call(evidence_payload=Explosive(), source_query_observations=Explosive(), extraction_inputs=Explosive(), settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False))
     assert result["disposition"] == "disabled" and result["llm_total_tokens"] == 0
+
+
+def test_real_settings_runtime_shadow_flag_defaults_false_and_parses_environment(monkeypatch):
+    monkeypatch.delenv("LUXIAN_0609_RUNTIME_SHADOW_ENABLED", raising=False)
+    assert Settings(JWT_SECRET="test-secret").LUXIAN_0609_RUNTIME_SHADOW_ENABLED is False
+    monkeypatch.setenv("LUXIAN_0609_RUNTIME_SHADOW_ENABLED", "true")
+    assert Settings(JWT_SECRET="test-secret").LUXIAN_0609_RUNTIME_SHADOW_ENABLED is True
 
 
 def test_enabled_zero_scope_is_planner_only():

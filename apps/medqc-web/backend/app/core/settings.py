@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED: bool = True
     LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED: bool = True
     LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED: bool = True
+    # 仅输出影子元数据，永不具备发布资格。
+    LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
