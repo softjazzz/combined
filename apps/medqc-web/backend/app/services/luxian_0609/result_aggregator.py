@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from . import programmatic_rules as rules_module
+from . import deterministic_gate as gate_module
 
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
@@ -122,7 +123,29 @@ class AggregationReport:
         value = self.to_dict(); value.pop("created_at"); return hashlib.sha256(_json(value).encode()).hexdigest()
 
 
-def aggregate_luxian_0609_programmatic_findings_shadow(*, finding_report: Any, aggregation_schema_version: str, aggregation_policy_version: str, created_at: str) -> AggregationReport:
-    if not isinstance(finding_report, rules_module.ProgrammaticFindingReport): raise TypeError("finding_report must be accepted ProgrammaticFindingReport")
+def aggregate_luxian_0609_programmatic_findings_shadow(*, gate_report: Any, finding_report: Any, aggregation_schema_version: str, aggregation_policy_version: str, created_at: str) -> AggregationReport:
+    """Aggregate only a finding report attested by rebuilding it from a real GateReport."""
+    if not isinstance(gate_report, gate_module.GateReport) or not isinstance(finding_report, rules_module.ProgrammaticFindingReport):
+        raise TypeError("gate_report and finding_report must be accepted value objects")
+    if (
+        finding_report.finding_schema_version != "finding-v1"
+        or finding_report.finding_policy_version != "policy-v1"
+        or finding_report.created_at != gate_report.created_at
+    ):
+        raise ValueError("finding report does not attest to gate report")
+    expected = rules_module.build_luxian_0609_programmatic_findings_shadow(
+        gate_report=gate_report,
+        finding_schema_version=finding_report.finding_schema_version,
+        finding_policy_version=finding_report.finding_policy_version,
+        created_at=finding_report.created_at,
+    )
+    if (
+        finding_report.visit_ref != expected.visit_ref
+        or finding_report.gate_fingerprint != expected.gate_fingerprint
+        or finding_report.findings != expected.findings
+        or finding_report.canonical_json() != expected.canonical_json()
+        or finding_report.fingerprint() != expected.fingerprint()
+    ):
+        raise ValueError("finding report does not attest to gate report")
     results = tuple(AggregatedRuleResult(item.rule_id, item.finding_kind, _MAP[item.finding_kind]) for item in finding_report.findings)
     return AggregationReport(aggregation_schema_version, aggregation_policy_version, finding_report.visit_ref, finding_report.fingerprint(), results, created_at)
