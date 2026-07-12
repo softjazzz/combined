@@ -181,6 +181,8 @@ class FactCoverageObservation:
             raise ValueError("duplicate produced_fact_id")
         if isinstance(self.processed_record_count, bool) or not isinstance(self.processed_record_count, int) or self.processed_record_count < 0:
             raise ValueError("invalid processed_record_count")
+        if fact_ids and self.processed_record_count == 0:
+            raise ValueError("produced facts require processed records")
         reason_code = _validate_code("reason_code", self.reason_code, max_length=64) if self.reason_code else ""
         error_code = _validate_code("error_code", self.error_code, max_length=64) if self.error_code else ""
         object.__setattr__(self, "fact_type", fact_type)
@@ -188,7 +190,7 @@ class FactCoverageObservation:
         object.__setattr__(self, "state", state)
         object.__setattr__(self, "extractor_version", _validate_code("extractor_version", self.extractor_version, max_length=96))
         object.__setattr__(self, "mapping_policy_version", _validate_code("mapping_policy_version", self.mapping_policy_version, max_length=96))
-        object.__setattr__(self, "produced_fact_ids", fact_ids)
+        object.__setattr__(self, "produced_fact_ids", tuple(sorted(fact_ids)))
         object.__setattr__(self, "reason_code", reason_code)
         object.__setattr__(self, "error_code", error_code)
 
@@ -306,20 +308,9 @@ class FactCoverageReport:
     source_contexts: tuple[CoverageSourceContext, ...]
     items: tuple[FactCoverageItem, ...]
     bundle_fact_index: tuple[FactCoverageRef, ...] = field(repr=False)
-    plan: ShadowRulePlan = field(repr=False, compare=False)
-    manifest: DocumentManifest = field(repr=False, compare=False)
-    bundle: FactShadowBundle = field(repr=False, compare=False)
     created_at: str = ""
 
     def __post_init__(self) -> None:
-        if not isinstance(self.plan, ShadowRulePlan) or not isinstance(self.manifest, DocumentManifest) or not isinstance(self.bundle, FactShadowBundle):
-            raise TypeError("coverage report requires accepted plan, manifest and bundle")
-        if self.plan.visit_ref != self.manifest.visit_ref or self.plan.visit_ref != self.bundle.visit_ref:
-            raise ValueError("coverage report visit_ref mismatch")
-        if self.visit_ref != self.plan.visit_ref:
-            raise ValueError("coverage report visit_ref does not match inputs")
-        if self.bundle.manifest_fingerprint != self.manifest.fingerprint() or self.bundle.source_snapshot_hash != self.manifest.source_snapshot_hash:
-            raise ValueError("coverage report bundle manifest mismatch")
         if any(type(value) is not tuple for value in (self.required_pairs, self.source_contexts, self.items, self.bundle_fact_index)):
             raise TypeError("coverage report collections must be tuple")
         if len(self.required_pairs) > MAX_COVERAGE_PAIRS or len(self.items) > MAX_COVERAGE_PAIRS:
@@ -329,8 +320,6 @@ class FactCoverageReport:
         required_pairs = tuple(sorted(self.required_pairs, key=lambda item: (item.fact_type, item.source_key)))
         if len(required_pairs) != len(set(required_pairs)):
             raise ValueError("duplicate required coverage pair")
-        if required_pairs != _required_pairs_from_plan(self.plan):
-            raise ValueError("required coverage pairs do not match plan")
         source_contexts = tuple(sorted(self.source_contexts, key=lambda item: item.source_key))
         if not all(isinstance(item, CoverageSourceContext) for item in source_contexts):
             raise TypeError("source_contexts must contain CoverageSourceContext")
@@ -338,19 +327,6 @@ class FactCoverageReport:
             raise ValueError("duplicate source coverage context")
         if {pair.source_key for pair in required_pairs} != {item.source_key for item in source_contexts}:
             raise ValueError("source contexts do not exactly match required pairs")
-        manifest_entries = {entry.source_key: entry for entry in self.manifest.entries}
-        if not {pair.source_key for pair in required_pairs}.issubset(manifest_entries):
-            raise ValueError("required coverage source is absent from manifest")
-        expected_contexts = tuple(
-            CoverageSourceContext(
-                source_key=source_key,
-                query_status=manifest_entries[source_key].query_status,
-                record_count=manifest_entries[source_key].record_count,
-            )
-            for source_key in sorted({pair.source_key for pair in required_pairs})
-        )
-        if source_contexts != expected_contexts:
-            raise ValueError("source contexts do not match manifest")
         if not all(isinstance(item, FactCoverageItem) for item in self.items):
             raise TypeError("items must contain FactCoverageItem")
         items = tuple(sorted(self.items, key=lambda item: (item.pair.fact_type, item.pair.source_key)))
@@ -360,21 +336,6 @@ class FactCoverageReport:
             raise TypeError("bundle_fact_index must contain FactCoverageRef")
         if len(self.bundle_fact_index) > MAX_TOTAL_FACT_REFS or len({item.fact_id for item in self.bundle_fact_index}) != len(self.bundle_fact_index):
             raise ValueError("invalid bundle fact index")
-        expected_fact_index = tuple(
-            sorted(
-                (
-                    FactCoverageRef(
-                        fact_id=item.fact.fact_id,
-                        fact_type=item.fact.fact_type,
-                        source_key=item.fact.source_key,
-                    )
-                    for item in self.bundle.items
-                ),
-                key=lambda item: item.fact_id,
-            )
-        )
-        if tuple(sorted(self.bundle_fact_index, key=lambda item: item.fact_id)) != expected_fact_index:
-            raise ValueError("bundle fact index does not match bundle")
         fact_index = {item.fact_id: item for item in self.bundle_fact_index}
         claimed_ids: list[str] = []
         contexts = {item.source_key: item for item in source_contexts}
@@ -391,13 +352,6 @@ class FactCoverageReport:
         object.__setattr__(self, "visit_ref", _validate_code("visit_ref", self.visit_ref))
         for name in ("plan_fingerprint", "manifest_fingerprint", "source_snapshot_hash", "bundle_fingerprint"):
             object.__setattr__(self, name, _validate_sha256(name, getattr(self, name)))
-        if (
-            self.plan_fingerprint != self.plan.fingerprint()
-            or self.manifest_fingerprint != self.manifest.fingerprint()
-            or self.source_snapshot_hash != self.manifest.source_snapshot_hash
-            or self.bundle_fingerprint != self.bundle.fingerprint()
-        ):
-            raise ValueError("coverage report fingerprints do not match inputs")
         object.__setattr__(self, "required_pairs", required_pairs)
         object.__setattr__(self, "source_contexts", source_contexts)
         object.__setattr__(self, "items", items)
@@ -533,8 +487,5 @@ def build_luxian_0609_fact_coverage_shadow(
         source_contexts=contexts,
         items=tuple(items),
         bundle_fact_index=fact_index,
-        plan=plan,
-        manifest=manifest,
-        bundle=bundle,
         created_at=created_at,
     )

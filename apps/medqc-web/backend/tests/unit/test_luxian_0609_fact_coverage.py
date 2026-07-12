@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from dataclasses import asdict
 import ast
 import importlib
 import json
@@ -22,7 +23,7 @@ from app.services.luxian_0609.fact_schema import (
     FactV2,
     TriggerScope,
 )
-from app.services.luxian_0609.planner import build_luxian_0609_shadow_plan
+from app.services.luxian_0609.planner import ShadowRulePlan, build_luxian_0609_shadow_plan
 from app.services.luxian_0609.shadow_fact_bundle import FactShadowBundle, FactShadowBundleItem
 from app.services.luxian_0609.source_manifest import DocumentManifest, QueryStatus, SourceManifestEntry
 
@@ -70,7 +71,7 @@ def _manifest(statuses: dict[str, QueryStatus] | None = None) -> DocumentManifes
     )
 
 
-def _fact(*, source_key: str, fact_type: str) -> FactV2:
+def _fact(*, source_key: str, fact_type: str, document_id: str = "doc-ref") -> FactV2:
     event_status = EventStatus.ORDERED if fact_type.endswith("order_confirmed") else EventStatus.PERFORMED
     return FactV2.create(
         visit_ref=VISIT_REF,
@@ -83,7 +84,7 @@ def _fact(*, source_key: str, fact_type: str) -> FactV2:
         assertion_context=AssertionContext.CURRENT_NARRATIVE,
         event_status=event_status,
         source_key=source_key,
-        source_document_id="doc-ref",
+        source_document_id=document_id,
         source_document_type="coverage_fixture",
         record_time=None,
         submit_time=None,
@@ -333,16 +334,77 @@ def test_direct_report_revalidates_exact_pairs_refs_and_bounded_collections(monk
     )
     with pytest.raises(ValueError, match="exactly match"):
         replace(report, items=(report.items[0],))
-    with pytest.raises(ValueError, match="bundle fact index"):
+    with pytest.raises(ValueError, match="not in bundle index"):
         replace(report, bundle_fact_index=())
-    with pytest.raises(ValueError, match="visit_ref does not match"):
-        replace(report, visit_ref="other-visit")
+    with pytest.raises(ValueError, match="source contexts"):
+        replace(report, source_contexts=())
     monkeypatch.setattr(coverage_module, "MAX_COVERAGE_PAIRS", 2)
     with pytest.raises(ValueError, match="too many observations"):
         _build()
     monkeypatch.setattr(coverage_module, "MAX_FACT_REFS_PER_PAIR", 1)
     with pytest.raises(ValueError, match="too many produced_fact_ids"):
         _observation(_pairs(plan)[0], fact_ids=(facts[0].fact_id, facts[1].fact_id))
+
+
+@pytest.mark.parametrize("state", [ExtractionCoverageState.PARTIAL, ExtractionCoverageState.ERROR])
+def test_zero_processed_records_cannot_claim_produced_fact_ids(state) -> None:
+    plan = _plan(("LX0609-032",))
+    manifest = _manifest()
+    fact = _fact(source_key="surgery_application", fact_type="current_visit_surgery_confirmed")
+    with pytest.raises(ValueError, match="produced facts require processed records"):
+        _observation(
+            _pairs(plan)[0],
+            state=state,
+            processed=0,
+            fact_ids=(fact.fact_id,),
+            reason="partial_budget_limit" if state is ExtractionCoverageState.PARTIAL else "extraction_error",
+            error="extractor_timeout" if state is ExtractionCoverageState.ERROR else "",
+        )
+    observations = (
+        _observation(
+            _pairs(plan)[0],
+            state=state,
+            processed=1,
+            fact_ids=(fact.fact_id,),
+            reason="partial_budget_limit" if state is ExtractionCoverageState.PARTIAL else "extraction_error",
+            error="extractor_timeout" if state is ExtractionCoverageState.ERROR else "",
+        ),
+        _observation(_pairs(plan)[1]),
+    )
+    report = _build(plan=plan, manifest=manifest, bundle=_bundle(manifest, (fact,)), observations=observations)
+    assert report.items[0].observation.produced_fact_ids == (fact.fact_id,)
+
+
+def test_multiple_produced_fact_ids_are_canonicalized_independent_of_input_order() -> None:
+    plan = _plan(("LX0609-032",))
+    manifest = _manifest()
+    first = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-a")
+    second = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-b")
+    bundle = _bundle(manifest, (first, second))
+    app_pair, record_pair = _pairs(plan)
+    left = _build(
+        plan=plan, manifest=manifest, bundle=bundle,
+        observations=(_observation(app_pair), _observation(record_pair, fact_ids=(first.fact_id, second.fact_id))),
+    )
+    right = _build(
+        plan=plan, manifest=manifest, bundle=bundle,
+        observations=(_observation(app_pair), _observation(record_pair, fact_ids=(second.fact_id, first.fact_id))),
+    )
+    assert left.fingerprint() == right.fingerprint()
+    assert left.canonical_json() == right.canonical_json()
+
+
+def test_returned_report_object_graph_retains_only_safe_values() -> None:
+    report = _build()
+    assert not hasattr(report, "plan")
+    assert not hasattr(report, "manifest")
+    assert not hasattr(report, "bundle")
+    forbidden_types = (ShadowRulePlan, DocumentManifest, FactShadowBundle, FactV2)
+    assert not any(isinstance(value, forbidden_types) for value in vars(report).values())
+    safe_graph = asdict(report)
+    serialized = repr(report) + json.dumps(safe_graph, default=str, ensure_ascii=False)
+    for forbidden in ("safe quote", "normalized_value", "doc-ref", "record_time", "source_document", "FactV2", "FactShadowBundle", "DocumentManifest", "ShadowRulePlan"):
+        assert forbidden not in serialized
 
 
 def test_fingerprint_excludes_created_at_and_output_is_private() -> None:
