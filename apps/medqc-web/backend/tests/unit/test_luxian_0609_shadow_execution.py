@@ -52,6 +52,8 @@ def test_safe_report_constructor_identity_and_privacy():
     assert "quote" not in repr(report) + str(asdict(report)) + report.canonical_json()
     with pytest.raises(ValueError):
         ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", (), (), (), (), CREATED)
+    payload = report.to_dict(); payload["planned_rule_ids"].append("LX0609-030")
+    assert report.planned_rule_ids == ()
 
 
 @pytest.mark.parametrize("marker", ["full_text", "sk-secret", "prompt-v1", "13800138000"])
