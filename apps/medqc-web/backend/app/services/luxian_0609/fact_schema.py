@@ -165,6 +165,9 @@ def _validate_code(field_name: str, value: Any, *, max_length: int = 96) -> str:
 def _validate_optional_ref(field_name: str, value: Any, *, max_length: int = 128) -> str:
     if value in (None, ""):
         return ""
+    # 内部行引用只接受精确 SHA-256；十六进制片段可偶然呈现手机号/证件号形状。
+    if isinstance(value, str) and _SHA256_PATTERN.fullmatch(value):
+        return value
     return _validate_code(field_name, value, max_length=max_length)
 
 

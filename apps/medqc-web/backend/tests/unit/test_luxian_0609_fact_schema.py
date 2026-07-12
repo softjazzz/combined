@@ -84,6 +84,16 @@ def _fact(**overrides) -> FactV2:
     return FactV2.create(**values)
 
 
+def test_optional_source_document_ref_accepts_only_exact_lowercase_sha256_before_identifier_scan():
+    digest = "13800138000" + "a" * 53
+    fact = _fact(source_document_id=digest)
+    assert fact.source_document_id == digest
+    for invalid in (digest.upper(), "sha256:" + digest, digest[:-1], "13800138000", "11010519491231002X", "Bearer secret"):
+        with pytest.raises(ValueError) as error:
+            _fact(source_document_id=invalid)
+        assert invalid not in str(error.value)
+
+
 @pytest.mark.parametrize(
     ("enum_type", "expected"),
     [
