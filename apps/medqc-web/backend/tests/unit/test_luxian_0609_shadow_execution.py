@@ -25,6 +25,25 @@ class Explosive:
 def _zero(**overrides):
     values = dict(visit_ref="visit-orch-001", selected_rule_ids=[], scoped_customer_rule_ids=[], record_rule_map={}, evidence_payload=Explosive(), source_query_observations=Explosive(), fact_pairs=Explosive(), deterministic_coverage_outcomes=Explosive(), redaction_terms=Explosive(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     values.update(overrides)
+    if "target_qualifications" not in overrides:
+        selected = set(values["selected_rule_ids"])
+        scoped = set(values["scoped_customer_rule_ids"])
+        recorded = set(values["record_rule_map"].get(values["visit_ref"], ()))
+        targets = {"LX0609-029": "presurg_summary", "LX0609-032": "surgery_safecheck_record"}
+        documents = values["evidence_payload"].get("programmatic_timeline", {}).get("documents", {}) if isinstance(values["evidence_payload"], dict) else {}
+        observed_status = {item.source_key: item.query_status.value for item in values["source_query_observations"]} if isinstance(values["source_query_observations"], (tuple, list)) else {}
+        values["target_qualifications"] = tuple(
+            module.gate.TargetQualification(
+                values["visit_ref"],
+                rule_id,
+                target,
+                "target-qualification-v1",
+                hashlib.sha256(module._json({"source_key": target, "documents": documents.get(target, [])}).encode()).hexdigest(),
+                1,
+            )
+            for rule_id, target in targets.items()
+            if rule_id in selected and rule_id in scoped and rule_id in recorded and observed_status.get(target) == "available"
+        )
     return build_luxian_0609_shadow_execution(**values)
 
 
@@ -146,6 +165,28 @@ def test_real_nonzero_030_chain_returns_safe_not_applicable_result():
     assert report.disposition == "completed"
     assert report.results[0].final_state.value == "not_applicable"
     assert report.summary_dict()["not_applicable_count"] == 1
+
+
+def test_available_target_qualification_snapshot_is_bound_to_safe_target_documents():
+    sources = ("surgery_application", "surgery_record", "surgery_safecheck_record")
+    observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
+    payload = {"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}
+    outcomes = (
+        _outcome("current_visit_surgery_confirmed", "surgery_application"),
+        _outcome("current_visit_surgery_confirmed", "surgery_record"),
+    )
+    qualification = module.gate.TargetQualification(
+        "visit-orch-001", "LX0609-032", "surgery_safecheck_record",
+        "target-qualification-v1", "a" * 64, 1,
+    )
+    with pytest.raises(ValueError, match="target qualification"):
+        _zero(
+            selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"],
+            record_rule_map={"visit-orch-001": ["LX0609-032"]}, evidence_payload=payload,
+            source_query_observations=observations, fact_pairs=(),
+            deterministic_coverage_outcomes=outcomes, redaction_terms=(),
+            target_qualifications=(qualification,),
+        )
 
 
 def test_real_nonzero_030_matched_target_present_is_compliant(monkeypatch):

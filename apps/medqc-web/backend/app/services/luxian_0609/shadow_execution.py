@@ -106,17 +106,35 @@ class ShadowExecutionReport:
         value=self.to_dict();value.pop("created_at");return hashlib.sha256(_json(value).encode()).hexdigest()
 
 
-def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any, scoped_customer_rule_ids: Any, record_rule_map: Any, evidence_payload: Mapping[str, Any] | None, source_query_observations: Sequence[manifest_builder.SourceQueryObservation], fact_pairs: Sequence[bundle.FactShadowPairInput], deterministic_coverage_outcomes: Sequence[FactCoverageOutcomeInput], redaction_terms: Sequence[str], planner_schema_version: str, rule_plan_version: str, manifest_schema_version: str, bundle_schema_version: str, coverage_schema_version: str, coverage_policy_version: str, gate_schema_version: str, gate_policy_version: str, finding_schema_version: str, finding_policy_version: str, aggregation_schema_version: str, aggregation_policy_version: str, execution_schema_version: str, execution_policy_version: str, package_version: str, planner_created_at: str, manifest_created_at: str, bundle_created_at: str, coverage_created_at: str, gate_created_at: str, finding_created_at: str, aggregation_created_at: str, created_at: str) -> ShadowExecutionReport:
+def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any, scoped_customer_rule_ids: Any, record_rule_map: Any, evidence_payload: Mapping[str, Any] | None, source_query_observations: Sequence[manifest_builder.SourceQueryObservation], fact_pairs: Sequence[bundle.FactShadowPairInput], deterministic_coverage_outcomes: Sequence[FactCoverageOutcomeInput], redaction_terms: Sequence[str], planner_schema_version: str, rule_plan_version: str, manifest_schema_version: str, bundle_schema_version: str, coverage_schema_version: str, coverage_policy_version: str, gate_schema_version: str, gate_policy_version: str, finding_schema_version: str, finding_policy_version: str, aggregation_schema_version: str, aggregation_policy_version: str, execution_schema_version: str, execution_policy_version: str, package_version: str, planner_created_at: str, manifest_created_at: str, bundle_created_at: str, coverage_created_at: str, gate_created_at: str, finding_created_at: str, aggregation_created_at: str, created_at: str, target_qualifications: Sequence[gate.TargetQualification] = ()) -> ShadowExecutionReport:
     plan = planner.build_luxian_0609_shadow_plan(visit_ref=visit_ref, selected_rule_ids=selected_rule_ids, scoped_customer_rule_ids=scoped_customer_rule_ids, record_rule_map=record_rule_map, planner_schema_version=planner_schema_version, rule_plan_version=rule_plan_version, created_at=planner_created_at)
     planned_ids = tuple(item.rule_id for item in plan.planned_rules)
     if not planned_ids:
         return ShadowExecutionReport(execution_schema_version, execution_policy_version, package_version, plan.visit_ref, "skipped_no_effective_rules", (), ("planner",), (("planner", plan.fingerprint()),), (), created_at)
-    if type(source_query_observations) not in (tuple, list) or type(fact_pairs) not in (tuple, list) or type(deterministic_coverage_outcomes) not in (tuple, list) or type(redaction_terms) not in (tuple, list): raise TypeError("nonzero execution inputs must be concrete collections")
+    if type(source_query_observations) not in (tuple, list) or type(fact_pairs) not in (tuple, list) or type(deterministic_coverage_outcomes) not in (tuple, list) or type(target_qualifications) not in (tuple, list) or type(redaction_terms) not in (tuple, list): raise TypeError("nonzero execution inputs must be concrete collections")
     if len(deterministic_coverage_outcomes) > MAX_COVERAGE_OUTCOMES or not all(isinstance(item, manifest_builder.SourceQueryObservation) for item in source_query_observations) or not all(isinstance(item, bundle.FactShadowPairInput) for item in fact_pairs) or not all(isinstance(item, FactCoverageOutcomeInput) for item in deterministic_coverage_outcomes) or not all(isinstance(item, str) for item in redaction_terms): raise TypeError("nonzero execution inputs contain invalid values")
     expected_sources = {source for item in plan.planned_rules for source in item.required_source_keys}
     observed_sources = {item.source_key for item in source_query_observations if isinstance(item, manifest_builder.SourceQueryObservation)}
     if len(observed_sources) != len(source_query_observations) or observed_sources != expected_sources: raise ValueError("source observations do not exactly match plan scope")
     manifest = manifest_builder.build_luxian_0609_source_manifest_shadow(visit_ref=plan.visit_ref, evidence_payload=evidence_payload, observations=source_query_observations, manifest_schema_version=manifest_schema_version, created_at=manifest_created_at)
+    qualification_by_rule = {item.rule_id: item for item in target_qualifications if isinstance(item, gate.TargetQualification)}
+    qualification_candidates = tuple(rule for rule in plan.planned_rules if rule.rule_id in ("LX0609-029", "LX0609-032"))
+    manifest_entries = {entry.source_key: entry for entry in manifest.entries} if qualification_candidates else {}
+    required_qualification_rules = tuple(
+        rule.rule_id
+        for rule in qualification_candidates
+        if manifest_entries[rule.target_source_key].query_status.value == "available"
+    )
+    if len(qualification_by_rule) != len(target_qualifications) or tuple(qualification_by_rule) != required_qualification_rules:
+        raise ValueError("target qualifications do not match plan")
+    safe_documents = (evidence_payload or {}).get("programmatic_timeline", {}).get("documents", {})
+    for rule in plan.planned_rules:
+        if rule.rule_id not in required_qualification_rules:
+            continue
+        qualification = qualification_by_rule[rule.rule_id]
+        expected_snapshot = hashlib.sha256(_json({"source_key": rule.target_source_key, "documents": safe_documents.get(rule.target_source_key, [])}).encode()).hexdigest()
+        if qualification.visit_ref != plan.visit_ref or qualification.target_source_key != rule.target_source_key or qualification.target_snapshot_hash != expected_snapshot:
+            raise ValueError("target qualification mismatch")
     facts = bundle.build_luxian_0609_fact_shadow_bundle(visit_ref=plan.visit_ref, manifest=manifest, paired_inputs=fact_pairs, bundle_schema_version=bundle_schema_version, created_at=bundle_created_at, redaction_terms=redaction_terms)
     pair_index = {item.pair_ref: item.fact for item in facts.items}
     outcome_pairs = {(item.fact_type, item.source_key) for item in deterministic_coverage_outcomes}
@@ -138,7 +156,7 @@ def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any
     if claimed_refs != relevant_bundle_pair_refs:
         raise ValueError("missing coverage pair reference")
     coverage_report = coverage.build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=facts, observations=tuple(observations), coverage_schema_version=coverage_schema_version, coverage_policy_version=coverage_policy_version, created_at=coverage_created_at)
-    gate_report = gate.build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=facts, coverage=coverage_report, gate_schema_version=gate_schema_version, gate_policy_version=gate_policy_version, created_at=gate_created_at)
+    gate_report = gate.build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=facts, coverage=coverage_report, target_qualifications=tuple(target_qualifications), gate_schema_version=gate_schema_version, gate_policy_version=gate_policy_version, created_at=gate_created_at)
     finding = rules.build_luxian_0609_programmatic_findings_shadow(gate_report=gate_report, finding_schema_version=finding_schema_version, finding_policy_version=finding_policy_version, created_at=finding_created_at)
     aggregated = aggregator.aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate_report, finding_report=finding, expected_finding_schema_version=finding_schema_version, expected_finding_policy_version=finding_policy_version, aggregation_schema_version=aggregation_schema_version, aggregation_policy_version=aggregation_policy_version, created_at=aggregation_created_at)
     fingerprints = (("planner", plan.fingerprint()), ("manifest", manifest.fingerprint()), ("bundle", facts.fingerprint()), ("coverage", coverage_report.fingerprint()), ("gate", gate_report.fingerprint()), ("finding", finding.fingerprint()), ("aggregation", aggregated.fingerprint()))

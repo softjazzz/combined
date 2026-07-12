@@ -61,6 +61,27 @@ class TargetResolution(str, Enum):
     ERROR = "error"
 
 
+@dataclass(frozen=True)
+class TargetQualification:
+    """Provider 生成的安全 target 资格摘要；不携带文书材料。"""
+    visit_ref: str
+    rule_id: str
+    target_source_key: str
+    qualification_policy_version: str
+    target_snapshot_hash: str
+    qualified_document_count: int
+
+    def __post_init__(self) -> None:
+        if self.rule_id not in ("LX0609-029", "LX0609-032") or self.target_source_key != _RULE_CONTRACT[self.rule_id][0]:
+            raise ValueError("invalid target qualification")
+        _code("qualification_visit_ref", self.visit_ref)
+        _code("qualification_policy_version", self.qualification_policy_version)
+        if not isinstance(self.target_snapshot_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", self.target_snapshot_hash):
+            raise ValueError("invalid target qualification")
+        if type(self.qualified_document_count) is not int or self.qualified_document_count < 0 or self.qualified_document_count > 512:
+            raise ValueError("invalid target qualification")
+
+
 class GateReadiness(str, Enum):
     READY = "ready"
     NOT_TRIGGERED = "not_triggered"
@@ -215,6 +236,7 @@ class GateReport:
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[GateDecision, ...]
     created_at: str
+    target_qualification_fingerprint: str = ""
 
     def __post_init__(self) -> None:
         if type(self.decisions) is not tuple or type(self.planned_rule_ids) is not tuple or len(self.decisions) > MAX_GATE_DECISIONS or not all(isinstance(x, GateDecision) for x in self.decisions):
@@ -230,6 +252,8 @@ class GateReport:
         object.__setattr__(self, "visit_ref", _code("visit_ref", self.visit_ref))
         for name in ("plan_fingerprint", "manifest_fingerprint", "source_snapshot_hash", "bundle_fingerprint", "coverage_fingerprint"):
             object.__setattr__(self, name, _sha(name, getattr(self, name)))
+        if self.target_qualification_fingerprint:
+            object.__setattr__(self, "target_qualification_fingerprint", _sha("target_qualification_fingerprint", self.target_qualification_fingerprint))
         object.__setattr__(self, "created_at", _created(self.created_at))
 
     def summary_dict(self) -> dict[str, Any]:
@@ -237,7 +261,7 @@ class GateReport:
         return {"absent_complete_count": sum(x.trigger_resolution is TriggerResolution.ABSENT_COMPLETE for x in decisions), "blocked_count": sum(x.readiness is GateReadiness.BLOCKED for x in decisions), "decision_count": len(decisions), "expected_llm_call_count": 0, "matched_count": sum(x.trigger_resolution is TriggerResolution.MATCHED for x in decisions), "ready_count": sum(x.readiness is GateReadiness.READY for x in decisions), "zero_llm_expected": True}
 
     def to_dict(self) -> dict[str, Any]:
-        return {"bundle_fingerprint": self.bundle_fingerprint, "coverage_fingerprint": self.coverage_fingerprint, "created_at": self.created_at, "decisions": [x.to_dict() for x in self.decisions], "gate_policy_version": self.gate_policy_version, "gate_schema_version": self.gate_schema_version, "manifest_fingerprint": self.manifest_fingerprint, "plan_fingerprint": self.plan_fingerprint, "planned_rule_ids": list(self.planned_rule_ids), "source_snapshot_hash": self.source_snapshot_hash, "summary": self.summary_dict(), "visit_ref": self.visit_ref}
+        return {"bundle_fingerprint": self.bundle_fingerprint, "coverage_fingerprint": self.coverage_fingerprint, "created_at": self.created_at, "decisions": [x.to_dict() for x in self.decisions], "gate_policy_version": self.gate_policy_version, "gate_schema_version": self.gate_schema_version, "manifest_fingerprint": self.manifest_fingerprint, "plan_fingerprint": self.plan_fingerprint, "planned_rule_ids": list(self.planned_rule_ids), "source_snapshot_hash": self.source_snapshot_hash, "summary": self.summary_dict(), "target_qualification_fingerprint": self.target_qualification_fingerprint, "visit_ref": self.visit_ref}
 
     def identity_dict(self) -> dict[str, Any]:
         d = self.to_dict(); d.pop("created_at"); return d
@@ -259,7 +283,7 @@ def _pair_resolution(item, context) -> TriggerResolution | None:
     return TriggerResolution.COVERAGE_NOT_RUN
 
 
-def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bundle: Any, coverage: Any, gate_schema_version: str, gate_policy_version: str, created_at: str) -> GateReport:
+def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bundle: Any, coverage: Any, target_qualifications: Any = None, gate_schema_version: str, gate_policy_version: str, created_at: str) -> GateReport:
     """Resolve internal trigger and target readiness from accepted shadow values only.
 
     The modules, rather than imported class aliases, are the type authority.  This
@@ -291,9 +315,29 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
     contexts = {context.source_key: context for context in coverage.source_contexts}
     coverage_items = {item.pair: item for item in coverage.items}
     facts = {item.fact.fact_id: item.fact for item in bundle.items}
+    if target_qualifications is None:
+        target_qualifications = ()
+    if type(target_qualifications) is not tuple or not all(isinstance(item, TargetQualification) for item in target_qualifications):
+        raise TypeError("target qualifications must be tuple")
+    qualification_by_rule = {item.rule_id: item for item in target_qualifications}
+    if len(qualification_by_rule) != len(target_qualifications):
+        raise ValueError("duplicate target qualification")
     for rule in plan.planned_rules:
         if rule.target_source_key not in entries:
             raise ValueError("gate target source absent manifest")
+    required_qualification_rules = tuple(
+        rule.rule_id
+        for rule in plan.planned_rules
+        if rule.rule_id in ("LX0609-029", "LX0609-032")
+        and entries[rule.target_source_key].query_status is manifest_module.QueryStatus.AVAILABLE
+    )
+    if tuple(qualification_by_rule) != required_qualification_rules:
+        raise ValueError("target qualification scope mismatch")
+    for rule_id in required_qualification_rules:
+        qualification = qualification_by_rule[rule_id]
+        rule = next(item for item in plan.planned_rules if item.rule_id == rule_id)
+        if qualification.visit_ref != plan.visit_ref or qualification.target_source_key != rule.target_source_key:
+            raise ValueError("target qualification mismatch")
 
     decisions: list[GateDecision] = []
     precedence = (
@@ -339,6 +383,10 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
                 manifest_module.QueryStatus.ERROR: TargetResolution.ERROR,
             }
             target_resolution = target_map[target.query_status]
+            if rule.rule_id in ("LX0609-029", "LX0609-032") and target.query_status is manifest_module.QueryStatus.AVAILABLE:
+                qualification = qualification_by_rule[rule.rule_id]
+                if qualification.qualified_document_count == 0:
+                    target_resolution = TargetResolution.EMPTY
             readiness = GateReadiness.READY if target_resolution in (TargetResolution.PRESENT, TargetResolution.EMPTY) else GateReadiness.BLOCKED
             decisions.append(GateDecision(rule.rule_id, TriggerResolution.MATCHED, rule.target_source_key, target_resolution, readiness, tuple(matched), rule.parent_rule_ids, rule.dependency_reason_codes))
         elif conflict:
@@ -348,4 +396,16 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
         else:
             outcome = next(value for value in precedence if value in blockers)
             decisions.append(GateDecision(rule.rule_id, outcome, rule.target_source_key, None, GateReadiness.BLOCKED, (), rule.parent_rule_ids, rule.dependency_reason_codes))
-    return GateReport(gate_schema_version, gate_policy_version, plan.visit_ref, plan.fingerprint(), manifest_fingerprint, manifest.source_snapshot_hash, bundle_fingerprint, coverage.fingerprint(), tuple(rule.rule_id for rule in plan.planned_rules), tuple(decisions), created_at)
+    qualification_identity = tuple(
+        {
+            "qualification_policy_version": item.qualification_policy_version,
+            "qualified_document_count": item.qualified_document_count,
+            "rule_id": item.rule_id,
+            "target_snapshot_hash": item.target_snapshot_hash,
+            "target_source_key": item.target_source_key,
+            "visit_ref": item.visit_ref,
+        }
+        for item in target_qualifications
+    )
+    qualification_fingerprint = hashlib.sha256(_json(qualification_identity).encode()).hexdigest()
+    return GateReport(gate_schema_version, gate_policy_version, plan.visit_ref, plan.fingerprint(), manifest_fingerprint, manifest.source_snapshot_hash, bundle_fingerprint, coverage.fingerprint(), tuple(rule.rule_id for rule in plan.planned_rules), tuple(decisions), created_at, qualification_fingerprint)

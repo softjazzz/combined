@@ -9,7 +9,7 @@ from typing import Any, Mapping
 
 from app.services.bundles import assembly as bundle_assembly
 
-from . import planner, runtime_shadow_assembler, source_manifest_builder
+from . import deterministic_gate, planner, runtime_shadow_assembler, source_manifest_builder
 from .source_manifest import QueryStatus
 
 _QUERY_VERSION = "runtime_source_v1"
@@ -17,6 +17,9 @@ _EXTRACTOR_VERSION = "rts-v1"
 _MAPPING_POLICY_VERSION = "rtm-v1"
 _MAX_SOURCES = 5
 _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
+_PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+_TARGET_QUALIFICATION_POLICY_VERSION = "target-qualification-v1"
+_MIN_SUBSTANTIVE_TARGET_LENGTH = 16
 _BEGIN_END_FIELDS = (
     "surgery_begin_time", "surgery_begin_datetime",
     "surgery_end_time", "surgery_end_datetime",
@@ -31,6 +34,7 @@ class _SourceUnavailable(Exception):
 class RuntimeShadowProvidedInputs:
     source_query_observations: tuple[source_manifest_builder.SourceQueryObservation, ...]
     extraction_inputs: tuple[runtime_shadow_assembler.RuntimePairExtractionInput, ...]
+    target_qualifications: tuple[deterministic_gate.TargetQualification, ...]
     evidence_payload: Mapping[str, Any]
 
 
@@ -62,6 +66,10 @@ def read_luxian_0609_runtime_source_rows(
     if not required.issubset(columns):
         raise _SourceUnavailable()
     selected = [field for field in _BEGIN_END_FIELDS if source_key == "surgery_record" and field in columns]
+    if source_key == "presurg_summary":
+        selected.extend(field for field in ("record_content", "record_time") if field in columns)
+    if source_key == "surgery_safecheck_record":
+        selected.extend(field for field in ("record_content",) if field in columns)
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
     order_candidates = (*getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()), "document_id", "id", *_BEGIN_END_FIELDS)
     order_columns = [field for field in order_candidates if field in columns]
@@ -107,6 +115,35 @@ def _has_performed_time(row: Mapping[str, Any]) -> bool:
         if parsed.strftime(_PERFORMED_TIME_FORMAT) == candidate:
             return True
     return False
+
+
+def _parse_performed_time(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    try:
+        parsed = datetime.strptime(candidate, _PERFORMED_TIME_FORMAT)
+    except ValueError:
+        return None
+    return parsed if parsed.strftime(_PERFORMED_TIME_FORMAT) == candidate else None
+
+
+def _substantive_target_body(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    candidate = value.strip()
+    return len(candidate) >= _MIN_SUBSTANTIVE_TARGET_LENGTH and candidate not in {"[]", "{}", "null", "None"}
+
+
+def _parse_presurg_record_time(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    try:
+        parsed = datetime.strptime(candidate, _PRESURG_RECORD_TIME_FORMAT)
+    except ValueError:
+        return None
+    return parsed if parsed.strftime(_PRESURG_RECORD_TIME_FORMAT) == candidate else None
 
 
 def provide_luxian_0609_runtime_shadow_inputs(
@@ -210,8 +247,41 @@ def provide_luxian_0609_runtime_shadow_inputs(
             extractor_version=_EXTRACTOR_VERSION, mapping_policy_version=_MAPPING_POLICY_VERSION,
             processed_record_count=processed, positive_signals=signals, reason_code=reason,
         ))
+    confirmed_surgery_times = tuple(
+        parsed
+        for row in rows_by_source.get("surgery_record", ())
+        for parsed in (_parse_performed_time(row.get(field)) for field in _BEGIN_END_FIELDS)
+        if parsed is not None
+    )
+    earliest_surgery_time = min(confirmed_surgery_times) if confirmed_surgery_times else None
+    observation_by_source = {item.source_key: item for item in observations}
+    qualifications: list[deterministic_gate.TargetQualification] = []
+    for rule in plan.planned_rules:
+        if rule.rule_id not in ("LX0609-029", "LX0609-032"):
+            continue
+        if observation_by_source[rule.target_source_key].query_status is not QueryStatus.AVAILABLE:
+            continue
+        target_rows = rows_by_source[rule.target_source_key]
+        target_snapshot_hash = _digest({"source_key": rule.target_source_key, "documents": documents[rule.target_source_key]})
+        if rule.rule_id == "LX0609-029":
+            qualified_count = sum(
+                1
+                for row in target_rows
+                if _substantive_target_body(row.get("record_content"))
+                and (record_time := _parse_presurg_record_time(row.get("record_time"))) is not None
+                and earliest_surgery_time is not None
+                and record_time <= earliest_surgery_time
+            )
+        else:
+            qualified_count = sum(1 for row in target_rows if _substantive_target_body(row.get("record_content")))
+        qualifications.append(deterministic_gate.TargetQualification(
+            visit_ref=plan.visit_ref, rule_id=rule.rule_id, target_source_key=rule.target_source_key,
+            qualification_policy_version=_TARGET_QUALIFICATION_POLICY_VERSION,
+            target_snapshot_hash=target_snapshot_hash, qualified_document_count=qualified_count,
+        ))
     return RuntimeShadowProvidedInputs(
         source_query_observations=tuple(observations),
         extraction_inputs=tuple(outcomes),
+        target_qualifications=tuple(qualifications),
         evidence_payload={"programmatic_timeline": {"documents": documents}},
     )

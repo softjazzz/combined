@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from types import SimpleNamespace
 
+import pytest
+
 from app.core.settings import Settings
 from app.services.luxian_0609 import planner, runtime_shadow_hook, runtime_shadow_input_provider
 from app.services.luxian_0609.runtime_shadow_assembler import RuntimePairExtractionInput, RuntimeStructuredFactSignal
@@ -88,6 +90,56 @@ def test_nonexact_provider_time_reaches_orch_as_not_applicable(monkeypatch):
     assert result["disposition"] == "completed"
     assert result["final_state_counts"]["not_applicable_count"] == 1
     assert result["final_state_counts"]["compliant_count"] == 0
+
+
+@pytest.mark.parametrize(("record_time", "expected"), [
+    ("2026-01-01 07:00:00", "compliant"),
+    ("2026-01-01 09:00:00", "non_compliant"),
+    ("", "non_compliant"),
+])
+def test_provider_029_qualification_keeps_raw_available_but_requires_pre_surgery_substantive_document(monkeypatch, record_time, expected):
+    def _reader(**kwargs):
+        source = kwargs["source_key"]
+        if source == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if source == "presurg_summary":
+            return [{"record_content": "structured-presurgery-document-body", "record_time": record_time}]
+        return [{}]
+
+    monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = runtime_shadow_hook.run_luxian_0609_runtime_shadow(
+        visit_ref=VISIT, selected_rule_ids=["LX0609-029"], scoped_customer_rule_ids=["LX0609-029"],
+        record_rule_map={VISIT: ["LX0609-029"]}, institute_id="i", patient_id="p",
+        settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
+    )
+    assert result["disposition"] == "completed"
+    assert result["final_state_counts"][f"{expected}_count"] == 1
+    assert result["expected_llm_call_count"] == result["llm_total_tokens"] == 0
+
+
+@pytest.mark.parametrize(("body", "expected"), [
+    ("structured-safecheck-document-body", "compliant"),
+    ("", "non_compliant"),
+    ("[]", "non_compliant"),
+])
+def test_provider_032_qualification_rejects_empty_shell_without_changing_source_truth(monkeypatch, body, expected):
+    def _reader(**kwargs):
+        source = kwargs["source_key"]
+        if source == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if source == "surgery_safecheck_record":
+            return [{"record_content": body}]
+        return [{}]
+
+    monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = runtime_shadow_hook.run_luxian_0609_runtime_shadow(
+        visit_ref=VISIT, selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"],
+        record_rule_map={VISIT: ["LX0609-032"]}, institute_id="i", patient_id="p",
+        settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
+    )
+    assert result["disposition"] == "completed"
+    assert result["final_state_counts"][f"{expected}_count"] == 1
+    assert result["expected_llm_call_count"] == result["llm_total_tokens"] == 0
 
 
 def test_exception_is_isolated_without_echo(monkeypatch):

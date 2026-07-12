@@ -75,6 +75,7 @@ def run_luxian_0609_runtime_shadow(
     evidence_payload: Mapping[str, Any] | None = None,
     source_query_observations: Sequence[Any] | None = None,
     extraction_inputs: Sequence[Any] | None = None,
+    target_qualifications: Sequence[Any] | None = None,
     redaction_terms: Sequence[str] | None = None,
     institute_id: str = "",
     patient_id: str = "",
@@ -108,8 +109,10 @@ def run_luxian_0609_runtime_shadow(
             )
             source_query_observations = provided.source_query_observations
             extraction_inputs = provided.extraction_inputs
+            target_qualifications = provided.target_qualifications
             evidence_payload = provided.evidence_payload
-        if source_query_observations is None or extraction_inputs is None:
+        qualification_required = any(rule_id in ("LX0609-029", "LX0609-032") for rule_id in planned)
+        if source_query_observations is None or extraction_inputs is None or (qualification_required and target_qualifications is None):
             return _summary("inputs_unavailable", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
         assembly = runtime_shadow_assembler.assemble_luxian_0609_runtime_shadow_inputs(
             plan=plan,
@@ -125,6 +128,7 @@ def run_luxian_0609_runtime_shadow(
             scoped_customer_rule_ids=scoped_customer_rule_ids, record_rule_map=record_rule_map,
             evidence_payload=evidence_payload, source_query_observations=assembly.source_query_observations,
             fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes,
+            target_qualifications=() if target_qualifications is None else target_qualifications,
             redaction_terms=() if redaction_terms is None else redaction_terms,
             planner_schema_version=_PLAN_SCHEMA, rule_plan_version=_RULE_PLAN,
             manifest_schema_version=_MANIFEST_SCHEMA, bundle_schema_version=_BUNDLE_SCHEMA,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import pytest
 
 from app.services.luxian_0609 import planner, runtime_shadow_input_provider as provider
@@ -70,6 +72,98 @@ def test_provider_rejects_invalid_calendar_time_as_performed_signal(monkeypatch)
 
     signal_outcome = next(item for item in result.extraction_inputs if item.source_key == "surgery_record")
     assert signal_outcome.positive_signals == ()
+
+
+@pytest.mark.parametrize(
+    "record_time,body,expected",
+    [
+        ("2026-01-01 07:00:00", "substantive approved pre-surgery summary", 1),
+        ("2026-01-01 09:00:00", "substantive approved post-surgery summary", 0),
+        ("", "substantive approved pre-surgery summary", 0),
+        ("2026-01-01", "substantive approved pre-surgery summary", 0),
+        ("2026-01-01 07:00:00", "   ", 0),
+    ],
+)
+def test_provider_029_target_qualification_requires_substantive_pre_surgery_body(monkeypatch, record_time, body, expected):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == "presurg_summary":
+            return [{"record_content": body, "record_time": record_time}]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    qualification = result.target_qualifications[0]
+    assert qualification.rule_id == "LX0609-029"
+    assert qualification.qualified_document_count == expected
+
+
+def test_provider_029_uses_earliest_confirmed_surgery_time_independent_of_row_order(monkeypatch):
+    surgery_rows = [
+        {"surgery_begin_time": "2026-01-02 08:00:00+08"},
+        {"surgery_end_time": "2026-01-01 08:00:00+08"},
+    ]
+    summary_rows = [
+        {"record_content": "substantive approved pre-surgery summary", "record_time": "2026-01-01 07:00:00"},
+        {"record_content": "substantive approved post-surgery summary", "record_time": "2026-01-01 09:00:00"},
+    ]
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return list(reversed(surgery_rows))
+        if kwargs["source_key"] == "presurg_summary":
+            return list(reversed(summary_rows))
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert result.target_qualifications[0].qualified_document_count == 1
+
+
+def test_provider_emits_no_target_sidecar_when_raw_target_is_empty(monkeypatch):
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", lambda **kwargs: [])
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-032"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert result.target_qualifications == ()
+
+
+def test_provider_sidecar_and_evidence_output_do_not_retain_target_body_or_time(monkeypatch):
+    body_marker = "private-target-body-marker"
+    time_marker = "2026-01-01 07:00:00"
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == "presurg_summary":
+            return [{"record_content": body_marker, "record_time": time_marker}]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    serialized = str(asdict(result))
+    assert body_marker not in serialized and time_marker not in serialized
+
+
+@pytest.mark.parametrize("body,expected", [("substantive safety checklist content", 1), ("", 0), ("   ", 0), ("[]", 0), ("{}", 0)])
+def test_provider_032_target_qualification_rejects_title_only_and_shells(monkeypatch, body, expected):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == "surgery_safecheck_record":
+            return [{"record_content": body, "document_title": "ignored title"}]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-032"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert result.target_qualifications[0].qualified_document_count == expected
 
 
 @pytest.mark.parametrize(

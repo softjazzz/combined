@@ -12,6 +12,7 @@ from app.services.luxian_0609.deterministic_gate import (
     GateFactRef,
     GateReadiness,
     GateReport,
+    TargetQualification,
     TargetResolution,
     TriggerResolution,
     build_luxian_0609_deterministic_gate_shadow,
@@ -79,12 +80,52 @@ def _coverage(*, plan, manifest, bundle, overrides=None):
     return build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=bundle, observations=tuple(observations), coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", created_at=CREATED)
 
 
-def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, manifest=None):
+def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, manifest=None, qualifications=None):
     plan = _plan(rule_ids)
     manifest = _manifest(statuses) if manifest is None else manifest
     bundle = _bundle(manifest, facts)
     coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle, overrides=overrides)
-    return build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+    if qualifications is None:
+        qualifications = tuple(
+            TargetQualification(VISIT, rule.rule_id, rule.target_source_key, "target-qualification-v1", "f" * 64, 1)
+            for rule in plan.planned_rules
+            if rule.rule_id in ("LX0609-029", "LX0609-032")
+            and next(entry.query_status for entry in manifest.entries if entry.source_key == rule.target_source_key) is QueryStatus.AVAILABLE
+        )
+    return build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, target_qualifications=qualifications, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+
+
+def test_available_qualified_targets_require_exact_safe_sidecar_scope_and_order():
+    order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    with pytest.raises(ValueError, match="qualification"):
+        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=())
+    qualification = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    extra = TargetQualification(VISIT, "LX0609-032", "surgery_safecheck_record", "target-qualification-v1", "e" * 64, 1)
+    with pytest.raises(ValueError, match="qualification"):
+        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(qualification, extra))
+    wrong_visit = TargetQualification("visit-other-001", "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    with pytest.raises(ValueError, match="qualification"):
+        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(wrong_visit,))
+
+
+def test_nonavailable_target_cannot_be_overridden_by_target_qualification():
+    order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    qualification = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    with pytest.raises(ValueError, match="qualification"):
+        _gate(
+            rule_ids=("LX0609-029",), facts=(order_fact,),
+            statuses={"presurg_summary": QueryStatus.EMPTY}, qualifications=(qualification,),
+        )
+
+
+def test_target_qualification_safe_identity_changes_gate_fingerprint_not_created_at():
+    order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    first = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
+    second = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v2", "f" * 64, 1)
+    first_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(first,))
+    second_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(second,))
+    assert first_gate.fingerprint() != second_gate.fingerprint()
+    assert first_gate.fingerprint() == replace(first_gate, created_at="2026-07-13T12:00:00+08:00").fingerprint()
 
 
 @pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])
@@ -94,6 +135,16 @@ def test_a_matched_target_matrix(status, resolution, readiness):
     pair = (fact.fact_type, fact.source_key)
     report = _gate(statuses={"surgery_record": status}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
     assert (report.decisions[0].target_resolution, report.decisions[0].readiness) == (resolution, readiness)
+
+
+@pytest.mark.parametrize(("rule_id", "source"), [("LX0609-029", "presurg_summary"), ("LX0609-032", "surgery_safecheck_record")])
+def test_target_qualification_keeps_raw_available_but_resolves_unqualified_as_empty(rule_id, source):
+    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
+    pair = (fact.fact_type, fact.source_key)
+    qualification = TargetQualification(VISIT, rule_id, source, "target-qualification-v1", "f" * 64, 0)
+    report = _gate(rule_ids=(rule_id,), facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))}, qualifications=(qualification,))
+    assert next(entry for entry in _manifest().entries if entry.source_key == source).query_status is QueryStatus.AVAILABLE
+    assert report.decisions[0].target_resolution is TargetResolution.EMPTY
 
 
 @pytest.mark.parametrize(("target", "readiness"), [("present", "blocked"), ("empty", "blocked"), ("unavailable", "ready"), ("error", "ready")])
