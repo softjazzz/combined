@@ -152,6 +152,14 @@ def test_real_orch_accepts_assembled_performed_signal():
     assert report.results[0].final_state.value == "compliant"
 
 
+@pytest.mark.parametrize("status,expected", [("unavailable", "data_gap"), ("error", "technical_error")])
+def test_real_orch_target_unavailable_and_error(status, expected):
+    plan = _plan("LX0609-030")
+    assembly = _assemble(plan, _signal("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "ordered", "order-" + status), statuses={"surgery_record": status})
+    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, evidence_payload=_payload(plan, statuses={"surgery_record": status}), source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
+    assert report.results[0].final_state.value == expected
+
+
 def test_public_assembly_rejects_forged_nested_quote_or_trace():
     assembly = _assemble(_plan("LX0609-030"), _signal())
     pair = assembly.fact_pairs[0]
