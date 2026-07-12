@@ -30,6 +30,13 @@ def _zero(**overrides):
     return build_luxian_0609_shadow_execution(**values)
 
 
+def _real_030_no_fact_inputs():
+    sources = ("inpat_nondrug_order", "surgery_application", "surgery_record")
+    observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
+    coverage = (FactCoverageObservation("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_application", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_record", "complete", "extractor-v1", "mapping-v1", 1, ()))
+    return dict(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload={"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}, source_query_observations=observations, fact_pairs=(), coverage_observations=coverage, redaction_terms=())
+
+
 def test_zero_scope_short_circuits_before_every_downstream_input():
     report = _zero()
     assert report.disposition == "skipped_no_effective_rules"
@@ -224,3 +231,59 @@ def test_real_nonzero_029_single_scope_is_non_compliant_only():
     report = _zero(selected_rule_ids=["LX0609-029"], scoped_customer_rule_ids=["LX0609-029"], record_rule_map={"visit-orch-001": ["LX0609-029"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
     assert tuple(result.rule_id for result in report.results) == ("LX0609-029",)
     assert report.results[0].final_state.value == "non_compliant"
+
+
+def test_real_multi_029_030_032_stable_order_and_counts():
+    sources = ("inpat_nondrug_order", "surgery_application", "surgery_record", "presurg_summary", "surgery_safecheck_record")
+    statuses = {"presurg_summary": "empty"}
+    observations = tuple(SourceQueryObservation.create(source_key=key, query_status=statuses.get(key, "available"), query_version="query-v1") for key in sources)
+    payload = {"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources if key != "presurg_summary"}}}
+    legacy = Luxian0609Fact(fact_type="current_visit_surgery_confirmed", family="surgery_anesthesia", source_document_type="手术记录", source_document_id="doc-multi", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
+    mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-multi").hexdigest(), legacy_fact=legacy, mapping=mapping)
+    manifest = build_luxian_0609_source_manifest_shadow(visit_ref="visit-orch-001", evidence_payload=payload, observations=observations, manifest_schema_version="manifest-v1", created_at=CREATED)
+    fact_id = build_luxian_0609_fact_shadow_bundle(visit_ref="visit-orch-001", manifest=manifest, paired_inputs=(pair,), bundle_schema_version="bundle-v1", created_at=CREATED, redaction_terms=()).items[0].fact.fact_id
+    coverage = (FactCoverageObservation("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_application", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_record", "complete", "extractor-v1", "mapping-v1", 1, (fact_id,)))
+    report = _zero(selected_rule_ids=["LX0609-029", "LX0609-030", "LX0609-032"], scoped_customer_rule_ids=["LX0609-029", "LX0609-030", "LX0609-032"], record_rule_map={"visit-orch-001": ["LX0609-029", "LX0609-030", "LX0609-032"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
+    assert report.planned_rule_ids == ("LX0609-029", "LX0609-030", "LX0609-032")
+    assert tuple(item.rule_id for item in report.results) == report.planned_rule_ids
+    assert tuple(item.final_state.value for item in report.results) == ("non_compliant", "compliant", "compliant")
+    assert report.summary_dict()["non_compliant_count"] == 1 and report.summary_dict()["compliant_count"] == 2
+    assert tuple(name for name, _ in report.stage_fingerprints) == module.FULL_STAGE_ORDER
+
+
+def test_real_builder_wrappers_execute_each_stage_once(monkeypatch):
+    calls = []
+    state = {"inside_aggregation": False}
+    stages = (("planner", module.planner, "build_luxian_0609_shadow_plan"), ("manifest", module.manifest_builder, "build_luxian_0609_source_manifest_shadow"), ("bundle", module.bundle, "build_luxian_0609_fact_shadow_bundle"), ("coverage", module.coverage, "build_luxian_0609_fact_coverage_shadow"), ("gate", module.gate, "build_luxian_0609_deterministic_gate_shadow"), ("finding", module.rules, "build_luxian_0609_programmatic_findings_shadow"), ("aggregation", module.aggregator, "aggregate_luxian_0609_programmatic_findings_shadow"))
+    for name, owner, attr in stages:
+        original = getattr(owner, attr)
+        def wrapper(*args, _original=original, _name=name, **kwargs):
+            if _name == "finding" and state["inside_aggregation"]:
+                return _original(*args, **kwargs)
+            calls.append(_name)
+            if _name == "aggregation":
+                state["inside_aggregation"] = True
+                try: return _original(*args, **kwargs)
+                finally: state["inside_aggregation"] = False
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(owner, attr, wrapper)
+    assert _zero(**_real_030_no_fact_inputs()).disposition == "completed"
+    assert calls == list(module.FULL_STAGE_ORDER)
+
+
+@pytest.mark.parametrize("failed_stage", ["manifest", "bundle", "coverage", "gate", "finding", "aggregation"])
+def test_real_builder_failure_stops_later_stages(monkeypatch, failed_stage):
+    calls = []
+    stages = (("planner", module.planner, "build_luxian_0609_shadow_plan"), ("manifest", module.manifest_builder, "build_luxian_0609_source_manifest_shadow"), ("bundle", module.bundle, "build_luxian_0609_fact_shadow_bundle"), ("coverage", module.coverage, "build_luxian_0609_fact_coverage_shadow"), ("gate", module.gate, "build_luxian_0609_deterministic_gate_shadow"), ("finding", module.rules, "build_luxian_0609_programmatic_findings_shadow"), ("aggregation", module.aggregator, "aggregate_luxian_0609_programmatic_findings_shadow"))
+    for name, owner, attr in stages:
+        original = getattr(owner, attr)
+        def wrapper(*args, _original=original, _name=name, **kwargs):
+            calls.append(_name)
+            if _name == failed_stage: raise RuntimeError("stage_failure")
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(owner, attr, wrapper)
+    with pytest.raises(RuntimeError, match="stage_failure"):
+        _zero(**_real_030_no_fact_inputs())
+    index = list(module.FULL_STAGE_ORDER).index(failed_stage)
+    assert calls == list(module.FULL_STAGE_ORDER[:index + 1])
