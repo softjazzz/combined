@@ -166,3 +166,19 @@ def test_public_assembly_rejects_forged_nested_quote_or_trace():
     forged = replace(pair, legacy_fact=replace(pair.legacy_fact, quote="SECRET_RAW_QUOTE", trace={"prompt": "SECRET"}))
     with pytest.raises(ValueError, match="assembly fact pair"):
         replace(assembly, fact_pairs=(forged,))
+
+
+@pytest.mark.parametrize("marker", ["13800138000", "11010519491231002X", "Bearer_secret", "patient_name", "raw_text"])
+def test_signal_sensitive_metadata_rejects_without_echo(marker):
+    with pytest.raises(ValueError) as error:
+        RuntimeStructuredFactSignal("a" * 64, marker, "surgery_record", "performed", "b" * 64, "runtime_structured", "extractor-v1", "mapping-v1")
+    assert marker not in str(error.value)
+
+
+def test_top_level_generator_and_subclass_reject_after_nonzero_plan():
+    plan = _plan("LX0609-030")
+    with pytest.raises(TypeError):
+        assemble_luxian_0609_runtime_shadow_inputs(plan=plan, evidence_payload=_payload(plan), source_query_observations=(item for item in _observations(plan)), extraction_inputs=_inputs(plan), assembler_schema_version="assembler-v1", assembler_policy_version="policy-v1", created_at=CREATED)
+    class Inputs(list): pass
+    with pytest.raises(TypeError):
+        _assemble(plan, inputs=Inputs(_inputs(plan)))
