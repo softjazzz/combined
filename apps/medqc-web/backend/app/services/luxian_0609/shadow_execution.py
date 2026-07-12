@@ -23,6 +23,7 @@ _SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|r
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 FULL_STAGE_ORDER = ("planner", "manifest", "bundle", "coverage", "gate", "finding", "aggregation")
+MAX_COVERAGE_OUTCOMES = 64
 
 
 def _json(value: Any) -> str: return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -34,6 +35,40 @@ def _created(value: Any) -> str:
         if not isinstance(value, str): raise ValueError
         datetime.fromisoformat(value.replace("Z", "+00:00")); return value
     except ValueError: raise ValueError("invalid created_at") from None
+
+
+@dataclass(frozen=True)
+class FactCoverageOutcomeInput:
+    fact_type: str
+    source_key: str
+    state: coverage.ExtractionCoverageState | str
+    extractor_version: str
+    mapping_policy_version: str
+    processed_record_count: int
+    produced_pair_refs: tuple[str, ...]
+    reason_code: str = ""
+    error_code: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fact_type", _code("fact_type", self.fact_type))
+        object.__setattr__(self, "source_key", _code("source_key", self.source_key))
+        object.__setattr__(self, "extractor_version", _code("extractor_version", self.extractor_version, 96))
+        object.__setattr__(self, "mapping_policy_version", _code("mapping_policy_version", self.mapping_policy_version, 96))
+        try:
+            state = coverage.ExtractionCoverageState(self.state)
+        except (TypeError, ValueError):
+            raise ValueError("invalid coverage state") from None
+        object.__setattr__(self, "state", state.value)
+        if type(self.produced_pair_refs) is not tuple or len(self.produced_pair_refs) > bundle.MAX_SHADOW_FACTS: raise TypeError("produced_pair_refs must be bounded tuple")
+        refs = tuple(sorted(self.produced_pair_refs))
+        if not all(isinstance(item, str) and _SHA.fullmatch(item) for item in refs) or len(refs) != len(set(refs)): raise ValueError("invalid produced_pair_refs")
+        if isinstance(self.processed_record_count, bool) or not isinstance(self.processed_record_count, int) or self.processed_record_count < 0 or (refs and self.processed_record_count == 0): raise ValueError("invalid processed_record_count")
+        object.__setattr__(self, "produced_pair_refs", refs)
+        object.__setattr__(self, "reason_code", _code("reason_code", self.reason_code, 64) if self.reason_code else "")
+        object.__setattr__(self, "error_code", _code("error_code", self.error_code, 64) if self.error_code else "")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"fact_type": self.fact_type, "source_key": self.source_key, "state": self.state, "extractor_version": self.extractor_version, "mapping_policy_version": self.mapping_policy_version, "processed_record_count": self.processed_record_count, "produced_pair_refs": list(self.produced_pair_refs), "reason_code": self.reason_code, "error_code": self.error_code}
 
 
 @dataclass(frozen=True)
@@ -71,19 +106,30 @@ class ShadowExecutionReport:
         value=self.to_dict();value.pop("created_at");return hashlib.sha256(_json(value).encode()).hexdigest()
 
 
-def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any, scoped_customer_rule_ids: Any, record_rule_map: Any, evidence_payload: Mapping[str, Any] | None, source_query_observations: Sequence[manifest_builder.SourceQueryObservation], fact_pairs: Sequence[bundle.FactShadowPairInput], coverage_observations: tuple[coverage.FactCoverageObservation, ...] | list[coverage.FactCoverageObservation], redaction_terms: Sequence[str], planner_schema_version: str, rule_plan_version: str, manifest_schema_version: str, bundle_schema_version: str, coverage_schema_version: str, coverage_policy_version: str, gate_schema_version: str, gate_policy_version: str, finding_schema_version: str, finding_policy_version: str, aggregation_schema_version: str, aggregation_policy_version: str, execution_schema_version: str, execution_policy_version: str, package_version: str, planner_created_at: str, manifest_created_at: str, bundle_created_at: str, coverage_created_at: str, gate_created_at: str, finding_created_at: str, aggregation_created_at: str, created_at: str) -> ShadowExecutionReport:
+def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any, scoped_customer_rule_ids: Any, record_rule_map: Any, evidence_payload: Mapping[str, Any] | None, source_query_observations: Sequence[manifest_builder.SourceQueryObservation], fact_pairs: Sequence[bundle.FactShadowPairInput], deterministic_coverage_outcomes: Sequence[FactCoverageOutcomeInput], redaction_terms: Sequence[str], planner_schema_version: str, rule_plan_version: str, manifest_schema_version: str, bundle_schema_version: str, coverage_schema_version: str, coverage_policy_version: str, gate_schema_version: str, gate_policy_version: str, finding_schema_version: str, finding_policy_version: str, aggregation_schema_version: str, aggregation_policy_version: str, execution_schema_version: str, execution_policy_version: str, package_version: str, planner_created_at: str, manifest_created_at: str, bundle_created_at: str, coverage_created_at: str, gate_created_at: str, finding_created_at: str, aggregation_created_at: str, created_at: str) -> ShadowExecutionReport:
     plan = planner.build_luxian_0609_shadow_plan(visit_ref=visit_ref, selected_rule_ids=selected_rule_ids, scoped_customer_rule_ids=scoped_customer_rule_ids, record_rule_map=record_rule_map, planner_schema_version=planner_schema_version, rule_plan_version=rule_plan_version, created_at=planner_created_at)
     planned_ids = tuple(item.rule_id for item in plan.planned_rules)
     if not planned_ids:
         return ShadowExecutionReport(execution_schema_version, execution_policy_version, package_version, plan.visit_ref, "skipped_no_effective_rules", (), ("planner",), (("planner", plan.fingerprint()),), (), created_at)
-    if type(source_query_observations) not in (tuple, list) or type(fact_pairs) not in (tuple, list) or type(coverage_observations) not in (tuple, list) or type(redaction_terms) not in (tuple, list): raise TypeError("nonzero execution inputs must be concrete collections")
-    if not all(isinstance(item, manifest_builder.SourceQueryObservation) for item in source_query_observations) or not all(isinstance(item, bundle.FactShadowPairInput) for item in fact_pairs) or not all(isinstance(item, coverage.FactCoverageObservation) for item in coverage_observations) or not all(isinstance(item, str) for item in redaction_terms): raise TypeError("nonzero execution inputs contain invalid values")
+    if type(source_query_observations) not in (tuple, list) or type(fact_pairs) not in (tuple, list) or type(deterministic_coverage_outcomes) not in (tuple, list) or type(redaction_terms) not in (tuple, list): raise TypeError("nonzero execution inputs must be concrete collections")
+    if len(deterministic_coverage_outcomes) > MAX_COVERAGE_OUTCOMES or not all(isinstance(item, manifest_builder.SourceQueryObservation) for item in source_query_observations) or not all(isinstance(item, bundle.FactShadowPairInput) for item in fact_pairs) or not all(isinstance(item, FactCoverageOutcomeInput) for item in deterministic_coverage_outcomes) or not all(isinstance(item, str) for item in redaction_terms): raise TypeError("nonzero execution inputs contain invalid values")
     expected_sources = {source for item in plan.planned_rules for source in item.required_source_keys}
     observed_sources = {item.source_key for item in source_query_observations if isinstance(item, manifest_builder.SourceQueryObservation)}
     if len(observed_sources) != len(source_query_observations) or observed_sources != expected_sources: raise ValueError("source observations do not exactly match plan scope")
     manifest = manifest_builder.build_luxian_0609_source_manifest_shadow(visit_ref=plan.visit_ref, evidence_payload=evidence_payload, observations=source_query_observations, manifest_schema_version=manifest_schema_version, created_at=manifest_created_at)
     facts = bundle.build_luxian_0609_fact_shadow_bundle(visit_ref=plan.visit_ref, manifest=manifest, paired_inputs=fact_pairs, bundle_schema_version=bundle_schema_version, created_at=bundle_created_at, redaction_terms=redaction_terms)
-    coverage_report = coverage.build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=facts, observations=coverage_observations, coverage_schema_version=coverage_schema_version, coverage_policy_version=coverage_policy_version, created_at=coverage_created_at)
+    pair_index = {item.pair_ref: item.fact for item in facts.items}
+    claimed_refs: set[str] = set()
+    observations: list[coverage.FactCoverageObservation] = []
+    for outcome in deterministic_coverage_outcomes:
+        fact_ids: list[str] = []
+        for pair_ref in outcome.produced_pair_refs:
+            fact = pair_index.get(pair_ref)
+            if fact is None or pair_ref in claimed_refs: raise ValueError("invalid coverage pair reference")
+            if fact.fact_type != outcome.fact_type or fact.source_key != outcome.source_key: raise ValueError("coverage pair reference mismatch")
+            claimed_refs.add(pair_ref); fact_ids.append(fact.fact_id)
+        observations.append(coverage.FactCoverageObservation(outcome.fact_type, outcome.source_key, outcome.state, outcome.extractor_version, outcome.mapping_policy_version, outcome.processed_record_count, tuple(fact_ids), outcome.reason_code, outcome.error_code))
+    coverage_report = coverage.build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=facts, observations=tuple(observations), coverage_schema_version=coverage_schema_version, coverage_policy_version=coverage_policy_version, created_at=coverage_created_at)
     gate_report = gate.build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=facts, coverage=coverage_report, gate_schema_version=gate_schema_version, gate_policy_version=gate_policy_version, created_at=gate_created_at)
     finding = rules.build_luxian_0609_programmatic_findings_shadow(gate_report=gate_report, finding_schema_version=finding_schema_version, finding_policy_version=finding_policy_version, created_at=finding_created_at)
     aggregated = aggregator.aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate_report, finding_report=finding, expected_finding_schema_version=finding_schema_version, expected_finding_policy_version=finding_policy_version, aggregation_schema_version=aggregation_schema_version, aggregation_policy_version=aggregation_policy_version, created_at=aggregation_created_at)
