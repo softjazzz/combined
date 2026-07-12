@@ -11,6 +11,31 @@
   - 主 agent 在开发 agent 完成后审查，再下达下一步任务。
   - 0609 质控集、V3.6 任务链路、任务详情、导出、证据链等共享契约需要同步。
 
+## 当前会话目录（2026-07-12）
+
+以下 ID 是当前 LX0609 工作流的有效路由目录。它们不是永久常量；任一角色更换 session 后，Coordinator 必须先更新本节并发送 `PROTOCOL_UPDATE`，其他 Agent 不得自行猜测或沿用旧 ID。
+
+| 角色                              | 当前 session / thread ID               | 状态    | 回调职责                                               |
+| --------------------------------- | -------------------------------------- | ------- | ------------------------------------------------------ |
+| Coordinator / 总架构师            | `019f4ff5-0a1d-7063-9d72-732b3fedf158` | active  | 唯一任务总控；接收所有 ACK、进度、评审、阻塞和终态报告 |
+| Implementation Agent / 开发       | `019f504e-f251-7fa1-9677-d82f7865678b` | active  | 仅按白名单实现；回调 Coordinator，不自行宣布验收通过   |
+| Independent Test Agent / 独立测试 | `019f50fc-3b96-74f1-b0f5-8047349655f2` | standby | 仅在收到 `TEST_ASSIGN` 后只读验收；回调 Coordinator    |
+
+已归档的临时接班 session `019f54ac-dfdb-7e83-b0e2-06403287e6f5` 不属于当前路由，不得向其派单或回调。
+
+跨 session 消息必须显式包含：
+
+```text
+coordinator_thread_id: 019f4ff5-0a1d-7063-9d72-732b3fedf158
+sender_thread_id: <发送方当前 thread ID>
+recipient_thread_id: <接收方当前 thread ID>
+```
+
+- Implementation Agent 和 Independent Test Agent 的 ACK、`PROGRESS_UPDATE`、`READY_FOR_REVIEW`、`TEST_REPORT`、`BLOCKED`、`NEED_COORDINATOR_DECISION`、`COMPLETE_REPORT` 必须发送到 `coordinator_thread_id`。
+- 只在本地 final 中写报告不算完成回调；跨 session 发送失败时必须标记 `CALLBACK_FAILED_NEEDS_COORDINATOR_POLLING`。
+- ACK 和进度更新不是终态。执行 Agent 只能以协议允许的终态结束当前任务，不能用“仍在处理中”或普通 final 提前停止。
+- 预计无法在单个 turn 内完成的实现任务，Coordinator 应在 `TASK_ASSIGN` 或 `CONTINUE_TASK` 中明确要求执行 Agent 使用 `create_goal` 建立持续目标；普通 turn 结束不等于任务结束，目标仅在提交、验证和终态回调完成后标记 `complete`。Coordinator 在 goal 运行期间只读监控，避免用频繁 follow-up 消息切断自动续跑。
+
 ## 角色
 
 ### Coordinator Agent
@@ -76,6 +101,9 @@ type:
 task_id:
 repo:
 thread_id:
+coordinator_thread_id:
+sender_thread_id:
+recipient_thread_id:
 related_threads:
 ```
 
@@ -85,6 +113,9 @@ related_threads:
 - `type`：只能使用本文档定义的消息类型。
 - `task_id`：稳定任务标识，例如 `v36-p1-task-export`。
 - `thread_id`：接收方线程 ID。
+- `coordinator_thread_id`：当前唯一 Coordinator 线程 ID；所有回调必须显式携带。
+- `sender_thread_id`：发送方当前线程 ID，用于避免角色名相同但 session 不同造成串线。
+- `recipient_thread_id`：本消息实际接收线程 ID；必须与当前会话目录一致。
 - `related_threads`：需要同步的其他线程 ID。
 
 ## TASK_ASSIGN
