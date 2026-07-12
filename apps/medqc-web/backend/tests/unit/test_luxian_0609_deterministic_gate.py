@@ -5,6 +5,8 @@ from dataclasses import replace
 import pytest
 
 from app.services.luxian_0609.deterministic_gate import (
+    GateDecision,
+    GateFactRef,
     GateReadiness,
     TargetResolution,
     TriggerResolution,
@@ -15,7 +17,7 @@ from test_luxian_0609_fact_coverage import _build, _bundle, _fact, _manifest, _o
 
 
 def _gate(*, plan=None, manifest=None, bundle=None, coverage=None):
-    plan = _plan(("LX0609-032",)) if plan is None else plan
+    plan = _plan(("LX0609-030",)) if plan is None else plan
     manifest = _manifest() if manifest is None else manifest
     bundle = _bundle(manifest) if bundle is None else bundle
     coverage = _build(plan=plan, manifest=manifest, bundle=bundle) if coverage is None else coverage
@@ -46,21 +48,35 @@ def test_claimed_exact_fact_matches_and_unclaimed_fact_is_ignored() -> None:
 
 
 def test_semantic_conflict_and_target_matrix() -> None:
-    plan = _plan(("LX0609-032",)); manifest = _manifest(); pair = _pairs(plan)[0]
+    plan = _plan(("LX0609-030",)); manifest = _manifest(); pair = _pairs(plan)[0]
     fact = _fact(source_key=pair[1], fact_type=pair[0]); object.__setattr__(fact, "assertion", type(fact.assertion).NEGATED)
     bundle = _bundle(manifest, (fact,))
-    coverage = _build(plan=plan, manifest=manifest, bundle=bundle, observations=(_observation(pair, fact_ids=(fact.fact_id,)), _observation(_pairs(plan)[1])))
+    coverage = _build(plan=plan, manifest=manifest, bundle=bundle, observations=(_observation(pair, fact_ids=(fact.fact_id,)), _observation(_pairs(plan)[1]), _observation(_pairs(plan)[2])))
     assert _gate(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage).decisions[0].trigger_resolution is TriggerResolution.SEMANTIC_CONFLICT
 
 
 def test_coverage_precedence_and_safe_object_graph() -> None:
-    plan = _plan(("LX0609-032",)); manifest = _manifest(); pairs = _pairs(plan)
+    plan = _plan(("LX0609-030",)); manifest = _manifest(); pairs = _pairs(plan)
     coverage = _build(plan=plan, manifest=manifest, observations=(
         _observation(pairs[0], state=ExtractionCoverageState.PARTIAL, processed=1, reason="partial_budget_limit"),
         _observation(pairs[1], state=ExtractionCoverageState.ERROR, processed=1, reason="extraction_error", error="extractor_timeout"),
+        _observation(pairs[2]),
     ))
     report = _gate(plan=plan, manifest=manifest, coverage=coverage)
     assert report.decisions[0].trigger_resolution is TriggerResolution.COVERAGE_ERROR
     assert not any(hasattr(report, name) for name in ("plan", "manifest", "bundle", "coverage"))
     with pytest.raises(ValueError):
         replace(report, decisions=(report.decisions[0], report.decisions[0]))
+
+
+def test_gate_decision_exact_state_matrix_and_rule_contract() -> None:
+    ref = GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
+    ready = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (ref,), (), ())
+    assert ready.readiness is GateReadiness.READY
+    for target, readiness in (("present", "blocked"), ("unavailable", "ready"), ("error", "ready")):
+        with pytest.raises(ValueError):
+            GateDecision("LX0609-030", "matched", "surgery_record", target, readiness, (ref,), (), ())
+    with pytest.raises(ValueError):
+        GateDecision("LX0609-029", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
+    with pytest.raises(ValueError):
+        GateDecision("LX0609-032", "absent_complete", "surgery_safecheck_record", None, "not_triggered", (), ("LX0609-999",), ("patient_name",))
