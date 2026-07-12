@@ -41,6 +41,7 @@ from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
+from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -2602,6 +2603,22 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         bundle=bundle_payload,
                         medical_text=str(record.get("medical_text") or ""),
                     )
+                    runtime_shadow_summary: Optional[Dict[str, Any]] = None
+                    if (
+                        rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                        and bool(getattr(settings, "LUXIAN_0609_RUNTIME_SHADOW_ENABLED", False))
+                    ):
+                        # 当前 router 没有查询四态和结构化事实真值；只附加安全影子摘要。
+                        runtime_shadow_summary = run_luxian_0609_runtime_shadow(
+                            visit_ref=visit_id,
+                            selected_rule_ids=filters.get("selected_rule_ids") or active_rule_ids,
+                            scoped_customer_rule_ids=filters.get("scoped_customer_rule_ids") or (),
+                            record_rule_map=filters.get("record_rule_map") or {},
+                            evidence_payload=evidence_payload,
+                            source_query_observations=None,
+                            extraction_inputs=None,
+                            settings=settings,
+                        )
                     primary_document_text = str(
                         evidence_payload.get("primary_document_text")
                         or (bundle_payload or {}).get("medical_text")
@@ -2636,6 +2653,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     record_luxian_0609_input_profile = dict(result.get("luxian_0609_input_profile") or {})
                     eval_items = list(result.get("evaluation_results") or [])
+                    if runtime_shadow_summary is not None:
+                        for eval_item in eval_items:
+                            if isinstance(eval_item, dict):
+                                metadata = dict(eval_item.get("metadata") or {})
+                                metadata["luxian_0609_runtime_shadow"] = runtime_shadow_summary
+                                eval_item["metadata"] = metadata
                 else:
                     bundle_scene = _resolve_workspace_bundle_scene(
                         current_scope=current_scope,

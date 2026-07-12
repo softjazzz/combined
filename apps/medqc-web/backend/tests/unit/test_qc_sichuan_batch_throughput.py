@@ -1554,3 +1554,48 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
     assert workspace.create_called is False
     assert submitted_tasks == []
     assert [call["status"] for call in workspace.list_calls] == ["queued", "running"]
+
+
+@pytest.mark.asyncio
+async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluation(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-030"],
+        "selected_rule_ids": ["LX0609-030"],
+        "scoped_customer_rule_ids": ["LX0609-030"],
+        "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+        "date_field": "discharge",
+    }
+    service = _ServiceStub()
+    sequence: List[str] = []
+    evaluation_row: Dict[str, Any] = {"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {"tokens_used": 17}}
+
+    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+        sequence.append("evaluate")
+        return {
+            "evaluation_results": [evaluation_row],
+            "token_usage": {"total_tokens": 17, "prompt_tokens": 10, "completion_tokens": 7},
+        }
+
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    async def _get_qc_service():
+        return service
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    original_hook = qc_sichuan.run_luxian_0609_runtime_shadow
+
+    def _hook(**kwargs: Any) -> Dict[str, Any]:
+        sequence.append("hook")
+        assert kwargs["source_query_observations"] is None and kwargs["extraction_inputs"] is None
+        return original_hook(**kwargs)
+
+    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", _hook)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert sequence and sequence[0] == "hook" and sequence[1] == "evaluate"
+    summary = (evaluation_row.get("metadata") or {}).get("luxian_0609_runtime_shadow")
+    assert summary and summary["disposition"] == "inputs_unavailable"
+    assert evaluation_row["status"] == "compliant"
