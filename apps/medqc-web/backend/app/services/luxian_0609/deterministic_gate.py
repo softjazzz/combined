@@ -21,7 +21,16 @@ MAX_MATCHED_FACT_REFS = 512
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _FORBIDDEN = re.compile(r"(?i)(not[_ -]?applicable|data[_ -]?gap|non[_ -]?compliant|ai[_ -]?suggested|technical[_ -]?error|evaluation[_ -]?unknown|suppressed|(?<!non[_ -])compliant)")
-_SENSITIVE = re.compile(r"(?i)(patient[_ -]?name|id[_ -]?card|phone|mobile|address|quote|value|source[_ -]?document|time|trace|prompt|response|authorization|api[_ -]?key|password)")
+_SENSITIVE = re.compile(
+    r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|"
+    r"record[_ -]?content|internal[_ -]?data|source[_ -]?document|patient[_ -]?name|"
+    r"id[_ -]?card|phone|mobile|address|quote|value|"
+    r"(record|submit|update)[_ -]?time|trace|prompt|response|error[_ -]?stack|sql)"
+)
+_CREDENTIAL = re.compile(
+    r"(?i)(authorization|bearer|api[_ -]?key|password|private[_ -]?key|"
+    r"(?:^|[_-])sk[_-][A-Za-z0-9_.-]+|-----begin)"
+)
 _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _RULE_ORDER = ("LX0609-029", "LX0609-030", "LX0609-032")
@@ -98,7 +107,18 @@ def _json(value: Any) -> str:
 
 
 def _code(name: str, value: Any, maximum: int = 128) -> str:
-    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _FORBIDDEN.search(value) or _SENSITIVE.search(value) or _ID_CARD.search(value) or _PHONE.search(value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value) > maximum
+        or not _CODE.fullmatch(value)
+        or _FORBIDDEN.search(value)
+        or _SENSITIVE.search(value)
+        or _CREDENTIAL.search(value)
+        or _ID_CARD.search(value)
+        or _PHONE.search(value)
+    ):
         raise ValueError(f"invalid {name}")
     return value
 

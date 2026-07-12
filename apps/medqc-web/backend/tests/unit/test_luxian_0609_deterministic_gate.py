@@ -113,6 +113,28 @@ def test_b_exact_rule_metadata_and_allowed_ref_pairs():
         GateDecision("LX0609-030", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
 
 
+@pytest.mark.parametrize("marker", ["Bearer_secret", "sk-secret", "full_text", "medical_text", "raw_response", "patient_name", "phone_13800000000", "11010519491231002X"])
+def test_a_public_code_fields_reject_sensitive_or_credential_markers_without_echo(marker):
+    with pytest.raises(ValueError) as fact_error:
+        GateFactRef("a" * 64, marker, "safe_source")
+    assert marker not in str(fact_error.value)
+    with pytest.raises(ValueError) as report_error:
+        GateReport(marker, "policy-v1", VISIT, "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, (), (), CREATED)
+    assert marker not in str(report_error.value)
+    with pytest.raises(ValueError) as visit_error:
+        GateReport("gate-v1", "policy-v1", marker, "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, (), (), CREATED)
+    assert marker not in str(visit_error.value)
+
+
+@pytest.mark.parametrize(("field", "value", "message"), [("trigger", "raw_response", "trigger_resolution"), ("target", "sk-secret", "target_resolution"), ("readiness", "Bearer_secret", "readiness")])
+def test_b_invalid_enums_are_non_echo(field, value, message):
+    values = {"trigger": "absent_complete", "target": None, "readiness": "not_triggered"}
+    values[field] = value
+    with pytest.raises(ValueError) as error:
+        GateDecision("LX0609-030", values["trigger"], "surgery_record", values["target"], values["readiness"], (), (), ())
+    assert str(error.value) == f"invalid {message}"
+
+
 @pytest.mark.parametrize("mode", ["matched", "absent", "conflict", "blocker"])
 def test_c_missing_target_rejects_before_every_resolution(mode):
     plan = _plan(("LX0609-029",))
@@ -150,6 +172,26 @@ def test_d_order_and_performed_semantics_and_e_positive_wins():
     assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
 
 
+@pytest.mark.parametrize("mode", ["coverage_partial", "coverage_not_run", "coverage_error", "source_unavailable", "source_error"])
+def test_c_positive_claimed_match_overrides_every_other_alternative_blocker(mode):
+    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
+    positive_pair = (fact.fact_type, fact.source_key)
+    blocked_pair = ("current_visit_surgery_confirmed", "surgery_application")
+    statuses = {}
+    overrides = {positive_pair: _observation(positive_pair, fact_ids=(fact.fact_id,))}
+    if mode == "coverage_partial":
+        overrides[blocked_pair] = _observation(blocked_pair, state="partial", processed=1, reason="partial_budget_limit")
+    elif mode == "coverage_not_run":
+        overrides[blocked_pair] = _observation(blocked_pair, state="not_run", processed=0, reason="extractor_not_run")
+    elif mode == "coverage_error":
+        overrides[blocked_pair] = _observation(blocked_pair, state="error", processed=1, reason="extraction_error", error="extractor_timeout")
+    elif mode == "source_unavailable":
+        statuses[blocked_pair[1]] = QueryStatus.UNAVAILABLE
+    else:
+        statuses[blocked_pair[1]] = QueryStatus.ERROR
+    assert _gate(facts=(fact,), statuses=statuses, overrides=overrides).decisions[0].trigger_resolution is TriggerResolution.MATCHED
+
+
 def test_e_unclaimed_fact_is_ignored_and_all_blocker_precedence():
     fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
     assert _gate(facts=(fact,)).decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
@@ -181,6 +223,16 @@ def test_f_each_nonconclusive_blocker(statuses, override, expected):
     if override is not None:
         state, reason = override
         overrides[pair] = _observation(pair, state=state, processed=1, reason=reason, error="extractor_timeout" if state == "error" else "")
+    assert _gate(statuses=statuses, overrides=overrides).decisions[0].trigger_resolution is expected
+
+
+@pytest.mark.parametrize(("statuses", "overrides", "expected"), [
+    ({"inpat_nondrug_order": QueryStatus.ERROR}, {("current_visit_surgery_confirmed", "surgery_record"): _observation(("current_visit_surgery_confirmed", "surgery_record"), state="error", processed=1, reason="extraction_error", error="extractor_timeout")}, TriggerResolution.SOURCE_ERROR),
+    ({"inpat_nondrug_order": QueryStatus.UNAVAILABLE}, {("current_visit_surgery_confirmed", "surgery_record"): _observation(("current_visit_surgery_confirmed", "surgery_record"), state="error", processed=1, reason="extraction_error", error="extractor_timeout")}, TriggerResolution.COVERAGE_ERROR),
+    ({"inpat_nondrug_order": QueryStatus.UNAVAILABLE}, {("current_visit_surgery_confirmed", "surgery_record"): _observation(("current_visit_surgery_confirmed", "surgery_record"), state="partial", processed=1, reason="partial_budget_limit")}, TriggerResolution.SOURCE_UNAVAILABLE),
+    (None, {("current_visit_surgery_confirmed", "surgery_application"): _observation(("current_visit_surgery_confirmed", "surgery_application"), state="partial", processed=1, reason="partial_budget_limit"), ("current_visit_surgery_confirmed", "surgery_record"): _observation(("current_visit_surgery_confirmed", "surgery_record"), state="not_run", processed=0, reason="extractor_not_run")}, TriggerResolution.COVERAGE_PARTIAL),
+])
+def test_d_explicit_blocker_precedence(statuses, overrides, expected):
     assert _gate(statuses=statuses, overrides=overrides).decisions[0].trigger_resolution is expected
 
 
@@ -221,6 +273,13 @@ def test_i_cross_object_fingerprint_mismatch():
     other_plan = build_luxian_0609_shadow_plan(visit_ref="visit-gate-002", selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-gate-002": ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
     with pytest.raises(ValueError, match="visit_ref"):
         build_luxian_0609_deterministic_gate_shadow(plan=other_plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+
+
+@pytest.mark.parametrize("field", ["plan_fingerprint", "manifest_fingerprint", "source_snapshot_hash", "bundle_fingerprint"])
+def test_e_coverage_cross_object_fingerprint_dimensions_reject(field):
+    plan = _plan(); manifest = _manifest(); bundle = _bundle(manifest); coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle)
+    with pytest.raises(ValueError, match="coverage fingerprint"):
+        build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=replace(coverage, **{field: "b" * 64}), gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
 
 
 def test_z_real_type_boundary_survives_module_reload():
