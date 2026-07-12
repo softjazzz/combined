@@ -175,6 +175,20 @@ def test_real_nonzero_030_order_trigger_target_error_is_technical_error():
     assert report.results[0].final_state.value == "technical_error"
 
 
+def test_real_nonzero_030_claimed_semantic_conflict_is_evaluation_unknown():
+    sources = ("inpat_nondrug_order", "surgery_application", "surgery_record")
+    observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
+    payload = {"programmatic_timeline": {"documents": {key: [{"content": "safe"}] for key in sources}}}
+    legacy = Luxian0609Fact(fact_type="current_visit_surgery_confirmed", family="surgery_anesthesia", source_document_type="手术记录", source_document_id="doc-conflict", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
+    mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="negated", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-conflict").hexdigest(), legacy_fact=legacy, mapping=mapping)
+    manifest = build_luxian_0609_source_manifest_shadow(visit_ref="visit-orch-001", evidence_payload=payload, observations=observations, manifest_schema_version="manifest-v1", created_at=CREATED)
+    fact_id = build_luxian_0609_fact_shadow_bundle(visit_ref="visit-orch-001", manifest=manifest, paired_inputs=(pair,), bundle_schema_version="bundle-v1", created_at=CREATED, redaction_terms=()).items[0].fact.fact_id
+    coverage = (FactCoverageObservation("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_application", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_record", "complete", "extractor-v1", "mapping-v1", 1, (fact_id,)))
+    report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
+    assert report.results[0].final_state.value == "evaluation_unknown"
+
+
 def test_real_nonzero_032_is_standalone_and_compliant():
     sources = ("surgery_application", "surgery_record", "surgery_safecheck_record")
     observations = tuple(SourceQueryObservation.create(source_key=key, query_status="available", query_version="query-v1") for key in sources)
