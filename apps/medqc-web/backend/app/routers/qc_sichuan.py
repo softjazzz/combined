@@ -2494,6 +2494,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_refine_summary: Dict[str, Any] = {}
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 bundle_scene = ""
+                runtime_shadow_summary: Optional[Dict[str, Any]] = None
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
                     nonlocal eval_items
@@ -2603,7 +2604,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         bundle=bundle_payload,
                         medical_text=str(record.get("medical_text") or ""),
                     )
-                    runtime_shadow_summary: Optional[Dict[str, Any]] = None
                     if (
                         rule_set_key == LUXIAN_0609_RULE_SET_KEY
                         and bool(getattr(settings, "LUXIAN_0609_RUNTIME_SHADOW_ENABLED", False))
@@ -2611,7 +2611,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         # 当前 router 没有查询四态和结构化事实真值；只附加安全影子摘要。
                         runtime_shadow_summary = run_luxian_0609_runtime_shadow(
                             visit_ref=visit_id,
-                            selected_rule_ids=filters.get("selected_rule_ids") or active_rule_ids,
+                            selected_rule_ids=filters.get("selected_rule_ids", ()),
                             scoped_customer_rule_ids=filters.get("scoped_customer_rule_ids") or (),
                             record_rule_map=filters.get("record_rule_map") or {},
                             evidence_payload=evidence_payload,
@@ -3076,6 +3076,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         issue_item["source_evidence"] = post_diagnostic_trace.get("source_evidence") or ""
                         issue_item["trigger_decision"] = post_diagnostic_trace.get("trigger_decision") or {}
                         issue_item["postprocess_reason"] = str(post_diagnostic_trace.get("postprocess_reason") or "")
+                    if runtime_shadow_summary is not None:
+                        persisted_metadata = dict(issue_item.get("metadata") or {})
+                        persisted_metadata["luxian_0609_runtime_shadow"] = runtime_shadow_summary
+                        issue_item["metadata"] = persisted_metadata
                     if not should_postprocess_formal_results and issue_item["status"] in {
                         "non_compliant",
                         "ai_suggested_non_compliant",

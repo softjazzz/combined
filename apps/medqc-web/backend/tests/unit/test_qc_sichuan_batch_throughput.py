@@ -1584,7 +1584,8 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     async def _get_qc_service():
         return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
     original_hook = qc_sichuan.run_luxian_0609_runtime_shadow
 
     def _hook(**kwargs: Any) -> Dict[str, Any]:
@@ -1599,3 +1600,52 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     summary = (evaluation_row.get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert summary and summary["disposition"] == "inputs_unavailable"
     assert evaluation_row["status"] == "compliant"
+    assert workspace.items
+    persisted_summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
+    assert persisted_summary and persisted_summary["disposition"] == "inputs_unavailable"
+    assert persisted_summary["expected_llm_call_count"] == persisted_summary["llm_total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_luxian_runtime_shadow_preserves_explicit_empty_selected_scope(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-030"], "selected_rule_ids": [],
+        "scoped_customer_rule_ids": ["LX0609-030"],
+        "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+    summaries: List[Dict[str, Any]] = []
+
+    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+        return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    async def _get_qc_service(): return service
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    original = qc_sichuan.run_luxian_0609_runtime_shadow
+    def _hook(**kwargs: Any) -> Dict[str, Any]:
+        assert kwargs["selected_rule_ids"] == []
+        result = original(**kwargs); summaries.append(result); return result
+    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", _hook)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    assert summaries and {item["disposition"] for item in summaries} == {"skipped_no_effective_rules"}
+
+
+@pytest.mark.asyncio
+async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
+    service = _ServiceStub()
+    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]: return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    async def _get_qc_service(): return service
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False))
+    monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", lambda **_: (_ for _ in ()).throw(AssertionError("hook should remain off")))
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    assert workspace.job["status"] == "completed"
