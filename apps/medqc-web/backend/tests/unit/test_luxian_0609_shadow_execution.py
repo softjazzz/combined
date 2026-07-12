@@ -36,6 +36,7 @@ def test_zero_scope_short_circuits_before_every_downstream_input():
     assert report.planned_rule_ids == report.results == ()
     assert report.stage_order == ("planner",) and report.stage_fingerprints[0][0] == "planner"
     assert report.summary_dict()["expected_llm_call_count"] == report.summary_dict()["llm_total_tokens"] == 0
+    assert all(report.summary_dict()[f"{state}_count"] == 0 for state in ("compliant", "non_compliant", "not_applicable", "data_gap", "technical_error", "evaluation_unknown"))
 
 
 @pytest.mark.parametrize("field", ["selected_rule_ids", "scoped_customer_rule_ids"])
@@ -118,3 +119,4 @@ def test_real_nonzero_030_chain_returns_safe_not_applicable_result():
     report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
     assert report.disposition == "completed"
     assert report.results[0].final_state.value == "not_applicable"
+    assert report.summary_dict()["not_applicable_count"] == 1

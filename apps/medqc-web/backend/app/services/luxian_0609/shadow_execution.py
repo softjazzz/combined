@@ -60,7 +60,10 @@ class ShadowExecutionReport:
         object.__setattr__(self, "execution_schema_version", _code("execution_schema_version", self.execution_schema_version, 64)); object.__setattr__(self, "execution_policy_version", _code("execution_policy_version", self.execution_policy_version, 64)); object.__setattr__(self, "package_version", _code("package_version", self.package_version, 64)); object.__setattr__(self, "visit_ref", _code("visit_ref", self.visit_ref)); object.__setattr__(self, "created_at", _created(self.created_at))
 
     def summary_dict(self) -> dict[str, Any]:
-        return {"expected_llm_call_count": 0, "llm_input_tokens": 0, "llm_output_tokens": 0, "llm_total_tokens": 0, "shadow_only": True, "release_eligible": False, "result_count": len(self.results)}
+        counts = {"compliant": 0, "non_compliant": 0, "not_applicable": 0, "data_gap": 0, "technical_error": 0, "evaluation_unknown": 0}
+        for result in self.results:
+            counts[result.final_state.value] += 1
+        return {**{f"{name}_count": value for name, value in counts.items()}, "expected_llm_call_count": 0, "llm_input_tokens": 0, "llm_output_tokens": 0, "llm_total_tokens": 0, "shadow_only": True, "release_eligible": False, "result_count": len(self.results)}
     def to_dict(self) -> dict[str, Any]: return {"execution_schema_version": self.execution_schema_version, "execution_policy_version": self.execution_policy_version, "package_version": self.package_version, "visit_ref": self.visit_ref, "disposition": self.disposition, "planned_rule_ids": list(self.planned_rule_ids), "stage_order": list(self.stage_order), "stage_fingerprints": [list(item) for item in self.stage_fingerprints], "results": [item.to_dict() for item in self.results], "summary": self.summary_dict(), "created_at": self.created_at}
     def canonical_json(self) -> str: return _json(self.to_dict())
     def fingerprint(self) -> str:
