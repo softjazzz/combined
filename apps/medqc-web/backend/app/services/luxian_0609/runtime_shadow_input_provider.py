@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import hashlib
 import json
 from typing import Any, Mapping
@@ -15,6 +16,7 @@ _QUERY_VERSION = "runtime_source_v1"
 _EXTRACTOR_VERSION = "rts-v1"
 _MAPPING_POLICY_VERSION = "rtm-v1"
 _MAX_SOURCES = 5
+_PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 _BEGIN_END_FIELDS = (
     "surgery_begin_time", "surgery_begin_datetime",
     "surgery_end_time", "surgery_end_datetime",
@@ -93,7 +95,18 @@ def _required_pairs(plan: planner.ShadowRulePlan) -> tuple[tuple[str, str], ...]
 
 
 def _has_performed_time(row: Mapping[str, Any]) -> bool:
-    return any(str(row.get(field) or "").strip() for field in _BEGIN_END_FIELDS)
+    for field in _BEGIN_END_FIELDS:
+        value = row.get(field)
+        if not isinstance(value, str):
+            continue
+        candidate = value.strip()
+        try:
+            parsed = datetime.strptime(candidate, _PERFORMED_TIME_FORMAT)
+        except ValueError:
+            continue
+        if parsed.strftime(_PERFORMED_TIME_FORMAT) == candidate:
+            return True
+    return False
 
 
 def provide_luxian_0609_runtime_shadow_inputs(
@@ -145,19 +158,22 @@ def provide_luxian_0609_runtime_shadow_inputs(
         safe_rows: list[dict[str, str]] = []
         signals: list[runtime_shadow_assembler.RuntimeStructuredFactSignal] = []
         materials = [
-            {
-                "source_key": source_key,
-                "surgery_times": {
-                    field: str(row.get(field) or "").strip()
-                    for field in _BEGIN_END_FIELDS
-                    if source_key == "surgery_record" and str(row.get(field) or "").strip()
+            (
+                {
+                    "source_key": source_key,
+                    "surgery_times": {
+                        field: str(row.get(field) or "").strip()
+                        for field in _BEGIN_END_FIELDS
+                        if source_key == "surgery_record" and str(row.get(field) or "").strip()
+                    },
                 },
-            }
+                source_key == "surgery_record" and _has_performed_time(row),
+            )
             for row in rows_by_source[source_key]
         ]
-        materials.sort(key=_canonical)
+        materials.sort(key=lambda item: _canonical(item[0]))
         occurrences: dict[str, int] = {}
-        for material in materials:
+        for material, has_performed_time in materials:
             material_key = _canonical(material)
             occurrence = occurrences.get(material_key, 0)
             occurrences[material_key] = occurrence + 1
@@ -167,7 +183,7 @@ def provide_luxian_0609_runtime_shadow_inputs(
             }
             row_ref = _digest(ref_material)
             safe_rows.append({"row_ref": row_ref, "source_snapshot": _digest({"snapshot": ref_material})})
-            if source_key == "surgery_record" and bool(material["surgery_times"]):
+            if has_performed_time:
                 signals.append(runtime_shadow_assembler.RuntimeStructuredFactSignal(
                     signal_ref=_digest({"signal": "performed", "row_ref": row_ref}),
                     fact_type="current_visit_surgery_confirmed", source_key=source_key,

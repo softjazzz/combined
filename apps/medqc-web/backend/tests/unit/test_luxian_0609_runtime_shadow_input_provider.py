@@ -20,7 +20,7 @@ def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):
     seen = []
     def _reader(**kwargs):
         seen.append(kwargs["source_key"])
-        return [{"surgery_begin_time": "2026-01-01 08:00"}] if kwargs["source_key"] == "surgery_record" else [{}]
+        return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}] if kwargs["source_key"] == "surgery_record" else [{}]
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
     result = provider.provide_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT)
     assert seen == sorted(seen)
@@ -58,6 +58,49 @@ def test_provider_empty_and_non_time_rows_do_not_fabricate_facts(monkeypatch):
     assert all(item.state == "complete" for item in result.extraction_inputs)
 
 
+def test_provider_rejects_invalid_calendar_time_as_performed_signal(monkeypatch):
+    def _reader(**kwargs):
+        return [{"surgery_begin_time": "2026-02-30 08:00:00+08"}] if kwargs["source_key"] == "surgery_record" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+
+    signal_outcome = next(item for item in result.extraction_inputs if item.source_key == "surgery_record")
+    assert signal_outcome.positive_signals == ()
+
+
+@pytest.mark.parametrize(
+    "field,value,expected",
+    [
+        ("surgery_begin_time", "2026-01-01 08:00:00+08", True),
+        ("surgery_end_time", "2026-01-01 09:00:00+08", True),
+        ("surgery_begin_time", " 2026-01-01 08:00:00+08 ", True),
+        ("surgery_begin_time", "2026-01-01 08:00:00+08:00", False),
+        ("surgery_begin_time", "2026-01-01 08:00:00+09", False),
+        ("surgery_begin_time", "prefix 2026-01-01 08:00:00+08", False),
+        ("surgery_begin_time", "2026-01-01 08:00:00+08 suffix", False),
+        ("surgery_begin_time", '"2026-01-01 08:00:00+08"', False),
+        ("surgery_begin_time", "2026-01-01  08:00:00+08", False),
+        ("surgery_begin_time", "2026-01-01T08:00:00Z", False),
+        ("surgery_begin_time", "1704067200", False),
+        ("surgery_begin_time", '["2026-01-01 08:00:00+08"]', False),
+    ],
+)
+def test_provider_accepts_only_trimmed_exact_whole_time(monkeypatch, field, value, expected):
+    def _reader(**kwargs):
+        return [{field: value}] if kwargs["source_key"] == "surgery_record" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    signal_outcome = next(item for item in result.extraction_inputs if item.source_key == "surgery_record")
+    assert bool(signal_outcome.positive_signals) is expected
+
+
 def test_032_has_no_order_pair_and_safecheck_target_is_queried(monkeypatch):
     seen = []
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", lambda **kwargs: seen.append(kwargs["source_key"]) or [])
@@ -67,7 +110,11 @@ def test_032_has_no_order_pair_and_safecheck_target_is_queried(monkeypatch):
 
 
 def test_row_refs_are_order_independent_duplicate_safe_and_visit_scoped(monkeypatch):
-    rows = [{"surgery_begin_time": "2026-01-02"}, {"surgery_begin_time": "2026-01-01"}, {"surgery_begin_time": "2026-01-01"}]
+    rows = [
+        {"surgery_begin_time": "2026-01-02 08:00:00+08"},
+        {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+        {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+    ]
     def _reader(**kwargs): return list(reversed(rows)) if kwargs["source_key"] == "surgery_record" else [{}]
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
     first = provider.provide_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT)
