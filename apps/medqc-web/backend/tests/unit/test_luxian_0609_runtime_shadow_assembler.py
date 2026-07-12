@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 
 import pytest
@@ -106,6 +107,17 @@ def test_source_status_truth_table(status):
     assert assembly.summary_dict()["fact_count"] == 0
 
 
+@pytest.mark.parametrize("status,state,reason,error", [("empty", "not_run", "", ""), ("unavailable", "not_run", "source_unavailable", "bad"), ("error", "not_run", "source_query_error", "bad")])
+def test_empty_and_query_boundaries_reject_late_failure_combinations(status, state, reason, error):
+    plan = _plan("LX0609-030")
+    values = list(_inputs(plan, statuses={"surgery_record": status}))
+    index = next(index for index, item in enumerate(values) if item.source_key == "surgery_record")
+    item = values[index]
+    values[index] = RuntimePairExtractionInput(item.fact_type, item.source_key, state, "extractor-v1", "mapping-v1", 0, (), reason, error)
+    with pytest.raises(ValueError):
+        _assemble(plan, statuses={"surgery_record": status}, inputs=tuple(values))
+
+
 def test_available_count_and_partial_truth_are_fail_closed():
     plan = _plan("LX0609-030")
     values = list(_inputs(plan))
@@ -138,3 +150,11 @@ def test_real_orch_accepts_assembled_performed_signal():
     assembly = _assemble(plan, _signal())
     report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, evidence_payload=payload, source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     assert report.results[0].final_state.value == "compliant"
+
+
+def test_public_assembly_rejects_forged_nested_quote_or_trace():
+    assembly = _assemble(_plan("LX0609-030"), _signal())
+    pair = assembly.fact_pairs[0]
+    forged = replace(pair, legacy_fact=replace(pair.legacy_fact, quote="SECRET_RAW_QUOTE", trace={"prompt": "SECRET"}))
+    with pytest.raises(ValueError, match="assembly fact pair"):
+        replace(assembly, fact_pairs=(forged,))

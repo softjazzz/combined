@@ -151,6 +151,15 @@ class RuntimeShadowAssembly:
             relevant = {item.pair_ref for item in self.fact_pairs if (item.legacy_fact.fact_type, item.mapping.source_key) in outcome_pairs}
             if claimed != relevant:
                 raise ValueError("invalid assembly pair claims")
+            for pair in self.fact_pairs:
+                fact, mapping = pair.legacy_fact, pair.mapping
+                if fact.fact_type not in _ALLOWED_FACT_TYPES or fact.family != "surgery_anesthesia" or not _SHA.fullmatch(fact.source_document_id) or fact.quote != "runtime_structured_signal" or fact.confidence != 1.0 or fact.extractor != "runtime_structured" or fact.trace != {}:
+                    raise ValueError("invalid assembly fact pair")
+                if mapping.source_key not in {item.source_key for item in self.deterministic_coverage_outcomes} or str(mapping.trigger_scope) != "current_visit" or str(mapping.current_visit_relevance) != "relevant" or str(mapping.assertion) != "affirmed" or str(mapping.assertion_context) != "current_narrative" or str(mapping.event_status) not in {"ordered", "performed"}:
+                    raise ValueError("invalid assembly fact mapping")
+                expected = {"event": str(mapping.event_status), "fact": fact.fact_type, "source": mapping.source_key}
+                if mapping.normalized_value != expected or not isinstance(mapping.extractor_version, str) or not mapping.extractor_version.startswith(self.assembler_policy_version + "."):
+                    raise ValueError("invalid assembly fact mapping")
 
     def summary_dict(self) -> dict[str, Any]:
         return {"source_count": len(self.source_query_observations), "pair_count": len(self.deterministic_coverage_outcomes), "fact_count": len(self.fact_pairs), "zero_llm": True, "llm_call_count": 0, "llm_total_tokens": 0}
@@ -221,10 +230,11 @@ def assemble_luxian_0609_runtime_shadow_inputs(*, plan: planner.ShadowRulePlan, 
             raise ValueError("source status and document count mismatch")
         if status in {QueryStatus.UNAVAILABLE, QueryStatus.ERROR}:
             expected_reason = "source_unavailable" if status is QueryStatus.UNAVAILABLE else "source_query_error"
-            if item.state != "not_run" or item.processed_record_count != 0 or item.positive_signals or item.reason_code != expected_reason:
+            if item.state != "not_run" or item.processed_record_count != 0 or item.positive_signals or item.reason_code != expected_reason or item.error_code:
                 raise ValueError("invalid unavailable source extraction")
         elif status is QueryStatus.EMPTY:
-            if item.positive_signals or not ((item.state == "complete" and item.processed_record_count == 0) or (item.state == "not_run" and item.processed_record_count == 0)):
+            valid_empty = (item.state == "complete" and item.processed_record_count == 0 and not item.reason_code and not item.error_code) or (item.state == "not_run" and item.processed_record_count == 0 and item.reason_code == "extractor_not_run" and not item.error_code)
+            if item.positive_signals or not valid_empty:
                 raise ValueError("invalid empty source extraction")
         elif item.state == "complete" and (item.processed_record_count != count or item.reason_code or item.error_code):
             raise ValueError("invalid complete extraction count")
