@@ -39,9 +39,21 @@ def _outcome(fact_type, source_key, *, state="complete", processed=1, refs=(), r
     return FactCoverageOutcomeInput(fact_type, source_key, state, "extractor-v1", "mapping-v1", processed, tuple(refs), reason_code, error_code)
 
 
-def _performed_pair(label="pair-probe"):
+def _performed_pair(label="pair-probe", normalized_value=True):
     legacy = Luxian0609Fact(fact_type="current_visit_surgery_confirmed", family="surgery_anesthesia", source_document_type="手术记录", source_document_id="doc-safe", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
-    mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"present": normalized_value}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    return FactShadowPairInput(pair_ref=hashlib.sha256(label.encode()).hexdigest(), legacy_fact=legacy, mapping=mapping)
+
+
+def _order_pair(label="order-probe"):
+    legacy = Luxian0609Fact(fact_type="current_visit_surgery_order_confirmed", family="surgery_anesthesia", source_document_type="医嘱", source_document_id="order-safe", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
+    mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    return FactShadowPairInput(pair_ref=hashlib.sha256(label.encode()).hexdigest(), legacy_fact=legacy, mapping=mapping)
+
+
+def _unrelated_pair(label="unrelated-probe"):
+    legacy = Luxian0609Fact(fact_type="unrelated_structured_fact", family="surgery_anesthesia", source_document_type="手术记录", source_document_id="unrelated-safe", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
+    mapping = LegacyFactV2Mapping(source_key="surgery_record", normalized_value={"other": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="performed", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
     return FactShadowPairInput(pair_ref=hashlib.sha256(label.encode()).hexdigest(), legacy_fact=legacy, mapping=mapping)
 
 
@@ -309,6 +321,32 @@ def test_pair_reference_mapping_is_fail_closed(kind):
     values["deterministic_coverage_outcomes"] = tuple(outcomes)
     with pytest.raises(ValueError, match="coverage pair"):
         _zero(**values)
+
+
+@pytest.mark.parametrize("pair_factory", [_performed_pair, _order_pair])
+def test_relevant_actual_pair_must_be_explicitly_claimed(pair_factory):
+    values = _real_030_no_fact_inputs()
+    values["fact_pairs"] = (pair_factory(),)
+    with pytest.raises(ValueError, match="missing coverage pair"):
+        _zero(**values)
+
+
+def test_every_relevant_actual_pair_must_be_claimed_when_multiple_exist():
+    values = _real_030_no_fact_inputs()
+    first, second = _performed_pair("multi-one"), _performed_pair("multi-two", normalized_value="second")
+    values["fact_pairs"] = (first, second)
+    outcomes = list(values["deterministic_coverage_outcomes"])
+    outcomes[-1] = _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(first.pair_ref,))
+    values["deterministic_coverage_outcomes"] = tuple(outcomes)
+    with pytest.raises(ValueError, match="missing coverage pair"):
+        _zero(**values)
+
+
+def test_unrelated_actual_bundle_pair_can_remain_unclaimed():
+    values = _real_030_no_fact_inputs()
+    values["fact_pairs"] = (_unrelated_pair(),)
+    report = _zero(**values)
+    assert report.results[0].final_state.value == "not_applicable"
 
 
 class OutcomeList(list):

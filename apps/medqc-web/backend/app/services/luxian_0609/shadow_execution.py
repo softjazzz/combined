@@ -119,6 +119,12 @@ def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any
     manifest = manifest_builder.build_luxian_0609_source_manifest_shadow(visit_ref=plan.visit_ref, evidence_payload=evidence_payload, observations=source_query_observations, manifest_schema_version=manifest_schema_version, created_at=manifest_created_at)
     facts = bundle.build_luxian_0609_fact_shadow_bundle(visit_ref=plan.visit_ref, manifest=manifest, paired_inputs=fact_pairs, bundle_schema_version=bundle_schema_version, created_at=bundle_created_at, redaction_terms=redaction_terms)
     pair_index = {item.pair_ref: item.fact for item in facts.items}
+    outcome_pairs = {(item.fact_type, item.source_key) for item in deterministic_coverage_outcomes}
+    relevant_bundle_pair_refs = {
+        item.pair_ref
+        for item in facts.items
+        if (item.fact.fact_type, item.fact.source_key) in outcome_pairs
+    }
     claimed_refs: set[str] = set()
     observations: list[coverage.FactCoverageObservation] = []
     for outcome in deterministic_coverage_outcomes:
@@ -129,6 +135,8 @@ def build_luxian_0609_shadow_execution(*, visit_ref: str, selected_rule_ids: Any
             if fact.fact_type != outcome.fact_type or fact.source_key != outcome.source_key: raise ValueError("coverage pair reference mismatch")
             claimed_refs.add(pair_ref); fact_ids.append(fact.fact_id)
         observations.append(coverage.FactCoverageObservation(outcome.fact_type, outcome.source_key, outcome.state, outcome.extractor_version, outcome.mapping_policy_version, outcome.processed_record_count, tuple(fact_ids), outcome.reason_code, outcome.error_code))
+    if claimed_refs != relevant_bundle_pair_refs:
+        raise ValueError("missing coverage pair reference")
     coverage_report = coverage.build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=facts, observations=tuple(observations), coverage_schema_version=coverage_schema_version, coverage_policy_version=coverage_policy_version, created_at=coverage_created_at)
     gate_report = gate.build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=facts, coverage=coverage_report, gate_schema_version=gate_schema_version, gate_policy_version=gate_policy_version, created_at=gate_created_at)
     finding = rules.build_luxian_0609_programmatic_findings_shadow(gate_report=gate_report, finding_schema_version=finding_schema_version, finding_policy_version=finding_policy_version, created_at=finding_created_at)
