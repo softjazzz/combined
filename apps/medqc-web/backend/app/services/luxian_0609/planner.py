@@ -52,20 +52,97 @@ _ALLOWED_RECORD_SCOPE_STATES = frozenset(
     {"empty_record_map", "current_visit_present", "current_visit_absent"}
 )
 
+
+_TRIGGER_REQUIREMENT_SPECS = MappingProxyType(
+    {
+        "current_visit_surgery_order_confirmed": MappingProxyType(
+            {
+                "allowed_source_keys": ("inpat_nondrug_order",),
+                "trigger_scope": "current_visit",
+                "current_visit_relevance": "relevant",
+                "assertion": "affirmed",
+                "allowed_event_statuses": ("ordered", "performed"),
+            }
+        ),
+        "current_visit_surgery_confirmed": MappingProxyType(
+            {
+                "allowed_source_keys": ("surgery_application", "surgery_record"),
+                "trigger_scope": "current_visit",
+                "current_visit_relevance": "relevant",
+                "assertion": "affirmed",
+                "allowed_event_statuses": ("performed",),
+            }
+        ),
+    }
+)
+
+
+@dataclass(frozen=True)
+class TriggerRequirement:
+    fact_type: str
+    allowed_source_keys: tuple[str, ...]
+    trigger_scope: str
+    current_visit_relevance: str
+    assertion: str
+    allowed_event_statuses: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fact_type, str):
+            raise TypeError("trigger requirement fact_type must be str")
+        if type(self.allowed_source_keys) is not tuple or type(
+            self.allowed_event_statuses
+        ) is not tuple:
+            raise TypeError("trigger requirement collections must be tuple")
+        expected = _TRIGGER_REQUIREMENT_SPECS.get(self.fact_type)
+        actual = {
+            "allowed_source_keys": self.allowed_source_keys,
+            "trigger_scope": self.trigger_scope,
+            "current_visit_relevance": self.current_visit_relevance,
+            "assertion": self.assertion,
+            "allowed_event_statuses": self.allowed_event_statuses,
+        }
+        if expected is None or actual != expected:
+            raise ValueError("trigger requirement mismatch")
+
+    @classmethod
+    def for_fact_type(cls, fact_type: str) -> "TriggerRequirement":
+        if not isinstance(fact_type, str):
+            raise TypeError("trigger requirement fact_type must be str")
+        expected = _TRIGGER_REQUIREMENT_SPECS.get(fact_type)
+        if expected is None:
+            raise ValueError("trigger requirement mismatch")
+        return cls(fact_type=fact_type, **expected)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "allowed_event_statuses": list(self.allowed_event_statuses),
+            "allowed_source_keys": list(self.allowed_source_keys),
+            "assertion": self.assertion,
+            "current_visit_relevance": self.current_visit_relevance,
+            "fact_type": self.fact_type,
+            "trigger_scope": self.trigger_scope,
+        }
+
+
+_ORDER_TRIGGER_REQUIREMENT = TriggerRequirement.for_fact_type(
+    "current_visit_surgery_order_confirmed"
+)
+_PERFORMED_TRIGGER_REQUIREMENT = TriggerRequirement.for_fact_type(
+    "current_visit_surgery_confirmed"
+)
+
+
 _RULE_METADATA = MappingProxyType({
     "LX0609-029": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
-        "required_trigger_fact_types": (
-            "current_visit_surgery_confirmed",
-            "current_visit_surgery_order_confirmed",
+        "trigger_requirements": (
+            _ORDER_TRIGGER_REQUIREMENT,
+            _PERFORMED_TRIGGER_REQUIREMENT,
         ),
-        "trigger_match_policy": "any",
-        "trigger_source_keys": ("surgery_application", "surgery_record"),
-        "trigger_source_match_policy": "any",
-        "required_source_keys": ("presurg_summary",),
+        "trigger_alternative_policy": "any",
         "target_source_key": "presurg_summary",
-        "source_requirement_version": "lx0609-surgery-source-v1",
+        "source_requirement_version": "lx0609-surgery-source-v2",
         "parent_rule_ids": (),
         "dependency_reason_codes": (),
         "independent_target_source": True,
@@ -73,16 +150,13 @@ _RULE_METADATA = MappingProxyType({
     "LX0609-030": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
-        "required_trigger_fact_types": (
-            "current_visit_surgery_confirmed",
-            "current_visit_surgery_order_confirmed",
+        "trigger_requirements": (
+            _ORDER_TRIGGER_REQUIREMENT,
+            _PERFORMED_TRIGGER_REQUIREMENT,
         ),
-        "trigger_match_policy": "any",
-        "trigger_source_keys": ("surgery_application", "surgery_record"),
-        "trigger_source_match_policy": "any",
-        "required_source_keys": ("surgery_record",),
+        "trigger_alternative_policy": "any",
         "target_source_key": "surgery_record",
-        "source_requirement_version": "lx0609-surgery-source-v1",
+        "source_requirement_version": "lx0609-surgery-source-v2",
         "parent_rule_ids": (),
         "dependency_reason_codes": (),
         "independent_target_source": True,
@@ -90,13 +164,10 @@ _RULE_METADATA = MappingProxyType({
     "LX0609-032": MappingProxyType({
         "family": "surgery_anesthesia",
         "execution_kind": "programmatic_zero_llm",
-        "required_trigger_fact_types": ("current_visit_surgery_confirmed",),
-        "trigger_match_policy": "all",
-        "trigger_source_keys": ("surgery_application", "surgery_record"),
-        "trigger_source_match_policy": "any",
-        "required_source_keys": ("surgery_safecheck_record",),
+        "trigger_requirements": (_PERFORMED_TRIGGER_REQUIREMENT,),
+        "trigger_alternative_policy": "any",
         "target_source_key": "surgery_safecheck_record",
-        "source_requirement_version": "lx0609-surgery-source-v1",
+        "source_requirement_version": "lx0609-surgery-source-v2",
         "parent_rule_ids": ("LX0609-030",),
         "dependency_reason_codes": ("informational_parent_only",),
         "independent_target_source": True,
@@ -217,11 +288,8 @@ class PlannedRule:
     rule_id: str
     family: str
     execution_kind: str
-    required_trigger_fact_types: tuple[str, ...]
-    trigger_match_policy: str
-    trigger_source_keys: tuple[str, ...]
-    trigger_source_match_policy: str
-    required_source_keys: tuple[str, ...]
+    trigger_requirements: tuple[TriggerRequirement, ...]
+    trigger_alternative_policy: str
     target_source_key: str
     source_requirement_version: str
     parent_rule_ids: tuple[str, ...]
@@ -234,9 +302,7 @@ class PlannedRule:
         if expected is None:
             raise ValueError("unsupported planned rule")
         collection_fields = (
-            "required_trigger_fact_types",
-            "trigger_source_keys",
-            "required_source_keys",
+            "trigger_requirements",
             "parent_rule_ids",
             "dependency_reason_codes",
         )
@@ -245,11 +311,8 @@ class PlannedRule:
         actual = {
             "family": self.family,
             "execution_kind": self.execution_kind,
-            "required_trigger_fact_types": tuple(self.required_trigger_fact_types),
-            "trigger_match_policy": self.trigger_match_policy,
-            "trigger_source_keys": tuple(self.trigger_source_keys),
-            "trigger_source_match_policy": self.trigger_source_match_policy,
-            "required_source_keys": tuple(self.required_source_keys),
+            "trigger_requirements": tuple(self.trigger_requirements),
+            "trigger_alternative_policy": self.trigger_alternative_policy,
             "target_source_key": self.target_source_key,
             "source_requirement_version": self.source_requirement_version,
             "parent_rule_ids": tuple(self.parent_rule_ids),
@@ -258,6 +321,10 @@ class PlannedRule:
         }
         if actual != expected:
             raise ValueError("planned rule metadata mismatch")
+        if not self.trigger_requirements or not all(
+            isinstance(item, TriggerRequirement) for item in self.trigger_requirements
+        ):
+            raise TypeError("trigger_requirements must contain TriggerRequirement values")
         _assert_no_forbidden_status_tokens(actual)
         object.__setattr__(self, "rule_id", rule_id)
         for field_name in collection_fields:
@@ -283,10 +350,32 @@ class PlannedRule:
             "rule_id": self.rule_id,
             "source_requirement_version": self.source_requirement_version,
             "target_source_key": self.target_source_key,
-            "trigger_match_policy": self.trigger_match_policy,
+            "trigger_alternative_policy": self.trigger_alternative_policy,
+            "trigger_requirements": [
+                requirement.to_dict() for requirement in self.trigger_requirements
+            ],
             "trigger_source_keys": list(self.trigger_source_keys),
-            "trigger_source_match_policy": self.trigger_source_match_policy,
         }
+
+    @property
+    def required_trigger_fact_types(self) -> tuple[str, ...]:
+        return tuple(requirement.fact_type for requirement in self.trigger_requirements)
+
+    @property
+    def trigger_source_keys(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                {
+                    source_key
+                    for requirement in self.trigger_requirements
+                    for source_key in requirement.allowed_source_keys
+                }
+            )
+        )
+
+    @property
+    def required_source_keys(self) -> tuple[str, ...]:
+        return tuple(sorted({*self.trigger_source_keys, self.target_source_key}))
 
 
 @dataclass(frozen=True)

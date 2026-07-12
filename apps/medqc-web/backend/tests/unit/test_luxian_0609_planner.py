@@ -217,8 +217,8 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert items["LX0609-030"].target_source_key == "surgery_record"
     assert items["LX0609-032"].target_source_key == "surgery_safecheck_record"
     assert items["LX0609-029"].required_trigger_fact_types == (
-        "current_visit_surgery_confirmed",
         "current_visit_surgery_order_confirmed",
+        "current_visit_surgery_confirmed",
     )
     assert items["LX0609-030"].required_trigger_fact_types == items["LX0609-029"].required_trigger_fact_types
     safecheck = items["LX0609-032"]
@@ -226,12 +226,102 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert safecheck.parent_rule_ids == ("LX0609-030",)
     assert safecheck.dependency_reason_codes == ("informational_parent_only",)
     assert safecheck.independent_target_source is True
-    assert safecheck.required_source_keys == ("surgery_safecheck_record",)
-    assert safecheck.trigger_source_match_policy == "any"
+    assert safecheck.required_source_keys == (
+        "surgery_application",
+        "surgery_record",
+        "surgery_safecheck_record",
+    )
+    assert safecheck.trigger_alternative_policy == "any"
     assert safecheck.trigger_source_keys != ("surgery_record",)
-    assert items["LX0609-029"].required_source_keys == ("presurg_summary",)
-    assert items["LX0609-030"].required_source_keys == ("surgery_record",)
+    assert items["LX0609-029"].required_source_keys == (
+        "inpat_nondrug_order",
+        "presurg_summary",
+        "surgery_application",
+        "surgery_record",
+    )
+    assert items["LX0609-030"].required_source_keys == (
+        "inpat_nondrug_order",
+        "surgery_application",
+        "surgery_record",
+    )
     assert items["LX0609-029"].parent_rule_ids == ()
+
+
+def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status() -> None:
+    items = {item.rule_id: item for item in _build().planned_rules}
+    expected_order = {
+        "allowed_event_statuses": ["ordered", "performed"],
+        "allowed_source_keys": ["inpat_nondrug_order"],
+        "assertion": "affirmed",
+        "current_visit_relevance": "relevant",
+        "fact_type": "current_visit_surgery_order_confirmed",
+        "trigger_scope": "current_visit",
+    }
+    expected_performed = {
+        "allowed_event_statuses": ["performed"],
+        "allowed_source_keys": ["surgery_application", "surgery_record"],
+        "assertion": "affirmed",
+        "current_visit_relevance": "relevant",
+        "fact_type": "current_visit_surgery_confirmed",
+        "trigger_scope": "current_visit",
+    }
+    for rule_id in ("LX0609-029", "LX0609-030"):
+        item = items[rule_id]
+        assert item.trigger_alternative_policy == "any"
+        assert [requirement.to_dict() for requirement in item.trigger_requirements] == [
+            expected_order,
+            expected_performed,
+        ]
+        assert "inpat_nondrug_order" in item.trigger_source_keys
+        assert item.required_source_keys == tuple(
+            sorted({*item.trigger_source_keys, item.target_source_key})
+        )
+
+    safecheck = items["LX0609-032"]
+    assert [requirement.to_dict() for requirement in safecheck.trigger_requirements] == [
+        expected_performed
+    ]
+    assert "inpat_nondrug_order" not in safecheck.trigger_source_keys
+    assert safecheck.required_source_keys == (
+        "surgery_application",
+        "surgery_record",
+        "surgery_safecheck_record",
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {
+            "fact_type": "current_visit_surgery_order_confirmed",
+            "allowed_source_keys": ("surgery_application",),
+            "allowed_event_statuses": ("ordered",),
+        },
+        {
+            "fact_type": "current_visit_surgery_confirmed",
+            "allowed_source_keys": ("inpat_nondrug_order",),
+            "allowed_event_statuses": ("performed",),
+        },
+        {
+            "fact_type": "current_visit_surgery_confirmed",
+            "allowed_source_keys": ("surgery_application", "surgery_record"),
+            "allowed_event_statuses": ("ordered",),
+        },
+        {
+            "fact_type": "current_visit_surgery_confirmed",
+            "allowed_source_keys": ("surgery_record", "surgery_application"),
+            "allowed_event_statuses": ("performed",),
+        },
+    ],
+)
+def test_trigger_requirement_direct_constructor_rejects_cross_wiring(kwargs) -> None:
+    with pytest.raises(ValueError, match="trigger requirement mismatch"):
+        planner_module.TriggerRequirement(
+            trigger_scope="current_visit",
+            current_visit_relevance="relevant",
+            assertion="affirmed",
+            **kwargs,
+        )
 
 
 def test_planner_only_declares_metadata_and_zero_llm_expectation() -> None:
@@ -249,12 +339,42 @@ def test_direct_planned_rule_construction_cannot_change_fixed_metadata() -> None
         replace(item, target_source_key="surgery_record")
     with pytest.raises(ValueError, match="metadata mismatch"):
         replace(item, family="other")
+    with pytest.raises(ValueError, match="metadata mismatch"):
+        replace(item, trigger_requirements=tuple(reversed(item.trigger_requirements)))
+    safecheck = PlannedRule.for_rule_id("LX0609-032")
+    with pytest.raises(ValueError, match="metadata mismatch"):
+        replace(
+            safecheck,
+            trigger_requirements=(
+                planner_module.TriggerRequirement.for_fact_type(
+                    "current_visit_surgery_order_confirmed"
+                ),
+            ),
+        )
+
+
+def test_trigger_requirement_is_frozen_and_to_dict_is_defensive() -> None:
+    requirement = planner_module.TriggerRequirement.for_fact_type(
+        "current_visit_surgery_order_confirmed"
+    )
+    with pytest.raises(AttributeError):
+        requirement.fact_type = "changed"
+    output = requirement.to_dict()
+    output["allowed_source_keys"].append("changed")
+    output["allowed_event_statuses"].clear()
+    assert requirement.allowed_source_keys == ("inpat_nondrug_order",)
+    assert requirement.allowed_event_statuses == ("ordered", "performed")
 
 
 def test_global_rule_metadata_is_deeply_immutable() -> None:
     with pytest.raises(TypeError):
         planner_module._RULE_METADATA["LX0609-029"]["target_source_key"] = "changed"
+    with pytest.raises(TypeError):
+        planner_module._TRIGGER_REQUIREMENT_SPECS[
+            "current_visit_surgery_order_confirmed"
+        ]["allowed_source_keys"] = ("changed",)
     assert PlannedRule.for_rule_id("LX0609-029").target_source_key == "presurg_summary"
+    assert PlannedRule.for_rule_id("LX0609-029").source_requirement_version.endswith("v2")
 
 
 def test_direct_plan_construction_revalidates_order_scope_and_exclusions() -> None:
