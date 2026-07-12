@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 import pytest
 
 from app.services.luxian_0609.shadow_execution import FactCoverageOutcomeInput, ShadowExecutionReport, build_luxian_0609_shadow_execution
-from app.services.luxian_0609 import shadow_execution as module
+from app.services.luxian_0609 import runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution as module
 from app.services.luxian_0609.source_manifest_builder import SourceQueryObservation
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.result_aggregator import AggregatedRuleResult
@@ -186,6 +186,51 @@ def test_available_target_qualification_snapshot_is_bound_to_safe_target_documen
             source_query_observations=observations, fact_pairs=(),
             deterministic_coverage_outcomes=outcomes, redaction_terms=(),
             target_qualifications=(qualification,),
+        )
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "target_source", "first_target", "second_target"),
+    [
+        ("LX0609-029", "presurg_summary", {"record_content": "substantive approved pre-surgery summary A", "record_time": "2026-01-01 07:00:00"}, {"record_content": "substantive approved pre-surgery summary B", "record_time": "2026-01-01 07:00:00"}),
+        ("LX0609-032", "surgery_safecheck_record", {"record_content": "substantive safety checklist content A"}, {"record_content": "substantive safety checklist content B"}),
+    ],
+)
+def test_stale_target_qualification_cannot_attest_same_count_changed_safe_target_material(monkeypatch, rule_id, target_source, first_target, second_target):
+    active_target = first_target
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == target_source:
+            return [active_target]
+        return []
+
+    monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
+    plan = module.planner.build_luxian_0609_shadow_plan(
+        visit_ref="visit-orch-001", selected_rule_ids=[rule_id], scoped_customer_rule_ids=[rule_id],
+        record_rule_map={"visit-orch-001": [rule_id]}, planner_schema_version="planner-v1",
+        rule_plan_version="slice-v1", created_at=CREATED,
+    )
+    first = runtime_shadow_input_provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=plan, institute_id="i", patient_id="p", visit_id="visit-orch-001",
+    )
+    active_target = second_target
+    second = runtime_shadow_input_provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=plan, institute_id="i", patient_id="p", visit_id="visit-orch-001",
+    )
+    assembly = runtime_shadow_assembler.assemble_luxian_0609_runtime_shadow_inputs(
+        plan=plan, evidence_payload=second.evidence_payload,
+        source_query_observations=second.source_query_observations,
+        extraction_inputs=second.extraction_inputs, assembler_schema_version="assembler-v1",
+        assembler_policy_version="runtime-v1", created_at=CREATED,
+    )
+    with pytest.raises(ValueError, match="target qualification"):
+        _zero(
+            selected_rule_ids=[rule_id], scoped_customer_rule_ids=[rule_id],
+            record_rule_map={"visit-orch-001": [rule_id]}, evidence_payload=second.evidence_payload,
+            source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs,
+            deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes,
+            redaction_terms=(), target_qualifications=first.target_qualifications,
         )
 
 

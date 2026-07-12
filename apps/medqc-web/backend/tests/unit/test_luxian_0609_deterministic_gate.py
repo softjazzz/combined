@@ -121,11 +121,20 @@ def test_nonavailable_target_cannot_be_overridden_by_target_qualification():
 def test_target_qualification_safe_identity_changes_gate_fingerprint_not_created_at():
     order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
     first = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 1)
-    second = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v2", "f" * 64, 1)
+    second = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "e" * 64, 1)
     first_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(first,))
     second_gate = _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(second,))
     assert first_gate.fingerprint() != second_gate.fingerprint()
     assert first_gate.fingerprint() == replace(first_gate, created_at="2026-07-13T12:00:00+08:00").fingerprint()
+
+
+def test_target_qualification_rejects_unapproved_policy_and_count_above_target_records():
+    with pytest.raises(ValueError, match="target qualification"):
+        TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v2", "f" * 64, 1)
+    order_fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    excessive = TargetQualification(VISIT, "LX0609-029", "presurg_summary", "target-qualification-v1", "f" * 64, 3)
+    with pytest.raises(ValueError, match="target qualification"):
+        _gate(rule_ids=("LX0609-029",), facts=(order_fact,), qualifications=(excessive,))
 
 
 @pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])

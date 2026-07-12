@@ -28,7 +28,7 @@ def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):
     assert seen == sorted(seen)
     assert set(seen) == {item.source_key for item in result.source_query_observations}
     documents = result.evidence_payload["programmatic_timeline"]["documents"]
-    assert all(set(row) == {"row_ref", "source_snapshot"} for rows in documents.values() for row in rows)
+    assert all(set(row).issubset({"row_ref", "source_snapshot", "qualification_material_hash"}) for rows in documents.values() for row in rows)
     signal_outcome = next(item for item in result.extraction_inputs if item.source_key == "surgery_record")
     assert signal_outcome.positive_signals and signal_outcome.positive_signals[0].event_status == "performed"
 
@@ -148,6 +148,62 @@ def test_provider_sidecar_and_evidence_output_do_not_retain_target_body_or_time(
     )
     serialized = str(asdict(result))
     assert body_marker not in serialized and time_marker not in serialized
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "target_source", "first_row", "second_row"),
+    [
+        (
+            "LX0609-029", "presurg_summary",
+            {"record_content": "substantive approved pre-surgery summary A", "record_time": "2026-01-01 07:00:00"},
+            {"record_content": "substantive approved pre-surgery summary B", "record_time": "2026-01-01 07:00:00"},
+        ),
+        (
+            "LX0609-032", "surgery_safecheck_record",
+            {"record_content": "substantive safety checklist content A"},
+            {"record_content": "substantive safety checklist content B"},
+        ),
+    ],
+)
+def test_target_qualification_snapshot_binds_allowlisted_body_and_time_material(monkeypatch, rule_id, target_source, first_row, second_row):
+    active_row = first_row
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == target_source:
+            return [active_row]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    first = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan(rule_id), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    active_row = second_row
+    second = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan(rule_id), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert first.target_qualifications[0].target_snapshot_hash != second.target_qualifications[0].target_snapshot_hash
+    target_row = first.evidence_payload["programmatic_timeline"]["documents"][target_source][0]
+    assert set(target_row) == {"row_ref", "source_snapshot", "qualification_material_hash"}
+    assert str(first_row) not in str(asdict(first)) and str(second_row) not in str(asdict(second))
+
+
+def test_target_qualification_duplicate_rows_have_unique_stable_safe_material_refs(monkeypatch):
+    duplicate = {"record_content": "substantive safety checklist content", "record_time": "ignored"}
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == "surgery_safecheck_record":
+            return [dict(duplicate), dict(duplicate)]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-032"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    rows = result.evidence_payload["programmatic_timeline"]["documents"]["surgery_safecheck_record"]
+    assert len(rows) == 2 and len({row["row_ref"] for row in rows}) == 2
+    assert len({row["qualification_material_hash"] for row in rows}) == 1
 
 
 @pytest.mark.parametrize("body,expected", [("substantive safety checklist content", 1), ("", 0), ("   ", 0), ("[]", 0), ("{}", 0)])

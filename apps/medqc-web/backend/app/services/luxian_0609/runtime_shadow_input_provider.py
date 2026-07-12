@@ -18,7 +18,7 @@ _MAPPING_POLICY_VERSION = "rtm-v1"
 _MAX_SOURCES = 5
 _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 _PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-_TARGET_QUALIFICATION_POLICY_VERSION = "target-qualification-v1"
+_TARGET_QUALIFICATION_POLICY_VERSION = deterministic_gate.TARGET_QUALIFICATION_POLICY_VERSION
 _MIN_SUBSTANTIVE_TARGET_LENGTH = 16
 _BEGIN_END_FIELDS = (
     "surgery_begin_time", "surgery_begin_datetime",
@@ -146,6 +146,22 @@ def _parse_presurg_record_time(value: Any) -> datetime | None:
     return parsed if parsed.strftime(_PRESURG_RECORD_TIME_FORMAT) == candidate else None
 
 
+def _target_qualification_material_hash(source_key: str, row: Mapping[str, Any]) -> str | None:
+    """将资格判定的白名单输入绑定为不可逆行摘要，绝不输出原值。"""
+    if source_key == "presurg_summary":
+        material = {
+            "record_content": row.get("record_content").strip() if isinstance(row.get("record_content"), str) else "",
+            "record_time": row.get("record_time").strip() if isinstance(row.get("record_time"), str) else "",
+        }
+    elif source_key == "surgery_safecheck_record":
+        material = {
+            "record_content": row.get("record_content").strip() if isinstance(row.get("record_content"), str) else "",
+        }
+    else:
+        return None
+    return _digest({"target_source_key": source_key, "qualification_material": material})
+
+
 def provide_luxian_0609_runtime_shadow_inputs(
     *, plan: planner.ShadowRulePlan, institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None = None,
@@ -194,20 +210,20 @@ def provide_luxian_0609_runtime_shadow_inputs(
     for source_key in expected_sources:
         safe_rows: list[dict[str, str]] = []
         signals: list[runtime_shadow_assembler.RuntimeStructuredFactSignal] = []
-        materials = [
-            (
-                {
-                    "source_key": source_key,
-                    "surgery_times": {
-                        field: str(row.get(field) or "").strip()
-                        for field in _BEGIN_END_FIELDS
-                        if source_key == "surgery_record" and str(row.get(field) or "").strip()
-                    },
+        materials = []
+        for row in rows_by_source[source_key]:
+            material = {
+                "source_key": source_key,
+                "surgery_times": {
+                    field: str(row.get(field) or "").strip()
+                    for field in _BEGIN_END_FIELDS
+                    if source_key == "surgery_record" and str(row.get(field) or "").strip()
                 },
-                source_key == "surgery_record" and _has_performed_time(row),
-            )
-            for row in rows_by_source[source_key]
-        ]
+            }
+            qualification_material_hash = _target_qualification_material_hash(source_key, row)
+            if qualification_material_hash is not None:
+                material["qualification_material_hash"] = qualification_material_hash
+            materials.append((material, source_key == "surgery_record" and _has_performed_time(row)))
         materials.sort(key=lambda item: _canonical(item[0]))
         occurrences: dict[str, int] = {}
         for material, has_performed_time in materials:
@@ -219,7 +235,10 @@ def provide_luxian_0609_runtime_shadow_inputs(
                 "material": material, "occurrence": occurrence,
             }
             row_ref = _digest(ref_material)
-            safe_rows.append({"row_ref": row_ref, "source_snapshot": _digest({"snapshot": ref_material})})
+            safe_row = {"row_ref": row_ref, "source_snapshot": _digest({"snapshot": ref_material})}
+            if "qualification_material_hash" in material:
+                safe_row["qualification_material_hash"] = material["qualification_material_hash"]
+            safe_rows.append(safe_row)
             if has_performed_time:
                 signals.append(runtime_shadow_assembler.RuntimeStructuredFactSignal(
                     signal_ref=_digest({"signal": "performed", "row_ref": row_ref}),

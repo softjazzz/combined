@@ -18,6 +18,7 @@ from . import source_manifest as manifest_module
 
 MAX_GATE_DECISIONS = 3
 MAX_MATCHED_FACT_REFS = 512
+TARGET_QUALIFICATION_POLICY_VERSION = "target-qualification-v1"
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _FORBIDDEN = re.compile(r"(?i)(not[_ -]?applicable|data[_ -]?gap|non[_ -]?compliant|ai[_ -]?suggested|technical[_ -]?error|evaluation[_ -]?unknown|suppressed|(?<!non[_ -])compliant)")
@@ -75,7 +76,8 @@ class TargetQualification:
         if self.rule_id not in ("LX0609-029", "LX0609-032") or self.target_source_key != _RULE_CONTRACT[self.rule_id][0]:
             raise ValueError("invalid target qualification")
         _code("qualification_visit_ref", self.visit_ref)
-        _code("qualification_policy_version", self.qualification_policy_version)
+        if self.qualification_policy_version != TARGET_QUALIFICATION_POLICY_VERSION:
+            raise ValueError("invalid target qualification")
         if not isinstance(self.target_snapshot_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", self.target_snapshot_hash):
             raise ValueError("invalid target qualification")
         if type(self.qualified_document_count) is not int or self.qualified_document_count < 0 or self.qualified_document_count > 512:
@@ -336,7 +338,12 @@ def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bun
     for rule_id in required_qualification_rules:
         qualification = qualification_by_rule[rule_id]
         rule = next(item for item in plan.planned_rules if item.rule_id == rule_id)
-        if qualification.visit_ref != plan.visit_ref or qualification.target_source_key != rule.target_source_key:
+        target_entry = entries[rule.target_source_key]
+        if (
+            qualification.visit_ref != plan.visit_ref
+            or qualification.target_source_key != rule.target_source_key
+            or qualification.qualified_document_count > target_entry.record_count
+        ):
             raise ValueError("target qualification mismatch")
 
     decisions: list[GateDecision] = []
