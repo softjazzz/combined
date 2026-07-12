@@ -137,12 +137,27 @@ class RuntimeShadowAssembly:
                 raise TypeError("assembly collections must be tuple")
         if self.disposition == "skipped_no_effective_rules" and (self.planned_rule_ids or self.source_query_observations or self.fact_pairs or self.deterministic_coverage_outcomes):
             raise ValueError("invalid skipped assembly")
+        if self.disposition == "assembled":
+            if not self.planned_rule_ids or self.planned_rule_ids != tuple(rule for rule in ("LX0609-029", "LX0609-030", "LX0609-032") if rule in self.planned_rule_ids) or not self.source_query_observations or not self.deterministic_coverage_outcomes:
+                raise ValueError("invalid assembled scope")
+            if tuple(item.source_key for item in self.source_query_observations) != tuple(sorted(item.source_key for item in self.source_query_observations)) or len({item.source_key for item in self.source_query_observations}) != len(self.source_query_observations):
+                raise ValueError("invalid assembly sources")
+            if tuple((item.fact_type, item.source_key) for item in self.deterministic_coverage_outcomes) != tuple(sorted((item.fact_type, item.source_key) for item in self.deterministic_coverage_outcomes)) or len({(item.fact_type, item.source_key) for item in self.deterministic_coverage_outcomes}) != len(self.deterministic_coverage_outcomes):
+                raise ValueError("invalid assembly outcomes")
+            if tuple(item.pair_ref for item in self.fact_pairs) != tuple(sorted(item.pair_ref for item in self.fact_pairs)) or len({item.pair_ref for item in self.fact_pairs}) != len(self.fact_pairs):
+                raise ValueError("invalid assembly pairs")
+            outcome_pairs = {(item.fact_type, item.source_key) for item in self.deterministic_coverage_outcomes}
+            claimed = {ref for item in self.deterministic_coverage_outcomes for ref in item.produced_pair_refs}
+            relevant = {item.pair_ref for item in self.fact_pairs if (item.legacy_fact.fact_type, item.mapping.source_key) in outcome_pairs}
+            if claimed != relevant:
+                raise ValueError("invalid assembly pair claims")
 
     def summary_dict(self) -> dict[str, Any]:
         return {"source_count": len(self.source_query_observations), "pair_count": len(self.deterministic_coverage_outcomes), "fact_count": len(self.fact_pairs), "zero_llm": True, "llm_call_count": 0, "llm_total_tokens": 0}
 
     def safe_to_dict(self) -> dict[str, Any]:
-        return {"assembler_schema_version": self.assembler_schema_version, "assembler_policy_version": self.assembler_policy_version, "visit_ref": self.visit_ref, "plan_fingerprint": self.plan_fingerprint, "disposition": self.disposition, "planned_rule_ids": list(self.planned_rule_ids), "sources": [{"source_key": item.source_key, "query_status": item.query_status.value} for item in self.source_query_observations], "pair_refs": [item.pair_ref for item in self.fact_pairs], "coverage": [item.to_dict() for item in self.deterministic_coverage_outcomes], "summary": self.summary_dict(), "created_at": self.created_at}
+        facts = [{"pair_ref": item.pair_ref, "fact_type": item.legacy_fact.fact_type, "source_key": item.mapping.source_key, "event_status": str(item.mapping.event_status), "source_record_ref": item.legacy_fact.source_document_id, "extractor_version": item.mapping.extractor_version} for item in self.fact_pairs]
+        return {"assembler_schema_version": self.assembler_schema_version, "assembler_policy_version": self.assembler_policy_version, "visit_ref": self.visit_ref, "plan_fingerprint": self.plan_fingerprint, "disposition": self.disposition, "planned_rule_ids": list(self.planned_rule_ids), "sources": [{"source_key": item.source_key, "query_status": item.query_status.value} for item in self.source_query_observations], "facts": facts, "coverage": [item.to_dict() for item in self.deterministic_coverage_outcomes], "summary": self.summary_dict(), "created_at": self.created_at}
 
     def fingerprint(self) -> str:
         value = self.safe_to_dict(); value.pop("created_at")
@@ -211,11 +226,17 @@ def assemble_luxian_0609_runtime_shadow_inputs(*, plan: planner.ShadowRulePlan, 
         elif status is QueryStatus.EMPTY:
             if item.positive_signals or not ((item.state == "complete" and item.processed_record_count == 0) or (item.state == "not_run" and item.processed_record_count == 0)):
                 raise ValueError("invalid empty source extraction")
-        elif item.state == "complete" and item.processed_record_count != count:
+        elif item.state == "complete" and (item.processed_record_count != count or item.reason_code or item.error_code):
             raise ValueError("invalid complete extraction count")
-        elif item.state == "partial" and (item.processed_record_count >= count or not item.reason_code):
+        elif item.state == "partial" and (item.processed_record_count >= count or item.reason_code not in {"partial_budget_limit", "partial_unsupported_record"} or item.error_code):
             raise ValueError("invalid partial extraction")
+        elif item.state == "not_run" and (item.processed_record_count != 0 or item.positive_signals or item.reason_code != "extractor_not_run" or item.error_code):
+            raise ValueError("invalid not_run extraction")
+        elif item.state == "error" and (item.processed_record_count > count or item.reason_code != "extraction_error" or not item.error_code):
+            raise ValueError("invalid extraction error")
         for signal in item.positive_signals:
+            if signal.extractor_version != item.extractor_version or signal.mapping_policy_version != item.mapping_policy_version:
+                raise ValueError("signal provenance mismatch")
             if signal.signal_ref in seen_refs:
                 raise ValueError("duplicate signal_ref")
             seen_refs.add(signal.signal_ref)
@@ -224,7 +245,7 @@ def assemble_luxian_0609_runtime_shadow_inputs(*, plan: planner.ShadowRulePlan, 
                 raise ValueError("signal violates trigger requirement")
             normalized = {"event": signal.event_status, "fact": signal.fact_type, "source": signal.source_key}
             legacy = Luxian0609Fact(fact_type=signal.fact_type, family="surgery_anesthesia", source_document_type=signal.source_document_type, source_document_id=signal.source_record_ref, record_time="", quote="runtime_structured_signal", confidence=1.0, extractor="runtime_structured", trace={})
-            mapping = LegacyFactV2Mapping(source_key=signal.source_key, normalized_value=normalized, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status=signal.event_status, extractor_version=signal.extractor_version, record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+            mapping = LegacyFactV2Mapping(source_key=signal.source_key, normalized_value=normalized, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status=signal.event_status, extractor_version=f"{assembler_policy_version}.{signal.mapping_policy_version}.{signal.extractor_version}", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
             pairs.append(shadow_fact_bundle.FactShadowPairInput(signal.signal_ref, legacy, mapping))
         outcomes.append(shadow_execution.FactCoverageOutcomeInput(item.fact_type, item.source_key, item.state, item.extractor_version, item.mapping_policy_version, item.processed_record_count, tuple(signal.signal_ref for signal in item.positive_signals), item.reason_code, item.error_code))
     return RuntimeShadowAssembly(assembler_schema_version, assembler_policy_version, plan.visit_ref, plan.fingerprint(), "assembled", planned_rule_ids, observations, tuple(sorted(pairs, key=lambda item: item.pair_ref)), tuple(sorted(outcomes, key=lambda item: (item.fact_type, item.source_key))), created_at)

@@ -11,6 +11,7 @@ from app.services.luxian_0609.runtime_shadow_assembler import (
     assemble_luxian_0609_runtime_shadow_inputs,
 )
 from app.services.luxian_0609.source_manifest_builder import SourceQueryObservation
+from app.services.luxian_0609.shadow_execution import build_luxian_0609_shadow_execution
 
 CREATED = "2026-07-12T18:00:00+08:00"
 VISIT = "visit-runtime-001"
@@ -126,6 +127,14 @@ def test_scope_and_duplicate_input_reject_without_payload_inference():
 
 def test_safe_identity_created_at_and_mutation_boundary():
     assembly = _assemble(_plan("LX0609-030"), _signal())
-    data = assembly.safe_to_dict(); data["pair_refs"].clear()
+    data = assembly.safe_to_dict(); data["facts"].clear()
     assert assembly.summary_dict()["fact_count"] == 1
     assert assembly.fingerprint() == assemble_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), evidence_payload=_payload(_plan("LX0609-030")), source_query_observations=_observations(_plan("LX0609-030")), extraction_inputs=_inputs(_plan("LX0609-030"), _signal()), assembler_schema_version="assembler-v1", assembler_policy_version="policy-v1", created_at="2026-07-13T18:00:00+08:00").fingerprint()
+
+
+def test_real_orch_accepts_assembled_performed_signal():
+    plan = _plan("LX0609-030")
+    payload = _payload(plan)
+    assembly = _assemble(plan, _signal())
+    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, evidence_payload=payload, source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
+    assert report.results[0].final_state.value == "compliant"
