@@ -1,82 +1,257 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
+import importlib
 
 import pytest
 
+from app.services.luxian_0609 import fact_coverage as coverage_module
+from app.services.luxian_0609 import planner as planner_module
 from app.services.luxian_0609.deterministic_gate import (
     GateDecision,
     GateFactRef,
     GateReadiness,
+    GateReport,
     TargetResolution,
     TriggerResolution,
     build_luxian_0609_deterministic_gate_shadow,
 )
-from app.services.luxian_0609.fact_coverage import ExtractionCoverageState
-from test_luxian_0609_fact_coverage import _build, _bundle, _fact, _manifest, _observation, _pairs, _plan
+from app.services.luxian_0609.fact_coverage import FactCoverageObservation, build_luxian_0609_fact_coverage_shadow
+from app.services.luxian_0609.fact_schema import Assertion, AssertionContext, CurrentVisitRelevance, EventStatus, FactV2, TriggerScope
+from app.services.luxian_0609.planner import build_luxian_0609_shadow_plan
+from app.services.luxian_0609.shadow_fact_bundle import FactShadowBundle, FactShadowBundleItem
+from app.services.luxian_0609.source_manifest import DocumentManifest, QueryStatus, SourceManifestEntry
+
+CREATED = "2026-07-12T12:00:00+08:00"
+VISIT = "visit-gate-001"
+SNAPSHOT = "a" * 64
+SOURCES = ("inpat_nondrug_order", "surgery_application", "surgery_record", "presurg_summary", "surgery_safecheck_record")
 
 
-def _gate(*, plan=None, manifest=None, bundle=None, coverage=None):
-    plan = _plan(("LX0609-030",)) if plan is None else plan
-    manifest = _manifest() if manifest is None else manifest
-    bundle = _bundle(manifest) if bundle is None else bundle
-    coverage = _build(plan=plan, manifest=manifest, bundle=bundle) if coverage is None else coverage
-    return build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at="2026-07-12T12:00:00+08:00")
+def _plan(rule_ids=("LX0609-030",)):
+    return build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=list(rule_ids), scoped_customer_rule_ids=list(rule_ids), record_rule_map={VISIT: list(rule_ids)}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
 
 
-def test_zero_and_absent_complete_gate_are_internal_only() -> None:
-    zero_plan = _plan(())
-    manifest = _manifest()
-    report = _gate(plan=zero_plan, manifest=manifest, bundle=_bundle(manifest), coverage=_build(plan=zero_plan, manifest=manifest, bundle=_bundle(manifest), observations=()))
-    assert report.decisions == ()
-    absent = _gate()
-    assert absent.decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
-    assert absent.decisions[0].readiness is GateReadiness.NOT_TRIGGERED
-    assert "compliant" not in absent.canonical_json()
+def _manifest(statuses=None, *, omit=()):
+    statuses = statuses or {}
+    entries = []
+    for index, source in enumerate(SOURCES):
+        if source in omit:
+            continue
+        status = statuses.get(source, QueryStatus.AVAILABLE)
+        entries.append(SourceManifestEntry.create(source_key=source, query_status=status, record_count=2 if status is QueryStatus.AVAILABLE else (0 if status is QueryStatus.EMPTY else None), query_version="query-v1", snapshot_ref="sha256:" + f"{index + 1:064x}", error_code="source_failure" if status is QueryStatus.ERROR else "", reason_code="source_paused" if status is QueryStatus.UNAVAILABLE else ""))
+    return DocumentManifest(manifest_schema_version="manifest-v1", visit_ref=VISIT, source_snapshot_hash=SNAPSHOT, entries=tuple(entries), created_at=CREATED)
 
 
-def test_claimed_exact_fact_matches_and_unclaimed_fact_is_ignored() -> None:
-    plan = _plan(("LX0609-030",)); manifest = _manifest(); pair = _pairs(plan)[0]
-    fact = _fact(source_key=pair[1], fact_type=pair[0]); bundle = _bundle(manifest, (fact,))
-    unclaimed = _build(plan=plan, manifest=manifest, bundle=bundle)
-    assert _gate(plan=plan, manifest=manifest, bundle=bundle, coverage=unclaimed).decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
-    coverage = _build(plan=plan, manifest=manifest, bundle=bundle, observations=(_observation(pair, fact_ids=(fact.fact_id,)), _observation(_pairs(plan)[1]), _observation(_pairs(plan)[2])))
-    decision = _gate(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage).decisions[0]
-    assert decision.trigger_resolution is TriggerResolution.MATCHED
-    assert decision.target_resolution is TargetResolution.PRESENT
-    assert decision.readiness is GateReadiness.READY
+def _pairs(plan):
+    return tuple(sorted({(requirement.fact_type, source) for rule in plan.planned_rules for requirement in rule.trigger_requirements for source in requirement.allowed_source_keys}))
 
 
-def test_semantic_conflict_and_target_matrix() -> None:
-    plan = _plan(("LX0609-030",)); manifest = _manifest(); pair = _pairs(plan)[0]
-    fact = _fact(source_key=pair[1], fact_type=pair[0]); object.__setattr__(fact, "assertion", type(fact.assertion).NEGATED)
-    bundle = _bundle(manifest, (fact,))
-    coverage = _build(plan=plan, manifest=manifest, bundle=bundle, observations=(_observation(pair, fact_ids=(fact.fact_id,)), _observation(_pairs(plan)[1]), _observation(_pairs(plan)[2])))
-    assert _gate(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage).decisions[0].trigger_resolution is TriggerResolution.SEMANTIC_CONFLICT
+def _fact(*, fact_type, source_key, document_id="doc-ref", trigger_scope=TriggerScope.CURRENT_VISIT, relevance=CurrentVisitRelevance.RELEVANT, assertion=Assertion.AFFIRMED, event_status=None, quote="safe quote", value=None):
+    if event_status is None:
+        event_status = EventStatus.ORDERED if fact_type.endswith("order_confirmed") else EventStatus.PERFORMED
+    return FactV2.create(visit_ref=VISIT, family="surgery_anesthesia", fact_type=fact_type, normalized_value={"kind": "gate_fixture"} if value is None else value, trigger_scope=trigger_scope, current_visit_relevance=relevance, assertion=assertion, assertion_context=AssertionContext.CURRENT_NARRATIVE, event_status=event_status, source_key=source_key, source_document_id=document_id, source_document_type="gate_fixture", record_time=None, submit_time=None, update_time=None, quote=quote, redaction_terms=(), confidence=0.9, extractor="gate_fixture", extractor_version="extractor-v1", fact_schema_version="fact-v2", source_snapshot_hash=SNAPSHOT, created_at=CREATED, extensions={}, known_upstream_fact_ids=())
 
 
-def test_coverage_precedence_and_safe_object_graph() -> None:
-    plan = _plan(("LX0609-030",)); manifest = _manifest(); pairs = _pairs(plan)
-    coverage = _build(plan=plan, manifest=manifest, observations=(
-        _observation(pairs[0], state=ExtractionCoverageState.PARTIAL, processed=1, reason="partial_budget_limit"),
-        _observation(pairs[1], state=ExtractionCoverageState.ERROR, processed=1, reason="extraction_error", error="extractor_timeout"),
-        _observation(pairs[2]),
-    ))
-    report = _gate(plan=plan, manifest=manifest, coverage=coverage)
-    assert report.decisions[0].trigger_resolution is TriggerResolution.COVERAGE_ERROR
-    assert not any(hasattr(report, name) for name in ("plan", "manifest", "bundle", "coverage"))
+def _bundle(manifest, facts=()):
+    return FactShadowBundle(bundle_schema_version="bundle-v1", visit_ref=VISIT, manifest_fingerprint=manifest.fingerprint(), source_snapshot_hash=SNAPSHOT, items=tuple(FactShadowBundleItem(pair_ref=f"{index + 1:064x}", fact=fact) for index, fact in enumerate(facts)), created_at=CREATED)
+
+
+def _observation(pair, *, state="complete", processed=2, fact_ids=(), reason="", error=""):
+    return FactCoverageObservation(fact_type=pair[0], source_key=pair[1], state=state, extractor_version="extractor-v1", mapping_policy_version="mapping-v1", processed_record_count=processed, produced_fact_ids=tuple(fact_ids), reason_code=reason, error_code=error)
+
+
+def _coverage(*, plan, manifest, bundle, overrides=None):
+    overrides = overrides or {}
+    observations = []
+    for pair in _pairs(plan):
+        status = next(entry.query_status for entry in manifest.entries if entry.source_key == pair[1])
+        if pair in overrides:
+            observations.append(overrides[pair])
+        elif status is QueryStatus.EMPTY:
+            observations.append(_observation(pair, processed=0))
+        elif status is QueryStatus.UNAVAILABLE:
+            observations.append(_observation(pair, state="not_run", processed=0, reason="source_unavailable"))
+        elif status is QueryStatus.ERROR:
+            observations.append(_observation(pair, state="not_run", processed=0, reason="source_query_error"))
+        else:
+            observations.append(_observation(pair))
+    return build_luxian_0609_fact_coverage_shadow(plan=plan, manifest=manifest, bundle=bundle, observations=tuple(observations), coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", created_at=CREATED)
+
+
+def _gate(*, rule_ids=("LX0609-030",), statuses=None, facts=(), overrides=None, manifest=None):
+    plan = _plan(rule_ids)
+    manifest = _manifest(statuses) if manifest is None else manifest
+    bundle = _bundle(manifest, facts)
+    coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle, overrides=overrides)
+    return build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+
+
+@pytest.mark.parametrize(("status", "resolution", "readiness"), [(QueryStatus.AVAILABLE, TargetResolution.PRESENT, GateReadiness.READY), (QueryStatus.EMPTY, TargetResolution.EMPTY, GateReadiness.READY), (QueryStatus.UNAVAILABLE, TargetResolution.UNAVAILABLE, GateReadiness.BLOCKED), (QueryStatus.ERROR, TargetResolution.ERROR, GateReadiness.BLOCKED)])
+def test_a_matched_target_matrix(status, resolution, readiness):
+    fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    plan = _plan()
+    pair = (fact.fact_type, fact.source_key)
+    report = _gate(statuses={"surgery_record": status}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
+    assert (report.decisions[0].target_resolution, report.decisions[0].readiness) == (resolution, readiness)
+
+
+@pytest.mark.parametrize(("target", "readiness"), [("present", "blocked"), ("empty", "blocked"), ("unavailable", "ready"), ("error", "ready")])
+def test_a_public_constructor_rejects_illegal_matched_crosses(target, readiness):
+    ref = GateFactRef("b" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
+    with pytest.raises(ValueError, match="invalid matched"):
+        GateDecision("LX0609-030", "matched", "surgery_record", target, readiness, (ref,), (), ())
+
+
+def test_b_exact_rule_metadata_and_allowed_ref_pairs():
+    assert GateDecision("LX0609-029", "absent_complete", "presurg_summary", None, "not_triggered", (), (), ()).rule_id == "LX0609-029"
+    assert GateDecision("LX0609-032", "absent_complete", "surgery_safecheck_record", None, "not_triggered", (), ("LX0609-030",), ("informational_parent_only",)).rule_id == "LX0609-032"
+    bad = GateFactRef("c" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
+    with pytest.raises(ValueError, match="not allowed"):
+        GateDecision("LX0609-032", "matched", "surgery_safecheck_record", "present", "ready", (bad,), ("LX0609-030",), ("informational_parent_only",))
+    with pytest.raises(ValueError, match="metadata"):
+        GateDecision("LX0609-030", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
+
+
+@pytest.mark.parametrize("mode", ["matched", "absent", "conflict", "blocker"])
+def test_c_missing_target_rejects_before_every_resolution(mode):
+    plan = _plan(("LX0609-029",))
+    manifest = _manifest(omit=("presurg_summary",))
+    pair = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
+    facts = ()
+    overrides = {}
+    if mode == "matched":
+        fact = _fact(fact_type=pair[0], source_key=pair[1]); facts = (fact,); overrides[pair] = _observation(pair, fact_ids=(fact.fact_id,))
+    elif mode == "conflict":
+        fact = _fact(fact_type=pair[0], source_key=pair[1], assertion=Assertion.NEGATED); facts = (fact,); overrides[pair] = _observation(pair, fact_ids=(fact.fact_id,))
+    elif mode == "blocker":
+        overrides[pair] = _observation(pair, state="partial", processed=1, reason="partial_budget_limit")
+    bundle = _bundle(manifest, facts)
+    coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle, overrides=overrides)
+    with pytest.raises(ValueError, match="target source"):
+        build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+
+
+@pytest.mark.parametrize(("field", "value"), [("trigger_scope", TriggerScope.PRIOR_HISTORY), ("relevance", CurrentVisitRelevance.NOT_RELEVANT), ("assertion", Assertion.NEGATED), ("event_status", EventStatus.PLANNED)])
+def test_d_valid_fact_semantic_conflicts(field, value):
+    kwargs = {field: value}
+    fact = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record", **kwargs)
+    pair = (fact.fact_type, fact.source_key)
+    report = _gate(facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
+    assert report.decisions[0].trigger_resolution is TriggerResolution.SEMANTIC_CONFLICT
+
+
+def test_d_order_and_performed_semantics_and_e_positive_wins():
+    order = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    performed = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record", document_id="doc-performed")
+    plan = _plan()
+    bad_pair = ("current_visit_surgery_confirmed", "surgery_application")
+    report = _gate(facts=(order, performed), overrides={(order.fact_type, order.source_key): _observation((order.fact_type, order.source_key), fact_ids=(order.fact_id,)), (performed.fact_type, performed.source_key): _observation((performed.fact_type, performed.source_key), fact_ids=(performed.fact_id,)), bad_pair: _observation(bad_pair, state="partial", processed=1, reason="partial_budget_limit")})
+    assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
+
+
+def test_e_unclaimed_fact_is_ignored_and_all_blocker_precedence():
+    fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    assert _gate(facts=(fact,)).decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
+    pairs = _pairs(_plan())
+    overrides = {
+        pairs[0]: _observation(pairs[0], state="partial", processed=1, reason="partial_budget_limit"),
+        pairs[1]: _observation(pairs[1], state="error", processed=1, reason="extraction_error", error="extractor_timeout"),
+        pairs[2]: _observation(pairs[2], state="not_run", processed=0, reason="extractor_not_run"),
+    }
+    assert _gate(overrides=overrides).decisions[0].trigger_resolution is TriggerResolution.COVERAGE_ERROR
+    assert _gate(statuses={"inpat_nondrug_order": QueryStatus.ERROR}, overrides={}).decisions[0].trigger_resolution is TriggerResolution.SOURCE_ERROR
+
+
+def test_f_complete_absence_empty_not_run_and_one_incomplete_alternative():
+    assert _gate().decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
+    assert _gate(statuses={"inpat_nondrug_order": QueryStatus.EMPTY}).decisions[0].trigger_resolution is TriggerResolution.ABSENT_COMPLETE
+    pair = ("current_visit_surgery_confirmed", "surgery_application")
+    assert _gate(overrides={pair: _observation(pair, state="not_run", processed=0, reason="extractor_not_run")}).decisions[0].trigger_resolution is TriggerResolution.COVERAGE_NOT_RUN
+
+
+@pytest.mark.parametrize(("statuses", "override", "expected"), [
+    ({"inpat_nondrug_order": QueryStatus.UNAVAILABLE}, None, TriggerResolution.SOURCE_UNAVAILABLE),
+    (None, ("partial", "partial_budget_limit"), TriggerResolution.COVERAGE_PARTIAL),
+    (None, ("error", "extraction_error"), TriggerResolution.COVERAGE_ERROR),
+])
+def test_f_each_nonconclusive_blocker(statuses, override, expected):
+    pair = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
+    overrides = {}
+    if override is not None:
+        state, reason = override
+        overrides[pair] = _observation(pair, state=state, processed=1, reason=reason, error="extractor_timeout" if state == "error" else "")
+    assert _gate(statuses=statuses, overrides=overrides).decisions[0].trigger_resolution is expected
+
+
+def test_g_030_empty_target_and_standalone_032():
+    fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order")
+    pair = (fact.fact_type, fact.source_key)
+    report = _gate(statuses={"surgery_record": QueryStatus.EMPTY}, facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
+    assert report.decisions[0].target_resolution is TargetResolution.EMPTY
+    surgical = _fact(fact_type="current_visit_surgery_confirmed", source_key="surgery_record")
+    standalone = _gate(rule_ids=("LX0609-032",), facts=(surgical,), overrides={(surgical.fact_type, surgical.source_key): _observation((surgical.fact_type, surgical.source_key), fact_ids=(surgical.fact_id,))})
+    assert standalone.decisions[0].trigger_resolution is TriggerResolution.MATCHED
+    assert standalone.decisions[0].parent_rule_ids == ("LX0609-030",)
+
+
+def test_h_zero_multi_constructor_bounds_and_ref_identity():
+    assert _gate(rule_ids=()).decisions == ()
+    multi = _gate(rule_ids=("LX0609-029", "LX0609-030", "LX0609-032"))
+    assert tuple(item.rule_id for item in multi.decisions) == ("LX0609-029", "LX0609-030", "LX0609-032")
     with pytest.raises(ValueError):
-        replace(report, decisions=(report.decisions[0], report.decisions[0]))
+        replace(multi, decisions=multi.decisions[::-1])
+    with pytest.raises(ValueError):
+        GateDecision("LX0609-030", "absent_complete", "surgery_record", None, "not_triggered", (GateFactRef("d" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"),), (), ())
+    refs = (GateFactRef("f" * 64, "current_visit_surgery_confirmed", "surgery_record"), GateFactRef("e" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order"))
+    decision = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", refs, (), ())
+    assert tuple(ref.fact_id for ref in decision.matched_fact_refs) == ("e" * 64, "f" * 64)
+    too_many = tuple(GateFactRef(f"{index:064x}", "current_visit_surgery_order_confirmed", "inpat_nondrug_order") for index in range(1, 514))
+    with pytest.raises(ValueError, match="matched fact refs"):
+        GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", too_many, (), ())
 
 
-def test_gate_decision_exact_state_matrix_and_rule_contract() -> None:
-    ref = GateFactRef("a" * 64, "current_visit_surgery_order_confirmed", "inpat_nondrug_order")
-    ready = GateDecision("LX0609-030", "matched", "surgery_record", "present", "ready", (ref,), (), ())
-    assert ready.readiness is GateReadiness.READY
-    for target, readiness in (("present", "blocked"), ("unavailable", "ready"), ("error", "ready")):
-        with pytest.raises(ValueError):
-            GateDecision("LX0609-030", "matched", "surgery_record", target, readiness, (ref,), (), ())
+def test_i_cross_object_fingerprint_mismatch():
+    plan = _plan(); manifest = _manifest(); bundle = _bundle(manifest); coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle)
+    with pytest.raises(ValueError, match="coverage fingerprint"):
+        build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=replace(coverage, plan_fingerprint="b" * 64), gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+    class ShadowRulePlan: pass
+    with pytest.raises(TypeError, match="accepted value objects"):
+        build_luxian_0609_deterministic_gate_shadow(plan=ShadowRulePlan(), manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+    other_plan = build_luxian_0609_shadow_plan(visit_ref="visit-gate-002", selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-gate-002": ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
+    with pytest.raises(ValueError, match="visit_ref"):
+        build_luxian_0609_deterministic_gate_shadow(plan=other_plan, manifest=manifest, bundle=bundle, coverage=coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
+
+
+def test_z_real_type_boundary_survives_module_reload():
+    global FactCoverageObservation, build_luxian_0609_fact_coverage_shadow, build_luxian_0609_shadow_plan
+    importlib.reload(planner_module); importlib.reload(coverage_module)
+    fresh_plan = planner_module.build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
+    fresh_manifest = _manifest(); fresh_bundle = _bundle(fresh_manifest)
+    observations = tuple(coverage_module.FactCoverageObservation(fact_type=pair[0], source_key=pair[1], state="complete", extractor_version="extractor-v1", mapping_policy_version="mapping-v1", processed_record_count=2, produced_fact_ids=()) for pair in _pairs(fresh_plan))
+    fresh_coverage = coverage_module.build_luxian_0609_fact_coverage_shadow(plan=fresh_plan, manifest=fresh_manifest, bundle=fresh_bundle, observations=observations, coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", created_at=CREATED)
+    assert build_luxian_0609_deterministic_gate_shadow(plan=fresh_plan, manifest=fresh_manifest, bundle=fresh_bundle, coverage=fresh_coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED).decisions
+    FactCoverageObservation = coverage_module.FactCoverageObservation
+    build_luxian_0609_fact_coverage_shadow = coverage_module.build_luxian_0609_fact_coverage_shadow
+    build_luxian_0609_shadow_plan = planner_module.build_luxian_0609_shadow_plan
+
+
+def test_j_safe_only_output_non_echo_and_forbidden_status_scan():
+    fact = _fact(fact_type="current_visit_surgery_order_confirmed", source_key="inpat_nondrug_order", quote="quote-marker", value={"detail": "value-marker"})
+    pair = (fact.fact_type, fact.source_key)
+    report = _gate(facts=(fact,), overrides={pair: _observation(pair, fact_ids=(fact.fact_id,))})
+    serialized = repr(report) + str(asdict(report)) + report.canonical_json()
+    for marker in ("quote-marker", "value-marker", "gate_fixture", "doc-ref", "Authorization", "api_key", "13800000000", "11010519491231002X"):
+        assert marker not in serialized
+    assert not any(name in vars(report) for name in ("plan", "manifest", "bundle", "coverage"))
+    for token in ("compliant", "not_applicable", "data_gap", "ai_suggested", "technical_error"):
+        assert token not in report.canonical_json()
+    with pytest.raises(ValueError, match="invalid"):
+        GateDecision("LX0609-030", "matched", "surgery_record", "patient_name", "ready", (), (), ())
+
+
+def test_report_constructor_exact_order_and_created_at_independent_identity():
+    report = _gate()
+    assert report.fingerprint() == replace(report, created_at="2026-07-13T12:00:00+08:00").fingerprint()
     with pytest.raises(ValueError):
-        GateDecision("LX0609-029", "absent_complete", "wrong_target", None, "not_triggered", (), (), ())
-    with pytest.raises(ValueError):
-        GateDecision("LX0609-032", "absent_complete", "surgery_safecheck_record", None, "not_triggered", (), ("LX0609-999",), ("patient_name",))
+        GateReport("gate-v1", "policy-v1", VISIT, "a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, ("LX0609-030",), (), CREATED)

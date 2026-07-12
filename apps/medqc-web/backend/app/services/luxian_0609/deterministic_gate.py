@@ -10,17 +10,20 @@ import re
 from types import MappingProxyType
 from typing import Any
 
-from .fact_coverage import CoveragePair, ExtractionCoverageState, FactCoverageReport
-from .fact_schema import Assertion, CurrentVisitRelevance, EventStatus, FactV2, TriggerScope
-from .planner import PlannedRule, ShadowRulePlan
-from .shadow_fact_bundle import FactShadowBundle
-from .source_manifest import DocumentManifest, QueryStatus
+from . import fact_coverage as coverage_module
+from . import fact_schema as fact_schema_module
+from . import planner as planner_module
+from . import shadow_fact_bundle as bundle_module
+from . import source_manifest as manifest_module
 
 MAX_GATE_DECISIONS = 3
 MAX_MATCHED_FACT_REFS = 512
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _FORBIDDEN = re.compile(r"(?i)(not[_ -]?applicable|data[_ -]?gap|non[_ -]?compliant|ai[_ -]?suggested|technical[_ -]?error|evaluation[_ -]?unknown|suppressed|(?<!non[_ -])compliant)")
+_SENSITIVE = re.compile(r"(?i)(patient[_ -]?name|id[_ -]?card|phone|mobile|address|quote|value|source[_ -]?document|time|trace|prompt|response|authorization|api[_ -]?key|password)")
+_ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _RULE_ORDER = ("LX0609-029", "LX0609-030", "LX0609-032")
 _ORDER_PAIR = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
 _PERFORMED_PAIRS = frozenset({("current_visit_surgery_confirmed", "surgery_application"), ("current_visit_surgery_confirmed", "surgery_record")})
@@ -55,12 +58,47 @@ class GateReadiness(str, Enum):
     BLOCKED = "blocked"
 
 
+def _coerce_trigger(value: TriggerResolution | str) -> TriggerResolution:
+    if isinstance(value, TriggerResolution):
+        return value
+    if isinstance(value, str):
+        try:
+            return TriggerResolution(value)
+        except ValueError:
+            pass
+    raise ValueError("invalid trigger_resolution")
+
+
+def _coerce_target(value: TargetResolution | str | None) -> TargetResolution | None:
+    if value is None:
+        return None
+    if isinstance(value, TargetResolution):
+        return value
+    if isinstance(value, str):
+        try:
+            return TargetResolution(value)
+        except ValueError:
+            pass
+    raise ValueError("invalid target_resolution")
+
+
+def _coerce_readiness(value: GateReadiness | str) -> GateReadiness:
+    if isinstance(value, GateReadiness):
+        return value
+    if isinstance(value, str):
+        try:
+            return GateReadiness(value)
+        except ValueError:
+            pass
+    raise ValueError("invalid readiness")
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def _code(name: str, value: Any, maximum: int = 128) -> str:
-    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _FORBIDDEN.search(value):
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _FORBIDDEN.search(value) or _SENSITIVE.search(value) or _ID_CARD.search(value) or _PHONE.search(value):
         raise ValueError(f"invalid {name}")
     return value
 
@@ -110,9 +148,9 @@ class GateDecision:
     def __post_init__(self) -> None:
         if type(self.matched_fact_refs) is not tuple or type(self.parent_rule_ids) is not tuple or type(self.dependency_reason_codes) is not tuple:
             raise TypeError("gate decision collections must be tuple")
-        trigger = TriggerResolution(self.trigger_resolution)
-        target = TargetResolution(self.target_resolution) if self.target_resolution is not None else None
-        readiness = GateReadiness(self.readiness)
+        trigger = _coerce_trigger(self.trigger_resolution)
+        target = _coerce_target(self.target_resolution)
+        readiness = _coerce_readiness(self.readiness)
         refs = tuple(sorted(self.matched_fact_refs, key=lambda item: item.fact_id))
         if len(refs) > MAX_MATCHED_FACT_REFS or not all(isinstance(item, GateFactRef) for item in refs) or len({item.fact_id for item in refs}) != len(refs):
             raise ValueError("invalid matched fact refs")
@@ -188,51 +226,106 @@ class GateReport:
 
 
 def _pair_resolution(item, context) -> TriggerResolution | None:
-    if context.query_status is QueryStatus.EMPTY: return None
-    if context.query_status is QueryStatus.ERROR: return TriggerResolution.SOURCE_ERROR
-    if context.query_status is QueryStatus.UNAVAILABLE: return TriggerResolution.SOURCE_UNAVAILABLE
-    if item.observation.state is ExtractionCoverageState.COMPLETE: return None
-    if item.observation.state is ExtractionCoverageState.ERROR: return TriggerResolution.COVERAGE_ERROR
-    if item.observation.state is ExtractionCoverageState.PARTIAL: return TriggerResolution.COVERAGE_PARTIAL
+    if context.query_status is manifest_module.QueryStatus.EMPTY: return None
+    if context.query_status is manifest_module.QueryStatus.ERROR: return TriggerResolution.SOURCE_ERROR
+    if context.query_status is manifest_module.QueryStatus.UNAVAILABLE: return TriggerResolution.SOURCE_UNAVAILABLE
+    state = item.observation.state.value
+    if state == "complete":
+        return None
+    if state == "error":
+        return TriggerResolution.COVERAGE_ERROR
+    if state == "partial":
+        return TriggerResolution.COVERAGE_PARTIAL
     return TriggerResolution.COVERAGE_NOT_RUN
 
 
-def build_luxian_0609_deterministic_gate_shadow(*, plan: ShadowRulePlan, manifest: DocumentManifest, bundle: FactShadowBundle, coverage: FactCoverageReport, gate_schema_version: str, gate_policy_version: str, created_at: str) -> GateReport:
-    if tuple(type(value).__name__ for value in (plan, manifest, bundle, coverage)) != ("ShadowRulePlan", "DocumentManifest", "FactShadowBundle", "FactCoverageReport"): raise TypeError("gate inputs must be accepted value objects")
-    if plan.visit_ref != manifest.visit_ref or plan.visit_ref != bundle.visit_ref or plan.visit_ref != coverage.visit_ref: raise ValueError("gate visit_ref mismatch")
-    if bundle.manifest_fingerprint != manifest.fingerprint() or bundle.source_snapshot_hash != manifest.source_snapshot_hash: raise ValueError("gate bundle manifest mismatch")
-    if coverage.plan_fingerprint != plan.fingerprint() or coverage.manifest_fingerprint != manifest.fingerprint() or coverage.bundle_fingerprint != bundle.fingerprint() or coverage.source_snapshot_hash != manifest.source_snapshot_hash: raise ValueError("gate coverage fingerprint mismatch")
-    entries = {x.source_key: x for x in manifest.entries}; contexts = {x.source_key: x for x in coverage.source_contexts}; coverage_items = {x.pair: x for x in coverage.items}; facts = {x.fact.fact_id: x.fact for x in bundle.items}
+def build_luxian_0609_deterministic_gate_shadow(*, plan: Any, manifest: Any, bundle: Any, coverage: Any, gate_schema_version: str, gate_policy_version: str, created_at: str) -> GateReport:
+    """Resolve internal trigger and target readiness from accepted shadow values only.
+
+    The modules, rather than imported class aliases, are the type authority.  This
+    keeps the boundary valid when a focused test reloads an accepted module.
+    """
+    if (
+        not isinstance(plan, planner_module.ShadowRulePlan)
+        or not isinstance(manifest, manifest_module.DocumentManifest)
+        or not isinstance(bundle, bundle_module.FactShadowBundle)
+        or not isinstance(coverage, coverage_module.FactCoverageReport)
+    ):
+        raise TypeError("gate inputs must be accepted value objects")
+
+    if plan.visit_ref != manifest.visit_ref or plan.visit_ref != bundle.visit_ref or plan.visit_ref != coverage.visit_ref:
+        raise ValueError("gate visit_ref mismatch")
+    manifest_fingerprint = manifest.fingerprint()
+    bundle_fingerprint = bundle.fingerprint()
+    if bundle.manifest_fingerprint != manifest_fingerprint or bundle.source_snapshot_hash != manifest.source_snapshot_hash:
+        raise ValueError("gate bundle manifest mismatch")
+    if (
+        coverage.plan_fingerprint != plan.fingerprint()
+        or coverage.manifest_fingerprint != manifest_fingerprint
+        or coverage.bundle_fingerprint != bundle_fingerprint
+        or coverage.source_snapshot_hash != manifest.source_snapshot_hash
+    ):
+        raise ValueError("gate coverage fingerprint mismatch")
+
+    entries = {entry.source_key: entry for entry in manifest.entries}
+    contexts = {context.source_key: context for context in coverage.source_contexts}
+    coverage_items = {item.pair: item for item in coverage.items}
+    facts = {item.fact.fact_id: item.fact for item in bundle.items}
     for rule in plan.planned_rules:
         if rule.target_source_key not in entries:
             raise ValueError("gate target source absent manifest")
-    decisions=[]
-    precedence=[TriggerResolution.SOURCE_ERROR, TriggerResolution.COVERAGE_ERROR, TriggerResolution.SOURCE_UNAVAILABLE, TriggerResolution.COVERAGE_PARTIAL, TriggerResolution.COVERAGE_NOT_RUN]
+
+    decisions: list[GateDecision] = []
+    precedence = (
+        TriggerResolution.SOURCE_ERROR,
+        TriggerResolution.COVERAGE_ERROR,
+        TriggerResolution.SOURCE_UNAVAILABLE,
+        TriggerResolution.COVERAGE_PARTIAL,
+        TriggerResolution.COVERAGE_NOT_RUN,
+    )
     for rule in plan.planned_rules:
-        matched=[]; conflict=False; blockers=[]
+        matched: list[GateFactRef] = []
+        conflict = False
+        blockers: list[TriggerResolution] = []
         for req in rule.trigger_requirements:
             for source in req.allowed_source_keys:
-                pair=(req.fact_type, source); item=coverage_items.get(CoveragePair(req.fact_type, source))
-                if item is None or source not in contexts: raise ValueError("gate coverage pair mismatch")
+                pair = coverage_module.CoveragePair(req.fact_type, source)
+                item = coverage_items.get(pair)
+                if item is None or source not in contexts:
+                    raise ValueError("gate coverage pair mismatch")
                 for ref in item.produced_fact_refs:
                     fact=facts.get(ref.fact_id)
-                    if fact is None: raise ValueError("gate fact reference missing bundle")
-                    if fact.fact_type==req.fact_type and fact.source_key==source:
-                        if fact.trigger_scope.value==req.trigger_scope and fact.current_visit_relevance.value==req.current_visit_relevance and fact.assertion.value==req.assertion and fact.event_status.value in req.allowed_event_statuses:
+                    if fact is None:
+                        raise ValueError("gate fact reference missing bundle")
+                    if fact.fact_type == req.fact_type and fact.source_key == source:
+                        if (
+                            fact.trigger_scope.value == req.trigger_scope
+                            and fact.current_visit_relevance.value == req.current_visit_relevance
+                            and fact.assertion.value == req.assertion
+                            and fact.event_status.value in req.allowed_event_statuses
+                        ):
                             matched.append(GateFactRef(fact.fact_id, fact.fact_type, fact.source_key))
-                        else: conflict=True
-                outcome=_pair_resolution(item, contexts[source])
-                if outcome: blockers.append(outcome)
+                        else:
+                            conflict = True
+                outcome = _pair_resolution(item, contexts[source])
+                if outcome is not None:
+                    blockers.append(outcome)
         if matched:
-            target=entries.get(rule.target_source_key)
-            if target is None: raise ValueError("gate target source absent manifest")
-            mapping={QueryStatus.AVAILABLE:TargetResolution.PRESENT, QueryStatus.EMPTY:TargetResolution.EMPTY, QueryStatus.UNAVAILABLE:TargetResolution.UNAVAILABLE, QueryStatus.ERROR:TargetResolution.ERROR}
-            decisions.append(GateDecision(rule.rule_id, TriggerResolution.MATCHED, rule.target_source_key, mapping[target.query_status], GateReadiness.READY if target.query_status in (QueryStatus.AVAILABLE,QueryStatus.EMPTY) else GateReadiness.BLOCKED, tuple(matched), rule.parent_rule_ids, rule.dependency_reason_codes))
+            target = entries[rule.target_source_key]
+            target_map = {
+                manifest_module.QueryStatus.AVAILABLE: TargetResolution.PRESENT,
+                manifest_module.QueryStatus.EMPTY: TargetResolution.EMPTY,
+                manifest_module.QueryStatus.UNAVAILABLE: TargetResolution.UNAVAILABLE,
+                manifest_module.QueryStatus.ERROR: TargetResolution.ERROR,
+            }
+            target_resolution = target_map[target.query_status]
+            readiness = GateReadiness.READY if target_resolution in (TargetResolution.PRESENT, TargetResolution.EMPTY) else GateReadiness.BLOCKED
+            decisions.append(GateDecision(rule.rule_id, TriggerResolution.MATCHED, rule.target_source_key, target_resolution, readiness, tuple(matched), rule.parent_rule_ids, rule.dependency_reason_codes))
         elif conflict:
             decisions.append(GateDecision(rule.rule_id, TriggerResolution.SEMANTIC_CONFLICT, rule.target_source_key, None, GateReadiness.BLOCKED, (), rule.parent_rule_ids, rule.dependency_reason_codes))
         elif not blockers:
             decisions.append(GateDecision(rule.rule_id, TriggerResolution.ABSENT_COMPLETE, rule.target_source_key, None, GateReadiness.NOT_TRIGGERED, (), rule.parent_rule_ids, rule.dependency_reason_codes))
         else:
-            outcome=next(x for x in precedence if x in blockers)
+            outcome = next(value for value in precedence if value in blockers)
             decisions.append(GateDecision(rule.rule_id, outcome, rule.target_source_key, None, GateReadiness.BLOCKED, (), rule.parent_rule_ids, rule.dependency_reason_codes))
-    return GateReport(gate_schema_version, gate_policy_version, plan.visit_ref, plan.fingerprint(), manifest.fingerprint(), manifest.source_snapshot_hash, bundle.fingerprint(), coverage.fingerprint(), tuple(rule.rule_id for rule in plan.planned_rules), tuple(decisions), created_at)
+    return GateReport(gate_schema_version, gate_policy_version, plan.visit_ref, plan.fingerprint(), manifest_fingerprint, manifest.source_snapshot_hash, bundle_fingerprint, coverage.fingerprint(), tuple(rule.rule_id for rule in plan.planned_rules), tuple(decisions), created_at)
