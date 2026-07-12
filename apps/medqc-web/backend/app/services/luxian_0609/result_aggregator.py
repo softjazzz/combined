@@ -123,20 +123,21 @@ class AggregationReport:
         value = self.to_dict(); value.pop("created_at"); return hashlib.sha256(_json(value).encode()).hexdigest()
 
 
-def aggregate_luxian_0609_programmatic_findings_shadow(*, gate_report: Any, finding_report: Any, aggregation_schema_version: str, aggregation_policy_version: str, created_at: str) -> AggregationReport:
+def aggregate_luxian_0609_programmatic_findings_shadow(*, gate_report: Any, finding_report: Any, expected_finding_schema_version: str, expected_finding_policy_version: str, aggregation_schema_version: str, aggregation_policy_version: str, created_at: str) -> AggregationReport:
     """Aggregate only a finding report attested by rebuilding it from a real GateReport."""
     if not isinstance(gate_report, gate_module.GateReport) or not isinstance(finding_report, rules_module.ProgrammaticFindingReport):
         raise TypeError("gate_report and finding_report must be accepted value objects")
+    expected_schema = _code("expected_finding_schema_version", expected_finding_schema_version, 64)
+    expected_policy = _code("expected_finding_policy_version", expected_finding_policy_version, 64)
     if (
-        finding_report.finding_schema_version != "finding-v1"
-        or finding_report.finding_policy_version != "policy-v1"
-        or finding_report.created_at != gate_report.created_at
+        finding_report.finding_schema_version != expected_schema
+        or finding_report.finding_policy_version != expected_policy
     ):
         raise ValueError("finding report does not attest to gate report")
     expected = rules_module.build_luxian_0609_programmatic_findings_shadow(
         gate_report=gate_report,
-        finding_schema_version=finding_report.finding_schema_version,
-        finding_policy_version=finding_report.finding_policy_version,
+        finding_schema_version=expected_schema,
+        finding_policy_version=expected_policy,
         created_at=finding_report.created_at,
     )
     if (
