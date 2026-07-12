@@ -6,7 +6,7 @@ import time
 from typing import Any, Mapping, Sequence
 
 from ...core.settings import get_settings
-from . import planner, runtime_shadow_assembler, shadow_execution
+from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
 
 
 _PLAN_SCHEMA = "planner-v1"
@@ -76,6 +76,9 @@ def run_luxian_0609_runtime_shadow(
     source_query_observations: Sequence[Any] | None = None,
     extraction_inputs: Sequence[Any] | None = None,
     redaction_terms: Sequence[str] | None = None,
+    institute_id: str = "",
+    patient_id: str = "",
+    source_schema: str | None = None,
     settings: Any = None,
 ) -> dict[str, Any]:
     """执行默认关闭的影子链；所有异常均隔离为安全摘要。"""
@@ -98,6 +101,14 @@ def run_luxian_0609_runtime_shadow(
         plan_fingerprint = plan.fingerprint()
         if not planned:
             return _summary("skipped_no_effective_rules", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
+        if source_query_observations is None and extraction_inputs is None and institute_id and patient_id and visit_ref:
+            provided = runtime_shadow_input_provider.provide_luxian_0609_runtime_shadow_inputs(
+                plan=plan, institute_id=institute_id, patient_id=patient_id,
+                visit_id=visit_ref, source_schema=source_schema,
+            )
+            source_query_observations = provided.source_query_observations
+            extraction_inputs = provided.extraction_inputs
+            evidence_payload = provided.evidence_payload
         if source_query_observations is None or extraction_inputs is None:
             return _summary("inputs_unavailable", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
         assembly = runtime_shadow_assembler.assemble_luxian_0609_runtime_shadow_inputs(

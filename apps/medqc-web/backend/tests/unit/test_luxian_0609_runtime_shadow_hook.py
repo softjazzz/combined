@@ -4,7 +4,7 @@ import hashlib
 from types import SimpleNamespace
 
 from app.core.settings import Settings
-from app.services.luxian_0609 import planner, runtime_shadow_hook
+from app.services.luxian_0609 import planner, runtime_shadow_hook, runtime_shadow_input_provider
 from app.services.luxian_0609.runtime_shadow_assembler import RuntimePairExtractionInput, RuntimeStructuredFactSignal
 from app.services.luxian_0609.source_manifest_builder import SourceQueryObservation
 
@@ -65,6 +65,18 @@ def test_full_real_030_path_is_completed_with_zero_llm():
     assert result["disposition"] == "completed"
     assert result["final_state_counts"]["compliant_count"] == 1
     assert result["expected_llm_call_count"] == result["llm_total_tokens"] == 0
+
+
+def test_nonzero_coordinates_use_provider_and_complete(monkeypatch):
+    seen = []
+    def _reader(**kwargs):
+        seen.append(kwargs["source_key"])
+        return [{"surgery_begin_time": "2026-01-01 08:00"}] if kwargs["source_key"] == "surgery_record" else [{}]
+    monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = _call(institute_id="i", patient_id="p", settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    assert result["disposition"] == "completed"
+    assert result["final_state_counts"]["compliant_count"] == 1
+    assert seen == sorted(seen)
 
 
 def test_exception_is_isolated_without_echo(monkeypatch):

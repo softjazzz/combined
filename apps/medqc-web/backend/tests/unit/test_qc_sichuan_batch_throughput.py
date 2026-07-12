@@ -11,6 +11,7 @@ from app.routers import qc_sichuan
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
+from app.services.luxian_0609 import runtime_shadow_input_provider
 
 
 class _WorkspaceStub:
@@ -1649,3 +1650,25 @@ async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
     monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", lambda **_: (_ for _ in ()).throw(AssertionError("hook should remain off")))
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
     assert workspace.job["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persists_completed(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
+    workspace.hydrate_records_with_medical_text = lambda rows: [{**row, "institute_id": "i", "patient_id": "p", "medical_text": "ignored"} for row in rows]  # type: ignore[assignment]
+    service = _ServiceStub()
+    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+        return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    async def _get_qc_service(): return service
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
+    def _reader(**kwargs: Any): return [{"surgery_begin_time": "2026-01-01"}] if kwargs["source_key"] == "surgery_record" else [{}]
+    monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+    assert workspace.items
+    summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
+    assert summary and summary["disposition"] == "completed" and summary["llm_total_tokens"] == 0
