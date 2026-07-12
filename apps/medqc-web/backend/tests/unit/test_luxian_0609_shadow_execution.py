@@ -202,3 +202,17 @@ def test_real_nonzero_032_is_standalone_and_compliant():
     report = _zero(selected_rule_ids=["LX0609-032"], scoped_customer_rule_ids=["LX0609-032"], record_rule_map={"visit-orch-001": ["LX0609-032"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
     assert tuple(result.rule_id for result in report.results) == ("LX0609-032",)
     assert report.results[0].final_state.value == "compliant"
+
+
+def test_real_nonzero_029_single_scope_is_non_compliant_only():
+    observations = (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="presurg_summary", query_status="empty", query_version="query-v1"))
+    payload = {"programmatic_timeline": {"documents": {"inpat_nondrug_order": [{"content": "safe"}], "surgery_application": [{"content": "safe"}], "surgery_record": [{"content": "safe"}]}}}
+    legacy = Luxian0609Fact(fact_type="current_visit_surgery_order_confirmed", family="surgery_anesthesia", source_document_type="医嘱", source_document_id="order-29", record_time="", quote="safe", confidence=0.9, extractor="structured", trace={})
+    mapping = LegacyFactV2Mapping(source_key="inpat_nondrug_order", normalized_value={"ordered": True}, trigger_scope="current_visit", current_visit_relevance="relevant", assertion="affirmed", assertion_context="current_narrative", event_status="ordered", extractor_version="policy-v1", record_time_handling="absent", mapped_record_time=None, omit_reason_code="")
+    pair = FactShadowPairInput(pair_ref=hashlib.sha256(b"pair-29").hexdigest(), legacy_fact=legacy, mapping=mapping)
+    manifest = build_luxian_0609_source_manifest_shadow(visit_ref="visit-orch-001", evidence_payload=payload, observations=observations, manifest_schema_version="manifest-v1", created_at=CREATED)
+    fact_id = build_luxian_0609_fact_shadow_bundle(visit_ref="visit-orch-001", manifest=manifest, paired_inputs=(pair,), bundle_schema_version="bundle-v1", created_at=CREATED, redaction_terms=()).items[0].fact.fact_id
+    coverage = (FactCoverageObservation("current_visit_surgery_order_confirmed", "inpat_nondrug_order", "complete", "extractor-v1", "mapping-v1", 1, (fact_id,)), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_application", "complete", "extractor-v1", "mapping-v1", 1, ()), FactCoverageObservation("current_visit_surgery_confirmed", "surgery_record", "complete", "extractor-v1", "mapping-v1", 1, ()))
+    report = _zero(selected_rule_ids=["LX0609-029"], scoped_customer_rule_ids=["LX0609-029"], record_rule_map={"visit-orch-001": ["LX0609-029"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), coverage_observations=coverage, redaction_terms=())
+    assert tuple(result.rule_id for result in report.results) == ("LX0609-029",)
+    assert report.results[0].final_state.value == "non_compliant"
