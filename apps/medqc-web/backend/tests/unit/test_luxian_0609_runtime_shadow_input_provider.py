@@ -64,3 +64,32 @@ def test_032_has_no_order_pair_and_safecheck_target_is_queried(monkeypatch):
     result = provider.provide_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-032"), institute_id="i", patient_id="p", visit_id=VISIT)
     assert "surgery_safecheck_record" in seen
     assert all(item.fact_type != "current_visit_surgery_order_confirmed" for item in result.extraction_inputs)
+
+
+def test_row_refs_are_order_independent_duplicate_safe_and_visit_scoped(monkeypatch):
+    rows = [{"surgery_begin_time": "2026-01-02"}, {"surgery_begin_time": "2026-01-01"}, {"surgery_begin_time": "2026-01-01"}]
+    def _reader(**kwargs): return list(reversed(rows)) if kwargs["source_key"] == "surgery_record" else [{}]
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    first = provider.provide_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT)
+    def _reader_forward(**kwargs): return list(rows) if kwargs["source_key"] == "surgery_record" else [{}]
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_forward)
+    second = provider.provide_luxian_0609_runtime_shadow_inputs(plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT)
+    assert first.evidence_payload == second.evidence_payload
+    first_refs = [item.signal_ref for item in next(item for item in first.extraction_inputs if item.source_key == "surgery_record").positive_signals]
+    assert len(first_refs) == len(set(first_refs)) == 3
+    other_visit = "visit-provider-002"
+    other_plan = planner.build_luxian_0609_shadow_plan(visit_ref=other_visit, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={other_visit: ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="029-030-032-v1", created_at="2026-07-12T18:00:00+08:00")
+    other = provider.provide_luxian_0609_runtime_shadow_inputs(plan=other_plan, institute_id="i", patient_id="p", visit_id=other_visit)
+    other_refs = [item.signal_ref for item in next(item for item in other.extraction_inputs if item.source_key == "surgery_record").positive_signals]
+    assert set(first_refs).isdisjoint(other_refs)
+    assert VISIT not in repr(first) and "visit-provider-002" not in repr(other)
+
+
+def test_trusted_schema_resolver_handles_single_split_and_rejects_arbitrary(monkeypatch):
+    monkeypatch.setattr(provider.bundle_assembly, "DB_SCHEMA_MODE", "single")
+    assert provider.bundle_assembly._default_source_schema() == "public"
+    monkeypatch.setattr(provider.bundle_assembly, "DB_SCHEMA_MODE", "split")
+    assert provider.bundle_assembly._default_source_schema() == "cdm"
+    monkeypatch.setattr(provider.bundle_assembly, "engine", None)
+    with pytest.raises(provider._SourceUnavailable):
+        provider.read_luxian_0609_runtime_source_rows(source_key="surgery_record", institute_id="i", patient_id="p", visit_id=VISIT, source_schema="other")

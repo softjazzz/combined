@@ -1666,7 +1666,9 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
     monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
-    def _reader(**kwargs: Any): return [{"surgery_begin_time": "2026-01-01"}] if kwargs["source_key"] == "surgery_record" else [{}]
+    def _reader(**kwargs: Any):
+        assert kwargs["source_schema"] is None
+        return [{"surgery_begin_time": "2026-01-01"}] if kwargs["source_key"] == "surgery_record" else [{}]
     monkeypatch.setattr(runtime_shadow_input_provider, "read_luxian_0609_runtime_source_rows", _reader)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
     assert workspace.items

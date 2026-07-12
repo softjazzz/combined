@@ -48,7 +48,10 @@ def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
     """生产读侧 seam；仅选择计数及手术时间所需字段。"""
-    schema = source_schema or bundle_assembly._default_source_schema()
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise _SourceUnavailable()
+    schema = trusted_schema
     engine = bundle_assembly.engine
     if engine is None:
         raise _SourceUnavailable()
@@ -58,12 +61,19 @@ def read_luxian_0609_runtime_source_rows(
         raise _SourceUnavailable()
     selected = [field for field in _BEGIN_END_FIELDS if source_key == "surgery_record" and field in columns]
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
+    order_candidates = (*getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()), "document_id", "id", *_BEGIN_END_FIELDS)
+    order_columns = [field for field in order_candidates if field in columns]
+    order_sql = ""
+    if order_columns:
+        order_sql = " ORDER BY " + ", ".join(
+            f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
+        )
     sql = (
         f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(schema, source_key)} "
         f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
         f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
         f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        "LIMIT :limit_rows"
+        f"{order_sql} LIMIT :limit_rows"
     )
     with engine.connect() as conn:
         rows = conn.execute(bundle_assembly.text(sql), {
@@ -94,6 +104,8 @@ def provide_luxian_0609_runtime_shadow_inputs(
         raise TypeError("plan must be nonzero ShadowRulePlan")
     if not all(isinstance(value, str) and value.strip() for value in (institute_id, patient_id, visit_id)):
         raise ValueError("invalid source coordinates")
+    if visit_id != plan.visit_ref:
+        raise ValueError("visit scope mismatch")
     expected_sources = tuple(sorted({source for rule in plan.planned_rules for source in rule.required_source_keys}))
     if len(expected_sources) > _MAX_SOURCES:
         raise ValueError("too many planned sources")
@@ -126,15 +138,36 @@ def provide_luxian_0609_runtime_shadow_inputs(
         rows_by_source[source_key] = rows
 
     status_by_source = {item.source_key: item.query_status for item in observations}
+    visit_scope_ref = _digest({"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id})
     documents: dict[str, list[dict[str, str]]] = {}
     signals_by_pair: dict[tuple[str, str], tuple[runtime_shadow_assembler.RuntimeStructuredFactSignal, ...]] = {}
     for source_key in expected_sources:
         safe_rows: list[dict[str, str]] = []
         signals: list[runtime_shadow_assembler.RuntimeStructuredFactSignal] = []
-        for index, row in enumerate(rows_by_source[source_key]):
-            row_ref = _digest({"source_key": source_key, "row_index": index, "row": row})
-            safe_rows.append({"row_ref": row_ref, "source_snapshot": _digest({"source_key": source_key, "row_index": index})})
-            if source_key == "surgery_record" and _has_performed_time(row):
+        materials = [
+            {
+                "source_key": source_key,
+                "surgery_times": {
+                    field: str(row.get(field) or "").strip()
+                    for field in _BEGIN_END_FIELDS
+                    if source_key == "surgery_record" and str(row.get(field) or "").strip()
+                },
+            }
+            for row in rows_by_source[source_key]
+        ]
+        materials.sort(key=_canonical)
+        occurrences: dict[str, int] = {}
+        for material in materials:
+            material_key = _canonical(material)
+            occurrence = occurrences.get(material_key, 0)
+            occurrences[material_key] = occurrence + 1
+            ref_material = {
+                "source_key": source_key, "visit_scope_ref": visit_scope_ref,
+                "material": material, "occurrence": occurrence,
+            }
+            row_ref = _digest(ref_material)
+            safe_rows.append({"row_ref": row_ref, "source_snapshot": _digest({"snapshot": ref_material})})
+            if source_key == "surgery_record" and bool(material["surgery_times"]):
                 signals.append(runtime_shadow_assembler.RuntimeStructuredFactSignal(
                     signal_ref=_digest({"signal": "performed", "row_ref": row_ref}),
                     fact_type="current_visit_surgery_confirmed", source_key=source_key,

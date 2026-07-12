@@ -2619,7 +2619,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             extraction_inputs=None,
                             institute_id=institute_id,
                             patient_id=patient_id,
-                            source_schema="cdm",
                             settings=settings,
                         )
                     primary_document_text = str(
