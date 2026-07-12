@@ -76,6 +76,18 @@ def test_required_pairs_are_trigger_derived_not_targets_and_032_has_no_order_pai
     assert "surgery_safecheck_record" not in {item.source_key for item in assembly.deterministic_coverage_outcomes}
 
 
+def test_target_only_source_query_truth_is_validated_before_orch():
+    plan = _plan("LX0609-032")
+    payload = _payload(plan)
+    del payload["programmatic_timeline"]["documents"]["surgery_safecheck_record"]
+    with pytest.raises(ValueError, match="source status and document count mismatch"):
+        _assemble(plan, payload=payload)
+
+    assert _assemble(plan).disposition == "assembled"
+    for status in ("empty", "unavailable", "error"):
+        assert _assemble(plan, statuses={"surgery_safecheck_record": status}).disposition == "assembled"
+
+
 def test_signal_maps_to_pair_ref_and_safe_outcome():
     plan = _plan("LX0609-030")
     signal = _signal()

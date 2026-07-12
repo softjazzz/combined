@@ -220,14 +220,21 @@ def assemble_luxian_0609_runtime_shadow_inputs(*, plan: planner.ShadowRulePlan, 
     counts = _document_counts(evidence_payload, expected_sources)
     observations = tuple(sorted(source_query_observations, key=lambda item: item.source_key))
     source_status = {item.source_key: item.query_status for item in observations}
+    # 所有计划查询来源（含仅作为目标的来源）都必须先满足四态与文书数一致性。
+    for source_key in expected_sources:
+        status, count = source_status[source_key], counts[source_key]
+        if (
+            (status is QueryStatus.AVAILABLE and count == 0)
+            or (status is QueryStatus.EMPTY and count != 0)
+            or (status in {QueryStatus.UNAVAILABLE, QueryStatus.ERROR} and count != 0)
+        ):
+            raise ValueError("source status and document count mismatch")
     pairs: list[shadow_fact_bundle.FactShadowPairInput] = []
     outcomes: list[shadow_execution.FactCoverageOutcomeInput] = []
     seen_refs: set[str] = set()
     for fact_type, source_key in required_pairs:
         item = input_by_pair[(fact_type, source_key)]
         status, count = source_status[source_key], counts[source_key]
-        if status is QueryStatus.AVAILABLE and count == 0 or status is QueryStatus.EMPTY and count != 0 or status in {QueryStatus.UNAVAILABLE, QueryStatus.ERROR} and count != 0:
-            raise ValueError("source status and document count mismatch")
         if status in {QueryStatus.UNAVAILABLE, QueryStatus.ERROR}:
             expected_reason = "source_unavailable" if status is QueryStatus.UNAVAILABLE else "source_query_error"
             if item.state != "not_run" or item.processed_record_count != 0 or item.positive_signals or item.reason_code != expected_reason or item.error_code:
