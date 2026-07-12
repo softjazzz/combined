@@ -71,6 +71,12 @@ def test_source_scope_requires_concrete_exact_observations_after_nonzero_plan():
         _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]})
 
 
+@pytest.mark.parametrize("observations", [(), (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="extra_source", query_status="available", query_version="query-v1")), (SourceQueryObservation.create(source_key="inpat_nondrug_order", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_application", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"), SourceQueryObservation.create(source_key="surgery_record", query_status="available", query_version="query-v1"))])
+def test_nonzero_source_scope_missing_extra_or_duplicate_rejects(observations):
+    with pytest.raises(ValueError, match="source observations"):
+        _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload={}, source_query_observations=observations, fact_pairs=(), coverage_observations=(), redaction_terms=())
+
+
 def test_nonzero_stages_run_once_in_fixed_order(monkeypatch):
     calls = []
     class Value:
