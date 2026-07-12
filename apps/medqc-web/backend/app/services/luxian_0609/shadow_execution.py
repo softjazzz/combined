@@ -19,14 +19,15 @@ from . import source_manifest_builder as manifest_builder
 _RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
 _CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
-_SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|prompt|quote|value|trace|response|authorization|bearer|api[_ -]?key|password|(?:^|[_-])sk[_-]|phone|id[_ -]?card)")
+_SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|patient[_ -]?name|mobile|address|source[_ -]?document|record[_ -]?content|error[_ -]?stack|sql|private[_ -]?key|prompt|quote|value|trace|response|authorization|bearer|api[_ -]?key|password|(?:^|[_-])sk[_-]|phone|id[_ -]?card)")
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+_ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 FULL_STAGE_ORDER = ("planner", "manifest", "bundle", "coverage", "gate", "finding", "aggregation")
 
 
 def _json(value: Any) -> str: return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 def _code(name: str, value: Any, maximum: int = 128) -> str:
-    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _SENSITIVE.search(value) or _PHONE.search(value): raise ValueError(f"invalid {name}")
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _SENSITIVE.search(value) or _PHONE.search(value) or _ID_CARD.search(value): raise ValueError(f"invalid {name}")
     return value
 def _created(value: Any) -> str:
     try:
