@@ -33,7 +33,8 @@ def _zero(**overrides):
 def test_zero_scope_short_circuits_before_every_downstream_input():
     report = _zero()
     assert report.disposition == "skipped_no_effective_rules"
-    assert report.planned_rule_ids == report.results == report.stage_order == ()
+    assert report.planned_rule_ids == report.results == ()
+    assert report.stage_order == ("planner",) and report.stage_fingerprints[0][0] == "planner"
     assert report.summary_dict()["expected_llm_call_count"] == report.summary_dict()["llm_total_tokens"] == 0
 
 
@@ -50,6 +51,18 @@ def test_safe_report_constructor_identity_and_privacy():
     assert "quote" not in repr(report) + str(asdict(report)) + report.canonical_json()
     with pytest.raises(ValueError):
         ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", (), (), (), (), CREATED)
+
+
+@pytest.mark.parametrize("marker", ["full_text", "sk-secret", "prompt-v1", "13800138000"])
+def test_public_execution_metadata_rejects_sensitive_values(marker):
+    with pytest.raises(ValueError) as error:
+        ShadowExecutionReport(marker, "policy-v1", "package-v1", "visit-orch-001", "skipped_no_effective_rules", (), ("planner",), (("planner", "a" * 64),), (), CREATED)
+    assert marker not in str(error.value)
+
+
+def test_direct_constructor_rejects_forged_topologies():
+    with pytest.raises(ValueError): ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", (), module.FULL_STAGE_ORDER, (), (), CREATED)
+    with pytest.raises(ValueError): ShadowExecutionReport("execution-v1", "policy-v1", "package-v1", "visit-orch-001", "completed", ("LX0609-030",), module.FULL_STAGE_ORDER, (("evil", "a" * 64),), (), CREATED)
 
 
 def test_source_scope_requires_concrete_exact_observations_after_nonzero_plan():
