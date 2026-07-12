@@ -12,7 +12,11 @@ EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind
 
 
 def _report(kind):
-    finding = ProgrammaticFinding("LX0609-030", kind, "surgery_record", (), (), ())
+    trigger = "matched" if kind in (FindingKind.REQUIREMENT_SATISFIED, FindingKind.REQUIRED_DOCUMENT_MISSING) else ("absent_complete" if kind is FindingKind.TRIGGER_ABSENT else ("semantic_conflict" if kind is FindingKind.EVIDENCE_CONFLICT else ("source_unavailable" if kind is FindingKind.SOURCE_INCOMPLETE else "source_error")))
+    target = "present" if kind is FindingKind.REQUIREMENT_SATISFIED else ("empty" if kind is FindingKind.REQUIRED_DOCUMENT_MISSING else None)
+    readiness = "ready" if target else ("not_triggered" if trigger == "absent_complete" else "blocked")
+    facts = ("a" * 64,) if target else ()
+    finding = ProgrammaticFinding("LX0609-030", kind, "surgery_record", trigger, target, readiness, (), (), facts)
     return ProgrammaticFindingReport("finding-v1", "policy-v1", "visit-prog-001", "a" * 64, (finding,), CREATED)
 
 
@@ -25,7 +29,7 @@ def test_all_findings_have_exact_aggregator_owned_final_state(kind):
 
 
 def test_032_is_independent_and_zero_is_valid_safe_only():
-    finding = ProgrammaticFinding("LX0609-032", FindingKind.REQUIREMENT_SATISFIED, "surgery_safecheck_record", ("LX0609-030",), ("informational_parent_only",), ())
+    finding = ProgrammaticFinding("LX0609-032", FindingKind.REQUIREMENT_SATISFIED, "surgery_safecheck_record", "matched", "present", "ready", ("LX0609-030",), ("informational_parent_only",), ("a" * 64,))
     report = ProgrammaticFindingReport("finding-v1", "policy-v1", "visit-prog-001", "a" * 64, (finding,), CREATED)
     result = aggregate_luxian_0609_programmatic_findings_shadow(finding_report=report, aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
     assert result.results[0].final_state is FinalState.COMPLIANT
@@ -39,3 +43,14 @@ def test_032_is_independent_and_zero_is_valid_safe_only():
 def test_constructor_mapping_and_real_type_boundary_fail_closed():
     with pytest.raises(ValueError): AggregatedRuleResult("LX0609-030", FindingKind.REQUIRED_DOCUMENT_MISSING, FinalState.COMPLIANT)
     with pytest.raises(TypeError): aggregate_luxian_0609_programmatic_findings_shadow(finding_report=object(), aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED)
+
+
+@pytest.mark.parametrize("marker", ["Bearer_secret", "sk-secret", "full_text", "13800138000", "prompt_text"])
+def test_aggregation_metadata_and_enum_errors_are_private(marker):
+    with pytest.raises(ValueError) as error:
+        AggregatedRuleResult("LX0609-030", marker, "compliant")
+    assert marker not in str(error.value)
+    report = _report(FindingKind.TRIGGER_ABSENT)
+    with pytest.raises(ValueError) as metadata_error:
+        aggregate_luxian_0609_programmatic_findings_shadow(finding_report=report, aggregation_schema_version=marker, aggregation_policy_version="policy-v1", created_at=CREATED)
+    assert marker not in str(metadata_error.value)

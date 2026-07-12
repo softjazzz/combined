@@ -13,6 +13,10 @@ from . import programmatic_rules as rules_module
 
 _SHA = re.compile(r"^[a-f0-9]{64}$")
 _RULES = ("LX0609-029", "LX0609-030", "LX0609-032")
+_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
+_SENSITIVE = re.compile(r"(?i)(full[_ -]?text|medical[_ -]?text|raw[_ -]?(text|response|output)|record[_ -]?content|internal[_ -]?data|source[_ -]?document|patient[_ -]?name|id[_ -]?card|phone|mobile|address|quote|value|(record|submit|update)[_ -]?time|trace|prompt|response|error[_ -]?stack|sql|authorization|bearer|api[_ -]?key|password|private[_ -]?key|(?:^|[_-])sk[_-])")
+_ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+_PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _MAP = {
     rules_module.FindingKind.REQUIREMENT_SATISFIED: "compliant",
     rules_module.FindingKind.REQUIRED_DOCUMENT_MISSING: "non_compliant",
@@ -42,6 +46,28 @@ def _sha(name: str, value: Any) -> str:
     return value
 
 
+def _code(name: str, value: Any, maximum: int = 128) -> str:
+    if not isinstance(value, str) or not value or value != value.strip() or len(value) > maximum or not _CODE.fullmatch(value) or _SENSITIVE.search(value) or _ID_CARD.search(value) or _PHONE.search(value):
+        raise ValueError(f"invalid {name}")
+    return value
+
+
+def _coerce_kind(value: rules_module.FindingKind | str) -> rules_module.FindingKind:
+    if isinstance(value, rules_module.FindingKind): return value
+    if isinstance(value, str):
+        try: return rules_module.FindingKind(value)
+        except ValueError: pass
+    raise ValueError("invalid finding_kind")
+
+
+def _coerce_final_state(value: FinalState | str) -> FinalState:
+    if isinstance(value, FinalState): return value
+    if isinstance(value, str):
+        try: return FinalState(value)
+        except ValueError: pass
+    raise ValueError("invalid final_state")
+
+
 def _created(value: Any) -> str:
     if not isinstance(value, str):
         raise ValueError("invalid created_at")
@@ -57,11 +83,12 @@ class AggregatedRuleResult:
     final_state: FinalState | str
 
     def __post_init__(self) -> None:
-        if self.rule_id not in _RULES: raise ValueError("invalid rule_id")
-        kind = rules_module.FindingKind(self.finding_kind)
-        state = FinalState(self.final_state)
+        rule = _code("rule_id", self.rule_id)
+        if rule not in _RULES: raise ValueError("invalid rule_id")
+        kind = _coerce_kind(self.finding_kind)
+        state = _coerce_final_state(self.final_state)
         if state.value != _MAP[kind]: raise ValueError("final state mapping mismatch")
-        object.__setattr__(self, "finding_kind", kind); object.__setattr__(self, "final_state", state)
+        object.__setattr__(self, "rule_id", rule); object.__setattr__(self, "finding_kind", kind); object.__setattr__(self, "final_state", state)
 
     def to_dict(self) -> dict[str, str]: return {"rule_id": self.rule_id, "finding_kind": self.finding_kind.value, "final_state": self.final_state.value}
 
@@ -76,10 +103,12 @@ class AggregationReport:
     created_at: str
 
     def __post_init__(self) -> None:
-        if type(self.results) is not tuple or not all(isinstance(item, AggregatedRuleResult) for item in self.results): raise ValueError("invalid aggregated results")
+        if type(self.results) is not tuple or len(self.results) > 3 or not all(isinstance(item, AggregatedRuleResult) for item in self.results): raise ValueError("invalid aggregated results")
         order = tuple(item.rule_id for item in self.results)
-        if order != tuple(rule for rule in _RULES if rule in order): raise ValueError("invalid aggregated result order")
-        if not all(isinstance(value, str) and value and value == value.strip() for value in (self.aggregation_schema_version, self.aggregation_policy_version, self.visit_ref)): raise ValueError("invalid aggregation metadata")
+        if len(order) != len(set(order)) or order != tuple(rule for rule in _RULES if rule in order): raise ValueError("invalid aggregated result order")
+        object.__setattr__(self, "aggregation_schema_version", _code("aggregation_schema_version", self.aggregation_schema_version, 64))
+        object.__setattr__(self, "aggregation_policy_version", _code("aggregation_policy_version", self.aggregation_policy_version, 64))
+        object.__setattr__(self, "visit_ref", _code("visit_ref", self.visit_ref))
         object.__setattr__(self, "finding_fingerprint", _sha("finding_fingerprint", self.finding_fingerprint)); object.__setattr__(self, "created_at", _created(self.created_at))
 
     def summary_dict(self) -> dict[str, Any]:

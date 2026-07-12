@@ -41,7 +41,7 @@ def test_zero_safe_output_identity_and_constructor_guards():
     assert not any(name in vars(report) for name in ("gate", "gate_report", "fact", "manifest", "bundle", "coverage"))
     assert "quote" not in repr(report) + str(asdict(report)) + report.canonical_json()
     with pytest.raises(TypeError): build_luxian_0609_programmatic_findings_shadow(gate_report=object(), finding_schema_version="finding-v1", finding_policy_version="policy-v1", created_at=CREATED)
-    with pytest.raises(ValueError): ProgrammaticFinding("LX0609-030", "trigger_absent", "surgery_record", (), (), ("a" * 64,))
+    with pytest.raises(ValueError): ProgrammaticFinding("LX0609-030", "trigger_absent", "surgery_record", "absent_complete", None, "not_triggered", (), (), ("a" * 64,))
 
 
 def test_032_stays_in_order_and_parent_is_only_safe_metadata():
@@ -50,3 +50,24 @@ def test_032_stays_in_order_and_parent_is_only_safe_metadata():
     report = build_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_schema_version="finding-v1", finding_policy_version="policy-v1", created_at=CREATED)
     assert report.findings[0].finding_kind is FindingKind.REQUIRED_DOCUMENT_MISSING
     assert report.findings[0].parent_rule_ids == ("LX0609-030",)
+
+
+@pytest.mark.parametrize("rule_id", ["LX0609-029", "LX0609-030", "LX0609-032"])
+def test_public_finding_rejects_wrong_rule_target_and_provenance_crosses(rule_id):
+    parents = ("LX0609-030",) if rule_id == "LX0609-032" else ()
+    reasons = ("informational_parent_only",) if rule_id == "LX0609-032" else ()
+    with pytest.raises(ValueError, match="target source"):
+        ProgrammaticFinding(rule_id, "trigger_absent", "wrong_target", "absent_complete", None, "not_triggered", parents, reasons, ())
+    target = {"LX0609-029": "presurg_summary", "LX0609-030": "surgery_record", "LX0609-032": "surgery_safecheck_record"}[rule_id]
+    with pytest.raises(ValueError, match="kind does not match"):
+        ProgrammaticFinding(rule_id, "requirement_satisfied", target, "absent_complete", None, "not_triggered", parents, reasons, ())
+
+
+@pytest.mark.parametrize("marker", ["Bearer_secret", "full_text", "13800138000", "11010519491231002X", "prompt_text"])
+def test_report_metadata_and_enum_errors_are_private(marker):
+    with pytest.raises(ValueError) as error:
+        ProgrammaticFinding("LX0609-030", marker, "surgery_record", "absent_complete", None, "not_triggered", (), (), ())
+    assert marker not in str(error.value)
+    with pytest.raises(ValueError) as report_error:
+        ProgrammaticFindingReport("finding-v1", "policy-v1", marker, "a" * 64, (), CREATED)
+    assert marker not in str(report_error.value)
