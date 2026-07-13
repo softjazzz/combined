@@ -3,14 +3,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-import hashlib
-import json
 from typing import Any, Mapping
 
 from app.services.bundles import assembly as bundle_assembly
 
 from . import deterministic_gate, planner, runtime_shadow_assembler, source_manifest_builder
 from .source_manifest import QueryStatus
+from .source_evidence_reader import (
+    SURGERY_TIME_FIELDS,
+    SourceEvidenceUnavailable,
+    canonical_source_evidence,
+    digest_source_evidence,
+    has_strict_performed_time,
+    parse_strict_performed_time,
+    read_luxian_0609_runtime_source_rows,
+)
 
 _QUERY_VERSION = "runtime_source_v1"
 _EXTRACTOR_VERSION = "rts-v1"
@@ -20,14 +27,9 @@ _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 _PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 _TARGET_QUALIFICATION_POLICY_VERSION = deterministic_gate.TARGET_QUALIFICATION_POLICY_VERSION
 _MIN_SUBSTANTIVE_TARGET_LENGTH = 16
-_BEGIN_END_FIELDS = (
-    "surgery_begin_time", "surgery_begin_datetime",
-    "surgery_end_time", "surgery_end_datetime",
-)
-
-
-class _SourceUnavailable(Exception):
-    pass
+# 兼容已验收 provider 的测试 seam；实现位于共享读侧模块。
+_BEGIN_END_FIELDS = SURGERY_TIME_FIELDS
+_SourceUnavailable = SourceEvidenceUnavailable
 
 
 @dataclass(frozen=True)
@@ -39,58 +41,11 @@ class RuntimeShadowProvidedInputs:
 
 
 def _canonical(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str)
+    return canonical_source_evidence(value)
 
 
 def _digest(value: Any) -> str:
-    return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
-
-
-def _source_limit(source_key: str) -> int:
-    return int(getattr(bundle_assembly, "_DOMAIN_FETCH_LIMITS", {}).get(source_key, 50))
-
-
-def read_luxian_0609_runtime_source_rows(
-    *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
-) -> list[dict[str, Any]]:
-    """生产读侧 seam；仅选择计数及手术时间所需字段。"""
-    trusted_schema = bundle_assembly._default_source_schema()
-    if source_schema not in (None, trusted_schema):
-        raise _SourceUnavailable()
-    schema = trusted_schema
-    engine = bundle_assembly.engine
-    if engine is None:
-        raise _SourceUnavailable()
-    columns = set(bundle_assembly._get_table_columns(schema, source_key))
-    required = {"institute_id", "patient_id", "visit_id"}
-    if not required.issubset(columns):
-        raise _SourceUnavailable()
-    selected = [field for field in _BEGIN_END_FIELDS if source_key == "surgery_record" and field in columns]
-    if source_key == "presurg_summary":
-        selected.extend(field for field in ("record_content", "record_time") if field in columns)
-    if source_key == "surgery_safecheck_record":
-        selected.extend(field for field in ("record_content",) if field in columns)
-    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
-    order_candidates = (*getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()), "document_id", "id", *_BEGIN_END_FIELDS)
-    order_columns = [field for field in order_candidates if field in columns]
-    order_sql = ""
-    if order_columns:
-        order_sql = " ORDER BY " + ", ".join(
-            f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
-        )
-    sql = (
-        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(schema, source_key)} "
-        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
-        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
-        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        f"{order_sql} LIMIT :limit_rows"
-    )
-    with engine.connect() as conn:
-        rows = conn.execute(bundle_assembly.text(sql), {
-            "institute_id": institute_id, "patient_id": patient_id,
-            "visit_id": visit_id, "limit_rows": _source_limit(source_key),
-        }).mappings().all()
-    return [dict(row) for row in rows]
+    return digest_source_evidence(value)
 
 
 def _required_pairs(plan: planner.ShadowRulePlan) -> tuple[tuple[str, str], ...]:
@@ -103,29 +58,11 @@ def _required_pairs(plan: planner.ShadowRulePlan) -> tuple[tuple[str, str], ...]
 
 
 def _has_performed_time(row: Mapping[str, Any]) -> bool:
-    for field in _BEGIN_END_FIELDS:
-        value = row.get(field)
-        if not isinstance(value, str):
-            continue
-        candidate = value.strip()
-        try:
-            parsed = datetime.strptime(candidate, _PERFORMED_TIME_FORMAT)
-        except ValueError:
-            continue
-        if parsed.strftime(_PERFORMED_TIME_FORMAT) == candidate:
-            return True
-    return False
+    return has_strict_performed_time(row)
 
 
 def _parse_performed_time(value: Any) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    candidate = value.strip()
-    try:
-        parsed = datetime.strptime(candidate, _PERFORMED_TIME_FORMAT)
-    except ValueError:
-        return None
-    return parsed if parsed.strftime(_PERFORMED_TIME_FORMAT) == candidate else None
+    return parse_strict_performed_time(value)
 
 
 def _substantive_target_body(value: Any) -> bool:

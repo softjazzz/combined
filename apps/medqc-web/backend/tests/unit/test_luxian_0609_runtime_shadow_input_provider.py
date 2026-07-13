@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import pytest
 
-from app.services.luxian_0609 import planner, runtime_shadow_input_provider as provider
+from app.services.luxian_0609 import planner, runtime_shadow_input_provider as provider, source_evidence_reader
 from app.services.luxian_0609.source_manifest import QueryStatus
 
 VISIT = "visit-provider-001"
@@ -16,6 +16,15 @@ def _plan(*rules):
         record_rule_map={VISIT: list(rules)}, planner_schema_version="planner-v1",
         rule_plan_version="029-030-032-v1", created_at="2026-07-12T18:00:00+08:00",
     )
+
+
+def test_shared_strict_performed_parser_and_digest_accept_only_exact_whole_values():
+    assert source_evidence_reader.parse_strict_performed_time(" 2026-01-01 08:00:00+08 ") is not None
+    assert source_evidence_reader.has_strict_performed_time({"surgery_end_time": "2026-01-01 08:00:00+08"})
+    assert source_evidence_reader.parse_strict_performed_time("2026-01-01 08:00:00+08:00") is None
+    digest = source_evidence_reader.digest_source_evidence({"raw": "Authorization_sensitive_marker"})
+    assert len(digest) == 64
+    assert "Authorization_sensitive_marker" not in digest
 
 
 def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):

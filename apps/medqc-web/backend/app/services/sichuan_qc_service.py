@@ -67,6 +67,8 @@ from .luxian_0609.execution import (
     attach_luxian_0609_execution_metadata,
     prepare_luxian_0609_execution,
 )
+from .luxian_0609 import source_evidence_reader
+from .luxian_0609_trigger_gate import build_luxian_0609_033_live_source_decision
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -243,6 +245,69 @@ _SC_105_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估�
 
 class RuleSourceGuardError(RuntimeError):
     """规则来源不满足生产治理约束时抛出。"""
+
+
+def _selected_luxian_0609_033_raw_rules(selected_rules: List[Dict[str, Any]]) -> bool:
+    raw_rule_ids = {
+        str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+        for rule in selected_rules
+        if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
+    }
+    for wrapper in load_luxian_0609_rules():
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() != "LX0609-033":
+            continue
+        mapped_rule_ids = {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(wrapper.get("mapped_rule_ids") or [])
+            if str(rule_id or "").strip()
+        }
+        return bool(raw_rule_ids.intersection(mapped_rule_ids))
+    return False
+
+
+def _build_luxian_0609_033_live_source_decisions(
+    *, bundle: Dict[str, Any], selected_rules: List[Dict[str, Any]], source_schema: str | None = None
+) -> Dict[str, Any]:
+    """033 在真正分派前读取一次受控手术表，返回安全 gate 决策。"""
+    if not _selected_luxian_0609_033_raw_rules(selected_rules):
+        return {}
+    institute_id = str((bundle or {}).get("institute_id") or "").strip()
+    patient_id = str((bundle or {}).get("patient_id") or "").strip()
+    visit_id = str((bundle or {}).get("visit_id") or "").strip()
+    if not all((institute_id, patient_id, visit_id)):
+        return {
+            "LX0609-033": build_luxian_0609_033_live_source_decision(
+                source_state="unavailable", source_status="unavailable", source_row_count=0
+            )
+        }
+    try:
+        rows = source_evidence_reader.read_luxian_0609_runtime_source_rows(
+            source_key="surgery_record",
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+    except source_evidence_reader.SourceEvidenceUnavailable:
+        source_state, source_status, row_count = "unavailable", "unavailable", 0
+    except Exception:
+        source_state, source_status, row_count = "error", "error", 0
+    else:
+        row_count = len(rows)
+        source_status = "available"
+        if not rows:
+            source_state = "zero_rows"
+        elif any(source_evidence_reader.has_strict_performed_time(row) for row in rows):
+            source_state = "exact_performed"
+        else:
+            source_state = "nonexact_rows"
+    return {
+        "LX0609-033": build_luxian_0609_033_live_source_decision(
+            source_state=source_state,
+            source_status=source_status,
+            source_row_count=row_count,
+        )
+    }
 
 
 class SichuanQCService:
@@ -4382,12 +4447,52 @@ class SichuanQCService:
             if str(item.get("content") or "").strip()
         ]
 
-        if not selected_rules or not bundle_documents:
+        luxian_context = None
+        execution_rules = selected_rules
+        settings = get_settings()
+        if (
+            str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
+            and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
+            and settings.LUXIAN_0609_TRIGGER_GATE_ENABLED
+        ):
+            raw_source_schema = (bundle or {}).get("source_schema")
+            source_schema = str(raw_source_schema).strip() if isinstance(raw_source_schema, str) else None
+            source_gate_decisions = _build_luxian_0609_033_live_source_decisions(
+                bundle=bundle,
+                selected_rules=selected_rules,
+                source_schema=source_schema or None,
+            )
+            execution_rules, luxian_context = await prepare_luxian_0609_execution(
+                rule_set_key=str(rule_set_key or "").strip(),
+                prepared_rules=selected_rules,
+                visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+                medical_text=content,
+                evidence_payload=evidence_payload,
+                llm_client=self.adjudicator_client,
+                settings=settings,
+                source_gate_decisions=source_gate_decisions,
+            )
+
+        if not execution_rules and luxian_context is not None:
+            orchestrated = {
+                "results": [],
+                "total_tokens": 0,
+                "total_prompt_tokens": 0,
+                "total_completion_tokens": 0,
+                "total_api_time": 0.0,
+                "executor_breakdown": {},
+                "cache_breakdown": {},
+                "pack_metrics": {},
+                "trace": [],
+                "refine_details": [],
+                "refine_summary": {},
+            }
+        elif not execution_rules or not bundle_documents:
             orchestrated = await self._evaluate_rules_orchestrated(
                 document_id=document_id,
                 content=content,
                 document_type=document_type,
-                rules=selected_rules,
+                rules=execution_rules,
                 evidence_source="bundle",
                 evidence_payload=evidence_payload,
                 bucket_strategy=bucket_strategy,
@@ -4397,7 +4502,7 @@ class SichuanQCService:
                 refine_confidence_threshold=refine_confidence_threshold,
                 max_refine_candidates=max_refine_candidates,
                 use_execution_cache=use_execution_cache,
-                rule_set_key=rule_set_key,
+                rule_set_key="" if luxian_context is not None else rule_set_key,
                 cancellation_check=cancellation_check,
             )
         else:
@@ -4416,7 +4521,7 @@ class SichuanQCService:
             refine_failed_count = 0
             refine_reasons_agg: Dict[str, int] = {}
 
-            for rule in selected_rules:
+            for rule in execution_rules:
                 raise_if_cancelled(cancellation_check)
                 matched_document = self._select_bundle_document_for_rule(
                     rule=rule,
@@ -4513,29 +4618,16 @@ class SichuanQCService:
                 "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
                 "refine_reasons": refine_reasons_agg,
             }
+        if luxian_context is not None:
             model_version = str(getattr(getattr(self, "client", None), "model", "") or "")
-            settings = get_settings()
-            if (
-                str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
-                and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
-            ):
-                _, luxian_context = await prepare_luxian_0609_execution(
-                    rule_set_key=str(rule_set_key or "").strip(),
-                    prepared_rules=selected_rules,
-                    visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
-                    medical_text=content,
-                    evidence_payload=evidence_payload,
-                    llm_client=self.adjudicator_client,
-                    settings=settings,
-                )
-                aggregate_luxian_0609_orchestrated_results(
-                    orchestrated=orchestrated,
-                    context=luxian_context,
-                    visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
-                    model_name=model_version,
-                    evidence_payload=evidence_payload,
-                    execution_rule_count=len(selected_rules),
-                )
+            aggregate_luxian_0609_orchestrated_results(
+                orchestrated=orchestrated,
+                context=luxian_context,
+                visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+                model_name=model_version,
+                evidence_payload=evidence_payload,
+                execution_rule_count=len(selected_rules),
+            )
         result = self._build_document_evaluation_result(
             document_id=document_id,
             document_type="终末病历" if scene == "final" else "运行病历",

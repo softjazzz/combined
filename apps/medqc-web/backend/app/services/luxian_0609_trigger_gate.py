@@ -11,6 +11,7 @@ TRIGGER_DATA_GAP = "data_gap"
 TRIGGER_UNKNOWN = "unknown"
 
 _KNOWN_STATUSES = {TRIGGER_PRESENT, TRIGGER_ABSENT, TRIGGER_DATA_GAP, TRIGGER_UNKNOWN}
+_LX0609_033_LIVE_SOURCE_STATES = {"exact_performed", "zero_rows", "nonexact_rows", "unavailable", "error"}
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,52 @@ class Luxian0609GateDecision:
         if self.extra:
             metadata.update(dict(self.extra))
         return metadata
+
+
+def build_luxian_0609_033_live_source_decision(
+    *, source_state: str, source_status: str, source_row_count: int
+) -> Luxian0609GateDecision:
+    """033 的受控读侧安全 gate；不读取或保留原始时间、坐标、SQL。"""
+    normalized_state = str(source_state or "").strip()
+    normalized_status = str(source_status or "").strip()
+    if normalized_state not in _LX0609_033_LIVE_SOURCE_STATES:
+        raise ValueError("invalid lx0609-033 live source state")
+    if normalized_status not in {"available", "unavailable", "error"}:
+        raise ValueError("invalid lx0609-033 live source status")
+    if not isinstance(source_row_count, int) or source_row_count < 0:
+        raise ValueError("invalid lx0609-033 live source count")
+
+    extra = {
+        "live_source_status": normalized_status,
+        "live_source_row_count": source_row_count,
+        "live_source_state": normalized_state,
+        "live_source_policy_version": "lx0609-033-live-source-v1",
+    }
+    if normalized_state == "zero_rows":
+        return Luxian0609GateDecision(
+            rule_id="LX0609-033",
+            status=TRIGGER_ABSENT,
+            reason="受控手术记录查询成功且未发现本次手术记录",
+            source="live_source_guard",
+            extra=extra,
+        )
+    if normalized_state == "exact_performed":
+        return Luxian0609GateDecision(
+            rule_id="LX0609-033",
+            status=TRIGGER_DATA_GAP,
+            reason="已确认本次严格已实施手术，但手术知情同意书来源完整性未获证明",
+            data_gap_fields=("手术知情同意书来源完整性",),
+            source="live_source_guard",
+            extra=extra,
+        )
+    return Luxian0609GateDecision(
+        rule_id="LX0609-033",
+        status=TRIGGER_DATA_GAP,
+        reason="无法由受控手术记录安全确认本次严格已实施手术",
+        data_gap_fields=("手术记录已实施时间",),
+        source="live_source_guard",
+        extra=extra,
+    )
 
 
 _FAMILY_KEYWORDS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (

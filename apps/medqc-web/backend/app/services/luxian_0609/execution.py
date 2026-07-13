@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 from .customer_rule_package import (
     LUXIAN_0609_RULE_SET_KEY,
@@ -13,6 +13,7 @@ from .customer_rule_package import (
     summarize_luxian_0609_results,
 )
 from .input_builder import build_luxian_0609_input_profile
+from ..luxian_0609_trigger_gate import Luxian0609GateDecision
 
 
 @dataclass
@@ -43,6 +44,7 @@ async def prepare_luxian_0609_execution(
     evidence_payload: dict[str, Any] | None,
     llm_client: Any,
     settings: Any,
+    source_gate_decisions: Mapping[str, Luxian0609GateDecision] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
 
@@ -57,17 +59,34 @@ async def prepare_luxian_0609_execution(
             executable_rule_count=len(prepared_rules),
         )
 
-    wrapper_rules = load_luxian_0609_rules()
+    prepared_rule_ids = {
+        str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+        for rule in prepared_rules
+        if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
+    }
+    wrapper_rules = [
+        wrapper
+        for wrapper in load_luxian_0609_rules()
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() in prepared_rule_ids
+        or prepared_rule_ids.intersection(
+            str(mapped_rule_id or "").strip().upper()
+            for mapped_rule_id in list(wrapper.get("mapped_rule_ids") or [])
+        )
+    ]
     input_profile = build_luxian_0609_input_profile(
         visit_id=visit_id,
         medical_text=medical_text,
         evidence_payload=evidence_payload,
     )
     trigger_gate_enabled = bool(settings.LUXIAN_0609_TRIGGER_GATE_ENABLED)
-    gate_decisions: dict[str, Any] = {}
+    gate_decisions: dict[str, Any] = {
+        str(rule_id or "").strip().upper(): decision
+        for rule_id, decision in dict(source_gate_decisions or {}).items()
+        if isinstance(decision, Luxian0609GateDecision)
+    }
     executable_rules = prepared_rules
     if trigger_gate_enabled:
-        gate_decisions = await evaluate_luxian_0609_trigger_gates_with_llm(
+        generic_decisions = await evaluate_luxian_0609_trigger_gates_with_llm(
             rules=wrapper_rules,
             visit_id=str(visit_id or ""),
             medical_text=medical_text,
@@ -75,6 +94,7 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
             enabled=bool(settings.LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED),
         )
+        gate_decisions = {**generic_decisions, **gate_decisions}
         executable_rules = filter_executable_rules_by_gate(
             executable_rules=prepared_rules,
             wrapper_rules=wrapper_rules,

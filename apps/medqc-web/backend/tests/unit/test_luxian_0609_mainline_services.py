@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.routers.qc_sichuan import _build_record_status_counts
@@ -18,6 +20,9 @@ from app.services.luxian_0609_trigger_gate import (
     filter_executable_rules_by_gate,
 )
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
+from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609 import source_evidence_reader
+from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
 def _wrapper(
@@ -39,6 +44,325 @@ def _wrapper(
         "dependency_type": dependency_type,
         "data_dependencies": data_dependencies or [],
     }
+
+
+@pytest.mark.asyncio
+async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_before_dispatch(monkeypatch):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        )
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    reader_calls = []
+    gate_calls = []
+    dispatch_calls = []
+
+    def _strict_reader(**kwargs):
+        reader_calls.append(dict(kwargs))
+        return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+
+    async def _generic_gate(**kwargs):
+        gate_calls.append([item.get("rule_id") for item in kwargs["rules"]])
+        return evaluate_luxian_0609_trigger_gates(
+            rules=kwargs["rules"],
+            visit_id=kwargs["visit_id"],
+            medical_text=kwargs["medical_text"],
+            evidence_payload=kwargs["evidence_payload"],
+        )
+
+    async def _unexpected_model_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        raise AssertionError("缺少同意书的 bundle guard 不应分派模型")
+
+    monkeypatch.setattr(
+        "app.services.luxian_0609.source_evidence_reader.read_luxian_0609_runtime_source_rows",
+        _strict_reader,
+    )
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _generic_gate)
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _unexpected_model_dispatch)
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-live-001",
+            "patient_id": "patient-033-live-001",
+            "visit_id": "visit-033-live-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {
+                "first_course_record": True,
+                "surgery_record": True,
+                "surgery_inform_consent": False,
+            },
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087", "LXE-31"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    customer_results = list(result["evaluation_results"])
+    observed = (
+        [item["rule_id"] for item in customer_results],
+        customer_results[0]["status"],
+        len(reader_calls),
+        len(dispatch_calls),
+    )
+    assert observed == (["LX0609-033"], "data_gap", 1, 0)
+    assert gate_calls == [["LX0609-033"]]
+    assert result["token_usage"]["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_lx0609_033_live_guard_scopes_wrappers_to_selected_raw_ids(monkeypatch):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        ),
+        _wrapper(
+            "LX0609-024",
+            name="恶性肿瘤手术记录",
+            mapped_rule_ids=["SC-099"],
+            trigger_condition="仅用于证明 wrapper scope 被收紧。",
+        ),
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    gate_calls = []
+    dispatch_calls = []
+
+    async def _generic_gate(**kwargs):
+        gate_calls.append([item.get("rule_id") for item in kwargs["rules"]])
+        return evaluate_luxian_0609_trigger_gates(
+            rules=kwargs["rules"],
+            visit_id=kwargs["visit_id"],
+            medical_text=kwargs["medical_text"],
+            evidence_payload=kwargs["evidence_payload"],
+        )
+
+    async def _unexpected_model_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        raise AssertionError("缺少同意书的 bundle guard 不应分派模型")
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _generic_gate)
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _unexpected_model_dispatch)
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-scope-001",
+            "patient_id": "patient-033-scope-001",
+            "visit_id": "visit-033-scope-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087", "LXE-31"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    observed = (
+        [item["rule_id"] for item in result["evaluation_results"]],
+        gate_calls,
+        len(dispatch_calls),
+    )
+    assert observed == (["LX0609-033"], [["LX0609-033"]], 0)
+    assert result["token_usage"]["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reader_mode,expected_status,expected_source_state",
+    [
+        ("zero_rows", "not_applicable", "zero_rows"),
+        ("nonexact_rows", "data_gap", "nonexact_rows"),
+        ("unavailable", "data_gap", "unavailable"),
+        ("error", "data_gap", "error"),
+    ],
+)
+async def test_lx0609_033_live_source_guard_handles_only_controlled_reader_outcomes(
+    monkeypatch, reader_mode, expected_status, expected_source_state
+):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        )
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    reader_calls = []
+    dispatch_calls = []
+
+    def _reader(**kwargs):
+        reader_calls.append(dict(kwargs))
+        if reader_mode == "unavailable":
+            raise source_evidence_reader.SourceEvidenceUnavailable()
+        if reader_mode == "error":
+            raise RuntimeError("Authorization_sensitive_marker")
+        if reader_mode == "nonexact_rows":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08:00"}]
+        return []
+
+    async def _generic_gate(**kwargs):
+        return evaluate_luxian_0609_trigger_gates(
+            rules=kwargs["rules"],
+            visit_id=kwargs["visit_id"],
+            medical_text=kwargs["medical_text"],
+            evidence_payload=kwargs["evidence_payload"],
+        )
+
+    async def _unexpected_model_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        raise AssertionError("033 source safety guard 不应分派模型")
+
+    monkeypatch.setattr(
+        "app.services.luxian_0609.source_evidence_reader.read_luxian_0609_runtime_source_rows", _reader
+    )
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _generic_gate)
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _unexpected_model_dispatch)
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-state-001",
+            "patient_id": "patient-033-state-001",
+            "visit_id": "visit-033-state-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087", "LXE-31"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    customer_result = result["evaluation_results"][0]
+    assert customer_result["status"] == expected_status
+    assert customer_result["metadata"]["live_source_state"] == expected_source_state
+    assert len(reader_calls) == 1
+    assert dispatch_calls == []
+    assert result["token_usage"]["total_tokens"] == 0
+    assert "Authorization_sensitive_marker" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rule_set_key,rule_ids,trigger_enabled",
+    [
+        (LUXIAN_0609_RULE_SET_KEY, ["SC-087", "LXE-31"], False),
+        ("other_rule_set", ["SC-087", "LXE-31"], True),
+        (LUXIAN_0609_RULE_SET_KEY, ["SC-099"], True),
+    ],
+)
+async def test_lx0609_033_live_reader_is_off_for_disabled_non_package_or_unselected_scope(
+    monkeypatch, rule_set_key, rule_ids, trigger_enabled
+):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        ),
+        _wrapper(
+            "LX0609-024",
+            name="恶性肿瘤手术记录",
+            mapped_rule_ids=["SC-099"],
+            trigger_condition="仅用于范围隔离。",
+        ),
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=trigger_enabled,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    reader_calls = []
+
+    def _reader(**kwargs):
+        reader_calls.append(dict(kwargs))
+        raise AssertionError("未选 033 或 package/gate 关闭时不得查询来源")
+
+    async def _generic_gate(**kwargs):
+        return evaluate_luxian_0609_trigger_gates(
+            rules=kwargs["rules"],
+            visit_id=kwargs["visit_id"],
+            medical_text=kwargs["medical_text"],
+            evidence_payload=kwargs["evidence_payload"],
+        )
+
+    async def _unexpected_model_dispatch(**kwargs):
+        raise AssertionError("本测试的缺文书路径不应分派模型")
+
+    monkeypatch.setattr(
+        "app.services.luxian_0609.source_evidence_reader.read_luxian_0609_runtime_source_rows", _reader
+    )
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _generic_gate)
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _unexpected_model_dispatch)
+    await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-off-001",
+            "patient_id": "patient-033-off-001",
+            "visit_id": "visit-033-off-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=rule_ids,
+        rule_set_key=rule_set_key,
+        use_execution_cache=False,
+    )
+
+    assert reader_calls == []
 
 
 def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
