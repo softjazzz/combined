@@ -16,8 +16,8 @@ _DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "luxian_0609_rule
 def load_luxian_0609_rules() -> list[dict[str, Any]]:
     """Load the customer-facing Luxian 0609 rule wrappers.
 
-    These are management-page view models. Actual execution still uses the
-    mapped SC/LX/CL rule ids recorded on each wrapper.
+    这些对象是 LX0609 独立包的客户规则目录。执行方式由 native_package 清单
+    决定；mapped_rule_ids 仅是尚未迁移规则的包内兼容依赖。
     """
     with _DATA_PATH.open("r", encoding="utf-8") as file:
         payload = json.load(file)

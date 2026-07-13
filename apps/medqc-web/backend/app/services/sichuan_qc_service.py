@@ -60,7 +60,9 @@ from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
 from .luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
+    load_luxian_0609_dependency_inventory,
     load_luxian_0609_rules,
+    resolve_package_entry_execution_rule_ids,
 )
 from .luxian_0609.execution import (
     aggregate_luxian_0609_orchestrated_results,
@@ -4488,6 +4490,28 @@ class SichuanQCService:
         evidence_payload = dict(eval_args.get("evidence_payload") or {})
         normalized_rule_set_key = str(rule_set_key or "").strip()
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        selected_customer_rule_ids: tuple[str, ...] | None = None
+        if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
+            normalized_requested_ids = tuple(
+                str(rule_id or "").strip().upper()
+                for rule_id in resolved_rule_ids
+                if str(rule_id or "").strip()
+            )
+            has_customer_ids = any(
+                rule_id.startswith("LX0609-") for rule_id in normalized_requested_ids
+            )
+            if has_customer_ids:
+                if not all(
+                    rule_id.startswith("LX0609-") for rule_id in normalized_requested_ids
+                ):
+                    raise ValueError("LX0609 package entry does not accept mixed rule ids")
+                selected_customer_rule_ids = normalized_requested_ids
+                resolved_rule_ids = list(
+                    resolve_package_entry_execution_rule_ids(
+                        inventory=load_luxian_0609_dependency_inventory(),
+                        selected_rule_ids=selected_customer_rule_ids,
+                    )
+                )
 
         selected_rules: List[Dict[str, Any]] = []
         if resolved_rule_ids:
@@ -4539,6 +4563,7 @@ class SichuanQCService:
                 institute_id=str((bundle or {}).get("institute_id") or ""),
                 patient_id=str((bundle or {}).get("patient_id") or ""),
                 source_schema=source_schema or None,
+                selected_customer_rule_ids=selected_customer_rule_ids,
             )
 
         if not execution_rules and luxian_context is not None:

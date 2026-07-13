@@ -233,6 +233,76 @@ async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_r
 
 
 @pytest.mark.asyncio
+async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_legacy_scope(monkeypatch):
+    """公共入口只收客户 ID；共享 SC-099 不得额外带出 019/024。"""
+
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    looked_up: list[str] = []
+    dispatched: list[list[str]] = []
+
+    def _get_rule(rule_id: str):
+        looked_up.append(rule_id)
+        return {
+            "rule_id": rule_id,
+            "rule_name": rule_id,
+            "applicable_documents": ["daily_course_record"],
+        }
+
+    async def _dispatch(**kwargs):
+        raw_ids = [str(rule.get("rule_id")) for rule in kwargs["rules"]]
+        dispatched.append(raw_ids)
+        return {
+            "results": [
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "未发现该项缺失。",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 1.0,
+                    "metadata": {},
+                }
+                for rule_id in raw_ids
+            ],
+            "total_tokens": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_api_time": 0.0,
+        }
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "get_rule_by_id", _get_rule)
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "safe-inst",
+            "patient_id": "safe-patient",
+            "visit_id": "safe-visit",
+            "structured_context": {"documents": {}},
+            "text_available": False,
+        },
+        rule_ids=["LX0609-013"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert looked_up == ["SC-037", "SC-099", "SC-114"]
+    assert dispatched == [["SC-037", "SC-099", "SC-114"]]
+    assert [item["rule_id"] for item in result["evaluation_results"]] == ["LX0609-013"]
+
+
+@pytest.mark.asyncio
 async def test_native_flag_off_preserves_legacy_rules_and_never_calls_native(monkeypatch):
     wrapper = _wrapper(
         "LX0609-029",

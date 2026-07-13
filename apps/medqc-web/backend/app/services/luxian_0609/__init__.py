@@ -4,9 +4,8 @@ This package is the stable boundary for LX0609 customer rule semantics:
 customer rule catalog, family scopes, execution mapping, trigger gates,
 customer-result aggregation, evidence formatting and review loop.
 
-The implementation still reuses existing SC/LX/CL execution rules underneath.
-Callers should import from this package instead of depending on scattered
-`luxian_0609_*` implementation modules directly.
+尚未原生迁移的规则仍由包内兼容适配器复用 SC/LX/CL/LXE 执行能力。调用方
+只应传递 LX0609 客户规则 ID，并从本包统一入口读取执行计划和结果。
 """
 
 from .customer_rule_package import (
@@ -41,6 +40,17 @@ from .execution import (
     prepare_luxian_0609_execution,
 )
 from .input_builder import build_luxian_0609_input_profile
+from .native_package import (
+    EXECUTION_MODE_COMPATIBILITY,
+    EXECUTION_MODE_NATIVE_ASYNC,
+    EXECUTION_MODE_NATIVE_SYNC,
+    Luxian0609PackagePlan,
+    Luxian0609RuleDependency,
+    build_luxian_0609_dependency_inventory,
+    build_luxian_0609_package_plan,
+    load_luxian_0609_dependency_inventory,
+    resolve_package_entry_execution_rule_ids,
+)
 
 __all__ = [
     "LUXIAN_0609_RULE_SET_KEY",
@@ -71,4 +81,13 @@ __all__ = [
     "is_luxian_0609_customer_package_enabled",
     "prepare_luxian_0609_execution",
     "build_luxian_0609_input_profile",
+    "EXECUTION_MODE_COMPATIBILITY",
+    "EXECUTION_MODE_NATIVE_ASYNC",
+    "EXECUTION_MODE_NATIVE_SYNC",
+    "Luxian0609PackagePlan",
+    "Luxian0609RuleDependency",
+    "build_luxian_0609_dependency_inventory",
+    "build_luxian_0609_package_plan",
+    "load_luxian_0609_dependency_inventory",
+    "resolve_package_entry_execution_rule_ids",
 ]

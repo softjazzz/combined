@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .customer_rule_package import (
     LUXIAN_0609_RULE_SET_KEY,
@@ -14,16 +14,17 @@ from .customer_rule_package import (
 )
 from .input_builder import build_luxian_0609_input_profile
 from .native_execution import (
-    NATIVE_MAPPED_RULE_IDS,
     build_luxian_0609_native_technical_results,
     execute_luxian_0609_native_rules,
-    native_rule_ids_from_wrappers,
 )
 from .native_mdt_execution import (
-    LEGACY_RULE_IDS as NATIVE_MDT_LEGACY_RULE_IDS,
-    RULE_ID as NATIVE_MDT_RULE_ID,
     execute_luxian_0609_native_mdt_rule,
-    native_mdt_rule_selected,
+)
+from .native_package import (
+    Luxian0609PackagePlan,
+    build_luxian_0609_package_plan,
+    load_luxian_0609_dependency_inventory,
+    resolve_selected_customer_rule_ids,
 )
 from ..luxian_0609_trigger_gate import Luxian0609GateDecision
 
@@ -45,6 +46,7 @@ class Luxian0609ExecutionContext:
     native_completion_tokens: int = 0
     native_total_tokens: int = 0
     native_api_time: float = 0.0
+    package_plan: Luxian0609PackagePlan | None = None
 
 
 def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any) -> bool:
@@ -67,6 +69,7 @@ async def prepare_luxian_0609_execution(
     institute_id: str = "",
     patient_id: str = "",
     source_schema: str | None = None,
+    selected_customer_rule_ids: Iterable[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
 
@@ -87,54 +90,61 @@ async def prepare_luxian_0609_execution(
         for rule in prepared_rules
         if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
     }
+    dependency_inventory = load_luxian_0609_dependency_inventory()
+    requested_customer_rule_ids = (
+        tuple(selected_customer_rule_ids)
+        if selected_customer_rule_ids is not None
+        else resolve_selected_customer_rule_ids(
+            inventory=dependency_inventory,
+            prepared_rule_ids=prepared_rule_ids,
+        )
+    )
+    package_plan = build_luxian_0609_package_plan(
+        inventory=dependency_inventory,
+        selected_rule_ids=requested_customer_rule_ids,
+        native_sync_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
+        ),
+        native_async_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False)
+        ),
+    )
+    selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
         wrapper
         for wrapper in load_luxian_0609_rules()
-        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() in prepared_rule_ids
-        or prepared_rule_ids.intersection(
-            str(mapped_rule_id or "").strip().upper()
-            for mapped_rule_id in list(wrapper.get("mapped_rule_ids") or [])
-        )
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+        in selected_customer_rule_id_set
     ]
     native_results: list[dict[str, Any]] = []
-    native_rule_ids: tuple[str, ...] = ()
-    native_customer_rule_ids: set[str] = set()
-    native_enabled = bool(getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False))
-    if native_enabled:
-        native_rule_ids = native_rule_ids_from_wrappers(
-            wrapper_rules=wrapper_rules,
-            prepared_rule_ids=prepared_rule_ids,
+    native_customer_rule_ids = {
+        *package_plan.native_sync_rule_ids,
+        *package_plan.native_async_rule_ids,
+    }
+    if package_plan.native_sync_rule_ids:
+        native_execution = execute_luxian_0609_native_rules(
+            rule_ids=package_plan.native_sync_rule_ids,
+            visit_id=str(visit_id or ""),
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            source_schema=source_schema,
         )
-        if native_rule_ids:
-            native_execution = execute_luxian_0609_native_rules(
-                rule_ids=native_rule_ids,
-                visit_id=str(visit_id or ""),
-                institute_id=str(institute_id or ""),
-                patient_id=str(patient_id or ""),
-                source_schema=source_schema,
+        native_results = list(native_execution.results)
+        if (
+            tuple(str(item.get("rule_id") or "") for item in native_results)
+            != package_plan.native_sync_rule_ids
+        ):
+            native_execution = build_luxian_0609_native_technical_results(
+                package_plan.native_sync_rule_ids,
+                reason_code="native_result_incomplete",
             )
             native_results = list(native_execution.results)
-            if tuple(str(item.get("rule_id") or "") for item in native_results) != native_rule_ids:
-                native_execution = build_luxian_0609_native_technical_results(
-                    native_rule_ids,
-                    reason_code="native_result_incomplete",
-                )
-                native_results = list(native_execution.results)
-            native_customer_rule_ids.update(native_rule_ids)
-            native_raw_ids = {*NATIVE_MAPPED_RULE_IDS, *native_rule_ids}
-            prepared_rules = [
-                rule for rule in prepared_rules
-                if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper() not in native_raw_ids
-            ]
     native_llm_call_count = 0
     native_prompt_tokens = 0
     native_completion_tokens = 0
     native_total_tokens = 0
     native_api_time = 0.0
-    if (
-        bool(getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False))
-        and native_mdt_rule_selected(wrapper_rules=wrapper_rules, prepared_rule_ids=prepared_rule_ids)
-    ):
+    if package_plan.native_async_rule_ids:
         native_mdt = await execute_luxian_0609_native_mdt_rule(
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
@@ -143,18 +153,17 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.append(native_mdt.result)
-        native_customer_rule_ids.add(NATIVE_MDT_RULE_ID)
         native_llm_call_count = native_mdt.llm_call_count
         native_prompt_tokens = native_mdt.prompt_tokens
         native_completion_tokens = native_mdt.completion_tokens
         native_total_tokens = native_mdt.total_tokens
         native_api_time = native_mdt.api_time
-        native_mdt_raw_ids = {*NATIVE_MDT_LEGACY_RULE_IDS, NATIVE_MDT_RULE_ID}
+    if package_plan.prepared_rule_ids_to_remove:
         prepared_rules = [
             rule
             for rule in prepared_rules
             if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
-            not in native_mdt_raw_ids
+            not in package_plan.prepared_rule_ids_to_remove
         ]
     legacy_wrapper_rules = [
         wrapper for wrapper in wrapper_rules
@@ -205,6 +214,7 @@ async def prepare_luxian_0609_execution(
         native_completion_tokens=native_completion_tokens,
         native_total_tokens=native_total_tokens,
         native_api_time=native_api_time,
+        package_plan=package_plan,
     )
 
 
