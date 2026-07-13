@@ -126,6 +126,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED: bool = True
     # 029/030/032 使用原生确定性执行；关闭后完整回退旧映射链。
     LUXIAN_0609_NATIVE_EXECUTION_ENABLED: bool = True
+    # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生试运行；验收前默认关闭。
+    LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

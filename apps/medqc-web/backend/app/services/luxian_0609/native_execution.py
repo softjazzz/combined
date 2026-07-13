@@ -88,7 +88,10 @@ def _customer_state(final_state: str) -> str:
     return "uncertain" if final_state == "evaluation_unknown" else final_state
 
 
-def _direct_result(*, rule_id: str, final_state: str, finding_kind: str, reason_code: str) -> dict[str, Any]:
+def build_luxian_0609_native_result(
+    *, rule_id: str, final_state: str, finding_kind: str, reason_code: str
+) -> dict[str, Any]:
+    """构造不携带映射、坐标或原文的客户安全原生结果。"""
     status = _customer_state(final_state)
     message = {
         "compliant": "未发现该项缺失。",
@@ -122,7 +125,7 @@ def _direct_result(*, rule_id: str, final_state: str, finding_kind: str, reason_
 
 def _technical_results(rule_ids: Sequence[str], *, reason_code: str) -> NativeExecutionResult:
     results = tuple(
-        _direct_result(
+        build_luxian_0609_native_result(
             rule_id=rule_id,
             final_state="technical_error",
             finding_kind="technical_failure",
@@ -225,7 +228,7 @@ def execute_luxian_0609_native_rules(
     except Exception:
         return _technical_results(selected, reason_code="native_execution_failure")
     results = tuple(
-        _direct_result(
+        build_luxian_0609_native_result(
             rule_id=result.rule_id,
             final_state=result.final_state.value,
             finding_kind=result.finding_kind.value,

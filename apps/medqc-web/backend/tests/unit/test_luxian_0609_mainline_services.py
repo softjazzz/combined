@@ -23,6 +23,7 @@ from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609.native_execution import NativeExecutionResult
 from app.services.luxian_0609 import source_evidence_reader
+from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
@@ -45,6 +46,124 @@ def _wrapper(
         "dependency_type": dependency_type,
         "data_dependencies": data_dependencies or [],
     }
+
+
+@pytest.mark.asyncio
+async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(monkeypatch):
+    wrapper = _wrapper(
+        "LX0609-040",
+        name="四级手术术前多学科讨论",
+        mapped_rule_ids=["SC-083", "CL-108"],
+        trigger_condition="四级手术",
+    )
+    native_item = {
+        "rule_id": "LX0609-040",
+        "status": "compliant",
+        "is_compliant": True,
+        "findings": "未发现该项缺失。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 1.0,
+        "metadata": {
+            "execution_source": "lx0609_native",
+            "executor_type": "llm",
+            "reason_code": "mdt_llm_present",
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "total_tokens": 110,
+        },
+    }
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [wrapper])
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_mdt_rule",
+        lambda **_: _async_value(
+            NativeMdtExecutionResult(
+                native_item,
+                llm_call_count=1,
+                prompt_tokens=100,
+                completion_tokens=10,
+                total_tokens=110,
+                api_time=0.4,
+            )
+        ),
+    )
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=True,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[{"rule_id": "SC-083"}, {"rule_id": "CL-108"}],
+        visit_id="V",
+        medical_text="",
+        evidence_payload={},
+        llm_client=object(),
+        settings=settings,
+        institute_id="I",
+        patient_id="P",
+    )
+
+    assert executable == []
+    assert context.legacy_wrapper_rules == []
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-040"]
+    orchestrated = {"results": [], "total_tokens": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0}
+    luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated=orchestrated,
+        context=context,
+        visit_id="V",
+        model_name="",
+        evidence_payload={},
+    )
+    assert orchestrated["total_tokens"] == 110
+    assert orchestrated["total_prompt_tokens"] == 100
+    assert orchestrated["total_completion_tokens"] == 10
+    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-040"]
+    assert "mapped_rule_ids" not in repr(orchestrated["results"])
+
+
+async def _async_value(value):
+    return value
+
+
+@pytest.mark.asyncio
+async def test_native_040_flag_off_preserves_legacy_rules(monkeypatch):
+    wrapper = _wrapper(
+        "LX0609-040",
+        name="四级手术术前多学科讨论",
+        mapped_rule_ids=["SC-083", "CL-108"],
+        trigger_condition="四级手术",
+    )
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [wrapper])
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[{"rule_id": "SC-083"}, {"rule_id": "CL-108"}],
+        visit_id="V",
+        medical_text="",
+        evidence_payload={},
+        llm_client=None,
+        settings=settings,
+        institute_id="I",
+        patient_id="P",
+    )
+
+    assert [item["rule_id"] for item in executable] == ["SC-083", "CL-108"]
+    assert context.native_results == []
+    assert [item["rule_id"] for item in context.legacy_wrapper_rules] == ["LX0609-040"]
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,32 @@ SURGERY_TIME_FIELDS = (
     "surgery_end_datetime",
 )
 
+_NATIVE_SOURCE_FIELDS = {
+    "mr_surgery": (
+        "surgery_code",
+        "surgery_name",
+        "surgical_level",
+        "surgery_begin_datetime",
+    ),
+    "presurg_discussion": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+        "host_name",
+        "host_summary",
+        "discuss_staff",
+        "v2_schema",
+    ),
+    "consultation_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+        "v2_schema",
+    ),
+}
+
 
 class SourceEvidenceUnavailable(Exception):
     """受控来源或就诊绑定字段不可用。"""
@@ -76,6 +102,59 @@ def read_luxian_0609_runtime_source_rows(
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
 
     order_candidates = (*getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()), "document_id", "id", *SURGERY_TIME_FIELDS)
+    order_columns = [field for field in order_candidates if field in columns]
+    order_sql = ""
+    if order_columns:
+        order_sql = " ORDER BY " + ", ".join(
+            f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST" for field in order_columns
+        )
+    sql = (
+        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"{order_sql} LIMIT :limit_rows"
+    )
+    with engine.connect() as connection:
+        rows = connection.execute(
+            bundle_assembly.text(sql),
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "limit_rows": _source_limit(source_key),
+            },
+        ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def read_luxian_0609_native_source_rows(
+    *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
+) -> list[dict[str, Any]]:
+    """读取原生质控批准字段；字段白名单固定，调用方不能扩大正文范围。"""
+    approved_fields = _NATIVE_SOURCE_FIELDS.get(str(source_key or "").strip())
+    if approved_fields is None:
+        raise SourceEvidenceUnavailable()
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+    required = {"institute_id", "patient_id", "visit_id"}
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+
+    selected = [field for field in approved_fields if field in columns]
+    if source_key == "mr_surgery" and not {"surgical_level", "surgery_begin_datetime"}.issubset(selected):
+        raise SourceEvidenceUnavailable()
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
+    order_candidates = (
+        *getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()),
+        "document_id",
+        "surgery_begin_datetime",
+    )
     order_columns = [field for field in order_candidates if field in columns]
     order_sql = ""
     if order_columns:

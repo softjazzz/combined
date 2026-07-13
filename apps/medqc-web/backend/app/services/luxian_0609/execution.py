@@ -19,6 +19,12 @@ from .native_execution import (
     execute_luxian_0609_native_rules,
     native_rule_ids_from_wrappers,
 )
+from .native_mdt_execution import (
+    LEGACY_RULE_IDS as NATIVE_MDT_LEGACY_RULE_IDS,
+    RULE_ID as NATIVE_MDT_RULE_ID,
+    execute_luxian_0609_native_mdt_rule,
+    native_mdt_rule_selected,
+)
 from ..luxian_0609_trigger_gate import Luxian0609GateDecision
 
 
@@ -34,6 +40,11 @@ class Luxian0609ExecutionContext:
     prepared_rule_count: int = 0
     executable_rule_count: int = 0
     native_results: list[dict[str, Any]] = field(default_factory=list)
+    native_llm_call_count: int = 0
+    native_prompt_tokens: int = 0
+    native_completion_tokens: int = 0
+    native_total_tokens: int = 0
+    native_api_time: float = 0.0
 
 
 def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any) -> bool:
@@ -87,6 +98,7 @@ async def prepare_luxian_0609_execution(
     ]
     native_results: list[dict[str, Any]] = []
     native_rule_ids: tuple[str, ...] = ()
+    native_customer_rule_ids: set[str] = set()
     native_enabled = bool(getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False))
     if native_enabled:
         native_rule_ids = native_rule_ids_from_wrappers(
@@ -108,14 +120,46 @@ async def prepare_luxian_0609_execution(
                     reason_code="native_result_incomplete",
                 )
                 native_results = list(native_execution.results)
+            native_customer_rule_ids.update(native_rule_ids)
             native_raw_ids = {*NATIVE_MAPPED_RULE_IDS, *native_rule_ids}
             prepared_rules = [
                 rule for rule in prepared_rules
                 if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper() not in native_raw_ids
             ]
+    native_llm_call_count = 0
+    native_prompt_tokens = 0
+    native_completion_tokens = 0
+    native_total_tokens = 0
+    native_api_time = 0.0
+    if (
+        bool(getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False))
+        and native_mdt_rule_selected(wrapper_rules=wrapper_rules, prepared_rule_ids=prepared_rule_ids)
+    ):
+        native_mdt = await execute_luxian_0609_native_mdt_rule(
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            llm_client=llm_client,
+        )
+        native_results.append(native_mdt.result)
+        native_customer_rule_ids.add(NATIVE_MDT_RULE_ID)
+        native_llm_call_count = native_mdt.llm_call_count
+        native_prompt_tokens = native_mdt.prompt_tokens
+        native_completion_tokens = native_mdt.completion_tokens
+        native_total_tokens = native_mdt.total_tokens
+        native_api_time = native_mdt.api_time
+        native_mdt_raw_ids = {*NATIVE_MDT_LEGACY_RULE_IDS, NATIVE_MDT_RULE_ID}
+        prepared_rules = [
+            rule
+            for rule in prepared_rules
+            if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+            not in native_mdt_raw_ids
+        ]
     legacy_wrapper_rules = [
         wrapper for wrapper in wrapper_rules
-        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() not in native_rule_ids
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+        not in native_customer_rule_ids
     ]
     input_profile = build_luxian_0609_input_profile(
         visit_id=visit_id,
@@ -156,6 +200,11 @@ async def prepare_luxian_0609_execution(
         prepared_rule_count=prepared_rule_count,
         executable_rule_count=len(executable_rules),
         native_results=native_results,
+        native_llm_call_count=native_llm_call_count,
+        native_prompt_tokens=native_prompt_tokens,
+        native_completion_tokens=native_completion_tokens,
+        native_total_tokens=native_total_tokens,
+        native_api_time=native_api_time,
     )
 
 
@@ -192,6 +241,10 @@ def aggregate_luxian_0609_orchestrated_results(
         return orchestrated
 
     orchestrated.setdefault("results", [])
+    orchestrated["total_prompt_tokens"] = int(orchestrated.get("total_prompt_tokens") or 0) + context.native_prompt_tokens
+    orchestrated["total_completion_tokens"] = int(orchestrated.get("total_completion_tokens") or 0) + context.native_completion_tokens
+    orchestrated["total_tokens"] = int(orchestrated.get("total_tokens") or 0) + context.native_total_tokens
+    orchestrated["total_api_time"] = float(orchestrated.get("total_api_time") or 0.0) + context.native_api_time
     orchestrated["results"] = [*context.native_results, *list(orchestrated.get("results") or [])]
     orchestrated["results"].extend(
         evaluate_luxian_0609_programmatic_rules(
