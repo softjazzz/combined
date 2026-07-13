@@ -40,6 +40,17 @@ _COMPLETED_MDT_PATTERN = re.compile(
     r"MDT讨论[^。；]{0,160}(?:一致认为|可手术|结论)",
     re.IGNORECASE,
 )
+_ROSTER_SECTION_PATTERN = re.compile(r"主持人签名[\s\S]{0,700}?病史汇报")
+_ANESTHESIA_ROSTER_PATTERN = re.compile(
+    r"(?:麻醉科\s*[\u4e00-\u9fff·]{1,8}|[\u4e00-\u9fff·]{1,8}\s*麻醉)"
+    r"(?:主任医师|副主任医师|主治医师|住院医师|医师|医生)"
+)
+_PHYSICIAN_TITLE_PATTERN = re.compile(
+    r"主任医师|副主任医师|主治医师|住院医师|医师|医生"
+)
+_COMPLETED_DISCUSSION_PATTERN = re.compile(
+    r"手术指征|讨论意见|讨论结论|讨论后|同意(?:上述)?意见|手术方案"
+)
 _PROJECTION_PATTERN = re.compile(
     r"MDT|多学科|多科|联合会诊|联合讨论|术前讨论|参加人员|参与人员|讨论人员|"
     r"会诊医师|主持|讨论意见|讨论结论|一致认为|麻醉科|科室",
@@ -148,6 +159,19 @@ def _project_document(text: str) -> str:
     for match in list(_PROJECTION_PATTERN.finditer(text))[:12]:
         add(text[max(0, match.start() - 220) : min(len(text), match.end() + 480)])
     return "\n…\n".join(chunks)[:_MAX_DOCUMENT_CHARS]
+
+
+def _has_completed_multidepartment_roster(text: str) -> bool:
+    """识别术前讨论参会名单中的麻醉医师；不把麻醉方式或拟请会诊当参会。"""
+    roster_match = _ROSTER_SECTION_PATTERN.search(text)
+    if roster_match is None:
+        return False
+    roster = roster_match.group(0)
+    return bool(
+        _ANESTHESIA_ROSTER_PATTERN.search(roster)
+        and len(_PHYSICIAN_TITLE_PATTERN.findall(roster)) >= 2
+        and (_COMPLETED_DISCUSSION_PATTERN.search(text) or "术前讨论" in text)
+    )
 
 
 def _llm_text(response: Mapping[str, Any]) -> str:
@@ -329,22 +353,35 @@ async def execute_luxian_0609_native_mdt_rule(
         )
 
     # 只接受在每台四级手术前出现的完成态强证据；计划性“拟请多学科”不会命中。
-    for surgery in level4:
-        start = _parse_datetime(surgery.get("surgery_begin_datetime"))
-        if start and any(
-            record_time <= start and _COMPLETED_MDT_PATTERN.search(text)
-            for _, record_time, _, text in documents
-        ):
-            continue
-        break
-    else:
-        return NativeMdtExecutionResult(
-            _result(
-                status="compliant",
-                finding_kind="requirement_satisfied",
-                reason_code="completed_mdt_strong_fact",
+    strong_evidence_policies = (
+        (
+            "completed_mdt_strong_fact",
+            lambda source, text: bool(_COMPLETED_MDT_PATTERN.search(text)),
+        ),
+        (
+            "completed_multidepartment_roster",
+            lambda source, text: (
+                source == "presurg_discussion"
+                and _has_completed_multidepartment_roster(text)
+            ),
+        ),
+    )
+    for reason_code, predicate in strong_evidence_policies:
+        if all(
+            (start := _parse_datetime(surgery.get("surgery_begin_datetime")))
+            and any(
+                record_time <= start and predicate(source, text)
+                for _, record_time, source, text in documents
             )
-        )
+            for surgery in level4
+        ):
+            return NativeMdtExecutionResult(
+                _result(
+                    status="compliant",
+                    finding_kind="requirement_satisfied",
+                    reason_code=reason_code,
+                )
+            )
 
     earliest_level4 = min(
         _parse_datetime(row.get("surgery_begin_datetime")) for row in level4

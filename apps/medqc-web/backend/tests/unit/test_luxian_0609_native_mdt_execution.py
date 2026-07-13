@@ -81,6 +81,100 @@ async def test_completed_mdt_strong_fact_short_circuits_llm(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_fact(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "mr_surgery": [
+                    {
+                        "surgery_name": "测试手术",
+                        "surgical_level": "四级",
+                        "surgery_begin_datetime": "2026-01-02T09:00:00",
+                    }
+                ],
+                "presurg_discussion": [
+                    {
+                        "record_time": "2026-01-01T09:00:00",
+                        "record_content": (
+                            "术前讨论。主持人签名：甲主任医师。"
+                            "乙主治医师、丙住院医师、丁麻醉医师参加。"
+                            "病史汇报：诊断明确，手术指征具备，讨论后同意手术。"
+                        ),
+                    }
+                ],
+                "consultation_record": [],
+            }
+        ),
+    )
+    llm = _LLM("absent")
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+
+    assert execution.result["status"] == "compliant"
+    assert (
+        execution.result["metadata"]["reason_code"]
+        == "completed_multidepartment_roster"
+    )
+    assert execution.llm_call_count == 0
+    assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "mr_surgery": [
+                    {
+                        "surgical_level": "四级",
+                        "surgery_begin_datetime": "2026-01-02T09:00:00",
+                    }
+                ],
+                "presurg_discussion": [
+                    {
+                        "record_time": "2026-01-01T09:00:00",
+                        "record_content": (
+                            "术前讨论。主持人签名：甲主任医师。"
+                            "乙主治医师、丙住院医师参加。"
+                            "病史汇报：手术指征具备，拟采用全身麻醉方式。"
+                        ),
+                    }
+                ],
+                "consultation_record": [],
+            }
+        ),
+    )
+    llm = _LLM("absent")
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+
+    assert execution.result["status"] == "non_compliant"
+    assert execution.result["metadata"]["reason_code"] == "mdt_llm_absent"
+    assert execution.llm_call_count == 1
+    assert llm.calls == 1
+
+
+@pytest.mark.asyncio
 async def test_ordinary_preop_consult_uses_one_trimmed_llm_call(monkeypatch):
     monkeypatch.setattr(
         native_mdt_execution,
