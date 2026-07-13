@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from ...core.settings import get_settings
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
+from .native_execution import execute_luxian_0609_native_rules
 
 
 _PLAN_SCHEMA = "planner-v1"
@@ -66,6 +67,30 @@ def _summary(
     return result
 
 
+def _native_summary(*, planned_rule_ids: tuple[str, ...], planner_fingerprint: str, native: Any, elapsed_ms: int) -> dict[str, Any]:
+    if str(getattr(native, "terminal_reason_code", "") or "") in {
+        "native_execution_failure",
+        "native_result_incomplete",
+    }:
+        return _summary("shadow_error", elapsed_ms=elapsed_ms)
+    result = _summary(
+        "completed",
+        planned_rule_ids=planned_rule_ids,
+        planner_fingerprint=planner_fingerprint,
+        elapsed_ms=elapsed_ms,
+    )
+    counts = {name: 0 for name in ("compliant", "non_compliant", "not_applicable", "data_gap", "technical_error", "evaluation_unknown")}
+    for item in native.results:
+        status = str(item.get("status") or "")
+        if status == "uncertain":
+            status = "evaluation_unknown"
+        if status in counts:
+            counts[status] += 1
+    result["execution_fingerprint"] = native.execution_fingerprint
+    result["final_state_counts"] = {f"{name}_count": value for name, value in counts.items()}
+    return result
+
+
 def run_luxian_0609_runtime_shadow(
     *,
     visit_ref: str,
@@ -103,14 +128,19 @@ def run_luxian_0609_runtime_shadow(
         if not planned:
             return _summary("skipped_no_effective_rules", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
         if source_query_observations is None and extraction_inputs is None and institute_id and patient_id and visit_ref:
-            provided = runtime_shadow_input_provider.provide_luxian_0609_runtime_shadow_inputs(
-                plan=plan, institute_id=institute_id, patient_id=patient_id,
-                visit_id=visit_ref, source_schema=source_schema,
+            native = execute_luxian_0609_native_rules(
+                rule_ids=planned,
+                visit_id=visit_ref,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                source_schema=source_schema,
             )
-            source_query_observations = provided.source_query_observations
-            extraction_inputs = provided.extraction_inputs
-            target_qualifications = provided.target_qualifications
-            evidence_payload = provided.evidence_payload
+            return _native_summary(
+                planned_rule_ids=planned,
+                planner_fingerprint=plan_fingerprint,
+                native=native,
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+            )
         qualification_required = any(rule_id in ("LX0609-029", "LX0609-032") for rule_id in planned)
         if source_query_observations is None or extraction_inputs is None or (qualification_required and target_qualifications is None):
             return _summary("inputs_unavailable", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)

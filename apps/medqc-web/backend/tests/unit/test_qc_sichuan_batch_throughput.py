@@ -206,6 +206,7 @@ class _IdempotentWorkspaceStub(_WorkspaceStub):
 class _ServiceStub:
     def __init__(self, status_by_rule: Optional[Dict[str, str]] = None) -> None:
         self.evaluate_calls = 0
+        self.evaluate_document_args: List[Dict[str, Any]] = []
         self.evaluate_rule_for_visit_calls = 0
         self.evaluate_rule_for_visit_args: List[Dict[str, Any]] = []
         self.status_by_rule = {str(k).upper(): str(v).lower() for k, v in (status_by_rule or {}).items()}
@@ -227,9 +228,10 @@ class _ServiceStub:
         content: str,
         document_type: str = "病程记录",
         rule_ids: Optional[List[str]] = None,
-        **_: Any,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         self.evaluate_calls += 1
+        self.evaluate_document_args.append(dict(kwargs))
         evals: List[Dict[str, Any]] = []
         for rid in list(rule_ids or []):
             normalized_rid = str(rid).upper()
@@ -1658,7 +1660,9 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
     workspace.hydrate_records_with_medical_text = lambda rows: [{**row, "institute_id": "i", "patient_id": "p", "medical_text": "ignored"} for row in rows]  # type: ignore[assignment]
     service = _ServiceStub()
-    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+    service_calls: List[Dict[str, Any]] = []
+    async def _evaluate_document_with_rules(**kwargs: Any) -> Dict[str, Any]:
+        service_calls.append(dict(kwargs))
         return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
     service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
@@ -1674,3 +1678,59 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     assert workspace.items
     summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert summary and summary["disposition"] == "completed" and summary["final_state_counts"]["compliant_count"] == 1 and summary["llm_total_tokens"] == 0
+    assert len(service_calls) == 2
+    assert {
+        (
+            call["source_institute_id"],
+            call["source_patient_id"],
+            call["source_visit_id"],
+            call["source_schema"],
+        )
+        for call in service_calls
+    } == {("i", "p", "visit-001", None), ("i", "p", "visit-002", None)}
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_long_text_fallback_preserves_native_source_coordinates(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.hydrate_records_with_medical_text = lambda rows: [
+        {
+            **row,
+            "institute_id": "i",
+            "patient_id": "p",
+            "medical_text": "fallback",
+        }
+        for row in rows
+    ]  # type: ignore[assignment]
+    service = _ServiceStub()
+
+    async def _get_qc_service():
+        return service
+
+    async def _fail_bundle(**_: Any) -> Dict[str, Any]:
+        raise RuntimeError("controlled bundle failure")
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fail_bundle)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False,
+            LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False,
+        ),
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert service.evaluate_calls == 2
+    assert {
+        (
+            call["source_institute_id"],
+            call["source_patient_id"],
+            call["source_visit_id"],
+            call["source_schema"],
+        )
+        for call in service.evaluate_document_args
+    } == {("i", "p", "visit-001", None), ("i", "p", "visit-002", None)}

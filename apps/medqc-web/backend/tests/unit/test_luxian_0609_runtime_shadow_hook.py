@@ -146,3 +146,25 @@ def test_exception_is_isolated_without_echo(monkeypatch):
     monkeypatch.setattr(runtime_shadow_hook.runtime_shadow_assembler, "assemble_luxian_0609_runtime_shadow_inputs", lambda **_: (_ for _ in ()).throw(RuntimeError("Bearer_secret")))
     result = _call(source_query_observations=(), extraction_inputs=(), settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
     assert result["disposition"] == "shadow_error" and "Bearer_secret" not in str(result)
+
+
+def test_live_native_infrastructure_failure_remains_shadow_error(monkeypatch):
+    monkeypatch.setattr(
+        runtime_shadow_hook,
+        "execute_luxian_0609_native_rules",
+        lambda **_: SimpleNamespace(
+            results=(),
+            planned_rule_ids=("LX0609-030",),
+            execution_fingerprint="",
+            terminal_reason_code="native_execution_failure",
+        ),
+    )
+
+    result = _call(
+        institute_id="i",
+        patient_id="p",
+        settings=SimpleNamespace(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
+    )
+
+    assert result["disposition"] == "shadow_error"
+    assert result["llm_total_tokens"] == 0

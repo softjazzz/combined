@@ -2494,6 +2494,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_refine_summary: Dict[str, Any] = {}
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 bundle_scene = ""
+                bundle_payload: Optional[Dict[str, Any]] = None
                 runtime_shadow_summary: Optional[Dict[str, Any]] = None
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
@@ -2571,7 +2572,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     }
 
                 if is_programmatic_mode and not (use_luxian_customer_results and not active_rule_ids):
-                    bundle_payload: Optional[Dict[str, Any]] = None
+                    bundle_payload = None
                     attempted_scenes: List[str] = []
                     if institute_id and patient_id and visit_id:
                         record_scope = str(record.get("scope") or "").strip().lower()
@@ -2641,6 +2642,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
                         rule_set_key=rule_set_key,
+                        source_institute_id=institute_id,
+                        source_patient_id=patient_id,
+                        source_visit_id=visit_id,
+                        source_schema=(
+                            str((bundle_payload or {}).get("source_schema") or "").strip()
+                            or None
+                        ),
                         cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})
@@ -2786,6 +2794,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
                         rule_set_key=rule_set_key,
+                        source_institute_id=institute_id,
+                        source_patient_id=patient_id,
+                        source_visit_id=visit_id,
+                        source_schema=(
+                            str((bundle_payload or {}).get("source_schema") or "").strip()
+                            or None
+                        ),
                         cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})

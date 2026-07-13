@@ -1931,6 +1931,39 @@ def _copy_customer_fields(
     return result
 
 
+def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str, Any]) -> dict[str, Any]:
+    """原生确定性结果不携带旧映射诊断。"""
+    wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
+    status = _status(selected)
+    if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain", "technical_error"}:
+        status = "technical_error"
+    selected_metadata = _strip_sensitive(dict(selected.get("metadata") or {}))
+    metadata = {
+        key: selected_metadata.get(key)
+        for key in ("execution_source", "executor_type", "finding_kind", "source_state", "reason_code", "prompt_tokens", "completion_tokens", "total_tokens")
+        if key in selected_metadata
+    }
+    metadata["execution_source"] = "lx0609_native"
+    metadata["aggregation_source"] = "native_programmatic"
+    metadata["customer_rule_id"] = wrapper_id
+    return {
+        **_strip_sensitive(selected),
+        "rule_id": wrapper_id,
+        "rule_code": wrapper_id,
+        "rule_name": str(wrapper.get("name") or wrapper.get("rule_name") or wrapper_id),
+        "status": status,
+        "is_compliant": status in {"compliant", "not_applicable"},
+        "metadata": metadata,
+        "diagnostic_trace": {},
+        "source_rule_id": "",
+        "source_status": str(metadata.get("source_state") or ""),
+        "source_conclusion": "",
+        "source_evidence": "",
+        "trigger_decision": {},
+        "postprocess_reason": str(metadata.get("reason_code") or ""),
+    }
+
+
 def aggregate_luxian_0609_results(
     *,
     wrapper_rules: list[dict[str, Any]],
@@ -1988,6 +2021,31 @@ def aggregate_luxian_0609_results(
                 reverse=True,
             )
             selected = direct_results[0]
+            if str((selected.get("metadata") or {}).get("execution_source") or "") == "lx0609_native":
+                result = _copy_native_customer_fields(wrapper=wrapper, selected=selected)
+                native_audit_context = {
+                    key: value
+                    for key, value in dict(audit_context or {}).items()
+                    if key not in {"visit_id", "patient_id", "evidence_payload"}
+                }
+                result = apply_luxian_0609_result_schema(
+                    result=result,
+                    wrapper_rule=wrapper,
+                    gate_decision=decision,
+                    audit_context=native_audit_context,
+                )
+                native_audit = dict(result.get("audit") or {})
+                for internal_key in (
+                    "visit_id",
+                    "patient_id",
+                    "model_name",
+                    "prompt_version",
+                    "error_message",
+                ):
+                    native_audit.pop(internal_key, None)
+                result["audit"] = native_audit
+                customer_results.append(result)
+                continue
             selected = _guard_copy_rule_without_first_course(
                 wrapper_id=wrapper_id,
                 selected=selected,

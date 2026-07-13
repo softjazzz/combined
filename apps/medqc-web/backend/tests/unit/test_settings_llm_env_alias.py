@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from pydantic import ValidationError
 
 from app.core.settings import Settings
@@ -18,6 +18,7 @@ LLM_ENV_KEYS = [
     "SICHUAN_API_KEY",
     "SICHUAN_MODEL",
     "SICHUAN_TIMEOUT_SECONDS",
+    "LUXIAN_0609_NATIVE_EXECUTION_ENABLED",
 ]
 
 
@@ -94,3 +95,12 @@ def test_llm_env_source_mixed(monkeypatch):
     settings = Settings(_env_file=None)
 
     assert settings.llm_env_source() == "mixed"
+
+
+def test_luxian_native_execution_defaults_on_and_can_be_disabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXECUTION_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_EXECUTION_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXECUTION_ENABLED is False

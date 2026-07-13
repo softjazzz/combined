@@ -21,6 +21,7 @@ from app.services.luxian_0609_trigger_gate import (
 )
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609.native_execution import NativeExecutionResult
 from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
@@ -44,6 +45,285 @@ def _wrapper(
         "dependency_type": dependency_type,
         "data_dependencies": data_dependencies or [],
     }
+
+
+@pytest.mark.asyncio
+async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_rules(monkeypatch):
+    """RED：原生开关开启后，正式 bundle 入口不得再把六条旧映射规则交给分派器。"""
+    wrappers = [
+        _wrapper("LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"),
+        _wrapper("LX0609-030", name="手术记录", mapped_rule_ids=["LX-025", "SC-095"], trigger_condition="手术患者"),
+        _wrapper("LX0609-032", name="手术安全核查", mapped_rule_ids=["SC-102", "LXE-33"], trigger_condition="手术患者"),
+    ]
+    legacy_raw_ids = ["CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33"]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+    )
+    dispatched: list[list[str]] = []
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        return {"results": [], "total_tokens": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0}
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        lambda **kwargs: NativeExecutionResult(
+            tuple(
+                {
+                    "rule_id": rule_id, "status": "technical_error", "is_compliant": False,
+                    "findings": "自动判定暂不可用，建议稍后重试。", "evidence": "", "suggestion": "请稍后重试。", "confidence": 0.0,
+                    "metadata": {"execution_source": "lx0609_native", "executor_type": "program", "finding_kind": "technical_failure", "source_state": "technical_error", "reason_code": "test"},
+                }
+                for rule_id in kwargs["rule_ids"]
+            ),
+            tuple(kwargs["rule_ids"]),
+        ),
+    )
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "get_rule_by_id", lambda rule_id: {"rule_id": rule_id, "rule_name": rule_id})
+    monkeypatch.setattr(service, "_select_bundle_document_for_rule", lambda **kwargs: {"id": "safe-doc", "document_type": "病程记录", "content": "安全测试文书"})
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running", "institute_id": "inst-native-red", "patient_id": "patient-native-red", "visit_id": "visit-native-red",
+            "structured_context": {"documents": {"first_course_record": [{"content": "安全测试文书"}]}}, "text_available": True,
+        },
+        rule_ids=legacy_raw_ids,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert dispatched == []
+    assert "luxian_0609_input_profile" not in result
+    for item in result["evaluation_results"]:
+        assert not {
+            "visit_id",
+            "patient_id",
+            "model_name",
+            "prompt_version",
+            "error_message",
+        }.intersection(item["audit"])
+
+
+@pytest.mark.asyncio
+async def test_native_flag_off_preserves_legacy_rules_and_never_calls_native(monkeypatch):
+    wrapper = _wrapper(
+        "LX0609-029",
+        name="术前小结",
+        mapped_rule_ids=["CL-181", "SC-081"],
+        trigger_condition="手术患者",
+    )
+    raw_rules = [{"rule_id": "CL-181"}, {"rule_id": "SC-081"}]
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [wrapper])
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        lambda **_: (_ for _ in ()).throw(AssertionError("native must remain off")),
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=raw_rules,
+        visit_id="visit-native-off",
+        medical_text="",
+        evidence_payload={},
+        llm_client=None,
+        settings=SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+            LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=False,
+        ),
+        institute_id="i",
+        patient_id="p",
+    )
+
+    assert executable == raw_rules
+    assert context.native_results == []
+    assert context.legacy_wrapper_rules == [wrapper]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_document_forwards_native_source_coordinates(monkeypatch):
+    captured = {}
+    service = SichuanQCService()
+
+    async def _resolve_rules(**_):
+        return []
+
+    async def _evaluate_with_rules(**kwargs):
+        captured.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(service, "_resolve_rules_for_document", _resolve_rules)
+    monkeypatch.setattr(service, "evaluate_document_with_rules", _evaluate_with_rules)
+
+    await service.evaluate_document(
+        document_id="record-native-fallback",
+        content="",
+        rule_ids=[],
+        source_institute_id="i",
+        source_patient_id="p",
+        source_visit_id="visit-native-fallback",
+        source_schema="cdm",
+    )
+
+    assert (
+        captured["source_institute_id"],
+        captured["source_patient_id"],
+        captured["source_visit_id"],
+        captured["source_schema"],
+    ) == ("i", "p", "visit-native-fallback", "cdm")
+
+
+@pytest.mark.asyncio
+async def test_incomplete_native_result_fails_closed_without_mapped_fallback(monkeypatch):
+    wrapper = _wrapper(
+        "LX0609-029",
+        name="术前小结",
+        mapped_rule_ids=["CL-181", "SC-081"],
+        trigger_condition="手术患者",
+    )
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [wrapper])
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        lambda **_: NativeExecutionResult((), ("LX0609-029",), terminal_reason_code="native_result_incomplete"),
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[{"rule_id": "CL-181"}, {"rule_id": "SC-081"}],
+        visit_id="visit-native-incomplete",
+        medical_text="",
+        evidence_payload={},
+        llm_client=None,
+        settings=SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+            LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        ),
+        institute_id="i",
+        patient_id="p",
+    )
+
+    assert executable == []
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-029"]
+    assert context.native_results[0]["status"] == "technical_error"
+
+
+@pytest.mark.asyncio
+async def test_mixed_native_and_legacy_partition_executes_once_and_keeps_catalog_order(monkeypatch):
+    native_wrapper = _wrapper(
+        "LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
+    )
+    legacy_wrapper = _wrapper(
+        "LX0609-033", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
+    )
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [native_wrapper, legacy_wrapper])
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        lambda **_: NativeExecutionResult(
+            ({
+                "rule_id": "LX0609-029", "status": "compliant", "is_compliant": True,
+                "findings": "未发现该项缺失。", "evidence": "", "suggestion": "", "confidence": 1.0,
+                "metadata": {
+                    "execution_source": "lx0609_native", "executor_type": "program",
+                    "finding_kind": "requirement_satisfied", "source_state": "compliant",
+                    "reason_code": "native_deterministic", "prompt_tokens": 0,
+                    "completion_tokens": 0, "total_tokens": 0,
+                },
+            },),
+            ("LX0609-029",),
+        ),
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[{"rule_id": rid} for rid in ("CL-181", "SC-081", "SC-087", "LXE-31")],
+        visit_id="visit-native-mixed",
+        medical_text="",
+        evidence_payload={},
+        llm_client=None,
+        settings=SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+            LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        ),
+        institute_id="i",
+        patient_id="p",
+    )
+    assert [rule["rule_id"] for rule in executable] == ["SC-087", "LXE-31"]
+    assert context.legacy_wrapper_rules == [legacy_wrapper]
+
+    orchestrated = {
+        "results": [{"rule_id": "SC-087", "status": "compliant", "is_compliant": True, "confidence": 1.0}],
+        "total_tokens": 7,
+    }
+    luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated=orchestrated,
+        context=context,
+        visit_id="visit-native-mixed",
+        model_name="test-model",
+        evidence_payload={},
+    )
+    assert [item["rule_id"] for item in orchestrated["results"]] == ["LX0609-029", "LX0609-033"]
+    assert orchestrated["total_tokens"] == 7
+    assert "luxian_0609_input_profile" not in orchestrated
+
+
+@pytest.mark.asyncio
+async def test_generic_gate_receives_only_legacy_wrappers_when_native_enabled(monkeypatch):
+    native_wrapper = _wrapper(
+        "LX0609-029", name="术前小结", mapped_rule_ids=["CL-181", "SC-081"], trigger_condition="手术患者"
+    )
+    legacy_wrapper = _wrapper(
+        "LX0609-033", name="手术同意书", mapped_rule_ids=["SC-087", "LXE-31"], trigger_condition="手术患者"
+    )
+    captured: list[list[str]] = []
+
+    async def _gate(**kwargs):
+        captured.append([item["rule_id"] for item in kwargs["rules"]])
+        return {}
+
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [native_wrapper, legacy_wrapper])
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        lambda **_: luxian_execution.build_luxian_0609_native_technical_results(("LX0609-029",)),
+    )
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _gate)
+    monkeypatch.setattr(luxian_execution, "filter_executable_rules_by_gate", lambda **kwargs: kwargs["executable_rules"])
+
+    await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[{"rule_id": rid} for rid in ("CL-181", "SC-081", "SC-087", "LXE-31")],
+        visit_id="visit-native-gate",
+        medical_text="",
+        evidence_payload={},
+        llm_client=None,
+        settings=SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+            LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=True,
+            LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        ),
+        institute_id="i",
+        patient_id="p",
+    )
+    assert captured == [["LX0609-033"]]
 
 
 @pytest.mark.asyncio

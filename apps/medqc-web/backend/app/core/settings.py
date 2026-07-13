@@ -124,6 +124,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED: bool = True
     LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED: bool = True
     LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED: bool = True
+    # 029/030/032 使用原生确定性执行；关闭后完整回退旧映射链。
+    LUXIAN_0609_NATIVE_EXECUTION_ENABLED: bool = True
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

@@ -1116,6 +1116,10 @@ class SichuanQCService:
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
         rule_set_key: str = "",
+        source_institute_id: str = "",
+        source_patient_id: str = "",
+        source_visit_id: str = "",
+        source_schema: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         raise_if_cancelled(cancellation_check)
@@ -1147,11 +1151,14 @@ class SichuanQCService:
         executable_rules, luxian_context = await prepare_luxian_0609_execution(
             rule_set_key=normalized_rule_set_key,
             prepared_rules=prepared_rules,
-            visit_id=str(document_id or ""),
+            visit_id=str(source_visit_id or document_id or ""),
             medical_text=content,
             evidence_payload=evidence_payload,
             llm_client=self.adjudicator_client,
             settings=settings,
+            institute_id=str(source_institute_id or ""),
+            patient_id=str(source_patient_id or ""),
+            source_schema=source_schema,
         )
 
         orchestrated = await self.rule_orchestrator.evaluate_rules(
@@ -4337,6 +4344,10 @@ class SichuanQCService:
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
         rule_set_key: str = "",
+        source_institute_id: str = "",
+        source_patient_id: str = "",
+        source_visit_id: str = "",
+        source_schema: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -4379,6 +4390,10 @@ class SichuanQCService:
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
             rule_set_key=rule_set_key,
+            source_institute_id=source_institute_id,
+            source_patient_id=source_patient_id,
+            source_visit_id=source_visit_id,
+            source_schema=source_schema,
             cancellation_check=cancellation_check,
         )
 
@@ -4399,6 +4414,10 @@ class SichuanQCService:
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
         rule_set_key: str = "",
+        source_institute_id: str = "",
+        source_patient_id: str = "",
+        source_visit_id: str = "",
+        source_schema: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
@@ -4418,6 +4437,10 @@ class SichuanQCService:
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
             rule_set_key=rule_set_key,
+            source_institute_id=source_institute_id,
+            source_patient_id=source_patient_id,
+            source_visit_id=source_visit_id,
+            source_schema=source_schema,
             cancellation_check=cancellation_check,
         )
         return self._build_document_evaluation_result(
@@ -4492,9 +4515,9 @@ class SichuanQCService:
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
         ):
             source_gate_decisions: Dict[str, Any] = {}
+            raw_source_schema = (bundle or {}).get("source_schema")
+            source_schema = str(raw_source_schema).strip() if isinstance(raw_source_schema, str) else None
             if settings.LUXIAN_0609_TRIGGER_GATE_ENABLED:
-                raw_source_schema = (bundle or {}).get("source_schema")
-                source_schema = str(raw_source_schema).strip() if isinstance(raw_source_schema, str) else None
                 source_gate_decisions = _build_luxian_0609_033_live_source_decisions(
                     bundle=bundle,
                     selected_rules=selected_rules,
@@ -4513,6 +4536,9 @@ class SichuanQCService:
                 llm_client=self.adjudicator_client,
                 settings=settings,
                 source_gate_decisions=source_gate_decisions,
+                institute_id=str((bundle or {}).get("institute_id") or ""),
+                patient_id=str((bundle or {}).get("patient_id") or ""),
+                source_schema=source_schema or None,
             )
 
         if not execution_rules and luxian_context is not None:

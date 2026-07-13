@@ -13,6 +13,12 @@ from .customer_rule_package import (
     summarize_luxian_0609_results,
 )
 from .input_builder import build_luxian_0609_input_profile
+from .native_execution import (
+    NATIVE_MAPPED_RULE_IDS,
+    build_luxian_0609_native_technical_results,
+    execute_luxian_0609_native_rules,
+    native_rule_ids_from_wrappers,
+)
 from ..luxian_0609_trigger_gate import Luxian0609GateDecision
 
 
@@ -22,10 +28,12 @@ class Luxian0609ExecutionContext:
     trigger_gate_enabled: bool = False
     evidence_formatter_enabled: bool = False
     wrapper_rules: list[dict[str, Any]] = field(default_factory=list)
+    legacy_wrapper_rules: list[dict[str, Any]] = field(default_factory=list)
     gate_decisions: dict[str, Any] = field(default_factory=dict)
     input_profile: dict[str, Any] = field(default_factory=dict)
     prepared_rule_count: int = 0
     executable_rule_count: int = 0
+    native_results: list[dict[str, Any]] = field(default_factory=list)
 
 
 def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any) -> bool:
@@ -45,6 +53,9 @@ async def prepare_luxian_0609_execution(
     llm_client: Any,
     settings: Any,
     source_gate_decisions: Mapping[str, Luxian0609GateDecision] | None = None,
+    institute_id: str = "",
+    patient_id: str = "",
+    source_schema: str | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
 
@@ -59,6 +70,7 @@ async def prepare_luxian_0609_execution(
             executable_rule_count=len(prepared_rules),
         )
 
+    prepared_rule_count = len(prepared_rules)
     prepared_rule_ids = {
         str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
         for rule in prepared_rules
@@ -72,6 +84,38 @@ async def prepare_luxian_0609_execution(
             str(mapped_rule_id or "").strip().upper()
             for mapped_rule_id in list(wrapper.get("mapped_rule_ids") or [])
         )
+    ]
+    native_results: list[dict[str, Any]] = []
+    native_rule_ids: tuple[str, ...] = ()
+    native_enabled = bool(getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False))
+    if native_enabled:
+        native_rule_ids = native_rule_ids_from_wrappers(
+            wrapper_rules=wrapper_rules,
+            prepared_rule_ids=prepared_rule_ids,
+        )
+        if native_rule_ids:
+            native_execution = execute_luxian_0609_native_rules(
+                rule_ids=native_rule_ids,
+                visit_id=str(visit_id or ""),
+                institute_id=str(institute_id or ""),
+                patient_id=str(patient_id or ""),
+                source_schema=source_schema,
+            )
+            native_results = list(native_execution.results)
+            if tuple(str(item.get("rule_id") or "") for item in native_results) != native_rule_ids:
+                native_execution = build_luxian_0609_native_technical_results(
+                    native_rule_ids,
+                    reason_code="native_result_incomplete",
+                )
+                native_results = list(native_execution.results)
+            native_raw_ids = {*NATIVE_MAPPED_RULE_IDS, *native_rule_ids}
+            prepared_rules = [
+                rule for rule in prepared_rules
+                if str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper() not in native_raw_ids
+            ]
+    legacy_wrapper_rules = [
+        wrapper for wrapper in wrapper_rules
+        if str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper() not in native_rule_ids
     ]
     input_profile = build_luxian_0609_input_profile(
         visit_id=visit_id,
@@ -87,7 +131,7 @@ async def prepare_luxian_0609_execution(
     executable_rules = prepared_rules
     if trigger_gate_enabled:
         generic_decisions = await evaluate_luxian_0609_trigger_gates_with_llm(
-            rules=wrapper_rules,
+            rules=legacy_wrapper_rules,
             visit_id=str(visit_id or ""),
             medical_text=medical_text,
             evidence_payload=evidence_payload,
@@ -108,8 +152,10 @@ async def prepare_luxian_0609_execution(
         wrapper_rules=wrapper_rules,
         gate_decisions=gate_decisions,
         input_profile=input_profile,
-        prepared_rule_count=len(prepared_rules),
+        legacy_wrapper_rules=legacy_wrapper_rules,
+        prepared_rule_count=prepared_rule_count,
         executable_rule_count=len(executable_rules),
+        native_results=native_results,
     )
 
 
@@ -124,7 +170,7 @@ def attach_luxian_0609_execution_metadata(
     orchestrated["rule_set_key"] = str(rule_set_key or "").strip()
     orchestrated["luxian_0609_execution_rule_count"] = context.prepared_rule_count
     orchestrated["luxian_0609_executed_rule_count"] = context.executable_rule_count
-    if context.input_profile:
+    if context.input_profile and not context.native_results:
         orchestrated["luxian_0609_input_profile"] = context.input_profile
     if context.trigger_gate_enabled:
         orchestrated["luxian_0609_trigger_gate"] = {
@@ -146,9 +192,10 @@ def aggregate_luxian_0609_orchestrated_results(
         return orchestrated
 
     orchestrated.setdefault("results", [])
+    orchestrated["results"] = [*context.native_results, *list(orchestrated.get("results") or [])]
     orchestrated["results"].extend(
         evaluate_luxian_0609_programmatic_rules(
-            wrapper_rules=context.wrapper_rules,
+            wrapper_rules=context.legacy_wrapper_rules,
             evidence_payload=evidence_payload,
         )
     )
@@ -176,7 +223,7 @@ def aggregate_luxian_0609_orchestrated_results(
         if execution_rule_count is not None
         else context.prepared_rule_count
     )
-    if context.input_profile:
+    if context.input_profile and not context.native_results:
         orchestrated["luxian_0609_input_profile"] = context.input_profile
     orchestrated["luxian_0609_summary"] = summarize_luxian_0609_results(customer_results)
     return orchestrated

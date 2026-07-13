@@ -46,6 +46,56 @@ def test_only_gate_attested_report_can_reach_final_mapping():
     assert aggregate_luxian_0609_programmatic_findings_shadow(gate_report=gate, finding_report=valid, expected_finding_schema_version="finding-v1", expected_finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", created_at=CREATED).results
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_is_compliant"),
+    [
+        ("compliant", True),
+        ("non_compliant", False),
+        ("not_applicable", True),
+        ("data_gap", False),
+        ("technical_error", False),
+        ("uncertain", False),
+    ],
+)
+def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostics(
+    status, expected_is_compliant
+):
+    wrapper = {
+        "rule_id": "LX0609-029",
+        "name": "术前小结",
+        "mapped_rule_ids": ["CL-181", "SC-081"],
+        "primary_execution_rule_id": "CL-181",
+    }
+    result = __import__("app.services.luxian_0609_result_aggregator", fromlist=["aggregate_luxian_0609_results"]).aggregate_luxian_0609_results(
+        wrapper_rules=[wrapper],
+        execution_results=[{
+            "rule_id": "LX0609-029", "status": status, "is_compliant": expected_is_compliant,
+            "findings": "符合要求", "evidence": "", "suggestion": "", "confidence": 1.0,
+            "metadata": {"execution_source": "lx0609_native", "finding_kind": "requirement_satisfied"},
+        }],
+        format_evidence=False,
+        audit_context={
+            "visit_id": "RAW_VISIT_COORD_029",
+            "patient_id": "RAW_PATIENT_COORD_029",
+            "evidence_payload": {"medical_text": "RAW_BODY_029"},
+        },
+    )[0]
+    metadata = result["metadata"]
+    assert metadata["execution_source"] == "lx0609_native"
+    assert metadata["aggregation_source"] == "native_programmatic"
+    assert not {"mapped_rule_ids", "primary_execution_rule_id", "selected_execution_rule_id", "mapped_result_count"}.intersection(metadata)
+    assert result["status"] == status
+    assert result["is_compliant"] is expected_is_compliant
+    assert not {"visit_id", "patient_id", "model_name", "prompt_version", "error_message"}.intersection(
+        result["audit"]
+    )
+    serialized = repr(result).lower()
+    assert all(marker not in serialized for marker in (
+        "cl-181", "sc-081", "mapped execution", "raw_text", "raw_response",
+        "raw_visit_coord_029", "raw_patient_coord_029", "raw_body_029", "prompt_version",
+    ))
+
+
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
 def test_attestation_rejects_every_safe_provenance_tamper(field):
     gate, finding = _pair(FindingKind.REQUIREMENT_SATISFIED)
