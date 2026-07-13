@@ -519,6 +519,29 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     assert result["token_usage"]["total_tokens"] == 0
 
 
+def test_surgery_inform_consent_alias_is_isolated_to_sc087():
+    service = SichuanQCService()
+    bundle_documents = [
+        {
+            "id": "synthetic-consent",
+            "document_type": "病程记录",
+            "source_table": "surgery_inform_consent",
+            "content": "synthetic-consent-document-content",
+        }
+    ]
+    matched_rule_ids = {
+        rule_id
+        for rule_id in ("SC-087", "SC-090", "SC-134")
+        if service._select_bundle_document_for_rule(
+            rule=service.get_rule_by_id(rule_id),
+            bundle_documents=bundle_documents,
+        )
+        is not None
+    }
+
+    assert matched_rule_ids == {"SC-087"}
+
+
 def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
     rules = [
         _wrapper(

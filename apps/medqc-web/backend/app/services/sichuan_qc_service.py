@@ -1950,12 +1950,16 @@ class SichuanQCService:
             return next((dict(item) for item in bundle_documents if str(item.get("content") or "").strip()), None)
 
         docs_by_code: Dict[str, List[Dict[str, Any]]] = {}
+        normalized_rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
         for item in bundle_documents:
             doc_code = self._canonical_doc_type(item.get("document_type") or item.get("source_table"))
             normalized_item = dict(item)
             docs_by_code.setdefault(doc_code, []).append(normalized_item)
             source_table = str(item.get("source_table") or "").strip().lower()
-            if source_table in {"surgery_inform_consent", "consent_form"}:
+            if normalized_rule_id in {"SC-087", "LXE-31"} and source_table in {
+                "surgery_inform_consent",
+                "consent_form",
+            }:
                 docs_by_code.setdefault("consent_form", []).append(normalized_item)
                 docs_by_code.setdefault("知情同意书", []).append(normalized_item)
 
