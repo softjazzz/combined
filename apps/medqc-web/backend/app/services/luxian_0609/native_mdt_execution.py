@@ -55,6 +55,23 @@ _PLANNED_PARTICIPANT_PATTERN = re.compile(r"拟请|拟邀请|计划请|计划邀
 _ROSTER_PLACEHOLDER_PATTERN = re.compile(
     r"待填|未填|待定|暂无|未知|空缺|某某|姓名|^无$"
 )
+_CLINICAL_NARRATIVE_TERMS = (
+    "患者",
+    "诊断",
+    "检查",
+    "入院",
+    "病史",
+    "查体",
+    "治疗",
+    "手术",
+    "风险",
+    "指征",
+    "讨论",
+    "认为",
+    "分析",
+    "建议",
+    "方案",
+)
 _PROJECTION_PATTERN = re.compile(
     r"MDT|多学科|多科|联合会诊|联合讨论|术前讨论|参加人员|参与人员|讨论人员|"
     r"会诊医师|主持|讨论意见|讨论结论|一致认为|麻醉科|科室",
@@ -187,10 +204,14 @@ def _has_completed_multidepartment_roster(text: str) -> bool:
         actual_anesthesiologist = True
         break
     narrative = _clean(text[roster_match.end() :])
+    unique_chinese_chars = {char for char in narrative if "\u4e00" <= char <= "\u9fff"}
+    clinical_term_count = sum(term in narrative for term in _CLINICAL_NARRATIVE_TERMS)
     return bool(
         actual_anesthesiologist
         and len(_PHYSICIAN_TITLE_PATTERN.findall(roster)) >= 2
         and len(narrative) >= 100
+        and len(unique_chinese_chars) >= 80
+        and clinical_term_count >= 3
         and (_COMPLETED_DISCUSSION_PATTERN.search(text) or "术前讨论" in text)
     )
 

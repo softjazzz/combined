@@ -102,9 +102,11 @@ async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_f
                         "record_content": (
                             "术前讨论。主持人签名：甲主任医师。"
                             "乙主治医师、丙住院医师、丁麻醉医师参加。"
-                            "病史汇报：诊断明确，手术指征具备，讨论后同意手术。"
-                            + "已完成相关检查和风险评估。"
-                            * 12
+                            "病史汇报：患者因持续症状入院，查体发现局部异常，"
+                            "影像与化验提示病变进展，结合既往治疗经过和当前功能状态，"
+                            "诊断依据充分，手术指征明确。各位医师分别分析麻醉风险、"
+                            "围术期监护、出血控制、器官保护、并发症预防及康复安排，"
+                            "讨论后认为现有方案可行，建议完善准备并按计划实施。"
                         ),
                     }
                 ],
@@ -182,6 +184,7 @@ async def test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut
     (
         "甲主任医师、拟请麻醉科张三主任医师",
         "甲主任医师、麻醉科待填主任医师",
+        "甲主任医师、麻醉科张三主任医师",
     ),
 )
 async def test_planned_or_placeholder_anesthesia_roster_does_not_shortcut(
