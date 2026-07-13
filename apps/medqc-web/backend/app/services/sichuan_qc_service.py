@@ -266,11 +266,23 @@ def _selected_luxian_0609_033_raw_rules(selected_rules: List[Dict[str, Any]]) ->
 
 
 def _build_luxian_0609_033_live_source_decisions(
-    *, bundle: Dict[str, Any], selected_rules: List[Dict[str, Any]], source_schema: str | None = None
+    *,
+    bundle: Dict[str, Any],
+    selected_rules: List[Dict[str, Any]],
+    source_schema: str | None = None,
+    consent_document_present: bool = False,
 ) -> Dict[str, Any]:
     """033 在真正分派前读取一次受控手术表，返回安全 gate 决策。"""
     if not _selected_luxian_0609_033_raw_rules(selected_rules):
         return {}
+    if consent_document_present:
+        return {
+            "LX0609-033": build_luxian_0609_033_live_source_decision(
+                source_state="consent_document_present",
+                source_status="available",
+                source_row_count=1,
+            )
+        }
     institute_id = str((bundle or {}).get("institute_id") or "").strip()
     patient_id = str((bundle or {}).get("patient_id") or "").strip()
     visit_id = str((bundle or {}).get("visit_id") or "").strip()
@@ -1940,7 +1952,12 @@ class SichuanQCService:
         docs_by_code: Dict[str, List[Dict[str, Any]]] = {}
         for item in bundle_documents:
             doc_code = self._canonical_doc_type(item.get("document_type") or item.get("source_table"))
-            docs_by_code.setdefault(doc_code, []).append(dict(item))
+            normalized_item = dict(item)
+            docs_by_code.setdefault(doc_code, []).append(normalized_item)
+            source_table = str(item.get("source_table") or "").strip().lower()
+            if source_table in {"surgery_inform_consent", "consent_form"}:
+                docs_by_code.setdefault("consent_form", []).append(normalized_item)
+                docs_by_code.setdefault("知情同意书", []).append(normalized_item)
 
         for wanted in normalized_docs:
             candidates = docs_by_code.get(wanted) or []
@@ -1948,6 +1965,21 @@ class SichuanQCService:
             if candidate is not None:
                 return candidate
         return None
+
+    def _has_luxian_0609_033_consent_document(
+        self,
+        *,
+        selected_rules: List[Dict[str, Any]],
+        bundle_documents: List[Dict[str, Any]],
+    ) -> bool:
+        """只认可 SC-087 已有文书匹配器选出的非空知情同意书。"""
+        for rule in selected_rules:
+            rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper()
+            if rule_id != "SC-087":
+                continue
+            if self._select_bundle_document_for_rule(rule=rule, bundle_documents=bundle_documents) is not None:
+                return True
+        return False
 
     def _build_bundle_evidence_payload_for_document(
         self,
@@ -4453,15 +4485,20 @@ class SichuanQCService:
         if (
             str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
-            and settings.LUXIAN_0609_TRIGGER_GATE_ENABLED
         ):
-            raw_source_schema = (bundle or {}).get("source_schema")
-            source_schema = str(raw_source_schema).strip() if isinstance(raw_source_schema, str) else None
-            source_gate_decisions = _build_luxian_0609_033_live_source_decisions(
-                bundle=bundle,
-                selected_rules=selected_rules,
-                source_schema=source_schema or None,
-            )
+            source_gate_decisions: Dict[str, Any] = {}
+            if settings.LUXIAN_0609_TRIGGER_GATE_ENABLED:
+                raw_source_schema = (bundle or {}).get("source_schema")
+                source_schema = str(raw_source_schema).strip() if isinstance(raw_source_schema, str) else None
+                source_gate_decisions = _build_luxian_0609_033_live_source_decisions(
+                    bundle=bundle,
+                    selected_rules=selected_rules,
+                    source_schema=source_schema or None,
+                    consent_document_present=self._has_luxian_0609_033_consent_document(
+                        selected_rules=selected_rules,
+                        bundle_documents=bundle_documents,
+                    ),
+                )
             execution_rules, luxian_context = await prepare_luxian_0609_execution(
                 rule_set_key=str(rule_set_key or "").strip(),
                 prepared_rules=selected_rules,

@@ -365,6 +365,160 @@ async def test_lx0609_033_live_reader_is_off_for_disabled_non_package_or_unselec
     assert reader_calls == []
 
 
+@pytest.mark.asyncio
+async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_reader(monkeypatch):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        )
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    reader_calls = []
+
+    def _reader(**kwargs):
+        reader_calls.append(dict(kwargs))
+        raise AssertionError("gate 关闭时不得查询严格手术来源")
+
+    monkeypatch.setattr(
+        "app.services.luxian_0609.source_evidence_reader.read_luxian_0609_runtime_source_rows", _reader
+    )
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+
+    service = SichuanQCService()
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-gate-off-001",
+            "patient_id": "patient-033-gate-off-001",
+            "visit_id": "visit-033-gate-off-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087", "LXE-31"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    customer_results = list(result["evaluation_results"])
+    assert reader_calls == []
+    assert [item["rule_id"] for item in customer_results] == ["LX0609-033"]
+    assert all(item["rule_id"] not in {"SC-087", "LXE-31"} for item in customer_results)
+    assert customer_results[0]["status"] == "not_applicable"
+    assert result["token_usage"]["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw_status", ["compliant", "non_compliant"])
+async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_live_reader(
+    monkeypatch, raw_status
+):
+    wrappers = [
+        _wrapper(
+            "LX0609-033",
+            name="手术知情同意书：无手术知情同意书",
+            mapped_rule_ids=["SC-087", "LXE-31"],
+            trigger_condition="手术患者应有手术知情同意书。",
+        )
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=True,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+    )
+    reader_calls = []
+    dispatch_calls = []
+
+    def _reader(**kwargs):
+        reader_calls.append(dict(kwargs))
+        raise AssertionError("已匹配非空同意书时不得查询严格手术来源")
+
+    async def _generic_gate(**kwargs):
+        return evaluate_luxian_0609_trigger_gates(
+            rules=kwargs["rules"],
+            visit_id=kwargs["visit_id"],
+            medical_text=kwargs["medical_text"],
+            evidence_payload=kwargs["evidence_payload"],
+        )
+
+    async def _semantic_dispatch(**kwargs):
+        dispatch_calls.append([item["rule_id"] for item in kwargs["rules"]])
+        return {
+            "results": [
+                {
+                    "rule_id": str(rule["rule_id"]),
+                    "status": raw_status,
+                    "is_compliant": raw_status == "compliant",
+                    "findings": "",
+                    "evidence": "",
+                    "suggestion": "",
+                }
+                for rule in kwargs["rules"]
+            ],
+            "total_tokens": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_api_time": 0.0,
+            "executor_breakdown": {},
+            "cache_breakdown": {},
+            "pack_metrics": {},
+            "trace": [],
+            "refine_details": [],
+            "refine_summary": {},
+        }
+
+    monkeypatch.setattr(
+        "app.services.luxian_0609.source_evidence_reader.read_luxian_0609_runtime_source_rows", _reader
+    )
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(luxian_execution, "evaluate_luxian_0609_trigger_gates_with_llm", _generic_gate)
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _semantic_dispatch)
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-033-consent-001",
+            "patient_id": "patient-033-consent-001",
+            "visit_id": "visit-033-consent-001",
+            "source_doc_priority": ["surgery_inform_consent"],
+            "document_hits": {"surgery_inform_consent": True},
+            "structured_context": {
+                "documents": {
+                    "surgery_inform_consent": [{"content": "synthetic-consent-document-content"}]
+                }
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087", "LXE-31"],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    customer_results = list(result["evaluation_results"])
+    customer_metadata = dict(customer_results[0].get("metadata") or {})
+    assert reader_calls == []
+    assert dispatch_calls == [["SC-087", "LXE-31"]]
+    assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", raw_status)]
+    assert customer_metadata["live_source_state"] == "consent_document_present"
+    assert "synthetic-consent-document-content" not in repr(customer_metadata)
+    assert result["token_usage"]["total_tokens"] == 0
+
+
 def test_trigger_gate_should_mark_absent_trigger_as_not_applicable_candidate():
     rules = [
         _wrapper(

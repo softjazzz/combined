@@ -11,7 +11,14 @@ TRIGGER_DATA_GAP = "data_gap"
 TRIGGER_UNKNOWN = "unknown"
 
 _KNOWN_STATUSES = {TRIGGER_PRESENT, TRIGGER_ABSENT, TRIGGER_DATA_GAP, TRIGGER_UNKNOWN}
-_LX0609_033_LIVE_SOURCE_STATES = {"exact_performed", "zero_rows", "nonexact_rows", "unavailable", "error"}
+_LX0609_033_LIVE_SOURCE_STATES = {
+    "consent_document_present",
+    "exact_performed",
+    "zero_rows",
+    "nonexact_rows",
+    "unavailable",
+    "error",
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +63,16 @@ def build_luxian_0609_033_live_source_decision(
         "live_source_state": normalized_state,
         "live_source_policy_version": "lx0609-033-live-source-v1",
     }
+    if normalized_state == "consent_document_present":
+        if normalized_status != "available" or source_row_count < 1:
+            raise ValueError("invalid lx0609-033 consent document source")
+        return Luxian0609GateDecision(
+            rule_id="LX0609-033",
+            status=TRIGGER_PRESENT,
+            reason="已匹配到非空手术知情同意书文书，保留现有语义核查分派",
+            source="bundle_document_guard",
+            extra=extra,
+        )
     if normalized_state == "zero_rows":
         return Luxian0609GateDecision(
             rule_id="LX0609-033",
