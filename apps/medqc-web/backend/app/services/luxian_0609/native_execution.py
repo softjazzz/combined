@@ -3,13 +3,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
 
 
 NATIVE_RULE_IDS = ("LX0609-029", "LX0609-030", "LX0609-032")
-NATIVE_MAPPED_RULE_IDS = ("CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33")
+NATIVE_LEGACY_RULE_IDS_BY_RULE_ID = MappingProxyType(
+    {
+        "LX0609-029": ("CL-181", "SC-081"),
+        "LX0609-030": ("LX-025", "SC-095"),
+        "LX0609-032": ("SC-102", "LXE-33"),
+    }
+)
+NATIVE_MAPPED_RULE_IDS = tuple(
+    legacy_rule_id
+    for native_rule_id in NATIVE_RULE_IDS
+    for legacy_rule_id in NATIVE_LEGACY_RULE_IDS_BY_RULE_ID[native_rule_id]
+)
 _PLAN_SCHEMA = "planner-v1"
 _RULE_PLAN = "029-030-032-v1"
 _ASSEMBLER_SCHEMA = "assembler-v1"
@@ -35,6 +47,21 @@ class NativeExecutionResult:
     planned_rule_ids: tuple[str, ...]
     execution_fingerprint: str = ""
     terminal_reason_code: str = ""
+
+
+def legacy_rule_ids_for_native_rule_ids(rule_ids: Sequence[str]) -> tuple[str, ...]:
+    """原生开关关闭时才展开旧执行 ID，保持客户入口不携带映射细节。"""
+    selected = {
+        str(rule_id or "").strip().upper()
+        for rule_id in rule_ids
+        if str(rule_id or "").strip()
+    }
+    return tuple(
+        legacy_rule_id
+        for native_rule_id in NATIVE_RULE_IDS
+        if native_rule_id in selected
+        for legacy_rule_id in NATIVE_LEGACY_RULE_IDS_BY_RULE_ID[native_rule_id]
+    )
 
 
 def native_rule_ids_from_wrappers(

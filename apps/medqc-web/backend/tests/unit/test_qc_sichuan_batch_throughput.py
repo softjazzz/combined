@@ -1399,6 +1399,63 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
 
 
 @pytest.mark.asyncio
+async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_without_legacy_mapping(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+    submitted_tasks: List[Dict[str, Any]] = []
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "submit_detached_task",
+        lambda name, func, *args: submitted_tasks.append(
+            {"name": name, "func": func, "args": args}
+        ),
+    )
+
+    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    request = SimpleNamespace(state=SimpleNamespace())
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        rule_ids=native_rule_ids,
+        scope="all",
+        date_field="admission",
+        record_ids=["visit-001", "visit-002"],
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+    filters = dict(workspace.created_job.get("filters") or {})
+    assert workspace.created_job["scope"] == "all"
+    assert filters["rule_ids"] == native_rule_ids
+    assert filters["selected_rule_ids"] == native_rule_ids
+    assert filters["scoped_customer_rule_ids"] == native_rule_ids
+    assert filters["validation_mode"] == "programmatic"
+    assert filters["customer_rule_count"] == filters["execution_rule_count"] == 3
+    assert filters["record_rule_map"] == {
+        "visit-001": native_rule_ids,
+        "visit-002": native_rule_ids,
+    }
+    assert workspace.created_job["draft_ids"] == native_rule_ids
+    assert response["data"]["draft_ids"] == native_rule_ids
+    serialized = json.dumps(workspace.created_job, ensure_ascii=False, sort_keys=True)
+    assert all(
+        legacy_rule_id not in serialized
+        for legacy_rule_id in ("CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33")
+    )
+    assert len(submitted_tasks) == 1
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
@@ -1607,6 +1664,155 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     persisted_summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert persisted_summary and persisted_summary["disposition"] == "inputs_unavailable"
     assert persisted_summary["expected_llm_call_count"] == persisted_summary["llm_total_tokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_lookup(monkeypatch):
+    workspace = _WorkspaceStub()
+    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    workspace.job["filters"] = {
+        "rule_ids": native_rule_ids,
+        "selected_rule_ids": native_rule_ids,
+        "scoped_customer_rule_ids": native_rule_ids,
+        "record_rule_map": {
+            "visit-001": native_rule_ids,
+            "visit-002": native_rule_ids,
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+
+    class _NativeOnlyService(_ServiceStub):
+        def assert_sc_rule_source_ready(self, **_: Any) -> Dict[str, Any]:
+            raise AssertionError("原生0609批任务不应依赖SC规则来源")
+
+        def get_rule_by_id(self, rule_id: str) -> Dict[str, Any]:
+            raise AssertionError(f"原生客户ID不应查询旧规则: {rule_id}")
+
+    service = _NativeOnlyService()
+    captured_rule_ids: List[List[str]] = []
+
+    async def _evaluate_document_with_rules(**kwargs: Any) -> Dict[str, Any]:
+        captured_rule_ids.append(
+            [str(rule.get("rule_id") or rule.get("rule_code") or "") for rule in kwargs["rules"]]
+        )
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant" if rule_id != "LX0609-032" else "non_compliant",
+                    "is_compliant": rule_id != "LX0609-032",
+                    "metadata": {"execution_source": "lx0609_native", "executor_type": "program"},
+                }
+                for rule_id in native_rule_ids
+            ],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+            LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False,
+        ),
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert captured_rule_ids == [native_rule_ids, native_rule_ids]
+    assert len(workspace.items) == 6
+    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(native_rule_ids)
+    assert int((workspace.summary or {}).get("total_tokens") or 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_native_luxian_batch_worker_flag_off_expands_legacy_rules_only_for_rollback(monkeypatch):
+    workspace = _WorkspaceStub()
+    native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
+    legacy_rule_ids = ["CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33"]
+    workspace.job["filters"] = {
+        "rule_ids": native_rule_ids,
+        "selected_rule_ids": native_rule_ids,
+        "scoped_customer_rule_ids": native_rule_ids,
+        "record_rule_map": {
+            "visit-001": native_rule_ids,
+            "visit-002": native_rule_ids,
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+    looked_up: List[str] = []
+    source_guard_calls: List[str] = []
+    captured_rule_ids: List[List[str]] = []
+
+    def _assert_sc_rule_source_ready(*, context: str, **_: Any) -> Dict[str, Any]:
+        source_guard_calls.append(context)
+        return {"sc_source": "pg_governance"}
+
+    def _get_rule_by_id(rule_id: str) -> Dict[str, Any]:
+        looked_up.append(rule_id)
+        return {
+            "rule_id": rule_id,
+            "rule_code": rule_id,
+            "name": f"规则-{rule_id}",
+            "defect_level": "一般缺陷",
+        }
+
+    async def _evaluate_document_with_rules(**kwargs: Any) -> Dict[str, Any]:
+        current_rule_ids = [
+            str(rule.get("rule_id") or rule.get("rule_code") or "") for rule in kwargs["rules"]
+        ]
+        captured_rule_ids.append(current_rule_ids)
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "metadata": {"executor_type": "program"},
+                }
+                for rule_id in current_rule_ids
+            ],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+        }
+
+    service.assert_sc_rule_source_ready = _assert_sc_rule_source_ready  # type: ignore[method-assign]
+    service.get_rule_by_id = _get_rule_by_id  # type: ignore[method-assign]
+    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: SimpleNamespace(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=False,
+            LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False,
+        ),
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert looked_up == legacy_rule_ids
+    assert captured_rule_ids == [legacy_rule_ids, legacy_rule_ids]
+    assert len(source_guard_calls) == 1
+    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(native_rule_ids)
 
 
 @pytest.mark.asyncio

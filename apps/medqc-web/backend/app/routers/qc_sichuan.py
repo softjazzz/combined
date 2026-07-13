@@ -42,6 +42,10 @@ from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
+from ..services.luxian_0609.native_execution import (
+    NATIVE_RULE_IDS,
+    legacy_rule_ids_for_native_rule_ids,
+)
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -2030,13 +2034,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         qc_service = await get_qc_service()
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
-        rule_ids = [str(item).strip() for item in (filters.get("rule_ids") or []) if str(item).strip()]
+        requested_rule_ids = [
+            str(item).strip().upper()
+            for item in (filters.get("rule_ids") or [])
+            if str(item).strip()
+        ]
         gate_only_customer_rule_ids_for_validation = [
             str(item).strip()
             for item in (filters.get("gate_only_customer_rule_ids") or [])
             if str(item).strip()
         ]
-        if not rule_ids and not gate_only_customer_rule_ids_for_validation:
+        if not requested_rule_ids and not gate_only_customer_rule_ids_for_validation:
             raise ValueError("批量任务缺少 rule_ids")
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
@@ -2045,6 +2053,26 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         programmatic_rule_set = get_sample_programmatic_rule_set()
         is_programmatic_mode = (
             validation_mode == "programmatic" or rule_set_key == programmatic_rule_set.key
+        )
+        settings = get_settings()
+        native_requested_rule_ids = tuple(
+            rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(requested_rule_ids)
+        )
+        is_direct_native_selection = bool(
+            rule_set_key == LUXIAN_0609_RULE_SET_KEY
+            and requested_rule_ids
+            and len(native_requested_rule_ids) == len(set(requested_rule_ids))
+        )
+        native_direct_enabled = bool(
+            is_direct_native_selection
+            and getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
+        )
+        rule_ids = (
+            list(native_requested_rule_ids)
+            if native_direct_enabled
+            else list(legacy_rule_ids_for_native_rule_ids(native_requested_rule_ids))
+            if is_direct_native_selection
+            else requested_rule_ids
         )
         execution_strategy = normalize_execution_strategy(filters.get("execution_strategy"))
         quality_profile = _normalize_quality_profile(filters.get("quality_profile"))
@@ -2058,10 +2086,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
         max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 2)))
-        qc_service.assert_sc_rule_source_ready(
-            context=f"workspace_batch_job:{job_id}",
-            block_batch=True,
-        )
+        if not native_direct_enabled:
+            qc_service.assert_sc_rule_source_ready(
+                context=f"workspace_batch_job:{job_id}",
+                block_batch=True,
+            )
 
         records = workspace.collect_records(
             scope=str(current.get("scope") or "all"),
@@ -2122,7 +2151,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_states: Dict[str, Dict[str, Any]] = {}
         valid_rule_ids: List[str] = []
         for rule_id in rule_ids:
-            rule = qc_service.get_rule_by_id(rule_id)
+            rule = (
+                get_luxian_0609_rule(rule_id)
+                if native_direct_enabled and rule_id in NATIVE_RULE_IDS
+                else qc_service.get_rule_by_id(rule_id)
+            )
             if rule and is_programmatic_mode:
                 rule = apply_programmatic_rule_runtime_overrides(rule)
             rule_name = str((rule or {}).get("name") or rule_id)
@@ -2160,7 +2193,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for rule_id in valid_rule_ids
             if isinstance(rule_states[rule_id].get("rule"), dict)
         ]
-        settings = get_settings()
         use_luxian_customer_results = bool(
             rule_set_key == LUXIAN_0609_RULE_SET_KEY
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
@@ -2207,11 +2239,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             normalized_record_id = str(raw_record_id or "").strip()
             if not normalized_record_id:
                 continue
+            requested_record_rule_ids = [
+                str(item or "").strip().upper()
+                for item in list(raw_rule_ids or [])
+                if str(item or "").strip()
+            ]
+            if is_direct_native_selection and not native_direct_enabled:
+                requested_record_rule_ids = list(
+                    legacy_rule_ids_for_native_rule_ids(requested_record_rule_ids)
+                )
             normalized_rule_ids = [
                 rule_id
                 for rule_id in (
                     str(item or "").strip().upper()
-                    for item in list(raw_rule_ids or [])
+                    for item in requested_record_rule_ids
                 )
                 if rule_id in rule_states
             ]
@@ -3582,9 +3623,32 @@ async def create_workspace_batch_job(
     if payload.rule_set_key and not requested_rule_set:
         raise HTTPException(status_code=422, detail=f"未知规则集: {payload.rule_set_key}")
 
+    requested_payload_rule_ids = [
+        str(item or "").strip().upper()
+        for item in (payload.rule_ids or [])
+        if str(item or "").strip()
+    ]
+    direct_native_rule_ids = tuple(
+        rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(requested_payload_rule_ids)
+    )
+    is_direct_native_selection = bool(
+        requested_rule_set
+        and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY
+        and requested_payload_rule_ids
+        and len(direct_native_rule_ids) == len(set(requested_payload_rule_ids))
+    )
+
     if requested_rule_set:
-        rule_ids = list(requested_rule_set.rule_ids)
-        effective_scope = requested_rule_set.scope or payload.scope
+        rule_ids = (
+            list(direct_native_rule_ids)
+            if is_direct_native_selection
+            else list(requested_rule_set.rule_ids)
+        )
+        effective_scope = (
+            payload.scope
+            if is_direct_native_selection
+            else requested_rule_set.scope or payload.scope
+        )
         rule_set_key = requested_rule_set.key
         rule_set_name = requested_rule_set.name
         rule_set_version = requested_rule_set.version
@@ -3730,6 +3794,21 @@ async def create_workspace_batch_job(
             "run_mode": run_mode,
             "idempotency_key": idempotency_key,
             "idempotency_payload": idempotency_payload,
+            **(
+                {
+                    "selected_rule_ids": list(direct_native_rule_ids),
+                    "scoped_customer_rule_ids": list(direct_native_rule_ids),
+                    "record_rule_map": {
+                        record_id: list(direct_native_rule_ids)
+                        for record_id in effective_record_ids
+                    },
+                    "validation_mode": "programmatic",
+                    "customer_rule_count": len(direct_native_rule_ids),
+                    "execution_rule_count": len(direct_native_rule_ids),
+                }
+                if is_direct_native_selection
+                else {}
+            ),
         },
         record_ids=payload.record_ids or [],
         total_records=len(records),
