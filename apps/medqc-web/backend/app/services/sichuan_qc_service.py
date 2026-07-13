@@ -4463,6 +4463,7 @@ class SichuanQCService:
         content = str(eval_args["content"])
         resolved_rule_ids = list(eval_args.get("rule_ids") or [])
         evidence_payload = dict(eval_args.get("evidence_payload") or {})
+        normalized_rule_set_key = str(rule_set_key or "").strip()
         quality_profile_normalized = normalize_quality_profile(quality_profile)
 
         selected_rules: List[Dict[str, Any]] = []
@@ -4487,7 +4488,7 @@ class SichuanQCService:
         execution_rules = selected_rules
         settings = get_settings()
         if (
-            str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
+            normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
         ):
             source_gate_decisions: Dict[str, Any] = {}
@@ -4504,7 +4505,7 @@ class SichuanQCService:
                     ),
                 )
             execution_rules, luxian_context = await prepare_luxian_0609_execution(
-                rule_set_key=str(rule_set_key or "").strip(),
+                rule_set_key=normalized_rule_set_key,
                 prepared_rules=selected_rules,
                 visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
                 medical_text=content,
@@ -4685,7 +4686,8 @@ class SichuanQCService:
             "adapter_version": str((eval_args.get("metadata") or {}).get("adapter_version") or ""),
             "compat_strategy": str((eval_args.get("metadata") or {}).get("compat_strategy") or ""),
         }
-        result["evidence_payload"] = evidence_payload
+        if normalized_rule_set_key != LUXIAN_0609_RULE_SET_KEY:
+            result["evidence_payload"] = evidence_payload
         return result
 
     async def evaluate_rule_for_visit(

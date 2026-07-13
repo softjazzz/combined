@@ -48,6 +48,7 @@ def _wrapper(
 
 @pytest.mark.asyncio
 async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_before_dispatch(monkeypatch):
+    raw_body_marker = "SAFE_BODY_MARKER_033_STRICT_DATA_GAP"
     wrappers = [
         _wrapper(
             "LX0609-033",
@@ -106,7 +107,7 @@ async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_be
                 "surgery_inform_consent": False,
             },
             "structured_context": {
-                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+                "documents": {"first_course_record": [{"content": raw_body_marker}]}
             },
             "text_available": True,
         },
@@ -125,6 +126,8 @@ async def test_lx0609_033_live_strict_performed_source_gap_stops_mapped_rules_be
     assert observed == (["LX0609-033"], "data_gap", 1, 0)
     assert gate_calls == [["LX0609-033"]]
     assert result["token_usage"]["total_tokens"] == 0
+    assert "evidence_payload" not in result
+    assert raw_body_marker not in repr(result)
 
 
 @pytest.mark.asyncio
@@ -367,6 +370,7 @@ async def test_lx0609_033_live_reader_is_off_for_disabled_non_package_or_unselec
 
 @pytest.mark.asyncio
 async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_reader(monkeypatch):
+    raw_body_marker = "SAFE_BODY_MARKER_033_GATE_OFF"
     wrappers = [
         _wrapper(
             "LX0609-033",
@@ -403,7 +407,7 @@ async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_r
             "source_doc_priority": ["first_course_record"],
             "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
             "structured_context": {
-                "documents": {"first_course_record": [{"content": "本次手术相关病程。"}]}
+                "documents": {"first_course_record": [{"content": raw_body_marker}]}
             },
             "text_available": True,
         },
@@ -418,6 +422,8 @@ async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_r
     assert all(item["rule_id"] not in {"SC-087", "LXE-31"} for item in customer_results)
     assert customer_results[0]["status"] == "not_applicable"
     assert result["token_usage"]["total_tokens"] == 0
+    assert "evidence_payload" not in result
+    assert raw_body_marker not in repr(result)
 
 
 @pytest.mark.asyncio
@@ -425,6 +431,7 @@ async def test_lx0609_033_gate_off_preserves_customer_aggregation_without_live_r
 async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_live_reader(
     monkeypatch, raw_status
 ):
+    raw_body_marker = "SAFE_BODY_MARKER_033_AVAILABLE_CONSENT"
     wrappers = [
         _wrapper(
             "LX0609-033",
@@ -498,9 +505,7 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
             "source_doc_priority": ["surgery_inform_consent"],
             "document_hits": {"surgery_inform_consent": True},
             "structured_context": {
-                "documents": {
-                    "surgery_inform_consent": [{"content": "synthetic-consent-document-content"}]
-                }
+                "documents": {"surgery_inform_consent": [{"content": raw_body_marker}]}
             },
             "text_available": True,
         },
@@ -515,8 +520,41 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     assert dispatch_calls == [["SC-087", "LXE-31"]]
     assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", raw_status)]
     assert customer_metadata["live_source_state"] == "consent_document_present"
-    assert "synthetic-consent-document-content" not in repr(customer_metadata)
+    assert raw_body_marker not in repr(customer_metadata)
     assert result["token_usage"]["total_tokens"] == 0
+    assert "evidence_payload" not in result
+    assert raw_body_marker not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_non_lx0609_running_bundle_preserves_legacy_evidence_payload(monkeypatch):
+    raw_body_marker = "SAFE_BODY_MARKER_NON_LX0609_LEGACY"
+
+    async def _unexpected_model_dispatch(**kwargs):
+        raise AssertionError("缺少同意书的非 LX0609 bundle guard 不应分派模型")
+
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _unexpected_model_dispatch)
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "inst-non-lx0609-001",
+            "patient_id": "patient-non-lx0609-001",
+            "visit_id": "visit-non-lx0609-001",
+            "source_doc_priority": ["first_course_record"],
+            "document_hits": {"first_course_record": True, "surgery_inform_consent": False},
+            "structured_context": {
+                "documents": {"first_course_record": [{"content": raw_body_marker}]}
+            },
+            "text_available": True,
+        },
+        rule_ids=["SC-087"],
+        rule_set_key="other_rule_set",
+        use_execution_cache=False,
+    )
+
+    assert "evidence_payload" in result
+    assert raw_body_marker in repr(result["evidence_payload"])
 
 
 def test_surgery_inform_consent_alias_is_isolated_to_sc087():
