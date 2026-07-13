@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Any
 
 
@@ -8,6 +9,7 @@ _TARGET_RULE_IDS = {
     "LX0609-001",
     "LX0609-002",
     "LX0609-003",
+    "LX0609-004",
     "LX0609-005",
     "LX0609-006",
     "LX0609-007",
@@ -37,6 +39,13 @@ _TARGET_RULE_IDS = {
     "LX0609-049",
 }
 
+_RESCUE_END_TIME_PATTERN = re.compile(
+    r"抢救结束时间\s*[:：]\s*(?P<value>"
+    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
+    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
+    r")"
+)
+
 
 def _norm(value: Any) -> str:
     return str(value or "").strip()
@@ -62,6 +71,25 @@ def _parse_dt(value: Any) -> datetime | None:
         return datetime.fromisoformat(text)
     except ValueError:
         return None
+
+
+def _parse_rescue_end_time(value: Any) -> datetime | None:
+    text = str(value or "")
+    match = _RESCUE_END_TIME_PATTERN.search(text)
+    if not match:
+        return None
+    candidate = match.group("value").strip()
+    normalized = (
+        candidate.replace("年", "-")
+        .replace("月", "-")
+        .replace("日", "")
+    )
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _hours_between(start: datetime, end: datetime) -> float:
@@ -520,6 +548,87 @@ def _evaluate_first_course_8h(rule: dict[str, Any], timeline: dict[str, Any]) ->
                 "evidence_role": "actual_time",
             }
         ],
+    )
+
+
+def _evaluate_rescue_6h(rule: dict[str, Any], timeline: dict[str, Any]) -> dict[str, Any]:
+    rescue_records = _documents(timeline, "rescue_record")
+    if not rescue_records:
+        return _result(
+            rule=rule,
+            status="not_applicable",
+            findings="当前就诊未发现抢救记录，本规则不适用。",
+            evidence="未发现本次就诊抢救记录。",
+            suggestion="",
+            reason="rescue_record_absent",
+        )
+
+    evaluated: list[tuple[float, datetime, datetime, dict[str, Any]]] = []
+    incomplete_count = 0
+    for record in rescue_records:
+        rescue_end_time = _parse_rescue_end_time(_document_text(record))
+        record_time = _document_time(record)
+        if rescue_end_time is None or record_time is None:
+            incomplete_count += 1
+            continue
+        delta = _hours_between(rescue_end_time, record_time)
+        if delta < 0:
+            incomplete_count += 1
+            continue
+        evaluated.append((delta, rescue_end_time, record_time, record))
+
+    overdue = [item for item in evaluated if item[0] > 6]
+    if overdue:
+        delta, rescue_end_time, record_time, record = max(overdue, key=lambda item: item[0])
+        title = _norm(record.get("title")) or "抢救记录"
+        return _result(
+            rule=rule,
+            status="non_compliant",
+            findings="抢救记录未在抢救结束后6小时内完成。",
+            evidence=(
+                f"抢救结束时间：{rescue_end_time:%Y-%m-%d %H:%M:%S}；"
+                f"{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}；间隔：{delta:.1f}小时"
+            ),
+            suggestion="请核对抢救结束时间和抢救记录完成时间，超过6小时需纳入缺陷复核。",
+            metadata={
+                "threshold": "抢救记录应在抢救结束后6小时内完成",
+                "expected_value": "<=6小时",
+                "actual_value": f"{delta:.1f}小时",
+                "delta": f"{delta - 6:.1f}小时",
+                "source_table": "rescue_record",
+                "document_type": title,
+            },
+        )
+    if incomplete_count or not evaluated:
+        return _result(
+            rule=rule,
+            status="data_gap",
+            findings="抢救记录缺少可验证的抢救结束时间或文书记录时间。",
+            evidence="仅接受明确标注的抢救结束时间和结构化文书记录时间，当前资料不足。",
+            suggestion="请补齐抢救结束时间和抢救记录时间后重新质控。",
+            confidence=0.9,
+            reason="rescue_time_incomplete",
+        )
+
+    delta, rescue_end_time, record_time, record = max(evaluated, key=lambda item: item[0])
+    title = _norm(record.get("title")) or "抢救记录"
+    return _result(
+        rule=rule,
+        status="compliant",
+        findings="抢救记录在抢救结束后6小时内完成。",
+        evidence=(
+            f"抢救结束时间：{rescue_end_time:%Y-%m-%d %H:%M:%S}；"
+            f"{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}；间隔：{delta:.1f}小时"
+        ),
+        suggestion="",
+        metadata={
+            "threshold": "抢救记录应在抢救结束后6小时内完成",
+            "expected_value": "<=6小时",
+            "actual_value": f"{delta:.1f}小时",
+            "delta": f"{delta - 6:.1f}小时",
+            "source_table": "rescue_record",
+            "document_type": title,
+        },
     )
 
 
@@ -1172,6 +1281,8 @@ def evaluate_luxian_0609_programmatic_rules(
             results.append(_evaluate_admission_24h(rule, timeline))
         elif rule_id == "LX0609-002":
             results.append(_evaluate_first_course_8h(rule, timeline))
+        elif rule_id == "LX0609-004":
+            results.append(_evaluate_rescue_6h(rule, timeline))
         elif rule_id == "LX0609-005":
             results.append(_evaluate_round(rule, timeline, role="attending", hours=48))
         elif rule_id == "LX0609-006":

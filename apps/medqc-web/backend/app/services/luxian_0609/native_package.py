@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Iterable, Mapping, Sequence
 
+from .native_basic_timeliness import (
+    BASIC_TIMELINESS_RULE_IDS,
+    EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
+)
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
 from .native_mdt_execution import RULE_ID as NATIVE_ASYNC_RULE_ID
 
@@ -24,6 +28,9 @@ _VALID_EXECUTION_MODES = frozenset(
         EXECUTION_MODE_COMPATIBILITY,
     }
 )
+EXECUTOR_COMPATIBILITY = "compatibility"
+EXECUTOR_SURGERY_PRESENCE = "surgery_presence"
+EXECUTOR_SURGERY_MDT = "surgery_mdt"
 
 
 def _normalize_rule_id(value: Any) -> str:
@@ -47,6 +54,7 @@ class Luxian0609RuleDependency:
     family_key: str
     family_name: str
     execution_mode: str
+    executor_key: str
     compatibility_rule_ids: tuple[str, ...]
     applicable_documents: tuple[str, ...]
     data_dependencies: tuple[str, ...]
@@ -59,7 +67,7 @@ class Luxian0609RuleDependency:
             raise ValueError("invalid LX0609 customer rule id")
         if self.execution_mode not in _VALID_EXECUTION_MODES:
             raise ValueError("invalid LX0609 execution mode")
-        if not self.family_key or not self.compatibility_rule_ids:
+        if not self.family_key or not self.executor_key or not self.compatibility_rule_ids:
             raise ValueError("incomplete LX0609 rule dependency")
 
 
@@ -73,6 +81,13 @@ class Luxian0609PackagePlan:
     compatibility_rule_ids: tuple[str, ...]
     compatibility_execution_rule_ids: tuple[str, ...]
     bypassed_execution_rule_ids: tuple[str, ...]
+    native_executor_batches: tuple[tuple[str, tuple[str, ...]], ...]
+
+    def native_rule_ids_for_executor(self, executor_key: str) -> tuple[str, ...]:
+        for key, rule_ids in self.native_executor_batches:
+            if key == executor_key:
+                return rule_ids
+        return ()
 
     @property
     def prepared_rule_ids_to_remove(self) -> frozenset[str]:
@@ -112,7 +127,7 @@ def build_luxian_0609_dependency_inventory(
     family_index = _family_index(family_definitions)
     inventory: list[Luxian0609RuleDependency] = []
     seen: set[str] = set()
-    native_sync = set(NATIVE_SYNC_RULE_IDS)
+    native_sync = {*NATIVE_SYNC_RULE_IDS, *BASIC_TIMELINESS_RULE_IDS}
     for rule in rules:
         rule_id = _normalize_rule_id(rule.get("rule_id") or rule.get("rule_code"))
         if not rule_id.startswith("LX0609-") or rule_id in seen:
@@ -124,16 +139,24 @@ def build_luxian_0609_dependency_inventory(
             raise ValueError("LX0609 rule is missing compatibility dependency")
         family_key, family_name = family_index[rule_id]
         execution_mode = EXECUTION_MODE_COMPATIBILITY
+        executor_key = EXECUTOR_COMPATIBILITY
         if rule_id in native_sync:
             execution_mode = EXECUTION_MODE_NATIVE_SYNC
+            executor_key = (
+                BASIC_TIMELINESS_EXECUTOR_KEY
+                if rule_id in BASIC_TIMELINESS_RULE_IDS
+                else EXECUTOR_SURGERY_PRESENCE
+            )
         elif rule_id == NATIVE_ASYNC_RULE_ID:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = EXECUTOR_SURGERY_MDT
         inventory.append(
             Luxian0609RuleDependency(
                 rule_id=rule_id,
                 family_key=family_key,
                 family_name=family_name,
                 execution_mode=execution_mode,
+                executor_key=executor_key,
                 compatibility_rule_ids=compatibility_rule_ids,
                 applicable_documents=tuple(
                     str(item).strip()
@@ -177,6 +200,7 @@ def build_luxian_0609_package_plan(
     selected_rule_ids: Iterable[str],
     native_sync_enabled: bool,
     native_async_enabled: bool,
+    native_basic_timeliness_enabled: bool = False,
 ) -> Luxian0609PackagePlan:
     """按目录顺序将客户选择分为原生同步、原生异步和兼容执行。"""
 
@@ -190,7 +214,11 @@ def build_luxian_0609_package_plan(
     native_sync_rule_ids = tuple(
         item.rule_id
         for item in selected
-        if native_sync_enabled and item.execution_mode == EXECUTION_MODE_NATIVE_SYNC
+        if item.execution_mode == EXECUTION_MODE_NATIVE_SYNC
+        and (
+            (item.executor_key == BASIC_TIMELINESS_EXECUTOR_KEY and native_basic_timeliness_enabled)
+            or (item.executor_key != BASIC_TIMELINESS_EXECUTOR_KEY and native_sync_enabled)
+        )
     )
     native_async_rule_ids = tuple(
         item.rule_id
@@ -200,6 +228,14 @@ def build_luxian_0609_package_plan(
     native_ids = {*native_sync_rule_ids, *native_async_rule_ids}
     compatibility = tuple(item for item in selected if item.rule_id not in native_ids)
     native = tuple(item for item in selected if item.rule_id in native_ids)
+    native_executor_batches: list[tuple[str, tuple[str, ...]]] = []
+    for executor_key in dict.fromkeys(item.executor_key for item in native):
+        native_executor_batches.append(
+            (
+                executor_key,
+                tuple(item.rule_id for item in native if item.executor_key == executor_key),
+            )
+        )
     return Luxian0609PackagePlan(
         selected_rule_ids=tuple(item.rule_id for item in selected),
         native_sync_rule_ids=native_sync_rule_ids,
@@ -215,6 +251,7 @@ def build_luxian_0609_package_plan(
             for item in native
             for execution_rule_id in item.compatibility_rule_ids
         ),
+        native_executor_batches=tuple(native_executor_batches),
     )
 
 

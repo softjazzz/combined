@@ -49,6 +49,11 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
     modes = {item.rule_id: item.execution_mode for item in inventory}
 
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_SYNC} == {
+        "LX0609-001",
+        "LX0609-002",
+        "LX0609-004",
+        "LX0609-005",
+        "LX0609-006",
         "LX0609-029",
         "LX0609-030",
         "LX0609-032",
@@ -56,7 +61,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_ASYNC} == {
         "LX0609-040"
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 45
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 40
 
 
 @pytest.mark.unit
@@ -70,14 +75,19 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
         selected_rule_ids=["LX0609-040", "LX0609-029", "LX0609-001"],
         native_sync_enabled=True,
         native_async_enabled=False,
+        native_basic_timeliness_enabled=True,
     )
 
     assert plan.selected_rule_ids == ("LX0609-001", "LX0609-029", "LX0609-040")
-    assert plan.native_sync_rule_ids == ("LX0609-029",)
+    assert plan.native_sync_rule_ids == ("LX0609-001", "LX0609-029")
     assert plan.native_async_rule_ids == ()
-    assert plan.compatibility_rule_ids == ("LX0609-001", "LX0609-040")
-    assert plan.compatibility_execution_rule_ids == ("SC-002", "SC-083", "CL-108")
-    assert plan.bypassed_execution_rule_ids == ("CL-181", "SC-081")
+    assert plan.compatibility_rule_ids == ("LX0609-040",)
+    assert plan.compatibility_execution_rule_ids == ("SC-083", "CL-108")
+    assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081")
+    assert plan.native_executor_batches == (
+        ("basic_timeliness", ("LX0609-001",)),
+        ("surgery_presence", ("LX0609-029",)),
+    )
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
         build_luxian_0609_package_plan(

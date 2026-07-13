@@ -17,10 +17,15 @@ from .native_execution import (
     build_luxian_0609_native_technical_results,
     execute_luxian_0609_native_rules,
 )
+from .native_basic_timeliness import (
+    EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
+    execute_luxian_0609_native_basic_timeliness,
+)
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
 from .native_package import (
+    EXECUTOR_SURGERY_PRESENCE,
     Luxian0609PackagePlan,
     build_luxian_0609_package_plan,
     load_luxian_0609_dependency_inventory,
@@ -108,6 +113,9 @@ async def prepare_luxian_0609_execution(
         native_async_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False)
         ),
+        native_basic_timeliness_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", False)
+        ),
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
@@ -121,9 +129,12 @@ async def prepare_luxian_0609_execution(
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
     }
-    if package_plan.native_sync_rule_ids:
+    surgery_presence_rule_ids = package_plan.native_rule_ids_for_executor(
+        EXECUTOR_SURGERY_PRESENCE
+    )
+    if surgery_presence_rule_ids:
         native_execution = execute_luxian_0609_native_rules(
-            rule_ids=package_plan.native_sync_rule_ids,
+            rule_ids=surgery_presence_rule_ids,
             visit_id=str(visit_id or ""),
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
@@ -132,13 +143,32 @@ async def prepare_luxian_0609_execution(
         native_results = list(native_execution.results)
         if (
             tuple(str(item.get("rule_id") or "") for item in native_results)
-            != package_plan.native_sync_rule_ids
+            != surgery_presence_rule_ids
         ):
             native_execution = build_luxian_0609_native_technical_results(
-                package_plan.native_sync_rule_ids,
+                surgery_presence_rule_ids,
                 reason_code="native_result_incomplete",
             )
             native_results = list(native_execution.results)
+    basic_timeliness_rule_ids = package_plan.native_rule_ids_for_executor(
+        BASIC_TIMELINESS_EXECUTOR_KEY
+    )
+    if basic_timeliness_rule_ids:
+        basic_execution = execute_luxian_0609_native_basic_timeliness(
+            rule_ids=basic_timeliness_rule_ids,
+            evidence_payload=evidence_payload,
+        )
+        native_results.extend(basic_execution.results)
+    if native_results:
+        native_result_by_rule_id = {
+            str(item.get("rule_id") or "").strip().upper(): item
+            for item in native_results
+        }
+        native_results = [
+            native_result_by_rule_id[rule_id]
+            for rule_id in package_plan.native_sync_rule_ids
+            if rule_id in native_result_by_rule_id
+        ]
     native_llm_call_count = 0
     native_prompt_tokens = 0
     native_completion_tokens = 0
