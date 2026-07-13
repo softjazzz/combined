@@ -51,6 +51,10 @@ _PHYSICIAN_TITLE_PATTERN = re.compile(
 _COMPLETED_DISCUSSION_PATTERN = re.compile(
     r"手术指征|讨论意见|讨论结论|讨论后|同意(?:上述)?意见|手术方案"
 )
+_PLANNED_PARTICIPANT_PATTERN = re.compile(r"拟请|拟邀请|计划请|计划邀请|建议请|待请")
+_ROSTER_PLACEHOLDER_PATTERN = re.compile(
+    r"待填|未填|待定|暂无|未知|空缺|某某|姓名|^无$"
+)
 _PROJECTION_PATTERN = re.compile(
     r"MDT|多学科|多科|联合会诊|联合讨论|术前讨论|参加人员|参与人员|讨论人员|"
     r"会诊医师|主持|讨论意见|讨论结论|一致认为|麻醉科|科室",
@@ -167,9 +171,26 @@ def _has_completed_multidepartment_roster(text: str) -> bool:
     if roster_match is None:
         return False
     roster = roster_match.group(0)
+    actual_anesthesiologist = False
+    for match in _ANESTHESIA_ROSTER_PATTERN.finditer(roster):
+        leading = roster[max(0, match.start() - 8) : match.start()]
+        if _PLANNED_PARTICIPANT_PATTERN.search(leading + match.group(0)):
+            continue
+        compact = re.sub(r"\s+", "", match.group(0))
+        if compact.startswith("麻醉科"):
+            name = compact[len("麻醉科") :]
+        else:
+            name = compact.split("麻醉", 1)[0]
+        name = _PHYSICIAN_TITLE_PATTERN.sub("", name)
+        if not name or _ROSTER_PLACEHOLDER_PATTERN.search(name):
+            continue
+        actual_anesthesiologist = True
+        break
+    narrative = _clean(text[roster_match.end() :])
     return bool(
-        _ANESTHESIA_ROSTER_PATTERN.search(roster)
+        actual_anesthesiologist
         and len(_PHYSICIAN_TITLE_PATTERN.findall(roster)) >= 2
+        and len(narrative) >= 100
         and (_COMPLETED_DISCUSSION_PATTERN.search(text) or "术前讨论" in text)
     )
 
@@ -322,6 +343,19 @@ async def execute_luxian_0609_native_mdt_rule(
         )
         return NativeMdtExecutionResult(
             _result(status=state, finding_kind=kind, reason_code=reason)
+        )
+    level4_session_times = {
+        start
+        for row in level4
+        if (start := _parse_datetime(row.get("surgery_begin_datetime"))) is not None
+    }
+    if len(level4_session_times) > 1:
+        return NativeMdtExecutionResult(
+            _result(
+                status="data_gap",
+                finding_kind="data_gap",
+                reason_code="multiple_level4_sessions_unresolved",
+            )
         )
 
     try:

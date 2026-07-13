@@ -103,6 +103,8 @@ async def test_preop_roster_with_anesthesiologist_is_completed_multidepartment_f
                             "术前讨论。主持人签名：甲主任医师。"
                             "乙主治医师、丙住院医师、丁麻醉医师参加。"
                             "病史汇报：诊断明确，手术指征具备，讨论后同意手术。"
+                            + "已完成相关检查和风险评估。"
+                            * 12
                         ),
                     }
                 ],
@@ -151,6 +153,58 @@ async def test_anesthesia_plan_without_anesthesiologist_roster_does_not_shortcut
                             "术前讨论。主持人签名：甲主任医师。"
                             "乙主治医师、丙住院医师参加。"
                             "病史汇报：手术指征具备，拟采用全身麻醉方式。"
+                        ),
+                    }
+                ],
+                "consultation_record": [],
+            }
+        ),
+    )
+    llm = _LLM("absent")
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+
+    assert execution.result["status"] == "non_compliant"
+    assert execution.result["metadata"]["reason_code"] == "mdt_llm_absent"
+    assert execution.llm_call_count == 1
+    assert llm.calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "roster",
+    (
+        "甲主任医师、拟请麻醉科张三主任医师",
+        "甲主任医师、麻醉科待填主任医师",
+    ),
+)
+async def test_planned_or_placeholder_anesthesia_roster_does_not_shortcut(
+    monkeypatch,
+    roster,
+):
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "mr_surgery": [
+                    {
+                        "surgical_level": "四级",
+                        "surgery_begin_datetime": "2026-01-02T09:00:00",
+                    }
+                ],
+                "presurg_discussion": [
+                    {
+                        "record_time": "2026-01-01T09:00:00",
+                        "record_content": (
+                            f"术前讨论。主持人签名：{roster}。病史汇报："
+                            + "模板保留手术指征和手术方案标签。" * 12
                         ),
                     }
                 ],
@@ -246,6 +300,56 @@ async def test_missing_mdt_document_is_programmatic_non_compliant(monkeypatch):
 
     assert execution.result["status"] == "non_compliant"
     assert execution.result["metadata"]["reason_code"] == "preoperative_mdt_absent"
+    assert llm.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_multiple_level4_sessions_without_operation_linkage_are_data_gap(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "mr_surgery": [
+                    {
+                        "surgery_name": "第一次手术",
+                        "surgical_level": "四级",
+                        "surgery_begin_datetime": "2026-01-02T09:00:00",
+                    },
+                    {
+                        "surgery_name": "第二次手术",
+                        "surgical_level": "四级",
+                        "surgery_begin_datetime": "2026-01-05T09:00:00",
+                    },
+                ],
+                "presurg_discussion": [
+                    {
+                        "record_time": "2026-01-01T09:00:00",
+                        "record_content": "经多学科讨论后一致认为可实施第一次手术。",
+                    }
+                ],
+                "consultation_record": [],
+            }
+        ),
+    )
+    llm = _LLM("present")
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=llm,
+    )
+
+    assert execution.result["status"] == "data_gap"
+    assert (
+        execution.result["metadata"]["reason_code"]
+        == "multiple_level4_sessions_unresolved"
+    )
+    assert execution.llm_call_count == 0
     assert llm.calls == 0
 
 
