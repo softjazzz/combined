@@ -1702,7 +1702,15 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
                     "rule_id": rule_id,
                     "status": "compliant" if rule_id != "LX0609-032" else "non_compliant",
                     "is_compliant": rule_id != "LX0609-032",
-                    "metadata": {"execution_source": "lx0609_native", "executor_type": "program"},
+                    "prompt_version": "native-should-hide",
+                    "model_version": "native-should-hide",
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "program",
+                        "prompt_version": "native-should-hide",
+                        "performance_profile": {"tokens_total": 0},
+                    },
+                    "audit": {"model_name": "native-should-hide"},
                 }
                 for rule_id in native_rule_ids
             ],
@@ -1733,6 +1741,23 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
     assert len(workspace.items) == 6
     assert {str(item.get("rule_id") or "") for item in workspace.items} == set(native_rule_ids)
     assert int((workspace.summary or {}).get("total_tokens") or 0) == 0
+    hidden_native_fields = {
+        "prompt_version",
+        "model_name",
+        "model_version",
+        "prompt_strategy",
+        "prompt_tokens",
+        "completion_tokens",
+        "cot_mode",
+        "requested_enable_thinking",
+        "thinking_heuristic_applied",
+        "llm_fallback",
+        "performance_profile",
+    }
+    for item in workspace.items:
+        assert hidden_native_fields.isdisjoint(item)
+        assert hidden_native_fields.isdisjoint(dict(item.get("metadata") or {}))
+        assert hidden_native_fields.isdisjoint(dict(item.get("audit") or {}))
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,10 @@ const ADrawerStub = defineComponent({
 const ATableStub = defineComponent({
   name: 'ATableStub',
   props: {
+    columns: {
+      type: Array,
+      default: () => [],
+    },
     dataSource: {
       type: Array,
       default: () => [],
@@ -468,6 +472,66 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(props.reviewBatchJobResult).toHaveBeenCalledTimes(1)
   })
 
+  it('泸县0609原生任务不应展示模型、Prompt和Token诊断字段', async () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.draft_ids = ['LX0609-029', 'LX0609-030', 'LX0609-032']
+    props.batchJobDetail.filters = {
+      rule_set_key: 'luxian_0609_qc_v1',
+      rule_ids: ['LX0609-029', 'LX0609-030', 'LX0609-032'],
+    }
+    Object.assign(props.batchJobDetail.rule_results?.[0]?.items?.[0] || {}, {
+      audit: { model_name: 'INTERNAL_NATIVE_MODEL_MARKER' },
+    })
+    if (props.batchJobDetail.summary) {
+      props.batchJobDetail.summary.performance_profile = {
+        tokens_total: 0,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        unattributed_tokens: 0,
+      }
+    }
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const deepReviewButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('深度复核'))
+    expect(deepReviewButton).toBeTruthy()
+    await deepReviewButton?.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain('INTERNAL_NATIVE_MODEL_MARKER')
+
+    await wrapper.find('.a-radio-advanced-stub').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const issueTable = wrapper
+      .findAllComponents(ATableStub)
+      .find((table) =>
+        (table.props('columns') as Array<{ key?: string }>).some(
+          (column) => column.key === 'findings',
+        ),
+      )
+    const issueColumnKeys = (issueTable?.props('columns') as Array<{ key?: string }>).map(
+      (column) => column.key,
+    )
+    expect(issueColumnKeys).not.toContain('prompt_version')
+    expect(issueColumnKeys).not.toContain('model_version')
+    expect(wrapper.text()).not.toContain('总 Token')
+    expect(wrapper.text()).not.toContain('输入 Token')
+    expect(wrapper.text()).not.toContain('语义规则')
+    expect(wrapper.text()).not.toContain('累计模型处理耗时')
+    expect(wrapper.text()).not.toContain('底层执行规则')
+    expect(wrapper.text()).not.toContain('映射到')
+    expect(wrapper.text()).toContain('本次执行质控点数')
+  })
+
   it('应展示当前任务摘要中的病历级与规则级统计口径', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props: buildProps(),
@@ -493,6 +557,19 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     await wrapper.find('.a-radio-advanced-stub').trigger('click')
     await wrapper.vm.$nextTick()
+
+    const genericIssueTable = wrapper
+      .findAllComponents(ATableStub)
+      .find((table) =>
+        (table.props('columns') as Array<{ key?: string }>).some(
+          (column) => column.key === 'findings',
+        ),
+      )
+    const genericIssueColumnKeys = (
+      genericIssueTable?.props('columns') as Array<{ key?: string }>
+    ).map((column) => column.key)
+    expect(genericIssueColumnKeys).toContain('prompt_version')
+    expect(genericIssueColumnKeys).toContain('model_version')
 
     await wrapper.find('.debug-rule-select.a-select-stub').setValue('rule-job-2')
     await flushPromises()

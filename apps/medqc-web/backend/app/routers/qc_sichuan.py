@@ -1091,6 +1091,44 @@ def _attach_result_performance_profile(item: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
+_LUXIAN_NATIVE_CUSTOMER_HIDDEN_FIELDS = frozenset(
+    {
+        "prompt_version",
+        "model_name",
+        "model_version",
+        "prompt_strategy",
+        "prompt_tokens",
+        "completion_tokens",
+        "cot_mode",
+        "requested_enable_thinking",
+        "thinking_heuristic_applied",
+        "llm_fallback",
+        "performance_profile",
+    }
+)
+
+
+def _strip_luxian_native_customer_diagnostics(
+    item: Dict[str, Any], *, native_result: bool = False
+) -> Dict[str, Any]:
+    """0609 原生结果不向客户任务详情暴露无意义的模型诊断字段。"""
+    metadata = dict(item.get("metadata") or {})
+    if not native_result and str(metadata.get("execution_source") or "").strip() != "lx0609_native":
+        return item
+    for key in _LUXIAN_NATIVE_CUSTOMER_HIDDEN_FIELDS:
+        item.pop(key, None)
+        metadata.pop(key, None)
+    audit = dict(item.get("audit") or {})
+    for key in _LUXIAN_NATIVE_CUSTOMER_HIDDEN_FIELDS:
+        audit.pop(key, None)
+    item["metadata"] = metadata
+    if audit:
+        item["audit"] = audit
+    else:
+        item.pop("audit", None)
+    return item
+
+
 def _build_batch_performance_profile(
     *,
     job_id: str,
@@ -3181,6 +3219,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 for final_item in [*record_issue_items, *record_status_items]:
                     _attach_result_performance_profile(final_item)
                     final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
+                    _strip_luxian_native_customer_diagnostics(
+                        final_item,
+                        native_result=native_direct_enabled and final_rule_id in NATIVE_RULE_IDS,
+                    )
                     if final_rule_id not in items_by_rule:
                         continue
                     if should_postprocess_formal_results:
