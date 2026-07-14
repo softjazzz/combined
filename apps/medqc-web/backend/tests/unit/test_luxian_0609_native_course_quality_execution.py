@@ -234,6 +234,82 @@ async def test_016_requires_admission_and_first_course_before_model():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "first_course_row",
+    [
+        {
+            "title": "首次病程记录",
+            "record_time": "2026-06-01 09:00:00",
+            "content_preview": "首次病程病例特点、诊断依据和诊疗计划已经完整记录。",
+            "text_preview": "首次病程记录预览",
+        },
+        {
+            "title": "首次病程记录",
+            "record_time": "2026-06-01 09:00:00",
+            "source_table": "first_course_record",
+            "assembled_fields": ["record_time", "document_title"],
+        },
+        {
+            "title": "首次病程记录",
+            "record_time": "2026-06-01 09:00:00",
+            "content": (
+                "source_table:first_course_record；文书类型：首次病程记录；"
+                "记录时间：2026年06月01日09时00分00秒；assembly_status:partial"
+            ),
+        },
+    ],
+)
+async def test_016_preview_or_assembly_shell_is_data_gap_without_model(
+    first_course_row: dict,
+):
+    client = _Client([{"is_compliant": False}])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016",),
+        wrapper_rules=[_wrapper("LX0609-016")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [_row("入院记录现病史与病例特点。")],
+                "first_course_record": [first_course_row],
+            }
+        ),
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "首次病程病例特点、诊断依据和诊疗计划已经完整记录" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_016_admission_preview_shell_is_data_gap_without_model():
+    client = _Client([{"is_compliant": True}])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016",),
+        wrapper_rules=[_wrapper("LX0609-016")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [
+                    {
+                        "title": "入院记录",
+                        "record_time": "2026-06-01 08:00:00",
+                        "text_preview": "入院记录预览",
+                    }
+                ],
+                "first_course_record": [_row("首次病程病例特点与诊断依据。")],
+            }
+        ),
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_017_requires_two_comparable_records_and_never_outputs_review_pending():
     one_record = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),

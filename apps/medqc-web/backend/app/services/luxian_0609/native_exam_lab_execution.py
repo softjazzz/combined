@@ -35,6 +35,7 @@ _MAX_CONTEXT_CHARS = 12000
 _EXAM_FACT_TYPE = "current_visit_ct_mri_exam"
 _CULTURE_FACT_TYPE = "current_visit_culture_or_ast"
 _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive"})
+_ABSENT_FACT_STATES = frozenset({"explicit_negative", "absent", "not_present"})
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 
 _CONTROLLED_MESSAGES = {
@@ -107,10 +108,12 @@ def _source_rows(
     return rows
 
 
-def _has_fact(
+def _fact_state(
     facts: Sequence[Any], fact_type: str, source_keys: Sequence[str]
-) -> bool:
+) -> str:
     approved_sources = frozenset(source_keys)
+    observed_present = False
+    observed_absent = False
     for raw_fact in facts:
         if not isinstance(raw_fact, Mapping):
             continue
@@ -118,13 +121,20 @@ def _has_fact(
         state = str(raw_fact.get("state") or "").strip().lower()
         source_key = str(raw_fact.get("source_key") or "").strip().lower()
         if (
-            actual_type == fact_type
-            and state in _PRESENT_FACT_STATES
-            and source_key in approved_sources
-            and raw_fact.get("current_visit_bound") is True
+            actual_type != fact_type
+            or source_key not in approved_sources
+            or raw_fact.get("current_visit_bound") is not True
         ):
-            return True
-    return False
+            continue
+        if state in _PRESENT_FACT_STATES:
+            observed_present = True
+        elif state in _ABSENT_FACT_STATES:
+            observed_absent = True
+    if observed_present and not observed_absent:
+        return "present"
+    if observed_present and observed_absent:
+        return "unknown"
+    return "absent" if observed_absent else "unknown"
 
 
 def _context(documents: Mapping[str, Any], *, fact_kind: str) -> str:
@@ -220,8 +230,8 @@ async def execute_luxian_0609_native_exam_lab_rules(
             planned_rule_ids=selected,
         )
 
-    exam_present = _has_fact(timeline_facts, _EXAM_FACT_TYPE, _EXAM_SOURCE_KEYS)
-    culture_present = _has_fact(
+    exam_state = _fact_state(timeline_facts, _EXAM_FACT_TYPE, _EXAM_SOURCE_KEYS)
+    culture_state = _fact_state(
         timeline_facts, _CULTURE_FACT_TYPE, _CULTURE_SOURCE_KEYS
     )
     wrappers_by_id = {
@@ -235,10 +245,25 @@ async def execute_luxian_0609_native_exam_lab_rules(
     api_time = 0.0
     for rule_id in selected:
         fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
-        fact_present = exam_present if fact_kind == "exam" else culture_present
-        if not fact_present:
+        fact_state = exam_state if fact_kind == "exam" else culture_state
+        if fact_state == "absent":
             results.append(
-                _result(rule_id, "not_applicable", f"{fact_kind}_fact_absent", executor_type="program")
+                _result(
+                    rule_id,
+                    "not_applicable",
+                    f"{fact_kind}_fact_absent",
+                    executor_type="program",
+                )
+            )
+            continue
+        if fact_state != "present":
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    f"{fact_kind}_fact_unknown",
+                    executor_type="program",
+                )
             )
             continue
         wrapper = wrappers_by_id.get(rule_id)

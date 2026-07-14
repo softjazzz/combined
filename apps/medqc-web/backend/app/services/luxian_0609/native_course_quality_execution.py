@@ -66,6 +66,7 @@ _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
 _MIN_COMPARABLE_CHARS = 24
+_MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
@@ -152,6 +153,52 @@ def _row_text(row: Mapping[str, Any]) -> str:
     )
 
 
+def _first_course_body_text(row: Mapping[str, Any]) -> str:
+    """只返回首次病程实质正文，不把界面预览当作正文。"""
+
+    content = _clean(
+        row.get("record_content")
+        or row.get("content")
+        or row.get("assembled_text")
+        or row.get("raw_text")
+    )
+    if not content:
+        return ""
+    normalized = re.sub(r"[\W_]+", "", content, flags=re.UNICODE)
+    shell_remainder = re.sub(
+        r"(?:首次病程记录|首次病程|记录时间|提交时间|文书类型|文书编号|正文|"
+        r"sourcetable|firstcourserecord|assemblystatus|partial|"
+        r"年|月|日|时|分|秒|\d+)",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return content if len(shell_remainder) >= _MIN_FIRST_COURSE_BODY_CHARS else ""
+
+
+def _admission_body_text(row: Mapping[str, Any]) -> str:
+    """只接受入院记录正文承载字段，拒绝标题、时间和预览壳。"""
+
+    content = _clean(
+        row.get("record_content")
+        or row.get("content")
+        or row.get("assembled_text")
+        or row.get("raw_text")
+    )
+    if not content:
+        return ""
+    normalized = re.sub(r"[\W_]+", "", content, flags=re.UNICODE)
+    shell_remainder = re.sub(
+        r"(?:入院记录|记录时间|提交时间|文书类型|文书编号|正文|"
+        r"sourcetable|admissionrecord|assemblystatus|partial|"
+        r"年|月|日|时|分|秒|\d+)",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return content if len(shell_remainder) >= _MIN_FIRST_COURSE_BODY_CHARS else ""
+
+
 def _source_rows(
     documents: Mapping[str, Any], source_key: str
 ) -> tuple[Mapping[str, Any], ...]:
@@ -173,6 +220,26 @@ def _substantive_rows(
             if content:
                 rows.append((source_key, row, content))
     return tuple(rows)
+
+
+def _substantive_first_course_rows(
+    documents: Mapping[str, Any],
+) -> tuple[tuple[str, Mapping[str, Any], str], ...]:
+    return tuple(
+        ("first_course_record", row, content)
+        for row in _source_rows(documents, "first_course_record")
+        if (content := _first_course_body_text(row))
+    )
+
+
+def _substantive_admission_rows(
+    documents: Mapping[str, Any],
+) -> tuple[tuple[str, Mapping[str, Any], str], ...]:
+    return tuple(
+        ("admission_record", row, content)
+        for row in _source_rows(documents, "admission_record")
+        if (content := _admission_body_text(row))
+    )
 
 
 def _fact_state(
@@ -530,9 +597,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             controlled_fact = "当前就诊存在病危医嘱"
         elif rule_id == "LX0609-016":
-            if not _substantive_rows(
-                documents, ("admission_record",)
-            ) or not _substantive_rows(documents, ("first_course_record",)):
+            if not _substantive_admission_rows(
+                documents
+            ) or not _substantive_first_course_rows(documents):
                 results.append(
                     _result(
                         rule_id,

@@ -79,7 +79,7 @@ class _Client:
 
 
 @pytest.mark.asyncio
-async def test_no_explicit_exam_or_culture_fact_returns_not_applicable_without_model():
+async def test_no_explicit_exam_or_culture_fact_returns_data_gap_without_model():
     client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -90,7 +90,14 @@ async def test_no_explicit_exam_or_culture_fact_returns_not_applicable_without_m
     )
 
     assert [item["rule_id"] for item in result.results] == list(exam_lab.EXAM_LAB_RULE_IDS)
-    assert [item["status"] for item in result.results] == ["not_applicable"] * 5
+    assert [item["status"] for item in result.results] == ["data_gap"] * 5
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "exam_fact_unknown",
+        "exam_fact_unknown",
+        "exam_fact_unknown",
+        "culture_fact_unknown",
+        "culture_fact_unknown",
+    ]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -109,8 +116,154 @@ async def test_generic_ct_mri_and_culture_words_do_not_replace_structured_fact_g
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["not_applicable"] * 5
+    assert [item["status"] for item in result.results] == ["data_gap"] * 5
     assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_absent_current_visit_facts_are_not_applicable_without_model():
+    client = _Client([])
+    payload = _payload(exam="通用检查来源", culture="通用检验来源")
+    payload["timeline_facts"] = [
+        {
+            "fact_type": "current_visit_ct_mri_exam",
+            "state": "explicit_negative",
+            "source_key": "exam_master",
+            "current_visit_bound": True,
+        },
+        {
+            "fact_type": "current_visit_culture_or_ast",
+            "state": "absent",
+            "source_key": "labtest_master",
+            "current_visit_bound": True,
+        },
+    ]
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=payload,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable"] * 5
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "exam_fact_absent",
+        "exam_fact_absent",
+        "exam_fact_absent",
+        "culture_fact_absent",
+        "culture_fact_absent",
+    ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_non_current_visit_or_wrong_source_absence_remains_data_gap():
+    client = _Client([])
+    payload = _payload()
+    payload["timeline_facts"] = [
+        {
+            "fact_type": "current_visit_ct_mri_exam",
+            "state": "absent",
+            "source_key": "exam_master",
+            "current_visit_bound": False,
+        },
+        {
+            "fact_type": "current_visit_culture_or_ast",
+            "state": "absent",
+            "source_key": "unapproved_lab_source",
+            "current_visit_bound": True,
+        },
+    ]
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=payload,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"] * 5
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_negative_result_is_not_treated_as_explicit_exam_or_culture_absence():
+    client = _Client([])
+    payload = _payload()
+    payload["timeline_facts"] = [
+        {
+            "fact_type": "current_visit_ct_mri_exam",
+            "state": "negative",
+            "source_key": "exam_master",
+            "current_visit_bound": True,
+        },
+        {
+            "fact_type": "current_visit_culture_or_ast",
+            "state": "negative",
+            "source_key": "labtest_master",
+            "current_visit_bound": True,
+        },
+    ]
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=payload,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"] * 5
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_conflicting_present_and_absent_facts_fail_closed_without_model():
+    client = _Client([])
+    payload = _payload()
+    payload["timeline_facts"] = [
+        {
+            "fact_type": "current_visit_ct_mri_exam",
+            "state": "present",
+            "source_key": "exam_master",
+            "current_visit_bound": True,
+        },
+        {
+            "fact_type": "current_visit_ct_mri_exam",
+            "state": "explicit_negative",
+            "source_key": "exam_master",
+            "current_visit_bound": True,
+        },
+        {
+            "fact_type": "current_visit_culture_or_ast",
+            "state": "present",
+            "source_key": "labtest_master",
+            "current_visit_bound": True,
+        },
+        {
+            "fact_type": "current_visit_culture_or_ast",
+            "state": "absent",
+            "source_key": "labtest_master",
+            "current_visit_bound": True,
+        },
+    ]
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=payload,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"] * 5
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
     assert client.prompts == []
 
 
@@ -133,8 +286,8 @@ async def test_exam_fact_calls_only_exam_rules_and_keeps_customer_order():
         "non_compliant",
         "compliant",
         "non_compliant",
-        "not_applicable",
-        "not_applicable",
+        "data_gap",
+        "data_gap",
     ]
     assert result.llm_call_count == 3
     assert result.total_tokens == 330

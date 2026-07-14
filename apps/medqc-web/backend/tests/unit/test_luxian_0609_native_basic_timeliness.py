@@ -37,6 +37,112 @@ def _rules(*rule_ids: str) -> list[dict]:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
+    "first_course_rows",
+    [
+        [],
+        [{"title": "首次病程记录", "authored_at": "2026-06-01 10:00:00"}],
+        [
+            {
+                "title": "首次病程记录",
+                "authored_at": "2026-06-01 10:00:00",
+                "text_preview": "仅供列表展示的预览",
+                "content_preview": "首次病程记录",
+            }
+        ],
+        [
+            {
+                "title": "首次病程记录",
+                "authored_at": "2026-06-01 10:00:00",
+                "assembly_status": "partial",
+                "source_fields": [{"field": "record_time"}],
+                "sections": [],
+                "data_quality_flags": ["body_missing"],
+            }
+        ],
+        [
+            {
+                "title": "首次病程记录",
+                "authored_at": "2026-06-01 10:00:00",
+                "content": (
+                    "source_table:first_course_record；文书类型：首次病程记录；"
+                    "记录时间：2026-06-01 10:00:00；assembly_status:partial"
+                ),
+            }
+        ],
+        [
+            {
+                "title": "首次病程记录",
+                "authored_at": "2026-06-01 10:00:00",
+                "content": "首次病程记录 2026年06月01日10时00分00秒",
+            }
+        ],
+    ],
+)
+def test_first_course_shell_or_missing_body_is_data_gap_without_content_echo(
+    first_course_rows: list[dict],
+):
+    marker = "SHELL_MARKER_MUST_NOT_ECHO"
+    rows = [dict(item, text_preview=marker) for item in first_course_rows]
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-002",),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "documents": {"first_course_record": rows},
+            }
+        },
+    )
+
+    assert execution.planned_rule_ids == ("LX0609-002",)
+    assert len(execution.results) == 1
+    result = execution.results[0]
+    assert result["status"] == "data_gap"
+    assert (
+        result["metadata"]["reason_code"]
+        == "first_course_substantive_content_unavailable"
+    )
+    assert result["metadata"]["prompt_tokens"] == 0
+    assert result["metadata"]["completion_tokens"] == 0
+    assert result["metadata"]["total_tokens"] == 0
+    assert marker not in repr(result)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("authored_at", "expected_status"),
+    [
+        ("2026-06-01 16:00:00", "compliant"),
+        ("2026-06-01 16:01:00", "non_compliant"),
+    ],
+)
+def test_first_course_substantive_body_keeps_eight_hour_boundary(
+    authored_at: str,
+    expected_status: str,
+):
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-002",),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "documents": {
+                    "first_course_record": [
+                        {
+                            "title": "首次病程记录",
+                            "authored_at": authored_at,
+                            "content": "患者入院后完成病史采集、体格检查和初步诊疗分析，记录诊断依据及后续处理计划。",
+                        }
+                    ]
+                },
+            }
+        },
+    )
+
+    assert execution.results[0]["status"] == expected_status
+    assert execution.results[0]["metadata"]["total_tokens"] == 0
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
     ("record_time", "expected_status"),
     [
         ("2026-06-01 15:00:00", "compliant"),
@@ -112,7 +218,11 @@ def test_native_basic_family_returns_five_results_in_catalog_order_without_llm()
                         {"title": "入院记录", "authored_at": "2026-06-01 09:00:00"}
                     ],
                     "first_course_record": [
-                        {"title": "首次病程记录", "authored_at": "2026-06-01 10:00:00"}
+                        {
+                            "title": "首次病程记录",
+                            "authored_at": "2026-06-01 10:00:00",
+                            "content": "患者入院后已完成病史采集和体格检查，并记录诊断依据、鉴别诊断及后续诊疗计划。",
+                        }
                     ],
                     "rescue_record": [],
                     "senior_course_record": [
