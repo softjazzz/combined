@@ -528,6 +528,214 @@ async def test_native_exam_lab_flag_off_preserves_exact_legacy_dispatch(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_order(monkeypatch):
+    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+    mappings = {
+        "LX0609-041": ["SC-133", "LXE-52"],
+        "LX0609-042": ["SC-134", "SC-133"],
+        "LX0609-043": ["SC-073", "SC-138"],
+        "LX0609-044": ["SC-074", "LX-018"],
+        "LX0609-045": ["SC-074", "LX-018"],
+        "LX0609-046": ["SC-074", "LX-018"],
+        "LX0609-047": ["CL-255", "SC-074"],
+        "LX0609-048": ["CL-256", "CL-208", "SC-074"],
+        "LX0609-049": ["SC-146"],
+    }
+    wrappers = []
+    for rule_id in selected:
+        wrapper = _wrapper(
+            rule_id,
+            name=rule_id,
+            mapped_rule_ids=mappings[rule_id],
+            trigger_condition="专用输血来源事实",
+        )
+        wrapper["custom_prompt"] = (
+            f"规则ID: {rule_id}\n病历文本：{{medical_text}}\n"
+            '只输出JSON：{"is_compliant": true}'
+        )
+        wrappers.append(wrapper)
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
+        LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    reader_calls: list[str] = []
+    dispatched: list[list[str]] = []
+
+    def _reader(*, source_key: str, **_):
+        reader_calls.append(source_key)
+        if source_key == "mr_bloodtrans":
+            return []
+        return [{"record_content": "输血记录正文，记录实际输注过程及观察情况。"}]
+
+    class _Client:
+        def __init__(self):
+            self.prompts: list[str] = []
+
+        async def generate(self, prompt: str):
+            self.prompts.append(prompt)
+            return {
+                "choices": [{"message": {"content": '{"is_compliant": true}'}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+            }
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        raise AssertionError("原生输血族不应派发旧规则")
+
+    raw_body_marker = "SAFE_TRANSFUSION_BODY_MARKER"
+    documents = {
+        "bloodtrans_record": [
+            {"content": f"输血记录正文，记录实际输注过程及观察情况。{raw_body_marker}"}
+        ],
+        "consent_form": [{"content": "输血治疗知情同意书，已完成风险告知及签名。"}],
+        "labtest_master": [{"content": "输血前常规检查资料。"}],
+        "blood_application": [{"content": "输血前评估及申请资料。"}],
+        "daily_course_record": [{"content": "输血过程及输血后评价记录。"}],
+        "surgery_record": [{"content": "手术记录中的术中输血信息。"}],
+        "anesthesia_record": [{"content": "麻醉记录中的术中输血信息。"}],
+        "postsurg_firstcourse_record": [{"content": "术后首次病程中的输血信息。"}],
+        "inpat_nondrug_order": [{"content": "输血医嘱中的成分和数量。"}],
+        "inpat_bill_item": [{"content": "输血收费中的成分和数量。"}],
+    }
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(
+        "app.services.luxian_0609.native_transfusion_execution.read_luxian_0609_native_source_rows",
+        _reader,
+    )
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+    client = _Client()
+    service.adjudicator_client = client
+    monkeypatch.setattr(
+        service,
+        "get_rule_by_id",
+        lambda rule_id: {"rule_id": rule_id, "rule_name": rule_id},
+    )
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "safe-institute",
+            "patient_id": "safe-patient",
+            "visit_id": "safe-visit",
+            "structured_context": {"documents": documents},
+            "text_available": False,
+        },
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert dispatched == []
+    assert reader_calls == []
+    # 正式 bundle 不承诺 consent_form 来源，041/042 必须 data_gap 且零模型。
+    assert len(client.prompts) == 7
+    assert [item["rule_id"] for item in result["evaluation_results"]] == selected
+    assert [item["status"] for item in result["evaluation_results"][:2]] == [
+        "data_gap",
+        "data_gap",
+    ]
+    assert result["token_usage"] == {
+        "total_tokens": 770,
+        "prompt_tokens": 700,
+        "completion_tokens": 70,
+    }
+    assert result["executor_breakdown"]["llm"] == 7
+    assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
+    assert raw_body_marker not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_native_transfusion_flag_off_preserves_exact_legacy_dispatch(monkeypatch):
+    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+    mappings = {
+        "LX0609-041": ["SC-133", "LXE-52"],
+        "LX0609-042": ["SC-134", "SC-133"],
+        "LX0609-043": ["SC-073", "SC-138"],
+        "LX0609-044": ["SC-074", "LX-018"],
+        "LX0609-045": ["SC-074", "LX-018"],
+        "LX0609-046": ["SC-074", "LX-018"],
+        "LX0609-047": ["CL-255", "SC-074"],
+        "LX0609-048": ["CL-256", "CL-208", "SC-074"],
+        "LX0609-049": ["SC-146"],
+    }
+    wrappers = [
+        _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="test")
+        for rule_id in selected
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
+        LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=False,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    dispatched: list[list[str]] = []
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        return {
+            "results": [],
+            "total_tokens": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "total_api_time": 0.0,
+        }
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+    monkeypatch.setattr(
+        service,
+        "get_rule_by_id",
+        lambda rule_id: {"rule_id": rule_id, "rule_name": rule_id},
+    )
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "visit_id": "safe-visit",
+            "structured_context": {"documents": {}},
+            "text_available": False,
+        },
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert dispatched == [[
+        "SC-133",
+        "LXE-52",
+        "SC-134",
+        "SC-073",
+        "SC-138",
+        "SC-074",
+        "LX-018",
+        "CL-255",
+        "CL-256",
+        "CL-208",
+        "SC-146",
+    ]]
+
+
+@pytest.mark.asyncio
 async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_legacy_scope(monkeypatch):
     """公共入口只收客户 ID；共享 SC-099 不得额外带出 019/024。"""
 

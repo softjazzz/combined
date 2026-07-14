@@ -18,6 +18,19 @@ SURGERY_TIME_FIELDS = (
 )
 
 _NATIVE_SOURCE_FIELDS = {
+    "mr_bloodtrans": (
+        "transfuse_variety",
+        "blood_transfusion_volume",
+        "blood_transfusion_unit",
+        "transblood_reaction_sign",
+        "transfution_datetime",
+    ),
+    "bloodtrans_record": (
+        "document_id",
+        "document_title",
+        "record_content",
+        "record_time",
+    ),
     "mr_surgery": (
         "surgery_code",
         "surgery_name",
@@ -160,6 +173,10 @@ def read_luxian_0609_native_source_rows(
 
     selected = [field for field in approved_fields if field in columns]
     if source_key == "mr_surgery" and not {"surgical_level", "surgery_begin_datetime"}.issubset(selected):
+        raise SourceEvidenceUnavailable()
+    if source_key == "mr_bloodtrans" and "transfution_datetime" not in selected:
+        raise SourceEvidenceUnavailable()
+    if source_key == "bloodtrans_record" and "record_content" not in selected:
         raise SourceEvidenceUnavailable()
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected) or "1 AS row_marker"
     order_candidates = (

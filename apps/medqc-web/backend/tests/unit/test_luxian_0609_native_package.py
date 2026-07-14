@@ -68,9 +68,18 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-021",
         "LX0609-022",
         "LX0609-023",
-        "LX0609-040"
+        "LX0609-040",
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-044",
+        "LX0609-045",
+        "LX0609-046",
+        "LX0609-047",
+        "LX0609-048",
+        "LX0609-049",
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 31
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 22
 
 
 @pytest.mark.unit
@@ -99,6 +108,36 @@ def test_exam_lab_family_flag_partitions_only_five_customer_rules():
     assert enabled.native_async_rule_ids == tuple(selected)
     assert enabled.compatibility_rule_ids == ()
     assert enabled.native_executor_batches == (("exam_lab", tuple(selected)),)
+    assert disabled.native_async_rule_ids == ()
+    assert disabled.compatibility_rule_ids == tuple(selected)
+
+
+@pytest.mark.unit
+def test_transfusion_family_flag_partitions_only_nine_customer_rules():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    selected = [f"LX0609-{number:03d}" for number in range(41, 50)]
+
+    enabled = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=selected,
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_transfusion_enabled=True,
+    )
+    disabled = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=selected,
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_transfusion_enabled=False,
+    )
+
+    assert enabled.native_async_rule_ids == tuple(selected)
+    assert enabled.compatibility_rule_ids == ()
+    assert enabled.native_executor_batches == (("transfusion", tuple(selected)),)
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == tuple(selected)
 

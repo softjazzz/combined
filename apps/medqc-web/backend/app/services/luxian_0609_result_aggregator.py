@@ -1932,7 +1932,7 @@ def _copy_customer_fields(
 
 
 def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str, Any]) -> dict[str, Any]:
-    """原生确定性结果不携带旧映射诊断。"""
+    """原生结果不携带旧映射诊断，并保留程序/模型执行类型。"""
     wrapper_id = _norm_id(wrapper.get("rule_id") or wrapper.get("rule_code"))
     status = _status(selected)
     if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain", "technical_error"}:
@@ -1944,7 +1944,11 @@ def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str,
         if key in selected_metadata
     }
     metadata["execution_source"] = "lx0609_native"
-    metadata["aggregation_source"] = "native_programmatic"
+    metadata["aggregation_source"] = (
+        "native_llm"
+        if str(metadata.get("executor_type") or "").strip().lower() == "llm"
+        else "native_programmatic"
+    )
     metadata["customer_rule_id"] = wrapper_id
     return {
         **_strip_sensitive(selected),

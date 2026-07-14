@@ -96,6 +96,40 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
     ))
 
 
+def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{
+            "rule_id": "LX0609-041",
+            "name": "输血知情同意书",
+            "mapped_rule_ids": ["SC-133", "LXE-52"],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-041",
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "满足要求",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 1.0,
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "executor_type": "llm",
+                "reason_code": "transfusion_customer_prompt",
+            },
+        }],
+        format_evidence=False,
+    )[0]
+
+    assert result["metadata"]["aggregation_source"] == "native_llm"
+    assert result["metadata"]["execution_source"] == "lx0609_native"
+    assert "SC-133" not in repr(result)
+    assert "LXE-52" not in repr(result)
+
+
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
 def test_attestation_rejects_every_safe_provenance_tamper(field):
     gate, finding = _pair(FindingKind.REQUIREMENT_SATISFIED)

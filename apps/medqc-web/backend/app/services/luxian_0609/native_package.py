@@ -23,6 +23,10 @@ from .native_exam_lab_execution import (
     EXAM_LAB_RULE_IDS,
     EXECUTOR_KEY as EXAM_LAB_EXECUTOR_KEY,
 )
+from .native_transfusion_execution import (
+    TRANSFUSION_RULE_IDS,
+    EXECUTOR_KEY as TRANSFUSION_EXECUTOR_KEY,
+)
 from .native_mdt_execution import RULE_ID as NATIVE_ASYNC_RULE_ID
 
 
@@ -161,6 +165,9 @@ def build_luxian_0609_dependency_inventory(
         elif rule_id in CONSULTATION_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = CONSULTATION_EXECUTOR_KEY
+        elif rule_id in TRANSFUSION_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = TRANSFUSION_EXECUTOR_KEY
         elif rule_id == NATIVE_ASYNC_RULE_ID:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXECUTOR_SURGERY_MDT
@@ -217,6 +224,7 @@ def build_luxian_0609_package_plan(
     native_basic_timeliness_enabled: bool = False,
     native_consultation_enabled: bool = False,
     native_exam_lab_enabled: bool = False,
+    native_transfusion_enabled: bool = False,
 ) -> Luxian0609PackagePlan:
     """按目录顺序将客户选择分为原生同步、原生异步和兼容执行。"""
 
@@ -243,8 +251,13 @@ def build_luxian_0609_package_plan(
         and (
             (item.executor_key == EXAM_LAB_EXECUTOR_KEY and native_exam_lab_enabled)
             or (item.executor_key == CONSULTATION_EXECUTOR_KEY and native_consultation_enabled)
+            or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
             or (
-                item.executor_key not in {EXAM_LAB_EXECUTOR_KEY, CONSULTATION_EXECUTOR_KEY}
+                item.executor_key not in {
+                    EXAM_LAB_EXECUTOR_KEY,
+                    CONSULTATION_EXECUTOR_KEY,
+                    TRANSFUSION_EXECUTOR_KEY,
+                }
                 and native_async_enabled
             )
         )

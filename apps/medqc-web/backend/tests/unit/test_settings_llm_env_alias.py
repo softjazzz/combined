@@ -22,6 +22,7 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED",
     "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED",
     "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED",
+    "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED",
 ]
 
 
@@ -134,3 +135,12 @@ def test_luxian_native_exam_lab_defaults_on_and_can_be_disabled(monkeypatch):
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED is False
+
+
+def test_luxian_native_transfusion_defaults_on_and_can_be_disabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED is False
