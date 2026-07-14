@@ -387,6 +387,73 @@ def _extract_timeline_fact_datetime(
     return ""
 
 
+def _resolve_admission_time(
+    *,
+    structured: dict[str, Any],
+    bundle_payload: dict[str, Any],
+    fallback_meta: dict[str, Any],
+    timeline_facts: list[Any],
+    documents: dict[str, list[dict[str, Any]]],
+    medical_text: str,
+) -> tuple[str, str, bool]:
+    """解析入院时刻并携带固定来源证明；正文/记录时间回退不得用于确定性时限质控。"""
+
+    trusted_candidates = (
+        (
+            _parse_datetime(fallback_meta.get("admission_datetime")),
+            "cdm_inpat_registration_admission_datetime",
+        ),
+        (
+            _extract_timeline_fact_datetime(
+                timeline_facts,
+                ("admission_time", "admission_datetime"),
+                source_tables=("mr", "inpat_registration", "admission_record"),
+            ),
+            "timeline_primary_admission_datetime",
+        ),
+    )
+    for value, basis in trusted_candidates:
+        if value:
+            return value, basis, True
+
+    untrusted_candidates = (
+        (
+            _parse_datetime(structured.get("admission_datetime")),
+            "structured_context_admission_datetime_unattested",
+        ),
+        (
+            _parse_datetime(bundle_payload.get("admission_datetime")),
+            "bundle_admission_datetime_unattested",
+        ),
+        (
+            _extract_timeline_fact_datetime(
+                timeline_facts,
+                ("record_time",),
+                source_tables=("admission_record",),
+            ),
+            "admission_record_record_time_fallback",
+        ),
+        (
+            _extract_datetime_by_labels(
+                "\n".join(
+                    _safe_text(item.get("content"))
+                    for item in documents.get("admission_record") or []
+                ),
+                ("入院日期", "入院时间"),
+            ),
+            "admission_record_text_label_fallback",
+        ),
+        (
+            _extract_datetime_by_labels(medical_text, ("入院日期", "入院时间")),
+            "medical_text_label_fallback",
+        ),
+    )
+    for value, basis in untrusted_candidates:
+        if value:
+            return value, basis, False
+    return "", "missing", False
+
+
 def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[str, Any]) -> list[dict[str, Any]]:
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
     if inventory_items:
@@ -639,6 +706,8 @@ def _build_supplement_text(
 
 def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medical_text: str = "") -> dict[str, Any]:
     bundle_payload = dict(bundle or {})
+    # 调用方携带的同名元数据不可作为来源证明；仅接受本次受控源表查询写回的值。
+    bundle_payload.pop("_source_table_fallback_meta", None)
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(structured, bundle_payload)
     fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
@@ -656,21 +725,13 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
 
     timeline_facts = list(bundle_payload.get("timeline_facts") or structured.get("timeline_facts") or [])
     medical_text_value = _safe_text(bundle_payload.get("medical_text")) or _safe_text(medical_text)
-    admission_time = (
-        _parse_datetime(structured.get("admission_datetime"))
-        or _parse_datetime(bundle_payload.get("admission_datetime"))
-        or _parse_datetime(fallback_meta.get("admission_datetime"))
-        or _extract_timeline_fact_datetime(timeline_facts, ("admission_time", "admission_datetime"))
-        or _extract_timeline_fact_datetime(
-            timeline_facts,
-            ("record_time",),
-            source_tables=("admission_record",),
-        )
-        or _extract_datetime_by_labels(
-            "\n".join(_safe_text(item.get("content")) for item in documents.get("admission_record") or []),
-            ("入院日期", "入院时间"),
-        )
-        or _extract_datetime_by_labels(medical_text_value, ("入院日期", "入院时间"))
+    admission_time, admission_time_basis, admission_time_trusted = _resolve_admission_time(
+        structured=structured,
+        bundle_payload=bundle_payload,
+        fallback_meta=fallback_meta,
+        timeline_facts=timeline_facts,
+        documents=documents,
+        medical_text=medical_text_value,
     )
     discharge_time = (
         _parse_datetime(structured.get("discharge_datetime"))
@@ -700,6 +761,8 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
         "programmatic_timeline": {
             "visit_id": _safe_text(bundle_payload.get("visit_id")),
             "admission_time": admission_time,
+            "admission_time_basis": admission_time_basis,
+            "admission_time_trusted": admission_time_trusted,
             "discharge_time": discharge_time,
             "documents": documents,
             "risk_flags": _extract_risk_flags(

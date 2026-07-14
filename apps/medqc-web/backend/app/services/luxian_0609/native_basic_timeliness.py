@@ -19,6 +19,15 @@ BASIC_TIMELINESS_RULE_IDS = (
 )
 EXECUTOR_KEY = "basic_timeliness"
 _FIRST_COURSE_RULE_ID = "LX0609-002"
+_ADMISSION_ANCHOR_RULE_IDS = frozenset(
+    {"LX0609-001", "LX0609-005", "LX0609-006"}
+)
+_TRUSTED_ADMISSION_TIME_BASES = frozenset(
+    {
+        "cdm_inpat_registration_admission_datetime",
+        "timeline_primary_admission_datetime",
+    }
+)
 _FIRST_COURSE_BODY_FIELDS = (
     "record_content",
     "content",
@@ -81,6 +90,30 @@ def _first_course_data_gap_result() -> dict[str, Any]:
     )
 
 
+def _trusted_admission_anchor_available(
+    evidence_payload: dict[str, Any] | None,
+) -> bool:
+    if not isinstance(evidence_payload, dict):
+        return False
+    timeline = evidence_payload.get("programmatic_timeline")
+    if not isinstance(timeline, dict):
+        return False
+    return (
+        bool(str(timeline.get("admission_time") or "").strip())
+        and timeline.get("admission_time_trusted") is True
+        and timeline.get("admission_time_basis") in _TRUSTED_ADMISSION_TIME_BASES
+    )
+
+
+def _admission_anchor_data_gap_result(rule_id: str) -> dict[str, Any]:
+    return build_luxian_0609_native_result(
+        rule_id=rule_id,
+        final_state="data_gap",
+        finding_kind="source_data_gap",
+        reason_code="trusted_admission_anchor_unavailable",
+    )
+
+
 def execute_luxian_0609_native_basic_timeliness(
     *,
     rule_ids: Sequence[str],
@@ -104,10 +137,13 @@ def execute_luxian_0609_native_basic_timeliness(
             _FIRST_COURSE_RULE_ID in selected
             and not _has_substantive_first_course_body(evidence_payload)
         )
+        admission_anchor_data_gap_ids = _ADMISSION_ANCHOR_RULE_IDS.intersection(
+            selected
+        ) if not _trusted_admission_anchor_available(evidence_payload) else set()
         selected_set = set(selected)
         evaluated_rule_ids = selected_set - (
             {_FIRST_COURSE_RULE_ID} if first_course_data_gap else set()
-        )
+        ) - admission_anchor_data_gap_ids
         wrappers = [
             rule
             for rule in load_luxian_0609_rules()
@@ -134,6 +170,9 @@ def execute_luxian_0609_native_basic_timeliness(
 
     results: list[dict[str, Any]] = []
     for rule_id in selected:
+        if rule_id in admission_anchor_data_gap_ids:
+            results.append(_admission_anchor_data_gap_result(rule_id))
+            continue
         if rule_id == _FIRST_COURSE_RULE_ID and first_course_data_gap:
             results.append(_first_course_data_gap_result())
             continue

@@ -142,6 +142,160 @@ def test_first_course_substantive_body_keeps_eight_hour_boundary(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("admission_time_trusted", [False, None])
+def test_admission_anchor_rules_reject_untrusted_or_unattested_legal_datetime(
+    admission_time_trusted: bool | None,
+):
+    timeline = {
+        "admission_time": "2026-06-01 08:00:00",
+        "documents": {
+            "admission_record": [
+                {"title": "入院记录", "authored_at": "2026-06-01 09:00:00"}
+            ],
+            "senior_course_record": [
+                {
+                    "title": "主治医师首次查房记录",
+                    "author_title": "主治医师",
+                    "authored_at": "2026-06-02 09:00:00",
+                },
+                {
+                    "title": "主任医师首次查房记录",
+                    "author_title": "主任医师",
+                    "authored_at": "2026-06-03 09:00:00",
+                },
+            ],
+        },
+    }
+    if admission_time_trusted is not None:
+        timeline["admission_time_trusted"] = admission_time_trusted
+
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload={"programmatic_timeline": timeline},
+    )
+
+    assert [item["status"] for item in execution.results] == ["data_gap"] * 3
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"trusted_admission_anchor_unavailable"}
+    assert all(item["metadata"]["total_tokens"] == 0 for item in execution.results)
+    assert "2026-06-01" not in repr(execution.results)
+
+
+@pytest.mark.unit
+def test_untrusted_admission_anchor_does_not_change_002_or_004():
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-002", "LX0609-004"),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "admission_time_trusted": False,
+                "documents": {
+                    "first_course_record": [
+                        {
+                            "title": "首次病程记录",
+                            "authored_at": "2026-06-01 16:00:00",
+                            "content": "患者入院后完成病史采集、体格检查、诊断分析及后续诊疗计划。",
+                        }
+                    ],
+                    "rescue_record": [
+                        {
+                            "title": "抢救记录",
+                            "authored_at": "2026-06-01 15:00:00",
+                            "content": "抢救开始时间：2026-06-01 08:30；抢救结束时间：2026-06-01 09:00。",
+                        }
+                    ],
+                },
+            }
+        },
+    )
+
+    assert [item["status"] for item in execution.results] == [
+        "compliant",
+        "compliant",
+    ]
+    assert all(item["metadata"]["total_tokens"] == 0 for item in execution.results)
+
+
+@pytest.mark.unit
+def test_admission_anchor_rules_reject_forged_trusted_flag_without_approved_basis():
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "admission_time_basis": "caller_claimed_admission_time",
+                "admission_time_trusted": True,
+                "documents": {},
+            }
+        },
+    )
+
+    assert [item["status"] for item in execution.results] == ["data_gap"] * 3
+    assert all(
+        item["metadata"]["reason_code"]
+        == "trusted_admission_anchor_unavailable"
+        for item in execution.results
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("admission_record_time", "attending_time", "senior_time", "expected"),
+    [
+        (
+            "2026-06-02 08:00:00",
+            "2026-06-03 08:00:00",
+            "2026-06-04 08:00:00",
+            ["compliant", "compliant", "compliant"],
+        ),
+        (
+            "2026-06-02 08:01:00",
+            "2026-06-03 08:01:00",
+            "2026-06-04 08:01:00",
+            ["non_compliant", "non_compliant", "non_compliant"],
+        ),
+    ],
+)
+def test_trusted_admission_anchor_keeps_24_48_72_hour_boundaries(
+    admission_record_time: str,
+    attending_time: str,
+    senior_time: str,
+    expected: list[str],
+):
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "admission_time_basis": "timeline_primary_admission_datetime",
+                "admission_time_trusted": True,
+                "documents": {
+                    "admission_record": [
+                        {"title": "入院记录", "authored_at": admission_record_time}
+                    ],
+                    "senior_course_record": [
+                        {
+                            "title": "主治医师首次查房记录",
+                            "author_title": "主治医师",
+                            "authored_at": attending_time,
+                        },
+                        {
+                            "title": "主任医师首次查房记录",
+                            "author_title": "主任医师",
+                            "authored_at": senior_time,
+                        },
+                    ],
+                },
+            }
+        },
+    )
+
+    assert [item["status"] for item in execution.results] == expected
+    assert all(item["metadata"]["total_tokens"] == 0 for item in execution.results)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("record_time", "expected_status"),
     [
@@ -213,6 +367,8 @@ def test_native_basic_family_returns_five_results_in_catalog_order_without_llm()
         evidence_payload={
             "programmatic_timeline": {
                 "admission_time": "2026-06-01 08:00:00",
+                "admission_time_basis": "timeline_primary_admission_datetime",
+                "admission_time_trusted": True,
                 "documents": {
                     "admission_record": [
                         {"title": "入院记录", "authored_at": "2026-06-01 09:00:00"}

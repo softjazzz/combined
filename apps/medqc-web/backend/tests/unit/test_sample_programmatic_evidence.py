@@ -73,7 +73,116 @@ def test_build_programmatic_evidence_payload_should_fallback_to_admission_record
     )
 
     assert payload["programmatic_timeline"]["admission_time"] == "2026-01-24 20:42:25"
+    assert payload["programmatic_timeline"]["admission_time_basis"] == "admission_record_record_time_fallback"
+    assert payload["programmatic_timeline"]["admission_time_trusted"] is False
     assert "入院时间：2026-01-24 20:42:25" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_not_attest_structured_admission_anchor_without_provenance():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "structured_context": {
+                "admission_datetime": "2026-01-24 08:00:00",
+            }
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-24 08:00:00"
+    assert timeline["admission_time_basis"] == "structured_context_admission_datetime_unattested"
+    assert timeline["admission_time_trusted"] is False
+
+
+def test_build_programmatic_evidence_payload_should_not_attest_bundle_admission_anchor_without_provenance():
+    payload = build_programmatic_evidence_payload(
+        bundle={"admission_datetime": "2026-01-24 08:00:00"}
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-24 08:00:00"
+    assert timeline["admission_time_basis"] == "bundle_admission_datetime_unattested"
+    assert timeline["admission_time_trusted"] is False
+
+
+def test_build_programmatic_evidence_payload_should_reject_external_fallback_meta_attestation(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: ([], {}),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "_source_table_fallback_meta": {
+                "admission_datetime": "2026-01-24 08:00:00",
+            }
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == ""
+    assert timeline["admission_time_basis"] == "missing"
+    assert timeline["admission_time_trusted"] is False
+
+
+def test_build_programmatic_evidence_payload_should_attest_approved_primary_timeline_fact():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "timeline_facts": [
+                {
+                    "source_table": "inpat_registration",
+                    "field": "admission_datetime",
+                    "value": "2026-01-24 08:00:00",
+                }
+            ]
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-24 08:00:00"
+    assert timeline["admission_time_basis"] == "timeline_primary_admission_datetime"
+    assert timeline["admission_time_trusted"] is True
+
+
+def test_build_programmatic_evidence_payload_should_not_trust_text_or_unapproved_timeline_anchor():
+    timeline_payload = build_programmatic_evidence_payload(
+        bundle={
+            "timeline_facts": [
+                {
+                    "source_table": "daily_course_record",
+                    "field": "admission_datetime",
+                    "value": "2026-01-24 08:00:00",
+                }
+            ],
+            "medical_text": "入院时间：2026-01-24 09:00:00",
+        }
+    )
+
+    timeline = timeline_payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-24 09:00:00"
+    assert timeline["admission_time_basis"] == "medical_text_label_fallback"
+    assert timeline["admission_time_trusted"] is False
+
+
+def test_build_programmatic_evidence_payload_should_not_trust_admission_document_label():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "admission_record",
+                    "document_title": "入院记录",
+                    "content": "入院时间：2026-01-24 08:00:00；主诉：不适。",
+                }
+            ]
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-24 08:00:00"
+    assert timeline["admission_time_basis"] == "admission_record_text_label_fallback"
+    assert timeline["admission_time_trusted"] is False
 
 
 def test_build_programmatic_evidence_payload_should_classify_course_round_roles_strictly():
@@ -191,6 +300,8 @@ def test_build_programmatic_evidence_payload_should_fallback_to_source_tables_wh
 
     timeline = payload["programmatic_timeline"]
     assert timeline["admission_time"] == "2026-01-22 10:00:00"
+    assert timeline["admission_time_basis"] == "cdm_inpat_registration_admission_datetime"
+    assert timeline["admission_time_trusted"] is True
     assert timeline["discharge_time"] == "2026-02-14 09:00:00"
     assert len(timeline["documents"]["daily_course_record"]) == 1
     assert len(timeline["documents"]["senior_course_record"]) == 1
