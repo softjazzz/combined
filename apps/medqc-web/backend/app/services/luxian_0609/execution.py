@@ -37,6 +37,18 @@ from .native_tumor_pathology_execution import (
     EXECUTOR_KEY as TUMOR_PATHOLOGY_EXECUTOR_KEY,
     execute_luxian_0609_native_tumor_pathology_rules,
 )
+from .native_course_quality_execution import (
+    EXECUTOR_KEY as COURSE_QUALITY_EXECUTOR_KEY,
+    execute_luxian_0609_native_course_quality_rules,
+)
+from .native_surgery_gate_execution import (
+    EXECUTOR_KEY as SURGERY_GATE_EXECUTOR_KEY,
+    execute_luxian_0609_native_surgery_gate_rules,
+)
+from .native_surgery_document_execution import (
+    EXECUTOR_KEY as SURGERY_DOCUMENT_EXECUTOR_KEY,
+    execute_luxian_0609_native_surgery_document_rules,
+)
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
@@ -144,6 +156,15 @@ async def prepare_luxian_0609_execution(
         ),
         native_tumor_pathology_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED", False)
+        ),
+        native_course_quality_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED", False)
+        ),
+        native_surgery_gate_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED", False)
+        ),
+        native_surgery_document_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED", False)
         ),
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
@@ -275,6 +296,58 @@ async def prepare_luxian_0609_execution(
         native_completion_tokens += tumor_pathology_execution.completion_tokens
         native_total_tokens += tumor_pathology_execution.total_tokens
         native_api_time += tumor_pathology_execution.api_time
+    course_quality_rule_ids = package_plan.native_rule_ids_for_executor(
+        COURSE_QUALITY_EXECUTOR_KEY
+    )
+    if course_quality_rule_ids:
+        course_quality_execution = await execute_luxian_0609_native_course_quality_rules(
+            rule_ids=course_quality_rule_ids,
+            wrapper_rules=wrapper_rules,
+            evidence_payload=evidence_payload,
+            llm_client=llm_client,
+        )
+        native_results.extend(course_quality_execution.results)
+        native_llm_call_count += course_quality_execution.llm_call_count
+        native_prompt_tokens += course_quality_execution.prompt_tokens
+        native_completion_tokens += course_quality_execution.completion_tokens
+        native_total_tokens += course_quality_execution.total_tokens
+        native_api_time += course_quality_execution.api_time
+    surgery_gate_rule_ids = package_plan.native_rule_ids_for_executor(
+        SURGERY_GATE_EXECUTOR_KEY
+    )
+    if surgery_gate_rule_ids:
+        surgery_gate_execution = await execute_luxian_0609_native_surgery_gate_rules(
+            rule_ids=surgery_gate_rule_ids,
+            wrapper_rules=wrapper_rules,
+            evidence_payload=evidence_payload,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            llm_client=llm_client,
+        )
+        native_results.extend(surgery_gate_execution.results)
+        native_llm_call_count += surgery_gate_execution.llm_call_count
+        native_prompt_tokens += surgery_gate_execution.prompt_tokens
+        native_completion_tokens += surgery_gate_execution.completion_tokens
+        native_total_tokens += surgery_gate_execution.total_tokens
+        native_api_time += surgery_gate_execution.api_time
+    surgery_document_rule_ids = package_plan.native_rule_ids_for_executor(
+        SURGERY_DOCUMENT_EXECUTOR_KEY
+    )
+    if surgery_document_rule_ids:
+        surgery_document_execution = await execute_luxian_0609_native_surgery_document_rules(
+            rule_ids=surgery_document_rule_ids,
+            wrapper_rules=wrapper_rules,
+            evidence_payload=evidence_payload,
+            llm_client=llm_client,
+        )
+        native_results.extend(surgery_document_execution.results)
+        native_llm_call_count += surgery_document_execution.llm_call_count
+        native_prompt_tokens += surgery_document_execution.prompt_tokens
+        native_completion_tokens += surgery_document_execution.completion_tokens
+        native_total_tokens += surgery_document_execution.total_tokens
+        native_api_time += surgery_document_execution.api_time
     mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
     if mdt_rule_ids:
         native_mdt = await execute_luxian_0609_native_mdt_rule(

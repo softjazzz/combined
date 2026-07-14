@@ -1,0 +1,559 @@
+"""LX0609 麻醉/术前文书族原生执行：强事实门控后逐规则裁剪判定。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import re
+from typing import Any, Mapping, Protocol, Sequence
+
+from .native_execution import build_luxian_0609_native_result
+
+
+SURGERY_DOCUMENT_RULE_IDS = (
+    "LX0609-034",
+    "LX0609-035",
+    "LX0609-036",
+    "LX0609-037",
+    "LX0609-038",
+    "LX0609-039",
+)
+EXECUTOR_KEY = "surgery_document"
+
+_ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})
+_ANESTHESIA_VISIT_RULE_IDS = frozenset({"LX0609-036", "LX0609-037"})
+_ANESTHESIA_RECORD_RULE_IDS = frozenset({"LX0609-038"})
+_ANESTHESIA_RULE_IDS = (
+    _ANESTHESIA_CONSENT_RULE_IDS
+    | _ANESTHESIA_VISIT_RULE_IDS
+    | _ANESTHESIA_RECORD_RULE_IDS
+)
+
+_ANESTHESIA_FACT_TYPES = frozenset(
+    {
+        "current_visit_anesthesia_performed",
+        "current_visit_anesthesia_confirmed",
+    }
+)
+_SURGERY_FACT_TYPES = frozenset({"current_visit_surgery_confirmed"})
+_EMERGENCY_FACT_TYPES = frozenset(
+    {
+        "current_visit_emergency_rescue_surgery",
+        "current_visit_lifesaving_emergency_surgery",
+    }
+)
+_PRESENT_STATES = frozenset({"present", "performed", "confirmed", "available"})
+_LOCAL_ANESTHESIA_VALUES = frozenset({"局麻", "局部麻醉", "表面麻醉", "局部浸润麻醉", "局部浸润"})
+
+_CONSENT_SOURCES = ("anesthesia_consent", "anesthesia_consent_form", "consent_form")
+_PREANE_SOURCES = ("preane_surveil_record", "preanesthesia_visit")
+_POSTANE_SOURCES = ("postane_surveil_record", "postanesthesia_visit")
+_MAX_ROWS_PER_SOURCE = 6
+_MAX_ROW_CHARS = 1800
+_MAX_CONTEXT_CHARS = 14000
+_MIN_SUBSTANTIVE_CHARS = 16
+_MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
+_PLACEHOLDER_PATTERN = re.compile(
+    r"^(?:无|暂无|空|空白|待填|未填|模板|空模板|\[\]|\{\}|-)+$",
+    re.IGNORECASE,
+)
+_ANESTHESIA_CONSENT_PATTERN = re.compile(
+    r"麻醉[\s\S]{0,40}(?:同意|告知|签名)|(?:同意|告知)[\s\S]{0,40}麻醉"
+)
+
+_CONTROLLED_MESSAGES = {
+    "compliant": ("麻醉或术前文书满足该项要求。", ""),
+    "non_compliant": (
+        "麻醉或术前文书未满足该项要求。",
+        "请按该质控点补充或修正相关文书。",
+    ),
+    "not_applicable": ("当前就诊不符合该项适用条件。", ""),
+    "data_gap": (
+        "当前麻醉或术前文书资料不足，暂不能形成可靠结论。",
+        "请补齐相关资料后重新质控。",
+    ),
+}
+
+
+class SurgeryDocumentLLMClient(Protocol):
+    async def generate(self, prompt: str) -> dict[str, Any]:
+        ...
+
+
+@dataclass(frozen=True)
+class NativeSurgeryDocumentExecutionResult:
+    results: tuple[dict[str, Any], ...]
+    planned_rule_ids: tuple[str, ...]
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+
+
+def _clean(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _documents(evidence_payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    if not isinstance(evidence_payload, Mapping):
+        return None
+    timeline = evidence_payload.get("programmatic_timeline")
+    if not isinstance(timeline, Mapping):
+        return None
+    documents = timeline.get("documents")
+    return documents if isinstance(documents, Mapping) else None
+
+
+def _timeline_facts(evidence_payload: Mapping[str, Any] | None) -> Sequence[Any] | None:
+    if not isinstance(evidence_payload, Mapping):
+        return None
+    facts = evidence_payload.get("timeline_facts")
+    return facts if isinstance(facts, list) else None
+
+
+def _row_text(row: Mapping[str, Any]) -> str:
+    return _clean(
+        row.get("content")
+        or row.get("record_content")
+        or row.get("assembled_text")
+        or row.get("raw_text")
+        or row.get("content_preview")
+        or row.get("text_preview")
+    )
+
+
+def _source_rows(
+    documents: Mapping[str, Any], source_keys: Sequence[str]
+) -> list[tuple[str, int, str]]:
+    rows: list[tuple[str, int, str]] = []
+    for source_key in source_keys:
+        raw_rows = documents.get(source_key)
+        if not isinstance(raw_rows, list):
+            continue
+        for index, raw_row in enumerate(raw_rows[:_MAX_ROWS_PER_SOURCE], start=1):
+            if not isinstance(raw_row, Mapping):
+                continue
+            text = _row_text(raw_row)
+            if text:
+                rows.append((source_key, index, text[:_MAX_ROW_CHARS]))
+    return rows
+
+
+def _substantive_rows(
+    documents: Mapping[str, Any], source_keys: Sequence[str]
+) -> list[tuple[str, int, str]]:
+    return [
+        row
+        for row in _source_rows(documents, source_keys)
+        if len(row[2]) >= _MIN_SUBSTANTIVE_CHARS
+        and not _PLACEHOLDER_PATTERN.fullmatch(row[2])
+    ]
+
+
+def _consent_rows(documents: Mapping[str, Any]) -> list[tuple[str, int, str]]:
+    dedicated = _substantive_rows(
+        documents, ("anesthesia_consent", "anesthesia_consent_form")
+    )
+    generic = [
+        row
+        for row in _substantive_rows(documents, ("consent_form",))
+        if _ANESTHESIA_CONSENT_PATTERN.search(row[2])
+    ]
+    return [*dedicated, *generic]
+
+
+def _fact_value(fact: Mapping[str, Any], key: str) -> str:
+    direct = _clean(fact.get(key))
+    if direct:
+        return direct
+    normalized = fact.get("normalized_value")
+    if isinstance(normalized, Mapping):
+        return _clean(normalized.get(key))
+    return ""
+
+
+def _matching_facts(
+    facts: Sequence[Any], *, fact_types: frozenset[str], source_keys: frozenset[str]
+) -> list[Mapping[str, Any]]:
+    matched: list[Mapping[str, Any]] = []
+    for raw_fact in facts:
+        if (
+            not isinstance(raw_fact, Mapping)
+            or raw_fact.get("current_visit_bound") is not True
+        ):
+            continue
+        fact_type = _clean(raw_fact.get("fact_type")).lower()
+        source_key = _clean(raw_fact.get("source_key")).lower()
+        state = _clean(raw_fact.get("state") or raw_fact.get("event_status")).lower()
+        if (
+            fact_type in fact_types
+            and source_key in source_keys
+            and state in _PRESENT_STATES
+        ):
+            matched.append(raw_fact)
+    return matched
+
+
+def _anesthesia_state(facts: Sequence[Any]) -> str:
+    matched = _matching_facts(
+        facts,
+        fact_types=_ANESTHESIA_FACT_TYPES,
+        source_keys=frozenset({"anesthesia_record"}),
+    )
+    if not matched:
+        return "absent"
+    methods = {
+        _fact_value(fact, "anesthesia_method") or _fact_value(fact, "method")
+        for fact in matched
+    }
+    methods.discard("")
+    if not methods:
+        return "performed_unknown_method"
+    if all(method in _LOCAL_ANESTHESIA_VALUES for method in methods):
+        return "local"
+    if any(method in _LOCAL_ANESTHESIA_VALUES for method in methods):
+        return "unknown"
+    return "nonlocal"
+
+
+def _has_performed_surgery(facts: Sequence[Any]) -> bool:
+    return bool(
+        _matching_facts(
+            facts,
+            fact_types=_SURGERY_FACT_TYPES,
+            source_keys=frozenset({"surgery_record"}),
+        )
+    )
+
+
+def _has_emergency_exception(facts: Sequence[Any]) -> bool:
+    return bool(
+        _matching_facts(
+            facts,
+            fact_types=_EMERGENCY_FACT_TYPES,
+            source_keys=frozenset({"surgery_record", "rescue_record"}),
+        )
+    )
+
+
+def _context(
+    documents: Mapping[str, Any], source_groups: Sequence[Sequence[str]]
+) -> str:
+    parts: list[str] = []
+    seen: set[tuple[str, int]] = set()
+    for group in source_groups:
+        rows = (
+            _consent_rows(documents)
+            if tuple(group) == _CONSENT_SOURCES
+            else _substantive_rows(documents, group)
+        )
+        for source_key, index, text in rows:
+            key = (source_key, index)
+            if key in seen:
+                continue
+            seen.add(key)
+            parts.append(f"[{source_key}-{index}] {text}")
+    return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
+
+
+def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
+    custom_prompt = _MAPPING_LINE_PATTERN.sub(
+        "", str(wrapper.get("custom_prompt") or "")
+    )
+    return (
+        custom_prompt.replace("{defect_level}", str(wrapper.get("defect_level") or ""))
+        .replace("{medical_text}", context)
+        .strip()
+    )
+
+
+def _response_text(response: Mapping[str, Any]) -> str:
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        if isinstance(message, Mapping):
+            return str(message.get("content") or "")
+    return str(response.get("content") or response.get("text") or "")
+
+
+def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>",
+        "",
+        _response_text(response),
+        flags=re.IGNORECASE,
+    ).strip()
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (TypeError, ValueError):
+        return None
+    value = payload.get("is_compliant") if isinstance(payload, Mapping) else None
+    return value if isinstance(value, bool) else None
+
+
+def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
+    usage = response.get("usage")
+    usage = usage if isinstance(usage, Mapping) else {}
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    total = int(usage.get("total_tokens") or prompt + completion)
+    return prompt, completion, total, float(response.get("_api_time") or 0.0)
+
+
+def _result(
+    rule_id: str,
+    status: str,
+    reason_code: str,
+    *,
+    executor_type: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    api_time: float = 0.0,
+) -> dict[str, Any]:
+    item = build_luxian_0609_native_result(
+        rule_id=rule_id,
+        final_state=status,
+        finding_kind="requirement_satisfied" if status == "compliant" else status,
+        reason_code=reason_code,
+    )
+    findings, suggestion = _CONTROLLED_MESSAGES[status]
+    item["findings"] = findings
+    item["suggestion"] = suggestion
+    metadata = dict(item.get("metadata") or {})
+    metadata.update(
+        {
+            "executor_type": executor_type,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "api_time": api_time,
+        }
+    )
+    item["metadata"] = metadata
+    return item
+
+
+def _terminal_result(
+    rule_id: str,
+    *,
+    facts: Sequence[Any],
+    documents: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    if rule_id in _ANESTHESIA_RULE_IDS:
+        anesthesia_state = _anesthesia_state(facts)
+        anesthesia_rows = _substantive_rows(documents, ("anesthesia_record",))
+        if anesthesia_state == "absent":
+            # 文书沉默、拟请、空模板或仅麻醉方式都不能证明“未实施麻醉”。
+            return _result(
+                rule_id,
+                "data_gap",
+                "anesthesia_performed_fact_unavailable",
+                executor_type="program",
+            )
+        if anesthesia_state == "unknown" or not anesthesia_rows:
+            return _result(
+                rule_id,
+                "data_gap",
+                "anesthesia_performed_fact_unavailable",
+                executor_type="program",
+            )
+        if rule_id in (_ANESTHESIA_VISIT_RULE_IDS | _ANESTHESIA_RECORD_RULE_IDS):
+            if anesthesia_state == "local":
+                return _result(
+                    rule_id,
+                    "not_applicable",
+                    "local_anesthesia_exception",
+                    executor_type="program",
+                )
+            if anesthesia_state != "nonlocal":
+                return _result(
+                    rule_id,
+                    "data_gap",
+                    "anesthesia_method_unavailable",
+                    executor_type="program",
+                )
+        if rule_id in _ANESTHESIA_CONSENT_RULE_IDS and not _consent_rows(documents):
+            return _result(
+                rule_id,
+                "data_gap",
+                "anesthesia_consent_source_unproven",
+                executor_type="program",
+            )
+        if rule_id in _ANESTHESIA_VISIT_RULE_IDS and (
+            not _substantive_rows(documents, _PREANE_SOURCES)
+            or not _substantive_rows(documents, _POSTANE_SOURCES)
+        ):
+            return _result(
+                rule_id,
+                "data_gap",
+                "anesthesia_visit_source_unproven",
+                executor_type="program",
+            )
+        return None
+
+    if not _has_performed_surgery(facts):
+        return _result(
+            rule_id,
+            "data_gap",
+            "performed_surgery_fact_unavailable",
+            executor_type="program",
+        )
+    if _has_emergency_exception(facts):
+        return _result(
+            rule_id,
+            "not_applicable",
+            "emergency_rescue_exception",
+            executor_type="program",
+        )
+    if not _substantive_rows(documents, ("presurg_discussion",)):
+        return _result(
+            rule_id,
+            "data_gap",
+            "preop_discussion_source_unproven",
+            executor_type="program",
+        )
+    return None
+
+
+def _context_groups(rule_id: str) -> tuple[tuple[str, ...], ...]:
+    if rule_id in _ANESTHESIA_CONSENT_RULE_IDS:
+        return (("anesthesia_record",), _CONSENT_SOURCES)
+    if rule_id in _ANESTHESIA_VISIT_RULE_IDS:
+        return (("anesthesia_record",), _PREANE_SOURCES, _POSTANE_SOURCES)
+    if rule_id in _ANESTHESIA_RECORD_RULE_IDS:
+        return (("anesthesia_record",),)
+    return (("surgery_record",), ("presurg_discussion",))
+
+
+async def execute_luxian_0609_native_surgery_document_rules(
+    *,
+    rule_ids: Sequence[str],
+    wrapper_rules: Sequence[Mapping[str, Any]],
+    evidence_payload: Mapping[str, Any] | None,
+    llm_client: SurgeryDocumentLLMClient | None,
+) -> NativeSurgeryDocumentExecutionResult:
+    """按客户目录顺序执行；强事实不足时零模型并保守降级。"""
+
+    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    selected = tuple(
+        rule_id for rule_id in SURGERY_DOCUMENT_RULE_IDS if rule_id in requested
+    )
+    if not selected:
+        return NativeSurgeryDocumentExecutionResult((), ())
+
+    documents = _documents(evidence_payload)
+    facts = _timeline_facts(evidence_payload)
+    if documents is None or facts is None:
+        return NativeSurgeryDocumentExecutionResult(
+            results=tuple(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_projection_unavailable",
+                    executor_type="program",
+                )
+                for rule_id in selected
+            ),
+            planned_rule_ids=selected,
+        )
+
+    wrappers_by_id = {
+        str(wrapper.get("rule_id") or wrapper.get("rule_code") or "")
+        .strip()
+        .upper(): wrapper
+        for wrapper in wrapper_rules
+        if isinstance(wrapper, Mapping)
+    }
+    results: list[dict[str, Any]] = []
+    llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+
+    for rule_id in selected:
+        terminal = _terminal_result(rule_id, facts=facts, documents=documents)
+        if terminal is not None:
+            results.append(terminal)
+            continue
+        context = _context(documents, _context_groups(rule_id))
+        wrapper = wrappers_by_id.get(rule_id)
+        if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_prompt_input_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+        if llm_client is None:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_llm_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+
+        llm_call_count += 1
+        try:
+            response = await llm_client.generate(_prompt(wrapper, context=context))
+        except Exception:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_llm_failure",
+                    executor_type="llm",
+                )
+            )
+            continue
+        prompt, completion, total, elapsed = _usage(response)
+        prompt_tokens += prompt
+        completion_tokens += completion
+        total_tokens += total
+        api_time += elapsed
+        is_compliant = _parse_is_compliant(response)
+        if is_compliant is None:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_llm_invalid_output",
+                    executor_type="llm",
+                    prompt_tokens=prompt,
+                    completion_tokens=completion,
+                    total_tokens=total,
+                    api_time=elapsed,
+                )
+            )
+            continue
+        status = "compliant" if is_compliant else "non_compliant"
+        results.append(
+            _result(
+                rule_id,
+                status,
+                "surgery_document_customer_prompt",
+                executor_type="llm",
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                total_tokens=total,
+                api_time=elapsed,
+            )
+        )
+
+    return NativeSurgeryDocumentExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=selected,
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )

@@ -928,6 +928,189 @@ async def test_native_tumor_pathology_flag_off_preserves_exact_legacy_dispatch(m
 
 
 @pytest.mark.asyncio
+async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_customer_order(
+    monkeypatch,
+):
+    selected = [
+        "LX0609-003", "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016",
+        "LX0609-017", "LX0609-018", "LX0609-024", "LX0609-025", "LX0609-028",
+        "LX0609-031", "LX0609-033", "LX0609-034", "LX0609-035", "LX0609-036",
+        "LX0609-037", "LX0609-038", "LX0609-039",
+    ]
+    mappings = {
+        "LX0609-003": ["LX-026", "SC-096"], "LX0609-007": ["LXE-18"],
+        "LX0609-008": ["SC-051", "CL-231"], "LX0609-009": ["SC-051", "CL-231"],
+        "LX0609-016": ["CL-273"], "LX0609-017": ["CL-275", "LXE-21"],
+        "LX0609-018": ["SC-008", "LX-001", "CL-068"], "LX0609-024": ["SC-099"],
+        "LX0609-025": ["SC-100", "SC-101"], "LX0609-028": ["SC-044", "LX-012"],
+        "LX0609-031": ["LX-027", "CL-173", "SC-098"], "LX0609-033": ["SC-087", "LXE-31"],
+        "LX0609-034": ["LX-022", "SC-090"], "LX0609-035": ["SC-090", "LX-022"],
+        "LX0609-036": ["LX-020"], "LX0609-037": ["LX-020", "SC-090"],
+        "LX0609-038": ["SC-090"], "LX0609-039": ["LX-019", "SC-082"],
+    }
+    wrappers = [
+        _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="native-test")
+        for rule_id in selected
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
+        LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=True,
+        LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED=True,
+        LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED=True,
+        LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED=True,
+        LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    calls: list[tuple[str, tuple[str, ...]]] = []
+    dispatched: list[list[str]] = []
+
+    def _result(rule_id: str) -> dict:
+        return {
+            "rule_id": rule_id, "status": "data_gap", "is_compliant": None,
+            "findings": "当前资料不足。", "evidence": "",
+            "suggestion": "请补齐资料后重新质控。", "confidence": 1.0,
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "aggregation_source": "native_programmatic",
+                "reason_code": "test_data_gap",
+            },
+        }
+
+    async def _execute(executor_key: str, **kwargs):
+        rule_ids = tuple(kwargs["rule_ids"])
+        calls.append((executor_key, rule_ids))
+        return SimpleNamespace(
+            results=tuple(_result(rule_id) for rule_id in rule_ids),
+            planned_rule_ids=rule_ids,
+            llm_call_count=0, prompt_tokens=0, completion_tokens=0,
+            total_tokens=0, api_time=0.0,
+        )
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        raise AssertionError("剩余原生规则族不应派发旧规则")
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(
+        luxian_execution, "execute_luxian_0609_native_course_quality_rules",
+        lambda **kwargs: _execute("course_quality", **kwargs),
+    )
+    monkeypatch.setattr(
+        luxian_execution, "execute_luxian_0609_native_surgery_gate_rules",
+        lambda **kwargs: _execute("surgery_gate", **kwargs),
+    )
+    monkeypatch.setattr(
+        luxian_execution, "execute_luxian_0609_native_surgery_document_rules",
+        lambda **kwargs: _execute("surgery_document", **kwargs),
+    )
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "get_rule_by_id", lambda rule_id: {"rule_id": rule_id})
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running", "visit_id": "safe-visit",
+            "structured_context": {"documents": {}}, "timeline_facts": [],
+            "text_available": False,
+        },
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert dispatched == []
+    assert calls == [
+        ("course_quality", ("LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018")),
+        ("surgery_gate", ("LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033")),
+        ("surgery_document", ("LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039")),
+    ]
+    assert [item["rule_id"] for item in result["evaluation_results"]] == selected
+    assert [item["status"] for item in result["evaluation_results"]] == ["data_gap"] * 18
+    assert result["token_usage"]["total_tokens"] == 0
+    legacy_ids = {raw_id for values in mappings.values() for raw_id in values}
+    assert all(raw_id not in repr(result["evaluation_results"]) for raw_id in legacy_ids)
+
+
+@pytest.mark.asyncio
+async def test_remaining_native_family_flags_off_preserve_exact_legacy_dispatch(monkeypatch):
+    selected = [
+        "LX0609-003", "LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016",
+        "LX0609-017", "LX0609-018", "LX0609-024", "LX0609-025", "LX0609-028",
+        "LX0609-031", "LX0609-033", "LX0609-034", "LX0609-035", "LX0609-036",
+        "LX0609-037", "LX0609-038", "LX0609-039",
+    ]
+    mappings = {
+        "LX0609-003": ["LX-026", "SC-096"], "LX0609-007": ["LXE-18"],
+        "LX0609-008": ["SC-051", "CL-231"], "LX0609-009": ["SC-051", "CL-231"],
+        "LX0609-016": ["CL-273"], "LX0609-017": ["CL-275", "LXE-21"],
+        "LX0609-018": ["SC-008", "LX-001", "CL-068"], "LX0609-024": ["SC-099"],
+        "LX0609-025": ["SC-100", "SC-101"], "LX0609-028": ["SC-044", "LX-012"],
+        "LX0609-031": ["LX-027", "CL-173", "SC-098"], "LX0609-033": ["SC-087", "LXE-31"],
+        "LX0609-034": ["LX-022", "SC-090"], "LX0609-035": ["SC-090", "LX-022"],
+        "LX0609-036": ["LX-020"], "LX0609-037": ["LX-020", "SC-090"],
+        "LX0609-038": ["SC-090"], "LX0609-039": ["LX-019", "SC-082"],
+    }
+    wrappers = [
+        _wrapper(rule_id, name=rule_id, mapped_rule_ids=mappings[rule_id], trigger_condition="test")
+        for rule_id in selected
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED=True,
+        LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=True,
+        LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED=True,
+        LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED=False,
+        LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED=False,
+        LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED=False,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    dispatched: list[list[str]] = []
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        return {
+            "results": [], "total_tokens": 0, "total_prompt_tokens": 0,
+            "total_completion_tokens": 0, "total_api_time": 0.0,
+        }
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+    monkeypatch.setattr(service, "get_rule_by_id", lambda rule_id: {"rule_id": rule_id})
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    await service.evaluate_running_final_bundle_input(
+        bundle={"scene": "running", "visit_id": "safe-visit", "structured_context": {"documents": {}}},
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    expected: list[str] = []
+    for rule_id in selected:
+        for raw_id in mappings[rule_id]:
+            if raw_id not in expected:
+                expected.append(raw_id)
+    assert dispatched == [expected]
+
+
+@pytest.mark.asyncio
 async def test_public_bundle_entry_accepts_exact_lx0609_ids_and_hides_shared_legacy_scope(monkeypatch):
     """公共入口只收客户 ID；共享 SC-099 不得额外带出 019/024。"""
 

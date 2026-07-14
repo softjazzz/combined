@@ -24,6 +24,10 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED",
     "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED",
     "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED",
+    "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED",
+    "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED",
+    "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED",
+    "LUXIAN_0609_NATIVE_MDT_040_ENABLED",
 ]
 
 
@@ -154,3 +158,31 @@ def test_luxian_native_tumor_pathology_defaults_on_and_can_be_disabled(monkeypat
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED is False
+
+
+@pytest.mark.parametrize(
+    "setting_name",
+    [
+        "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED",
+        "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED",
+        "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED",
+    ],
+)
+def test_remaining_native_family_flags_default_on_and_can_be_disabled(
+    monkeypatch, setting_name
+):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert getattr(Settings(_env_file=None), setting_name) is True
+
+    monkeypatch.setenv(setting_name, "false")
+    assert getattr(Settings(_env_file=None), setting_name) is False
+
+
+def test_luxian_native_mdt_040_defaults_on_and_can_be_disabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_MDT_040_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_MDT_040_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_MDT_040_ENABLED is False

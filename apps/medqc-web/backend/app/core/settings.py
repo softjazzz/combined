@@ -136,8 +136,14 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED: bool = True
     # 肿瘤病理族013/019/026/027独立包开关；关闭时精确回退现有映射执行链。
     LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED: bool = True
-    # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生试运行；验收前默认关闭。
-    LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = False
+    # 病程质量族007/008/009/016/017/018独立包开关；关闭时精确回退旧映射链。
+    LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED: bool = True
+    # 手术高风险门控003/024/025/028/031/033独立包开关；关闭时精确回退旧映射链。
+    LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED: bool = True
+    # 麻醉及手术文书034-039独立包开关；关闭时精确回退旧映射链。
+    LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED: bool = True
+    # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生执行；关闭时精确回退旧映射链。
+    LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = True
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

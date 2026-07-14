@@ -31,6 +31,18 @@ from .native_tumor_pathology_execution import (
     EXECUTOR_KEY as TUMOR_PATHOLOGY_EXECUTOR_KEY,
     TUMOR_PATHOLOGY_RULE_IDS,
 )
+from .native_course_quality_execution import (
+    COURSE_QUALITY_RULE_IDS,
+    EXECUTOR_KEY as COURSE_QUALITY_EXECUTOR_KEY,
+)
+from .native_surgery_gate_execution import (
+    EXECUTOR_KEY as SURGERY_GATE_EXECUTOR_KEY,
+    SURGERY_GATE_RULE_IDS,
+)
+from .native_surgery_document_execution import (
+    EXECUTOR_KEY as SURGERY_DOCUMENT_EXECUTOR_KEY,
+    SURGERY_DOCUMENT_RULE_IDS,
+)
 from .native_mdt_execution import RULE_ID as NATIVE_ASYNC_RULE_ID
 
 
@@ -175,6 +187,15 @@ def build_luxian_0609_dependency_inventory(
         elif rule_id in TUMOR_PATHOLOGY_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = TUMOR_PATHOLOGY_EXECUTOR_KEY
+        elif rule_id in COURSE_QUALITY_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = COURSE_QUALITY_EXECUTOR_KEY
+        elif rule_id in SURGERY_GATE_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = SURGERY_GATE_EXECUTOR_KEY
+        elif rule_id in SURGERY_DOCUMENT_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = SURGERY_DOCUMENT_EXECUTOR_KEY
         elif rule_id == NATIVE_ASYNC_RULE_ID:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXECUTOR_SURGERY_MDT
@@ -233,6 +254,9 @@ def build_luxian_0609_package_plan(
     native_exam_lab_enabled: bool = False,
     native_transfusion_enabled: bool = False,
     native_tumor_pathology_enabled: bool = False,
+    native_course_quality_enabled: bool = False,
+    native_surgery_gate_enabled: bool = False,
+    native_surgery_document_enabled: bool = False,
 ) -> Luxian0609PackagePlan:
     """按目录顺序将客户选择分为原生同步、原生异步和兼容执行。"""
 
@@ -265,11 +289,26 @@ def build_luxian_0609_package_plan(
                 and native_tumor_pathology_enabled
             )
             or (
+                item.executor_key == COURSE_QUALITY_EXECUTOR_KEY
+                and native_course_quality_enabled
+            )
+            or (
+                item.executor_key == SURGERY_GATE_EXECUTOR_KEY
+                and native_surgery_gate_enabled
+            )
+            or (
+                item.executor_key == SURGERY_DOCUMENT_EXECUTOR_KEY
+                and native_surgery_document_enabled
+            )
+            or (
                 item.executor_key not in {
                     EXAM_LAB_EXECUTOR_KEY,
                     CONSULTATION_EXECUTOR_KEY,
                     TRANSFUSION_EXECUTOR_KEY,
                     TUMOR_PATHOLOGY_EXECUTOR_KEY,
+                    COURSE_QUALITY_EXECUTOR_KEY,
+                    SURGERY_GATE_EXECUTOR_KEY,
+                    SURGERY_DOCUMENT_EXECUTOR_KEY,
                 }
                 and native_async_enabled
             )

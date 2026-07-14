@@ -82,8 +82,26 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-047",
         "LX0609-048",
         "LX0609-049",
+        "LX0609-003",
+        "LX0609-007",
+        "LX0609-008",
+        "LX0609-009",
+        "LX0609-016",
+        "LX0609-017",
+        "LX0609-018",
+        "LX0609-024",
+        "LX0609-025",
+        "LX0609-028",
+        "LX0609-031",
+        "LX0609-033",
+        "LX0609-034",
+        "LX0609-035",
+        "LX0609-036",
+        "LX0609-037",
+        "LX0609-038",
+        "LX0609-039",
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 18
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 0
 
 
 @pytest.mark.unit
@@ -174,6 +192,78 @@ def test_tumor_pathology_family_flag_partitions_only_four_customer_rules():
     assert enabled.native_executor_batches == (("tumor_pathology", tuple(selected)),)
     assert disabled.native_async_rule_ids == ()
     assert disabled.compatibility_rule_ids == tuple(selected)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("selected", "flag_name", "executor_key"),
+    [
+        (
+            ["LX0609-007", "LX0609-008", "LX0609-009", "LX0609-016", "LX0609-017", "LX0609-018"],
+            "native_course_quality_enabled",
+            "course_quality",
+        ),
+        (
+            ["LX0609-003", "LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031", "LX0609-033"],
+            "native_surgery_gate_enabled",
+            "surgery_gate",
+        ),
+        (
+            ["LX0609-034", "LX0609-035", "LX0609-036", "LX0609-037", "LX0609-038", "LX0609-039"],
+            "native_surgery_document_enabled",
+            "surgery_document",
+        ),
+    ],
+)
+def test_remaining_family_flags_partition_only_their_customer_rules(
+    selected, flag_name, executor_key
+):
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    common = {
+        "inventory": inventory,
+        "selected_rule_ids": selected,
+        "native_sync_enabled": True,
+        "native_async_enabled": False,
+    }
+
+    enabled = build_luxian_0609_package_plan(**common, **{flag_name: True})
+    disabled = build_luxian_0609_package_plan(**common, **{flag_name: False})
+
+    assert enabled.native_async_rule_ids == tuple(selected)
+    assert enabled.compatibility_rule_ids == ()
+    assert enabled.native_executor_batches == ((executor_key, tuple(selected)),)
+    assert disabled.native_async_rule_ids == ()
+    assert disabled.compatibility_rule_ids == tuple(selected)
+
+
+@pytest.mark.unit
+def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+
+    plan = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=[item.rule_id for item in inventory],
+        native_sync_enabled=True,
+        native_async_enabled=True,
+        native_basic_timeliness_enabled=True,
+        native_consultation_enabled=True,
+        native_exam_lab_enabled=True,
+        native_transfusion_enabled=True,
+        native_tumor_pathology_enabled=True,
+        native_course_quality_enabled=True,
+        native_surgery_gate_enabled=True,
+        native_surgery_document_enabled=True,
+    )
+
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 49
+    assert plan.compatibility_rule_ids == ()
+    assert plan.compatibility_execution_rule_ids == ()
 
 
 @pytest.mark.unit
