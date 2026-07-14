@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 
 import pytest
 
@@ -27,6 +28,29 @@ def test_shared_strict_performed_parser_and_digest_accept_only_exact_whole_value
     assert "Authorization_sensitive_marker" not in digest
 
 
+def test_shared_performed_fact_accepts_only_approved_source_representations():
+    assert source_evidence_reader.has_trusted_performed_surgery(
+        source_key="surgery_record",
+        row={"surgery_begin_time": "2026-01-01 08:00:00+08"},
+    )
+    assert source_evidence_reader.has_trusted_performed_surgery(
+        source_key="mr_surgery",
+        row={"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},
+    )
+    assert not source_evidence_reader.has_trusted_performed_surgery(
+        source_key="mr_surgery",
+        row={"surgery_begin_datetime": "2026-01-01 08:00:00", "surgery_name": "ignored"},
+    )
+    assert not source_evidence_reader.has_trusted_performed_surgery(
+        source_key="mr_surgery",
+        row={"surgery_name": "ignored", "surgery_code": "ignored"},
+    )
+    assert not source_evidence_reader.has_trusted_performed_surgery(
+        source_key="mr_surgery",
+        row={"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0, tzinfo=timezone.utc)},
+    )
+
+
 def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):
     seen = []
     def _reader(**kwargs):
@@ -40,6 +64,53 @@ def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):
     assert all(set(row).issubset({"row_ref", "source_snapshot", "qualification_material_hash"}) for rows in documents.values() for row in rows)
     signal_outcome = next(item for item in result.extraction_inputs if item.source_key == "surgery_record")
     assert signal_outcome.positive_signals and signal_outcome.positive_signals[0].event_status == "performed"
+
+
+def test_provider_emits_performed_signal_from_typed_mr_surgery_when_surgery_record_is_empty(monkeypatch):
+    seen: list[str] = []
+
+    def _reader(**kwargs):
+        seen.append(kwargs["source_key"])
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029", "LX0609-030", "LX0609-032"),
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+    )
+
+    assert seen == sorted(seen)
+    mr_outcome = next(item for item in result.extraction_inputs if item.source_key == "mr_surgery")
+    assert len(mr_outcome.positive_signals) == 1
+    assert mr_outcome.positive_signals[0].source_key == "mr_surgery"
+    assert mr_outcome.positive_signals[0].event_status == "performed"
+    assert "2026-01-01" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"surgery_begin_datetime": "2026-01-01 08:00:00"},
+        {"surgery_name": "ignored"},
+        {"surgery_code": "ignored"},
+    ],
+)
+def test_provider_does_not_promote_untyped_or_descriptive_mr_surgery_rows(monkeypatch, row):
+    def _reader(**kwargs):
+        return [row] if kwargs["source_key"] == "mr_surgery" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+
+    outcome = next(item for item in result.extraction_inputs if item.source_key == "mr_surgery")
+    assert outcome.state == "complete"
+    assert outcome.positive_signals == ()
 
 
 @pytest.mark.parametrize("mode,status,code", [
@@ -130,6 +201,46 @@ def test_provider_029_uses_earliest_confirmed_surgery_time_independent_of_row_or
     result = provider.provide_luxian_0609_runtime_shadow_inputs(
         plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
     )
+    assert result.target_qualifications[0].qualified_document_count == 1
+
+
+def test_provider_029_qualification_uses_typed_mr_surgery_time_when_surgery_record_is_empty(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+        if kwargs["source_key"] == "presurg_summary":
+            return [{
+                "record_content": "substantive approved pre-surgery summary",
+                "record_time": "2026-01-01 07:00:00",
+            }]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+
+    assert result.target_qualifications[0].qualified_document_count == 1
+
+
+def test_provider_029_keeps_strict_surgery_record_time_priority_over_earlier_mr_surgery(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 6, 0)}]
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        if kwargs["source_key"] == "presurg_summary":
+            return [{
+                "record_content": "substantive approved pre-surgery summary",
+                "record_time": "2026-01-01 07:00:00",
+            }]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+
     assert result.target_qualifications[0].qualified_document_count == 1
 
 
@@ -291,6 +402,52 @@ def test_row_refs_are_order_independent_duplicate_safe_and_visit_scoped(monkeypa
     assert VISIT not in repr(first) and "visit-provider-002" not in repr(other)
 
 
+def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeypatch):
+    rows = [
+        {"surgery_begin_datetime": datetime(2026, 1, 2, 8, 0)},
+        {"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},
+        {"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},
+    ]
+
+    def _reader_reversed(**kwargs):
+        return list(reversed(rows)) if kwargs["source_key"] == "mr_surgery" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_reversed)
+    first = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+
+    def _reader_forward(**kwargs):
+        return list(rows) if kwargs["source_key"] == "mr_surgery" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_forward)
+    second = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert first.evidence_payload == second.evidence_payload
+    assert first.extraction_inputs == second.extraction_inputs
+    refs = [
+        item.signal_ref
+        for item in next(
+            item for item in first.extraction_inputs if item.source_key == "mr_surgery"
+        ).positive_signals
+    ]
+    assert len(refs) == len(set(refs)) == 3
+
+    changed_rows = [*rows[:-1], {"surgery_begin_datetime": datetime(2026, 1, 3, 8, 0)}]
+
+    def _reader_changed(**kwargs):
+        return changed_rows if kwargs["source_key"] == "mr_surgery" else []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader_changed)
+    changed = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
+    )
+    assert first.evidence_payload != changed.evidence_payload
+    assert first.extraction_inputs != changed.extraction_inputs
+    assert "2026-01-0" not in repr(first)
+
+
 def test_trusted_schema_resolver_handles_single_split_and_rejects_arbitrary(monkeypatch):
     monkeypatch.setattr(provider.bundle_assembly, "DB_SCHEMA_MODE", "single")
     assert provider.bundle_assembly._default_source_schema() == "public"
@@ -299,3 +456,59 @@ def test_trusted_schema_resolver_handles_single_split_and_rejects_arbitrary(monk
     monkeypatch.setattr(provider.bundle_assembly, "engine", None)
     with pytest.raises(provider._SourceUnavailable):
         provider.read_luxian_0609_runtime_source_rows(source_key="surgery_record", institute_id="i", patient_id="p", visit_id=VISIT, source_schema="other")
+
+
+def test_runtime_reader_selects_and_stably_orders_typed_mr_surgery_before_limit(monkeypatch):
+    captured: dict[str, object] = {}
+    typed_value = datetime(2026, 1, 1, 8, 0)
+
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"surgery_begin_datetime": typed_value}]
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, statement, params):
+            captured["sql"] = str(statement)
+            captured["params"] = dict(params)
+            return _Rows()
+
+    class _Engine:
+        def connect(self):
+            return _Connection()
+
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _Engine())
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda *_: {"institute_id", "patient_id", "visit_id", "surgery_begin_datetime"},
+    )
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_qualified_table", lambda *_: '"cdm"."mr_surgery"')
+
+    rows = source_evidence_reader.read_luxian_0609_runtime_source_rows(
+        source_key="mr_surgery",
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        source_schema=None,
+    )
+
+    sql = str(captured["sql"])
+    assert rows == [{"surgery_begin_datetime": typed_value}]
+    assert '"surgery_begin_datetime" ASC NULLS LAST' in sql
+    assert sql.index('"surgery_begin_datetime" ASC NULLS LAST') < sql.index("LIMIT")
+    assert captured["params"] == {
+        "institute_id": "i",
+        "patient_id": "p",
+        "visit_id": VISIT,
+        "limit_rows": source_evidence_reader._source_limit("mr_surgery"),
+    }

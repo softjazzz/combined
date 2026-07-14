@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from app.services.luxian_0609 import native_execution
@@ -48,6 +49,146 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
     assert [item["status"] for item in result.results] == ["non_compliant", "compliant", "non_compliant"]
     assert all(item["metadata"]["executor_type"] == "program" for item in result.results)
     assert all(item["metadata"]["total_tokens"] == 0 for item in result.results)
+
+
+def test_native_core_uses_typed_mr_surgery_trigger_for_all_three_targets(monkeypatch):
+    seen: list[str] = []
+
+    def _reader(**kwargs):
+        seen.append(kwargs["source_key"])
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+        return []
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "read_luxian_0609_runtime_source_rows",
+        _reader,
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=native_execution.NATIVE_RULE_IDS,
+        visit_id="visit-native-mr-001",
+        institute_id="inst-native-mr-001",
+        patient_id="patient-native-mr-001",
+        source_schema=None,
+    )
+
+    assert seen == sorted(seen)
+    assert len(seen) == len(set(seen)) == 6
+    assert [item["rule_id"] for item in result.results] == list(native_execution.NATIVE_RULE_IDS)
+    assert [item["status"] for item in result.results] == ["non_compliant"] * 3
+    assert all(item["metadata"]["total_tokens"] == 0 for item in result.results)
+    assert all(not item["metadata"].get("mapped_rule_ids") for item in result.results)
+    assert "2026-01-01" not in repr(result)
+
+
+def test_native_core_mr_surgery_error_does_not_override_strict_surgery_record_positive(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            raise RuntimeError("Bearer_private_mr_error")
+        if kwargs["source_key"] == "surgery_record":
+            return [{"surgery_begin_time": "2026-01-01 08:00:00+08"}]
+        return []
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "read_luxian_0609_runtime_source_rows",
+        _reader,
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=native_execution.NATIVE_RULE_IDS,
+        visit_id="visit-native-mr-002",
+        institute_id="inst-native-mr-002",
+        patient_id="patient-native-mr-002",
+        source_schema=None,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+        "non_compliant",
+    ]
+    assert {item["metadata"]["total_tokens"] for item in result.results} == {0}
+    assert "Bearer_private_mr_error" not in repr(result)
+
+
+def test_native_core_typed_mr_trigger_keeps_030_target_source_error_isolated(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+        if kwargs["source_key"] == "surgery_record":
+            raise RuntimeError("raw_surgery_record_error")
+        return []
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "read_luxian_0609_runtime_source_rows",
+        _reader,
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=native_execution.NATIVE_RULE_IDS,
+        visit_id="visit-native-mr-target-error",
+        institute_id="inst-native-mr-target-error",
+        patient_id="patient-native-mr-target-error",
+        source_schema=None,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "technical_error",
+        "non_compliant",
+    ]
+    assert {item["metadata"]["total_tokens"] for item in result.results} == {0}
+    assert "raw_surgery_record_error" not in repr(result)
+
+
+def test_native_032_typed_mr_surgery_with_shell_safecheck_is_non_compliant(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+        if kwargs["source_key"] == "surgery_safecheck_record":
+            return [{"record_content": "", "document_title": "ignored"}]
+        return []
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "read_luxian_0609_runtime_source_rows",
+        _reader,
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-032",),
+        visit_id="visit-native-mr-004",
+        institute_id="inst-native-mr-004",
+        patient_id="patient-native-mr-004",
+        source_schema=None,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.results[0]["metadata"]["total_tokens"] == 0
+
+
+def test_native_core_mr_surgery_error_without_alternative_positive_is_fail_closed(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            raise RuntimeError("raw_mr_error")
+        return []
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "read_luxian_0609_runtime_source_rows",
+        _reader,
+    )
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=native_execution.NATIVE_RULE_IDS,
+        visit_id="visit-native-mr-003",
+        institute_id="inst-native-mr-003",
+        patient_id="patient-native-mr-003",
+        source_schema=None,
+    )
+
+    assert [item["status"] for item in result.results] == ["technical_error"] * 3
+    assert {item["metadata"]["total_tokens"] for item in result.results} == {0}
+    assert "raw_mr_error" not in repr(result)
 
 
 def test_native_wrapper_selection_accepts_customer_or_mapped_prepared_rule_id():

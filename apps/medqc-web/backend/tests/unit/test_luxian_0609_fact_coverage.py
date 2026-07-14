@@ -31,7 +31,7 @@ from app.services.luxian_0609.source_manifest import DocumentManifest, QueryStat
 CREATED_AT = "2026-07-12T10:00:00+08:00"
 VISIT_REF = "visit-coverage-001"
 SNAPSHOT = "a" * 64
-SOURCES = ("inpat_nondrug_order", "surgery_application", "surgery_record")
+SOURCES = ("inpat_nondrug_order", "mr_surgery", "surgery_application", "surgery_record")
 
 
 def _plan(rule_ids=("LX0609-029", "LX0609-030", "LX0609-032")):
@@ -171,11 +171,13 @@ def test_pair_expansion_uses_trigger_requirements_not_query_union_or_target_sour
     plan_029 = _plan(("LX0609-029",))
     plan_032 = _plan(("LX0609-032",))
     assert _pairs(plan_029) == (
+        ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
         ("current_visit_surgery_confirmed", "surgery_record"),
         ("current_visit_surgery_order_confirmed", "inpat_nondrug_order"),
     )
     assert _pairs(plan_032) == (
+        ("current_visit_surgery_confirmed", "mr_surgery"),
         ("current_visit_surgery_confirmed", "surgery_application"),
         ("current_visit_surgery_confirmed", "surgery_record"),
     )
@@ -205,13 +207,13 @@ def test_available_complete_zero_facts_is_distinct_from_partial_not_run_and_erro
     manifest = _manifest()
     pairs = _pairs(plan)
     complete = _build(plan=plan, manifest=manifest, observations=tuple(_observation(pair) for pair in pairs))
-    assert complete.summary_dict()["complete_pair_count"] == 2
+    assert complete.summary_dict()["complete_pair_count"] == 3
     partial = tuple(_observation(pair, state=ExtractionCoverageState.PARTIAL, processed=1, reason="partial_budget_limit") for pair in pairs)
     not_run = tuple(_observation(pair, state=ExtractionCoverageState.NOT_RUN, processed=0, reason="extractor_not_run") for pair in pairs)
     errors = tuple(_observation(pair, state=ExtractionCoverageState.ERROR, processed=0, reason="extraction_error", error="extractor_timeout") for pair in pairs)
-    assert _build(plan=plan, manifest=manifest, observations=partial).summary_dict()["partial_pair_count"] == 2
-    assert _build(plan=plan, manifest=manifest, observations=not_run).summary_dict()["not_run_pair_count"] == 2
-    assert _build(plan=plan, manifest=manifest, observations=errors).summary_dict()["error_pair_count"] == 2
+    assert _build(plan=plan, manifest=manifest, observations=partial).summary_dict()["partial_pair_count"] == 3
+    assert _build(plan=plan, manifest=manifest, observations=not_run).summary_dict()["not_run_pair_count"] == 3
+    assert _build(plan=plan, manifest=manifest, observations=errors).summary_dict()["error_pair_count"] == 3
 
 
 @pytest.mark.parametrize(
@@ -247,7 +249,7 @@ def test_observations_must_exactly_match_required_pairs() -> None:
     pairs = _pairs(plan)
     with pytest.raises(ValueError, match="exactly cover"):
         _build(plan=plan, observations=(_observation(pairs[0]),))
-    with pytest.raises(ValueError, match="exactly match"):
+    with pytest.raises(ValueError, match="exactly cover"):
         _build(plan=plan, observations=(_observation(pairs[0]), _observation(pairs[0])))
     extra = _observation(("current_visit_surgery_order_confirmed", "inpat_nondrug_order"))
     with pytest.raises(ValueError, match="exactly cover"):
@@ -265,7 +267,11 @@ def test_fact_refs_must_exist_match_pair_and_be_claimed_once() -> None:
     missing = tuple(_observation(pair, fact_ids=("f" * 64,)) for pair in _pairs(plan))
     with pytest.raises(ValueError, match="does not match coverage pair"):
         _build(plan=plan, manifest=manifest, bundle=bundle, observations=missing)
-    wrong = (_observation(_pairs(plan)[0], fact_ids=(facts[1].fact_id,)), _observation(_pairs(plan)[1]))
+    pairs = _pairs(plan)
+    wrong = tuple(
+        _observation(pair, fact_ids=(facts[1].fact_id,) if index == 0 else ())
+        for index, pair in enumerate(pairs)
+    )
     with pytest.raises(ValueError, match="does not match coverage pair"):
         _build(plan=plan, manifest=manifest, bundle=bundle, observations=wrong)
     claimed_twice = tuple(_observation(pair, fact_ids=(facts[0].fact_id,)) for pair in _pairs(plan))
@@ -279,9 +285,9 @@ def test_unrelated_bundle_facts_do_not_expand_or_leak_coverage_pairs() -> None:
     related = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed")
     unrelated = _fact(source_key="inpat_nondrug_order", fact_type="unrelated_fact_type")
     bundle = _bundle(manifest, (related, unrelated))
-    observations = (
-        _observation(_pairs(plan)[0]),
-        _observation(_pairs(plan)[1], fact_ids=(related.fact_id,)),
+    observations = tuple(
+        _observation(pair, fact_ids=(related.fact_id,) if pair[1] == "surgery_record" else ())
+        for pair in _pairs(plan)
     )
     report = _build(plan=plan, manifest=manifest, bundle=bundle, observations=observations)
     assert "unrelated_fact_type" not in report.canonical_json()
@@ -351,28 +357,34 @@ def test_zero_processed_records_cannot_claim_produced_fact_ids(state) -> None:
     plan = _plan(("LX0609-032",))
     manifest = _manifest()
     fact = _fact(source_key="surgery_application", fact_type="current_visit_surgery_confirmed")
+    app_pair = next(pair for pair in _pairs(plan) if pair[1] == "surgery_application")
     with pytest.raises(ValueError, match="produced facts require processed records"):
         _observation(
-            _pairs(plan)[0],
+            app_pair,
             state=state,
             processed=0,
             fact_ids=(fact.fact_id,),
             reason="partial_budget_limit" if state is ExtractionCoverageState.PARTIAL else "extraction_error",
             error="extractor_timeout" if state is ExtractionCoverageState.ERROR else "",
         )
-    observations = (
+    observations = tuple(
         _observation(
-            _pairs(plan)[0],
-            state=state,
-            processed=1,
-            fact_ids=(fact.fact_id,),
-            reason="partial_budget_limit" if state is ExtractionCoverageState.PARTIAL else "extraction_error",
-            error="extractor_timeout" if state is ExtractionCoverageState.ERROR else "",
-        ),
-        _observation(_pairs(plan)[1]),
+            pair,
+            state=state if pair == app_pair else ExtractionCoverageState.COMPLETE,
+            processed=1 if pair == app_pair else 2,
+            fact_ids=(fact.fact_id,) if pair == app_pair else (),
+            reason=("partial_budget_limit" if state is ExtractionCoverageState.PARTIAL else "extraction_error") if pair == app_pair else "",
+            error="extractor_timeout" if pair == app_pair and state is ExtractionCoverageState.ERROR else "",
+        )
+        for pair in _pairs(plan)
     )
     report = _build(plan=plan, manifest=manifest, bundle=_bundle(manifest, (fact,)), observations=observations)
-    assert report.items[0].observation.produced_fact_ids == (fact.fact_id,)
+    app_item = next(
+        item
+        for item in report.items
+        if (item.observation.fact_type, item.observation.source_key) == app_pair
+    )
+    assert app_item.observation.produced_fact_ids == (fact.fact_id,)
 
 
 def test_multiple_produced_fact_ids_are_canonicalized_independent_of_input_order() -> None:
@@ -381,14 +393,21 @@ def test_multiple_produced_fact_ids_are_canonicalized_independent_of_input_order
     first = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-a")
     second = _fact(source_key="surgery_record", fact_type="current_visit_surgery_confirmed", document_id="doc-b")
     bundle = _bundle(manifest, (first, second))
-    app_pair, record_pair = _pairs(plan)
+    pairs = _pairs(plan)
+    record_pair = next(pair for pair in pairs if pair[1] == "surgery_record")
     left = _build(
         plan=plan, manifest=manifest, bundle=bundle,
-        observations=(_observation(app_pair), _observation(record_pair, fact_ids=(first.fact_id, second.fact_id))),
+        observations=tuple(
+            _observation(pair, fact_ids=(first.fact_id, second.fact_id) if pair == record_pair else ())
+            for pair in pairs
+        ),
     )
     right = _build(
         plan=plan, manifest=manifest, bundle=bundle,
-        observations=(_observation(app_pair), _observation(record_pair, fact_ids=(second.fact_id, first.fact_id))),
+        observations=tuple(
+            _observation(pair, fact_ids=(second.fact_id, first.fact_id) if pair == record_pair else ())
+            for pair in pairs
+        ),
     )
     assert left.fingerprint() == right.fingerprint()
     assert left.canonical_json() == right.canonical_json()

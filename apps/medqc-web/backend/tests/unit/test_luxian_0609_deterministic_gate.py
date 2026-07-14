@@ -26,7 +26,14 @@ from app.services.luxian_0609.source_manifest import DocumentManifest, QueryStat
 CREATED = "2026-07-12T12:00:00+08:00"
 VISIT = "visit-gate-001"
 SNAPSHOT = "a" * 64
-SOURCES = ("inpat_nondrug_order", "surgery_application", "surgery_record", "presurg_summary", "surgery_safecheck_record")
+SOURCES = (
+    "inpat_nondrug_order",
+    "mr_surgery",
+    "surgery_application",
+    "surgery_record",
+    "presurg_summary",
+    "surgery_safecheck_record",
+)
 
 
 def _plan(rule_ids=("LX0609-030",)):
@@ -230,6 +237,65 @@ def test_d_order_and_performed_semantics_and_e_positive_wins():
     bad_pair = ("current_visit_surgery_confirmed", "surgery_application")
     report = _gate(facts=(order, performed), overrides={(order.fact_type, order.source_key): _observation((order.fact_type, order.source_key), fact_ids=(order.fact_id,)), (performed.fact_type, performed.source_key): _observation((performed.fact_type, performed.source_key), fact_ids=(performed.fact_id,)), bad_pair: _observation(bad_pair, state="partial", processed=1, reason="partial_budget_limit")})
     assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
+
+
+def test_typed_mr_surgery_fact_is_accepted_and_overrides_other_source_error():
+    fact = _fact(
+        fact_type="current_visit_surgery_confirmed",
+        source_key="mr_surgery",
+        document_id="mr-surgery-ref",
+    )
+    positive_pair = (fact.fact_type, fact.source_key)
+    report = _gate(
+        facts=(fact,),
+        statuses={"surgery_record": QueryStatus.ERROR},
+        overrides={positive_pair: _observation(positive_pair, fact_ids=(fact.fact_id,))},
+    )
+
+    assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
+    assert report.decisions[0].matched_fact_refs[0].source_key == "mr_surgery"
+
+
+def test_strict_surgery_record_fact_overrides_mr_surgery_source_error():
+    fact = _fact(
+        fact_type="current_visit_surgery_confirmed",
+        source_key="surgery_record",
+        document_id="surgery-record-ref",
+    )
+    positive_pair = (fact.fact_type, fact.source_key)
+    report = _gate(
+        facts=(fact,),
+        statuses={"mr_surgery": QueryStatus.ERROR},
+        overrides={positive_pair: _observation(positive_pair, fact_ids=(fact.fact_id,))},
+    )
+
+    assert report.decisions[0].trigger_resolution is TriggerResolution.MATCHED
+    assert report.decisions[0].matched_fact_refs[0].source_key == "surgery_record"
+
+
+def test_mr_surgery_source_error_blocks_only_when_no_alternative_positive():
+    report = _gate(statuses={"mr_surgery": QueryStatus.ERROR})
+    assert report.decisions[0].trigger_resolution is TriggerResolution.SOURCE_ERROR
+    assert report.decisions[0].readiness is GateReadiness.BLOCKED
+
+
+def test_gate_decision_rejects_unapproved_performed_source():
+    bad = GateFactRef(
+        "9" * 64,
+        "current_visit_surgery_confirmed",
+        "presurg_summary",
+    )
+    with pytest.raises(ValueError, match="not allowed"):
+        GateDecision(
+            "LX0609-030",
+            "matched",
+            "surgery_record",
+            "present",
+            "ready",
+            (bad,),
+            (),
+            (),
+        )
 
 
 @pytest.mark.parametrize("mode", ["coverage_partial", "coverage_not_run", "coverage_error", "source_unavailable", "source_error"])

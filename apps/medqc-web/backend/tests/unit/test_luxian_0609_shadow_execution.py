@@ -25,10 +25,36 @@ class Explosive:
 def _zero(**overrides):
     values = dict(visit_ref="visit-orch-001", selected_rule_ids=[], scoped_customer_rule_ids=[], record_rule_map={}, evidence_payload=Explosive(), source_query_observations=Explosive(), fact_pairs=Explosive(), deterministic_coverage_outcomes=Explosive(), redaction_terms=Explosive(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     values.update(overrides)
+    selected = set(values["selected_rule_ids"])
+    scoped = set(values["scoped_customer_rule_ids"])
+    recorded = set(values["record_rule_map"].get(values["visit_ref"], ()))
+    effective = selected & scoped & recorded & {"LX0609-029", "LX0609-030", "LX0609-032"}
+    if effective and isinstance(values["source_query_observations"], (tuple, list)):
+        observations = tuple(values["source_query_observations"])
+        if not any(item.source_key == "mr_surgery" for item in observations):
+            values["source_query_observations"] = observations + (
+                SourceQueryObservation.create(
+                    source_key="mr_surgery", query_status="empty", query_version="query-v1",
+                ),
+            )
+    if (
+        effective
+        and isinstance(values["deterministic_coverage_outcomes"], (tuple, list))
+        and values["deterministic_coverage_outcomes"]
+        and all(isinstance(item, FactCoverageOutcomeInput) for item in values["deterministic_coverage_outcomes"])
+    ):
+        outcomes = tuple(values["deterministic_coverage_outcomes"])
+        if not any(
+            item.fact_type == "current_visit_surgery_confirmed" and item.source_key == "mr_surgery"
+            for item in outcomes
+        ):
+            values["deterministic_coverage_outcomes"] = outcomes + (
+                _outcome("current_visit_surgery_confirmed", "mr_surgery", processed=0),
+            )
+    if effective and isinstance(values["evidence_payload"], dict):
+        documents = values["evidence_payload"].setdefault("programmatic_timeline", {}).setdefault("documents", {})
+        documents.setdefault("mr_surgery", [])
     if "target_qualifications" not in overrides:
-        selected = set(values["selected_rule_ids"])
-        scoped = set(values["scoped_customer_rule_ids"])
-        recorded = set(values["record_rule_map"].get(values["visit_ref"], ()))
         targets = {"LX0609-029": "presurg_summary", "LX0609-032": "surgery_safecheck_record"}
         documents = values["evidence_payload"].get("programmatic_timeline", {}).get("documents", {}) if isinstance(values["evidence_payload"], dict) else {}
         observed_status = {item.source_key: item.query_status.value for item in values["source_query_observations"]} if isinstance(values["source_query_observations"], (tuple, list)) else {}
@@ -256,7 +282,7 @@ def test_real_nonzero_030_matched_target_present_is_compliant(monkeypatch):
     outcomes = (_outcome("current_visit_surgery_order_confirmed", "inpat_nondrug_order"), _outcome("current_visit_surgery_confirmed", "surgery_application"), _outcome("current_visit_surgery_confirmed", "surgery_record", refs=(pair.pair_ref,)))
     report = _zero(selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={"visit-orch-001": ["LX0609-030"]}, evidence_payload=payload, source_query_observations=observations, fact_pairs=(pair,), deterministic_coverage_outcomes=outcomes, redaction_terms=())
     assert report.results[0].final_state.value == "compliant"
-    assert captured["coverage_fact_ids"][-1] == (captured["fact_id"],)
+    assert (captured["fact_id"],) in captured["coverage_fact_ids"]
 
 
 def test_real_nonzero_030_order_trigger_target_empty_is_non_compliant():

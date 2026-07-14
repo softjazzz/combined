@@ -15,14 +15,16 @@ from .source_evidence_reader import (
     canonical_source_evidence,
     digest_source_evidence,
     has_strict_performed_time,
+    has_trusted_performed_surgery,
     parse_strict_performed_time,
     read_luxian_0609_runtime_source_rows,
+    trusted_performed_surgery_times,
 )
 
 _QUERY_VERSION = "runtime_source_v1"
 _EXTRACTOR_VERSION = "rts-v1"
 _MAPPING_POLICY_VERSION = "rtm-v1"
-_MAX_SOURCES = 5
+_MAX_SOURCES = 6
 _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 _PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 _TARGET_QUALIFICATION_POLICY_VERSION = deterministic_gate.TARGET_QUALIFICATION_POLICY_VERSION
@@ -149,18 +151,23 @@ def provide_luxian_0609_runtime_shadow_inputs(
         signals: list[runtime_shadow_assembler.RuntimeStructuredFactSignal] = []
         materials = []
         for row in rows_by_source[source_key]:
-            material = {
-                "source_key": source_key,
-                "surgery_times": {
+            surgery_times: dict[str, str] = {}
+            if source_key == "surgery_record":
+                surgery_times = {
                     field: str(row.get(field) or "").strip()
                     for field in _BEGIN_END_FIELDS
-                    if source_key == "surgery_record" and str(row.get(field) or "").strip()
-                },
+                    if str(row.get(field) or "").strip()
+                }
+            elif source_key == "mr_surgery" and isinstance(row.get("surgery_begin_datetime"), datetime):
+                surgery_times = {"surgery_begin_datetime": row["surgery_begin_datetime"].isoformat()}
+            material = {
+                "source_key": source_key,
+                "surgery_times": surgery_times,
             }
             qualification_material_hash = _target_qualification_material_hash(source_key, row)
             if qualification_material_hash is not None:
                 material["qualification_material_hash"] = qualification_material_hash
-            materials.append((material, source_key == "surgery_record" and _has_performed_time(row)))
+            materials.append((material, has_trusted_performed_surgery(source_key=source_key, row=row)))
         materials.sort(key=lambda item: _canonical(item[0]))
         occurrences: dict[str, int] = {}
         for material, has_performed_time in materials:
@@ -203,12 +210,18 @@ def provide_luxian_0609_runtime_shadow_inputs(
             extractor_version=_EXTRACTOR_VERSION, mapping_policy_version=_MAPPING_POLICY_VERSION,
             processed_record_count=processed, positive_signals=signals, reason_code=reason,
         ))
-    confirmed_surgery_times = tuple(
+    surgery_record_times = tuple(
         parsed
         for row in rows_by_source.get("surgery_record", ())
-        for parsed in (_parse_performed_time(row.get(field)) for field in _BEGIN_END_FIELDS)
-        if parsed is not None
+        for parsed in trusted_performed_surgery_times(source_key="surgery_record", row=row)
     )
+    mr_surgery_times = tuple(
+        parsed
+        for row in rows_by_source.get("mr_surgery", ())
+        for parsed in trusted_performed_surgery_times(source_key="mr_surgery", row=row)
+    )
+    # 保留已验收的 surgery_record 时序语义；仅在其没有严格时间时回退 typed mr_surgery。
+    confirmed_surgery_times = surgery_record_times or mr_surgery_times
     earliest_surgery_time = min(confirmed_surgery_times) if confirmed_surgery_times else None
     observation_by_source = {item.source_key: item for item in observations}
     qualifications: list[deterministic_gate.TargetQualification] = []

@@ -227,6 +227,7 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert safecheck.dependency_reason_codes == ("informational_parent_only",)
     assert safecheck.independent_target_source is True
     assert safecheck.required_source_keys == (
+        "mr_surgery",
         "surgery_application",
         "surgery_record",
         "surgery_safecheck_record",
@@ -235,12 +236,14 @@ def test_rule_metadata_declares_exact_sources_facts_and_dependency() -> None:
     assert safecheck.trigger_source_keys != ("surgery_record",)
     assert items["LX0609-029"].required_source_keys == (
         "inpat_nondrug_order",
+        "mr_surgery",
         "presurg_summary",
         "surgery_application",
         "surgery_record",
     )
     assert items["LX0609-030"].required_source_keys == (
         "inpat_nondrug_order",
+        "mr_surgery",
         "surgery_application",
         "surgery_record",
     )
@@ -259,7 +262,7 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
     }
     expected_performed = {
         "allowed_event_statuses": ["performed"],
-        "allowed_source_keys": ["surgery_application", "surgery_record"],
+        "allowed_source_keys": ["surgery_application", "surgery_record", "mr_surgery"],
         "assertion": "affirmed",
         "current_visit_relevance": "relevant",
         "fact_type": "current_visit_surgery_confirmed",
@@ -283,6 +286,7 @@ def test_trigger_requirements_bind_fact_source_scope_assertion_and_event_status(
     ]
     assert "inpat_nondrug_order" not in safecheck.trigger_source_keys
     assert safecheck.required_source_keys == (
+        "mr_surgery",
         "surgery_application",
         "surgery_record",
         "surgery_safecheck_record",
@@ -374,7 +378,7 @@ def test_global_rule_metadata_is_deeply_immutable() -> None:
             "current_visit_surgery_order_confirmed"
         ]["allowed_source_keys"] = ("changed",)
     assert PlannedRule.for_rule_id("LX0609-029").target_source_key == "presurg_summary"
-    assert PlannedRule.for_rule_id("LX0609-029").source_requirement_version.endswith("v2")
+    assert PlannedRule.for_rule_id("LX0609-029").source_requirement_version.endswith("v3")
 
 
 def test_direct_plan_construction_revalidates_order_scope_and_exclusions() -> None:

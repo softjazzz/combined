@@ -157,6 +157,27 @@ def has_strict_performed_time(row: Mapping[str, Any]) -> bool:
     return any(parse_strict_performed_time(row.get(field)) is not None for field in SURGERY_TIME_FIELDS)
 
 
+def trusted_performed_surgery_times(
+    *, source_key: str, row: Mapping[str, Any]
+) -> tuple[datetime, ...]:
+    """返回批准来源中的本次已实施手术时间；描述性字段不能触发。"""
+    if source_key == "surgery_record":
+        return tuple(
+            parsed
+            for field in SURGERY_TIME_FIELDS
+            if (parsed := parse_strict_performed_time(row.get(field))) is not None
+        )
+    if source_key == "mr_surgery":
+        value = row.get("surgery_begin_datetime")
+        return (value,) if isinstance(value, datetime) and value.tzinfo is None else ()
+    return ()
+
+
+def has_trusted_performed_surgery(*, source_key: str, row: Mapping[str, Any]) -> bool:
+    """仅严格手术记录时间或 mr_surgery typed 时间可证明已实施。"""
+    return bool(trusted_performed_surgery_times(source_key=source_key, row=row))
+
+
 def _source_limit(source_key: str) -> int:
     return int(getattr(bundle_assembly, "_DOMAIN_FETCH_LIMITS", {}).get(source_key, 50))
 
@@ -177,6 +198,10 @@ def read_luxian_0609_runtime_source_rows(
         raise SourceEvidenceUnavailable()
 
     selected = [field for field in SURGERY_TIME_FIELDS if source_key == "surgery_record" and field in columns]
+    if source_key == "mr_surgery":
+        if "surgery_begin_datetime" not in columns:
+            raise SourceEvidenceUnavailable()
+        selected.append("surgery_begin_datetime")
     if source_key == "presurg_summary":
         selected.extend(field for field in ("record_content", "record_time") if field in columns)
     if source_key == "surgery_safecheck_record":

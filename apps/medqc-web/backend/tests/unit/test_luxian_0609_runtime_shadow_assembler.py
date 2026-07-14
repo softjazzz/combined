@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import json
 
 import pytest
 
-from app.services.luxian_0609 import planner
+from app.services.luxian_0609 import deterministic_gate, planner
 from app.services.luxian_0609.runtime_shadow_assembler import (
     RuntimePairExtractionInput,
     RuntimeStructuredFactSignal,
@@ -72,7 +73,11 @@ def test_zero_plan_does_not_read_downstream_inputs():
 
 def test_required_pairs_are_trigger_derived_not_targets_and_032_has_no_order_pair():
     assembly = _assemble(_plan("LX0609-032"))
-    assert {(item.fact_type, item.source_key) for item in assembly.deterministic_coverage_outcomes} == {("current_visit_surgery_confirmed", "surgery_application"), ("current_visit_surgery_confirmed", "surgery_record")}
+    assert {(item.fact_type, item.source_key) for item in assembly.deterministic_coverage_outcomes} == {
+        ("current_visit_surgery_confirmed", "mr_surgery"),
+        ("current_visit_surgery_confirmed", "surgery_application"),
+        ("current_visit_surgery_confirmed", "surgery_record"),
+    }
     assert "surgery_safecheck_record" not in {item.source_key for item in assembly.deterministic_coverage_outcomes}
 
 
@@ -161,7 +166,21 @@ def test_real_orch_accepts_assembled_performed_signal(rule_id):
     plan = _plan(rule_id)
     payload = _payload(plan)
     assembly = _assemble(plan, _signal())
-    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=[rule_id], scoped_customer_rule_ids=[rule_id], record_rule_map={VISIT: [rule_id]}, evidence_payload=payload, source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
+    qualifications = ()
+    if rule_id == "LX0609-032":
+        target_source = "surgery_safecheck_record"
+        snapshot = hashlib.sha256(json.dumps(
+            {"source_key": target_source, "documents": payload["programmatic_timeline"]["documents"][target_source]},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode()).hexdigest()
+        qualifications = (
+            deterministic_gate.TargetQualification(
+                VISIT, rule_id, target_source,
+                deterministic_gate.TARGET_QUALIFICATION_POLICY_VERSION,
+                snapshot, 1,
+            ),
+        )
+    report = build_luxian_0609_shadow_execution(visit_ref=VISIT, selected_rule_ids=[rule_id], scoped_customer_rule_ids=[rule_id], record_rule_map={VISIT: [rule_id]}, evidence_payload=payload, source_query_observations=assembly.source_query_observations, fact_pairs=assembly.fact_pairs, deterministic_coverage_outcomes=assembly.deterministic_coverage_outcomes, target_qualifications=qualifications, redaction_terms=(), planner_schema_version="planner-v1", rule_plan_version="slice-v1", manifest_schema_version="manifest-v1", bundle_schema_version="bundle-v1", coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", gate_schema_version="gate-v1", gate_policy_version="policy-v1", finding_schema_version="finding-v1", finding_policy_version="policy-v1", aggregation_schema_version="aggregation-v1", aggregation_policy_version="policy-v1", execution_schema_version="execution-v1", execution_policy_version="policy-v1", package_version="package-v1", planner_created_at=CREATED, manifest_created_at=CREATED, bundle_created_at=CREATED, coverage_created_at=CREATED, gate_created_at=CREATED, finding_created_at=CREATED, aggregation_created_at=CREATED, created_at=CREATED)
     assert report.results[0].final_state.value == "compliant"
 
 

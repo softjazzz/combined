@@ -36,7 +36,11 @@ _ID_CARD = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _PHONE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _RULE_ORDER = ("LX0609-029", "LX0609-030", "LX0609-032")
 _ORDER_PAIR = ("current_visit_surgery_order_confirmed", "inpat_nondrug_order")
-_PERFORMED_PAIRS = frozenset({("current_visit_surgery_confirmed", "surgery_application"), ("current_visit_surgery_confirmed", "surgery_record")})
+_PERFORMED_PAIRS = frozenset({
+    ("current_visit_surgery_confirmed", "surgery_application"),
+    ("current_visit_surgery_confirmed", "surgery_record"),
+    ("current_visit_surgery_confirmed", "mr_surgery"),
+})
 _RULE_CONTRACT = MappingProxyType({
     "LX0609-029": ("presurg_summary", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
     "LX0609-030": ("surgery_record", (), (), frozenset({_ORDER_PAIR, *_PERFORMED_PAIRS})),
