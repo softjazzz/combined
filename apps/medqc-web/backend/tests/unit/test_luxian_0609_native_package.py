@@ -59,13 +59,48 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-032",
     }
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_ASYNC} == {
+        "LX0609-010",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-014",
+        "LX0609-015",
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
         "LX0609-023",
         "LX0609-040"
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 36
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 31
+
+
+@pytest.mark.unit
+def test_exam_lab_family_flag_partitions_only_five_customer_rules():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    selected = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
+
+    enabled = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=selected,
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_exam_lab_enabled=True,
+    )
+    disabled = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=selected,
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_exam_lab_enabled=False,
+    )
+
+    assert enabled.native_async_rule_ids == tuple(selected)
+    assert enabled.compatibility_rule_ids == ()
+    assert enabled.native_executor_batches == (("exam_lab", tuple(selected)),)
+    assert disabled.native_async_rule_ids == ()
+    assert disabled.compatibility_rule_ids == tuple(selected)
 
 
 @pytest.mark.unit

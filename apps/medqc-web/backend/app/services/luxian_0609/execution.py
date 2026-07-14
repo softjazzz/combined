@@ -25,6 +25,10 @@ from .native_consultation_execution import (
     EXECUTOR_KEY as CONSULTATION_EXECUTOR_KEY,
     execute_luxian_0609_native_consultation_rules,
 )
+from .native_exam_lab_execution import (
+    EXECUTOR_KEY as EXAM_LAB_EXECUTOR_KEY,
+    execute_luxian_0609_native_exam_lab_rules,
+)
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
@@ -124,6 +128,9 @@ async def prepare_luxian_0609_execution(
         native_consultation_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", False)
         ),
+        native_exam_lab_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED", False)
+        ),
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
@@ -182,6 +189,20 @@ async def prepare_luxian_0609_execution(
     native_completion_tokens = 0
     native_total_tokens = 0
     native_api_time = 0.0
+    exam_lab_rule_ids = package_plan.native_rule_ids_for_executor(EXAM_LAB_EXECUTOR_KEY)
+    if exam_lab_rule_ids:
+        exam_lab_execution = await execute_luxian_0609_native_exam_lab_rules(
+            rule_ids=exam_lab_rule_ids,
+            wrapper_rules=wrapper_rules,
+            evidence_payload=evidence_payload,
+            llm_client=llm_client,
+        )
+        native_results.extend(exam_lab_execution.results)
+        native_llm_call_count += exam_lab_execution.llm_call_count
+        native_prompt_tokens += exam_lab_execution.prompt_tokens
+        native_completion_tokens += exam_lab_execution.completion_tokens
+        native_total_tokens += exam_lab_execution.total_tokens
+        native_api_time += exam_lab_execution.api_time
     consultation_rule_ids = package_plan.native_rule_ids_for_executor(
         CONSULTATION_EXECUTOR_KEY
     )
