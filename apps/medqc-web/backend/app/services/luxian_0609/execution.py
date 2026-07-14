@@ -33,6 +33,10 @@ from .native_transfusion_execution import (
     EXECUTOR_KEY as TRANSFUSION_EXECUTOR_KEY,
     execute_luxian_0609_native_transfusion_rules,
 )
+from .native_tumor_pathology_execution import (
+    EXECUTOR_KEY as TUMOR_PATHOLOGY_EXECUTOR_KEY,
+    execute_luxian_0609_native_tumor_pathology_rules,
+)
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
@@ -137,6 +141,9 @@ async def prepare_luxian_0609_execution(
         ),
         native_transfusion_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED", False)
+        ),
+        native_tumor_pathology_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED", False)
         ),
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
@@ -248,6 +255,26 @@ async def prepare_luxian_0609_execution(
         native_completion_tokens += transfusion_execution.completion_tokens
         native_total_tokens += transfusion_execution.total_tokens
         native_api_time += transfusion_execution.api_time
+    tumor_pathology_rule_ids = package_plan.native_rule_ids_for_executor(
+        TUMOR_PATHOLOGY_EXECUTOR_KEY
+    )
+    if tumor_pathology_rule_ids:
+        tumor_pathology_execution = await execute_luxian_0609_native_tumor_pathology_rules(
+            rule_ids=tumor_pathology_rule_ids,
+            wrapper_rules=wrapper_rules,
+            evidence_payload=evidence_payload,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            llm_client=llm_client,
+        )
+        native_results.extend(tumor_pathology_execution.results)
+        native_llm_call_count += tumor_pathology_execution.llm_call_count
+        native_prompt_tokens += tumor_pathology_execution.prompt_tokens
+        native_completion_tokens += tumor_pathology_execution.completion_tokens
+        native_total_tokens += tumor_pathology_execution.total_tokens
+        native_api_time += tumor_pathology_execution.api_time
     mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
     if mdt_rule_ids:
         native_mdt = await execute_luxian_0609_native_mdt_rule(

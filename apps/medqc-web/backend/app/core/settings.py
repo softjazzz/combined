@@ -134,6 +134,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED: bool = True
     # 输血族041-049独立包开关；关闭时精确回退现有映射执行链。
     LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED: bool = True
+    # 肿瘤病理族013/019/026/027独立包开关；关闭时精确回退现有映射执行链。
+    LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED: bool = True
     # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生试运行；验收前默认关闭。
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。

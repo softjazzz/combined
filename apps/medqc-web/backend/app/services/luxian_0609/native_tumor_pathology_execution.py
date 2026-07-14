@@ -1,0 +1,507 @@
+"""LX0609 肿瘤病理族原生执行：受控来源门控后逐规则裁剪判定。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import re
+from typing import Any, Mapping, Protocol, Sequence
+
+from .native_execution import build_luxian_0609_native_result
+from .source_evidence_reader import (
+    SourceEvidenceUnavailable,
+    read_luxian_0609_native_source_rows,
+)
+
+
+TUMOR_PATHOLOGY_RULE_IDS = (
+    "LX0609-013",
+    "LX0609-019",
+    "LX0609-026",
+    "LX0609-027",
+)
+EXECUTOR_KEY = "tumor_pathology"
+
+_PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
+_PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
+_CHEMO_TARGET_SOURCES = ("inpat_drug_order", "daily_course_record")
+_DISCHARGE_TARGET_SOURCES = ("diagnosis", "discharge_record")
+_MAX_ROWS_PER_SOURCE = 8
+_MAX_ROW_CHARS = 1400
+_MAX_CONTEXT_CHARS = 18000
+_MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
+_MALIGNANT_CODE_PATTERN = re.compile(r"^C[0-9]{2}(?:[.A-Z0-9-]*)$")
+_PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive"})
+
+_MALIGNANT_FACT_TYPES = frozenset(
+    {
+        "current_visit_malignant_neoplasm_diagnosis",
+        "current_visit_malignant_tumor",
+    }
+)
+_CHEMO_FACT_TYPES = frozenset(
+    {
+        "current_visit_chemotherapy_order",
+        "current_visit_chemotherapy_treatment",
+    }
+)
+
+_CONTROLLED_MESSAGES = {
+    "compliant": ("肿瘤病理相关记录满足该项要求。", ""),
+    "non_compliant": (
+        "肿瘤病理相关记录未满足该项要求。",
+        "请按该质控点补充或修正相关记录。",
+    ),
+    "not_applicable": ("当前就诊未发现该项适用的肿瘤病理事实。", ""),
+    "data_gap": (
+        "当前肿瘤病理资料不足，暂不能形成可靠结论。",
+        "请补齐相关资料后重新质控。",
+    ),
+}
+
+
+class TumorPathologyLLMClient(Protocol):
+    async def generate(self, prompt: str) -> dict[str, Any]:
+        ...
+
+
+@dataclass(frozen=True)
+class SourceMaterial:
+    state: str
+    rows: tuple[Mapping[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class NativeTumorPathologyExecutionResult:
+    results: tuple[dict[str, Any], ...]
+    planned_rule_ids: tuple[str, ...]
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+
+
+def _clean(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _documents(evidence_payload: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    if not isinstance(evidence_payload, Mapping):
+        return None
+    timeline = evidence_payload.get("programmatic_timeline")
+    if not isinstance(timeline, Mapping):
+        return None
+    documents = timeline.get("documents")
+    return documents if isinstance(documents, Mapping) else None
+
+
+def _timeline_facts(evidence_payload: Mapping[str, Any] | None) -> Sequence[Any]:
+    if not isinstance(evidence_payload, Mapping):
+        return ()
+    facts = evidence_payload.get("timeline_facts")
+    return tuple(facts) if isinstance(facts, list) else ()
+
+
+def _bundle_rows(
+    documents: Mapping[str, Any] | None, source_key: str
+) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(documents, Mapping):
+        return ()
+    raw_rows = documents.get(source_key)
+    if not isinstance(raw_rows, list):
+        return ()
+    return tuple(
+        row for row in raw_rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
+    )
+
+
+def _load_source(
+    *,
+    documents: Mapping[str, Any] | None,
+    source_key: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SourceMaterial:
+    bundle_rows = _bundle_rows(documents, source_key)
+    if bundle_rows:
+        return SourceMaterial("present", bundle_rows)
+    if not all((institute_id, patient_id, visit_id)):
+        return SourceMaterial("unavailable")
+    try:
+        rows = read_luxian_0609_native_source_rows(
+            source_key=source_key,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+    except SourceEvidenceUnavailable:
+        return SourceMaterial("unavailable")
+    except Exception:
+        return SourceMaterial("error")
+    material = tuple(
+        row for row in rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
+    )
+    return SourceMaterial("present" if material else "empty", material)
+
+
+def _row_text(row: Mapping[str, Any]) -> str:
+    approved_keys = (
+        "content",
+        "record_content",
+        "assembled_text",
+        "diagnosis",
+        "eye_findings",
+        "microscope_findings",
+        "specimen_name",
+        "surgery_name",
+        "diagnosis_code",
+        "drug_code",
+        "generic_name",
+        "brand_name",
+        "drug_type",
+        "single_dose",
+        "single_dose_unit",
+        "drug_apply_method",
+        "drug_frequency",
+        "prescribed_datetime",
+        "order_status",
+        "discharge_order",
+        "treatment_course",
+    )
+    return _clean(
+        " ".join(_clean(row.get(key)) for key in approved_keys if _clean(row.get(key)))
+    )
+
+
+def _source_text(source_key: str, material: SourceMaterial) -> list[str]:
+    return [
+        f"[{source_key}-{index}] {text[:_MAX_ROW_CHARS]}"
+        for index, row in enumerate(material.rows, start=1)
+        if (text := _row_text(row))
+    ]
+
+
+def _has_fact(
+    facts: Sequence[Any], fact_types: frozenset[str], source_keys: frozenset[str]
+) -> bool:
+    for raw_fact in facts:
+        if not isinstance(raw_fact, Mapping):
+            continue
+        if raw_fact.get("current_visit_bound") is not True:
+            continue
+        fact_type = _clean(raw_fact.get("fact_type")).lower()
+        state = _clean(raw_fact.get("state")).lower()
+        source_key = _clean(raw_fact.get("source_key")).lower()
+        if (
+            fact_type in fact_types
+            and state in _PRESENT_FACT_STATES
+            and source_key in source_keys
+        ):
+            return True
+    return False
+
+
+def _has_malignant_code(material: SourceMaterial) -> bool:
+    return any(
+        _MALIGNANT_CODE_PATTERN.fullmatch(
+            _clean(row.get("diagnosis_code") or row.get("content")).upper()
+        )
+        for row in material.rows
+    )
+
+
+def _has_any_diagnosis_code(material: SourceMaterial) -> bool:
+    return any(_clean(row.get("diagnosis_code")) for row in material.rows)
+
+
+def _has_substantive_pathology_report(material: SourceMaterial) -> bool:
+    return any(
+        any(
+            _clean(row.get(key))
+            for key in (
+                "diagnosis",
+                "record_content",
+                "content",
+                "eye_findings",
+                "microscope_findings",
+            )
+        )
+        for row in material.rows
+    )
+
+
+def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
+    custom_prompt = _MAPPING_LINE_PATTERN.sub(
+        "", str(wrapper.get("custom_prompt") or "")
+    )
+    return (
+        custom_prompt.replace("{defect_level}", str(wrapper.get("defect_level") or ""))
+        .replace("{medical_text}", context)
+        .strip()
+    )
+
+
+def _response_text(response: Mapping[str, Any]) -> str:
+    choices = response.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], Mapping):
+        message = choices[0].get("message")
+        if isinstance(message, Mapping):
+            return str(message.get("content") or "")
+    return str(response.get("content") or response.get("text") or "")
+
+
+def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.IGNORECASE
+    ).strip()
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (TypeError, ValueError):
+        return None
+    value = payload.get("is_compliant") if isinstance(payload, Mapping) else None
+    return value if isinstance(value, bool) else None
+
+
+def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
+    usage = response.get("usage")
+    usage = usage if isinstance(usage, Mapping) else {}
+    prompt = int(usage.get("prompt_tokens") or 0)
+    completion = int(usage.get("completion_tokens") or 0)
+    total = int(usage.get("total_tokens") or prompt + completion)
+    return prompt, completion, total, float(response.get("_api_time") or 0.0)
+
+
+def _result(
+    rule_id: str, status: str, reason_code: str, *, executor_type: str
+) -> dict[str, Any]:
+    item = build_luxian_0609_native_result(
+        rule_id=rule_id,
+        final_state=status,
+        finding_kind="requirement_satisfied" if status == "compliant" else status,
+        reason_code=reason_code,
+    )
+    findings, suggestion = _CONTROLLED_MESSAGES[status]
+    item["findings"] = findings
+    item["suggestion"] = suggestion
+    metadata = dict(item.get("metadata") or {})
+    metadata["executor_type"] = executor_type
+    item["metadata"] = metadata
+    return item
+
+
+async def execute_luxian_0609_native_tumor_pathology_rules(
+    *,
+    rule_ids: Sequence[str],
+    wrapper_rules: Sequence[Mapping[str, Any]],
+    evidence_payload: Mapping[str, Any] | None,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+    llm_client: TumorPathologyLLMClient | None,
+) -> NativeTumorPathologyExecutionResult:
+    """按客户目录顺序执行；无受控适用事实时不调用模型。"""
+
+    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    selected = tuple(
+        rule_id for rule_id in TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
+    )
+    if not selected:
+        return NativeTumorPathologyExecutionResult((), ())
+
+    documents = _documents(evidence_payload)
+    facts = _timeline_facts(evidence_payload)
+    cache: dict[str, SourceMaterial] = {}
+
+    def source(source_key: str) -> SourceMaterial:
+        if source_key not in cache:
+            cache[source_key] = _load_source(
+                documents=documents,
+                source_key=source_key,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+            )
+        return cache[source_key]
+
+    wrappers_by_id = {
+        str(wrapper.get("rule_id") or wrapper.get("rule_code") or "")
+        .strip()
+        .upper(): wrapper
+        for wrapper in wrapper_rules
+        if isinstance(wrapper, Mapping)
+    }
+    results: list[dict[str, Any]] = []
+    llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+
+    for rule_id in selected:
+        context_sources: tuple[str, ...]
+        if rule_id in {"LX0609-013", "LX0609-019"}:
+            master = source("pathology_exam_master")
+            report = source("pathology_exam_report")
+            pathology_present = master.state == "present" or report.state == "present"
+            if not pathology_present:
+                source_failed = any(
+                    material.state in {"unavailable", "error"}
+                    for material in (master, report)
+                )
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap" if source_failed else "not_applicable",
+                        "pathology_source_unavailable"
+                        if source_failed
+                        else "pathology_fact_absent",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if rule_id == "LX0609-013" and not _has_substantive_pathology_report(
+                report
+            ):
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "pathology_result_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
+        else:
+            diagnosis = source("diagnosis")
+            malignant_present = _has_fact(
+                facts,
+                _MALIGNANT_FACT_TYPES,
+                frozenset({"diagnosis", "pathology_exam_report"}),
+            ) or _has_malignant_code(diagnosis)
+            if not malignant_present:
+                status = "not_applicable"
+                if diagnosis.state in {
+                    "empty",
+                    "unavailable",
+                    "error",
+                } or not _has_any_diagnosis_code(diagnosis):
+                    status = "data_gap"
+                results.append(
+                    _result(
+                        rule_id,
+                        status,
+                        "malignant_diagnosis_unavailable"
+                        if status == "data_gap"
+                        else "malignant_diagnosis_absent",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if rule_id == "LX0609-026":
+                chemo_present = _has_fact(
+                    facts,
+                    _CHEMO_FACT_TYPES,
+                    frozenset({"inpat_drug_order"}),
+                )
+                if not chemo_present:
+                    results.append(
+                        _result(
+                            rule_id,
+                            "data_gap",
+                            "chemotherapy_fact_unavailable",
+                            executor_type="program",
+                        )
+                    )
+                    continue
+                context_sources = _CHEMO_TARGET_SOURCES
+            else:
+                context_sources = _DISCHARGE_TARGET_SOURCES
+
+        materials = {source_key: source(source_key) for source_key in context_sources}
+        required_sources = (
+            ("surgery_record", "daily_course_record")
+            if rule_id in {"LX0609-013", "LX0609-019"}
+            else ("inpat_drug_order", "daily_course_record")
+            if rule_id == "LX0609-026"
+            else ("discharge_record",)
+        )
+        if any(
+            materials[source_key].state != "present" for source_key in required_sources
+        ):
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "tumor_target_projection_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+        context = "\n".join(
+            line
+            for source_key in context_sources
+            for line in _source_text(source_key, materials[source_key])
+        )[:_MAX_CONTEXT_CHARS]
+        wrapper = wrappers_by_id.get(rule_id)
+        if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "tumor_prompt_input_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+        if llm_client is None:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "tumor_llm_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+        llm_call_count += 1
+        try:
+            response = await llm_client.generate(_prompt(wrapper, context=context))
+        except Exception:
+            results.append(
+                _result(rule_id, "data_gap", "tumor_llm_failure", executor_type="llm")
+            )
+            continue
+        prompt, completion, total, elapsed = _usage(response)
+        prompt_tokens += prompt
+        completion_tokens += completion
+        total_tokens += total
+        api_time += elapsed
+        is_compliant = _parse_is_compliant(response)
+        if is_compliant is None:
+            results.append(
+                _result(
+                    rule_id, "data_gap", "tumor_llm_invalid_output", executor_type="llm"
+                )
+            )
+            continue
+        status = "compliant" if is_compliant else "non_compliant"
+        results.append(
+            _result(rule_id, status, "tumor_customer_prompt", executor_type="llm")
+        )
+
+    return NativeTumorPathologyExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=selected,
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
