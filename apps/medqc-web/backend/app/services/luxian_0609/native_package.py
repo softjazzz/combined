@@ -15,6 +15,10 @@ from .native_basic_timeliness import (
     EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
 )
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
+from .native_consultation_execution import (
+    CONSULTATION_RULE_IDS,
+    EXECUTOR_KEY as CONSULTATION_EXECUTOR_KEY,
+)
 from .native_mdt_execution import RULE_ID as NATIVE_ASYNC_RULE_ID
 
 
@@ -147,6 +151,9 @@ def build_luxian_0609_dependency_inventory(
                 if rule_id in BASIC_TIMELINESS_RULE_IDS
                 else EXECUTOR_SURGERY_PRESENCE
             )
+        elif rule_id in CONSULTATION_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = CONSULTATION_EXECUTOR_KEY
         elif rule_id == NATIVE_ASYNC_RULE_ID:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXECUTOR_SURGERY_MDT
@@ -201,6 +208,7 @@ def build_luxian_0609_package_plan(
     native_sync_enabled: bool,
     native_async_enabled: bool,
     native_basic_timeliness_enabled: bool = False,
+    native_consultation_enabled: bool = False,
 ) -> Luxian0609PackagePlan:
     """按目录顺序将客户选择分为原生同步、原生异步和兼容执行。"""
 
@@ -223,7 +231,11 @@ def build_luxian_0609_package_plan(
     native_async_rule_ids = tuple(
         item.rule_id
         for item in selected
-        if native_async_enabled and item.execution_mode == EXECUTION_MODE_NATIVE_ASYNC
+        if item.execution_mode == EXECUTION_MODE_NATIVE_ASYNC
+        and (
+            (item.executor_key == CONSULTATION_EXECUTOR_KEY and native_consultation_enabled)
+            or (item.executor_key != CONSULTATION_EXECUTOR_KEY and native_async_enabled)
+        )
     )
     native_ids = {*native_sync_rule_ids, *native_async_rule_ids}
     compatibility = tuple(item for item in selected if item.rule_id not in native_ids)

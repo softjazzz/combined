@@ -20,6 +20,7 @@ LLM_ENV_KEYS = [
     "SICHUAN_TIMEOUT_SECONDS",
     "LUXIAN_0609_NATIVE_EXECUTION_ENABLED",
     "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED",
+    "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED",
 ]
 
 
@@ -114,3 +115,12 @@ def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypa
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED is False
+
+
+def test_luxian_native_consultation_defaults_on_and_can_be_disabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False

@@ -22,6 +22,9 @@ from app.services.luxian_0609_trigger_gate import (
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609.native_execution import NativeExecutionResult
+from app.services.luxian_0609.native_consultation_execution import (
+    NativeConsultationExecutionResult,
+)
 from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
@@ -230,6 +233,126 @@ async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_r
             "prompt_version",
             "error_message",
         }.intersection(item["audit"])
+
+
+@pytest.mark.asyncio
+async def test_native_consultation_public_entry_bypasses_legacy_and_accounts_one_call(monkeypatch):
+    wrappers = [
+        _wrapper(
+            "LX0609-020",
+            name="会诊执行记录缺失",
+            mapped_rule_ids=["LX-017", "CL-250"],
+            trigger_condition="有会诊记录",
+        ),
+        _wrapper(
+            "LX0609-021",
+            name="会诊目的不明确",
+            mapped_rule_ids=["SC-068", "LX-015"],
+            trigger_condition="有会诊申请",
+        ),
+        _wrapper(
+            "LX0609-022",
+            name="会诊意见不明确",
+            mapped_rule_ids=["SC-069"],
+            trigger_condition="有会诊意见",
+        ),
+        _wrapper(
+            "LX0609-023",
+            name="会诊执行记录不规范",
+            mapped_rule_ids=["CL-248", "CL-250", "CL-071"],
+            trigger_condition="有会诊执行记录",
+        ),
+    ]
+    settings = SimpleNamespace(
+        LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+        LUXIAN_0609_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
+        LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
+        LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
+    )
+    dispatched: list[list[str]] = []
+    consultation_calls: list[tuple[str, ...]] = []
+
+    async def _dispatch(**kwargs):
+        dispatched.append([str(rule.get("rule_id")) for rule in kwargs["rules"]])
+        return {"results": [], "total_tokens": 0}
+
+    async def _consultation(**kwargs):
+        consultation_calls.append(tuple(kwargs["rule_ids"]))
+        return NativeConsultationExecutionResult(
+            results=tuple(
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "会诊相关记录满足该项要求。",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 1.0,
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "llm",
+                        "reason_code": "test",
+                    },
+                }
+                for rule_id in kwargs["rule_ids"]
+            ),
+            planned_rule_ids=tuple(kwargs["rule_ids"]),
+            llm_call_count=1,
+            prompt_tokens=120,
+            completion_tokens=20,
+            total_tokens=140,
+            api_time=0.25,
+        )
+
+    monkeypatch.setattr("app.services.sichuan_qc_service.get_settings", lambda: settings)
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_consultation_rules",
+        _consultation,
+    )
+    service = SichuanQCService()
+    monkeypatch.setattr(
+        service,
+        "get_rule_by_id",
+        lambda rule_id: {"rule_id": rule_id, "rule_name": rule_id},
+    )
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "safe-inst",
+            "patient_id": "safe-patient",
+            "visit_id": "safe-visit",
+            "structured_context": {"documents": {}},
+            "text_available": False,
+        },
+        rule_ids=[wrapper["rule_id"] for wrapper in wrappers],
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert dispatched == []
+    assert consultation_calls == [
+        ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+    ]
+    assert [item["rule_id"] for item in result["evaluation_results"]] == [
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
+    ]
+    assert result["token_usage"] == {
+        "total_tokens": 140,
+        "prompt_tokens": 120,
+        "completion_tokens": 20,
+    }
+    assert result["executor_breakdown"]["llm"] == 1
 
 
 @pytest.mark.asyncio

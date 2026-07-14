@@ -21,10 +21,15 @@ from .native_basic_timeliness import (
     EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
     execute_luxian_0609_native_basic_timeliness,
 )
+from .native_consultation_execution import (
+    EXECUTOR_KEY as CONSULTATION_EXECUTOR_KEY,
+    execute_luxian_0609_native_consultation_rules,
+)
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
 from .native_package import (
+    EXECUTOR_SURGERY_MDT,
     EXECUTOR_SURGERY_PRESENCE,
     Luxian0609PackagePlan,
     build_luxian_0609_package_plan,
@@ -116,6 +121,9 @@ async def prepare_luxian_0609_execution(
         native_basic_timeliness_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", False)
         ),
+        native_consultation_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", False)
+        ),
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
@@ -174,7 +182,26 @@ async def prepare_luxian_0609_execution(
     native_completion_tokens = 0
     native_total_tokens = 0
     native_api_time = 0.0
-    if package_plan.native_async_rule_ids:
+    consultation_rule_ids = package_plan.native_rule_ids_for_executor(
+        CONSULTATION_EXECUTOR_KEY
+    )
+    if consultation_rule_ids:
+        consultation_execution = await execute_luxian_0609_native_consultation_rules(
+            rule_ids=consultation_rule_ids,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            llm_client=llm_client,
+        )
+        native_results.extend(consultation_execution.results)
+        native_llm_call_count += consultation_execution.llm_call_count
+        native_prompt_tokens += consultation_execution.prompt_tokens
+        native_completion_tokens += consultation_execution.completion_tokens
+        native_total_tokens += consultation_execution.total_tokens
+        native_api_time += consultation_execution.api_time
+    mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
+    if mdt_rule_ids:
         native_mdt = await execute_luxian_0609_native_mdt_rule(
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
@@ -183,11 +210,26 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.append(native_mdt.result)
-        native_llm_call_count = native_mdt.llm_call_count
-        native_prompt_tokens = native_mdt.prompt_tokens
-        native_completion_tokens = native_mdt.completion_tokens
-        native_total_tokens = native_mdt.total_tokens
-        native_api_time = native_mdt.api_time
+        native_llm_call_count += native_mdt.llm_call_count
+        native_prompt_tokens += native_mdt.prompt_tokens
+        native_completion_tokens += native_mdt.completion_tokens
+        native_total_tokens += native_mdt.total_tokens
+        native_api_time += native_mdt.api_time
+    if native_results:
+        native_result_by_rule_id = {
+            str(item.get("rule_id") or "").strip().upper(): item
+            for item in native_results
+        }
+        ordered_native_rule_ids = tuple(
+            rule_id
+            for rule_id in package_plan.selected_rule_ids
+            if rule_id in native_customer_rule_ids
+        )
+        native_results = [
+            native_result_by_rule_id[rule_id]
+            for rule_id in ordered_native_rule_ids
+            if rule_id in native_result_by_rule_id
+        ]
     if package_plan.prepared_rule_ids_to_remove:
         prepared_rules = [
             rule
@@ -285,6 +327,12 @@ def aggregate_luxian_0609_orchestrated_results(
     orchestrated["total_completion_tokens"] = int(orchestrated.get("total_completion_tokens") or 0) + context.native_completion_tokens
     orchestrated["total_tokens"] = int(orchestrated.get("total_tokens") or 0) + context.native_total_tokens
     orchestrated["total_api_time"] = float(orchestrated.get("total_api_time") or 0.0) + context.native_api_time
+    executor_breakdown = dict(orchestrated.get("executor_breakdown") or {})
+    if context.native_llm_call_count:
+        executor_breakdown["llm"] = (
+            int(executor_breakdown.get("llm") or 0) + context.native_llm_call_count
+        )
+    orchestrated["executor_breakdown"] = executor_breakdown
     orchestrated["results"] = [*context.native_results, *list(orchestrated.get("results") or [])]
     orchestrated["results"].extend(
         evaluate_luxian_0609_programmatic_rules(

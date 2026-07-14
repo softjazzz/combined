@@ -59,9 +59,13 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-032",
     }
     assert {rule_id for rule_id, mode in modes.items() if mode == EXECUTION_MODE_NATIVE_ASYNC} == {
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
         "LX0609-040"
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 40
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 36
 
 
 @pytest.mark.unit

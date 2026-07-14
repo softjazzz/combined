@@ -41,6 +41,18 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
         "v2_schema",
     ),
+    "daily_course_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
+    "senior_course_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
 }
 
 

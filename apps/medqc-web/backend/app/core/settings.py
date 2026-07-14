@@ -128,6 +128,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_EXECUTION_ENABLED: bool = True
     # 001/002/004/005/006 使用基础时限族原生确定性执行；关闭后回退旧映射链。
     LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED: bool = True
+    # 020/021/022/023 使用一次裁剪会诊语义执行；关闭后整族回退旧映射链。
+    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = True
     # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生试运行；验收前默认关闭。
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
