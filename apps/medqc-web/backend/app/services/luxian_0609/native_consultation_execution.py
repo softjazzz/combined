@@ -45,6 +45,36 @@ _COURSE_LINK_PATTERNS = (
     re.compile(r"(?:遵(?:照|从)?|按|根据|结合|采纳).{0,16}会诊(?:意见)?"),
     re.compile(r"会诊意见.{0,24}(?:执行|落实|调整|加用|停用|改为|给予|予以|复查|完善)"),
 )
+_EMBEDDED_EXECUTION_HEADING_RE = re.compile(
+    r"(?:请会诊执行记录|会诊意见执行情况|执行情况)\s*[:：]"
+)
+_ROLE_OPINION_MARKER_RE = re.compile(
+    r"(?:(?<!申请)(?:医师|医生|药师)会诊|会诊(?:医师|医生|药师))\s*[:：]"
+)
+_SIGNATURE_RE = re.compile(r"(?:会诊医师|申请医师|医师)?签名\s*[:：]")
+_EXECUTION_ANCHOR_RE = re.compile(
+    r"(?:已)?(?:遵(?:照|从)?|按|根据|结合).{0,12}(?:会诊意见|会诊医嘱|医嘱)"
+)
+_NON_EXECUTION_PREFIX_RE = re.compile(
+    r"^(?:拟|计划|应|待|未|无|尚未|未见|未予|未能|暂无|建议|必要时|需)"
+)
+_DISQUALIFYING_EXECUTION_RE = re.compile(
+    r"(?:尚未|未见|未予|未能|暂无|未(?:执行|落实|遵|按|根据|结合)|拟|计划|"
+    r"建议|必要时|应当?|待(?:执行|落实|填写)|需(?:要)?|请填写|未填写)"
+)
+_NON_ACTIONABLE_OPINION_RE = re.compile(
+    r"(?:尚未|未见|未予|未能|暂无|未(?:执行|落实|遵|按|根据|结合)|拟|计划|"
+    r"必要时|应当?|待(?:执行|落实|填写)|需(?:要)?|请填写|未填写)"
+)
+_EXECUTION_GENERIC_WORD_RE = re.compile(
+    r"(?:遵照?|遵从|按|根据|结合|会诊意见|会诊医嘱|医嘱|执行|落实|已)"
+)
+_SPECIFIC_EXECUTION_ACTION_RE = re.compile(
+    r"(?:调整|加用|停用|给予|予以|复查|完善|监测|告知|开立|继续|治疗|处理|观察|控制|随访|检查|用药|饮食|护理)"
+)
+_ACTIONABLE_OPINION_RE = re.compile(
+    r"(?:治疗|处理|复查|用药|检查|调整|给予|完善|观察|监测|随访)"
+)
 
 _REASON_STATUS = {
     "LX0609-020": {
@@ -107,18 +137,213 @@ def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def _role_opinion_matches(content: str) -> tuple[re.Match[str], ...]:
+    accepted: list[re.Match[str]] = []
+    for match in _ROLE_OPINION_MARKER_RE.finditer(content):
+        clause_start = max(
+            (content.rfind(token, 0, match.start()) for token in "。；;!?！？"),
+            default=-1,
+        )
+        prefix = content[clause_start + 1 : match.start()]
+        if "申请" in prefix:
+            continue
+        if re.search(r"请.{0,12}科", prefix) and not _extract_tail_execution(
+            content, match.end()
+        ):
+            continue
+        accepted.append(match)
+    return tuple(accepted)
+
+
 def _split_consultation_content(content: str) -> tuple[str, str]:
     positions = [content.find(marker) for marker in _CONSULTATION_OPINION_MARKERS]
     positions = [position for position in positions if position >= 0]
+    positions.extend(match.start() for match in _role_opinion_matches(content))
     if not positions:
         return content, ""
     split_at = min(positions)
     return content[:split_at].strip(" ,，;；"), content[split_at:].strip()
 
 
+def _trim_before_signature(content: str) -> str:
+    match = _SIGNATURE_RE.search(content)
+    return content[: match.start()] if match else content
+
+
+def _is_positive_execution_segment(content: str, *, require_controlled_start: bool) -> bool:
+    candidate = _clean(_trim_before_signature(content)).strip(" ,，;；。")
+    if not candidate or candidate in {"/", "-", "--", "无", "空", "未填写"}:
+        return False
+    if _NON_EXECUTION_PREFIX_RE.search(candidate):
+        return False
+    if _DISQUALIFYING_EXECUTION_RE.search(candidate):
+        return False
+    if require_controlled_start:
+        return bool(_EXECUTION_ANCHOR_RE.match(candidate))
+    # 显式“执行情况”标题已经提供强结构边界；这里只排除空模板、计划和否定。
+    return True
+
+
+def _extract_positive_execution_sentences(
+    content: str, *, require_controlled_start: bool
+) -> str:
+    accepted: list[str] = []
+    for raw_sentence in re.split(r"[。；;!?！？]+", _trim_before_signature(content)):
+        sentence = _clean(raw_sentence).strip(" ,，;；。")
+        if not sentence:
+            continue
+        disqualifying = _DISQUALIFYING_EXECUTION_RE.search(sentence)
+        if disqualifying:
+            completed_prefix = sentence[: disqualifying.start()].strip(" ,，;；。")
+            if not completed_prefix or not re.search(
+                r"(?:已|完成|落实|执行|调整|加用|停用|给予|予以|复查|完善|监测|告知|开立|继续|治疗|处理|观察|控制|随访|检查|用药|饮食|护理)",
+                completed_prefix,
+            ):
+                continue
+            sentence = completed_prefix
+        if _is_positive_execution_segment(
+            sentence, require_controlled_start=require_controlled_start
+        ):
+            accepted.append(sentence)
+    return "。".join(accepted)
+
+
+def _extract_tail_execution(content: str, boundary_end: int) -> str:
+    opinion_tail = _trim_before_signature(content[boundary_end:])
+    for match in reversed(list(_EXECUTION_ANCHOR_RE.finditer(opinion_tail))):
+        if len(opinion_tail) - match.start() > 120:
+            continue
+        prefix = opinion_tail[max(0, match.start() - 6) : match.start()]
+        if re.search(r"(?:拟|计划|应|待|未|无|尚未|未予|未能|建议)\s*$", prefix):
+            continue
+        opinion_prefix = opinion_tail[: match.start()]
+        if not opinion_prefix.strip(" ,，;；。"):
+            continue
+        has_sentence_end = bool(re.search(r"[。；;!?！？]", opinion_prefix))
+        long_enumerated_opinion = (
+            len(opinion_prefix) >= 80
+            and sum(opinion_prefix.count(token) for token in ("，", ",")) >= 4
+            and bool(
+                re.search(
+                    r"(?:意见|建议|诊断|考虑|治疗|处理|检查|复查|用药|调整|给予|完善|观察|监测)",
+                    opinion_prefix,
+                )
+            )
+        )
+        if not (has_sentence_end or long_enumerated_opinion):
+            continue
+        candidate = opinion_tail[match.start() :]
+        positive = _extract_positive_execution_sentences(
+            candidate, require_controlled_start=True
+        )
+        if positive:
+            return positive
+    return ""
+
+
+def _extract_embedded_execution_text(content: str) -> str:
+    """仅提取同张会诊单中有明确结构边界的既往执行事实。"""
+    normalized = _clean(content)
+    heading = _EMBEDDED_EXECUTION_HEADING_RE.search(normalized)
+    if heading:
+        candidate = normalized[heading.end() :]
+        return _extract_positive_execution_sentences(
+            candidate, require_controlled_start=False
+        )
+
+    opinion_boundaries = [
+        (position, position + len(marker))
+        for marker in _CONSULTATION_OPINION_MARKERS
+        if (position := normalized.find(marker)) >= 0
+    ]
+    opinion_boundaries.extend(
+        (match.start(), match.end())
+        for match in _role_opinion_matches(normalized)
+    )
+    if not opinion_boundaries:
+        return ""
+    _boundary_start, boundary_end = min(opinion_boundaries)
+    return _extract_tail_execution(normalized, boundary_end)
+
+
+def _embedded_execution_quality(content: str) -> str | None:
+    """只裁决段级强边界；灰区继续交给单次语义调用。"""
+    if _DISQUALIFYING_EXECUTION_RE.search(_clean(content)):
+        return None
+    residual = _EXECUTION_GENERIC_WORD_RE.sub("", _clean(content))
+    residual = re.sub(r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", residual)
+    action_count = len(_SPECIFIC_EXECUTION_ACTION_RE.findall(residual))
+    has_number = bool(re.search(r"[0-9０-９]", residual))
+    if len(residual) <= 5 and action_count == 0 and not has_number:
+        return "vague"
+    if len(residual) >= 8 and (action_count >= 1 or has_number):
+        return "specific"
+    return None
+
+
+def _embedded_execution_by_ref(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]]
+) -> dict[str, tuple[str, str]]:
+    evidence: dict[str, tuple[str, str]] = {}
+    rows = _rows_for_context("consultation_record", rows_by_source)
+    for index, row in enumerate(rows, start=1):
+        content = _extract_embedded_execution_text(
+            _clean(row.get("record_content"))
+        )
+        if content:
+            consultation_ref = f"consultation_record-{index}"
+            evidence[f"{consultation_ref}-embedded-execution"] = (
+                consultation_ref,
+                content,
+            )
+    return evidence
+
+
+def _is_actionable_consultation_row(content: str) -> bool:
+    """判断该会诊意见是否需要后续执行覆盖；申请、模板、否定和空泛意见不计入020。"""
+    if _extract_embedded_execution_text(content):
+        return True
+    _application, opinion = _split_consultation_content(content)
+    normalized_opinion = _clean(_trim_before_signature(opinion))
+    if not normalized_opinion:
+        return False
+    if _NON_ACTIONABLE_OPINION_RE.search(normalized_opinion):
+        return False
+    if _SPECIFIC_EXECUTION_ACTION_RE.search(normalized_opinion):
+        return True
+    residual = re.sub(r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", normalized_opinion)
+    return len(residual) >= 8 and bool(_ACTIONABLE_OPINION_RE.search(residual))
+
+
+def _consultation_refs_for_execution(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]]
+) -> frozenset[str]:
+    refs: set[str] = set()
+    for index, row in enumerate(
+        _rows_for_context("consultation_record", rows_by_source), start=1
+    ):
+        content = _clean(row.get("record_content"))
+        has_embedded_execution = bool(_extract_embedded_execution_text(content))
+        has_standard_opinion = any(
+            marker in content for marker in _CONSULTATION_OPINION_MARKERS
+        )
+        if (
+            has_embedded_execution
+            or (has_standard_opinion or _role_opinion_matches(content))
+            and _is_actionable_consultation_row(content)
+        ):
+            refs.add(f"consultation_record-{index}")
+    return frozenset(refs)
+
+
 def _course_row_can_link(row: Mapping[str, Any]) -> bool:
     content = _clean(row.get("record_content"))
     return any(pattern.search(content) for pattern in _COURSE_LINK_PATTERNS)
+
+
+def _course_row_has_consultation_clue(row: Mapping[str, Any]) -> bool:
+    """仅用于识别会诊来源可能缺失，不把该线索提升为执行事实。"""
+    return "会诊" in _clean(row.get("record_content"))
 
 
 def _project_row(source_key: str, row: Mapping[str, Any], index: int) -> str:
@@ -135,8 +360,20 @@ def _project_row(source_key: str, row: Mapping[str, Any], index: int) -> str:
             content = content[:_MAX_DOCUMENT_CHARS]
     else:
         application, opinion = _split_consultation_content(content)
+        embedded = _extract_embedded_execution_text(content)
+        if embedded and embedded in opinion:
+            opinion = opinion[: opinion.rfind(embedded)]
+            opinion = _EMBEDDED_EXECUTION_HEADING_RE.sub("", opinion).strip(
+                " ,，;；。"
+            )
+        embedded_projection = (
+            f"内嵌执行[{source_key}-{index}-embedded-execution]={embedded[:300]}；"
+            if embedded
+            else ""
+        )
         content = (
-            f"申请段={application or '空'}；会诊意见段={opinion or '无法分段'}"
+            f"{embedded_projection}申请段={application or '空'}；"
+            f"会诊意见段={opinion or '无法分段'}"
         )[:_MAX_DOCUMENT_CHARS]
     return f"[{source_key}-{index}] 标题={title}；记录时间={record_time or '未提供'}；正文={content or '空'}"
 
@@ -238,11 +475,11 @@ def _prompt(*, selected: Sequence[str], context: str, course_source_complete: bo
 后续病程来源状态：{course_state}
 
 严格口径：
-- 020：有会诊后，后续病程是否存在会诊意见执行记录；即使只笼统写“遵会诊意见”，也算存在执行记录，记录质量由023判断；仅会诊单内出现意见不等于后续病程有执行记录。
+- 020：有会诊后，是否存在与该张会诊绑定的执行记录；明确投影出的“内嵌执行[...]”或后续病程执行均可作为执行记录。即使只笼统写“遵会诊意见”，也算存在执行记录，记录质量由023判断。
 - 021：会诊申请目的是否明确具体诊疗问题；单独只写“请会诊/协助诊治/请指导”属于不明确，但前面已写明具体症状、异常检查、诊断问题或明确术前评估事项时，即使结尾是“协助诊治”也属于目的明确。
 - 022：会诊意见是否有明确诊断判断或可执行检查、治疗、用药、复查建议；只有“必要时检查/调整用药/继续治疗”且没有具体项目属于笼统；结合明确评估结论写“暂无特殊处理/同意手术/观察随访”属于明确意见。
 - 023：逐张检查已有后续执行记录是否归纳并写明具体措施；只写“遵会诊意见执行”、照抄意见或无具体措施的链接标为 vague。
-- 020/023 只能使用 daily_course_record-* 或 senior_course_record-* 作为后续执行证据。consultation_record 内的“已遵嘱/执行情况”不能代替后续病程。每个 execution_link 必须同时指向被落实的 consultation_ref 和时间晚于它的 course_ref；病程只写“请某科会诊”仍是申请，不是执行。没有匹配后续病程的会诊不得编造链接。
+- 020/023 只能使用裁剪文书中明确投影的 *-embedded-execution、daily_course_record-* 或 senior_course_record-* 作为执行证据。内嵌执行只能绑定同编号 consultation_ref；后续病程由系统按时间唯一归属，不得让同一个病程重复覆盖多张会诊。病程只写“请某科会诊”仍是申请，不是执行。没有匹配证据的会诊不得编造链接。
 - 021 只判断申请段，即 consultation_record 中“病史敬悉/会诊意见/会诊医师意见”之前的内容；不得借用会诊医师后写的诊断和建议反推申请目的明确。
 - 不得把签名、会诊时间缺项串到 021/022/023；只有后续病程来源查询不完整才允许 source_incomplete，临床内容未记录不等于资料来源不完整。
 
@@ -252,7 +489,7 @@ def _prompt(*, selected: Sequence[str], context: str, course_source_complete: bo
 execution_link.quality=specific|vague
 
 只输出 JSON，不要输出原文、解释或新增字段：
-{{"results":{{"LX0609-021":{{"reason_code":"..."}},"LX0609-022":{{"reason_code":"..."}}}},"execution_links":[{{"consultation_ref":"consultation_record-1","course_ref":"daily_course_record-1或senior_course_record-1","quality":"specific或vague"}}]}}
+{{"results":{{"LX0609-021":{{"reason_code":"..."}},"LX0609-022":{{"reason_code":"..."}}}},"execution_links":[{{"consultation_ref":"consultation_record-1","execution_ref":"consultation_record-1-embedded-execution或daily_course_record-1或senior_course_record-1","quality":"specific或vague"}}]}}
 
 裁剪文书：
 {context} """
@@ -296,56 +533,148 @@ def _derive_execution_reasons(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     course_source_complete: bool,
 ) -> tuple[str, str]:
-    if not course_source_complete:
-        return "execution_source_incomplete", "execution_source_incomplete"
+    rows_by_ref = _rows_by_ref(rows_by_source)
+    consultation_refs = _consultation_refs_for_execution(rows_by_source)
+    course_refs = _course_refs(rows_by_source)
+    embedded_by_ref = _embedded_execution_by_ref(rows_by_source)
+    embedded_consultation_refs = {
+        consultation_ref
+        for consultation_ref, _content in embedded_by_ref.values()
+    }
+    deterministic_embedded_quality = {
+        execution_ref: quality
+        for execution_ref, (_consultation_ref, content) in embedded_by_ref.items()
+        if (quality := _embedded_execution_quality(content)) is not None
+    }
+    complete_deterministic_embedded = (
+        bool(consultation_refs)
+        and consultation_refs <= embedded_consultation_refs
+        and len(deterministic_embedded_quality) == len(embedded_by_ref)
+        and not course_refs
+    )
     links = payload.get("execution_links") if isinstance(payload, Mapping) else None
     if not isinstance(links, list):
-        return "execution_source_incomplete", "execution_time_unresolved"
-
-    rows_by_ref = _rows_by_ref(rows_by_source)
-    consultation_refs = frozenset(
-        ref for ref in rows_by_ref if ref.startswith("consultation_record-")
-    )
-    course_refs = _course_refs(rows_by_source)
+        reason_020 = (
+            "execution_specific"
+            if consultation_refs
+            and consultation_refs <= embedded_consultation_refs
+            else "execution_source_incomplete"
+        )
+        return reason_020, "execution_time_unresolved"
     valid_qualities_by_consultation: dict[str, list[str]] = {}
+    for execution_ref, quality in deterministic_embedded_quality.items():
+        consultation_ref, _content = embedded_by_ref[execution_ref]
+        valid_qualities_by_consultation.setdefault(consultation_ref, []).append(
+            quality
+        )
+    course_qualities_by_ref: dict[str, list[str]] = {}
+    course_claims_by_ref: dict[str, set[str]] = {}
+    unresolved = False
     for raw_link in links:
         if not isinstance(raw_link, Mapping):
-            return "execution_source_incomplete", "execution_time_unresolved"
-        consultation_ref = str(raw_link.get("consultation_ref") or "").strip()
-        course_ref = str(raw_link.get("course_ref") or "").strip()
-        quality = str(raw_link.get("quality") or "").strip()
-        if course_ref not in course_refs:
-            # 模型引用了申请/普通病程，不构成执行证据；按未建立链接处理。
+            unresolved = True
             continue
-        consultation_time = _record_datetime(rows_by_ref.get(consultation_ref))
+        consultation_ref = str(raw_link.get("consultation_ref") or "").strip()
+        execution_ref = str(
+            raw_link.get("execution_ref") or raw_link.get("course_ref") or ""
+        ).strip()
+        quality = str(raw_link.get("quality") or "").strip()
+        if quality not in {"specific", "vague"}:
+            unresolved = True
+            continue
+        if execution_ref in embedded_by_ref:
+            bound_consultation_ref, _content = embedded_by_ref[execution_ref]
+            if consultation_ref != bound_consultation_ref:
+                unresolved = True
+                continue
+            if execution_ref in deterministic_embedded_quality:
+                # 确定性段级边界优先，避免模型把具体执行误标为空泛，或反向放宽。
+                continue
+            valid_qualities_by_consultation.setdefault(
+                bound_consultation_ref, []
+            ).append(quality)
+            continue
+        if execution_ref not in course_refs:
+            # 未知引用不能静默折叠为临床缺失。
+            unresolved = True
+            continue
+        if consultation_ref not in consultation_refs:
+            unresolved = True
+            continue
+        course_qualities_by_ref.setdefault(execution_ref, []).append(quality)
+        course_claims_by_ref.setdefault(execution_ref, set()).add(consultation_ref)
+
+    # 一个病程执行记录只能被一张会诊声明；保留模型明确关联，但严格校验引用和时序。
+    for course_ref, qualities in course_qualities_by_ref.items():
+        claims = course_claims_by_ref.get(course_ref, set())
+        if len(claims) != 1:
+            unresolved = True
+            continue
         course_time = _record_datetime(rows_by_ref.get(course_ref))
+        consultation_ref = next(iter(claims))
+        consultation_time = _record_datetime(rows_by_ref.get(consultation_ref))
         if (
-            consultation_ref not in consultation_refs
-            or quality not in {"specific", "vague"}
+            course_time is None
             or consultation_time is None
-            or course_time is None
             or course_time <= consultation_time
         ):
-            return "execution_source_incomplete", "execution_time_unresolved"
-        # 同一引用对重复且质量冲突时保留全部判断；023按任一vague保守聚合，不依赖输出顺序。
-        valid_qualities_by_consultation.setdefault(consultation_ref, []).append(quality)
-
-    if not valid_qualities_by_consultation:
-        return "execution_missing", "execution_record_missing"
-    reason_020 = (
-        "execution_specific"
-        if consultation_refs == frozenset(valid_qualities_by_consultation)
-        else "execution_missing"
-    )
-    reason_023 = (
-        "execution_vague_or_copied"
-        if any(
-            quality == "vague"
-            for qualities in valid_qualities_by_consultation.values()
-            for quality in qualities
+            unresolved = True
+            continue
+        quality = "vague" if "vague" in qualities else "specific"
+        valid_qualities_by_consultation.setdefault(consultation_ref, []).append(
+            quality
         )
-        else "execution_specific_summarized"
+
+    covered_consultation_refs = embedded_consultation_refs | set(
+        valid_qualities_by_consultation
     )
+    all_consultations_covered = bool(consultation_refs) and (
+        consultation_refs <= covered_consultation_refs
+    )
+    if complete_deterministic_embedded:
+        reason_020 = "execution_specific"
+    elif unresolved:
+        reason_020 = "execution_source_incomplete"
+    elif all_consultations_covered:
+        reason_020 = "execution_specific"
+    elif not course_source_complete:
+        reason_020 = "execution_source_incomplete"
+    else:
+        reason_020 = "execution_missing"
+
+    has_vague = any(
+        quality == "vague"
+        for qualities in valid_qualities_by_consultation.values()
+        for quality in qualities
+    )
+    embedded_without_quality = embedded_consultation_refs - set(
+        valid_qualities_by_consultation
+    )
+    deterministic_has_vague = "vague" in deterministic_embedded_quality.values()
+    if complete_deterministic_embedded:
+        reason_023 = (
+            "execution_vague_or_copied"
+            if deterministic_has_vague
+            else "execution_specific_summarized"
+        )
+    elif unresolved:
+        reason_023 = "execution_time_unresolved"
+    elif has_vague:
+        reason_023 = "execution_vague_or_copied"
+    elif embedded_without_quality:
+        reason_023 = "execution_time_unresolved"
+    elif not covered_consultation_refs:
+        reason_023 = (
+            "execution_source_incomplete"
+            if not course_source_complete
+            else "execution_record_missing"
+        )
+    elif not course_source_complete and not (
+        consultation_refs <= embedded_consultation_refs
+    ):
+        reason_023 = "execution_source_incomplete"
+    else:
+        reason_023 = "execution_specific_summarized"
     return reason_020, reason_023
 
 
@@ -418,6 +747,18 @@ async def execute_luxian_0609_native_consultation_rules(
             selected,
         )
     if not consultation_rows:
+        has_controlled_course_clue = any(
+            _course_row_has_consultation_clue(row)
+            for source_key in ("daily_course_record", "senior_course_record")
+            for row in rows_by_source.get(source_key) or ()
+        )
+        if has_controlled_course_clue:
+            return NativeConsultationExecutionResult(
+                _terminal_results(
+                    selected, "data_gap", "consultation_source_incomplete"
+                ),
+                selected,
+            )
         return NativeConsultationExecutionResult(
             _terminal_results(selected, "not_applicable", "consultation_absent"),
             selected,
@@ -479,9 +820,6 @@ async def execute_luxian_0609_native_consultation_rules(
             if rule_id == "LX0609-023":
                 reason_code = reason_023
             status = _REASON_STATUS[rule_id].get(reason_code, "data_gap")
-        if rule_id in {"LX0609-020", "LX0609-023"} and not course_source_complete:
-            reason_code = "execution_source_incomplete"
-            status = "data_gap"
         if status == "data_gap" and not reason_code:
             reason_code = "consultation_llm_invalid_output"
         results.append(_result(rule_id, status, reason_code, executor_type="llm"))
