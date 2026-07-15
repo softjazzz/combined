@@ -121,16 +121,16 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
     assert [item["status"] for item in result.results] == [
         "compliant",
         "non_compliant",
+        "data_gap",
         "compliant",
         "non_compliant",
         "compliant",
-        "non_compliant",
-        "compliant",
         "compliant",
         "non_compliant",
+        "compliant",
     ]
-    assert result.llm_call_count == 8
-    assert result.total_tokens == 880
+    assert result.llm_call_count == 7
+    assert result.total_tokens == 770
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
 
@@ -224,6 +224,53 @@ async def test_missing_daily_course_keeps_045_046_047_data_gap_without_model(
     } == {"transfusion_rule_projection_incomplete"}
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": False}])
+
+    for lab_documents in (
+        {
+            "labtest_master": [
+                {"content": "仅有检验主单和检验科室，缺少项目、结果和报告时间。"}
+            ],
+            "labtest_item_report": [],
+        },
+        {
+            "labtest_master": [{"content": "输血前检验主单。"}],
+            "labtest_item_report": [
+                {
+                    "content": (
+                        "叙述声称输血前九项齐全，但没有版本化项目清单、"
+                        "结构化结果和可比报告时间。"
+                    )
+                }
+            ],
+        },
+    ):
+        result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+            rule_ids=("LX0609-043",),
+            wrapper_rules=[_wrapper("LX0609-043")],
+            evidence_payload=_documents(**lab_documents),
+            institute_id="safe-institute",
+            patient_id="safe-patient",
+            visit_id="safe-visit",
+            source_schema=None,
+            llm_client=client,
+        )
+
+        assert result.results[0]["status"] == "data_gap"
+        assert (
+            result.results[0]["metadata"]["reason_code"]
+            == "pretransfusion_test_contract_unavailable"
+        )
+        assert result.results[0]["metadata"]["executor_type"] == "program"
+        assert result.llm_call_count == 0
+        assert result.total_tokens == 0
+
     assert client.prompts == []
 
 

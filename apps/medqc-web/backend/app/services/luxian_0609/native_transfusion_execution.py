@@ -221,6 +221,17 @@ def _has_required_projection(rule_id: str, documents: Mapping[str, Any]) -> bool
     )
 
 
+def _programmatic_043_status() -> tuple[str, str]:
+    """当前检验投影不足以证明“九项”的临床完整性。
+
+    客户目录尚未冻结版本化项目清单和采用哪个检验时间；现有 bundle 又只保留
+    泛检验主单或异常摘要，会丢掉正常血型、配血和阴性筛查结果。因而任何
+    合规/不合规结论都会把数据同步缺口冒充临床事实，只能确定性返回数据不足。
+    """
+
+    return "data_gap", "pretransfusion_test_contract_unavailable"
+
+
 def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
     parts: list[str] = []
     for source_key in _RULE_CONTEXT_SOURCES[rule_id]:
@@ -586,6 +597,12 @@ async def execute_luxian_0609_native_transfusion_rules(
                     "transfusion_rule_projection_incomplete",
                     executor_type="program",
                 )
+            )
+            continue
+        if rule_id == "LX0609-043":
+            status, reason_code = _programmatic_043_status()
+            results.append(
+                _result(rule_id, status, reason_code, executor_type="program")
             )
             continue
         if rule_id == "LX0609-044":

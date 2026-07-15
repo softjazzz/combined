@@ -849,24 +849,32 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
 
     assert dispatched == []
     assert reader_calls == []
-    # 正式 bundle 不承诺 consent_form 来源，041/042 必须 data_gap 且零模型。
-    assert len(client.prompts) == 6
+    # 041/042 缺同意书，043 缺版本化九项及时序契约，三者都必须零模型。
+    assert len(client.prompts) == 5
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [item["status"] for item in result["evaluation_results"][:2]] == [
         "data_gap",
         "data_gap",
     ]
+    rule_043 = next(
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-043"
+    )
+    assert rule_043["status"] == "data_gap"
+    assert (
+        rule_043["metadata"]["reason_code"]
+        == "pretransfusion_test_contract_unavailable"
+    )
     rule_047 = next(
         item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-047"
     )
     assert rule_047["status"] == "compliant"
     assert rule_047["metadata"]["reason_code"] == "posttransfusion_evaluation_complete"
     assert result["token_usage"] == {
-        "total_tokens": 660,
-        "prompt_tokens": 600,
-        "completion_tokens": 60,
+        "total_tokens": 550,
+        "prompt_tokens": 500,
+        "completion_tokens": 50,
     }
-    assert result["executor_breakdown"]["llm"] == 6
+    assert result["executor_breakdown"]["llm"] == 5
     assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
     assert raw_body_marker not in repr(result)
 
