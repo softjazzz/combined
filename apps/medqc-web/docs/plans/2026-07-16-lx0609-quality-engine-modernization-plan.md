@@ -29,6 +29,7 @@
 5. LLM只输出受约束的语义事实或判断要素，不直接拥有最终客户状态。
 6. 任何规则无法证明缺陷时不得输出确定 `non_compliant`。
 7. 每一阶段独立 commit、独立开关、独立回滚，不跨阶段顺手重构。
+8. 每次人工发现可复现问题，必须沉淀为机器契约、Golden 病例或自动门禁；同类问题不得依赖 Agent 下次重新理解。
 
 ## 2. 目标组件与核心契约
 
@@ -164,6 +165,94 @@ class Luxian0609FamilyExecutor(Protocol):
 | 5    | 语义规则族直切            |            是 |         受控 | Golden、稳定性、成本通过           |
 | 6    | 全49正式切换与旧链退役    |            是 |     预期下降 | 全门禁通过且回滚演练完成           |
 
+### 3.1 横向主线：自动化基础设施
+
+自动化基础设施不是独立的“最后优化阶段”，而是 Phase 0–6 的共同交付物。任何阶段只有同时交付业务改动和对应自动门禁，才允许退出。目标是让后续 Agent 只凭规则 ID 就能自动获得数据依赖、状态语义、Python/LLM 边界、受影响病例、验收命令和回滚条件，无须由协调者重复口头补充。
+
+知识固化优先级固定为：
+
+1. 可执行类型、机器契约和不可变值对象；
+2. contract tests、truth table 和 accepted Golden；
+3. CI、发布门和性能/隐私阻断；
+4. 脚本、Skill、`AGENTS.md`、review 文档和任务模板。
+
+文档只能解释决策，不能替代可执行约束。能够由测试或 CI 判断的规则，不得只写在提示词或评审说明中。
+
+### 3.2 各阶段必须同步交付的自动化
+
+| 阶段 | 自动化交付                                                                            | 自动阻断条件                                              |
+| ---- | ------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 0    | 49点机器契约、版本化 Golden ledger、统一质量门 CLI                                    | 规则契约缺字段；accepted truth 缺失却声称准确率通过       |
+| 1    | source registry 编译检查、快照四态/完整性/身份 contract tests                         | 仅 `visit_id` 查询；来源异常被压为空；同一评估多 snapshot |
+| 2    | executor registry 漂移检查、exact selected/output set/order 门禁、family 故障隔离测试 | 缺失/重复/额外结果；跨 family 影响；旧 ID 泄漏            |
+| 3    | reducer 全状态真值表、客户 DTO 白名单、隐私 fuzz gate                                 | 中文文案改状态；unknown 折叠；正文/prompt/坐标泄漏        |
+| 4    | 受影响规则自动选例、Python 确定性重复运行、零模型断言                                 | truth table 非100%；程序化路径产生模型调用                |
+| 5    | LLM schema/stability/cost gate、灰区/硬负例回归                                       | 解析不完整；unknown 被折叠；状态稳定性或成本超预算        |
+| 6    | 全49正式入口 E2E、rollback drill、旧链引用扫描                                        | 非49个结果；旧 orchestrator 仍被正式入口调用；回滚失败    |
+
+### 3.3 全49机器可读规则契约
+
+Create: `backend/app/data/luxian_0609_rule_contracts_v1.json`
+
+Test: `backend/tests/unit/test_luxian_0609_rule_contracts.py`
+
+每条规则至少声明：
+
+- `rule_id`、`family_key`、`executor_key`、`contract_version`；
+- 权威来源表、三坐标绑定、权威字段、权威时间和 source completeness 要求；
+- positive、explicit-negative、unknown/data-gap 事实定义；
+- applicability 和 QC truth table、允许终态、固定 reason codes；
+- `python`、`regex`、`llm` 各自允许处理的边界；
+- prompt/schema/model policy 版本，以及每病例最大调用数、token、P95预算；
+- 客户 DTO 白名单、trace 白名单、accepted Golden 分层门槛；
+- feature flag、rollback adapter 和 legacy ID 仅兼容声明。
+
+契约编译测试必须验证“客户目录 → 规则契约 → executor registry → focused tests”一致；禁止一个规则无执行器、多个最终执行器、无 unknown/data-gap 语义或修改 prompt 后不升级版本。
+
+### 3.4 单一自动质量门
+
+Create: `backend/scripts/run_luxian_0609_quality_gate.py`
+
+Test: `backend/tests/unit/test_luxian_0609_quality_gate.py`
+
+统一命令：
+
+```powershell
+cd backend
+python scripts/run_luxian_0609_quality_gate.py --changed
+```
+
+`--changed` 根据 git diff 和规则契约计算受影响规则族，并按固定顺序运行：
+
+1. catalog/contract/registry 漂移检查；
+2. 受影响族 focused truth table；
+3. 受影响 accepted Golden；
+4. 全49正式入口 scope/order/exactly-once 冒烟；
+5. 客户结果隐私 fuzz；
+6. LLM 调用、token、retry、parse error、P50/P95 与基线差异；
+7. flag-off rollback 对比。
+
+命令输出一个安全 JSON summary 和人类可读摘要，不写患者正文、三坐标或 raw response。失败必须返回非0退出码，并明确规则 ID、失败门、expected/actual 安全状态和复现命令。
+
+### 3.5 CI 分层与运行成本
+
+Modify: `../../.github/workflows/backend-quality-medqc.yml`
+
+- PR 必跑：契约编译、focused tests、正式入口49点范围/顺序、状态 reducer、隐私 fuzz、零模型断言；目标10分钟内完成。
+- 有脱敏 snapshot 的 PR 门：受影响 accepted Golden、确定性稳定性和性能预算。
+- 夜间门：需要真实模型的语义 Golden、同输入3次稳定性、token/P95预算、source readiness 覆盖漂移。
+- 发布门：全 accepted Golden、全49正式入口、rollback drill、legacy reference scan 全部通过。
+
+模型或真实病例门因外部依赖无法运行时必须明确 `blocked`，不得记为通过；无 accepted Golden 的规则只能保持 shadow。
+
+### 3.6 防止自动化本身失控
+
+- 不为一次性问题创建永久脚本；同类问题至少出现两次，或属于准确性/隐私/状态/范围硬约束，才提升为通用门禁。
+- 新脚本必须接入统一质量门或明确替代旧脚本；禁止继续形成互不调用的报告脚本堆。
+- 自动化不得生成临床真值；人工双审确认后的状态和安全证据引用才能进入 accepted Golden。
+- Agent、Skill 或文档不得绕过契约和 CI；它们只能帮助找到正确入口、解释失败和生成标准任务。
+- 性能优化不得降低准确率门槛；模型调用减少只有在 accepted Golden 不退化时才算收益。
+
 ## 4. Phase 0：冻结基线和修正测量口径
 
 ### Task 0.1：建立49点引擎符合性清单
@@ -219,6 +308,22 @@ python -m pytest tests/unit/test_qc_llm_client.py tests/unit/test_luxian_0609_re
 - 每条规则至少拥有一个可用边界样本；缺少真实适用病例时明确记录 `sample_gap`。
 - 确定性规则至少覆盖 compliant、non_compliant、not_applicable、data_gap 和时间/数量边界。
 - 语义规则按规则族至少30个已人工判定的 applicable 样本；单规则每个实际输出方向至少5例，否则保持 shadow。
+
+### Task 0.4：建立统一质量门骨架并接入 CI
+
+**Files:**
+
+- Create: `backend/scripts/run_luxian_0609_quality_gate.py`
+- Create: `backend/tests/unit/test_luxian_0609_quality_gate.py`
+- Modify: `../../.github/workflows/backend-quality-medqc.yml`
+
+**Steps:**
+
+1. 写失败测试，证明未知检查项、检查失败和外部依赖 blocked 都返回非0退出码，且摘要不包含患者标识或正文。
+2. 实现只编排现有 catalog、scope、focused pytest 和 privacy 检查的最小 CLI；本阶段不复制临床判断。
+3. 运行 `python scripts/run_luxian_0609_quality_gate.py --changed --no-model`，确认输出包含所选规则、执行门和安全计量。
+4. 将无模型快速门接入 PR workflow；真实模型和真实 Golden 暂放夜间/手动受控门。
+5. 提交：`git commit -m "建立泸县0609统一自动质量门"`。
 
 ## 5. Phase 1：EvidenceSnapshot 只读旁路
 
@@ -482,13 +587,15 @@ Create: `backend/app/services/luxian_0609/semantic_fact_extractor.py`
 
 ## 12. 每个规则族的固定验证流程
 
-1. 聚焦单测：只跑本族 truth table 和 contract tests。
-2. 受影响真实病例：人工核对 evidence、applicability、state、reason。
-3. 固定10例×49：只验证范围、形状、无回归、性能，不冒充准确率。
-4. 本族 accepted Golden：计算precision/recall/NA-DG原因准确率。
-5. 同输入稳定性：Python 5次、LLM 3次。
-6. flag-off rollback：与切换前客户结果和调用路径一致。
-7. 独立测试Agent证伪后才允许切下一族。
+1. 先更新机器契约，质量门自动计算受影响规则和病例，禁止只靠任务描述限定范围。
+2. 聚焦单测：只跑本族 truth table 和 contract tests。
+3. 受影响真实病例：人工核对 evidence、applicability、state、reason；确认结果写回版本化 Golden ledger。
+4. 固定10例×49：只验证范围、形状、无回归、性能，不冒充准确率。
+5. 本族 accepted Golden：自动计算precision/recall/NA-DG原因准确率。
+6. 同输入稳定性：Python 5次、LLM 3次；结果由质量门比较预算。
+7. privacy/performance gate：客户 DTO、trace、调用次数、token、P95 必须通过。
+8. flag-off rollback：与切换前客户结果和调用路径一致。
+9. 独立测试Agent运行同一质量门证伪后才允许切下一族；不得使用另一套临时命令替代。
 
 ## 13. 停止条件
 
@@ -514,3 +621,6 @@ Create: `backend/app/services/luxian_0609/semantic_fact_extractor.py`
 5. 正式入口不经过旧通用规则 orchestrator；旧映射只在冻结 rollback adapter。
 6. 每条已发布规则满足其 accepted Golden 门禁；未满足的规则明确保持 shadow。
 7. 全49 scope、性能、稳定性、隐私和回滚演练通过。
+8. 全49规则拥有机器可读契约，且 catalog、executor、测试、prompt/策略版本无漂移。
+9. PR、夜间和发布三层质量门已接入 CI；同类问题再次出现时能自动阻断，而不是依赖人工记忆。
+10. 任一 Agent 在没有额外口头背景时，可从规则 ID 得到数据依赖、状态语义、执行边界、受影响 Golden、验证命令和回滚方法。
