@@ -32,6 +32,10 @@ from app.services.luxian_0609.evidence_snapshot import (
     SourceCompleteness,
     SourceObservation,
 )
+from app.services.luxian_0609.evidence_material import (
+    Luxian0609EvidenceMaterialStore,
+    Luxian0609EvidenceReadSession,
+)
 from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
 from app.services.luxian_0609.native_package import Luxian0609PackagePlan
 from app.services.luxian_0609.source_manifest import QueryStatus
@@ -189,6 +193,17 @@ def _safe_evidence_snapshot() -> Luxian0609EvidenceSnapshot:
     )
 
 
+def _safe_evidence_session() -> Luxian0609EvidenceReadSession:
+    snapshot = _safe_evidence_snapshot()
+    return Luxian0609EvidenceReadSession(
+        snapshot=snapshot,
+        materials=Luxian0609EvidenceMaterialStore.create(
+            snapshot=snapshot,
+            sources={},
+        ),
+    )
+
+
 def test_evidence_snapshot_rule_refs_bind_all_49_to_one_hash() -> None:
     selected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
     snapshot = _safe_evidence_snapshot()
@@ -213,6 +228,13 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
 ) -> None:
     selected = ("LX0609-001", "LX0609-010", "LX0609-029")
     snapshot = _safe_evidence_snapshot()
+    session = Luxian0609EvidenceReadSession(
+        snapshot=snapshot,
+        materials=Luxian0609EvidenceMaterialStore.create(
+            snapshot=snapshot,
+            sources={},
+        ),
+    )
     calls: list[tuple[str, tuple[str, ...]]] = []
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
@@ -274,8 +296,8 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     )
     monkeypatch.setattr(
         luxian_execution,
-        "build_luxian_0609_evidence_snapshot",
-        lambda **_kwargs: snapshot,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
     )
     monkeypatch.setattr(
         luxian_execution,
@@ -364,8 +386,8 @@ async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
     )
     monkeypatch.setattr(
         luxian_execution,
-        "build_luxian_0609_evidence_snapshot",
-        lambda **_kwargs: _safe_evidence_snapshot(),
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: _safe_evidence_session(),
     )
     monkeypatch.setattr(
         luxian_execution,
@@ -437,7 +459,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
     )
     monkeypatch.setattr(
         luxian_execution,
-        "build_luxian_0609_evidence_snapshot",
+        "build_luxian_0609_evidence_read_session",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private failure")),
     )
     monkeypatch.setattr(

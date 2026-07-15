@@ -148,6 +148,8 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
         "logical_llm_call_count": 1,
         "snapshot_build_count": 1,
         "result_count": 49,
+        "baseline_family_reader_calls": 0,
+        "candidate_family_reader_calls": 0,
     }
     assert original_calls == 1
 

@@ -8,8 +8,10 @@ import pytest
 
 from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.evidence_snapshot import SourceCompleteness, SourceQueryState
+from app.services.luxian_0609.evidence_material import Luxian0609EvidenceMaterialStore
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
     build_luxian_0609_evidence_snapshot,
 )
 from app.services.luxian_0609.source_evidence_reader import (
@@ -94,6 +96,69 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
     assert len(snapshot.document_refs) == 5
     assert snapshot.facts == ()
+
+
+def test_read_session_retains_private_material_once_without_safe_output_leak() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(
+            source_key,
+            [{"record_content": f"private-{source_key}", "record_time": "t"}],
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-020",),
+        institute_id="institute-private-001",
+        patient_id="patient-private-001",
+        visit_id="visit-private-001",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=("senior_course_record",),
+    )
+
+    assert calls == [
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+    ]
+    assert len(calls) == len(set(calls))
+    assert session.materials.rows("consultation_record")[0][
+        "record_content"
+    ] == "private-consultation_record"
+    assert session.materials.safe_summary() == {
+        "source_count": 3,
+        "sources": (
+            "consultation_record",
+            "daily_course_record",
+            "senior_course_record",
+        ),
+    }
+    safe_repr = repr((session, session.snapshot.to_safe_dict()))
+    assert "private-consultation_record" not in safe_repr
+    assert "visit-private-001" not in safe_repr
+
+    stale_source = _rows(
+        "consultation_record",
+        [{"record_content": "changed-same-count", "record_time": "t"}],
+    )
+    with pytest.raises(ValueError, match="material rows do not match snapshot identity"):
+        Luxian0609EvidenceMaterialStore.create(
+            snapshot=session.snapshot,
+            sources={
+                **{
+                    source_key: session.materials.source(source_key)
+                    for source_key in (
+                        "daily_course_record",
+                        "senior_course_record",
+                    )
+                },
+                "consultation_record": stale_source,
+            },
+        )
 
 
 def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_legacy() -> None:

@@ -246,6 +246,10 @@ async def _evaluate_runtime_flag_ab_case(
     """冻结两条迁移开关，只改变一个候选变量，排除串扰和模型随机性。"""
 
     from app.services.luxian_0609 import execution as luxian_execution
+    from app.services.luxian_0609 import (
+        native_consultation_execution,
+        native_mdt_execution,
+    )
     from app.services import sichuan_qc_service as service_module
 
     managed_flags = (
@@ -258,19 +262,48 @@ async def _evaluate_runtime_flag_ab_case(
     }
     original_generate = service.adjudicator_client.generate
     original_provider = luxian_execution.build_luxian_0609_evidence_snapshot
+    original_session_provider = (
+        luxian_execution.build_luxian_0609_evidence_read_session
+    )
     original_get_settings = service_module.get_settings
     replay = InMemoryLlmReplay(original_generate)
     snapshot_hashes: list[str] = []
+    reader_phase = "baseline"
+    family_reader_calls = {"baseline": 0, "candidate": 0}
+    original_consultation_reader = (
+        native_consultation_execution.read_luxian_0609_native_source_rows
+    )
+    original_mdt_reader = native_mdt_execution.read_luxian_0609_native_source_rows
+
+    def counted_consultation_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_consultation_reader(**kwargs)
+
+    def counted_mdt_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_mdt_reader(**kwargs)
 
     def counted_provider(**kwargs):
         snapshot = original_provider(**kwargs)
         snapshot_hashes.append(str(snapshot.snapshot_hash))
         return snapshot
 
+    def counted_session_provider(**kwargs):
+        session = original_session_provider(**kwargs)
+        snapshot_hashes.append(str(session.snapshot.snapshot_hash))
+        return session
+
     try:
         service_module.get_settings = lambda: settings
         for name in managed_flags:
             setattr(settings, name, False)
+        if mode_label == "unified_engine":
+            native_consultation_execution.read_luxian_0609_native_source_rows = (
+                counted_consultation_reader
+            )
+            native_mdt_execution.read_luxian_0609_native_source_rows = (
+                counted_mdt_reader
+            )
         service.adjudicator_client.generate = replay.record
         baseline = await evaluate_full_luxian_0609_case(
             service=service,
@@ -280,8 +313,12 @@ async def _evaluate_runtime_flag_ab_case(
         )
 
         setattr(settings, candidate_flag, True)
+        reader_phase = "candidate"
         service.adjudicator_client.generate = replay.replay
         luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
+        luxian_execution.build_luxian_0609_evidence_read_session = (
+            counted_session_provider
+        )
         candidate = await evaluate_full_luxian_0609_case(
             service=service,
             bundle=bundle,
@@ -296,7 +333,14 @@ async def _evaluate_runtime_flag_ab_case(
             else:
                 setattr(settings, name, value)
         service.adjudicator_client.generate = original_generate
+        native_consultation_execution.read_luxian_0609_native_source_rows = (
+            original_consultation_reader
+        )
+        native_mdt_execution.read_luxian_0609_native_source_rows = original_mdt_reader
         luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
+        luxian_execution.build_luxian_0609_evidence_read_session = (
+            original_session_provider
+        )
         service_module.get_settings = original_get_settings
 
     baseline_states = build_safe_rule_states(_result_rows(baseline))
@@ -316,13 +360,23 @@ async def _evaluate_runtime_flag_ab_case(
         or "unified_engine_used" in candidate_repr
     ):
         raise RuntimeError(f"{mode_label}内部执行对象进入客户返回")
-    return {
+    comparison = {
         "states_match": baseline_states == candidate_states,
         "tokens_match": baseline_tokens == candidate_tokens,
         "logical_llm_call_count": replay.call_count,
         "snapshot_build_count": len(snapshot_hashes),
         "result_count": len(candidate_states),
     }
+    if mode_label == "unified_engine":
+        if family_reader_calls["candidate"] != 0:
+            raise RuntimeError("统一引擎咨询/MDT族仍在自行查库")
+        comparison.update(
+            {
+                "baseline_family_reader_calls": family_reader_calls["baseline"],
+                "candidate_family_reader_calls": family_reader_calls["candidate"],
+            }
+        )
+    return comparison
 
 
 async def run(args: argparse.Namespace) -> int:

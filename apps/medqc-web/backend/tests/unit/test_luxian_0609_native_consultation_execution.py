@@ -8,6 +8,10 @@ from types import SimpleNamespace
 
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609 import native_consultation_execution as consultation
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
 
 
 class _Client:
@@ -45,6 +49,105 @@ def _reader(rows_by_source: dict[str, list[dict]]):
         return rows_by_source.get(kwargs["source_key"], [])
 
     return read
+
+
+def _material_session(rows_by_source: dict[str, list[dict]]):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-020",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("senior_course_record",),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_consultation_consumes_shared_material_without_live_reader(monkeypatch):
+    session = _material_session({})
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shared material path must not query")
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({}),
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in execution.results] == [
+        "not_applicable"
+    ] * 4
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_empty_consultation_with_truncated_course_material_is_data_gap(
+    monkeypatch,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        truncated = source_key == "daily_course_record"
+        rows = ([{"record_content": "private course"}] if truncated else [])
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=truncated,
+            limit_rows=1 if truncated else 50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-020",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("senior_course_record",),
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shared material path must not query")
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({}),
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in execution.results] == ["data_gap"] * 4
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"consultation_source_incomplete"}
 
 
 @pytest.mark.unit

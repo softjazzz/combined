@@ -8,6 +8,7 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_material import Luxian0609EvidenceMaterialStore
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
@@ -301,6 +302,7 @@ async def execute_luxian_0609_native_mdt_rule(
     visit_id: str,
     source_schema: str | None,
     llm_client: MdtLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeMdtExecutionResult:
     """执行 040；所有来源异常和模型不确定均保守为 data_gap。"""
     if not all(
@@ -315,12 +317,16 @@ async def execute_luxian_0609_native_mdt_rule(
             )
         )
     try:
-        surgeries = read_luxian_0609_native_source_rows(
-            source_key="mr_surgery",
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
+        surgeries = (
+            [dict(row) for row in evidence_materials.rows("mr_surgery")]
+            if evidence_materials is not None
+            else read_luxian_0609_native_source_rows(
+                source_key="mr_surgery",
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+            )
         )
     except Exception:
         return NativeMdtExecutionResult(
@@ -382,12 +388,16 @@ async def execute_luxian_0609_native_mdt_rule(
     try:
         documents: list[tuple[int, datetime, str, str]] = []
         for source_key in ("presurg_discussion", "consultation_record"):
-            rows = read_luxian_0609_native_source_rows(
-                source_key=source_key,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                source_schema=source_schema,
+            rows = (
+                [dict(row) for row in evidence_materials.rows(source_key)]
+                if evidence_materials is not None
+                else read_luxian_0609_native_source_rows(
+                    source_key=source_key,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                )
             )
             for row in rows:
                 record_time = _parse_datetime(row.get("record_time"))

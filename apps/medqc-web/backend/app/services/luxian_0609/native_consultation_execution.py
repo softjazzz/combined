@@ -8,6 +8,7 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_material import Luxian0609EvidenceMaterialStore
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
@@ -925,6 +926,7 @@ async def execute_luxian_0609_native_consultation_rules(
     visit_id: str,
     source_schema: str | None,
     llm_client: ConsultationLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeConsultationExecutionResult:
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(rule_id for rule_id in CONSULTATION_RULE_IDS if rule_id in requested)
@@ -941,13 +943,18 @@ async def execute_luxian_0609_native_consultation_rules(
     course_source_complete = True
     for source_key in _SOURCE_KEYS:
         try:
-            rows_by_source[source_key] = read_luxian_0609_native_source_rows(
-                source_key=source_key,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                source_schema=source_schema,
-            )
+            if evidence_materials is not None:
+                rows_by_source[source_key] = [
+                    dict(row) for row in evidence_materials.rows(source_key)
+                ]
+            else:
+                rows_by_source[source_key] = read_luxian_0609_native_source_rows(
+                    source_key=source_key,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                )
         except Exception:
             rows_by_source[source_key] = []
             if source_key == "consultation_record":
@@ -962,6 +969,13 @@ async def execute_luxian_0609_native_consultation_rules(
             selected,
         )
     if not consultation_rows:
+        if not course_source_complete:
+            return NativeConsultationExecutionResult(
+                _terminal_results(
+                    selected, "data_gap", "consultation_source_incomplete"
+                ),
+                selected,
+            )
         has_controlled_course_clue = any(
             _course_row_has_consultation_clue(row)
             for source_key in ("daily_course_record", "senior_course_record")

@@ -225,6 +225,22 @@ def is_registered_luxian_0609_source_key(source_key: str) -> bool:
     return bool(_entries_for_source_key(source_key))
 
 
+def resolve_luxian_0609_physical_source_entry(
+    source_key: str,
+) -> SourceRegistryEntry:
+    """解析唯一物理来源；projection alias 和派生键不能伪装成可查询表。"""
+
+    normalized = str(source_key or "").strip().lower()
+    matches = tuple(
+        entry
+        for entry in load_luxian_0609_source_registry().values()
+        if normalized in entry.physical_source_keys
+    )
+    if len(matches) != 1:
+        raise ValueError("LX0609 physical source is not uniquely registered")
+    return matches[0]
+
+
 def source_key_accepts_query_version(source_key: str, query_version: str) -> bool:
     version = str(query_version or "").strip()
     return any(version == entry.query_version for entry in _entries_for_source_key(source_key))

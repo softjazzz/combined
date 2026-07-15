@@ -15,7 +15,11 @@ from .customer_rule_package import (
 )
 from .input_builder import build_luxian_0609_input_profile
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
-from .evidence_snapshot_provider import build_luxian_0609_evidence_snapshot
+from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot_provider import (
+    build_luxian_0609_evidence_read_session,
+    build_luxian_0609_evidence_snapshot,
+)
 from .engine import Luxian0609ExecutionEngine
 from .execution_contract import build_family_technical_envelope
 from .executor_registry import (
@@ -23,6 +27,7 @@ from .executor_registry import (
     LegacyFamilyExecutionResources,
     LegacyNativeExecutorFunctions,
     build_luxian_0609_legacy_executor_registry,
+    resolve_legacy_executor_material_source_keys,
 )
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .native_execution import (
@@ -176,7 +181,11 @@ async def prepare_luxian_0609_execution(
         settings=settings,
     )
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+    unified_engine_enabled = bool(
+        getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
+    )
     if (
         bool(
             getattr(
@@ -184,7 +193,7 @@ async def prepare_luxian_0609_execution(
                 "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
                 False,
             )
-            or getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
+            or unified_engine_enabled
         )
         and all(
             isinstance(value, str) and value.strip()
@@ -192,14 +201,33 @@ async def prepare_luxian_0609_execution(
         )
     ):
         try:
-            evidence_snapshot = build_luxian_0609_evidence_snapshot(
-                selected_rule_ids=package_plan.selected_rule_ids,
-                institute_id=str(institute_id),
-                patient_id=str(patient_id),
-                visit_id=str(visit_id),
-                source_schema=source_schema,
-                created_at=datetime.now(timezone.utc).isoformat(),
-            )
+            if unified_engine_enabled:
+                evidence_session = build_luxian_0609_evidence_read_session(
+                    selected_rule_ids=package_plan.selected_rule_ids,
+                    institute_id=str(institute_id),
+                    patient_id=str(patient_id),
+                    visit_id=str(visit_id),
+                    source_schema=source_schema,
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                    additional_source_keys=(
+                        resolve_legacy_executor_material_source_keys(
+                            executor_key
+                            for executor_key, _
+                            in package_plan.native_executor_batches
+                        )
+                    ),
+                )
+                evidence_snapshot = evidence_session.snapshot
+                evidence_materials = evidence_session.materials
+            else:
+                evidence_snapshot = build_luxian_0609_evidence_snapshot(
+                    selected_rule_ids=package_plan.selected_rule_ids,
+                    institute_id=str(institute_id),
+                    patient_id=str(patient_id),
+                    visit_id=str(visit_id),
+                    source_schema=source_schema,
+                    created_at=datetime.now(timezone.utc).isoformat(),
+                )
             evidence_snapshot_rule_refs = (
                 build_luxian_0609_evidence_snapshot_rule_refs(
                     snapshot=evidence_snapshot,
@@ -209,6 +237,7 @@ async def prepare_luxian_0609_execution(
         except Exception:
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
             evidence_snapshot = None
+            evidence_materials = None
             evidence_snapshot_rule_refs = ()
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
@@ -227,9 +256,6 @@ async def prepare_luxian_0609_execution(
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
     }
-    unified_engine_enabled = bool(
-        getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
-    )
     unified_engine_used = False
     if (
         unified_engine_enabled
@@ -273,6 +299,7 @@ async def prepare_luxian_0609_execution(
             visit_id=str(visit_id or ""),
             source_schema=source_schema,
             llm_client=llm_client,
+            evidence_materials=evidence_materials,
         )
         functions = LegacyNativeExecutorFunctions(
             surgery_presence=execute_luxian_0609_native_rules,

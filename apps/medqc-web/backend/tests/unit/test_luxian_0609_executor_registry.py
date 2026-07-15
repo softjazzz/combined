@@ -8,6 +8,9 @@ from app.services.luxian_0609.engine import (
     FamilyExecutionSuccess,
     Luxian0609ExecutionEngine,
 )
+from app.services.luxian_0609.evidence_material import (
+    Luxian0609EvidenceMaterialStore,
+)
 from app.services.luxian_0609.evidence_snapshot import (
     EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     Luxian0609EvidenceSnapshot,
@@ -115,6 +118,11 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
         surgery_document=family("surgery_document"),
         surgery_mdt=mdt,
     )
+    snapshot = _snapshot()
+    materials = Luxian0609EvidenceMaterialStore.create(
+        snapshot=snapshot,
+        sources={},
+    )
     resources = LegacyFamilyExecutionResources(
         wrapper_rules=({"rule_id": "LX0609-010"},),
         evidence_payload={"safe": True},
@@ -123,6 +131,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
         visit_id="safe-visit",
         source_schema="cdm",
         llm_client=object(),
+        evidence_materials=materials,
     )
     registry = build_luxian_0609_legacy_executor_registry(
         resources=resources,
@@ -140,7 +149,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
             (executor_key, (RULE_BY_EXECUTOR[executor_key],))
             for executor_key in LEGACY_NATIVE_EXECUTION_ORDER
         ),
-        snapshot=_snapshot(),
+        snapshot=snapshot,
         contracts=tuple(contracts_by_id[rule_id] for rule_id in selected_rule_ids),
         default_deadline_seconds=1.0,
         max_concurrency=1,
@@ -154,4 +163,6 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     ] == list(selected_rule_ids)
     assert calls[0][1]["source_schema"] == "cdm"
     assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
+    assert calls[3][1]["evidence_materials"] is materials
+    assert calls[-1][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-1][1]

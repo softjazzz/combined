@@ -12,6 +12,7 @@ import math
 import re
 from typing import Any, Awaitable, Callable, Iterable, Protocol, TYPE_CHECKING
 
+from .evidence_material import Luxian0609EvidenceMaterialStore
 from .execution_contract import FamilyExecutionEnvelope
 
 if TYPE_CHECKING:
@@ -107,6 +108,39 @@ LEGACY_NATIVE_EXECUTION_ORDER = (
     "surgery_mdt",
 )
 
+# 第一批可由现有 bounded snapshot 投影完整承载的请求内材料来源。
+LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
+    "consultation_quality": (
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+    ),
+    "surgery_mdt": (
+        "mr_surgery",
+        "presurg_discussion",
+        "consultation_record",
+    ),
+}
+
+
+def resolve_legacy_executor_material_source_keys(
+    executor_keys: Iterable[str],
+) -> tuple[str, ...]:
+    """按物理 source 去重，供一次性 read-session 预取。"""
+
+    requested = tuple(executor_keys)
+    return tuple(
+        sorted(
+            {
+                source_key
+                for executor_key in requested
+                for source_key in LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS.get(
+                    executor_key, ()
+                )
+            }
+        )
+    )
+
 
 @dataclass(frozen=True)
 class LegacyFamilyExecutionResources:
@@ -119,6 +153,7 @@ class LegacyFamilyExecutionResources:
     visit_id: str
     source_schema: str | None
     llm_client: Any
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None
 
 
 @dataclass(frozen=True)
@@ -227,6 +262,7 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_materials=resources.evidence_materials,
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
@@ -310,6 +346,7 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_materials=resources.evidence_materials,
             )
         )
         return _to_envelope(
