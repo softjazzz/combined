@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -95,36 +96,114 @@ async def test_selected_rules_keep_customer_catalog_order_and_missing_projection
 
 
 @pytest.mark.asyncio
-async def test_007_uses_bounded_course_timeline_and_one_customer_prompt_call():
-    client = _Client([{"is_compliant": True}])
-    payload = _payload(
-        documents={
-            "first_course_record": [_row("首次病程记录，病情稳定。")],
-            "daily_course_record": [_row("日常病程记录，病情平稳。", "2026-06-03 09:00:00")],
-        },
-        facts=[
-            _strong_fact("current_visit_serious_order", state="absent"),
-            _strong_fact("current_visit_critical_order", state="absent"),
-        ],
+@pytest.mark.parametrize(
+    ("senior_time", "expected_status"),
+    [
+        (datetime(2026, 6, 4, 9, 0), "compliant"),
+        (datetime(2026, 6, 4, 9, 0, 1), "non_compliant"),
+    ],
+)
+async def test_007_uses_only_daily_and_senior_record_time_without_model(
+    monkeypatch, senior_time: datetime, expected_status: str
+):
+    reader_calls: list[str] = []
+
+    def fake_reader(**kwargs):
+        source_key = kwargs["source_key"]
+        reader_calls.append(source_key)
+        if source_key == "daily_course_record":
+            return [
+                {"record_time": datetime(2026, 6, 1, 9, 0)},
+                {"record_time": None},
+            ]
+        if source_key == "senior_course_record":
+            return [{"record_time": senior_time}]
+        raise AssertionError(source_key)
+
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", fake_reader)
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: False
     )
-    payload["primary_document_text"] = "FULL_CHART_MUST_NOT_ENTER_PROMPT"
-    payload["medical_text"] = "FULL_MEDICAL_TEXT_MUST_NOT_ENTER_PROMPT"
+    client = _Client([{"is_compliant": False}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-007",),
         wrapper_rules=[_wrapper("LX0609-007")],
-        evidence_payload=payload,
+        evidence_payload=_payload(
+            documents={
+                "first_course_record": [_row("不得计入007", "2026-06-02 09:00:00")],
+                "rescue_record": [_row("不得计入007", "2026-06-03 09:00:00")],
+            }
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant"]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 45
-    assert result.results[0]["metadata"]["total_tokens"] == 45
-    assert "首次病程记录" in client.prompts[0]
-    assert "SHOULD_NOT_LEAK" not in client.prompts[0]
-    assert "FULL_CHART_MUST_NOT_ENTER_PROMPT" not in client.prompts[0]
-    assert "FULL_MEDICAL_TEXT_MUST_NOT_ENTER_PROMPT" not in client.prompts[0]
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert reader_calls == ["daily_course_record", "senior_course_record"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+    assert "不得计入007" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_007_unstable_order_is_not_applicable_without_reading_course_rows(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: True
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: (_ for _ in ()).throw(AssertionError("course rows must not be read")),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[_wrapper("LX0609-007")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_007_missing_authoritative_record_times_is_data_gap_without_model(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: False
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: [{"record_time": None, "update_time": datetime(2026, 6, 1, 9, 0)}],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[_wrapper("LX0609-007")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "authoritative_course_time_unavailable"
+    )
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

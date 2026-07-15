@@ -190,6 +190,45 @@ def luxian_0609_native_source_row_limit(source_key: str) -> int:
     return _source_limit(source_key)
 
 
+def has_luxian_0609_current_visit_unstable_order(
+    *, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
+) -> bool:
+    """判断本次就诊是否下达过病危或病重医嘱，不返回医嘱原文。"""
+
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    source_key = "inpat_nondrug_order"
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+    required = {"institute_id", "patient_id", "visit_id", "order_name"}
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+
+    sql = (
+        f"SELECT 1 FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
+        f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) LIMIT 1"
+    )
+    with engine.connect() as connection:
+        row = connection.execute(
+            bundle_assembly.text(sql),
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "critical_name": "%病危%",
+                "serious_name": "%病重%",
+            },
+        ).first()
+    return row is not None
+
+
 def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:

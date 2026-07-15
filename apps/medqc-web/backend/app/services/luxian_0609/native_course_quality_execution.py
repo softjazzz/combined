@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import json
 import re
@@ -10,6 +11,7 @@ from typing import Any, Mapping, Protocol, Sequence
 
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    has_luxian_0609_current_visit_unstable_order,
     luxian_0609_native_source_row_limit,
     read_luxian_0609_native_source_rows,
 )
@@ -30,6 +32,10 @@ _COURSE_SOURCES = (
     "daily_course_record",
     "senior_course_record",
     "rescue_record",
+)
+_RULE_007_RECORD_SOURCES = (
+    "daily_course_record",
+    "senior_course_record",
 )
 _ROUND_SOURCES = (
     "daily_course_record",
@@ -79,12 +85,14 @@ _COMPLAINT_PATTERN = re.compile(r"主诉\s*[:：]\s*[^；;。]{2,}")
 _DIAGNOSIS_PATTERN = re.compile(r"(?:第一诊断|主要诊断|入院诊断|首页第一诊断)\s*[:：]\s*[^；;。]{2,}")
 
 _RULE_CONTEXT_SOURCES = {
-    "LX0609-007": _TIMELINE_SOURCES,
+    "LX0609-007": _RULE_007_RECORD_SOURCES,
     "LX0609-008": _TIMELINE_SOURCES,
     "LX0609-009": _TIMELINE_SOURCES,
     "LX0609-016": ("admission_record", "first_course_record"),
     "LX0609-018": ("admission_record",),
 }
+
+_RULE_007_MAX_INTERVAL = timedelta(hours=72)
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("查房病程相关记录满足该项要求。", ""),
@@ -284,6 +292,116 @@ def _timeline_ready(documents: Mapping[str, Any]) -> bool:
             time_markers.add(record_time)
         time_markers.update(_DATE_PATTERN.findall(content))
     return len(time_markers) >= 2
+
+
+def _authoritative_course_time(value: Any) -> datetime | None:
+    """007 只接受两类病程表的 record_time，不使用正文或更新时间。"""
+
+    if isinstance(value, datetime):
+        return value if value.tzinfo is None else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is None else None
+
+
+def _rule_007_result(
+    *,
+    serious_state: str,
+    critical_state: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> dict[str, Any]:
+    if serious_state == "present" or critical_state == "present":
+        return _result(
+            "LX0609-007",
+            "not_applicable",
+            "unstable_patient_fact_present",
+            executor_type="program",
+        )
+
+    coordinates = (institute_id, patient_id, visit_id)
+    if not all(str(value or "").strip() for value in coordinates):
+        return _result(
+            "LX0609-007",
+            "data_gap",
+            "course_time_source_unavailable",
+            executor_type="program",
+        )
+
+    try:
+        if has_luxian_0609_current_visit_unstable_order(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        ):
+            return _result(
+                "LX0609-007",
+                "not_applicable",
+                "unstable_patient_order_present",
+                executor_type="program",
+            )
+
+        record_times: set[datetime] = set()
+        for source_key in _RULE_007_RECORD_SOURCES:
+            rows = read_luxian_0609_native_source_rows(
+                source_key=source_key,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+            )
+            if len(rows) >= luxian_0609_native_source_row_limit(source_key):
+                return _result(
+                    "LX0609-007",
+                    "data_gap",
+                    "course_time_source_truncated",
+                    executor_type="program",
+                )
+            record_times.update(
+                parsed
+                for row in rows
+                if (parsed := _authoritative_course_time(row.get("record_time")))
+                is not None
+            )
+    except Exception:
+        return _result(
+            "LX0609-007",
+            "data_gap",
+            "course_time_source_unavailable",
+            executor_type="program",
+        )
+
+    ordered_times = sorted(record_times)
+    if len(ordered_times) < 2:
+        return _result(
+            "LX0609-007",
+            "data_gap",
+            "authoritative_course_time_unavailable",
+            executor_type="program",
+        )
+    if any(
+        current - previous > _RULE_007_MAX_INTERVAL
+        for previous, current in zip(ordered_times, ordered_times[1:])
+    ):
+        return _result(
+            "LX0609-007",
+            "non_compliant",
+            "course_record_interval_over_72h",
+            executor_type="program",
+        )
+    return _result(
+        "LX0609-007",
+        "compliant",
+        "course_record_interval_within_72h",
+        executor_type="program",
+    )
 
 
 def _context(
@@ -615,36 +733,17 @@ async def execute_luxian_0609_native_course_quality_rules(
 
         controlled_fact = ""
         if rule_id == "LX0609-007":
-            if serious_state == "present" or critical_state == "present":
-                results.append(
-                    _result(
-                        rule_id,
-                        "not_applicable",
-                        "unstable_patient_fact_present",
-                        executor_type="program",
-                    )
+            results.append(
+                _rule_007_result(
+                    serious_state=serious_state,
+                    critical_state=critical_state,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
                 )
-                continue
-            if serious_state != "absent" or critical_state != "absent":
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "criticality_fact_unavailable",
-                        executor_type="program",
-                    )
-                )
-                continue
-            if not _timeline_ready(documents):
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "course_timeline_unavailable",
-                        executor_type="program",
-                    )
-                )
-                continue
+            )
+            continue
         elif rule_id == "LX0609-008":
             if serious_state == "absent":
                 results.append(
