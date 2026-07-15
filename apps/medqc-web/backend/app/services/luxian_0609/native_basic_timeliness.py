@@ -116,6 +116,8 @@ def _approved_admission_anchor_available(
         and isinstance(admission_rows, (list, tuple))
         and any(
             isinstance(row, dict)
+            and str(row.get("source_table") or "").strip().lower()
+            == "admission_record"
             and str(row.get("authored_at") or "").strip() == admission_time
             for row in admission_rows
         )

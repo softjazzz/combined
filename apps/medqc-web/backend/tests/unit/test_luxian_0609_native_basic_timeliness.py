@@ -250,7 +250,11 @@ def test_admission_record_time_is_approved_for_0426_timeliness_rules():
                 "admission_time_trusted": False,
                 "documents": {
                     "admission_record": [
-                        {"title": "入院记录", "authored_at": "2026-06-01 08:00:00"}
+                        {
+                            "source_table": "admission_record",
+                            "title": "入院记录",
+                            "authored_at": "2026-06-01 08:00:00",
+                        }
                     ],
                     "senior_course_record": [
                         {
@@ -282,7 +286,20 @@ def test_admission_record_time_is_approved_for_0426_timeliness_rules():
     "admission_rows",
     [
         [],
-        [{"title": "入院记录", "authored_at": "2026-06-01 09:00:00"}],
+        [
+            {
+                "source_table": "admission_record",
+                "title": "入院记录",
+                "authored_at": "2026-06-01 09:00:00",
+            }
+        ],
+        [
+            {
+                "source_table": "discharge_record",
+                "title": "入院记录",
+                "authored_at": "2026-06-01 08:00:00",
+            }
+        ],
     ],
 )
 def test_customer_approved_admission_basis_must_bind_same_admission_record_time(
