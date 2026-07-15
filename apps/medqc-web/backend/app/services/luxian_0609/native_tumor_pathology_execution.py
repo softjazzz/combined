@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -32,6 +33,49 @@ _MAX_CONTEXT_CHARS = 18000
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _MALIGNANT_CODE_PATTERN = re.compile(r"^C[0-9]{2}(?:[.A-Z0-9-]*)$")
 _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive"})
+_PATHOLOGY_SAMPLING_ACTION_PATTERNS = (
+    re.compile(
+        r"(?:切除|取出|切取|留取|获取|取材).{0,48}"
+        r"(?:标本|组织|病灶|肿物|阑尾|胆囊)?.{0,24}"
+        r"(?:送病理(?:检查)?|送病检|送检)"
+    ),
+    re.compile(
+        r"(?:标本|组织|病灶|肿物|阑尾|胆囊).{0,48}"
+        r"(?:已送|送病理(?:检查)?|送病检|送检)"
+    ),
+    re.compile(
+        r"(?:术中|手术中).{0,24}(?:取材|切取|留取)"
+        r"(?:了|完成|并|后|，|,|送病理|送病检|送检|$)"
+    ),
+    re.compile(r"(?:已|已经)(?:送病理(?:检查)?|送病检|送检)"),
+)
+_PATHOLOGY_SAMPLING_NEGATIVE_PATTERN = re.compile(
+    r"(?:"
+    r"(?:不|未|无|未见|尚未|未予|未行|未记录|缺少|遗漏|拒绝|取消|放弃|暂缓).{0,18}"
+    r"(?:取材|标本|送病理|送病检|送检)"
+    r"|(?:拟|计划|建议|待|考虑|准备|预计|应|需|请|嘱).{0,18}"
+    r"(?:取材|标本|送病理|送病检|送检)"
+    r"|(?:取材|标本|送病理|送病检|送检).{0,18}"
+    r"(?:不|未|无|未见|尚未|缺失|未记录|不详|拒绝|取消|放弃|暂缓|单|申请|医嘱|登记|流程|手续|计划)"
+    r")"
+)
+_PATHOLOGY_SAMPLING_EMPTY_TEMPLATE_PATTERN = re.compile(
+    r"(?:术中取材|标本送检情况|送检情况)\s*[:：]\s*$"
+)
+_PATHOLOGY_DIRECT_SEND_PATTERN = re.compile(r"(?:送病理(?:检查)?|送病检|送检)")
+_PATHOLOGY_SAMPLING_SUBJECT_PATTERN = re.compile(
+    r"(?:标本|组织|病灶|肿物|阑尾|胆囊|取材|切除|取出)"
+)
+_PATHOLOGY_SAMPLING_ADMIN_PATTERN = re.compile(
+    r"(?:送检单|申请|医嘱|登记|流程|手续|计划|打印)"
+)
+_PATHOLOGY_FINAL_RESULT_PATTERN = re.compile(r"病理(?:诊断|结果)")
+_PATHOLOGY_PENDING_RESULT_PATTERN = re.compile(
+    r"(?:待补|待出|待定|待完善|待诊断|待报告|待复核|未出|审核中|尚未|另报|后续正式报告|暂缺|未完成|初步)"
+)
+_PATHOLOGY_REPORT_DATETIME_PATTERN = re.compile(
+    r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
+)
 
 _MALIGNANT_FACT_TYPES = frozenset(
     {
@@ -218,20 +262,77 @@ def _has_any_diagnosis_code(material: SourceMaterial) -> bool:
     return any(_clean(row.get("diagnosis_code")) for row in material.rows)
 
 
-def _has_substantive_pathology_report(material: SourceMaterial) -> bool:
-    return any(
-        any(
-            _clean(row.get(key))
-            for key in (
-                "diagnosis",
-                "record_content",
-                "content",
-                "eye_findings",
-                "microscope_findings",
-            )
+def _has_complete_pathology_result(material: SourceMaterial) -> bool:
+    """最终结果和报告时间必须来自同一份报告，肉眼/镜下材料不能代替最终诊断。"""
+
+    for row in material.rows:
+        report_time = _clean(
+            row.get("report_datetime")
+            or row.get("report_time")
+            or row.get("record_time")
+            or row.get("display_time")
+            or row.get("authored_at")
         )
-        for row in material.rows
-    )
+        if not report_time:
+            continue
+        if not _PATHOLOGY_REPORT_DATETIME_PATTERN.fullmatch(report_time):
+            continue
+        try:
+            datetime.fromisoformat(report_time.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        diagnosis = _clean(row.get("diagnosis"))
+        body = _clean(row.get("record_content") or row.get("content"))
+        result_text = diagnosis or body
+        if not result_text or _PATHOLOGY_PENDING_RESULT_PATTERN.search(result_text):
+            continue
+        if diagnosis or _PATHOLOGY_FINAL_RESULT_PATTERN.search(body):
+            return True
+    return False
+
+
+def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
+    """仅接受已实施的取材/送检事实；计划、否定和空模板继续交由模型判断。"""
+
+    for material in materials:
+        for row in material.rows:
+            text = _row_text(row)
+            segments = [
+                _clean(segment)
+                for segment in re.split(r"[。！？；;，,\r\n]+", text)
+                if _clean(segment)
+            ]
+            for index, normalized in enumerate(segments):
+                if not normalized:
+                    continue
+                if _PATHOLOGY_SAMPLING_EMPTY_TEMPLATE_PATTERN.search(normalized):
+                    continue
+                for pattern in _PATHOLOGY_SAMPLING_ACTION_PATTERNS:
+                    for match in pattern.finditer(normalized):
+                        local_window = normalized[
+                            max(0, match.start() - 20) : min(
+                                len(normalized), match.end() + 20
+                            )
+                        ]
+                        if not _PATHOLOGY_SAMPLING_NEGATIVE_PATTERN.search(
+                            local_window
+                        ):
+                            return True
+                if not _PATHOLOGY_DIRECT_SEND_PATTERN.search(normalized):
+                    continue
+                recent_context = " ".join(segments[max(0, index - 2) : index])
+                combined_context = f"{recent_context} {normalized}".strip()
+                if (
+                    _PATHOLOGY_SAMPLING_SUBJECT_PATTERN.search(recent_context)
+                    and not _PATHOLOGY_SAMPLING_NEGATIVE_PATTERN.search(
+                        combined_context
+                    )
+                    and not _PATHOLOGY_SAMPLING_ADMIN_PATTERN.search(
+                        combined_context
+                    )
+                ):
+                    return True
+    return False
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -365,14 +466,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     )
                 )
                 continue
-            if rule_id == "LX0609-013" and not _has_substantive_pathology_report(
-                report
-            ):
+            if rule_id == "LX0609-013" and not _has_complete_pathology_result(report):
                 results.append(
                     _result(
                         rule_id,
                         "data_gap",
-                        "pathology_result_unavailable",
+                        "pathology_final_result_or_report_time_unavailable",
                         executor_type="program",
                     )
                 )
@@ -440,6 +539,18 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     rule_id,
                     "data_gap",
                     "tumor_target_projection_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
+        if rule_id == "LX0609-019" and _has_documented_pathology_sampling(
+            materials["surgery_record"], materials["daily_course_record"]
+        ):
+            results.append(
+                _result(
+                    rule_id,
+                    "compliant",
+                    "pathology_sampling_recorded",
                     executor_type="program",
                 )
             )

@@ -998,8 +998,15 @@ async def test_native_tumor_pathology_public_entry_bypasses_legacy_rules_and_kee
     marker = "SAFE_TUMOR_BODY_MARKER"
     documents = {
         "pathology_exam_master": [{"content": "病理送检申请资料。"}],
-        "pathology_exam_report": [{"content": "病理诊断资料。"}],
-        "surgery_record": [{"content": "手术记录中已记录取材与送检。"}],
+        "pathology_exam_report": [
+            {
+                "diagnosis": "病理诊断资料。",
+                "content": "病理诊断明确，完整病理结果资料已经形成。",
+                "report_datetime": "2026-04-26 10:00:00",
+                "record_time": "2026-04-26 10:00:00",
+            }
+        ],
+        "surgery_record": [{"content": "手术记录中包含本次手术经过。"}],
         "daily_course_record": [{"content": f"病程记录中已记录病理结果。{marker}"}],
         "inpat_drug_order": [{"content": "受控化疗医嘱资料。"}],
         "discharge_record": [{"content": "出院后肿瘤治疗计划。"}],
