@@ -6,6 +6,10 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
 
 
 def _documents(**overrides: list[dict]) -> dict:
@@ -64,6 +68,118 @@ def _reader(*, source_key: str, **_: object) -> list[dict]:
     if source_key == "bloodtrans_record":
         return [{"record_content": "输血记录正文，记录实际输注过程及观察情况。"}]
     raise AssertionError(source_key)
+
+
+@pytest.mark.asyncio
+async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
+    monkeypatch,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [
+                {
+                    "document_id": "private-transfusion-id",
+                    "record_content": "输血记录正文，记录实际输注过程及观察情况。",
+                    "record_time": "2026-01-01 10:00:00",
+                }
+            ]
+            if source_key == "bloodtrans_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-041",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("mr_bloodtrans", "bloodtrans_record"),
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shared material path must not query")
+        ),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-041",),
+        wrapper_rules=[_wrapper("LX0609-041")],
+        evidence_payload=_documents(bloodtrans_record=[]),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_materials=session.materials,
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert (
+        result.results[0]["metadata"]["reason_code"]
+        == "transfusion_rule_projection_incomplete"
+    )
+
+
+@pytest.mark.asyncio
+async def test_transfusion_truncated_shared_trigger_source_is_data_gap(monkeypatch):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        truncated = source_key == "mr_bloodtrans"
+        rows = ([{"transfution_datetime": None}] if truncated else [])
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=truncated,
+            limit_rows=1 if truncated else 50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-041",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("mr_bloodtrans", "bloodtrans_record"),
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shared material path must not query")
+        ),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-041",),
+        wrapper_rules=[_wrapper("LX0609-041")],
+        evidence_payload=_documents(bloodtrans_record=[]),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_materials=session.materials,
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert (
+        result.results[0]["metadata"]["reason_code"]
+        == "transfusion_source_unavailable"
+    )
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

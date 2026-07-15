@@ -124,6 +124,10 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "presurg_discussion",
         "consultation_record",
     ),
+    "transfusion": (
+        "mr_bloodtrans",
+        "bloodtrans_record",
+    ),
 }
 
 
@@ -283,6 +287,7 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_materials=resources.evidence_materials,
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

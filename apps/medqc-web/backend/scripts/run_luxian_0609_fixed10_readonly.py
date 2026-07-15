@@ -250,6 +250,7 @@ async def _evaluate_runtime_flag_ab_case(
         native_basic_timeliness,
         native_consultation_execution,
         native_mdt_execution,
+        native_transfusion_execution,
     )
     from app.services import sichuan_qc_service as service_module
 
@@ -278,6 +279,9 @@ async def _evaluate_runtime_flag_ab_case(
     original_basic_reader = (
         native_basic_timeliness.read_luxian_0609_course_round_timeline
     )
+    original_transfusion_reader = (
+        native_transfusion_execution.read_luxian_0609_native_source_rows
+    )
 
     def counted_consultation_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
@@ -290,6 +294,10 @@ async def _evaluate_runtime_flag_ab_case(
     def counted_basic_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_basic_reader(**kwargs)
+
+    def counted_transfusion_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_transfusion_reader(**kwargs)
 
     def counted_provider(**kwargs):
         snapshot = original_provider(**kwargs)
@@ -314,6 +322,9 @@ async def _evaluate_runtime_flag_ab_case(
             )
             native_basic_timeliness.read_luxian_0609_course_round_timeline = (
                 counted_basic_reader
+            )
+            native_transfusion_execution.read_luxian_0609_native_source_rows = (
+                counted_transfusion_reader
             )
         service.adjudicator_client.generate = replay.record
         baseline = await evaluate_full_luxian_0609_case(
@@ -350,6 +361,9 @@ async def _evaluate_runtime_flag_ab_case(
         native_mdt_execution.read_luxian_0609_native_source_rows = original_mdt_reader
         native_basic_timeliness.read_luxian_0609_course_round_timeline = (
             original_basic_reader
+        )
+        native_transfusion_execution.read_luxian_0609_native_source_rows = (
+            original_transfusion_reader
         )
         luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
         luxian_execution.build_luxian_0609_evidence_read_session = (

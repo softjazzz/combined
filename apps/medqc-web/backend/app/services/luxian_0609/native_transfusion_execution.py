@@ -8,6 +8,7 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_material import Luxian0609EvidenceMaterialStore
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
@@ -507,6 +508,7 @@ def _performed_source_state(
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> str:
     # 正式 bundle 已携带同次就诊专用输血记录时直接采用，避免重复查库；
     # 普通病程/手术文本中的“输血”字样不进入该分支。
@@ -520,13 +522,18 @@ def _performed_source_state(
     failed = False
     for source_key in _TRIGGER_SOURCES:
         try:
-            rows_by_source[source_key] = read_luxian_0609_native_source_rows(
-                source_key=source_key,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                source_schema=source_schema,
-            )
+            if evidence_materials is not None:
+                rows_by_source[source_key] = [
+                    dict(row) for row in evidence_materials.rows(source_key)
+                ]
+            else:
+                rows_by_source[source_key] = read_luxian_0609_native_source_rows(
+                    source_key=source_key,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                )
         except Exception:
             rows_by_source[source_key] = []
             failed = True
@@ -556,6 +563,7 @@ async def execute_luxian_0609_native_transfusion_rules(
     visit_id: str,
     source_schema: str | None,
     llm_client: TransfusionLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeTransfusionExecutionResult:
     """先证明本次存在专用输血来源，再按客户规则逐条裁剪执行。"""
 
@@ -571,6 +579,7 @@ async def execute_luxian_0609_native_transfusion_rules(
         patient_id=str(patient_id or ""),
         visit_id=str(visit_id or ""),
         source_schema=source_schema,
+        evidence_materials=evidence_materials,
     )
     if source_state != "present":
         status = "not_applicable" if source_state == "absent" else "data_gap"
