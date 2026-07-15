@@ -63,3 +63,8 @@ jobs:
           ENV: development
         run: |
           python -m pytest -q tests/integration/test_release_gate_smoke.py
+
+      - name: LX0609 no-model quality gate
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python scripts/run_luxian_0609_quality_gate.py --profile pr-no-model
