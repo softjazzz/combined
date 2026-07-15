@@ -1,9 +1,11 @@
 """LX0609 受控只读来源证据：纯时间/摘要函数与显式有界查询。"""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from app.services.bundles import assembly as bundle_assembly
@@ -126,13 +128,87 @@ _NATIVE_SOURCE_FIELDS = {
     ),
 }
 
+_SNAPSHOT_SOURCE_FIELDS = {
+    source_key: _NATIVE_SOURCE_FIELDS[source_key]
+    for source_key in (
+        "mr_bloodtrans",
+        "bloodtrans_record",
+        "mr_surgery",
+        "presurg_discussion",
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+        "discharge_record",
+        "surgery_record",
+    )
+}
+_SNAPSHOT_SOURCE_FIELDS.update({
+    "presurg_summary": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
+    "surgery_safecheck_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
+})
+
 
 class SourceEvidenceUnavailable(Exception):
     """受控来源或就诊绑定字段不可用。"""
 
 
+class SourceEvidenceQueryError(Exception):
+    """数据库连接或查询执行失败；不携带底层异常原文。"""
+
+
 class SourceEvidenceTruncated(Exception):
     """受控来源超过读取上限，不能据截断结果作否定判断。"""
+
+
+@dataclass(frozen=True)
+class SnapshotSourceRows:
+    """provider 内部读取结果；raw rows 不得进入客户或 safe summary。"""
+
+    source_key: str
+    rows: tuple[Mapping[str, Any], ...]
+    truncated: bool
+    limit_rows: int
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        source_key: str,
+        rows: Any,
+        truncated: bool,
+        limit_rows: int,
+    ) -> SnapshotSourceRows:
+        normalized_source = str(source_key or "").strip().lower()
+        if normalized_source not in _SNAPSHOT_SOURCE_FIELDS:
+            raise SourceEvidenceUnavailable()
+        if isinstance(limit_rows, bool) or not isinstance(limit_rows, int) or limit_rows < 1:
+            raise ValueError("limit_rows must be a positive int")
+        if not isinstance(truncated, bool):
+            raise TypeError("truncated must be bool")
+        raw_rows = tuple(rows)
+        if len(raw_rows) > limit_rows:
+            raise ValueError("snapshot rows exceed declared limit")
+        if truncated and not raw_rows:
+            raise ValueError("truncated snapshot rows cannot be empty")
+        if not all(isinstance(row, Mapping) for row in raw_rows):
+            raise TypeError("snapshot rows must contain mappings")
+        frozen_rows = tuple(MappingProxyType(dict(row)) for row in raw_rows)
+        return cls(
+            source_key=normalized_source,
+            rows=frozen_rows,
+            truncated=truncated,
+            limit_rows=limit_rows,
+        )
 
 
 def canonical_source_evidence(value: Any) -> str:
@@ -434,3 +510,91 @@ def read_luxian_0609_native_source_rows(
             },
         ).mappings().all()
     return [dict(row) for row in rows]
+
+
+def read_luxian_0609_snapshot_source_rows(
+    *,
+    source_key: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """为 EvidenceSnapshot 执行一次 limit+1 三坐标有界读取。"""
+
+    coordinates = (institute_id, patient_id, visit_id)
+    if not all(isinstance(value, str) and value.strip() for value in coordinates):
+        raise SourceEvidenceUnavailable()
+    normalized_source = str(source_key or "").strip().lower()
+    approved_fields = _SNAPSHOT_SOURCE_FIELDS.get(normalized_source)
+    if approved_fields is None:
+        raise SourceEvidenceUnavailable()
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    columns = set(bundle_assembly._get_table_columns(trusted_schema, normalized_source))
+    required = {"institute_id", "patient_id", "visit_id"}
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    selected = [field for field in approved_fields if field in columns]
+    if not selected:
+        raise SourceEvidenceUnavailable()
+    order_candidates = (
+        *getattr(bundle_assembly, "_ORDER_COLUMNS_PRIORITY", ()),
+        "document_id",
+        "pathology_exam_id",
+        "pathology_id",
+        "diagnosis_id",
+        "order_id",
+        "record_time",
+        "report_datetime",
+        "surgery_begin_datetime",
+        "surgery_begin_time",
+        "transfution_datetime",
+    )
+    order_columns = []
+    # 优先业务主键/时间，再补齐全部批准投影字段形成稳定全序。
+    # 完全相同的重复行即使数据库交换顺序，其规范化材料仍相同。
+    for field in (*order_candidates, *selected):
+        if field in columns and field not in order_columns:
+            order_columns.append(field)
+    if not order_columns:
+        raise SourceEvidenceUnavailable()
+
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    order_sql = ", ".join(
+        f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
+        for field in order_columns
+    )
+    limit_rows = _source_limit(normalized_source)
+    sql = (
+        f"SELECT {select_sql} "
+        f"FROM {bundle_assembly._qualified_table(trusted_schema, normalized_source)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"ORDER BY {order_sql} LIMIT :limit_rows"
+    )
+    try:
+        with engine.connect() as connection:
+            raw_rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "limit_rows": limit_rows + 1,
+                },
+            ).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    truncated = len(raw_rows) > limit_rows
+    return SnapshotSourceRows.create(
+        source_key=normalized_source,
+        rows=[dict(row) for row in raw_rows[:limit_rows]],
+        truncated=truncated,
+        limit_rows=limit_rows,
+    )

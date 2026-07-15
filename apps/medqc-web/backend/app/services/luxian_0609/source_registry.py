@@ -1,7 +1,7 @@
 """LX0609 规则文书需求到受控来源的版本化注册表。
 
-注册表区分物理来源、派生父来源和执行器别名。它只声明未来 snapshot
-provider 必须遵守的读取能力，绝不把当前 bundle 投影等同于来源完整。
+注册表区分物理来源、派生父来源和执行器别名。它声明 snapshot provider
+必须遵守的读取能力，绝不把当前 bundle 投影等同于来源完整。
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ class SourceRegistryEntry:
 
     @property
     def complete_capable(self) -> bool:
-        """仅 future provider 的 limit+1 协议可证明查询结果未截断。"""
+        """仅 snapshot provider 的 limit+1 协议可证明查询结果未截断。"""
 
         return (
             self.completeness_attestation_policy
@@ -135,7 +135,7 @@ _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 _REGISTRY_ENTRIES = (
     _entry("admission_record"),
     _entry("anesthesia_record"),
-    _entry("bloodtrans_record", access_mode=_BOUNDED),
+    _entry("bloodtrans_record", "bloodtrans_record", "mr_bloodtrans", access_mode=_BOUNDED),
     _entry(
         "consent_form",
         "consent_form",

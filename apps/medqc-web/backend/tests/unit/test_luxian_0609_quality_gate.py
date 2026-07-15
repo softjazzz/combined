@@ -142,3 +142,4 @@ def test_subprocess_gate_extracts_only_safe_pytest_counts() -> None:
 def test_pr_no_model_rule_contract_gate_includes_evidence_snapshot_contract() -> None:
     rule_contract_gate = next(gate for gate in _PR_NO_MODEL_GATES if gate.name == "rule_contract")
     assert "tests/unit/test_luxian_0609_evidence_snapshot.py" in rule_contract_gate.args
+    assert "tests/unit/test_luxian_0609_evidence_snapshot_provider.py" in rule_contract_gate.args
