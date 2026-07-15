@@ -52,6 +52,7 @@ _PR_NO_MODEL_GATES = (
             "tests/unit/test_luxian_0609_rule_contracts.py",
             "tests/unit/test_luxian_0609_evidence_snapshot.py",
             "tests/unit/test_luxian_0609_evidence_snapshot_provider.py",
+            "tests/unit/test_luxian_0609_engine.py",
             "tests/unit/test_luxian_0609_native_package.py",
             "tests/unit/test_luxian_0609_full_regression_scope.py",
             "tests/unit/test_luxian_0609_rule_catalog.py",
