@@ -69,8 +69,8 @@ _RULE_REQUIRED_SOURCE_GROUPS = {
         ("labtest_master", "labtest_item_report", "exam_master", "exam_item_report"),
     ),
     "LX0609-044": (("bloodtrans_record",), ("blood_application", "daily_course_record")),
-    "LX0609-045": (("bloodtrans_record",),),
-    "LX0609-046": (("bloodtrans_record",),),
+    "LX0609-045": (("bloodtrans_record",), ("daily_course_record",)),
+    "LX0609-046": (("bloodtrans_record",), ("daily_course_record",)),
     "LX0609-047": (("bloodtrans_record",), ("daily_course_record",)),
     "LX0609-048": (
         ("bloodtrans_record",),

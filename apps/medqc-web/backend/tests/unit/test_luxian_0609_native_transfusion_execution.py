@@ -188,6 +188,37 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
 
 
 @pytest.mark.asyncio
+async def test_missing_daily_course_keeps_045_046_047_data_gap_without_model(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-045", "LX0609-046", "LX0609-047"),
+        wrapper_rules=[
+            _wrapper("LX0609-045"),
+            _wrapper("LX0609-046"),
+            _wrapper("LX0609-047"),
+        ],
+        evidence_payload=_documents(daily_course_record=[]),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"] * 3
+    assert {
+        item["metadata"]["reason_code"] for item in result.results
+    } == {"transfusion_rule_projection_incomplete"}
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_without_model(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
 
