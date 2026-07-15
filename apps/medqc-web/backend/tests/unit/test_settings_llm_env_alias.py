@@ -115,6 +115,15 @@ def test_luxian_native_execution_defaults_on_and_can_be_disabled(monkeypatch):
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXECUTION_ENABLED is False
 
 
+def test_luxian_evidence_snapshot_sidecar_defaults_off_and_can_be_enabled(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED is False
+
+    monkeypatch.setenv("LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED", "true")
+    assert Settings(_env_file=None).LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED is True
+
+
 def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")

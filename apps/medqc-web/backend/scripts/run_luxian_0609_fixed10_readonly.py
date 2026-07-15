@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
+import hashlib
 import json
 import re
 import sys
@@ -71,6 +73,43 @@ def build_safe_rule_states(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, 
         }
         for item in rows
     ]
+
+
+class InMemoryLlmReplay:
+    """仅在内存保存响应；以 prompt 摘要保证 A/B 输入完全一致。"""
+
+    def __init__(self, original_generate: Any) -> None:
+        self._original_generate = original_generate
+        self._records: list[tuple[str, dict[str, Any]]] = []
+        self._replay_index = 0
+
+    @staticmethod
+    def _prompt_hash(prompt: str) -> str:
+        return hashlib.sha256(str(prompt).encode("utf-8")).hexdigest()
+
+    async def record(self, prompt: str) -> dict[str, Any]:
+        response = await self._original_generate(prompt)
+        if not isinstance(response, Mapping):
+            raise RuntimeError("LLM响应不是对象")
+        self._records.append((self._prompt_hash(prompt), copy.deepcopy(dict(response))))
+        return response
+
+    async def replay(self, prompt: str) -> dict[str, Any]:
+        if self._replay_index >= len(self._records):
+            raise RuntimeError("A/B重放调用次数超过基线")
+        expected_hash, response = self._records[self._replay_index]
+        self._replay_index += 1
+        if self._prompt_hash(prompt) != expected_hash:
+            raise RuntimeError("A/B模型输入发生变化")
+        return copy.deepcopy(response)
+
+    @property
+    def call_count(self) -> int:
+        return len(self._records)
+
+    def assert_complete(self) -> None:
+        if self._replay_index != len(self._records):
+            raise RuntimeError("A/B重放调用次数少于基线")
 
 
 def load_private_case_map(path: Path, *, limit: int) -> list[dict[str, str]]:
@@ -152,35 +191,129 @@ async def evaluate_full_luxian_0609_case(
     return result
 
 
+async def evaluate_snapshot_sidecar_ab_case(
+    *,
+    service: Any,
+    settings: Any,
+    bundle: dict[str, Any],
+    rule_ids: Sequence[str],
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    """同一次真实模型响应内存重放，隔离模型随机性比较 sidecar。"""
+
+    from app.services.luxian_0609 import execution as luxian_execution
+    from app.services import sichuan_qc_service as service_module
+
+    original_flag = bool(settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED)
+    original_generate = service.adjudicator_client.generate
+    original_provider = luxian_execution.build_luxian_0609_evidence_snapshot
+    original_get_settings = service_module.get_settings
+    replay = InMemoryLlmReplay(original_generate)
+    snapshot_hashes: list[str] = []
+
+    def counted_provider(**kwargs):
+        snapshot = original_provider(**kwargs)
+        snapshot_hashes.append(str(snapshot.snapshot_hash))
+        return snapshot
+
+    try:
+        service_module.get_settings = lambda: settings
+        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = False
+        service.adjudicator_client.generate = replay.record
+        baseline = await evaluate_full_luxian_0609_case(
+            service=service,
+            bundle=bundle,
+            rule_ids=rule_ids,
+            timeout_seconds=timeout_seconds,
+        )
+
+        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = True
+        service.adjudicator_client.generate = replay.replay
+        luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
+        candidate = await evaluate_full_luxian_0609_case(
+            service=service,
+            bundle=bundle,
+            rule_ids=rule_ids,
+            timeout_seconds=timeout_seconds,
+        )
+        replay.assert_complete()
+    finally:
+        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = original_flag
+        service.adjudicator_client.generate = original_generate
+        luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
+        service_module.get_settings = original_get_settings
+
+    baseline_states = build_safe_rule_states(_result_rows(baseline))
+    candidate_states = build_safe_rule_states(_result_rows(candidate))
+    baseline_tokens = int(
+        dict(baseline.get("token_usage") or {}).get("total_tokens") or 0
+    )
+    candidate_tokens = int(
+        dict(candidate.get("token_usage") or {}).get("total_tokens") or 0
+    )
+    if len(snapshot_hashes) != 1:
+        raise RuntimeError("sidecar每病例必须且只能构建一次快照")
+    if snapshot_hashes[0] in repr(candidate) or "evidence_snapshot" in repr(candidate):
+        raise RuntimeError("sidecar内部快照进入客户返回")
+    return {
+        "states_match": baseline_states == candidate_states,
+        "tokens_match": baseline_tokens == candidate_tokens,
+        "logical_llm_call_count": replay.call_count,
+        "snapshot_build_count": len(snapshot_hashes),
+        "result_count": len(candidate_states),
+    }
+
+
 async def run(args: argparse.Namespace) -> int:
+    from app.core.settings import get_settings
     from app.services.sichuan_qc_service import SichuanQCService
 
     cases = load_private_case_map(Path(args.case_map), limit=int(args.limit))
     rule_ids = resolve_full_luxian_0609_rule_ids()
     service = SichuanQCService()
+    settings = get_settings()
     failed = 0
     for case in cases:
         started = time.perf_counter()
         try:
-            result = await evaluate_full_luxian_0609_case(
-                service=service,
-                bundle=load_bundle_readonly(case),
-                rule_ids=rule_ids,
-                timeout_seconds=float(args.timeout_seconds),
-            )
-            rows = _result_rows(result)
-            status_counts = dict(Counter(str(item.get("status") or "unknown") for item in rows))
-            token_usage = result.get("token_usage")
-            if not isinstance(token_usage, Mapping):
-                token_usage = {}
-            summary = {
-                "case_label": case["case_label"],
-                "result_count": len(rows),
-                "status_counts": status_counts,
-                "rule_states": build_safe_rule_states(rows),
-                "elapsed_ms": int((time.perf_counter() - started) * 1000),
-                "total_tokens": int(token_usage.get("total_tokens") or 0),
-            }
+            bundle = load_bundle_readonly(case)
+            if args.snapshot_sidecar_ab:
+                comparison = await evaluate_snapshot_sidecar_ab_case(
+                    service=service,
+                    settings=settings,
+                    bundle=bundle,
+                    rule_ids=rule_ids,
+                    timeout_seconds=float(args.timeout_seconds),
+                )
+                if not comparison["states_match"] or not comparison["tokens_match"]:
+                    raise RuntimeError("sidecar A/B状态或token发生变化")
+                summary = {
+                    "case_label": case["case_label"],
+                    **comparison,
+                    "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                }
+            else:
+                result = await evaluate_full_luxian_0609_case(
+                    service=service,
+                    bundle=bundle,
+                    rule_ids=rule_ids,
+                    timeout_seconds=float(args.timeout_seconds),
+                )
+                rows = _result_rows(result)
+                status_counts = dict(
+                    Counter(str(item.get("status") or "unknown") for item in rows)
+                )
+                token_usage = result.get("token_usage")
+                if not isinstance(token_usage, Mapping):
+                    token_usage = {}
+                summary = {
+                    "case_label": case["case_label"],
+                    "result_count": len(rows),
+                    "status_counts": status_counts,
+                    "rule_states": build_safe_rule_states(rows),
+                    "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                    "total_tokens": int(token_usage.get("total_tokens") or 0),
+                }
         except Exception as exc:  # noqa: BLE001
             failed += 1
             summary = {
@@ -192,12 +325,22 @@ async def run(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="只读运行固定病例的LX0609全49点正式入口回归")
     parser.add_argument("--case-map", default=str(DEFAULT_CASE_MAP))
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--timeout-seconds", type=float, default=60.0)
-    return parser.parse_args()
+    parser.add_argument(
+        "--assert-49",
+        action="store_true",
+        help="显式声明并校验全49个客户规则ID和返回顺序",
+    )
+    parser.add_argument(
+        "--snapshot-sidecar-ab",
+        action="store_true",
+        help="捕获一次真实模型响应并内存重放，比较sidecar开关前后结果",
+    )
+    return parser.parse_args(argv)
 
 
 if __name__ == "__main__":

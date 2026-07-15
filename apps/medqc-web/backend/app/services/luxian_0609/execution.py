@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
 from .customer_rule_package import (
@@ -13,6 +14,9 @@ from .customer_rule_package import (
     summarize_luxian_0609_results,
 )
 from .input_builder import build_luxian_0609_input_profile
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .evidence_snapshot_provider import build_luxian_0609_evidence_snapshot
+from .rule_contracts import load_luxian_0609_rule_contracts
 from .native_execution import (
     build_luxian_0609_native_technical_results,
     execute_luxian_0609_native_rules,
@@ -81,6 +85,30 @@ class Luxian0609ExecutionContext:
     native_total_tokens: int = 0
     native_api_time: float = 0.0
     package_plan: Luxian0609PackagePlan | None = None
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
+    evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+
+
+def build_luxian_0609_evidence_snapshot_rule_refs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    selected_rule_ids: Iterable[str],
+) -> tuple[tuple[str, str], ...]:
+    """把所选客户规则按原顺序绑定到同一个内部快照，不进入客户输出。"""
+
+    if not isinstance(snapshot, Luxian0609EvidenceSnapshot):
+        raise TypeError("snapshot must be Luxian0609EvidenceSnapshot")
+    normalized = tuple(
+        str(rule_id or "").strip().upper() for rule_id in selected_rule_ids
+    )
+    allowed_rule_ids = {item.rule_id for item in load_luxian_0609_rule_contracts()}
+    if (
+        not normalized
+        or len(normalized) != len(set(normalized))
+        or any(rule_id not in allowed_rule_ids for rule_id in normalized)
+    ):
+        raise ValueError("invalid LX0609 snapshot rule scope")
+    return tuple((rule_id, snapshot.snapshot_hash) for rule_id in normalized)
 
 
 def is_luxian_0609_customer_package_enabled(*, rule_set_key: str, settings: Any) -> bool:
@@ -138,6 +166,40 @@ async def prepare_luxian_0609_execution(
         selected_rule_ids=requested_customer_rule_ids,
         settings=settings,
     )
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
+    evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+    if (
+        bool(
+            getattr(
+                settings,
+                "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
+                False,
+            )
+        )
+        and all(
+            isinstance(value, str) and value.strip()
+            for value in (institute_id, patient_id, visit_id)
+        )
+    ):
+        try:
+            evidence_snapshot = build_luxian_0609_evidence_snapshot(
+                selected_rule_ids=package_plan.selected_rule_ids,
+                institute_id=str(institute_id),
+                patient_id=str(patient_id),
+                visit_id=str(visit_id),
+                source_schema=source_schema,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+            evidence_snapshot_rule_refs = (
+                build_luxian_0609_evidence_snapshot_rule_refs(
+                    snapshot=evidence_snapshot,
+                    selected_rule_ids=package_plan.selected_rule_ids,
+                )
+            )
+        except Exception:
+            # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
+            evidence_snapshot = None
+            evidence_snapshot_rule_refs = ()
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [
         wrapper
@@ -414,6 +476,8 @@ async def prepare_luxian_0609_execution(
         native_total_tokens=native_total_tokens,
         native_api_time=native_api_time,
         package_plan=package_plan,
+        evidence_snapshot=evidence_snapshot,
+        evidence_snapshot_rule_refs=evidence_snapshot_rule_refs,
     )
 
 

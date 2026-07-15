@@ -26,7 +26,16 @@ from app.services.luxian_0609.native_consultation_execution import (
     NativeConsultationExecutionResult,
 )
 from app.services.luxian_0609 import source_evidence_reader
+from app.services.luxian_0609.evidence_snapshot import (
+    EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+    Luxian0609EvidenceSnapshot,
+    SourceCompleteness,
+    SourceObservation,
+)
 from app.services.luxian_0609.native_mdt_execution import NativeMdtExecutionResult
+from app.services.luxian_0609.native_package import Luxian0609PackagePlan
+from app.services.luxian_0609.source_manifest import QueryStatus
+from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
@@ -150,9 +159,51 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
         "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
+        "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _safe_evidence_snapshot() -> Luxian0609EvidenceSnapshot:
+    return Luxian0609EvidenceSnapshot.create(
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        snapshot_schema_version=EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
+        source_registry_version=SOURCE_REGISTRY_VERSION,
+        observations=(
+            SourceObservation.create(
+                source_key="surgery_record",
+                query_state=QueryStatus.EMPTY,
+                completeness=SourceCompleteness.COMPLETE,
+                record_count=0,
+                query_version="snapshot-provider-surgery_record-v1",
+                snapshot_ref=f"sha256:{'a' * 64}",
+            ),
+        ),
+        facts=(),
+        document_refs=(),
+        created_at="2026-07-16T12:00:00+08:00",
+    )
+
+
+def test_evidence_snapshot_rule_refs_bind_all_49_to_one_hash() -> None:
+    selected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    snapshot = _safe_evidence_snapshot()
+
+    refs = luxian_execution.build_luxian_0609_evidence_snapshot_rule_refs(
+        snapshot=snapshot,
+        selected_rule_ids=selected,
+    )
+
+    assert tuple(rule_id for rule_id, _ in refs) == selected
+    assert {snapshot_hash for _, snapshot_hash in refs} == {snapshot.snapshot_hash}
+    with pytest.raises(ValueError, match="invalid LX0609 snapshot rule scope"):
+        luxian_execution.build_luxian_0609_evidence_snapshot_rule_refs(
+            snapshot=snapshot,
+            selected_rule_ids=("LX0609-999",),
+        )
 
 
 @pytest.mark.asyncio
@@ -223,6 +274,182 @@ async def test_public_entry_all_49_native_rules_do_not_load_legacy_mappings(monk
         "selected_customer_rule_ids": tuple(selected),
     }
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
+
+
+@pytest.mark.asyncio
+async def test_public_entry_snapshot_sidecar_is_once_internal_and_output_compatible(
+    monkeypatch,
+) -> None:
+    selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    snapshot = _safe_evidence_snapshot()
+    sidecar_enabled = False
+    provider_calls: list[dict] = []
+    context_refs: list[tuple[tuple[str, str], ...]] = []
+    context_snapshots: list[Luxian0609EvidenceSnapshot | None] = []
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=tuple(selected),
+        native_sync_rule_ids=(),
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(),
+    )
+
+    def _provider(**kwargs):
+        provider_calls.append(dict(kwargs))
+        return snapshot
+
+    def _aggregate(*, orchestrated, context, **_kwargs):
+        context_refs.append(context.evidence_snapshot_rule_refs)
+        context_snapshots.append(context.evidence_snapshot)
+        orchestrated["results"] = [
+            {
+                "rule_id": rule_id,
+                "status": "data_gap",
+                "is_compliant": None,
+                "findings": "当前资料不足。",
+                "evidence": "",
+                "suggestion": "请补齐资料后重新质控。",
+                "confidence": 1.0,
+                "metadata": {"execution_source": "lx0609_native"},
+            }
+            for rule_id in selected
+        ]
+        orchestrated["display_rule_ids"] = selected
+        orchestrated["display_rule_count"] = len(selected)
+
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.get_settings",
+        lambda: _all_native_settings(
+            LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=sidecar_enabled
+        ),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        _provider,
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [])
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.aggregate_luxian_0609_orchestrated_results",
+        _aggregate,
+    )
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+
+    def _legacy_lookup(rule_id):
+        raise AssertionError(f"全原生入口不应加载旧规则: {rule_id}")
+
+    monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
+    bundle = {
+        "scene": "running",
+        "institute_id": "private-institute",
+        "patient_id": "private-patient",
+        "visit_id": "private-visit",
+        "structured_context": {"documents": {}},
+        "text_available": False,
+    }
+
+    disabled_result = await service.evaluate_running_final_bundle_input(
+        bundle=bundle,
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+    sidecar_enabled = True
+    enabled_result = await service.evaluate_running_final_bundle_input(
+        bundle=bundle,
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    def _failing_provider(**_kwargs):
+        raise RuntimeError("raw SQL Bearer_secret 13800138000")
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        _failing_provider,
+    )
+    failed_sidecar_result = await service.evaluate_running_final_bundle_input(
+        bundle=bundle,
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    assert disabled_result == enabled_result == failed_sidecar_result
+    assert context_refs[0] == ()
+    assert tuple(rule_id for rule_id, _ in context_refs[1]) == tuple(selected)
+    assert {snapshot_hash for _, snapshot_hash in context_refs[1]} == {
+        snapshot.snapshot_hash
+    }
+    assert context_refs[2] == ()
+    assert context_snapshots == [None, snapshot, None]
+    assert len(provider_calls) == 1
+    assert tuple(provider_calls[0]["selected_rule_ids"]) == tuple(selected)
+    assert snapshot.snapshot_hash not in repr(enabled_result)
+    assert "evidence_snapshot" not in repr(enabled_result)
+    assert "Bearer_secret" not in repr(failed_sidecar_result)
+    assert "13800138000" not in repr(failed_sidecar_result)
+
+
+@pytest.mark.asyncio
+async def test_snapshot_sidecar_requires_three_coordinates_before_provider(
+    monkeypatch,
+) -> None:
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=("LX0609-001",),
+        native_sync_rule_ids=(),
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: [])
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("缺少三坐标时不得读取provider")
+        ),
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={},
+        llm_client=object(),
+        settings=_all_native_settings(
+            LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=True
+        ),
+        institute_id="",
+        patient_id="private-patient",
+        selected_customer_rule_ids=("LX0609-001",),
+    )
+
+    assert executable == []
+    assert context.evidence_snapshot is None
+    assert context.evidence_snapshot_rule_refs == ()
 
 
 @pytest.mark.asyncio
