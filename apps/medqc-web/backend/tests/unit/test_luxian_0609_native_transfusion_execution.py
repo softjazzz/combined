@@ -91,7 +91,7 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
 
 
 @pytest.mark.asyncio
-async def test_dedicated_record_triggers_selected_rules_once_each_and_keeps_customer_order(monkeypatch):
+async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_call_model(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client(
         [{"is_compliant": index % 2 == 0} for index in range(len(transfusion.TRANSFUSION_RULE_IDS))]
@@ -100,7 +100,16 @@ async def test_dedicated_record_triggers_selected_rules_once_each_and_keeps_cust
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
         rule_ids=tuple(reversed(transfusion.TRANSFUSION_RULE_IDS)),
         wrapper_rules=[_wrapper(rule_id) for rule_id in transfusion.TRANSFUSION_RULE_IDS],
-        evidence_payload=_documents(bloodtrans_record=[{"content": "输血记录"}]),
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "2026年6月5日16:10输注完毕。"
+                        "输血后复查血红蛋白较前改善，未见输血不良反应。"
+                    )
+                }
+            ]
+        ),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -117,11 +126,11 @@ async def test_dedicated_record_triggers_selected_rules_once_each_and_keeps_cust
         "compliant",
         "non_compliant",
         "compliant",
-        "non_compliant",
         "compliant",
+        "non_compliant",
     ]
-    assert result.llm_call_count == 9
-    assert result.total_tokens == 990
+    assert result.llm_call_count == 8
+    assert result.total_tokens == 880
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
 
@@ -216,6 +225,350 @@ async def test_missing_daily_course_keeps_045_046_047_data_gap_without_model(
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_047_posttransfusion_evaluation_is_deterministic_without_model(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    same_record = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "2026年6月5日16:10输注完毕。"
+                        "输血后复查血红蛋白较前改善，未见输血不良反应。"
+                    )
+                }
+            ],
+            daily_course_record=[
+                {
+                    "record_time": datetime(2026, 6, 5, 18, 40),
+                    "content": "普通病程：继续观察一般情况。",
+                }
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert same_record.results[0]["status"] == "compliant"
+    assert same_record.results[0]["metadata"]["reason_code"] == (
+        "posttransfusion_evaluation_complete"
+    )
+    assert same_record.results[0]["metadata"]["executor_type"] == "program"
+    assert same_record.llm_call_count == 0
+
+    later_course = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {"content": "2026-06-05 16:10输血结束，输注过程顺利。"}
+            ],
+            daily_course_record=[
+                {
+                    "record_time": datetime(2026, 6, 5, 18, 40),
+                    "content": "输血后复查血红蛋白上升，症状改善。",
+                }
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert later_course.results[0]["status"] == "compliant"
+    assert later_course.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "end_text",
+    [
+        "2026-06-05 16:10:00+08输血结束",
+        "2026-06-05 16:10:00+08:00输血结束",
+        "2026-06-05 16:10输血结束后",
+        "2026年6月5日16:10输注完毕后",
+    ],
+)
+async def test_047_accepts_controlled_timezone_and_postposition_forms(
+    monkeypatch, end_text
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        f"{end_text}，复查血红蛋白较前改善，"
+                        "未见输血不良反应。"
+                    )
+                }
+            ],
+            daily_course_record=[{"content": "普通病程：继续观察。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "expected_status"),
+    [
+        (
+            (
+                "2026-06-05 10:00输血结束。未记录输血后评价。"
+                "2026-06-05 16:00输血结束。输血后复查血红蛋白改善。"
+            ),
+            "non_compliant",
+        ),
+        (
+            (
+                "2026-06-05 10:00输血结束。输血后复查血红蛋白改善。"
+                "2026-06-05 16:00输血结束。未记录输血后评价。"
+            ),
+            "non_compliant",
+        ),
+        (
+            (
+                "2026-06-05 10:00输血结束，过程顺利。"
+                "2026-06-05 16:00输血结束。输血后复查血红蛋白改善。"
+            ),
+            "compliant",
+        ),
+    ],
+)
+async def test_047_allows_final_summary_but_preserves_explicit_missing_statement(
+    monkeypatch, content, expected_status
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": content}],
+            daily_course_record=[{"content": "普通病程：继续观察。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == expected_status
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluation_text", "expected_status"),
+    [
+        ("未见输血后评价异常。", "compliant"),
+        ("无输血后评价异常。", "compliant"),
+        ("输血后评价未见异常。", "compliant"),
+        ("未记录输血后评价。", "non_compliant"),
+        ("缺少输血后评价。", "non_compliant"),
+        ("未书写输血后评价。", "non_compliant"),
+    ],
+)
+async def test_047_distinguishes_normal_evaluation_from_missing_documentation(
+    monkeypatch, evaluation_text, expected_status
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {"content": f"2026-06-05 16:10输血结束。{evaluation_text}"}
+            ],
+            daily_course_record=[{"content": "普通病程：继续观察。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == expected_status
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_047_rejects_pre_end_or_unrelated_observation_and_requires_end_time(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    no_post_evaluation = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "2026年6月5日15:30观察生命体征平稳，"
+                        "2026年6月5日16:10输注完毕。"
+                    )
+                }
+            ],
+            daily_course_record=[
+                {
+                    "record_time": datetime(2026, 6, 5, 18, 40),
+                    "content": "普通病程：生命体征平稳，继续观察。",
+                }
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert no_post_evaluation.results[0]["status"] == "non_compliant"
+    assert no_post_evaluation.results[0]["metadata"]["reason_code"] == (
+        "posttransfusion_evaluation_missing"
+    )
+    assert no_post_evaluation.llm_call_count == 0
+
+    missing_end_time = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {"content": "输注完毕后复查血红蛋白上升，症状改善。"}
+            ],
+            daily_course_record=[
+                {
+                    "record_time": datetime(2026, 6, 5, 18, 40),
+                    "content": "输血后复查血红蛋白上升，症状改善。",
+                }
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert missing_end_time.results[0]["status"] == "data_gap"
+    assert missing_end_time.results[0]["metadata"]["reason_code"] == (
+        "transfusion_end_time_unavailable"
+    )
+    assert missing_end_time.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_047_rejects_planned_time_weak_context_and_unresolved_end_rows(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    async def _execute(
+        *, blood_rows: list[dict], daily_rows: list[dict]
+    ) -> transfusion.NativeTransfusionExecutionResult:
+        return await transfusion.execute_luxian_0609_native_transfusion_rules(
+            rule_ids=("LX0609-047",),
+            wrapper_rules=[_wrapper("LX0609-047")],
+            evidence_payload=_documents(
+                bloodtrans_record=blood_rows,
+                daily_course_record=daily_rows,
+            ),
+            institute_id="safe-institute",
+            patient_id="safe-patient",
+            visit_id="safe-visit",
+            source_schema=None,
+            llm_client=_Client([]),
+        )
+
+    planned = await _execute(
+        blood_rows=[
+            {"content": "预计2026-06-05 16:10输血结束。生命体征平稳。"}
+        ],
+        daily_rows=[{"content": "普通病程：继续观察。"}],
+    )
+    assert planned.results[0]["status"] == "data_gap"
+    assert planned.results[0]["metadata"]["reason_code"] == (
+        "transfusion_end_time_unavailable"
+    )
+
+    document_time = await _execute(
+        blood_rows=[
+            {"content": "2026-06-05 16:10记录：输血结束。生命体征平稳。"}
+        ],
+        daily_rows=[{"content": "普通病程：继续观察。"}],
+    )
+    assert document_time.results[0]["status"] == "data_gap"
+
+    weak_context = await _execute(
+        blood_rows=[{"content": "2026-06-05 16:10输血结束，输注过程顺利。"}],
+        daily_rows=[
+            {
+                "record_time": datetime(2026, 6, 5, 18, 40),
+                "content": "复查血小板正常，生命体征平稳。",
+            }
+        ],
+    )
+    assert weak_context.results[0]["status"] == "non_compliant"
+
+    unresolved_row = await _execute(
+        blood_rows=[
+            {
+                "content": (
+                    "2026-06-05 10:00输血结束。"
+                    "输血后复查血红蛋白改善。"
+                )
+            },
+            {"content": "16:00输血结束。未记录输血后评价。"},
+        ],
+        daily_rows=[{"content": "普通病程：继续观察。"}],
+    )
+    assert unresolved_row.results[0]["status"] == "data_gap"
+    assert unresolved_row.results[0]["metadata"]["reason_code"] == (
+        "transfusion_end_time_unavailable"
+    )
+
+    one_of_two_missing = await _execute(
+        blood_rows=[
+            {
+                "content": (
+                    "2026-06-05 10:00输血结束。"
+                    "输血后复查血红蛋白改善。"
+                )
+            },
+            {
+                "content": (
+                    "2026-06-05 16:00输血结束。"
+                    "未记录输血后评价。"
+                )
+            },
+        ],
+        daily_rows=[{"content": "普通病程：继续观察。"}],
+    )
+    assert one_of_two_missing.results[0]["status"] == "non_compliant"
+    assert planned.llm_call_count == weak_context.llm_call_count == 0
+    assert document_time.llm_call_count == unresolved_row.llm_call_count == 0
+    assert one_of_two_missing.llm_call_count == 0
 
 
 @pytest.mark.asyncio

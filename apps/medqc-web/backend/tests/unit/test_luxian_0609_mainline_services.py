@@ -798,7 +798,13 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     raw_body_marker = "SAFE_TRANSFUSION_BODY_MARKER"
     documents = {
         "bloodtrans_record": [
-            {"content": f"输血记录正文，记录实际输注过程及观察情况。{raw_body_marker}"}
+            {
+                "content": (
+                    "2026年6月5日16:10输注完毕。"
+                    "输血后复查血红蛋白较前改善，未见输血不良反应。"
+                    f"{raw_body_marker}"
+                )
+            }
         ],
         "consent_form": [{"content": "输血治疗知情同意书，已完成风险告知及签名。"}],
         "labtest_master": [{"content": "输血前常规检查资料。"}],
@@ -844,18 +850,23 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     assert dispatched == []
     assert reader_calls == []
     # 正式 bundle 不承诺 consent_form 来源，041/042 必须 data_gap 且零模型。
-    assert len(client.prompts) == 7
+    assert len(client.prompts) == 6
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [item["status"] for item in result["evaluation_results"][:2]] == [
         "data_gap",
         "data_gap",
     ]
+    rule_047 = next(
+        item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-047"
+    )
+    assert rule_047["status"] == "compliant"
+    assert rule_047["metadata"]["reason_code"] == "posttransfusion_evaluation_complete"
     assert result["token_usage"] == {
-        "total_tokens": 770,
-        "prompt_tokens": 700,
-        "completion_tokens": 70,
+        "total_tokens": 660,
+        "prompt_tokens": 600,
+        "completion_tokens": 60,
     }
-    assert result["executor_breakdown"]["llm"] == 7
+    assert result["executor_breakdown"]["llm"] == 6
     assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
     assert raw_body_marker not in repr(result)
 

@@ -32,6 +32,42 @@ _PRETRANSFUSION_CORE_PATTERNS = (
     re.compile(r"输血风险|既往输血|不良反应|过敏|生命体征|发热"),
 )
 
+_TRANSFUSION_END_PATTERN = re.compile(
+    r"(?:输血|输注)(?:结束|完毕|完成)|输毕|结束(?:输血|输注)"
+)
+_TRANSFUSION_CONTEXT_PATTERN = re.compile(r"输血|输注|输毕")
+_PLANNED_TIME_PREFIX_PATTERN = re.compile(r"预计|计划|拟于|拟在|预定|约于")
+_POSTTRANSFUSION_MISSING_PATTERN = re.compile(
+    r"(?:未记录|缺少|未书写).{0,12}"
+    r"(?:输血|输注)(?:结束)?后(?:评价|评估|疗效|复查)"
+    r"|(?:输血|输注)(?:结束)?后.{0,12}(?:评价|评估).{0,12}"
+    r"(?:缺失|未记录|未书写)"
+)
+_POSTTRANSFUSION_CLINICAL_PATTERNS = (
+    re.compile(
+        r"(?:未见|无)(?:输血|输注)(?:结束)?后(?:评价|评估)异常"
+        r"|(?:输血|输注)(?:结束)?后(?:评价|评估).{0,8}"
+        r"(?:未见|无)(?:明显)?异常"
+        r"|(?:输血|输注)(?:结束)?后(?:评价|评估)正常"
+    ),
+    re.compile(r"疗效|效果|改善|好转|缓解|复查|复测"),
+    re.compile(
+        r"输血反应|不良反应|寒战|发热|皮疹|胸闷|腰背痛|血红蛋白尿|溶血"
+    ),
+    re.compile(r"生命体征|体温|血压|脉搏|呼吸"),
+)
+_ISO_DATETIME_PATTERN = re.compile(
+    r"(?<!\d)(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/]"
+    r"(?P<day>\d{1,2})[ T](?P<hour>\d{1,2}):(?P<minute>\d{2})"
+    r"(?::(?P<second>\d{2}))?(?P<timezone>\+08(?::?00)?)?"
+)
+_CN_DATETIME_PATTERN = re.compile(
+    r"(?<!\d)(?P<year>\d{4})年(?P<month>\d{1,2})月(?P<day>\d{1,2})日\s*"
+    r"(?P<hour>\d{1,2})(?::(?P<minute_colon>\d{2})"
+    r"(?::(?P<second_colon>\d{2}))?"
+    r"|时(?P<minute_cn>\d{1,2})分?(?:(?P<second_cn>\d{1,2})秒?)?)"
+)
+
 _RULE_CONTEXT_SOURCES = {
     "LX0609-041": ("bloodtrans_record", "consent_form", "blood_transfusion_consent"),
     "LX0609-042": ("bloodtrans_record", "consent_form", "blood_transfusion_consent"),
@@ -165,6 +201,19 @@ def _source_entries(documents: Mapping[str, Any], source_key: str) -> list[str]:
     return entries
 
 
+def _source_document_rows(
+    documents: Mapping[str, Any], source_key: str
+) -> list[Mapping[str, Any]]:
+    raw_rows = documents.get(source_key)
+    if not isinstance(raw_rows, list):
+        return []
+    return [
+        raw_row
+        for raw_row in raw_rows[:_MAX_ROWS_PER_SOURCE]
+        if isinstance(raw_row, Mapping)
+    ]
+
+
 def _has_required_projection(rule_id: str, documents: Mapping[str, Any]) -> bool:
     return all(
         any(_source_rows(documents, source_key) for source_key in group)
@@ -208,6 +257,156 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     if not has_marker and not has_indication and not has_application:
         return "non_compliant", "pretransfusion_assessment_missing"
     return None
+
+
+def _datetime_from_match(match: re.Match[str]) -> datetime | None:
+    values = match.groupdict()
+    minute = values.get("minute") or values.get("minute_colon") or values.get("minute_cn")
+    second = values.get("second") or values.get("second_colon") or values.get("second_cn") or "0"
+    try:
+        return datetime(
+            int(values["year"]),
+            int(values["month"]),
+            int(values["day"]),
+            int(values["hour"]),
+            int(minute or 0),
+            int(second),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_document_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo is not None else value
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    for pattern in (_ISO_DATETIME_PATTERN, _CN_DATETIME_PATTERN):
+        match = pattern.fullmatch(candidate)
+        if match:
+            return _datetime_from_match(match)
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+
+
+def _transfusion_end_evidence(
+    text: str,
+) -> tuple[tuple[tuple[datetime, int, int], ...], bool]:
+    """只接受紧邻“结束/完毕”标识的完整日期时间，避免用文书时间猜输血结束。"""
+
+    datetime_matches = [
+        match
+        for pattern in (_ISO_DATETIME_PATTERN, _CN_DATETIME_PATTERN)
+        for match in pattern.finditer(text)
+    ]
+    events: list[tuple[datetime, int, int]] = []
+    unresolved = False
+    for end_match in _TRANSFUSION_END_PATTERN.finditer(text):
+        time_match = max(
+            (
+                match
+                for match in datetime_matches
+                if match.end() <= end_match.start()
+                and end_match.start() - match.end() <= 4
+            ),
+            key=lambda match: match.end(),
+            default=None,
+        )
+        if time_match is None:
+            # “输血结束后复查”可以是对前述已记录结束事件的引用，不能重复要求时间；
+            # 其余独立结束标志缺少完整时间时必须 fail-closed。
+            if not text[end_match.end() :].startswith("后"):
+                unresolved = True
+            continue
+        separator = text[time_match.end() : end_match.start()]
+        if separator.strip(" \t\r\n，,。；;：:"):
+            unresolved = True
+            continue
+        prefix = text[max(0, time_match.start() - 12) : time_match.start()]
+        if _PLANNED_TIME_PREFIX_PATTERN.search(prefix):
+            unresolved = True
+            continue
+        parsed = _datetime_from_match(time_match)
+        if parsed is not None:
+            events.append((parsed, end_match.start(), end_match.end()))
+        else:
+            unresolved = True
+    return tuple(events), unresolved
+
+
+def _has_clinical_posttransfusion_evaluation(text: str) -> bool:
+    if _POSTTRANSFUSION_MISSING_PATTERN.search(text):
+        return False
+    return any(pattern.search(text) for pattern in _POSTTRANSFUSION_CLINICAL_PATTERNS)
+
+
+def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
+    """按输血结束时间轴确定性判断，禁止普通观察或结束前记录冒充评价。"""
+
+    end_rows: list[tuple[datetime, bool]] = []
+    unresolved_end_marker = False
+    explicit_missing_evaluation = False
+    for row in _source_document_rows(documents, "bloodtrans_record"):
+        text = _row_text(row)
+        events, row_unresolved = _transfusion_end_evidence(text)
+        unresolved_end_marker = unresolved_end_marker or row_unresolved
+        if not events:
+            continue
+        ordered_events = sorted(events, key=lambda event: event[1])
+        for index, (_, _, marker_end) in enumerate(ordered_events[:-1]):
+            next_marker_start = ordered_events[index + 1][1]
+            explicit_missing_evaluation = (
+                explicit_missing_evaluation
+                or _POSTTRANSFUSION_MISSING_PATTERN.search(
+                    text[marker_end:next_marker_start]
+                )
+                is not None
+            )
+        last_end, _, last_marker_end = max(events, key=lambda event: event[0])
+        last_tail = text[last_marker_end : last_marker_end + 360]
+        explicit_missing_evaluation = (
+            explicit_missing_evaluation
+            or _POSTTRANSFUSION_MISSING_PATTERN.search(last_tail) is not None
+        )
+        end_rows.append(
+            (
+                last_end,
+                _has_clinical_posttransfusion_evaluation(last_tail),
+            )
+        )
+
+    if unresolved_end_marker or not end_rows:
+        return "data_gap", "transfusion_end_time_unavailable"
+    if explicit_missing_evaluation:
+        return "non_compliant", "posttransfusion_evaluation_missing"
+    if all(has_evaluation for _, has_evaluation in end_rows):
+        return "compliant", "posttransfusion_evaluation_complete"
+
+    # 多份独立输血记录必须各自有评价；同一记录内的成分输注允许在最终结束后总评。
+    if len(end_rows) > 1:
+        return "non_compliant", "posttransfusion_evaluation_missing"
+
+    latest_end = end_rows[0][0]
+    for row in _source_document_rows(documents, "daily_course_record"):
+        record_time = _parse_document_datetime(
+            row.get("record_time") or row.get("display_time")
+        )
+        text = _row_text(row)
+        if (
+            record_time is not None
+            and record_time > latest_end
+            and _TRANSFUSION_CONTEXT_PATTERN.search(text)
+            and _has_clinical_posttransfusion_evaluation(text)
+        ):
+            return "compliant", "posttransfusion_evaluation_complete"
+
+    return "non_compliant", "posttransfusion_evaluation_missing"
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -397,6 +596,12 @@ async def execute_luxian_0609_native_transfusion_rules(
                     _result(rule_id, status, reason_code, executor_type="program")
                 )
                 continue
+        if rule_id == "LX0609-047":
+            status, reason_code = _programmatic_047_status(documents)
+            results.append(
+                _result(rule_id, status, reason_code, executor_type="program")
+            )
+            continue
         wrapper = wrappers_by_id.get(rule_id)
         context = _context(rule_id, documents)
         if wrapper is None or not str(wrapper.get("custom_prompt") or "").strip() or not context:
