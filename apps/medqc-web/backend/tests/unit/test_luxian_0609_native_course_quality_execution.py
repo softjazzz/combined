@@ -6,6 +6,10 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609 import native_course_quality_execution as course
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
 
 
 def _row(content: str, record_time: str = "2026-06-01 09:00:00") -> dict:
@@ -66,6 +70,120 @@ class _Client:
             "usage": {"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45},
             "_api_time": 0.1,
         }
+
+
+@pytest.mark.asyncio
+async def test_course_017_consumes_shared_material_without_live_reader(
+    monkeypatch,
+):
+    copied = "患者病情平稳，查体无明显变化，继续当前治疗方案并观察。"
+    rows_by_source = {
+        "daily_course_record": [
+            {
+                "document_id": "private-a",
+                "record_time": "2026-01-01 09:00:00",
+                "record_content": copied,
+            }
+        ],
+        "senior_course_record": [
+            {
+                "document_id": "private-b",
+                "record_time": "2026-01-02 09:00:00",
+                "record_content": copied,
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=(
+            "daily_course_record",
+            "senior_course_record",
+        ),
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shared course material must not query")
+        ),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.llm_call_count == 0
+    assert "private-a" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_course_017_preserves_truncated_material_reason() -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [{"document_id": "private-a", "record_content": "a" * 40}]
+            if source_key == "daily_course_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=bool(rows),
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "course_comparison_source_truncated"
+    )
 
 
 @pytest.mark.asyncio

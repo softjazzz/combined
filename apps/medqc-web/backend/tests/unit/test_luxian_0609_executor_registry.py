@@ -166,5 +166,6 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[4][1]["evidence_materials"] is materials
+    assert calls[6][1]["evidence_materials"] is materials
     assert calls[-1][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-1][1]

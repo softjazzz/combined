@@ -395,6 +395,18 @@ async def _evaluate_runtime_flag_ab_case(
         "snapshot_build_count": len(snapshot_hashes),
         "result_count": len(candidate_states),
     }
+    if baseline_states != candidate_states:
+        comparison["state_differences"] = [
+            {
+                "rule_id": baseline_row["rule_id"],
+                "baseline_status": baseline_row["status"],
+                "candidate_status": candidate_row["status"],
+            }
+            for baseline_row, candidate_row in zip(
+                baseline_states, candidate_states
+            )
+            if baseline_row != candidate_row
+        ]
     if mode_label == "unified_engine":
         if family_reader_calls["candidate"] != 0:
             raise RuntimeError("统一引擎已迁移规则族仍在自行查库")

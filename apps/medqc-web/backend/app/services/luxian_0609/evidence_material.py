@@ -24,6 +24,10 @@ class EvidenceMaterialUnavailable(Exception):
     """所需来源没有可消费的完整请求内材料。"""
 
 
+class EvidenceMaterialTruncated(EvidenceMaterialUnavailable):
+    """来源读取成功但超过请求内上限，不能据截断材料作完整判断。"""
+
+
 def build_material_document_refs(
     source_key: str,
     rows: tuple[Mapping[str, Any], ...],
@@ -129,8 +133,10 @@ class Luxian0609EvidenceMaterialStore:
     def source(self, source_key: str) -> SnapshotSourceRows:
         normalized = str(source_key or "").strip().lower()
         material = self._sources.get(normalized)
-        if material is None or material.truncated:
+        if material is None:
             raise EvidenceMaterialUnavailable()
+        if material.truncated:
+            raise EvidenceMaterialTruncated()
         return material
 
     def rows(self, source_key: str) -> tuple[Mapping[str, object], ...]:
@@ -166,6 +172,7 @@ class Luxian0609EvidenceReadSession:
 
 
 __all__ = [
+    "EvidenceMaterialTruncated",
     "EvidenceMaterialUnavailable",
     "Luxian0609EvidenceMaterialStore",
     "Luxian0609EvidenceReadSession",

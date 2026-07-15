@@ -9,6 +9,10 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    Luxian0609EvidenceMaterialStore,
+)
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     has_luxian_0609_current_visit_unstable_order,
@@ -738,6 +742,7 @@ async def execute_luxian_0609_native_course_quality_rules(
     visit_id: str = "",
     source_schema: str | None = None,
     llm_client: CourseQualityLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeCourseQualityExecutionResult:
     """按客户目录顺序执行；每条适用语义规则最多调用模型一次。"""
 
@@ -786,12 +791,16 @@ async def execute_luxian_0609_native_course_quality_rules(
                     "daily_course_record",
                     "senior_course_record",
                 ):
-                    source_rows = read_luxian_0609_native_source_rows(
-                        source_key=source_key,
-                        institute_id=institute_id,
-                        patient_id=patient_id,
-                        visit_id=visit_id,
-                        source_schema=source_schema,
+                    source_rows = (
+                        [dict(row) for row in evidence_materials.rows(source_key)]
+                        if evidence_materials is not None
+                        else read_luxian_0609_native_source_rows(
+                            source_key=source_key,
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            source_schema=source_schema,
+                        )
                     )
                     if len(source_rows) >= luxian_0609_native_source_row_limit(
                         source_key
@@ -801,6 +810,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                     complete_documents[source_key] = source_rows
                 if not copy_source_failure:
                     copy_documents = complete_documents
+            except EvidenceMaterialTruncated:
+                copy_source_failure = "course_comparison_source_truncated"
             except Exception:
                 copy_source_failure = "course_comparison_source_unavailable"
 
