@@ -87,6 +87,29 @@ _NON_REQUEST_CONSULTATION_RE = re.compile(
 _DEFINITE_CONSULTATION_REQUEST_RE = re.compile(
     r"(?:今日|现已|已经|已|申请|予以|请)[^。；]{0,16}(?:科|医师|医生|药师)?会诊"
 )
+_RECONSULTATION_MARKER_RE = re.compile(
+    r"(?:再次(?:请|申请|予以)?.{0,12}会诊|复会诊|二次会诊|第[二三四五六七八九十0-9]+次会诊)"
+)
+_PREVIOUS_CONSULTATION_REFERENCE_RE = re.compile(
+    r"(?:(?:前次|上次|前述|此前|既往|原)(?:的)?.{0,12}(?:会诊|会诊意见|方案)|"
+    r"(?:会诊|会诊意见|方案).{0,8}(?:前次|上次|前述|此前|既往|原)|"
+    r"我科会诊(?:曾|已)?.{0,8}(?:给予|予以|使用|应用|开立|制定|调整))"
+)
+_COMPLETED_EXECUTION_RE = re.compile(
+    r"(?:(?:已|已经).{0,32}(?:执行|落实|给予|使用|应用|服用|开立|完成|抗凝|治疗|用药|方案)|"
+    r"我科会诊(?:曾|已)?.{0,8}(?:给予|予以|使用|应用|开立))"
+)
+_OBJECTIVE_RECHECK_RESULT_RE = re.compile(
+    r"复查.{0,48}(?:[0-9０-９]|正常|异常|升高|降低|增高|减低|阳性|阴性|达标|未达标|改善|较前)"
+)
+_RESULT_BASED_ADJUSTMENT_RE = re.compile(
+    r"(?:(?:根据|结合|依据).{0,28}(?:复查|结果|指标|INR).{0,40}(?:调整|加量|减量|增量|停用|改用|改为|维持)|"
+    r"复查.{0,72}(?:建议|故|遂|现).{0,32}(?:调整|加量|减量|增量|停用|改用|改为|维持))"
+)
+_DOSE_OR_PLAN_RE = re.compile(
+    r"(?:剂量|方案|药物|用药|治疗|[0-9０-９]+(?:\.[0-9０-９]+)?\s*(?:mg|g|ml|片|粒|单位))",
+    re.IGNORECASE,
+)
 _PURPOSE_STRONG_CLINICAL_RE = re.compile(
     r"(?:胸闷|胸痛|腹痛|头痛|发热|咳嗽|咳痰|气促|呼吸困难|恶心|呕吐|"
     r"头晕|乏力|水肿|出血|意识障碍|"
@@ -403,6 +426,69 @@ def _consultation_refs_for_execution(
     return frozenset(refs)
 
 
+def _is_complete_reconsultation_execution(row: Mapping[str, Any]) -> bool:
+    """仅接受“前次方案已执行 + 客观复查结果 + 据此调整”的复会诊闭环。"""
+
+    title = _clean(row.get("document_title"))
+    content = _clean(row.get("record_content"))
+    combined = f"{title} {content}".strip()
+    if not combined or not _RECONSULTATION_MARKER_RE.search(combined):
+        return False
+    if not _PREVIOUS_CONSULTATION_REFERENCE_RE.search(content):
+        return False
+    if not _COMPLETED_EXECUTION_RE.search(content):
+        return False
+    if not _OBJECTIVE_RECHECK_RESULT_RE.search(content):
+        return False
+    if not _RESULT_BASED_ADJUSTMENT_RE.search(content):
+        return False
+    return bool(_DOSE_OR_PLAN_RE.search(content))
+
+
+def _reconsultation_execution_by_ref(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]]
+) -> dict[str, tuple[str, str]]:
+    """仅在唯一既往可执行会诊时绑定完整复会诊闭环。"""
+
+    rows = _rows_for_context("consultation_record", rows_by_source)
+    indexed_rows = [
+        (index, row, _record_datetime(row))
+        for index, row in enumerate(rows, start=1)
+    ]
+    evidence: dict[str, tuple[str, str]] = {}
+    claimed_targets: set[str] = set()
+    for evidence_index, evidence_row, evidence_time in indexed_rows:
+        if evidence_time is None or not _is_complete_reconsultation_execution(
+            evidence_row
+        ):
+            continue
+        earlier = [
+            (target_time, target_index)
+            for target_index, target_row, target_time in indexed_rows
+            if target_time is not None
+            and target_time < evidence_time
+            and target_index != evidence_index
+            and _is_actionable_consultation_row(
+                _clean(target_row.get("record_content"))
+            )
+        ]
+        # 没有受控科室/会诊单关联键时，多个既往会诊不能靠“最近一张”猜绑定。
+        # 仅在唯一既往可执行会诊时接受“前次会诊”这一明确指代。
+        if len(earlier) != 1:
+            continue
+        _target_time, target_index = earlier[0]
+        target_ref = f"consultation_record-{target_index}"
+        if target_ref in claimed_targets:
+            continue
+        claimed_targets.add(target_ref)
+        evidence_ref = f"consultation_record-{evidence_index}-reconsult-execution"
+        evidence[evidence_ref] = (
+            target_ref,
+            f"consultation_record-{evidence_index}",
+        )
+    return evidence
+
+
 def _course_row_can_link(row: Mapping[str, Any]) -> bool:
     content = _clean(row.get("record_content"))
     return any(pattern.search(content) for pattern in _COURSE_LINK_PATTERNS)
@@ -641,16 +727,25 @@ def _derive_execution_reasons(
     course_source_complete: bool,
 ) -> tuple[str, str]:
     rows_by_ref = _rows_by_ref(rows_by_source)
-    consultation_refs = _consultation_refs_for_execution(rows_by_source)
+    reconsultation_by_ref = _reconsultation_execution_by_ref(rows_by_source)
+    reconsultation_evidence_rows = {
+        evidence_row_ref
+        for _target_ref, evidence_row_ref in reconsultation_by_ref.values()
+    }
+    consultation_refs = _consultation_refs_for_execution(
+        rows_by_source
+    ) - reconsultation_evidence_rows
     course_refs = _course_refs(rows_by_source)
     embedded_by_ref = _embedded_execution_by_ref(rows_by_source)
     embedded_consultation_refs = {
         consultation_ref
         for consultation_ref, _content in embedded_by_ref.values()
+        if consultation_ref not in reconsultation_evidence_rows
     }
     deterministic_embedded_quality = {
         execution_ref: quality
-        for execution_ref, (_consultation_ref, content) in embedded_by_ref.items()
+        for execution_ref, (consultation_ref, content) in embedded_by_ref.items()
+        if consultation_ref not in reconsultation_evidence_rows
         if (quality := _embedded_execution_quality(content)) is not None
     }
     complete_deterministic_embedded = (
@@ -658,6 +753,7 @@ def _derive_execution_reasons(
         and consultation_refs <= embedded_consultation_refs
         and len(deterministic_embedded_quality) == len(embedded_by_ref)
         and not course_refs
+        and not reconsultation_by_ref
     )
     links = payload.get("execution_links") if isinstance(payload, Mapping) else None
     if not isinstance(links, list):
@@ -673,6 +769,10 @@ def _derive_execution_reasons(
         consultation_ref, _content = embedded_by_ref[execution_ref]
         valid_qualities_by_consultation.setdefault(consultation_ref, []).append(
             quality
+        )
+    for consultation_ref, _evidence_row_ref in reconsultation_by_ref.values():
+        valid_qualities_by_consultation.setdefault(consultation_ref, []).append(
+            "specific"
         )
     course_qualities_by_ref: dict[str, list[str]] = {}
     course_claims_by_ref: dict[str, set[str]] = {}
@@ -691,6 +791,9 @@ def _derive_execution_reasons(
             continue
         if execution_ref in embedded_by_ref:
             bound_consultation_ref, _content = embedded_by_ref[execution_ref]
+            if bound_consultation_ref in reconsultation_evidence_rows:
+                # 完整复会诊是前次会诊的执行证据，不再把其自身作为待覆盖会诊。
+                continue
             if consultation_ref != bound_consultation_ref:
                 unresolved = True
                 continue
@@ -731,6 +834,11 @@ def _derive_execution_reasons(
         valid_qualities_by_consultation.setdefault(consultation_ref, []).append(
             quality
         )
+
+    # 后续复会诊形成了完整、客观且据结果调整的闭环时，覆盖此前仅有的空泛执行记载。
+    # 该覆盖只针对已由严格确定性边界唯一绑定的前次会诊，不接受模型扩张。
+    for consultation_ref, _evidence_row_ref in reconsultation_by_ref.values():
+        valid_qualities_by_consultation[consultation_ref] = ["specific"]
 
     covered_consultation_refs = embedded_consultation_refs | set(
         valid_qualities_by_consultation
@@ -888,6 +996,12 @@ async def execute_luxian_0609_native_consultation_rules(
         purpose_reason = _programmatic_purpose_reason(consultation_rows)
         if purpose_reason is not None:
             programmatic_reasons["LX0609-021"] = purpose_reason
+    if (
+        "LX0609-023" in selected
+        and _reconsultation_execution_by_ref(rows_by_source)
+    ):
+        # 完整复会诊闭环已经由严格 Python 条件唯一绑定，无需先把正文送模型。
+        programmatic_reasons["LX0609-023"] = "execution_specific_summarized"
     semantic_selected = tuple(
         rule_id for rule_id in selected if rule_id not in programmatic_reasons
     )

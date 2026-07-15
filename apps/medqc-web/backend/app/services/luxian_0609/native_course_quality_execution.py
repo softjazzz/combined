@@ -78,6 +78,9 @@ _MAX_CONTEXT_CHARS = 18000
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
+_COPY_STRONG_EXACT_THRESHOLD = 0.95
+_COPY_STRONG_LONGEST_BLOCK_CHARS = 120
+_COPY_STRONG_MATCH_COVERAGE = 0.45
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
 _TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?")
@@ -508,15 +511,49 @@ def _normalized_for_similarity(content: str) -> str:
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", value).lower()
 
 
-def _copy_result(
+@dataclass(frozen=True)
+class _CopyAssessment:
+    terminal_result: dict[str, Any] | None
+    gray_context: str
+    safe_metadata: Mapping[str, Any]
+
+
+def _copy_gray_context(
+    *, left_source: str, left_content: str, right_source: str, right_content: str,
+    maximum_similarity: float,
+) -> str:
+    return (
+        f"[Python候选] 全文相似度={maximum_similarity * 100:.2f}%，"
+        "但未达到强复制证据标准。只比较以下两份当前就诊病程，不得引用其他病历。\n"
+        f"[文书A:{left_source}]\n{left_content[:_MAX_ROW_CHARS]}\n"
+        f"[文书B:{right_source}]\n{right_content[:_MAX_ROW_CHARS]}"
+    )[:_MAX_CONTEXT_CHARS]
+
+
+def _copy_gray_prompt(*, context: str) -> str:
+    return f"""你是病历复制质控裁决器，只判断 LX0609-017：两份病程是否属于不合理复制。
+
+判定约束：
+1. Python 已发现全文相似度略高于70%，但这本身不能直接判缺陷。
+2. 常规查体模板、共同诊断背景和固定格式重复，不等于不合理复制。
+3. 如果症状变化、客观检查数值、病情评估或治疗计划存在明确实质更新，应判合规。
+4. 只有核心临床内容大段复用，且缺少针对当日病情的实质变化和处置更新，才判不合规。
+5. 不得推测未提供的病历内容。
+
+{context}
+
+只输出JSON：{{"is_compliant": true/false}}"""
+
+
+def _assess_copy(
     documents: Mapping[str, Any], *, source_complete: bool = False
-) -> dict[str, Any]:
+) -> _CopyAssessment:
     rows = _substantive_rows(
         documents,
         _ROUND_SOURCES,
         limit_per_source=None if source_complete else _MAX_ROWS_PER_SOURCE,
     )
-    comparable: list[tuple[str, str]] = []
+    comparable: list[tuple[str, str, str]] = []
     seen_documents: set[tuple[str, str, str]] = set()
     for source_key, row, content in rows:
         normalized = _normalized_for_similarity(content)
@@ -531,7 +568,7 @@ def _copy_result(
         if identity in seen_documents:
             continue
         seen_documents.add(identity)
-        comparable.append((source_key, normalized))
+        comparable.append((source_key, normalized, content))
     safe_metadata: dict[str, Any] = {
         "comparable_document_count": len(comparable),
         "maximum_similarity": 0.0,
@@ -539,56 +576,92 @@ def _copy_result(
         "best_match_source_types": [],
     }
     if not rows:
-        return _result(
-            "LX0609-017",
-            "not_applicable" if source_complete else "data_gap",
-            (
-                "insufficient_comparable_course_records"
-                if source_complete
-                else "course_comparison_material_unavailable"
+        return _CopyAssessment(
+            terminal_result=_result(
+                "LX0609-017",
+                "not_applicable" if source_complete else "data_gap",
+                (
+                    "insufficient_comparable_course_records"
+                    if source_complete
+                    else "course_comparison_material_unavailable"
+                ),
+                executor_type="program",
+                extra_metadata=safe_metadata,
             ),
-            executor_type="program",
-            extra_metadata=safe_metadata,
+            gray_context="",
+            safe_metadata=safe_metadata,
         )
     if len(comparable) < 2:
-        return _result(
-            "LX0609-017",
-            "not_applicable",
-            "insufficient_comparable_course_records",
-            executor_type="program",
-            extra_metadata=safe_metadata,
+        return _CopyAssessment(
+            terminal_result=_result(
+                "LX0609-017",
+                "not_applicable",
+                "insufficient_comparable_course_records",
+                executor_type="program",
+                extra_metadata=safe_metadata,
+            ),
+            gray_context="",
+            safe_metadata=safe_metadata,
         )
     maximum = -1.0
     best_source_types: list[str] = []
-    for index, (left_source, left) in enumerate(comparable):
-        for right_source, right in comparable[index + 1 :]:
-            similarity = SequenceMatcher(None, left, right, autojunk=False).ratio()
+    best_pair: tuple[str, str, str, str] | None = None
+    longest_block = 0
+    substantial_coverage = 0.0
+    for index, (left_source, left, left_content) in enumerate(comparable):
+        for right_source, right, right_content in comparable[index + 1 :]:
+            matcher = SequenceMatcher(None, left, right, autojunk=False)
+            similarity = matcher.ratio()
             if similarity > maximum:
                 maximum = similarity
                 best_source_types = [left_source, right_source]
+                best_pair = (left_source, left_content, right_source, right_content)
+                blocks = [block.size for block in matcher.get_matching_blocks() if block.size]
+                longest_block = max(blocks, default=0)
+                substantial_chars = sum(size for size in blocks if size >= 40)
+                substantial_coverage = substantial_chars / max(1, min(len(left), len(right)))
     maximum = max(maximum, 0.0)
     safe_metadata.update(
         {
             "maximum_similarity": round(maximum, 4),
             "best_match_source_types": best_source_types,
+            "longest_matching_block_chars": longest_block,
+            "substantial_matching_coverage": round(substantial_coverage, 4),
         }
     )
     evidence = (
         f"已比较 {len(comparable)} 份病程/查房记录，最高全文相似度 "
             f"{maximum * 100:.4f}%，判定阈值 {_COPY_SIMILARITY_THRESHOLD * 100:.0f}%。"
     )
-    if maximum > _COPY_SIMILARITY_THRESHOLD:
+    strong_copy = maximum >= _COPY_STRONG_EXACT_THRESHOLD or (
+        longest_block >= _COPY_STRONG_LONGEST_BLOCK_CHARS
+        and substantial_coverage >= _COPY_STRONG_MATCH_COVERAGE
+    )
+    if maximum > _COPY_SIMILARITY_THRESHOLD and strong_copy:
         item = _result(
             "LX0609-017",
             "non_compliant",
-            "course_similarity_above_threshold",
+            "strong_copy_evidence",
             executor_type="program",
             extra_metadata=safe_metadata,
         )
         item["findings"] = "发现两份病程/查房记录全文相似度超过70%，存在高度重复。"
         item["evidence"] = evidence
         item["suggestion"] = "请核对重复记录，补充本次病情变化、诊疗调整和查房意见。"
-        return item
+        return _CopyAssessment(item, "", safe_metadata)
+    if maximum > _COPY_SIMILARITY_THRESHOLD and best_pair is not None:
+        left_source, left_content, right_source, right_content = best_pair
+        return _CopyAssessment(
+            terminal_result=None,
+            gray_context=_copy_gray_context(
+                left_source=left_source,
+                left_content=left_content,
+                right_source=right_source,
+                right_content=right_content,
+                maximum_similarity=maximum,
+            ),
+            safe_metadata=safe_metadata,
+        )
     item = _result(
         "LX0609-017",
         "compliant",
@@ -597,7 +670,24 @@ def _copy_result(
         extra_metadata=safe_metadata,
     )
     item["evidence"] = evidence
-    return item
+    return _CopyAssessment(item, "", safe_metadata)
+
+
+def _copy_result(
+    documents: Mapping[str, Any], *, source_complete: bool = False
+) -> dict[str, Any]:
+    """兼容纯函数测试；灰区必须由正式执行入口调用裁剪模型。"""
+
+    assessment = _assess_copy(documents, source_complete=source_complete)
+    if assessment.terminal_result is not None:
+        return assessment.terminal_result
+    return _result(
+        "LX0609-017",
+        "data_gap",
+        "copy_semantic_review_required",
+        executor_type="program",
+        extra_metadata=assessment.safe_metadata,
+    )
 
 
 def _admission_material_ready(
@@ -722,13 +812,91 @@ async def execute_luxian_0609_native_course_quality_rules(
                         executor_type="program",
                     )
                 )
-            else:
+                continue
+            assessment = _assess_copy(
+                copy_documents,
+                source_complete=copy_documents is not documents,
+            )
+            if assessment.terminal_result is not None:
+                results.append(assessment.terminal_result)
+                continue
+            wrapper = wrappers_by_id.get(rule_id)
+            if (
+                wrapper is None
+                or not _clean(wrapper.get("custom_prompt"))
+                or not assessment.gray_context
+            ):
                 results.append(
-                    _copy_result(
-                        copy_documents,
-                        source_complete=copy_documents is not documents,
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "copy_prompt_input_unavailable",
+                        executor_type="program",
+                        extra_metadata=assessment.safe_metadata,
                     )
                 )
+                continue
+            if llm_client is None:
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "copy_llm_unavailable",
+                        executor_type="program",
+                        extra_metadata=assessment.safe_metadata,
+                    )
+                )
+                continue
+            llm_call_count += 1
+            try:
+                response = await llm_client.generate(
+                    _copy_gray_prompt(context=assessment.gray_context)
+                )
+            except Exception:
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "copy_llm_failure",
+                        executor_type="llm",
+                        extra_metadata=assessment.safe_metadata,
+                    )
+                )
+                continue
+            prompt, completion, total, elapsed = _usage(response)
+            prompt_tokens += prompt
+            completion_tokens += completion
+            total_tokens += total
+            api_time += elapsed
+            is_compliant = _parse_is_compliant(response)
+            if is_compliant is None:
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "copy_llm_invalid_output",
+                        executor_type="llm",
+                        prompt_tokens=prompt,
+                        completion_tokens=completion,
+                        total_tokens=total,
+                        api_time=elapsed,
+                        extra_metadata=assessment.safe_metadata,
+                    )
+                )
+                continue
+            results.append(
+                _result(
+                    rule_id,
+                    "compliant" if is_compliant else "non_compliant",
+                    "copy_gray_llm",
+                    executor_type="llm",
+                    prompt_tokens=prompt,
+                    completion_tokens=completion,
+                    total_tokens=total,
+                    api_time=elapsed,
+                    extra_metadata=assessment.safe_metadata,
+                )
+            )
             continue
 
         controlled_fact = ""

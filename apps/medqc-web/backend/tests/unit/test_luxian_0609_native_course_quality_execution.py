@@ -439,6 +439,170 @@ async def test_017_requires_two_comparable_records_and_never_outputs_review_pend
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("llm_output", "expected_status"),
+    [
+        ({"is_compliant": True}, "compliant"),
+        ({"is_compliant": False}, "non_compliant"),
+    ],
+)
+async def test_017_gray_similarity_uses_one_cropped_llm_call(
+    monkeypatch, llm_output: dict, expected_status: str
+):
+    common_blocks = [
+        "患者神志清楚生命体征平稳腹部柔软无明显压痛",
+        "双肺呼吸音清心律齐双下肢无明显水肿",
+        "继续观察症状体征以及复查指标变化",
+        "已向患者及家属说明当前病情和后续安排",
+    ]
+    left = "。".join(
+        (
+            common_blocks[0],
+            "今日腹痛减轻进食改善复查炎症指标下降",
+            common_blocks[1],
+            "停止静脉补液改为口服药物准备出院",
+            common_blocks[2],
+            common_blocks[3],
+        )
+    )
+    right = "。".join(
+        (
+            common_blocks[0],
+            "今日仍有发热咳嗽复查胸部影像提示感染",
+            common_blocks[1],
+            "继续静脉抗感染并增加雾化治疗暂不出院",
+            common_blocks[2],
+            common_blocks[3],
+        )
+    )
+
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {
+                **_row(right, "2026-06-02 09:00:00"),
+                "document_id": "safe-right",
+            },
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+    client = _Client([llm_output])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert result.results[0]["metadata"]["reason_code"] == "copy_gray_llm"
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
+    assert "只比较以下两份" in client.prompts[0]
+    assert "safe-left" not in client.prompts[0]
+    assert "safe-right" not in client.prompts[0]
+    assert left not in repr(result)
+    assert right not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_017_strong_copy_uses_python_without_model(monkeypatch):
+    copied = (
+        "患者神志清楚，生命体征平稳，查体无明显变化。"
+        "复查结果与前次一致，继续当前治疗方案并密切观察病情变化。"
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(copied), "document_id": "safe-left"},
+            {
+                **_row(copied, "2026-06-02 09:00:00"),
+                "document_id": "safe-right",
+            },
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+    client = _Client([{"is_compliant": True}])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == "strong_copy_evidence"
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client", "expected_reason"),
+    [
+        (_Client(["not-json"]), "copy_llm_invalid_output"),
+        (_Client([RuntimeError("raw Bearer_secret 13800138000")]), "copy_llm_failure"),
+    ],
+)
+async def test_017_gray_llm_failure_is_safe_data_gap(
+    monkeypatch, client: _Client, expected_reason: str
+):
+    common = "患者神志清楚生命体征平稳腹部柔软双肺呼吸音清继续观察病情变化"
+    left = f"{common}今日腹痛减轻复查指标下降停止静脉补液{common}"
+    right = f"{common}今日仍有发热复查提示感染继续静脉抗感染{common}"
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {
+                **_row(right, "2026-06-02 09:00:00"),
+                "document_id": "safe-right",
+            },
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.llm_call_count == 1
+    assert "Bearer_secret" not in repr(result)
+    assert "13800138000" not in repr(result)
+    assert left not in repr(result)
+    assert right not in repr(result)
+
+
+@pytest.mark.asyncio
 async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bundle(
     monkeypatch,
 ):

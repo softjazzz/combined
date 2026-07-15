@@ -1431,6 +1431,146 @@ async def test_one_consultation_can_have_multiple_later_execution_records(monkey
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_later_reconsultation_with_complete_execution_loop_qualifies_023(monkeypatch):
+    client = _Client({"results": {}, "execution_links": []})
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": (
+                            "会诊意见：建议抗凝治疗并复查凝血功能。"
+                            "遵会诊意见执行。"
+                        ),
+                    },
+                    {
+                        "record_time": "2026-06-03 10:00:00",
+                        "record_content": (
+                            "再次会诊，前次会诊建议的抗凝方案已执行。"
+                            "复查凝血功能INR 2.6，根据复查结果将华法林剂量调整为每日2.5mg。"
+                        ),
+                    },
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-023",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in execution.results] == ["compliant"]
+    assert execution.llm_call_count == 0
+    assert client.calls == []
+    assert execution.results[0]["metadata"]["executor_type"] == "program"
+
+
+@pytest.mark.unit
+def test_same_department_reconsultation_can_explicitly_carry_prior_execution_loop():
+    row = {
+        "record_time": "2026-06-03 10:00:00",
+        "record_content": (
+            "患者复查凝血异常，再次请心内科会诊协助诊疗，调整剂量。"
+            "心内科医师会诊：我科会诊给予华法林半片每日一次，"
+            "今日复查凝血为INR 2.6，我科建议华法林改为三分之一片每日一次，"
+            "动态复查凝血。遵会诊意见执行，华法林改为三分之一片每日一次。"
+        ),
+    }
+
+    assert consultation._is_complete_reconsultation_execution(row) is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "later_content",
+    (
+        # 缺少前次会诊关联。
+        "抗凝方案已执行。复查凝血功能INR 2.6，根据结果将华法林剂量调整为每日2.5mg。",
+        # 只有空泛执行，没有客观复查结果和调整闭环。
+        "再次会诊，遵前次会诊意见执行。",
+        # 有执行和复查结果，但没有据此调整剂量或方案。
+        "再次会诊，前次会诊建议的抗凝方案已执行，复查凝血功能INR 2.6。",
+        # 只有计划，不是已经发生的执行事实。
+        "再次会诊，拟按前次会诊方案抗凝，复查凝血功能后调整华法林剂量。",
+    ),
+)
+async def test_incomplete_reconsultation_loop_does_not_qualify_023(
+    monkeypatch, later_content
+):
+    client = _Client({"results": {}, "execution_links": []})
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": "会诊意见：建议抗凝治疗并复查凝血功能。",
+                    },
+                    {
+                        "record_time": "2026-06-03 10:00:00",
+                        "record_content": later_content,
+                    },
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-023",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert execution.results[0]["status"] != "compliant"
+
+
+@pytest.mark.unit
+def test_reconsultation_execution_rejects_ambiguous_multiple_earlier_consultations():
+    evidence = consultation._reconsultation_execution_by_ref(
+        {
+            "consultation_record": [
+                {
+                    "record_time": "2026-06-01 09:00:00",
+                    "record_content": "会诊意见：第一次建议复查。",
+                },
+                {
+                    "record_time": "2026-06-01 10:00:00",
+                    "record_content": "会诊意见：第二次建议抗凝并复查。",
+                },
+                {
+                    "record_time": "2026-06-02 10:00:00",
+                    "record_content": (
+                        "复会诊：前次会诊抗凝方案已执行，复查INR 2.4，"
+                        "根据复查结果调整华法林剂量为每日2.5mg。"
+                    ),
+                },
+            ]
+        }
+    )
+
+    assert evidence == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_context_overflow_fails_closed_instead_of_ignoring_documents(monkeypatch):
     client = _Client({"results": {}, "execution_links": []})
     monkeypatch.setattr(

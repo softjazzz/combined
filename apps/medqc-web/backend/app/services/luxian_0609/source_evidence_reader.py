@@ -121,6 +121,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_time",
         "surgery_name",
         "surgery_code",
+        "surgery_process",
         "record_content",
     ),
 }
@@ -128,6 +129,10 @@ _NATIVE_SOURCE_FIELDS = {
 
 class SourceEvidenceUnavailable(Exception):
     """受控来源或就诊绑定字段不可用。"""
+
+
+class SourceEvidenceTruncated(Exception):
+    """受控来源超过读取上限，不能据截断结果作否定判断。"""
 
 
 def canonical_source_evidence(value: Any) -> str:
@@ -138,6 +143,94 @@ def canonical_source_evidence(value: Any) -> str:
 def digest_source_evidence(value: Any) -> str:
     """纯不可逆摘要；调用方不得把输入原值写入输出。"""
     return hashlib.sha256(canonical_source_evidence(value).encode("utf-8")).hexdigest()
+
+
+def read_luxian_0609_course_round_timeline(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """读取005/006所需的权威标题与时间；不读取或返回病程正文。"""
+
+    coordinates = (institute_id, patient_id, visit_id)
+    if not all(isinstance(value, str) and value.strip() for value in coordinates):
+        raise SourceEvidenceUnavailable()
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for source_key in ("daily_course_record", "senior_course_record"):
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+        required = {
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_title",
+            "record_time",
+        }
+        if not required.issubset(columns):
+            raise SourceEvidenceUnavailable()
+        document_id_field = next(
+            (field for field in ("document_id", "id") if field in columns),
+            None,
+        )
+        selected = ["document_title", "record_time"]
+        if document_id_field:
+            selected.append(document_id_field)
+        select_sql = ", ".join(
+            bundle_assembly._quote_ident(field) for field in selected
+        )
+        order_fields = ["record_time"]
+        if document_id_field:
+            order_fields.append(document_id_field)
+        order_sql = ", ".join(
+            f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
+            for field in order_fields
+        )
+        limit = _source_limit(source_key)
+        sql = (
+            f"SELECT {select_sql} "
+            f"FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+            f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+            f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+            f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+            f"ORDER BY {order_sql} LIMIT :limit_rows"
+        )
+        with engine.connect() as connection:
+            rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "limit_rows": limit + 1,
+                },
+            ).mappings().all()
+        if len(rows) > limit:
+            raise SourceEvidenceTruncated()
+        safe_rows: list[dict[str, Any]] = []
+        for row in rows:
+            title = str(row.get("document_title") or "").strip()
+            record_time = row.get("record_time")
+            document_id = row.get(document_id_field) if document_id_field else None
+            safe_rows.append(
+                {
+                    "document_id": digest_source_evidence(
+                        (source_key, document_id, record_time, title)
+                    ),
+                    "title": title,
+                    "authored_at": record_time,
+                    "source_table": source_key,
+                }
+            )
+        result[source_key] = safe_rows
+    return result
 
 
 def parse_strict_performed_time(value: Any) -> datetime | None:

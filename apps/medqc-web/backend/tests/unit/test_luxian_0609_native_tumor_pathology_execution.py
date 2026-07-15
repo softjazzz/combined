@@ -5,6 +5,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_tumor_pathology_execution as tumor
+from app.services.luxian_0609 import source_evidence_reader
 
 
 def _wrapper(rule_id: str) -> dict:
@@ -219,6 +220,151 @@ async def test_019_documented_sampling_is_programmatic_compliant_without_model(
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_019_reads_documented_sampling_from_live_surgery_process_without_model(
+    monkeypatch,
+):
+    raw_process = "术中切取病灶标本并送病理检查。SAFE_RAW_SURGERY_PROCESS"
+
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "surgery_record":
+            return [
+                {
+                    "record_content": "",
+                    "surgery_process": raw_process,
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(tumor, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([])
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-019",),
+        wrapper_rules=[_wrapper("LX0609-019")],
+        evidence_payload=_payload(
+            surgery_record=[
+                {
+                    "record_content": "手术记录已组装，但旧投影尚无手术过程字段。",
+                }
+            ]
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.results[0]["metadata"]["reason_code"] == "pathology_sampling_recorded"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+    assert "SAFE_RAW_SURGERY_PROCESS" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_013_does_not_read_live_surgery_process_projection(monkeypatch):
+    calls: list[str] = []
+
+    def _reader(**kwargs):
+        calls.append(kwargs["source_key"])
+        return []
+
+    monkeypatch.setattr(tumor, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": True}])
+    payload = _payload(
+        pathology_exam_master=[{"content": "病理申请"}],
+        pathology_exam_report=[
+            {
+                "diagnosis": "病理诊断已完成",
+                "report_datetime": "2026-06-02 08:00:00",
+            }
+        ],
+        surgery_record=[{"record_content": "既有手术记录投影"}],
+        daily_course_record=[{"record_content": "既有日常病程投影"}],
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013",),
+        wrapper_rules=[_wrapper("LX0609-013")],
+        evidence_payload=payload,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert calls == []
+
+
+def test_native_surgery_record_reader_projects_surgery_process(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [{"surgery_process": "safe-internal-material"}]
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, statement, params):
+            captured["sql"] = str(statement)
+            captured["params"] = dict(params)
+            return _Rows()
+
+    class _Engine:
+        def connect(self):
+            return _Connection()
+
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _Engine())
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm"
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda *_: {
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_id",
+            "surgery_process",
+            "record_content",
+        },
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_qualified_table",
+        lambda *_: '"cdm"."surgery_record"',
+    )
+
+    rows = source_evidence_reader.read_luxian_0609_native_source_rows(
+        source_key="surgery_record",
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+    )
+
+    assert rows == [{"surgery_process": "safe-internal-material"}]
+    assert '"surgery_process"' in str(captured["sql"])
+    assert captured["params"]["limit_rows"] == source_evidence_reader._source_limit(
+        "surgery_record"
+    )
 
 
 @pytest.mark.asyncio

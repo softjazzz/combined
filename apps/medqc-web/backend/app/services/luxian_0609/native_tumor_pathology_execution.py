@@ -296,7 +296,13 @@ def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
 
     for material in materials:
         for row in material.rows:
-            text = _row_text(row)
+            text = _clean(
+                " ".join(
+                    part
+                    for part in (_row_text(row), _clean(row.get("surgery_process")))
+                    if part
+                )
+            )
             segments = [
                 _clean(segment)
                 for segment in re.split(r"[。！？；;，,\r\n]+", text)
@@ -543,8 +549,25 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
             )
             continue
+        sampling_surgery = materials.get("surgery_record")
+        if (
+            rule_id == "LX0609-019"
+            and sampling_surgery is not None
+            and not any("surgery_process" in row for row in sampling_surgery.rows)
+        ):
+            live_surgery = _load_source(
+                documents=None,
+                source_key="surgery_record",
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+            )
+            if live_surgery.state == "present":
+                sampling_surgery = live_surgery
         if rule_id == "LX0609-019" and _has_documented_pathology_sampling(
-            materials["surgery_record"], materials["daily_course_record"]
+            sampling_surgery or materials["surgery_record"],
+            materials["daily_course_record"],
         ):
             results.append(
                 _result(

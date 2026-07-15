@@ -178,6 +178,10 @@ async def prepare_luxian_0609_execution(
         basic_execution = execute_luxian_0609_native_basic_timeliness(
             rule_ids=basic_timeliness_rule_ids,
             evidence_payload=evidence_payload,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
         )
         native_results.extend(basic_execution.results)
     if native_results:

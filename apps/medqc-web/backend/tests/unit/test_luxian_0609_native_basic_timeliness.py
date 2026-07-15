@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609 import native_basic_timeliness as basic_timeliness
+from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.native_basic_timeliness import (
     BASIC_TIMELINESS_RULE_IDS,
     execute_luxian_0609_native_basic_timeliness,
@@ -13,6 +15,7 @@ from app.services.luxian_0609_programmatic_rules import (
     evaluate_luxian_0609_programmatic_rules,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
+from app.services import sample_programmatic_evidence as programmatic_evidence
 
 
 _LEGACY_RULE_IDS = ("SC-002", "CL-081", "SC-021", "SC-054", "SC-048", "SC-049", "CL-080")
@@ -33,6 +36,320 @@ def _settings(*, basic_enabled: bool) -> SimpleNamespace:
 def _rules(*rule_ids: str) -> list[dict]:
     selected = set(rule_ids)
     return [rule for rule in load_luxian_0609_rules() if rule["rule_id"] in selected]
+
+
+def _private_course_rows(attending_time: str, senior_time: str) -> dict[str, list[dict]]:
+    return {
+        "daily_course_record": [
+            {
+                "document_id": "safe-attending-ref",
+                "title": "主治医师首次查房记录",
+                "authored_at": attending_time,
+                "source_table": "daily_course_record",
+            }
+        ],
+        "senior_course_record": [
+            {
+                "document_id": "safe-senior-ref",
+                "title": "副主任医师首次查房记录",
+                "authored_at": senior_time,
+                "source_table": "senior_course_record",
+            }
+        ],
+    }
+
+
+@pytest.mark.unit
+def test_course_reader_uses_exact_coordinates_stable_order_and_safe_refs(monkeypatch):
+    captured: list[tuple[str, dict]] = []
+
+    class _Rows:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return list(self.rows)
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params):
+            sql = str(statement)
+            captured.append((sql, dict(params)))
+            return _Rows(
+                [
+                    {
+                        "document_id": "RAW-DOCUMENT-ID",
+                        "document_title": "副主任医师查房记录",
+                        "record_time": "2026-06-02 08:00:00",
+                    }
+                ]
+            )
+
+    class _Engine:
+        def connect(self):
+            return _Connection()
+
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _Engine())
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda *_args: {
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_id",
+            "document_title",
+            "record_time",
+        },
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_qualified_table",
+        lambda _schema, table: f'"cdm"."{table}"',
+    )
+
+    rows = source_evidence_reader.read_luxian_0609_course_round_timeline(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+    )
+
+    assert len(captured) == 2
+    for sql, params in captured:
+        assert '"institute_id" = :institute_id' in sql
+        assert '"patient_id" = :patient_id' in sql
+        assert '"visit_id" = :visit_id' in sql
+        assert sql.index('ORDER BY "record_time" ASC NULLS LAST') < sql.index("LIMIT")
+        assert params["institute_id"] == "I"
+        assert params["patient_id"] == "P"
+        assert params["visit_id"] == "V"
+        assert params["limit_rows"] == (
+            source_evidence_reader._source_limit("daily_course_record") + 1
+        )
+    assert "RAW-DOCUMENT-ID" not in repr(rows)
+    assert len(rows["daily_course_record"][0]["document_id"]) == 64
+
+
+@pytest.mark.unit
+def test_course_reader_rejects_truncated_source(monkeypatch):
+    class _Rows:
+        def mappings(self):
+            return self
+
+        def all(self):
+            return [
+                {
+                    "document_id": f"doc-{index}",
+                    "document_title": "主治医师查房记录",
+                    "record_time": f"2026-06-0{index + 1} 08:00:00",
+                }
+                for index in range(3)
+            ]
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, _statement, params):
+            assert params["limit_rows"] == 3
+            return _Rows()
+
+    class _Engine:
+        def connect(self):
+            return _Connection()
+
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _Engine())
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda *_args: {
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "document_id",
+            "document_title",
+            "record_time",
+        },
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_qualified_table",
+        lambda _schema, table: f'"cdm"."{table}"',
+    )
+    monkeypatch.setattr(source_evidence_reader, "_source_limit", lambda _source: 2)
+
+    with pytest.raises(source_evidence_reader.SourceEvidenceTruncated):
+        source_evidence_reader.read_luxian_0609_course_round_timeline(
+            institute_id="I",
+            patient_id="P",
+            visit_id="V",
+            source_schema=None,
+        )
+
+
+@pytest.mark.unit
+def test_live_course_source_uses_private_time_only_rows_for_005_and_006(
+    monkeypatch,
+):
+    """正式执行只读权威标题/时间，不把查房正文扩进共享证据。"""
+
+    calls: list[dict] = []
+
+    def _read(**kwargs):
+        calls.append(kwargs)
+        return {
+            "daily_course_record": [
+                {
+                    "document_id": "safe-attending-ref",
+                    "title": "主治医师首次查房记录",
+                    "authored_at": "2026-06-02 08:00:00",
+                    "source_table": "daily_course_record",
+                }
+            ],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-senior-ref",
+                    "title": "副主任医师首次查房记录",
+                    "authored_at": "2026-06-03 08:00:00",
+                    "source_table": "senior_course_record",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(basic_timeliness, "read_luxian_0609_course_round_timeline", _read)
+    payload = {
+        "programmatic_timeline": {
+            "admission_time": "2026-06-01 08:00:00",
+            "admission_time_basis": "timeline_primary_admission_datetime",
+            "admission_time_trusted": True,
+            "documents": {"daily_course_record": [{"raw_text": "MUST_STAY_PRIVATE"}]},
+        }
+    }
+
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-005", "LX0609-006"),
+        evidence_payload=payload,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+    )
+
+    assert [item["status"] for item in execution.results] == ["compliant", "compliant"]
+    assert calls == [
+        {
+            "institute_id": "I",
+            "patient_id": "P",
+            "visit_id": "V",
+            "source_schema": None,
+        }
+    ]
+    assert payload["programmatic_timeline"]["documents"] == {
+        "daily_course_record": [{"raw_text": "MUST_STAY_PRIVATE"}]
+    }
+    assert "MUST_STAY_PRIVATE" not in repr(execution.results)
+
+
+@pytest.mark.unit
+def test_course_source_read_failure_is_data_gap_only_for_005_and_006(monkeypatch):
+    """查房源读取异常必须失败关闭，且不改变001的既有确定性判断。"""
+
+    def _raise(**_kwargs):
+        raise RuntimeError("sensitive database failure")
+
+    monkeypatch.setattr(basic_timeliness, "read_luxian_0609_course_round_timeline", _raise)
+    payload = programmatic_evidence.build_programmatic_evidence_payload(
+        bundle={
+            "institute_id": "i",
+            "patient_id": "p",
+            "visit_id": "v",
+            "timeline_facts": [
+                {
+                    "source_table": "inpat_registration",
+                    "field": "admission_datetime",
+                    "value": "2026-06-01 08:00:00",
+                }
+            ],
+            "structured_context": {
+                "documents": {
+                    "admission_record": [
+                        {
+                            "source_table": "admission_record",
+                            "record_time": "2026-06-02 08:00:00",
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload=payload,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+    )
+
+    assert [item["status"] for item in execution.results] == [
+        "compliant",
+        "data_gap",
+        "data_gap",
+    ]
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results[1:]
+    } == {"course_source_read_unavailable"}
+    assert "sensitive database failure" not in repr(execution.results)
+
+
+@pytest.mark.unit
+def test_missing_source_coordinates_fail_closed_for_005_and_006():
+    payload = programmatic_evidence.build_programmatic_evidence_payload(
+        bundle={
+            "timeline_facts": [
+                {
+                    "source_table": "inpat_registration",
+                    "field": "admission_datetime",
+                    "value": "2026-06-01 08:00:00",
+                }
+            ],
+            "structured_context": {"documents": {}},
+        }
+    )
+
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-005", "LX0609-006"),
+        evidence_payload=payload,
+    )
+
+    assert [item["status"] for item in execution.results] == [
+        "data_gap",
+        "data_gap",
+    ]
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"course_source_read_unavailable"}
 
 
 @pytest.mark.unit
@@ -240,7 +557,14 @@ def test_admission_anchor_rules_reject_forged_trusted_flag_without_approved_basi
 
 
 @pytest.mark.unit
-def test_admission_record_time_is_approved_for_0426_timeliness_rules():
+def test_admission_record_time_is_approved_for_0426_timeliness_rules(monkeypatch):
+    monkeypatch.setattr(
+        basic_timeliness,
+        "read_luxian_0609_course_round_timeline",
+        lambda **_kwargs: _private_course_rows(
+            "2026-06-03 08:00:00", "2026-06-04 08:00:00"
+        ),
+    )
     execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
         evidence_payload={
@@ -271,6 +595,9 @@ def test_admission_record_time_is_approved_for_0426_timeliness_rules():
                 },
             }
         },
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
     )
 
     assert [item["status"] for item in execution.results] == [
@@ -349,7 +676,13 @@ def test_trusted_admission_anchor_keeps_24_48_72_hour_boundaries(
     attending_time: str,
     senior_time: str,
     expected: list[str],
+    monkeypatch,
 ):
+    monkeypatch.setattr(
+        basic_timeliness,
+        "read_luxian_0609_course_round_timeline",
+        lambda **_kwargs: _private_course_rows(attending_time, senior_time),
+    )
     execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
         evidence_payload={
@@ -376,6 +709,9 @@ def test_trusted_admission_anchor_keeps_24_48_72_hour_boundaries(
                 },
             }
         },
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
     )
 
     assert [item["status"] for item in execution.results] == expected
@@ -448,7 +784,16 @@ def test_rescue_record_rejects_nonexact_or_missing_end_time(content: str):
 
 
 @pytest.mark.unit
-def test_native_basic_family_returns_five_results_in_catalog_order_without_llm():
+def test_native_basic_family_returns_five_results_in_catalog_order_without_llm(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        basic_timeliness,
+        "read_luxian_0609_course_round_timeline",
+        lambda **_kwargs: _private_course_rows(
+            "2026-06-02 09:00:00", "2026-06-03 09:00:00"
+        ),
+    )
     execution = execute_luxian_0609_native_basic_timeliness(
         rule_ids=BASIC_TIMELINESS_RULE_IDS,
         evidence_payload={
@@ -483,6 +828,9 @@ def test_native_basic_family_returns_five_results_in_catalog_order_without_llm()
                 },
             }
         },
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
     )
 
     assert execution.planned_rule_ids == BASIC_TIMELINESS_RULE_IDS

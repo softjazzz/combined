@@ -6,6 +6,7 @@ import re
 from typing import Any, Sequence
 
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
+from .source_evidence_reader import read_luxian_0609_course_round_timeline
 from ..luxian_0609_rule_catalog import load_luxian_0609_rules
 from ..luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 
@@ -22,6 +23,7 @@ _FIRST_COURSE_RULE_ID = "LX0609-002"
 _ADMISSION_ANCHOR_RULE_IDS = frozenset(
     {"LX0609-001", "LX0609-005", "LX0609-006"}
 )
+_COURSE_SOURCE_RULE_IDS = frozenset({"LX0609-005", "LX0609-006"})
 _TRUSTED_ADMISSION_TIME_BASES = frozenset(
     {
         "cdm_inpat_registration_admission_datetime",
@@ -140,10 +142,23 @@ def _admission_anchor_data_gap_result(rule_id: str) -> dict[str, Any]:
     )
 
 
+def _course_source_data_gap_result(rule_id: str) -> dict[str, Any]:
+    return build_luxian_0609_native_result(
+        rule_id=rule_id,
+        final_state="data_gap",
+        finding_kind="source_data_gap",
+        reason_code="course_source_read_unavailable",
+    )
+
+
 def execute_luxian_0609_native_basic_timeliness(
     *,
     rule_ids: Sequence[str],
     evidence_payload: dict[str, Any] | None,
+    institute_id: str = "",
+    patient_id: str = "",
+    visit_id: str = "",
+    source_schema: str | None = None,
 ) -> NativeExecutionResult:
     """一次执行所选基础时限点；不调用模型、不展开旧映射 ID。"""
 
@@ -159,6 +174,33 @@ def execute_luxian_0609_native_basic_timeliness(
         return NativeExecutionResult((), ())
 
     try:
+        selected_set = set(selected)
+        course_rule_ids = _COURSE_SOURCE_RULE_IDS.intersection(selected_set)
+        course_source_data_gap_ids: set[str] = set()
+        course_evidence_payload: dict[str, Any] | None = None
+        if course_rule_ids:
+            try:
+                course_documents = read_luxian_0609_course_round_timeline(
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                )
+            except Exception:
+                course_source_data_gap_ids = set(course_rule_ids)
+            else:
+                original_payload = (
+                    dict(evidence_payload) if isinstance(evidence_payload, dict) else {}
+                )
+                original_timeline = original_payload.get("programmatic_timeline")
+                private_timeline = (
+                    dict(original_timeline) if isinstance(original_timeline, dict) else {}
+                )
+                private_documents = dict(course_documents)
+                private_documents["first_course_record"] = []
+                private_timeline["documents"] = private_documents
+                original_payload["programmatic_timeline"] = private_timeline
+                course_evidence_payload = original_payload
         first_course_data_gap = (
             _FIRST_COURSE_RULE_ID in selected
             and not _has_substantive_first_course_body(evidence_payload)
@@ -166,19 +208,37 @@ def execute_luxian_0609_native_basic_timeliness(
         admission_anchor_data_gap_ids = _ADMISSION_ANCHOR_RULE_IDS.intersection(
             selected
         ) if not _approved_admission_anchor_available(evidence_payload) else set()
-        selected_set = set(selected)
         evaluated_rule_ids = selected_set - (
             {_FIRST_COURSE_RULE_ID} if first_course_data_gap else set()
-        ) - admission_anchor_data_gap_ids
+        ) - admission_anchor_data_gap_ids - course_source_data_gap_ids
         wrappers = [
             rule
             for rule in load_luxian_0609_rules()
             if str(rule.get("rule_id") or "").strip().upper() in evaluated_rule_ids
         ]
+        non_course_wrappers = [
+            rule
+            for rule in wrappers
+            if str(rule.get("rule_id") or "").strip().upper()
+            not in _COURSE_SOURCE_RULE_IDS
+        ]
+        course_wrappers = [
+            rule
+            for rule in wrappers
+            if str(rule.get("rule_id") or "").strip().upper()
+            in _COURSE_SOURCE_RULE_IDS
+        ]
         evaluated = evaluate_luxian_0609_programmatic_rules(
-            wrapper_rules=wrappers,
+            wrapper_rules=non_course_wrappers,
             evidence_payload=evidence_payload,
         )
+        if course_wrappers and course_evidence_payload is not None:
+            evaluated.extend(
+                evaluate_luxian_0609_programmatic_rules(
+                    wrapper_rules=course_wrappers,
+                    evidence_payload=course_evidence_payload,
+                )
+            )
         by_rule_id = {
             str(item.get("rule_id") or "").strip().upper(): item
             for item in evaluated
@@ -198,6 +258,9 @@ def execute_luxian_0609_native_basic_timeliness(
     for rule_id in selected:
         if rule_id in admission_anchor_data_gap_ids:
             results.append(_admission_anchor_data_gap_result(rule_id))
+            continue
+        if rule_id in course_source_data_gap_ids:
+            results.append(_course_source_data_gap_result(rule_id))
             continue
         if rule_id == _FIRST_COURSE_RULE_ID and first_course_data_gap:
             results.append(_first_course_data_gap_result())
