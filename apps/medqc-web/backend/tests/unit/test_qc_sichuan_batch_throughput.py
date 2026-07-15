@@ -14,6 +14,25 @@ from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 from app.services.luxian_0609 import runtime_shadow_input_provider
 
 
+def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
+    values = {
+        "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+        "LUXIAN_0609_NATIVE_EXECUTION_ENABLED": True,
+        "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
+        "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": True,
+        "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED": True,
+        "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED": True,
+        "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED": True,
+        "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED": True,
+        "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED": True,
+        "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
+        "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
+        "LUXIAN_0609_RUNTIME_SHADOW_ENABLED": False,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
 class _WorkspaceStub:
     def __init__(self) -> None:
         self.job: Dict[str, Any] = {
@@ -1456,6 +1475,266 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("aggregation_enabled", [True, False])
+async def test_create_workspace_batch_job_full_luxian_set_uses_49_customer_ids(
+    monkeypatch,
+    aggregation_enabled: bool,
+):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+    submitted_tasks: List[Dict[str, Any]] = []
+    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 50)]
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "submit_detached_task",
+        lambda name, func, *args: submitted_tasks.append(
+            {"name": name, "func": func, "args": args}
+        ),
+    )
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=aggregation_enabled
+        ),
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            scope="all",
+            date_field="admission",
+            record_ids=["visit-001", "visit-002"],
+        ),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+    filters = dict(workspace.created_job.get("filters") or {})
+    assert filters["rule_ids"] == customer_rule_ids
+    assert filters["selected_rule_ids"] == customer_rule_ids
+    assert filters["scoped_customer_rule_ids"] == customer_rule_ids
+    assert filters["customer_rule_count"] == filters["execution_rule_count"] == 49
+    assert all(
+        selected == customer_rule_ids
+        for selected in dict(filters["record_rule_map"]).values()
+    )
+    assert workspace.created_job["draft_ids"] == customer_rule_ids
+    assert len(submitted_tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_luxian_batch_single_family_off_checks_sc_source(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    source_guard_calls: List[str] = []
+
+    class _CreateGuardService(_ServiceStub):
+        def assert_sc_rule_source_ready(
+            self, *, context: str, block_batch: bool = False
+        ) -> Dict[str, Any]:
+            source_guard_calls.append(context)
+            return {"sc_source": "pg_governance"}
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args: None)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(
+            LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=False
+        ),
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            rule_ids=["LX0609-044"],
+            scope="all",
+            record_ids=["visit-001"],
+        ),
+        qc_service=_CreateGuardService(),  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert source_guard_calls == ["workspace_batch_create"]
+    assert workspace.created_job is not None
+    assert workspace.created_job["draft_ids"] == ["LX0609-044"]
+    assert workspace.created_job["filters"]["rule_ids"] == ["LX0609-044"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("validation_mode", ["programmatic", "customer"])
+async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
+    monkeypatch,
+    validation_mode: str,
+):
+    workspace = _WorkspaceStub()
+    customer_rule_ids = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    workspace.job["filters"] = {
+        "rule_ids": customer_rule_ids,
+        "selected_rule_ids": customer_rule_ids,
+        "scoped_customer_rule_ids": customer_rule_ids,
+        "record_rule_map": {
+            "visit-001": customer_rule_ids,
+            "visit-002": customer_rule_ids,
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": validation_mode,
+    }
+    captured: List[Dict[str, Any]] = []
+
+    class _CustomerPackageService(_ServiceStub):
+        def assert_sc_rule_source_ready(self, **_: Any) -> Dict[str, Any]:
+            raise AssertionError("全原生0609批任务不应依赖旧SC规则来源")
+
+        def get_rule_by_id(self, rule_id: str) -> Dict[str, Any]:
+            raise AssertionError(f"全原生0609批任务不应查询旧规则: {rule_id}")
+
+        async def evaluate_document_with_rules(self, **_: Any) -> Dict[str, Any]:
+            raise AssertionError("0609批任务应统一走 customer package bundle 入口")
+
+        async def evaluate_running_final_bundle_input(self, **kwargs: Any) -> Dict[str, Any]:
+            captured.append(
+                {
+                    "rule_ids": list(kwargs["rule_ids"]),
+                    "scene": str(kwargs["bundle"].get("scene") or ""),
+                    "data_quality_flags": list(
+                        kwargs["bundle"].get("data_quality_flags") or []
+                    ),
+                }
+            )
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": rule_id,
+                        "status": "compliant",
+                        "is_compliant": True,
+                        "metadata": {
+                            "execution_source": "lx0609_native",
+                            "executor_type": "program",
+                        },
+                    }
+                    for rule_id in kwargs["rule_ids"]
+                ],
+                "token_usage": {
+                    "total_tokens": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                },
+            }
+
+    service = _CustomerPackageService()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        _luxian_native_settings,
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert captured == [
+        {
+            "rule_ids": customer_rule_ids,
+            "scene": "final",
+            "data_quality_flags": ["bundle_unavailable"],
+        },
+        {
+            "rule_ids": customer_rule_ids,
+            "scene": "final",
+            "data_quality_flags": ["bundle_unavailable"],
+        },
+    ]
+    assert len(workspace.items) == 98
+    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(
+        customer_rule_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_luxian_batch_single_family_off_checks_sc_source_and_keeps_customer_entry(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    customer_rule_ids = ["LX0609-044"]
+    workspace.job["filters"] = {
+        "rule_ids": customer_rule_ids,
+        "selected_rule_ids": customer_rule_ids,
+        "scoped_customer_rule_ids": customer_rule_ids,
+        "record_rule_map": {
+            "visit-001": customer_rule_ids,
+            "visit-002": customer_rule_ids,
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    source_guard_calls: List[str] = []
+    package_calls: List[List[str]] = []
+
+    class _SingleFamilyRollbackService(_ServiceStub):
+        def assert_sc_rule_source_ready(
+            self, *, context: str, block_batch: bool = False
+        ) -> Dict[str, Any]:
+            source_guard_calls.append(context)
+            return {"sc_source": "pg_governance"}
+
+        async def evaluate_running_final_bundle_input(
+            self, **kwargs: Any
+        ) -> Dict[str, Any]:
+            package_calls.append(list(kwargs["rule_ids"]))
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": "LX0609-044",
+                        "status": "data_gap",
+                        "is_compliant": False,
+                        "metadata": {"execution_source": "customer_aggregation"},
+                    }
+                ],
+                "token_usage": {"total_tokens": 0},
+            }
+
+    service = _SingleFamilyRollbackService()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(
+            LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED=False
+        ),
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "completed"
+    assert source_guard_calls == ["workspace_batch_job:job-throughput-001"]
+    assert package_calls == [customer_rule_ids, customer_rule_ids]
+    assert {str(item.get("rule_id") or "") for item in workspace.items} == {
+        "LX0609-044"
+    }
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
@@ -1632,19 +1911,23 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     sequence: List[str] = []
     evaluation_row: Dict[str, Any] = {"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {"tokens_used": 17}}
 
-    async def _evaluate_document_with_rules(**_: Any) -> Dict[str, Any]:
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
         sequence.append("evaluate")
         return {
             "evaluation_results": [evaluation_row],
             "token_usage": {"total_tokens": 17, "prompt_tokens": 10, "completion_tokens": 7},
         }
 
-    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service():
         return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
+    )
     monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
     original_hook = qc_sichuan.run_luxian_0609_runtime_shadow
 
@@ -1656,7 +1939,7 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
     monkeypatch.setattr(qc_sichuan, "run_luxian_0609_runtime_shadow", _hook)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    assert sequence and sequence[0] == "hook" and sequence[1] == "evaluate"
+    assert sequence == ["hook", "evaluate", "hook", "evaluate"]
     summary = (evaluation_row.get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert summary and summary["disposition"] == "inputs_unavailable"
     assert evaluation_row["status"] == "compliant"
@@ -1692,10 +1975,8 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
     service = _NativeOnlyService()
     captured_rule_ids: List[List[str]] = []
 
-    async def _evaluate_document_with_rules(**kwargs: Any) -> Dict[str, Any]:
-        captured_rule_ids.append(
-            [str(rule.get("rule_id") or rule.get("rule_code") or "") for rule in kwargs["rules"]]
-        )
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        captured_rule_ids.append(list(kwargs["rule_ids"]))
         return {
             "evaluation_results": [
                 {
@@ -1717,7 +1998,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
             "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
         }
 
-    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
 
     async def _get_qc_service():
@@ -1727,11 +2008,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
     monkeypatch.setattr(
         qc_sichuan,
         "get_settings",
-        lambda: SimpleNamespace(
-            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
-            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
-            LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False,
-        ),
+        _luxian_native_settings,
     )
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
@@ -1739,7 +2016,9 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
     assert workspace.job["status"] == "completed"
     assert captured_rule_ids == [native_rule_ids, native_rule_ids]
     assert len(workspace.items) == 6
-    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(native_rule_ids)
+    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(
+        native_rule_ids
+    )
     assert int((workspace.summary or {}).get("total_tokens") or 0) == 0
     hidden_native_fields = {
         "prompt_version",
@@ -1761,7 +2040,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
 
 @pytest.mark.asyncio
-async def test_native_luxian_batch_worker_flag_off_expands_legacy_rules_only_for_rollback(monkeypatch):
+async def test_luxian_batch_aggregation_off_expands_full_legacy_rollback(monkeypatch):
     workspace = _WorkspaceStub()
     native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]
     legacy_rule_ids = ["CL-181", "SC-081", "LX-025", "SC-095", "SC-102", "LXE-33"]
@@ -1824,10 +2103,8 @@ async def test_native_luxian_batch_worker_flag_off_expands_legacy_rules_only_for
     monkeypatch.setattr(
         qc_sichuan,
         "get_settings",
-        lambda: SimpleNamespace(
-            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
-            LUXIAN_0609_NATIVE_EXECUTION_ENABLED=False,
-            LUXIAN_0609_RUNTIME_SHADOW_ENABLED=False,
+        lambda: _luxian_native_settings(
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=False
         ),
     )
 
@@ -1837,7 +2114,8 @@ async def test_native_luxian_batch_worker_flag_off_expands_legacy_rules_only_for
     assert looked_up == legacy_rule_ids
     assert captured_rule_ids == [legacy_rule_ids, legacy_rule_ids]
     assert len(source_guard_calls) == 1
-    assert {str(item.get("rule_id") or "") for item in workspace.items} == set(native_rule_ids)
+    # 全量兼容回滚沿用旧 SC 批任务行为：合规项不持久化为问题明细。
+    assert workspace.items == []
 
 
 @pytest.mark.asyncio
@@ -1892,14 +2170,18 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     workspace.hydrate_records_with_medical_text = lambda rows: [{**row, "institute_id": "i", "patient_id": "p", "medical_text": "ignored"} for row in rows]  # type: ignore[assignment]
     service = _ServiceStub()
     service_calls: List[Dict[str, Any]] = []
-    async def _evaluate_document_with_rules(**kwargs: Any) -> Dict[str, Any]:
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         service_calls.append(dict(kwargs))
         return {"evaluation_results": [{"rule_id": "LX0609-030", "status": "compliant", "is_compliant": True, "metadata": {}}]}
-    service.evaluate_document_with_rules = _evaluate_document_with_rules  # type: ignore[attr-defined]
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     async def _get_qc_service(): return service
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
-    monkeypatch.setattr(qc_sichuan, "get_settings", lambda: SimpleNamespace(LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True, LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True))
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(LUXIAN_0609_RUNTIME_SHADOW_ENABLED=True),
+    )
     monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [{"rule_id": "LX0609-030", "rule_code": "LX0609-030", "name": "规则-030"}])
     def _reader(**kwargs: Any):
         assert kwargs["source_schema"] is None
@@ -1912,10 +2194,10 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     assert len(service_calls) == 2
     assert {
         (
-            call["source_institute_id"],
-            call["source_patient_id"],
-            call["source_visit_id"],
-            call["source_schema"],
+            call["bundle"]["institute_id"],
+            call["bundle"]["patient_id"],
+            call["bundle"]["visit_id"],
+            call["bundle"].get("source_schema"),
         )
         for call in service_calls
     } == {("i", "p", "visit-001", None), ("i", "p", "visit-002", None)}

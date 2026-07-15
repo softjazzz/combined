@@ -18,6 +18,16 @@ from app.services.rule_domain_router import route_rule_to_domain
 from app.services.rule_domain_router import RuleExecutionInput
 
 
+def test_luxian_0609_rule_set_should_persist_exact_customer_ids():
+    rule_set = get_sichuan_rule_set("luxian_0609_qc_v1")
+
+    assert rule_set is not None
+    assert tuple(rule_set.rule_ids) == tuple(
+        f"LX0609-{index:03d}" for index in range(1, 50)
+    )
+    assert all(rule_id.startswith("LX0609-") for rule_id in rule_set.rule_ids)
+
+
 def test_sc_content_v1_rule_set_should_be_fixed_first_batch():
     rule_set = get_sichuan_rule_set("sc_content_v1")
 

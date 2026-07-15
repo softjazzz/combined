@@ -27,9 +27,12 @@ from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
 from ..services.luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
     LUXIAN_0609_RULE_SET_NAME,
+    build_luxian_0609_package_plan_from_settings,
     filter_luxian_0609_rules_by_documents,
     get_luxian_0609_rule,
+    load_luxian_0609_dependency_inventory,
     load_luxian_0609_rules,
+    resolve_package_rollback_execution_rule_ids,
     review_luxian_0609_batch_job,
 )
 from ..services.sc_rule_launch_tier import (
@@ -42,10 +45,6 @@ from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
-from ..services.luxian_0609.native_execution import (
-    NATIVE_RULE_IDS,
-    legacy_rule_ids_for_native_rule_ids,
-)
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -71,6 +70,53 @@ from ..services.customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qc/sichuan", tags=["qc-sichuan"])
+
+
+def _ordered_luxian_0609_customer_rule_ids(
+    requested_rule_ids: List[str] | tuple[str, ...],
+) -> tuple[str, ...]:
+    """只接受完整的客户规则 ID，并按独立包目录顺序返回。"""
+
+    requested = {
+        str(rule_id or "").strip().upper()
+        for rule_id in requested_rule_ids
+        if str(rule_id or "").strip()
+    }
+    if not requested:
+        return ()
+    inventory = load_luxian_0609_dependency_inventory()
+    by_id = {item.rule_id for item in inventory}
+    if any(rule_id not in by_id for rule_id in requested):
+        return ()
+    return tuple(item.rule_id for item in inventory if item.rule_id in requested)
+
+
+def _luxian_0609_rollback_rule_ids(
+    customer_rule_ids: List[str] | tuple[str, ...],
+) -> tuple[str, ...]:
+    return resolve_package_rollback_execution_rule_ids(
+        inventory=load_luxian_0609_dependency_inventory(),
+        selected_rule_ids=customer_rule_ids,
+    )
+
+
+def _luxian_0609_compatibility_rule_ids(
+    customer_rule_ids: List[str] | tuple[str, ...],
+    *,
+    settings: Any,
+) -> tuple[str, ...]:
+    """按当前族开关计算仍会进入兼容链的旧执行规则。"""
+
+    if not customer_rule_ids:
+        return ()
+    if not getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False):
+        return _luxian_0609_rollback_rule_ids(customer_rule_ids)
+    plan = build_luxian_0609_package_plan_from_settings(
+        inventory=load_luxian_0609_dependency_inventory(),
+        selected_rule_ids=customer_rule_ids,
+        settings=settings,
+    )
+    return plan.compatibility_execution_rule_ids
 
 # 全局服务实例（将在启动时初始化）
 service: Optional[SichuanQCService] = None
@@ -2093,8 +2139,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             validation_mode == "programmatic" or rule_set_key == programmatic_rule_set.key
         )
         settings = get_settings()
-        native_requested_rule_ids = tuple(
-            rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(requested_rule_ids)
+        native_requested_rule_ids = _ordered_luxian_0609_customer_rule_ids(
+            requested_rule_ids
         )
         is_direct_native_selection = bool(
             rule_set_key == LUXIAN_0609_RULE_SET_KEY
@@ -2103,12 +2149,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         )
         native_direct_enabled = bool(
             is_direct_native_selection
-            and getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
+            and getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
+        )
+        compatibility_rule_ids = (
+            _luxian_0609_compatibility_rule_ids(
+                native_requested_rule_ids,
+                settings=settings,
+            )
+            if is_direct_native_selection
+            else ()
         )
         rule_ids = (
             list(native_requested_rule_ids)
             if native_direct_enabled
-            else list(legacy_rule_ids_for_native_rule_ids(native_requested_rule_ids))
+            else list(_luxian_0609_rollback_rule_ids(native_requested_rule_ids))
             if is_direct_native_selection
             else requested_rule_ids
         )
@@ -2124,9 +2178,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
         max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 2)))
-        if not native_direct_enabled:
-            qc_service.assert_sc_rule_source_ready(
+        if compatibility_rule_ids:
+            _enforce_sc_source_guard(
+                qc_service,
                 context=f"workspace_batch_job:{job_id}",
+                rule_ids=list(compatibility_rule_ids),
                 block_batch=True,
             )
 
@@ -2191,7 +2247,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         for rule_id in rule_ids:
             rule = (
                 get_luxian_0609_rule(rule_id)
-                if native_direct_enabled and rule_id in NATIVE_RULE_IDS
+                if native_direct_enabled and rule_id in set(native_requested_rule_ids)
                 else qc_service.get_rule_by_id(rule_id)
             )
             if rule and is_programmatic_mode:
@@ -2284,7 +2340,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             ]
             if is_direct_native_selection and not native_direct_enabled:
                 requested_record_rule_ids = list(
-                    legacy_rule_ids_for_native_rule_ids(requested_record_rule_ids)
+                    _luxian_0609_rollback_rule_ids(requested_record_rule_ids)
                 )
             normalized_rule_ids = [
                 rule_id
@@ -2650,7 +2706,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "context_tokens_estimate": 0,
                     }
 
-                if is_programmatic_mode and not (use_luxian_customer_results and not active_rule_ids):
+                if (
+                    (is_programmatic_mode or native_direct_enabled)
+                    and not (use_luxian_customer_results and not active_rule_ids)
+                ):
                     bundle_payload = None
                     attempted_scenes: List[str] = []
                     if institute_id and patient_id and visit_id:
@@ -2707,29 +2766,67 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         or record.get("medical_text")
                         or ""
                     )
-                    result = await qc_service.evaluate_document_with_rules(
-                        document_id=record_id or "unknown",
-                        content=primary_document_text,
-                        document_type=document_type,
-                        rules=active_rules,
-                        evidence_source="timeline" if used_bundle_path else "medical_text_fallback",
-                        evidence_payload=evidence_payload,
-                        bucket_strategy=bucket_strategy,
-                        quality_profile=quality_profile,
-                        batch_output_mode=batch_output_mode,
-                        enable_selective_refine=enable_selective_refine,
-                        refine_confidence_threshold=refine_confidence_threshold,
-                        max_refine_candidates=max_refine_candidates,
-                        rule_set_key=rule_set_key,
-                        source_institute_id=institute_id,
-                        source_patient_id=patient_id,
-                        source_visit_id=visit_id,
-                        source_schema=(
-                            str((bundle_payload or {}).get("source_schema") or "").strip()
-                            or None
-                        ),
-                        cancellation_check=_is_cancelled,
-                    )
+                    if native_direct_enabled:
+                        package_bundle = dict(bundle_payload or {})
+                        package_bundle.setdefault(
+                            "scene",
+                            _resolve_workspace_bundle_scene(
+                                current_scope=current_scope,
+                                record_scope=str(record.get("scope") or ""),
+                            )
+                            or "running",
+                        )
+                        package_bundle.setdefault("institute_id", institute_id)
+                        package_bundle.setdefault("patient_id", patient_id)
+                        package_bundle.setdefault("visit_id", visit_id or record_id)
+                        package_bundle.setdefault("medical_text", primary_document_text)
+                        package_bundle.setdefault("structured_context", {})
+                        package_bundle.setdefault("document_hits", {})
+                        package_bundle.setdefault(
+                            "data_quality_flags",
+                            [] if bundle_payload is not None else ["bundle_unavailable"],
+                        )
+                        package_bundle.setdefault("source_doc_priority", [])
+                        package_bundle.setdefault(
+                            "text_available", bool(primary_document_text)
+                        )
+                        result = await qc_service.evaluate_running_final_bundle_input(
+                            bundle=package_bundle,
+                            rule_ids=active_rule_ids,
+                            bucket_strategy=bucket_strategy,
+                            quality_profile=quality_profile,
+                            batch_output_mode=batch_output_mode,
+                            enable_selective_refine=enable_selective_refine,
+                            refine_confidence_threshold=refine_confidence_threshold,
+                            max_refine_candidates=max_refine_candidates,
+                            rule_set_key=rule_set_key,
+                            cancellation_check=_is_cancelled,
+                        )
+                        used_bundle_path = True
+                    else:
+                        result = await qc_service.evaluate_document_with_rules(
+                            document_id=record_id or "unknown",
+                            content=primary_document_text,
+                            document_type=document_type,
+                            rules=active_rules,
+                            evidence_source="timeline" if used_bundle_path else "medical_text_fallback",
+                            evidence_payload=evidence_payload,
+                            bucket_strategy=bucket_strategy,
+                            quality_profile=quality_profile,
+                            batch_output_mode=batch_output_mode,
+                            enable_selective_refine=enable_selective_refine,
+                            refine_confidence_threshold=refine_confidence_threshold,
+                            max_refine_candidates=max_refine_candidates,
+                            rule_set_key=rule_set_key,
+                            source_institute_id=institute_id,
+                            source_patient_id=patient_id,
+                            source_visit_id=visit_id,
+                            source_schema=(
+                                str((bundle_payload or {}).get("source_schema") or "").strip()
+                                or None
+                            ),
+                            cancellation_check=_is_cancelled,
+                        )
                     token_usage = dict(result.get("token_usage") or {})
                     record_total_tokens = int(token_usage.get("total_tokens") or 0)
                     record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
@@ -2756,6 +2853,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
                 if (
                     not is_programmatic_mode
+                    and not native_direct_enabled
                     and not (use_luxian_customer_results and not active_rule_ids)
                     and prefer_rule_level_visit_eval
                     and len(active_rule_ids) == 1
@@ -2766,6 +2864,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     used_bundle_path = await _evaluate_rule_level_visit_bundle()
                 elif (
                     not is_programmatic_mode
+                    and not native_direct_enabled
                     and not (use_luxian_customer_results and not active_rule_ids)
                     and bundle_scene
                     and institute_id
@@ -2856,7 +2955,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 bundle_scene,
                                 exc_info=True,
                             )
-                elif current_scope in {"final", "all"} and not (use_luxian_customer_results and not active_rule_ids):
+                elif (
+                    not native_direct_enabled
+                    and current_scope in {"final", "all"}
+                    and not (use_luxian_customer_results and not active_rule_ids)
+                ):
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
 
                 if not used_bundle_path:
@@ -3221,7 +3324,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
                     _strip_luxian_native_customer_diagnostics(
                         final_item,
-                        native_result=native_direct_enabled and final_rule_id in NATIVE_RULE_IDS,
+                        native_result=(
+                            native_direct_enabled
+                            and final_rule_id in set(native_requested_rule_ids)
+                        ),
                     )
                     if final_rule_id not in items_by_rule:
                         continue
@@ -3670,15 +3776,26 @@ async def create_workspace_batch_job(
         for item in (payload.rule_ids or [])
         if str(item or "").strip()
     ]
-    direct_native_rule_ids = tuple(
-        rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(requested_payload_rule_ids)
+    requested_rule_set_rule_ids = list(
+        requested_payload_rule_ids
+        or (requested_rule_set.rule_ids if requested_rule_set else ())
+    )
+    direct_native_rule_ids = _ordered_luxian_0609_customer_rule_ids(
+        requested_rule_set_rule_ids
     )
     is_direct_native_selection = bool(
         requested_rule_set
         and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY
-        and requested_payload_rule_ids
-        and len(direct_native_rule_ids) == len(set(requested_payload_rule_ids))
+        and requested_rule_set_rule_ids
+        and len(direct_native_rule_ids) == len(set(requested_rule_set_rule_ids))
     )
+    if (
+        requested_rule_set
+        and requested_rule_set.key == LUXIAN_0609_RULE_SET_KEY
+        and requested_payload_rule_ids
+        and not is_direct_native_selection
+    ):
+        raise HTTPException(status_code=422, detail="LX0609规则集只接受客户质控点ID")
 
     if requested_rule_set:
         rule_ids = (
@@ -3720,12 +3837,21 @@ async def create_workspace_batch_job(
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
-    _enforce_sc_source_guard(
-        qc_service,
-        context="workspace_batch_create",
-        rule_ids=rule_ids,
-        block_batch=True,
+    compatibility_rule_ids = (
+        _luxian_0609_compatibility_rule_ids(
+            direct_native_rule_ids,
+            settings=get_settings(),
+        )
+        if is_direct_native_selection
+        else tuple(rule_ids)
     )
+    if compatibility_rule_ids:
+        _enforce_sc_source_guard(
+            qc_service,
+            context="workspace_batch_create",
+            rule_ids=list(compatibility_rule_ids),
+            block_batch=True,
+        )
 
     workspace = _sichuan_workspace_service()
     normalized_scope = _normalize_scope(effective_scope)
