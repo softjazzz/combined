@@ -21,6 +21,17 @@ _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 
+_PRETRANSFUSION_ASSESSMENT_PATTERN = re.compile(r"输血前(?:评估|评价)")
+_PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN = re.compile(
+    r"(?:未见|未记录|未形成|无|缺少).{0,12}输血前(?:评估|评价)"
+    r"|输血前(?:评估|评价).{0,12}(?:缺失|不完整|未记录)"
+)
+_PRETRANSFUSION_CORE_PATTERNS = (
+    re.compile(r"输血指征|适应证|必要性|拟输血原因"),
+    re.compile(r"贫血|血红蛋白|\bHb\b|血小板|凝血|失血|出血"),
+    re.compile(r"输血风险|既往输血|不良反应|过敏|生命体征|发热"),
+)
+
 _RULE_CONTEXT_SOURCES = {
     "LX0609-041": ("bloodtrans_record", "consent_form", "blood_transfusion_consent"),
     "LX0609-042": ("bloodtrans_record", "consent_form", "blood_transfusion_consent"),
@@ -136,6 +147,24 @@ def _source_rows(documents: Mapping[str, Any], source_key: str) -> list[str]:
     return rows
 
 
+def _source_entries(documents: Mapping[str, Any], source_key: str) -> list[str]:
+    """为单文书判定保留标题与正文边界，避免跨文书拼接临床事实。"""
+
+    raw_rows = documents.get(source_key)
+    if not isinstance(raw_rows, list):
+        return []
+    entries: list[str] = []
+    for raw_row in raw_rows[:_MAX_ROWS_PER_SOURCE]:
+        if not isinstance(raw_row, Mapping):
+            continue
+        title = _clean(raw_row.get("document_title") or raw_row.get("title"))
+        content = _row_text(raw_row)
+        entry = " ".join(value for value in (title, content) if value).strip()
+        if entry:
+            entries.append(entry[:_MAX_ROW_CHARS])
+    return entries
+
+
 def _has_required_projection(rule_id: str, documents: Mapping[str, Any]) -> bool:
     return all(
         any(_source_rows(documents, source_key) for source_key in group)
@@ -149,6 +178,36 @@ def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
         for index, content in enumerate(_source_rows(documents, source_key), start=1):
             parts.append(f"[{source_key}-{index}] {content}")
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
+
+
+def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | None:
+    """仅收口明确的输血前评估事实；灰区仍交给裁剪模型。"""
+
+    entries = tuple(
+        entry
+        for source_key in _RULE_CONTEXT_SOURCES["LX0609-044"]
+        for entry in _source_entries(documents, source_key)
+    )
+    if any(_PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry) for entry in entries):
+        return "non_compliant", "pretransfusion_assessment_missing"
+
+    if any(
+        _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry)
+        and all(pattern.search(entry) for pattern in _PRETRANSFUSION_CORE_PATTERNS)
+        for entry in entries
+    ):
+        return "compliant", "pretransfusion_assessment_complete"
+
+    has_marker = any(_PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry) for entry in entries)
+    has_indication = any(
+        _PRETRANSFUSION_CORE_PATTERNS[0].search(entry) for entry in entries
+    )
+    has_application = bool(_source_entries(documents, "blood_application"))
+    # 输血过程中的生命体征、发热或不良反应不能反向充当“输血前评估”。
+    # 没有评估标识且连指征/必要性也未记录时，可确定为缺失；其余灰区仍交给模型。
+    if not has_marker and not has_indication and not has_application:
+        return "non_compliant", "pretransfusion_assessment_missing"
+    return None
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -330,6 +389,14 @@ async def execute_luxian_0609_native_transfusion_rules(
                 )
             )
             continue
+        if rule_id == "LX0609-044":
+            programmatic_status = _programmatic_044_status(documents)
+            if programmatic_status is not None:
+                status, reason_code = programmatic_status
+                results.append(
+                    _result(rule_id, status, reason_code, executor_type="program")
+                )
+                continue
         wrapper = wrappers_by_id.get(rule_id)
         context = _context(rule_id, documents)
         if wrapper is None or not str(wrapper.get("custom_prompt") or "").strip() or not context:

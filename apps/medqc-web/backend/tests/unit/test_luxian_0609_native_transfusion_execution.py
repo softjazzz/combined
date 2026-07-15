@@ -188,6 +188,129 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
 
 
 @pytest.mark.asyncio
+async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_without_model(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    missing = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "输血记录：患者拟输注红细胞，输血过程中生命体征平稳，"
+                        "记录血红蛋白检查结果，但未形成输血前评估。"
+                    )
+                }
+            ],
+            blood_application=[],
+            daily_course_record=[{"content": "病程记录：输血结束后继续观察。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert missing.results[0]["status"] == "non_compliant"
+    assert missing.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_missing"
+    assert missing.results[0]["metadata"]["executor_type"] == "program"
+    assert missing.llm_call_count == 0
+
+    complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "输血记录：按评估及医嘱完成输注。"}],
+            blood_application=[
+                {
+                    "document_title": "输血前评估记录",
+                    "content": (
+                        "患者贫血，血红蛋白降低，具有输血指征及必要性；"
+                        "既往无输血不良反应，已评估输血风险和生命体征。"
+                    )
+                }
+            ],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert complete.results[0]["status"] == "compliant"
+    assert complete.results[0]["metadata"]["reason_code"] == "pretransfusion_assessment_complete"
+    assert complete.results[0]["metadata"]["executor_type"] == "program"
+    assert complete.llm_call_count == 0
+
+    gray_client = _Client([{"is_compliant": True}])
+    gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "输血记录：已记录输血指征，输注过程平稳。"}],
+            blood_application=[],
+            daily_course_record=[{"content": "病程记录：患者贫血，拟输注红细胞。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=gray_client,
+    )
+    assert gray.results[0]["status"] == "compliant"
+    assert gray.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
+    assert gray.llm_call_count == 1
+    assert len(gray_client.prompts) == 1
+
+    split_client = _Client([{"is_compliant": False}])
+    split = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "输血前评估：患者具有输血指征。"}],
+            blood_application=[{"content": "患者贫血，血红蛋白降低。"}],
+            daily_course_record=[{"content": "既往无输血不良反应，已说明风险。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=split_client,
+    )
+    assert split.results[0]["status"] == "non_compliant"
+    assert split.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
+    assert split.llm_call_count == 1
+
+    application_client = _Client([{"is_compliant": True}])
+    application_gray = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "输血记录：按医嘱完成输注。"}],
+            blood_application=[
+                {
+                    "document_title": "输血申请单",
+                    "content": (
+                        "患者血红蛋白降低，拟输红细胞；既往无不良反应，生命体征平稳。"
+                    ),
+                }
+            ],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=application_client,
+    )
+    assert application_gray.results[0]["status"] == "compliant"
+    assert application_gray.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
+    assert application_gray.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_source_error_and_invalid_model_output_fail_closed_without_echo(monkeypatch):
     secret = "Bearer_secret_13800138000"
 
