@@ -247,6 +247,7 @@ async def _evaluate_runtime_flag_ab_case(
 
     from app.services.luxian_0609 import execution as luxian_execution
     from app.services.luxian_0609 import (
+        native_basic_timeliness,
         native_consultation_execution,
         native_mdt_execution,
     )
@@ -274,6 +275,9 @@ async def _evaluate_runtime_flag_ab_case(
         native_consultation_execution.read_luxian_0609_native_source_rows
     )
     original_mdt_reader = native_mdt_execution.read_luxian_0609_native_source_rows
+    original_basic_reader = (
+        native_basic_timeliness.read_luxian_0609_course_round_timeline
+    )
 
     def counted_consultation_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
@@ -282,6 +286,10 @@ async def _evaluate_runtime_flag_ab_case(
     def counted_mdt_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_mdt_reader(**kwargs)
+
+    def counted_basic_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_basic_reader(**kwargs)
 
     def counted_provider(**kwargs):
         snapshot = original_provider(**kwargs)
@@ -303,6 +311,9 @@ async def _evaluate_runtime_flag_ab_case(
             )
             native_mdt_execution.read_luxian_0609_native_source_rows = (
                 counted_mdt_reader
+            )
+            native_basic_timeliness.read_luxian_0609_course_round_timeline = (
+                counted_basic_reader
             )
         service.adjudicator_client.generate = replay.record
         baseline = await evaluate_full_luxian_0609_case(
@@ -337,6 +348,9 @@ async def _evaluate_runtime_flag_ab_case(
             original_consultation_reader
         )
         native_mdt_execution.read_luxian_0609_native_source_rows = original_mdt_reader
+        native_basic_timeliness.read_luxian_0609_course_round_timeline = (
+            original_basic_reader
+        )
         luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
         luxian_execution.build_luxian_0609_evidence_read_session = (
             original_session_provider
@@ -369,7 +383,7 @@ async def _evaluate_runtime_flag_ab_case(
     }
     if mode_label == "unified_engine":
         if family_reader_calls["candidate"] != 0:
-            raise RuntimeError("统一引擎咨询/MDT族仍在自行查库")
+            raise RuntimeError("统一引擎已迁移规则族仍在自行查库")
         comparison.update(
             {
                 "baseline_family_reader_calls": family_reader_calls["baseline"],

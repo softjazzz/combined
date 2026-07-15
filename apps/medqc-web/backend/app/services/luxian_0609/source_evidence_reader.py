@@ -221,6 +221,35 @@ def digest_source_evidence(value: Any) -> str:
     return hashlib.sha256(canonical_source_evidence(value).encode("utf-8")).hexdigest()
 
 
+def build_luxian_0609_course_round_timeline_from_rows(
+    rows_by_source: Mapping[str, tuple[Mapping[str, Any], ...]],
+) -> dict[str, list[dict[str, Any]]]:
+    """把共享材料转换为005/006既有安全时间线，不读取数据库。"""
+
+    result: dict[str, list[dict[str, Any]]] = {}
+    for source_key in ("daily_course_record", "senior_course_record"):
+        rows = rows_by_source.get(source_key)
+        if rows is None:
+            raise SourceEvidenceUnavailable()
+        safe_rows: list[dict[str, Any]] = []
+        for row in rows:
+            title = str(row.get("document_title") or "").strip()
+            record_time = row.get("record_time")
+            document_id = row.get("document_id") or row.get("id")
+            safe_rows.append(
+                {
+                    "document_id": digest_source_evidence(
+                        (source_key, document_id, record_time, title)
+                    ),
+                    "title": title,
+                    "authored_at": record_time,
+                    "source_table": source_key,
+                }
+            )
+        result[source_key] = safe_rows
+    return result
+
+
 def read_luxian_0609_course_round_timeline(
     *,
     institute_id: str,
@@ -240,7 +269,7 @@ def read_luxian_0609_course_round_timeline(
     if engine is None:
         raise SourceEvidenceUnavailable()
 
-    result: dict[str, list[dict[str, Any]]] = {}
+    raw_rows_by_source: dict[str, tuple[Mapping[str, Any], ...]] = {}
     for source_key in ("daily_course_record", "senior_course_record"):
         columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
         required = {
@@ -290,23 +319,8 @@ def read_luxian_0609_course_round_timeline(
             ).mappings().all()
         if len(rows) > limit:
             raise SourceEvidenceTruncated()
-        safe_rows: list[dict[str, Any]] = []
-        for row in rows:
-            title = str(row.get("document_title") or "").strip()
-            record_time = row.get("record_time")
-            document_id = row.get(document_id_field) if document_id_field else None
-            safe_rows.append(
-                {
-                    "document_id": digest_source_evidence(
-                        (source_key, document_id, record_time, title)
-                    ),
-                    "title": title,
-                    "authored_at": record_time,
-                    "source_table": source_key,
-                }
-            )
-        result[source_key] = safe_rows
-    return result
+        raw_rows_by_source[source_key] = tuple(dict(row) for row in rows)
+    return build_luxian_0609_course_round_timeline_from_rows(raw_rows_by_source)
 
 
 def parse_strict_performed_time(value: Any) -> datetime | None:

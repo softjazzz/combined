@@ -162,6 +162,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
         item.envelope.results[0]["rule_id"] for item in report.outcomes
     ] == list(selected_rule_ids)
     assert calls[0][1]["source_schema"] == "cdm"
+    assert calls[1][1]["evidence_materials"] is materials
     assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[-1][1]["evidence_materials"] is materials

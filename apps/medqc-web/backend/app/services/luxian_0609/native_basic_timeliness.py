@@ -5,8 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any, Sequence
 
+from .evidence_material import Luxian0609EvidenceMaterialStore
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
-from .source_evidence_reader import read_luxian_0609_course_round_timeline
+from .source_evidence_reader import (
+    build_luxian_0609_course_round_timeline_from_rows,
+    read_luxian_0609_course_round_timeline,
+)
 from ..luxian_0609_rule_catalog import load_luxian_0609_rules
 from ..luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 
@@ -159,6 +163,7 @@ def execute_luxian_0609_native_basic_timeliness(
     patient_id: str = "",
     visit_id: str = "",
     source_schema: str | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeExecutionResult:
     """一次执行所选基础时限点；不调用模型、不展开旧映射 ID。"""
 
@@ -180,12 +185,25 @@ def execute_luxian_0609_native_basic_timeliness(
         course_evidence_payload: dict[str, Any] | None = None
         if course_rule_ids:
             try:
-                course_documents = read_luxian_0609_course_round_timeline(
-                    institute_id=institute_id,
-                    patient_id=patient_id,
-                    visit_id=visit_id,
-                    source_schema=source_schema,
-                )
+                if evidence_materials is not None:
+                    course_documents = (
+                        build_luxian_0609_course_round_timeline_from_rows(
+                            {
+                                source_key: evidence_materials.rows(source_key)
+                                for source_key in (
+                                    "daily_course_record",
+                                    "senior_course_record",
+                                )
+                            }
+                        )
+                    )
+                else:
+                    course_documents = read_luxian_0609_course_round_timeline(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        source_schema=source_schema,
+                    )
             except Exception:
                 course_source_data_gap_ids = set(course_rule_ids)
             else:
