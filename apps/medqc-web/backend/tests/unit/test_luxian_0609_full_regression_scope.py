@@ -9,6 +9,7 @@ from scripts.run_luxian_0609_fixed10_readonly import (
     build_safe_rule_states,
     evaluate_full_luxian_0609_case,
     evaluate_snapshot_sidecar_ab_case,
+    evaluate_unified_engine_ab_case,
     parse_args,
     resolve_full_luxian_0609_rule_ids,
     validate_full_luxian_0609_results,
@@ -19,6 +20,13 @@ def test_full_regression_accepts_explicit_assert_49_cli_contract() -> None:
     args = parse_args(["--assert-49", "--snapshot-sidecar-ab"])
     assert args.assert_49 is True
     assert args.snapshot_sidecar_ab is True
+
+    unified_args = parse_args(["--assert-49", "--unified-engine-ab"])
+    assert unified_args.assert_49 is True
+    assert unified_args.unified_engine_ab is True
+
+    with pytest.raises(SystemExit):
+        parse_args(["--snapshot-sidecar-ab", "--unified-engine-ab"])
 
 
 @pytest.mark.asyncio
@@ -65,6 +73,68 @@ async def test_snapshot_sidecar_ab_replays_same_model_response_and_counts_one_sn
     )
 
     comparison = await evaluate_snapshot_sidecar_ab_case(
+        service=Service(),
+        settings=settings,
+        bundle={"scene": "running"},
+        rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
+        timeout_seconds=1.0,
+    )
+
+    assert comparison == {
+        "states_match": True,
+        "tokens_match": True,
+        "logical_llm_call_count": 1,
+        "snapshot_build_count": 1,
+        "result_count": 49,
+    }
+    assert original_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snapshot(
+    monkeypatch,
+) -> None:
+    from app.services.luxian_0609 import execution as luxian_execution
+
+    original_calls = 0
+
+    async def generate(_prompt):
+        nonlocal original_calls
+        original_calls += 1
+        return {
+            "choices": [{"message": {"content": "stable"}}],
+            "usage": {"total_tokens": 11},
+        }
+
+    settings = SimpleNamespace(
+        LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=False,
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+    )
+    client = SimpleNamespace(generate=generate)
+
+    class Service:
+        adjudicator_client = client
+
+        async def evaluate_running_final_bundle_input(self, **_kwargs):
+            response = await self.adjudicator_client.generate("same prompt")
+            if settings.LUXIAN_0609_UNIFIED_ENGINE_ENABLED:
+                luxian_execution.build_luxian_0609_evidence_snapshot()
+            assert response["choices"][0]["message"]["content"] == "stable"
+            return {
+                "evaluation_results": [
+                    {"rule_id": rule_id, "status": "compliant"}
+                    for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+                ],
+                "token_usage": {"total_tokens": 11},
+            }
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        lambda **_kwargs: SimpleNamespace(snapshot_hash="c" * 64),
+    )
+
+    comparison = await evaluate_unified_engine_ab_case(
         service=Service(),
         settings=settings,
         bundle={"scene": "running"},

@@ -248,9 +248,10 @@ class Luxian0609ExecutionEngine:
             )
 
         semaphore = asyncio.Semaphore(max_concurrency)
+        abort_event = asyncio.Event()
         tasks: dict[str, asyncio.Task[FamilyExecutionOutcome]] = {}
 
-        async def run(executor_key: str) -> FamilyExecutionOutcome:
+        async def run_family(executor_key: str) -> FamilyExecutionOutcome:
             registration = registrations[executor_key]
             context = contexts[executor_key]
             for dependency in registration.depends_on:
@@ -271,6 +272,13 @@ class Luxian0609ExecutionEngine:
                     return failure
 
             async with semaphore:
+                if abort_event.is_set():
+                    return FamilyExecutionFailure.create(
+                        executor_key=executor_key,
+                        selected_rule_ids=context.selected_rule_ids,
+                        failure_kind="dependency",
+                        reason_code="engine_execution_aborted",
+                    )
                 _emit_trace(
                     trace_sink,
                     executor_key=executor_key,
@@ -350,11 +358,29 @@ class Luxian0609ExecutionEngine:
                 )
                 return failure
 
+        async def run(executor_key: str) -> FamilyExecutionOutcome:
+            try:
+                return await run_family(executor_key)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # 引擎内部异常必须先阻止尚未开始的族进入执行器，再由外层统一
+                # 取消和等待所有任务，避免请求返回后仍产生未计量的模型调用。
+                abort_event.set()
+                raise
+
         for executor_key in executor_keys:
             tasks[executor_key] = asyncio.create_task(run(executor_key))
         try:
             outcomes = await asyncio.gather(*(tasks[key] for key in executor_keys))
         except asyncio.CancelledError:
+            for task in tasks.values():
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
+            raise
+        except Exception:
+            abort_event.set()
             for task in tasks.values():
                 if not task.done():
                     task.cancel()

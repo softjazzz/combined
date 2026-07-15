@@ -16,6 +16,14 @@ from .customer_rule_package import (
 from .input_builder import build_luxian_0609_input_profile
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .evidence_snapshot_provider import build_luxian_0609_evidence_snapshot
+from .engine import Luxian0609ExecutionEngine
+from .execution_contract import build_family_technical_envelope
+from .executor_registry import (
+    LEGACY_NATIVE_EXECUTION_ORDER,
+    LegacyFamilyExecutionResources,
+    LegacyNativeExecutorFunctions,
+    build_luxian_0609_legacy_executor_registry,
+)
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .native_execution import (
     build_luxian_0609_native_technical_results,
@@ -87,6 +95,7 @@ class Luxian0609ExecutionContext:
     package_plan: Luxian0609PackagePlan | None = None
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+    unified_engine_used: bool = False
 
 
 def build_luxian_0609_evidence_snapshot_rule_refs(
@@ -175,6 +184,7 @@ async def prepare_luxian_0609_execution(
                 "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
                 False,
             )
+            or getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
         )
         and all(
             isinstance(value, str) and value.strip()
@@ -208,14 +218,124 @@ async def prepare_luxian_0609_execution(
         in selected_customer_rule_id_set
     ]
     native_results: list[dict[str, Any]] = []
+    native_llm_call_count = 0
+    native_prompt_tokens = 0
+    native_completion_tokens = 0
+    native_total_tokens = 0
+    native_api_time = 0.0
     native_customer_rule_ids = {
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
     }
+    unified_engine_enabled = bool(
+        getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
+    )
+    unified_engine_used = False
+    if (
+        unified_engine_enabled
+        and evidence_snapshot is None
+        and package_plan.native_executor_batches
+    ):
+        # sidecar 可 fail-open，但统一引擎以同一快照为硬前提。缺坐标或构建失败
+        # 必须一次性安全终止本次 native 规则，不能静默绕回旧链。
+        unified_engine_used = True
+        expected_native_rule_ids = tuple(
+            rule_id
+            for rule_id in selected_customer_rule_ids
+            if rule_id in native_customer_rule_ids
+        )
+        native_results.extend(
+            build_family_technical_envelope(
+                expected_rule_ids=expected_native_rule_ids,
+                reason_code="unified_engine_snapshot_unavailable",
+            ).results
+        )
+    if (
+        unified_engine_enabled
+        and evidence_snapshot is not None
+        and package_plan.native_executor_batches
+    ):
+        ordered_batches = tuple(
+            batch
+            for executor_key in LEGACY_NATIVE_EXECUTION_ORDER
+            for batch in package_plan.native_executor_batches
+            if batch[0] == executor_key
+        ) + tuple(
+            batch
+            for batch in package_plan.native_executor_batches
+            if batch[0] not in LEGACY_NATIVE_EXECUTION_ORDER
+        )
+        resources = LegacyFamilyExecutionResources(
+            wrapper_rules=tuple(wrapper_rules),
+            evidence_payload=evidence_payload,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            llm_client=llm_client,
+        )
+        functions = LegacyNativeExecutorFunctions(
+            surgery_presence=execute_luxian_0609_native_rules,
+            basic_timeliness=execute_luxian_0609_native_basic_timeliness,
+            exam_lab=execute_luxian_0609_native_exam_lab_rules,
+            consultation_quality=execute_luxian_0609_native_consultation_rules,
+            transfusion=execute_luxian_0609_native_transfusion_rules,
+            tumor_pathology=execute_luxian_0609_native_tumor_pathology_rules,
+            course_quality=execute_luxian_0609_native_course_quality_rules,
+            surgery_gate=execute_luxian_0609_native_surgery_gate_rules,
+            surgery_document=execute_luxian_0609_native_surgery_document_rules,
+            surgery_mdt=execute_luxian_0609_native_mdt_rule,
+        )
+        contracts_by_id = {
+            item.rule_id: item for item in load_luxian_0609_rule_contracts()
+        }
+        try:
+            engine_report = await Luxian0609ExecutionEngine(
+                registry=build_luxian_0609_legacy_executor_registry(
+                    resources=resources,
+                    functions=functions,
+                )
+            ).execute(
+                executor_batches=ordered_batches,
+                snapshot=evidence_snapshot,
+                contracts=tuple(
+                    contracts_by_id[rule_id]
+                    for _, rule_ids in ordered_batches
+                    for rule_id in rule_ids
+                ),
+                default_deadline_seconds=300.0,
+                max_concurrency=1,
+            )
+        except Exception:
+            # 开关开启后禁止重跑冻结旧链：引擎可能已调用过部分模型，回退会造成
+            # 重复调用和状态漂移。基础设施异常按选中族逐点安全降级为技术错误；
+            # 真正回滚只能关闭开关后由下一次请求走旧链。
+            unified_engine_used = True
+            expected_native_rule_ids = tuple(
+                rule_id
+                for rule_id in selected_customer_rule_ids
+                if rule_id in native_customer_rule_ids
+            )
+            native_results.extend(
+                build_family_technical_envelope(
+                    expected_rule_ids=expected_native_rule_ids,
+                    reason_code="unified_engine_infrastructure_failed",
+                ).results
+            )
+        else:
+            unified_engine_used = True
+            for outcome in engine_report.outcomes:
+                envelope = outcome.envelope
+                native_results.extend(envelope.results)
+                native_llm_call_count += envelope.llm_call_count
+                native_prompt_tokens += envelope.prompt_tokens
+                native_completion_tokens += envelope.completion_tokens
+                native_total_tokens += envelope.total_tokens
+                native_api_time += envelope.api_time
     surgery_presence_rule_ids = package_plan.native_rule_ids_for_executor(
         EXECUTOR_SURGERY_PRESENCE
     )
-    if surgery_presence_rule_ids:
+    if surgery_presence_rule_ids and not unified_engine_used:
         native_execution = execute_luxian_0609_native_rules(
             rule_ids=surgery_presence_rule_ids,
             visit_id=str(visit_id or ""),
@@ -236,7 +356,7 @@ async def prepare_luxian_0609_execution(
     basic_timeliness_rule_ids = package_plan.native_rule_ids_for_executor(
         BASIC_TIMELINESS_EXECUTOR_KEY
     )
-    if basic_timeliness_rule_ids:
+    if basic_timeliness_rule_ids and not unified_engine_used:
         basic_execution = execute_luxian_0609_native_basic_timeliness(
             rule_ids=basic_timeliness_rule_ids,
             evidence_payload=evidence_payload,
@@ -246,7 +366,7 @@ async def prepare_luxian_0609_execution(
             source_schema=source_schema,
         )
         native_results.extend(basic_execution.results)
-    if native_results:
+    if native_results and not unified_engine_used:
         native_result_by_rule_id = {
             str(item.get("rule_id") or "").strip().upper(): item
             for item in native_results
@@ -256,13 +376,8 @@ async def prepare_luxian_0609_execution(
             for rule_id in package_plan.native_sync_rule_ids
             if rule_id in native_result_by_rule_id
         ]
-    native_llm_call_count = 0
-    native_prompt_tokens = 0
-    native_completion_tokens = 0
-    native_total_tokens = 0
-    native_api_time = 0.0
     exam_lab_rule_ids = package_plan.native_rule_ids_for_executor(EXAM_LAB_EXECUTOR_KEY)
-    if exam_lab_rule_ids:
+    if exam_lab_rule_ids and not unified_engine_used:
         exam_lab_execution = await execute_luxian_0609_native_exam_lab_rules(
             rule_ids=exam_lab_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -278,7 +393,7 @@ async def prepare_luxian_0609_execution(
     consultation_rule_ids = package_plan.native_rule_ids_for_executor(
         CONSULTATION_EXECUTOR_KEY
     )
-    if consultation_rule_ids:
+    if consultation_rule_ids and not unified_engine_used:
         consultation_execution = await execute_luxian_0609_native_consultation_rules(
             rule_ids=consultation_rule_ids,
             institute_id=str(institute_id or ""),
@@ -296,7 +411,7 @@ async def prepare_luxian_0609_execution(
     transfusion_rule_ids = package_plan.native_rule_ids_for_executor(
         TRANSFUSION_EXECUTOR_KEY
     )
-    if transfusion_rule_ids:
+    if transfusion_rule_ids and not unified_engine_used:
         transfusion_execution = await execute_luxian_0609_native_transfusion_rules(
             rule_ids=transfusion_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -316,7 +431,7 @@ async def prepare_luxian_0609_execution(
     tumor_pathology_rule_ids = package_plan.native_rule_ids_for_executor(
         TUMOR_PATHOLOGY_EXECUTOR_KEY
     )
-    if tumor_pathology_rule_ids:
+    if tumor_pathology_rule_ids and not unified_engine_used:
         tumor_pathology_execution = await execute_luxian_0609_native_tumor_pathology_rules(
             rule_ids=tumor_pathology_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -336,7 +451,7 @@ async def prepare_luxian_0609_execution(
     course_quality_rule_ids = package_plan.native_rule_ids_for_executor(
         COURSE_QUALITY_EXECUTOR_KEY
     )
-    if course_quality_rule_ids:
+    if course_quality_rule_ids and not unified_engine_used:
         course_quality_execution = await execute_luxian_0609_native_course_quality_rules(
             rule_ids=course_quality_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -356,7 +471,7 @@ async def prepare_luxian_0609_execution(
     surgery_gate_rule_ids = package_plan.native_rule_ids_for_executor(
         SURGERY_GATE_EXECUTOR_KEY
     )
-    if surgery_gate_rule_ids:
+    if surgery_gate_rule_ids and not unified_engine_used:
         surgery_gate_execution = await execute_luxian_0609_native_surgery_gate_rules(
             rule_ids=surgery_gate_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -376,7 +491,7 @@ async def prepare_luxian_0609_execution(
     surgery_document_rule_ids = package_plan.native_rule_ids_for_executor(
         SURGERY_DOCUMENT_EXECUTOR_KEY
     )
-    if surgery_document_rule_ids:
+    if surgery_document_rule_ids and not unified_engine_used:
         surgery_document_execution = await execute_luxian_0609_native_surgery_document_rules(
             rule_ids=surgery_document_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -390,7 +505,7 @@ async def prepare_luxian_0609_execution(
         native_total_tokens += surgery_document_execution.total_tokens
         native_api_time += surgery_document_execution.api_time
     mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
-    if mdt_rule_ids:
+    if mdt_rule_ids and not unified_engine_used:
         native_mdt = await execute_luxian_0609_native_mdt_rule(
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
@@ -478,6 +593,7 @@ async def prepare_luxian_0609_execution(
         package_plan=package_plan,
         evidence_snapshot=evidence_snapshot,
         evidence_snapshot_rule_refs=evidence_snapshot_rule_refs,
+        unified_engine_used=unified_engine_used,
     )
 
 

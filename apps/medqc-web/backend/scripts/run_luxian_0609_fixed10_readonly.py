@@ -201,10 +201,61 @@ async def evaluate_snapshot_sidecar_ab_case(
 ) -> dict[str, Any]:
     """同一次真实模型响应内存重放，隔离模型随机性比较 sidecar。"""
 
+    return await _evaluate_runtime_flag_ab_case(
+        service=service,
+        settings=settings,
+        bundle=bundle,
+        rule_ids=rule_ids,
+        timeout_seconds=timeout_seconds,
+        candidate_flag="LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
+        mode_label="sidecar",
+    )
+
+
+async def evaluate_unified_engine_ab_case(
+    *,
+    service: Any,
+    settings: Any,
+    bundle: dict[str, Any],
+    rule_ids: Sequence[str],
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    """复用同一次真实模型响应，比较冻结旧链与统一执行信封正式入口。"""
+
+    return await _evaluate_runtime_flag_ab_case(
+        service=service,
+        settings=settings,
+        bundle=bundle,
+        rule_ids=rule_ids,
+        timeout_seconds=timeout_seconds,
+        candidate_flag="LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
+        mode_label="unified_engine",
+    )
+
+
+async def _evaluate_runtime_flag_ab_case(
+    *,
+    service: Any,
+    settings: Any,
+    bundle: dict[str, Any],
+    rule_ids: Sequence[str],
+    timeout_seconds: float,
+    candidate_flag: str,
+    mode_label: str,
+) -> dict[str, Any]:
+    """冻结两条迁移开关，只改变一个候选变量，排除串扰和模型随机性。"""
+
     from app.services.luxian_0609 import execution as luxian_execution
     from app.services import sichuan_qc_service as service_module
 
-    original_flag = bool(settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED)
+    managed_flags = (
+        "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
+    )
+    missing = object()
+    original_flags = {
+        name: getattr(settings, name, missing) for name in managed_flags
+    }
     original_generate = service.adjudicator_client.generate
     original_provider = luxian_execution.build_luxian_0609_evidence_snapshot
     original_get_settings = service_module.get_settings
@@ -218,7 +269,8 @@ async def evaluate_snapshot_sidecar_ab_case(
 
     try:
         service_module.get_settings = lambda: settings
-        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = False
+        for name in managed_flags:
+            setattr(settings, name, False)
         service.adjudicator_client.generate = replay.record
         baseline = await evaluate_full_luxian_0609_case(
             service=service,
@@ -227,7 +279,7 @@ async def evaluate_snapshot_sidecar_ab_case(
             timeout_seconds=timeout_seconds,
         )
 
-        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = True
+        setattr(settings, candidate_flag, True)
         service.adjudicator_client.generate = replay.replay
         luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
         candidate = await evaluate_full_luxian_0609_case(
@@ -238,7 +290,11 @@ async def evaluate_snapshot_sidecar_ab_case(
         )
         replay.assert_complete()
     finally:
-        settings.LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED = original_flag
+        for name, value in original_flags.items():
+            if value is missing:
+                delattr(settings, name)
+            else:
+                setattr(settings, name, value)
         service.adjudicator_client.generate = original_generate
         luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
         service_module.get_settings = original_get_settings
@@ -252,9 +308,14 @@ async def evaluate_snapshot_sidecar_ab_case(
         dict(candidate.get("token_usage") or {}).get("total_tokens") or 0
     )
     if len(snapshot_hashes) != 1:
-        raise RuntimeError("sidecar每病例必须且只能构建一次快照")
-    if snapshot_hashes[0] in repr(candidate) or "evidence_snapshot" in repr(candidate):
-        raise RuntimeError("sidecar内部快照进入客户返回")
+        raise RuntimeError(f"{mode_label}每病例必须且只能构建一次快照")
+    candidate_repr = repr(candidate)
+    if (
+        snapshot_hashes[0] in candidate_repr
+        or "evidence_snapshot" in candidate_repr
+        or "unified_engine_used" in candidate_repr
+    ):
+        raise RuntimeError(f"{mode_label}内部执行对象进入客户返回")
     return {
         "states_match": baseline_states == candidate_states,
         "tokens_match": baseline_tokens == candidate_tokens,
@@ -277,8 +338,13 @@ async def run(args: argparse.Namespace) -> int:
         started = time.perf_counter()
         try:
             bundle = load_bundle_readonly(case)
-            if args.snapshot_sidecar_ab:
-                comparison = await evaluate_snapshot_sidecar_ab_case(
+            if args.snapshot_sidecar_ab or args.unified_engine_ab:
+                evaluator = (
+                    evaluate_snapshot_sidecar_ab_case
+                    if args.snapshot_sidecar_ab
+                    else evaluate_unified_engine_ab_case
+                )
+                comparison = await evaluator(
                     service=service,
                     settings=settings,
                     bundle=bundle,
@@ -286,7 +352,7 @@ async def run(args: argparse.Namespace) -> int:
                     timeout_seconds=float(args.timeout_seconds),
                 )
                 if not comparison["states_match"] or not comparison["tokens_match"]:
-                    raise RuntimeError("sidecar A/B状态或token发生变化")
+                    raise RuntimeError("A/B状态或token发生变化")
                 summary = {
                     "case_label": case["case_label"],
                     **comparison,
@@ -335,10 +401,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="显式声明并校验全49个客户规则ID和返回顺序",
     )
-    parser.add_argument(
+    ab_group = parser.add_mutually_exclusive_group()
+    ab_group.add_argument(
         "--snapshot-sidecar-ab",
         action="store_true",
         help="捕获一次真实模型响应并内存重放，比较sidecar开关前后结果",
+    )
+    ab_group.add_argument(
+        "--unified-engine-ab",
+        action="store_true",
+        help="捕获一次真实模型响应并内存重放，比较旧链与统一执行信封",
     )
     return parser.parse_args(argv)
 

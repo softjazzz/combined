@@ -146,6 +146,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = True
     # 只读构建统一证据快照并保存在内部执行上下文；默认关闭且不改变客户结果。
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = False
+    # 统一执行信封迁移开关；关闭时保留冻结旧调度链作为回滚。
+    LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

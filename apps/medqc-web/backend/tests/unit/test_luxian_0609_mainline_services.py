@@ -160,6 +160,7 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
         "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED": False,
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -204,6 +205,283 @@ def test_evidence_snapshot_rule_refs_bind_all_49_to_one_hash() -> None:
             snapshot=snapshot,
             selected_rule_ids=("LX0609-999",),
         )
+
+
+@pytest.mark.asyncio
+async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-001", "LX0609-010", "LX0609-029")
+    snapshot = _safe_evidence_snapshot()
+    calls: list[tuple[str, tuple[str, ...]]] = []
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=("LX0609-001", "LX0609-029"),
+        native_async_rule_ids=("LX0609-010",),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(
+            ("basic_timeliness", ("LX0609-001",)),
+            ("exam_lab", ("LX0609-010",)),
+            ("surgery_presence", ("LX0609-029",)),
+        ),
+    )
+
+    def _native_result(rule_id: str) -> dict:
+        return {
+            "rule_id": rule_id,
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 1.0,
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "reason_code": "test_result",
+            },
+        }
+
+    def _sync(name: str):
+        def invoke(**kwargs):
+            rule_ids = tuple(kwargs["rule_ids"])
+            calls.append((name, rule_ids))
+            return NativeExecutionResult(
+                results=tuple(_native_result(rule_id) for rule_id in rule_ids),
+                planned_rule_ids=rule_ids,
+            )
+
+        return invoke
+
+    async def _exam(**kwargs):
+        rule_ids = tuple(kwargs["rule_ids"])
+        calls.append(("exam_lab", rule_ids))
+        return SimpleNamespace(
+            results=tuple(_native_result(rule_id) for rule_id in rule_ids),
+            planned_rule_ids=rule_ids,
+            llm_call_count=1,
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+            api_time=0.2,
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        lambda **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_rules",
+        _sync("surgery_presence"),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_basic_timeliness",
+        _sync("basic_timeliness"),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_exam_lab_rules",
+        _exam,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={"programmatic_timeline": {}},
+        llm_client=object(),
+        settings=_all_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert calls == [
+        ("surgery_presence", ("LX0609-029",)),
+        ("basic_timeliness", ("LX0609-001",)),
+        ("exam_lab", ("LX0609-010",)),
+    ]
+    assert [item["rule_id"] for item in context.native_results] == list(selected)
+    assert context.native_llm_call_count == 1
+    assert context.native_total_tokens == 15
+    assert context.unified_engine_used is True
+    assert context.evidence_snapshot is snapshot
+
+
+@pytest.mark.asyncio
+async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-001",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=selected,
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(
+            ("basic_timeliness", selected),
+            ("basic_timeliness", selected),
+        ),
+    )
+    legacy_calls = 0
+
+    def legacy_executor(**_kwargs):
+        nonlocal legacy_calls
+        legacy_calls += 1
+        raise AssertionError("统一引擎异常后不得重放旧链")
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        lambda **_kwargs: _safe_evidence_snapshot(),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-001",
+                name="LX0609-001",
+                mapped_rule_ids=["RAW-LX0609-001"],
+                trigger_condition="test",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_basic_timeliness",
+        legacy_executor,
+    )
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={"programmatic_timeline": {}},
+        llm_client=object(),
+        settings=_all_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert legacy_calls == 0
+    assert context.unified_engine_used is True
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-001"]
+    assert context.native_results[0]["status"] == "technical_error"
+    assert (
+        context.native_results[0]["metadata"]["reason_code"]
+        == "unified_engine_infrastructure_failed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fallback(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-001",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=selected,
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("basic_timeliness", selected),),
+    )
+    legacy_calls = 0
+
+    def legacy_executor(**_kwargs):
+        nonlocal legacy_calls
+        legacy_calls += 1
+        raise AssertionError("快照失败后不得静默回放旧链")
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_snapshot",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private failure")),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-001",
+                name="LX0609-001",
+                mapped_rule_ids=["RAW-LX0609-001"],
+                trigger_condition="test",
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_basic_timeliness",
+        legacy_executor,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={"programmatic_timeline": {}},
+        llm_client=object(),
+        settings=_all_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert legacy_calls == 0
+    assert context.unified_engine_used is True
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-001"]
+    assert context.native_results[0]["status"] == "technical_error"
+    assert (
+        context.native_results[0]["metadata"]["reason_code"]
+        == "unified_engine_snapshot_unavailable"
+    )
+    assert "private failure" not in repr(context.native_results)
 
 
 @pytest.mark.asyncio

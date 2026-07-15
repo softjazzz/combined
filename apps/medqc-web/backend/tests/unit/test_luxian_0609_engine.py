@@ -460,3 +460,48 @@ async def test_engine_propagates_parent_cancellation():
 
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+@pytest.mark.asyncio
+async def test_engine_internal_failure_aborts_queued_families_and_cleans_tasks(
+    monkeypatch,
+):
+    calls: list[str] = []
+
+    async def _first(context: FamilyExecutionContext):
+        calls.append("first")
+        return _envelope(context)
+
+    async def _second(context: FamilyExecutionContext):
+        calls.append("second")
+        return _envelope(context)
+
+    registry = Luxian0609ExecutorRegistry(
+        (
+            ExecutorRegistration(
+                executor_key="basic_timeliness", executor=_Executor(_first)
+            ),
+            ExecutorRegistration(
+                executor_key="exam_lab", executor=_Executor(_second)
+            ),
+        )
+    )
+    monkeypatch.setattr(
+        "app.services.luxian_0609.engine.validate_family_execution_envelope",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("validator failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="validator failed"):
+        await Luxian0609ExecutionEngine(registry=registry).execute(
+            executor_batches=(
+                ("basic_timeliness", ("LX0609-001",)),
+                ("exam_lab", ("LX0609-010",)),
+            ),
+            snapshot=_snapshot(),
+            contracts=_contracts("LX0609-001", "LX0609-010"),
+            default_deadline_seconds=1.0,
+            max_concurrency=1,
+        )
+
+    await asyncio.sleep(0)
+    assert calls == ["first"]
