@@ -28,6 +28,13 @@ _TRUSTED_ADMISSION_TIME_BASES = frozenset(
         "timeline_primary_admission_datetime",
     }
 )
+_CUSTOMER_APPROVED_ADMISSION_TIME_BASES = frozenset(
+    {
+        # 0426 存量数据无住院登记时间；入院记录源的 record_time
+        # 是当前客户批准的入院时限锨点，仅限该固定来源基础。
+        "admission_record_record_time_fallback",
+    }
+)
 _FIRST_COURSE_BODY_FIELDS = (
     "record_content",
     "content",
@@ -90,7 +97,7 @@ def _first_course_data_gap_result() -> dict[str, Any]:
     )
 
 
-def _trusted_admission_anchor_available(
+def _approved_admission_anchor_available(
     evidence_payload: dict[str, Any] | None,
 ) -> bool:
     if not isinstance(evidence_payload, dict):
@@ -98,10 +105,27 @@ def _trusted_admission_anchor_available(
     timeline = evidence_payload.get("programmatic_timeline")
     if not isinstance(timeline, dict):
         return False
-    return (
-        bool(str(timeline.get("admission_time") or "").strip())
-        and timeline.get("admission_time_trusted") is True
-        and timeline.get("admission_time_basis") in _TRUSTED_ADMISSION_TIME_BASES
+    basis = timeline.get("admission_time_basis")
+    admission_time = str(timeline.get("admission_time") or "").strip()
+    documents = timeline.get("documents")
+    admission_rows = (
+        documents.get("admission_record") if isinstance(documents, dict) else None
+    )
+    approved_record_time_bound = (
+        basis in _CUSTOMER_APPROVED_ADMISSION_TIME_BASES
+        and isinstance(admission_rows, (list, tuple))
+        and any(
+            isinstance(row, dict)
+            and str(row.get("authored_at") or "").strip() == admission_time
+            for row in admission_rows
+        )
+    )
+    return bool(admission_time) and (
+        (
+            timeline.get("admission_time_trusted") is True
+            and basis in _TRUSTED_ADMISSION_TIME_BASES
+        )
+        or approved_record_time_bound
     )
 
 
@@ -139,7 +163,7 @@ def execute_luxian_0609_native_basic_timeliness(
         )
         admission_anchor_data_gap_ids = _ADMISSION_ANCHOR_RULE_IDS.intersection(
             selected
-        ) if not _trusted_admission_anchor_available(evidence_payload) else set()
+        ) if not _approved_admission_anchor_available(evidence_payload) else set()
         selected_set = set(selected)
         evaluated_rule_ids = selected_set - (
             {_FIRST_COURSE_RULE_ID} if first_course_data_gap else set()

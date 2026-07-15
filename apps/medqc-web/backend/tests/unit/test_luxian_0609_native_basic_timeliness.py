@@ -240,6 +240,76 @@ def test_admission_anchor_rules_reject_forged_trusted_flag_without_approved_basi
 
 
 @pytest.mark.unit
+def test_admission_record_time_is_approved_for_0426_timeliness_rules():
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "admission_time_basis": "admission_record_record_time_fallback",
+                "admission_time_trusted": False,
+                "documents": {
+                    "admission_record": [
+                        {"title": "入院记录", "authored_at": "2026-06-01 08:00:00"}
+                    ],
+                    "senior_course_record": [
+                        {
+                            "title": "主治医师首次查房记录",
+                            "author_title": "主治医师",
+                            "authored_at": "2026-06-03 08:00:00",
+                        },
+                        {
+                            "title": "主任医师首次查房记录",
+                            "author_title": "主任医师",
+                            "authored_at": "2026-06-04 08:00:00",
+                        },
+                    ],
+                },
+            }
+        },
+    )
+
+    assert [item["status"] for item in execution.results] == [
+        "compliant",
+        "compliant",
+        "compliant",
+    ]
+    assert all(item["metadata"]["total_tokens"] == 0 for item in execution.results)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "admission_rows",
+    [
+        [],
+        [{"title": "入院记录", "authored_at": "2026-06-01 09:00:00"}],
+    ],
+)
+def test_customer_approved_admission_basis_must_bind_same_admission_record_time(
+    admission_rows: list[dict[str, str]],
+):
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload={
+            "programmatic_timeline": {
+                "admission_time": "2026-06-01 08:00:00",
+                "admission_time_basis": "admission_record_record_time_fallback",
+                "admission_time_trusted": False,
+                "documents": {
+                    "admission_record": admission_rows,
+                    "senior_course_record": [],
+                },
+            }
+        },
+    )
+
+    assert [item["status"] for item in execution.results] == ["data_gap"] * 3
+    assert {
+        item["metadata"]["reason_code"] for item in execution.results
+    } == {"trusted_admission_anchor_unavailable"}
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("admission_record_time", "attending_time", "senior_time", "expected"),
     [
