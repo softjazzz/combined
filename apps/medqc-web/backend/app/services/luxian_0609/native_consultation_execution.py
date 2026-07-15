@@ -34,12 +34,16 @@ _MAX_DOCUMENT_CHARS = 900
 _MAX_CONTEXT_CHARS = 20000
 _COURSE_CONTEXT_KEYWORDS = ("会诊", "遵嘱", "遵会诊", "已遵", "执行")
 _CONSULTATION_OPINION_MARKERS = (
-    "会诊意见:",
-    "会诊意见：",
     "病史敬悉",
     "病史尽悉",
     "病史已悉",
     "病史已获悉",
+)
+_CONSULTATION_OPINION_HEADING_RE = re.compile(r"会诊意见\s*[:：]?")
+_OPINION_REFERENCE_PREFIX_RE = re.compile(r"(?:遵|按|根据|结合|采纳)\s*$")
+_OPINION_AUTHOR_SUFFIX_RE = re.compile(
+    r"(?:(?:[一-鿿]{1,12}科)?[一-鿿]{0,8})"
+    r"(?:主任医师|副主任医师|主治医师|住院医师|医师|医生|药师)\s*$"
 )
 _COURSE_LINK_PATTERNS = (
     re.compile(r"(?:遵(?:照|从)?|按|根据|结合|采纳).{0,16}会诊(?:意见)?"),
@@ -74,6 +78,34 @@ _SPECIFIC_EXECUTION_ACTION_RE = re.compile(
 )
 _ACTIONABLE_OPINION_RE = re.compile(
     r"(?:治疗|处理|复查|用药|检查|调整|给予|完善|观察|监测|随访)"
+)
+_NON_REQUEST_CONSULTATION_RE = re.compile(
+    r"(?:(?:拟|计划|建议|必要时|考虑|可)[^。；]{0,24}会诊|"
+    r"会诊[^。；]{0,24}(?:拒绝|不同意|取消|未行|未予|暂缓)|"
+    r"(?:拒绝|不同意|取消|未行|未予|暂缓)[^。；]{0,24}会诊)"
+)
+_DEFINITE_CONSULTATION_REQUEST_RE = re.compile(
+    r"(?:今日|现已|已经|已|申请|予以|请)[^。；]{0,16}(?:科|医师|医生|药师)?会诊"
+)
+_PURPOSE_STRONG_CLINICAL_RE = re.compile(
+    r"(?:胸闷|胸痛|腹痛|头痛|发热|咳嗽|咳痰|气促|呼吸困难|恶心|呕吐|"
+    r"头晕|乏力|水肿|出血|意识障碍|"
+    r"(?:血压|心率|血糖).{0,6}(?:异常|升高|降低|增高|减低|不稳|波动|[0-9０-９])|"
+    r"(?:白细胞|血红蛋白|肌酐|转氨酶).{0,6}(?:异常|升高|降低|增高|减低|[0-9０-９])|"
+    r"(?:检查|检验|培养|病理).{0,6}(?:阳性|异常)|"
+    r"异常|升高|降低|增高|减低|感染|梗死|狭窄|占位|"
+    r"结节|肿物|肿瘤|贫血|"
+    r"食欲(?:差|下降|不振)|纳差|(?:进食|饮食)(?:差|少|减少|困难|受限)|"
+    r"营养(?:不良|风险|不足)|消瘦|体重(?:下降|减轻)|"
+    r"心累|心慌|心悸|突发.{0,6}不适|"
+    r"术前评估|麻醉评估|用药评估|明确诊断|"
+    r"(?:评估|调整|制定).{0,8}(?:手术|麻醉|用药|治疗|风险|方案))"
+)
+_PURPOSE_GENERIC_ONLY_RE = re.compile(
+    r"(?:申请|请|拟请).{0,12}会诊(?:协助诊治|指导诊治|请指导|进一步诊治|评估病情)?"
+)
+_PURPOSE_NEGATED_CLINICAL_RE = re.compile(
+    r"(?:无|未诉|否认)[^，,。；;!?！？]{0,24}"
 )
 
 _REASON_STATUS = {
@@ -155,9 +187,40 @@ def _role_opinion_matches(content: str) -> tuple[re.Match[str], ...]:
     return tuple(accepted)
 
 
+def _opinion_heading_matches(content: str) -> tuple[re.Match[str], ...]:
+    accepted: list[re.Match[str]] = []
+    for match in _CONSULTATION_OPINION_HEADING_RE.finditer(content):
+        prefix = content[max(0, match.start() - 8) : match.start()]
+        if _OPINION_REFERENCE_PREFIX_RE.search(prefix):
+            continue
+        accepted.append(match)
+    return tuple(accepted)
+
+
+def _opinion_heading_start(content: str, match: re.Match[str]) -> int:
+    """将紧邻无冒号“会诊意见”前的科室/医师署名归入意见段。"""
+
+    clause_start = max(
+        (content.rfind(token, 0, match.start()) for token in "。；;!?！？"),
+        default=-1,
+    )
+    prefix = content[clause_start + 1 : match.start()].strip()
+    if (
+        prefix
+        and not re.search(r"(?:申请|拟请|请)", prefix)
+        and _OPINION_AUTHOR_SUFFIX_RE.fullmatch(prefix)
+    ):
+        return clause_start + 1
+    return match.start()
+
+
 def _split_consultation_content(content: str) -> tuple[str, str]:
     positions = [content.find(marker) for marker in _CONSULTATION_OPINION_MARKERS]
     positions = [position for position in positions if position >= 0]
+    positions.extend(
+        _opinion_heading_start(content, match)
+        for match in _opinion_heading_matches(content)
+    )
     positions.extend(match.start() for match in _role_opinion_matches(content))
     if not positions:
         return content, ""
@@ -260,6 +323,10 @@ def _extract_embedded_execution_text(content: str) -> str:
         (match.start(), match.end())
         for match in _role_opinion_matches(normalized)
     )
+    opinion_boundaries.extend(
+        (match.start(), match.end())
+        for match in _opinion_heading_matches(normalized)
+    )
     if not opinion_boundaries:
         return ""
     _boundary_start, boundary_end = min(opinion_boundaries)
@@ -326,7 +393,7 @@ def _consultation_refs_for_execution(
         has_embedded_execution = bool(_extract_embedded_execution_text(content))
         has_standard_opinion = any(
             marker in content for marker in _CONSULTATION_OPINION_MARKERS
-        )
+        ) or bool(_opinion_heading_matches(content))
         if (
             has_embedded_execution
             or (has_standard_opinion or _role_opinion_matches(content))
@@ -343,7 +410,47 @@ def _course_row_can_link(row: Mapping[str, Any]) -> bool:
 
 def _course_row_has_consultation_clue(row: Mapping[str, Any]) -> bool:
     """仅用于识别会诊来源可能缺失，不把该线索提升为执行事实。"""
-    return "会诊" in _clean(row.get("record_content"))
+    content = _clean(row.get("record_content"))
+    for sentence in re.split(r"[。；;!?！？]", content):
+        if "会诊" not in sentence or _NON_REQUEST_CONSULTATION_RE.search(sentence):
+            continue
+        if _DEFINITE_CONSULTATION_REQUEST_RE.search(sentence):
+            return True
+    return False
+
+
+def _purpose_state_from_application(content: str) -> str | None:
+    """只用申请段识别强目的或纯套话；灰区继续交给语义模型。"""
+
+    application, _opinion = _split_consultation_content(content)
+    application = _clean(application)
+    if not application:
+        return "purpose_missing"
+    positive_application = _PURPOSE_NEGATED_CLINICAL_RE.sub("", application)
+    if _PURPOSE_STRONG_CLINICAL_RE.search(positive_application):
+        return "purpose_clear"
+    compact = re.sub(r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", application)
+    if compact in {"申请会诊", "请会诊", "拟请会诊", "会诊"}:
+        return "purpose_missing"
+    if _PURPOSE_GENERIC_ONLY_RE.fullmatch(compact):
+        return "purpose_vague"
+    return None
+
+
+def _programmatic_purpose_reason(
+    consultation_rows: Sequence[Mapping[str, Any]],
+) -> str | None:
+    states = [
+        _purpose_state_from_application(_clean(row.get("record_content")))
+        for row in consultation_rows
+    ]
+    if not states or any(state is None for state in states):
+        return None
+    if "purpose_missing" in states:
+        return "purpose_missing"
+    if "purpose_vague" in states:
+        return "purpose_vague"
+    return "purpose_clear"
 
 
 def _project_row(source_key: str, row: Mapping[str, Any], index: int) -> str:
@@ -776,15 +883,50 @@ async def execute_luxian_0609_native_consultation_rules(
     course_source_complete = course_source_complete and _course_context_complete(
         rows_by_source
     )
+    programmatic_reasons: dict[str, str] = {}
+    if "LX0609-021" in selected:
+        purpose_reason = _programmatic_purpose_reason(consultation_rows)
+        if purpose_reason is not None:
+            programmatic_reasons["LX0609-021"] = purpose_reason
+    semantic_selected = tuple(
+        rule_id for rule_id in selected if rule_id not in programmatic_reasons
+    )
+    if not semantic_selected:
+        return NativeConsultationExecutionResult(
+            tuple(
+                _result(
+                    rule_id,
+                    _REASON_STATUS[rule_id][programmatic_reasons[rule_id]],
+                    programmatic_reasons[rule_id],
+                    executor_type="program",
+                )
+                for rule_id in selected
+            ),
+            selected,
+        )
     if llm_client is None:
         return NativeConsultationExecutionResult(
-            _terminal_results(selected, "data_gap", "consultation_llm_unavailable"),
+            tuple(
+                _result(
+                    rule_id,
+                    (
+                        _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
+                        if rule_id in programmatic_reasons
+                        else "data_gap"
+                    ),
+                    programmatic_reasons.get(
+                        rule_id, "consultation_llm_unavailable"
+                    ),
+                    executor_type="program",
+                )
+                for rule_id in selected
+            ),
             selected,
         )
 
     try:
-        analysis_rule_ids = list(selected)
-        if "LX0609-020" in selected and "LX0609-023" not in analysis_rule_ids:
+        analysis_rule_ids = list(semantic_selected)
+        if "LX0609-020" in semantic_selected and "LX0609-023" not in analysis_rule_ids:
             analysis_rule_ids.append("LX0609-023")
         response = await llm_client.generate(
             _prompt(
@@ -795,7 +937,21 @@ async def execute_luxian_0609_native_consultation_rules(
         )
     except Exception:
         return NativeConsultationExecutionResult(
-            _terminal_results(selected, "data_gap", "consultation_llm_failure"),
+            tuple(
+                _result(
+                    rule_id,
+                    (
+                        _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
+                        if rule_id in programmatic_reasons
+                        else "data_gap"
+                    ),
+                    programmatic_reasons.get(rule_id, "consultation_llm_failure"),
+                    executor_type=(
+                        "program" if rule_id in programmatic_reasons else "llm"
+                    ),
+                )
+                for rule_id in selected
+            ),
             selected,
             llm_call_count=1,
         )
@@ -810,19 +966,29 @@ async def execute_luxian_0609_native_consultation_rules(
     )
     results: list[dict[str, Any]] = []
     for rule_id in selected:
-        if rule_id == "LX0609-020":
+        if rule_id in programmatic_reasons:
+            reason_code = programmatic_reasons[rule_id]
+            status = _REASON_STATUS[rule_id][reason_code]
+            executor_type = "program"
+        elif rule_id == "LX0609-020":
             reason_code = reason_020
             status = _REASON_STATUS[rule_id].get(reason_code, "data_gap")
+            executor_type = "llm"
         else:
             raw = raw_results.get(rule_id)
             raw = raw if isinstance(raw, Mapping) else {}
             reason_code = str(raw.get("reason_code") or "").strip()
             if rule_id == "LX0609-023":
                 reason_code = reason_023
-            status = _REASON_STATUS[rule_id].get(reason_code, "data_gap")
+            if reason_code not in _REASON_STATUS[rule_id]:
+                reason_code = "consultation_llm_invalid_output"
+                status = "data_gap"
+            else:
+                status = _REASON_STATUS[rule_id][reason_code]
+            executor_type = "llm"
         if status == "data_gap" and not reason_code:
             reason_code = "consultation_llm_invalid_output"
-        results.append(_result(rule_id, status, reason_code, executor_type="llm"))
+        results.append(_result(rule_id, status, reason_code, executor_type=executor_type))
     return NativeConsultationExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,

@@ -724,7 +724,20 @@ async def test_embedded_specific_and_vague_yield_020_compliant_023_non_compliant
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_zero_consultation_with_controlled_course_clue_is_data_gap_without_llm(monkeypatch):
+@pytest.mark.parametrize(
+    ("course_text", "expected_status"),
+    [
+        ("今日已请心内科会诊协助诊治。", "data_gap"),
+        ("曾建议请心内科会诊。今日已请心内科会诊协助诊治。", "data_gap"),
+        ("拟请心内科会诊进一步评估。", "not_applicable"),
+        ("建议请心内科会诊，但家属明确拒绝，未行会诊。", "not_applicable"),
+    ],
+)
+async def test_zero_consultation_only_definite_request_is_source_incomplete_without_llm(
+    monkeypatch,
+    course_text: str,
+    expected_status: str,
+):
     client = _Client({})
     monkeypatch.setattr(
         consultation,
@@ -733,7 +746,7 @@ async def test_zero_consultation_with_controlled_course_clue_is_data_gap_without
             {
                 "consultation_record": [],
                 "daily_course_record": [
-                    {"record_content": "拟请心内科会诊进一步评估。"}
+                    {"record_content": course_text}
                 ],
                 "senior_course_record": [],
             }
@@ -750,11 +763,201 @@ async def test_zero_consultation_with_controlled_course_clue_is_data_gap_without
     )
 
     assert client.calls == []
-    assert [item["status"] for item in execution.results] == ["data_gap", "data_gap"]
-    assert all(
-        item["metadata"]["reason_code"] == "consultation_source_incomplete"
-        for item in execution.results
+    assert [item["status"] for item in execution.results] == [
+        expected_status,
+        expected_status,
+    ]
+    expected_reason = (
+        "consultation_source_incomplete"
+        if expected_status == "data_gap"
+        else "consultation_absent"
     )
+    assert all(item["metadata"]["reason_code"] == expected_reason for item in execution.results)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consultation_text", "expected_status", "expected_reason"),
+    [
+        (
+            "患者持续胸闷，心电图提示缺血改变，请心内科会诊协助诊治。"
+            "会诊意见：建议完善检查。",
+            "compliant",
+            "purpose_clear",
+        ),
+        (
+            "请心内科医师会诊协助诊治。会诊意见：患者胸闷，心电图提示异常。",
+            "non_compliant",
+            "purpose_vague",
+        ),
+        (
+            "请心内科医师会诊协助诊治。会诊意见 患者胸闷，心电图提示异常。",
+            "non_compliant",
+            "purpose_vague",
+        ),
+        (
+            "请心内科医师会诊协助诊治。"
+            "心内科某副主任医师会诊意见 患者胸闷，心电图提示异常。",
+            "non_compliant",
+            "purpose_vague",
+        ),
+    ],
+)
+async def test_021_programmatic_purpose_uses_application_segment_only(
+    monkeypatch,
+    consultation_text: str,
+    expected_status: str,
+    expected_reason: str,
+):
+    client = _Client(
+        {"results": {"LX0609-021": {"reason_code": "purpose_vague"}}}
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [{"record_content": consultation_text}],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert client.calls == []
+    assert [item["status"] for item in execution.results] == [expected_status]
+    assert execution.results[0]["metadata"]["reason_code"] == expected_reason
+    assert execution.results[0]["metadata"]["executor_type"] == "program"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "application_text",
+    [
+        "患者生命体征平稳、血压正常，请营养科会诊协助诊治。",
+        "患者相关检查阴性，请心内科会诊协助诊治。",
+    ],
+)
+async def test_021_normal_or_negative_facts_remain_semantic_gray(
+    monkeypatch,
+    application_text: str,
+):
+    client = _Client(
+        {"results": {"LX0609-021": {"reason_code": "application_unresolved"}}}
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [{"record_content": application_text}],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert len(client.calls) == 1
+    assert [item["status"] for item in execution.results] == ["data_gap"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_021_unknown_model_reason_is_fixed_data_gap_without_echo(monkeypatch):
+    secret = "Bearer_secret_13800138000"
+    client = _Client(
+        {"results": {"LX0609-021": {"reason_code": secret}}}
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {"record_content": "患者目前情况需进一步评估，请心内科会诊。"}
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in execution.results] == ["data_gap"]
+    assert execution.results[0]["metadata"]["reason_code"] == (
+        "consultation_llm_invalid_output"
+    )
+    assert secret not in repr(execution)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_021_multiple_patient_specific_applications_are_programmatically_clear(
+    monkeypatch,
+):
+    client = _Client(
+        {"results": {"LX0609-021": {"reason_code": "purpose_vague"}}}
+    )
+    application_rows = [
+        "患者近期食欲下降、进食减少，请营养科会诊协助诊治。会诊意见：建议调整饮食。",
+        "患者存在营养不良风险，请营养科会诊评估治疗方案。会诊意见：建议营养支持。",
+        "患者突发心累不适，请心内科会诊协助诊治。会诊意见：建议完善检查。",
+        "患者持续心慌、心悸，请心内科会诊协助诊治。会诊意见：建议监测心率。",
+    ]
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {"record_content": content} for content in application_rows
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert client.calls == []
+    assert [item["status"] for item in execution.results] == ["compliant"]
+    assert execution.results[0]["metadata"]["reason_code"] == "purpose_clear"
 
 
 @pytest.mark.unit
@@ -1308,7 +1511,7 @@ async def test_context_overflow_fails_closed_instead_of_ignoring_documents(monke
     assert len(client.calls) == 1
     assert [item["status"] for item in course_overflow.results] == [
         "data_gap",
-        "compliant",
+        "non_compliant",
         "compliant",
         "data_gap",
     ]
