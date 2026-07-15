@@ -344,6 +344,50 @@ def build_luxian_0609_package_plan(
     )
 
 
+def build_luxian_0609_package_plan_from_settings(
+    *,
+    inventory: Sequence[Luxian0609RuleDependency],
+    selected_rule_ids: Iterable[str],
+    settings: Any,
+) -> Luxian0609PackagePlan:
+    """用同一组运行开关构建包计划，供公共入口与执行器共同使用。"""
+
+    return build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=selected_rule_ids,
+        native_sync_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
+        ),
+        native_async_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False)
+        ),
+        native_basic_timeliness_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", False)
+        ),
+        native_consultation_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", False)
+        ),
+        native_exam_lab_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED", False)
+        ),
+        native_transfusion_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED", False)
+        ),
+        native_tumor_pathology_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED", False)
+        ),
+        native_course_quality_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED", False)
+        ),
+        native_surgery_gate_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED", False)
+        ),
+        native_surgery_document_enabled=bool(
+            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED", False)
+        ),
+    )
+
+
 def resolve_selected_customer_rule_ids(
     *,
     inventory: Sequence[Luxian0609RuleDependency],
@@ -360,12 +404,12 @@ def resolve_selected_customer_rule_ids(
     )
 
 
-def resolve_package_entry_execution_rule_ids(
+def resolve_package_rollback_execution_rule_ids(
     *,
     inventory: Sequence[Luxian0609RuleDependency],
     selected_rule_ids: Iterable[str],
 ) -> tuple[str, ...]:
-    """公共入口过渡适配：LX0609 选择只在包内展开为当前执行依赖。"""
+    """显式整体回滚适配：仅在关闭客户原生包时展开旧执行依赖。"""
 
     requested = {_normalize_rule_id(rule_id) for rule_id in selected_rule_ids}
     requested.discard("")
@@ -377,4 +421,17 @@ def resolve_package_entry_execution_rule_ids(
         for item in inventory
         if item.rule_id in requested
         for execution_rule_id in item.compatibility_rule_ids
+    )
+
+
+def resolve_package_entry_execution_rule_ids(
+    *,
+    inventory: Sequence[Luxian0609RuleDependency],
+    selected_rule_ids: Iterable[str],
+) -> tuple[str, ...]:
+    """兼容旧调用方；新公共入口不得用它启动原生执行。"""
+
+    return resolve_package_rollback_execution_rule_ids(
+        inventory=inventory,
+        selected_rule_ids=selected_rule_ids,
     )

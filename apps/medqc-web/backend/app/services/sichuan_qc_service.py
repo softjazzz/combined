@@ -60,9 +60,10 @@ from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
 from .luxian_0609 import (
     LUXIAN_0609_RULE_SET_KEY,
+    build_luxian_0609_package_plan_from_settings,
     load_luxian_0609_dependency_inventory,
     load_luxian_0609_rules,
-    resolve_package_entry_execution_rule_ids,
+    resolve_package_rollback_execution_rule_ids,
 )
 from .luxian_0609.execution import (
     aggregate_luxian_0609_orchestrated_results,
@@ -4490,6 +4491,7 @@ class SichuanQCService:
         evidence_payload = dict(eval_args.get("evidence_payload") or {})
         normalized_rule_set_key = str(rule_set_key or "").strip()
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        settings = get_settings()
         selected_customer_rule_ids: tuple[str, ...] | None = None
         if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
             normalized_requested_ids = tuple(
@@ -4506,12 +4508,23 @@ class SichuanQCService:
                 ):
                     raise ValueError("LX0609 package entry does not accept mixed rule ids")
                 selected_customer_rule_ids = normalized_requested_ids
-                resolved_rule_ids = list(
-                    resolve_package_entry_execution_rule_ids(
-                        inventory=load_luxian_0609_dependency_inventory(),
+                dependency_inventory = load_luxian_0609_dependency_inventory()
+                if settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED:
+                    package_plan = build_luxian_0609_package_plan_from_settings(
+                        inventory=dependency_inventory,
                         selected_rule_ids=selected_customer_rule_ids,
+                        settings=settings,
                     )
-                )
+                    resolved_rule_ids = list(
+                        package_plan.compatibility_execution_rule_ids
+                    )
+                else:
+                    resolved_rule_ids = list(
+                        resolve_package_rollback_execution_rule_ids(
+                            inventory=dependency_inventory,
+                            selected_rule_ids=selected_customer_rule_ids,
+                        )
+                    )
 
         selected_rules: List[Dict[str, Any]] = []
         if resolved_rule_ids:
@@ -4519,7 +4532,7 @@ class SichuanQCService:
                 rule = self.get_rule_by_id(str(rid or "").strip())
                 if rule:
                     selected_rules.append(self._ensure_rule_execution_meta(rule))
-        else:
+        elif selected_customer_rule_ids is None:
             selected_rules = await self._resolve_rules_for_document(
                 document_type=document_type,
                 rule_ids=resolved_rule_ids,
@@ -4533,7 +4546,6 @@ class SichuanQCService:
 
         luxian_context = None
         execution_rules = selected_rules
-        settings = get_settings()
         if (
             normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
@@ -4719,7 +4731,7 @@ class SichuanQCService:
                 visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
                 model_name=model_version,
                 evidence_payload=evidence_payload,
-                execution_rule_count=len(selected_rules),
+                execution_rule_count=len(selected_customer_rule_ids or selected_rules),
             )
         result = self._build_document_evaluation_result(
             document_id=document_id,

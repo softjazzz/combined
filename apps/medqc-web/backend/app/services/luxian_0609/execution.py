@@ -56,7 +56,7 @@ from .native_package import (
     EXECUTOR_SURGERY_MDT,
     EXECUTOR_SURGERY_PRESENCE,
     Luxian0609PackagePlan,
-    build_luxian_0609_package_plan,
+    build_luxian_0609_package_plan_from_settings,
     load_luxian_0609_dependency_inventory,
     resolve_selected_customer_rule_ids,
 )
@@ -133,39 +133,10 @@ async def prepare_luxian_0609_execution(
             prepared_rule_ids=prepared_rule_ids,
         )
     )
-    package_plan = build_luxian_0609_package_plan(
+    package_plan = build_luxian_0609_package_plan_from_settings(
         inventory=dependency_inventory,
         selected_rule_ids=requested_customer_rule_ids,
-        native_sync_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_EXECUTION_ENABLED", False)
-        ),
-        native_async_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_MDT_040_ENABLED", False)
-        ),
-        native_basic_timeliness_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED", False)
-        ),
-        native_consultation_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", False)
-        ),
-        native_exam_lab_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED", False)
-        ),
-        native_transfusion_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED", False)
-        ),
-        native_tumor_pathology_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED", False)
-        ),
-        native_course_quality_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED", False)
-        ),
-        native_surgery_gate_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED", False)
-        ),
-        native_surgery_document_enabled=bool(
-            getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED", False)
-        ),
+        settings=settings,
     )
     selected_customer_rule_id_set = set(package_plan.selected_rule_ids)
     wrapper_rules = [

@@ -48,8 +48,10 @@ from .native_package import (
     Luxian0609RuleDependency,
     build_luxian_0609_dependency_inventory,
     build_luxian_0609_package_plan,
+    build_luxian_0609_package_plan_from_settings,
     load_luxian_0609_dependency_inventory,
     resolve_package_entry_execution_rule_ids,
+    resolve_package_rollback_execution_rule_ids,
 )
 
 __all__ = [
@@ -88,6 +90,8 @@ __all__ = [
     "Luxian0609RuleDependency",
     "build_luxian_0609_dependency_inventory",
     "build_luxian_0609_package_plan",
+    "build_luxian_0609_package_plan_from_settings",
     "load_luxian_0609_dependency_inventory",
     "resolve_package_entry_execution_rule_ids",
+    "resolve_package_rollback_execution_rule_ids",
 ]
