@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import math
 from typing import Any, Callable, Iterable, Mapping
 
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .execution_contract import (
+    FamilyExecutionEnvelope,
+    build_family_technical_envelope,
+    validate_family_execution_envelope,
+)
 from .executor_registry import (
     ExecutorRegistration,
     Luxian0609ExecutorRegistry,
@@ -20,6 +26,7 @@ from .rule_contracts import Luxian0609RuleContract
 
 _FAILURE_REASON_CODES = {
     "cancelled": "family_execution_cancelled",
+    "contract": "family_result_contract_violation",
     "dependency": "family_dependency_failed",
     "exception": "family_execution_failed",
     "timeout": "family_execution_timeout",
@@ -48,6 +55,7 @@ class FamilyExecutionContext:
         if (
             isinstance(self.deadline_seconds, bool)
             or not isinstance(self.deadline_seconds, (int, float))
+            or not math.isfinite(self.deadline_seconds)
             or self.deadline_seconds <= 0
         ):
             raise ValueError("deadline_seconds must be positive")
@@ -57,7 +65,11 @@ class FamilyExecutionContext:
 class FamilyExecutionSuccess:
     executor_key: str
     selected_rule_ids: tuple[str, ...]
-    payload: Any
+    envelope: FamilyExecutionEnvelope
+
+    def __post_init__(self) -> None:
+        if self.envelope.planned_rule_ids != self.selected_rule_ids:
+            raise ValueError("success envelope scope mismatch")
 
 
 @dataclass(frozen=True)
@@ -66,6 +78,13 @@ class FamilyExecutionFailure:
     selected_rule_ids: tuple[str, ...]
     failure_kind: str
     reason_code: str
+    envelope: FamilyExecutionEnvelope
+
+    def __post_init__(self) -> None:
+        if self.failure_kind not in _FAILURE_REASON_CODES:
+            raise ValueError("invalid family failure kind")
+        if not self.reason_code or self.envelope.planned_rule_ids != self.selected_rule_ids:
+            raise ValueError("failure envelope scope mismatch")
 
     @classmethod
     def create(
@@ -74,6 +93,8 @@ class FamilyExecutionFailure:
         executor_key: str,
         selected_rule_ids: tuple[str, ...],
         failure_kind: str,
+        reason_code: str = "",
+        envelope: FamilyExecutionEnvelope | None = None,
     ) -> FamilyExecutionFailure:
         if failure_kind not in _FAILURE_REASON_CODES:
             raise ValueError("invalid family failure kind")
@@ -81,7 +102,12 @@ class FamilyExecutionFailure:
             executor_key=executor_key,
             selected_rule_ids=selected_rule_ids,
             failure_kind=failure_kind,
-            reason_code=_FAILURE_REASON_CODES[failure_kind],
+            reason_code=reason_code or _FAILURE_REASON_CODES[failure_kind],
+            envelope=envelope
+            or build_family_technical_envelope(
+                expected_rule_ids=selected_rule_ids,
+                reason_code=reason_code or _FAILURE_REASON_CODES[failure_kind],
+            ),
         )
 
 
@@ -171,6 +197,7 @@ class Luxian0609ExecutionEngine:
         if (
             isinstance(default_deadline_seconds, bool)
             or not isinstance(default_deadline_seconds, (int, float))
+            or not math.isfinite(default_deadline_seconds)
             or default_deadline_seconds <= 0
         ):
             raise ValueError("default_deadline_seconds must be positive")
@@ -276,22 +303,43 @@ class Luxian0609ExecutionEngine:
                     except Exception:
                         failure_kind = "exception"
                     else:
-                        _emit_trace(
-                            trace_sink,
-                            executor_key=executor_key,
-                            event="completed",
-                            rule_count=len(context.selected_rule_ids),
-                        )
-                        return FamilyExecutionSuccess(
-                            executor_key=executor_key,
-                            selected_rule_ids=context.selected_rule_ids,
-                            payload=payload,
-                        )
+                        if not isinstance(payload, FamilyExecutionEnvelope):
+                            failure_kind = "contract"
+                            contract_reason_code = "family_envelope_invalid"
+                        else:
+                            validation = validate_family_execution_envelope(
+                                envelope=payload,
+                                expected_rule_ids=context.selected_rule_ids,
+                            )
+                            if validation.valid:
+                                _emit_trace(
+                                    trace_sink,
+                                    executor_key=executor_key,
+                                    event="completed",
+                                    rule_count=len(context.selected_rule_ids),
+                                )
+                                return FamilyExecutionSuccess(
+                                    executor_key=executor_key,
+                                    selected_rule_ids=context.selected_rule_ids,
+                                    envelope=validation.envelope,
+                                )
+                            failure_kind = "contract"
+                            contract_reason_code = validation.reason_code
+                            payload = validation.envelope
 
                 failure = FamilyExecutionFailure.create(
                     executor_key=executor_key,
                     selected_rule_ids=context.selected_rule_ids,
                     failure_kind=failure_kind,
+                    reason_code=(
+                        contract_reason_code if failure_kind == "contract" else ""
+                    ),
+                    envelope=(
+                        payload
+                        if failure_kind == "contract"
+                        and isinstance(payload, FamilyExecutionEnvelope)
+                        else None
+                    ),
                 )
                 _emit_trace(
                     trace_sink,

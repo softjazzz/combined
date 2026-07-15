@@ -144,6 +144,7 @@ def test_pr_no_model_rule_contract_gate_includes_evidence_snapshot_contract() ->
     assert "tests/unit/test_luxian_0609_evidence_snapshot.py" in rule_contract_gate.args
     assert "tests/unit/test_luxian_0609_evidence_snapshot_provider.py" in rule_contract_gate.args
     assert "tests/unit/test_luxian_0609_engine.py" in rule_contract_gate.args
+    assert "tests/unit/test_luxian_0609_execution_contract.py" in rule_contract_gate.args
     mainline_gate = next(
         gate for gate in _PR_NO_MODEL_GATES if gate.name == "mainline_aggregation"
     )

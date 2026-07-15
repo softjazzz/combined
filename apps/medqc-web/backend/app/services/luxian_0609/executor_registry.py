@@ -7,18 +7,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import re
-from typing import Any, Iterable, Protocol, TYPE_CHECKING
+from typing import Iterable, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .engine import FamilyExecutionContext
+    from .execution_contract import FamilyExecutionEnvelope
 
 
 _EXECUTOR_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class Luxian0609FamilyExecutor(Protocol):
-    async def evaluate(self, context: FamilyExecutionContext) -> Any:
+    async def evaluate(
+        self,
+        context: FamilyExecutionContext,
+    ) -> FamilyExecutionEnvelope:
         """执行一个规则族；临床结果契约由后续 exactly-once 层校验。"""
 
 
@@ -50,6 +55,7 @@ class ExecutorRegistration:
         if self.deadline_seconds is not None and (
             isinstance(self.deadline_seconds, bool)
             or not isinstance(self.deadline_seconds, (int, float))
+            or not math.isfinite(self.deadline_seconds)
             or self.deadline_seconds <= 0
         ):
             raise ValueError("deadline_seconds must be positive")

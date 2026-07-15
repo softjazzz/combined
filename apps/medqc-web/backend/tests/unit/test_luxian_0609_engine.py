@@ -22,6 +22,8 @@ from app.services.luxian_0609.executor_registry import (
     ExecutorRegistration,
     Luxian0609ExecutorRegistry,
 )
+from app.services.luxian_0609.execution_contract import FamilyExecutionEnvelope
+from app.services.luxian_0609.native_execution import build_luxian_0609_native_result
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
@@ -67,10 +69,25 @@ def _contracts(*rule_ids: str):
     )
 
 
+def _envelope(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
+    return FamilyExecutionEnvelope(
+        results=tuple(
+            build_luxian_0609_native_result(
+                rule_id=rule_id,
+                final_state="compliant",
+                finding_kind="test_result",
+                reason_code="test_result",
+            )
+            for rule_id in context.selected_rule_ids
+        ),
+        planned_rule_ids=context.selected_rule_ids,
+    )
+
+
 @pytest.mark.unit
 def test_executor_registry_rejects_duplicate_or_unknown_keys():
     async def _evaluate(context: FamilyExecutionContext):
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registry = Luxian0609ExecutorRegistry()
     registry.register(
@@ -99,7 +116,7 @@ async def test_engine_resolves_registry_and_passes_one_snapshot_to_every_family(
     def _executor(name: str):
         async def _evaluate(context: FamilyExecutionContext):
             seen.append((name, context.snapshot, context.selected_rule_ids))
-            return {"family": name}
+            return _envelope(context)
 
         return _Executor(_evaluate)
 
@@ -152,7 +169,7 @@ async def test_engine_runs_independent_families_with_bounded_concurrency():
             both_started.set()
         await release.wait()
         active -= 1
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registry = Luxian0609ExecutorRegistry(
         (
@@ -189,7 +206,7 @@ async def test_engine_runs_independent_families_with_bounded_concurrency():
 @pytest.mark.parametrize("cycle", [False, True])
 async def test_engine_rejects_missing_or_cyclic_dependencies(cycle: bool):
     async def _evaluate(context: FamilyExecutionContext):
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registrations = [
         ExecutorRegistration(
@@ -238,7 +255,7 @@ async def test_engine_preserves_explicit_dependency_order():
             events.append(f"{name}:start")
             await asyncio.sleep(0)
             events.append(f"{name}:end")
-            return context.selected_rule_ids
+            return _envelope(context)
 
         return _Executor(_evaluate)
 
@@ -277,7 +294,7 @@ async def test_engine_isolates_timeout_and_exception_without_echoing_error():
         raise RuntimeError("Bearer secret raw patient marker")
 
     async def _ok(context: FamilyExecutionContext):
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registry = Luxian0609ExecutorRegistry(
         (
@@ -309,6 +326,10 @@ async def test_engine_isolates_timeout_and_exception_without_echoing_error():
         "timeout",
         "exception",
     ]
+    assert [
+        outcome.envelope.results[0]["status"]
+        for outcome in report.outcomes[:2]
+    ] == ["technical_error", "technical_error"]
     assert "Bearer" not in repr(report)
     assert "patient" not in repr(report)
 
@@ -319,7 +340,7 @@ async def test_engine_isolates_executor_internal_cancellation():
         raise asyncio.CancelledError
 
     async def _ok(context: FamilyExecutionContext):
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registry = Luxian0609ExecutorRegistry(
         (
@@ -346,9 +367,51 @@ async def test_engine_isolates_executor_internal_cancellation():
 
 
 @pytest.mark.asyncio
+async def test_engine_converts_invalid_envelope_to_family_technical_results():
+    async def _missing(context: FamilyExecutionContext):
+        return FamilyExecutionEnvelope(
+            results=(),
+            planned_rule_ids=context.selected_rule_ids,
+        )
+
+    registry = Luxian0609ExecutorRegistry(
+        (
+            ExecutorRegistration(
+                executor_key="basic_timeliness", executor=_Executor(_missing)
+            ),
+        )
+    )
+    events: list[str] = []
+    report = await Luxian0609ExecutionEngine(registry=registry).execute(
+        executor_batches=(
+            ("basic_timeliness", ("LX0609-001", "LX0609-002")),
+        ),
+        snapshot=_snapshot(),
+        contracts=_contracts("LX0609-001", "LX0609-002"),
+        default_deadline_seconds=1.0,
+        max_concurrency=1,
+        trace_sink=lambda event: events.append(str(event["event"])),
+    )
+
+    failure = report.outcomes[0]
+    assert isinstance(failure, FamilyExecutionFailure)
+    assert failure.failure_kind == "contract"
+    assert failure.reason_code == "family_result_missing"
+    assert [item["rule_id"] for item in failure.envelope.results] == [
+        "LX0609-001",
+        "LX0609-002",
+    ]
+    assert [item["status"] for item in failure.envelope.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert events == ["started", "failed"]
+
+
+@pytest.mark.asyncio
 async def test_engine_rejects_rule_contract_executor_mismatch():
     async def _evaluate(context: FamilyExecutionContext):
-        return context.selected_rule_ids
+        return _envelope(context)
 
     registry = Luxian0609ExecutorRegistry(
         (
