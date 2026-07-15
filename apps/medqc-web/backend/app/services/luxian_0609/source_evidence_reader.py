@@ -182,6 +182,14 @@ def _source_limit(source_key: str) -> int:
     return int(getattr(bundle_assembly, "_DOMAIN_FETCH_LIMITS", {}).get(source_key, 50))
 
 
+def luxian_0609_native_source_row_limit(source_key: str) -> int:
+    """返回批准来源的有界读取上限；达到上限时调用方必须视为可能截断。"""
+
+    if str(source_key or "").strip() not in _NATIVE_SOURCE_FIELDS:
+        raise SourceEvidenceUnavailable()
+    return _source_limit(source_key)
+
+
 def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:

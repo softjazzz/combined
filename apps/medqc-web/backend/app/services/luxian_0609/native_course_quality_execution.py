@@ -9,6 +9,10 @@ import re
 from typing import Any, Mapping, Protocol, Sequence
 
 from .native_execution import build_luxian_0609_native_result
+from .source_evidence_reader import (
+    luxian_0609_native_source_row_limit,
+    read_luxian_0609_native_source_rows,
+)
 
 
 COURSE_QUALITY_RULE_IDS = (
@@ -200,22 +204,29 @@ def _admission_body_text(row: Mapping[str, Any]) -> str:
 
 
 def _source_rows(
-    documents: Mapping[str, Any], source_key: str
+    documents: Mapping[str, Any],
+    source_key: str,
+    *,
+    limit: int | None = _MAX_ROWS_PER_SOURCE,
 ) -> tuple[Mapping[str, Any], ...]:
     raw_rows = documents.get(source_key)
     if not isinstance(raw_rows, list):
         return ()
+    selected_rows = raw_rows if limit is None else raw_rows[:limit]
     return tuple(
-        row for row in raw_rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
+        row for row in selected_rows if isinstance(row, Mapping)
     )
 
 
 def _substantive_rows(
-    documents: Mapping[str, Any], source_keys: Sequence[str]
+    documents: Mapping[str, Any],
+    source_keys: Sequence[str],
+    *,
+    limit_per_source: int | None = _MAX_ROWS_PER_SOURCE,
 ) -> tuple[tuple[str, Mapping[str, Any], str], ...]:
     rows: list[tuple[str, Mapping[str, Any], str]] = []
     for source_key in source_keys:
-        for row in _source_rows(documents, source_key):
+        for row in _source_rows(documents, source_key, limit=limit_per_source):
             content = _row_text(row)
             if content:
                 rows.append((source_key, row, content))
@@ -347,6 +358,7 @@ def _result(
     completion_tokens: int = 0,
     total_tokens: int = 0,
     api_time: float = 0.0,
+    extra_metadata: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     item = build_luxian_0609_native_result(
         rule_id=rule_id,
@@ -367,6 +379,7 @@ def _result(
             "api_time": api_time,
         }
     )
+    metadata.update(dict(extra_metadata or {}))
     item["metadata"] = metadata
     return item
 
@@ -377,20 +390,47 @@ def _normalized_for_similarity(content: str) -> str:
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", value).lower()
 
 
-def _copy_result(documents: Mapping[str, Any]) -> dict[str, Any]:
-    contents = [
-        _normalized_for_similarity(content)
-        for _, _, content in _substantive_rows(documents, _ROUND_SOURCES)
-    ]
-    comparable = [
-        content for content in contents if len(content) >= _MIN_COMPARABLE_CHARS
-    ]
-    if not contents:
+def _copy_result(
+    documents: Mapping[str, Any], *, source_complete: bool = False
+) -> dict[str, Any]:
+    rows = _substantive_rows(
+        documents,
+        _ROUND_SOURCES,
+        limit_per_source=None if source_complete else _MAX_ROWS_PER_SOURCE,
+    )
+    comparable: list[tuple[str, str]] = []
+    seen_documents: set[tuple[str, str, str]] = set()
+    for source_key, row, content in rows:
+        normalized = _normalized_for_similarity(content)
+        if len(normalized) < _MIN_COMPARABLE_CHARS:
+            continue
+        document_id = _clean(row.get("document_id"))
+        identity = (
+            source_key,
+            "document_id" if document_id else _clean(row.get("record_time")),
+            document_id or normalized,
+        )
+        if identity in seen_documents:
+            continue
+        seen_documents.add(identity)
+        comparable.append((source_key, normalized))
+    safe_metadata: dict[str, Any] = {
+        "comparable_document_count": len(comparable),
+        "maximum_similarity": 0.0,
+        "similarity_threshold": _COPY_SIMILARITY_THRESHOLD,
+        "best_match_source_types": [],
+    }
+    if not rows:
         return _result(
             "LX0609-017",
-            "data_gap",
-            "course_comparison_material_unavailable",
+            "not_applicable" if source_complete else "data_gap",
+            (
+                "insufficient_comparable_course_records"
+                if source_complete
+                else "course_comparison_material_unavailable"
+            ),
             executor_type="program",
+            extra_metadata=safe_metadata,
         )
     if len(comparable) < 2:
         return _result(
@@ -398,25 +438,48 @@ def _copy_result(documents: Mapping[str, Any]) -> dict[str, Any]:
             "not_applicable",
             "insufficient_comparable_course_records",
             executor_type="program",
+            extra_metadata=safe_metadata,
         )
-    maximum = max(
-        SequenceMatcher(None, left, right, autojunk=False).ratio()
-        for index, left in enumerate(comparable)
-        for right in comparable[index + 1 :]
+    maximum = -1.0
+    best_source_types: list[str] = []
+    for index, (left_source, left) in enumerate(comparable):
+        for right_source, right in comparable[index + 1 :]:
+            similarity = SequenceMatcher(None, left, right, autojunk=False).ratio()
+            if similarity > maximum:
+                maximum = similarity
+                best_source_types = [left_source, right_source]
+    maximum = max(maximum, 0.0)
+    safe_metadata.update(
+        {
+            "maximum_similarity": round(maximum, 4),
+            "best_match_source_types": best_source_types,
+        }
+    )
+    evidence = (
+        f"已比较 {len(comparable)} 份病程/查房记录，最高全文相似度 "
+            f"{maximum * 100:.4f}%，判定阈值 {_COPY_SIMILARITY_THRESHOLD * 100:.0f}%。"
     )
     if maximum > _COPY_SIMILARITY_THRESHOLD:
-        return _result(
+        item = _result(
             "LX0609-017",
             "non_compliant",
             "course_similarity_above_threshold",
             executor_type="program",
+            extra_metadata=safe_metadata,
         )
-    return _result(
+        item["findings"] = "发现两份病程/查房记录全文相似度超过70%，存在高度重复。"
+        item["evidence"] = evidence
+        item["suggestion"] = "请核对重复记录，补充本次病情变化、诊疗调整和查房意见。"
+        return item
+    item = _result(
         "LX0609-017",
         "compliant",
         "course_similarity_within_threshold",
         executor_type="program",
+        extra_metadata=safe_metadata,
     )
+    item["evidence"] = evidence
+    return item
 
 
 def _admission_material_ready(
@@ -456,6 +519,10 @@ async def execute_luxian_0609_native_course_quality_rules(
     rule_ids: Sequence[str],
     wrapper_rules: Sequence[Mapping[str, Any]],
     evidence_payload: Mapping[str, Any] | None,
+    institute_id: str = "",
+    patient_id: str = "",
+    visit_id: str = "",
+    source_schema: str | None = None,
     llm_client: CourseQualityLLMClient | None,
 ) -> NativeCourseQualityExecutionResult:
     """按客户目录顺序执行；每条适用语义规则最多调用模型一次。"""
@@ -492,12 +559,58 @@ async def execute_luxian_0609_native_course_quality_rules(
         if isinstance(wrapper, Mapping)
     }
 
+    copy_documents = documents
+    copy_source_failure = ""
+    coordinates = (institute_id, patient_id, visit_id)
+    if "LX0609-017" in selected:
+        if not all(str(value or "").strip() for value in coordinates):
+            copy_source_failure = "course_comparison_source_unavailable"
+        else:
+            try:
+                complete_documents: dict[str, list[dict[str, Any]]] = {}
+                for source_key in (
+                    "daily_course_record",
+                    "senior_course_record",
+                ):
+                    source_rows = read_luxian_0609_native_source_rows(
+                        source_key=source_key,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        source_schema=source_schema,
+                    )
+                    if len(source_rows) >= luxian_0609_native_source_row_limit(
+                        source_key
+                    ):
+                        copy_source_failure = "course_comparison_source_truncated"
+                        break
+                    complete_documents[source_key] = source_rows
+                if not copy_source_failure:
+                    copy_documents = complete_documents
+            except Exception:
+                copy_source_failure = "course_comparison_source_unavailable"
+
     results: list[dict[str, Any]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     for rule_id in selected:
         if rule_id == "LX0609-017":
-            results.append(_copy_result(documents))
+            if copy_source_failure:
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        copy_source_failure,
+                        executor_type="program",
+                    )
+                )
+            else:
+                results.append(
+                    _copy_result(
+                        copy_documents,
+                        source_complete=copy_documents is not documents,
+                    )
+                )
             continue
 
         controlled_fact = ""

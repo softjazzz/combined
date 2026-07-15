@@ -1940,7 +1940,20 @@ def _copy_native_customer_fields(*, wrapper: dict[str, Any], selected: dict[str,
     selected_metadata = _strip_sensitive(dict(selected.get("metadata") or {}))
     metadata = {
         key: selected_metadata.get(key)
-        for key in ("execution_source", "executor_type", "finding_kind", "source_state", "reason_code", "prompt_tokens", "completion_tokens", "total_tokens")
+        for key in (
+            "execution_source",
+            "executor_type",
+            "finding_kind",
+            "source_state",
+            "reason_code",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "comparable_document_count",
+            "maximum_similarity",
+            "similarity_threshold",
+            "best_match_source_types",
+        )
         if key in selected_metadata
     }
     metadata["execution_source"] = "lx0609_native"

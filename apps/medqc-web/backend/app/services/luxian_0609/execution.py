@@ -275,6 +275,10 @@ async def prepare_luxian_0609_execution(
             rule_ids=course_quality_rule_ids,
             wrapper_rules=wrapper_rules,
             evidence_payload=evidence_payload,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
             llm_client=llm_client,
         )
         native_results.extend(course_quality_execution.results)

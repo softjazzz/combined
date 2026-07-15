@@ -130,6 +130,55 @@ def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():
     assert "LXE-52" not in repr(result)
 
 
+def test_native_copy_result_keeps_only_safe_structured_similarity_metrics():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{
+            "rule_id": "LX0609-017",
+            "name": "复制病历",
+            "mapped_rule_ids": ["CL-275", "LXE-21"],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-017",
+            "status": "non_compliant",
+            "is_compliant": False,
+            "findings": "发现两份病程记录高度重复。",
+            "evidence": "已比较 11 份记录，最高全文相似度 75.24%，判定阈值 70%。",
+            "suggestion": "请修正重复记录。",
+            "confidence": 1.0,
+            "metadata": {
+                "execution_source": "lx0609_native",
+                "executor_type": "program",
+                "reason_code": "course_similarity_above_threshold",
+                "comparable_document_count": 11,
+                "maximum_similarity": 0.7524,
+                "similarity_threshold": 0.7,
+                "best_match_source_types": [
+                    "senior_course_record",
+                    "senior_course_record",
+                ],
+                "document_id": "RAW_DOCUMENT_ID_MUST_NOT_LEAK",
+            },
+        }],
+        format_evidence=False,
+    )[0]
+
+    metadata = result["metadata"]
+    assert metadata["comparable_document_count"] == 11
+    assert metadata["maximum_similarity"] == 0.7524
+    assert metadata["similarity_threshold"] == 0.7
+    assert metadata["best_match_source_types"] == [
+        "senior_course_record",
+        "senior_course_record",
+    ]
+    assert "RAW_DOCUMENT_ID_MUST_NOT_LEAK" not in repr(result)
+    assert "CL-275" not in repr(result)
+    assert "LXE-21" not in repr(result)
+
+
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
 def test_attestation_rejects_every_safe_provenance_tamper(field):
     gate, finding = _pair(FindingKind.REQUIREMENT_SATISFIED)

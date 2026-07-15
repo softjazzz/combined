@@ -311,53 +311,235 @@ async def test_016_admission_preview_shell_is_data_gap_without_model():
 
 @pytest.mark.asyncio
 async def test_017_requires_two_comparable_records_and_never_outputs_review_pending():
-    one_record = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
-        evidence_payload=_payload(
-            documents={"daily_course_record": [_row("患者病情稳定，继续观察治疗。")]}
-        ),
-        llm_client=_Client([]),
+    one_record = course._copy_result(
+        {"daily_course_record": [_row("患者病情稳定，继续观察治疗。")]},
+        source_complete=True,
     )
-    assert [item["status"] for item in one_record.results] == ["not_applicable"]
+    assert one_record["status"] == "not_applicable"
     assert "复核" not in repr(one_record)
 
     copied = "患者神志清楚，咳嗽咳痰，双肺呼吸音粗，继续抗感染平喘化痰治疗，观察病情变化。"
-    similar = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-017",),
-        wrapper_rules=[_wrapper("LX0609-017")],
-        evidence_payload=_payload(
-            documents={
-                "daily_course_record": [
-                    _row(copied),
-                    _row(copied, "2026-06-02 09:00:00"),
-                ]
-            }
-        ),
-        llm_client=_Client([]),
+    similar = course._copy_result(
+        {
+            "daily_course_record": [
+                _row(copied),
+                _row(copied, "2026-06-02 09:00:00"),
+            ]
+        },
+        source_complete=True,
     )
-    assert [item["status"] for item in similar.results] == ["non_compliant"]
-    assert similar.llm_call_count == 0
+    assert similar["status"] == "non_compliant"
     assert "复核" not in repr(similar)
 
-    different = await course.execute_luxian_0609_native_course_quality_rules(
+    different = course._copy_result(
+        {
+            "daily_course_record": [
+                _row("患者胸痛缓解，复查心肌酶阴性，计划完善冠脉CTA检查并调整药物。"),
+                _row(
+                    "冠脉CTA提示前降支狭窄，活动后仍有胸闷，已请介入组会诊评估造影。",
+                    "2026-06-02 09:00:00",
+                ),
+            ]
+        },
+        source_complete=True,
+    )
+    assert different["status"] == "compliant"
+    assert "复核" not in repr(different)
+
+    exact_threshold = course._copy_result(
+        {
+            "daily_course_record": [
+                _row("a" * 21 + "b" * 9),
+                _row("a" * 21 + "c" * 9, "2026-06-02 09:00:00"),
+            ]
+        },
+        source_complete=True,
+    )
+    assert exact_threshold["metadata"]["maximum_similarity"] == 0.7
+    assert exact_threshold["status"] == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bundle(
+    monkeypatch,
+):
+    bundle_rows = [
+        _row(f"第{index}次病程内容各不相同，仅用于证明旧投影不完整。")
+        for index in range(1, 4)
+    ]
+    copied = "患者神志清楚，生命体征平稳，继续原治疗方案并密切观察病情变化。"
+    source_rows = {
+        "daily_course_record": [
+            _row(
+                f"完整来源中的日常病程记录第{index}次，患者症状、检查结果、"
+                f"治疗方案和后续观察计划均按当日实际情况记录。"
+            )
+            for index in range(1, 10)
+        ],
+        "senior_course_record": [
+            _row(copied, "2026-06-10 09:00:00"),
+            _row(copied, "2026-06-11 09:00:00"),
+        ],
+    }
+    reader_calls: list[str] = []
+
+    def _read(**kwargs):
+        source_key = str(kwargs["source_key"])
+        reader_calls.append(source_key)
+        return list(source_rows[source_key])
+
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={"daily_course_record": bundle_rows}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert reader_calls == ["daily_course_record", "senior_course_record"]
+    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert result.llm_call_count == 0
+    metadata = result.results[0]["metadata"]
+    assert metadata["comparable_document_count"] == 11
+    assert metadata["maximum_similarity"] == 1.0
+    assert metadata["similarity_threshold"] == 0.7
+    assert metadata["best_match_source_types"] == [
+        "senior_course_record",
+        "senior_course_record",
+    ]
+    assert copied not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reader_result", "expected_status", "expected_reason"),
+    [
+        ([], "not_applicable", "insufficient_comparable_course_records"),
+        (
+            RuntimeError("raw SQL Bearer_secret 13800138000"),
+            "data_gap",
+            "course_comparison_source_unavailable",
+        ),
+    ],
+)
+async def test_017_complete_source_empty_or_failure_keeps_controlled_state(
+    monkeypatch,
+    reader_result,
+    expected_status: str,
+    expected_reason: str,
+):
+    def _read(**_kwargs):
+        if isinstance(reader_result, Exception):
+            raise reader_result
+        return list(reader_result)
+
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={"daily_course_record": [_row("旧投影内容不应兜底。")]}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.llm_call_count == 0
+    assert "Bearer_secret" not in repr(result)
+    assert "13800138000" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_017_without_complete_coordinates_or_with_source_limit_is_data_gap(
+    monkeypatch,
+):
+    reader_calls: list[str] = []
+
+    def _read(**kwargs):
+        reader_calls.append(str(kwargs["source_key"]))
+        return [
+            {
+                **_row(f"完整来源第{index}条病程记录，患者病情和治疗计划均有详细描述。"),
+                "document_id": f"safe-{index}",
+            }
+            for index in range(200)
+        ]
+
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", _read)
+
+    no_coordinates = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         wrapper_rules=[_wrapper("LX0609-017")],
         evidence_payload=_payload(
             documents={
                 "daily_course_record": [
-                    _row("患者胸痛缓解，复查心肌酶阴性，计划完善冠脉CTA检查并调整药物。"),
-                    _row(
-                        "冠脉CTA提示前降支狭窄，活动后仍有胸闷，已请介入组会诊评估造影。",
-                        "2026-06-02 09:00:00",
-                    ),
+                    _row("a" * 40),
+                    _row("a" * 40, "2026-06-02 09:00:00"),
                 ]
             }
         ),
         llm_client=_Client([]),
     )
-    assert [item["status"] for item in different.results] == ["compliant"]
-    assert "复核" not in repr(different)
+    assert [item["status"] for item in no_coordinates.results] == ["data_gap"]
+    assert reader_calls == []
+
+    truncated = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+    assert [item["status"] for item in truncated.results] == ["data_gap"]
+    assert truncated.results[0]["metadata"]["reason_code"] == (
+        "course_comparison_source_truncated"
+    )
+    assert reader_calls == ["daily_course_record"]
+
+
+@pytest.mark.asyncio
+async def test_017_does_not_treat_duplicate_database_rows_as_two_course_records(
+    monkeypatch,
+):
+    row = {
+        **_row("患者病情稳定，继续当前治疗方案并观察症状、体征及复查指标变化。"),
+        "document_id": "safe-document-ref",
+    }
+
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [dict(row), dict(row)]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable"]
+    assert result.results[0]["metadata"]["comparable_document_count"] == 1
+    assert "safe-document-ref" not in repr(result)
 
 
 @pytest.mark.asyncio
