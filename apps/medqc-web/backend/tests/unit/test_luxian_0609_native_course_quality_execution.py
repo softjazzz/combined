@@ -207,6 +207,86 @@ async def test_007_missing_authoritative_record_times_is_data_gap_without_model(
 
 
 @pytest.mark.asyncio
+async def test_007_substantive_record_without_authoritative_time_blocks_non_compliant(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: False
+    )
+
+    def fake_reader(**kwargs):
+        if kwargs["source_key"] == "daily_course_record":
+            return [
+                _row("患者病情稳定，继续当前治疗。", "2026-06-01 08:00:00"),
+                _row("上级医师查房后调整治疗方案。", None),
+                _row("患者症状改善，复查指标下降。", "2026-06-05 08:00:00"),
+            ]
+        if kwargs["source_key"] == "senior_course_record":
+            return []
+        raise AssertionError(kwargs["source_key"])
+
+    monkeypatch.setattr(
+        course, "read_luxian_0609_native_source_rows", fake_reader
+    )
+    client = _Client([])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[_wrapper("LX0609-007")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "authoritative_course_time_incomplete"
+    )
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_007_substantive_record_without_time_does_not_downgrade_compliant_timeline(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: False
+    )
+
+    def fake_reader(**kwargs):
+        if kwargs["source_key"] == "daily_course_record":
+            return [
+                _row("患者病情稳定，继续当前治疗。", "2026-06-01 08:00:00"),
+                _row("上级医师查房后调整治疗方案。", None),
+                _row("患者症状改善，复查指标下降。", "2026-06-03 08:00:00"),
+            ]
+        if kwargs["source_key"] == "senior_course_record":
+            return []
+        raise AssertionError(kwargs["source_key"])
+
+    monkeypatch.setattr(
+        course, "read_luxian_0609_native_source_rows", fake_reader
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[_wrapper("LX0609-007")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
     documents = {
         "daily_course_record": [
@@ -511,6 +591,59 @@ async def test_017_gray_similarity_uses_one_cropped_llm_call(
     assert "只比较以下两份" in client.prompts[0]
     assert "safe-left" not in client.prompts[0]
     assert "safe-right" not in client.prompts[0]
+    assert left not in repr(result)
+    assert right not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_017_long_template_block_below_95_percent_uses_one_cropped_llm_call(
+    monkeypatch,
+):
+    template = (
+        "患者神志清楚，生命体征平稳，双肺呼吸音清，心律齐，腹部柔软，"
+        "双下肢无水肿，继续观察病情变化并复查相关指标。"
+    ) * 5
+    left = (
+        f"{template}今日腹痛明显缓解，炎症指标下降，停止静脉补液，"
+        "调整为口服治疗并准备出院。"
+    )
+    right = (
+        f"{template}今日出现发热咳嗽，胸部影像提示感染进展，"
+        "继续静脉抗感染并增加雾化治疗，暂缓出院。"
+    )
+
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {
+                **_row(right, "2026-06-02 09:00:00"),
+                "document_id": "safe-right",
+            },
+        ]
+        if kwargs["source_key"] == "senior_course_record"
+        else [],
+    )
+    client = _Client([{"is_compliant": True}])
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert 0.70 < result.results[0]["metadata"]["maximum_similarity"] < 0.95
+    assert result.results[0]["metadata"]["reason_code"] == "copy_gray_llm"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "只比较以下两份" in client.prompts[0]
     assert left not in repr(result)
     assert right not in repr(result)
 

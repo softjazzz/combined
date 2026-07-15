@@ -79,8 +79,6 @@ _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
 _COPY_STRONG_EXACT_THRESHOLD = 0.95
-_COPY_STRONG_LONGEST_BLOCK_CHARS = 120
-_COPY_STRONG_MATCH_COVERAGE = 0.45
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
 _TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?")
@@ -352,6 +350,7 @@ def _rule_007_result(
             )
 
         record_times: set[datetime] = set()
+        substantive_record_without_time = False
         for source_key in _RULE_007_RECORD_SOURCES:
             rows = read_luxian_0609_native_source_rows(
                 source_key=source_key,
@@ -367,12 +366,12 @@ def _rule_007_result(
                     "course_time_source_truncated",
                     executor_type="program",
                 )
-            record_times.update(
-                parsed
-                for row in rows
-                if (parsed := _authoritative_course_time(row.get("record_time")))
-                is not None
-            )
+            for row in rows:
+                parsed = _authoritative_course_time(row.get("record_time"))
+                if parsed is not None:
+                    record_times.add(parsed)
+                elif _row_text(row):
+                    substantive_record_without_time = True
     except Exception:
         return _result(
             "LX0609-007",
@@ -389,10 +388,18 @@ def _rule_007_result(
             "authoritative_course_time_unavailable",
             executor_type="program",
         )
-    if any(
+    interval_over_72h = any(
         current - previous > _RULE_007_MAX_INTERVAL
         for previous, current in zip(ordered_times, ordered_times[1:])
-    ):
+    )
+    if interval_over_72h and substantive_record_without_time:
+        return _result(
+            "LX0609-007",
+            "data_gap",
+            "authoritative_course_time_incomplete",
+            executor_type="program",
+        )
+    if interval_over_72h:
         return _result(
             "LX0609-007",
             "non_compliant",
@@ -633,10 +640,9 @@ def _assess_copy(
         f"已比较 {len(comparable)} 份病程/查房记录，最高全文相似度 "
             f"{maximum * 100:.4f}%，判定阈值 {_COPY_SIMILARITY_THRESHOLD * 100:.0f}%。"
     )
-    strong_copy = maximum >= _COPY_STRONG_EXACT_THRESHOLD or (
-        longest_block >= _COPY_STRONG_LONGEST_BLOCK_CHARS
-        and substantial_coverage >= _COPY_STRONG_MATCH_COVERAGE
-    )
+    # 长模板块会显著抬高匹配长度和覆盖率，但不能证明动态临床内容被复制。
+    # Python 只强判近乎全文复制；70%～95%统一交给一次裁剪语义判断。
+    strong_copy = maximum >= _COPY_STRONG_EXACT_THRESHOLD
     if maximum > _COPY_SIMILARITY_THRESHOLD and strong_copy:
         item = _result(
             "LX0609-017",

@@ -22,6 +22,7 @@ _MAX_CONTEXT_CHARS = 18000
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 
 _PRETRANSFUSION_ASSESSMENT_PATTERN = re.compile(r"输血前(?:评估|评价)")
+_PRETRANSFUSION_PURPOSE_PATTERN = re.compile(r"输血目的")
 _PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN = re.compile(
     r"(?:未见|未记录|未形成|无|缺少).{0,12}输血前(?:评估|评价)"
     r"|输血前(?:评估|评价).{0,12}(?:缺失|不完整|未记录)"
@@ -251,6 +252,16 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     if any(_PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry) for entry in entries):
         return "non_compliant", "pretransfusion_assessment_missing"
 
+    bloodtrans_entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    form_complete = any(
+        _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+        and _PRETRANSFUSION_CORE_PATTERNS[1].search(entry)
+        and _PRETRANSFUSION_CORE_PATTERNS[2].search(entry)
+        for entry in bloodtrans_entries
+    )
+    if form_complete:
+        return "compliant", "pretransfusion_assessment_complete"
+
     if any(
         _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry)
         and all(pattern.search(entry) for pattern in _PRETRANSFUSION_CORE_PATTERNS)
@@ -262,10 +273,20 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     has_indication = any(
         _PRETRANSFUSION_CORE_PATTERNS[0].search(entry) for entry in entries
     )
+    has_form_purpose_basis = any(
+        _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+        and _PRETRANSFUSION_CORE_PATTERNS[1].search(entry)
+        for entry in bloodtrans_entries
+    )
     has_application = bool(_source_entries(documents, "blood_application"))
     # 输血过程中的生命体征、发热或不良反应不能反向充当“输血前评估”。
     # 没有评估标识且连指征/必要性也未记录时，可确定为缺失；其余灰区仍交给模型。
-    if not has_marker and not has_indication and not has_application:
+    if (
+        not has_marker
+        and not has_indication
+        and not has_form_purpose_basis
+        and not has_application
+    ):
         return "non_compliant", "pretransfusion_assessment_missing"
     return None
 

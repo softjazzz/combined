@@ -742,6 +742,77 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
 
 
 @pytest.mark.asyncio
+async def test_044_same_record_transfusion_purpose_and_individual_basis_is_compliant_without_model(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "输血目的：纠正贫血；患者血红蛋白降低，"
+                        "既往无输血不良反应，输注前生命体征平稳。"
+                    )
+                }
+            ],
+            blood_application=[],
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "pretransfusion_assessment_complete"
+    )
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_044_transfusion_purpose_without_risk_assessment_uses_one_cropped_llm_call(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": True}])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {"content": "输血目的：纠正贫血；患者血红蛋白降低。"}
+            ],
+            blood_application=[],
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_customer_prompt"
+    )
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
 async def test_source_error_and_invalid_model_output_fail_closed_without_echo(monkeypatch):
     secret = "Bearer_secret_13800138000"
 
