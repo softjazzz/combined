@@ -8,6 +8,12 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceUnavailable,
@@ -168,10 +174,41 @@ def _load_source(
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> SourceMaterial:
     bundle_rows = _bundle_rows(documents, source_key)
     if bundle_rows:
         return SourceMaterial("present", bundle_rows)
+    if evidence_snapshot is not None:
+        observation = next(
+            (
+                item
+                for item in evidence_snapshot.observations
+                if item.source_key == source_key
+            ),
+            None,
+        )
+        if observation is not None:
+            if (
+                evidence_materials is None
+                or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+            ):
+                return SourceMaterial("error")
+            if observation.query_state.value in {"unavailable", "error"}:
+                return SourceMaterial(observation.query_state.value)
+            try:
+                rows = evidence_materials.rows(source_key)
+            except EvidenceMaterialTruncated:
+                return SourceMaterial("truncated")
+            except EvidenceMaterialUnavailable:
+                return SourceMaterial("error")
+            material = tuple(
+                row
+                for row in rows[:_MAX_ROWS_PER_SOURCE]
+                if isinstance(row, Mapping)
+            )
+            return SourceMaterial("present" if material else "empty", material)
     if not all((institute_id, patient_id, visit_id)):
         return SourceMaterial("unavailable")
     try:
@@ -413,6 +450,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     visit_id: str,
     source_schema: str | None,
     llm_client: TumorPathologyLLMClient | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeTumorPathologyExecutionResult:
     """按客户目录顺序执行；无受控适用事实时不调用模型。"""
 
@@ -436,6 +475,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 patient_id=patient_id,
                 visit_id=visit_id,
                 source_schema=source_schema,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
             )
         return cache[source_key]
 
@@ -458,7 +499,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             pathology_present = master.state == "present" or report.state == "present"
             if not pathology_present:
                 source_failed = any(
-                    material.state in {"unavailable", "error"}
+                    material.state in {"unavailable", "error", "truncated"}
                     for material in (master, report)
                 )
                 results.append(
@@ -562,6 +603,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 patient_id=patient_id,
                 visit_id=visit_id,
                 source_schema=source_schema,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
             )
             if live_surgery.state == "present":
                 sampling_surgery = live_surgery

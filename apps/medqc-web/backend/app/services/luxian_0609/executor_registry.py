@@ -136,13 +136,23 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
     ),
 }
 
+LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
+    "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+}
+
 
 def resolve_legacy_executor_material_source_keys(
     executor_keys: Iterable[str],
+    *,
+    selected_rule_ids: Iterable[str] = (),
 ) -> tuple[str, ...]:
-    """按物理 source 去重，供一次性 read-session 预取。"""
+    """按执行器与规则级依赖去重，供一次性 read-session 预取。"""
 
     requested = tuple(executor_keys)
+    selected = tuple(
+        str(rule_id or "").strip().upper() for rule_id in selected_rule_ids
+    )
     return tuple(
         sorted(
             {
@@ -151,6 +161,11 @@ def resolve_legacy_executor_material_source_keys(
                 for source_key in LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS.get(
                     executor_key, ()
                 )
+            }
+            | {
+                source_key
+                for rule_id in selected
+                for source_key in LEGACY_RULE_MATERIAL_SOURCE_KEYS.get(rule_id, ())
             }
         )
     )
@@ -310,6 +325,8 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_snapshot=resources.evidence_snapshot,
+                evidence_materials=resources.evidence_materials,
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

@@ -433,6 +433,8 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
     assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
         *expected,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+        "pathology_exam_master",
+        "pathology_exam_report",
     }
 
 

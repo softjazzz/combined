@@ -211,9 +211,12 @@ async def prepare_luxian_0609_execution(
                     created_at=datetime.now(timezone.utc).isoformat(),
                     additional_source_keys=(
                         resolve_legacy_executor_material_source_keys(
-                            executor_key
-                            for executor_key, _
-                            in package_plan.native_executor_batches
+                            tuple(
+                                executor_key
+                                for executor_key, _
+                                in package_plan.native_executor_batches
+                            ),
+                            selected_rule_ids=package_plan.selected_rule_ids,
                         )
                     ),
                 )

@@ -252,6 +252,7 @@ async def _evaluate_runtime_flag_ab_case(
         native_course_quality_execution,
         native_mdt_execution,
         native_surgery_gate_execution,
+        native_tumor_pathology_execution,
         native_transfusion_execution,
         source_evidence_reader,
     )
@@ -295,6 +296,9 @@ async def _evaluate_runtime_flag_ab_case(
     original_surgery_native_reader = (
         native_surgery_gate_execution.read_luxian_0609_native_source_rows
     )
+    original_tumor_reader = (
+        native_tumor_pathology_execution.read_luxian_0609_native_source_rows
+    )
     original_unstable_order_reader = (
         native_course_quality_execution.has_luxian_0609_current_visit_unstable_order
     )
@@ -329,6 +333,16 @@ async def _evaluate_runtime_flag_ab_case(
     def counted_surgery_native_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_surgery_native_reader(**kwargs)
+
+    def counted_tumor_reader(**kwargs):
+        if kwargs.get("source_key") in {
+            "pathology_exam_master",
+            "pathology_exam_report",
+            "surgery_record",
+            "daily_course_record",
+        }:
+            family_reader_calls[reader_phase] += 1
+        return original_tumor_reader(**kwargs)
 
     def counted_unstable_order_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
@@ -374,6 +388,9 @@ async def _evaluate_runtime_flag_ab_case(
             )
             native_surgery_gate_execution.read_luxian_0609_native_source_rows = (
                 counted_surgery_native_reader
+            )
+            native_tumor_pathology_execution.read_luxian_0609_native_source_rows = (
+                counted_tumor_reader
             )
             native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
                 counted_unstable_order_reader
@@ -428,6 +445,9 @@ async def _evaluate_runtime_flag_ab_case(
         )
         native_surgery_gate_execution.read_luxian_0609_native_source_rows = (
             original_surgery_native_reader
+        )
+        native_tumor_pathology_execution.read_luxian_0609_native_source_rows = (
+            original_tumor_reader
         )
         native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
             original_unstable_order_reader

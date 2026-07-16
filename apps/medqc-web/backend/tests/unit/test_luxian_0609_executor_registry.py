@@ -82,6 +82,17 @@ def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> No
     )
 
 
+def test_tumor_pathology_materials_are_scoped_only_to_013_019() -> None:
+    assert resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",),
+        selected_rule_ids=("LX0609-013", "LX0609-019"),
+    ) == ("pathology_exam_master", "pathology_exam_report")
+    assert resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",),
+        selected_rule_ids=("LX0609-026", "LX0609-027"),
+    ) == ()
+
+
 @pytest.mark.asyncio
 async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order():
     calls: list[tuple[str, dict]] = []
@@ -174,6 +185,8 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[4][1]["evidence_materials"] is materials
+    assert calls[5][1]["evidence_snapshot"] is snapshot
+    assert calls[5][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_snapshot"] is snapshot
     assert calls[7][1]["evidence_snapshot"] is snapshot
