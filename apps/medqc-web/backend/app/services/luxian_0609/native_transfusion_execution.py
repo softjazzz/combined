@@ -34,6 +34,33 @@ _PRETRANSFUSION_CORE_PATTERNS = (
     re.compile(r"输血风险|既往输血|不良反应|过敏|生命体征|发热"),
 )
 
+_TRANSFUSION_COURSE_SHELL_PATTERN = re.compile(
+    r"空模板|模板(?:内容)?|待补(?:充)?|未填写|暂无内容|无正文|记录正文"
+)
+_TRANSFUSION_COMPONENT_PATTERN = re.compile(
+    r"红细胞|血浆|血小板|冷沉淀|全血|白蛋白|粒细胞"
+)
+_TRANSFUSION_DOSE_PATTERN = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:U|单位|m[lL]|毫升|袋)",
+    flags=re.IGNORECASE,
+)
+_TRANSFUSION_START_PATTERN = re.compile(
+    r"(?:输血|输注).{0,12}(?:开始|起始)|(?:开始|起始)(?:时间|输血|输注)"
+    r"|\d{1,2}:\d{2}.{0,4}(?:开始|起始)"
+    r"|(?:开始|起始).{0,4}\d{1,2}:\d{2}"
+)
+_TRANSFUSION_COURSE_END_PATTERN = re.compile(
+    r"(?:输血|输注).{0,12}(?:结束|完毕|完成)"
+    r"|结束(?:时间)?|输毕"
+)
+_TRANSFUSION_OBSERVATION_PATTERN = re.compile(
+    r"输血过程中|输注过程中|严密观察|生命体征|过程(?:平稳|顺利)"
+)
+_TRANSFUSION_REACTION_PATTERN = re.compile(
+    r"(?:无|未见).{0,16}(?:不良反应|输血反应|寒战|发热|皮疹|胸闷)"
+    r"|耐受良好|有输血反应|发生.{0,8}反应"
+)
+
 _TRANSFUSION_END_PATTERN = re.compile(
     r"(?:输血|输注)(?:结束|完毕|完成)|输毕|结束(?:输血|输注)"
 )
@@ -289,6 +316,72 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
         and not has_application
     ):
         return "non_compliant", "pretransfusion_assessment_missing"
+    return None
+
+
+def _is_substantive_transfusion_course_entry(entry: str) -> bool:
+    """只识别专用输血记录中的实质临床内容；标题或模板不进入确定性短路。"""
+
+    if (
+        len(entry) < 24
+        or not _TRANSFUSION_CONTEXT_PATTERN.search(entry)
+        or _TRANSFUSION_COURSE_SHELL_PATTERN.search(entry)
+    ):
+        return False
+    clinical_signals = tuple(
+        bool(pattern.search(entry))
+        for pattern in (
+            _PRETRANSFUSION_PURPOSE_PATTERN,
+            _PRETRANSFUSION_CORE_PATTERNS[0],
+            _TRANSFUSION_COMPONENT_PATTERN,
+            _TRANSFUSION_DOSE_PATTERN,
+            _TRANSFUSION_START_PATTERN,
+            _TRANSFUSION_END_PATTERN,
+            _TRANSFUSION_OBSERVATION_PATTERN,
+            _TRANSFUSION_REACTION_PATTERN,
+        )
+    )
+    # 前两项仅描述目的/指征；至少还要有一个真实输注过程信号。
+    return sum(clinical_signals) >= 2 and any(clinical_signals[2:])
+
+
+def _programmatic_045_status(
+    documents: Mapping[str, Any],
+) -> tuple[str, str] | None:
+    entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    if any(_is_substantive_transfusion_course_entry(entry) for entry in entries):
+        return "compliant", "transfusion_course_record_present"
+    return None
+
+
+def _is_complete_transfusion_course_entry(entry: str) -> bool:
+    """逐份核对完整性，禁止从多份文书拼接成一份合规记录。"""
+
+    if not _is_substantive_transfusion_course_entry(entry):
+        return False
+    has_purpose_or_indication = bool(
+        _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+        or _PRETRANSFUSION_CORE_PATTERNS[0].search(entry)
+    )
+    return all(
+        (
+            has_purpose_or_indication,
+            bool(_TRANSFUSION_COMPONENT_PATTERN.search(entry)),
+            bool(_TRANSFUSION_DOSE_PATTERN.search(entry)),
+            bool(_TRANSFUSION_START_PATTERN.search(entry)),
+            bool(_TRANSFUSION_COURSE_END_PATTERN.search(entry)),
+            bool(_TRANSFUSION_OBSERVATION_PATTERN.search(entry)),
+            bool(_TRANSFUSION_REACTION_PATTERN.search(entry)),
+        )
+    )
+
+
+def _programmatic_046_status(
+    documents: Mapping[str, Any],
+) -> tuple[str, str] | None:
+    entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    if entries and all(_is_complete_transfusion_course_entry(entry) for entry in entries):
+        return "compliant", "transfusion_course_record_complete"
     return None
 
 
@@ -637,6 +730,22 @@ async def execute_luxian_0609_native_transfusion_rules(
             continue
         if rule_id == "LX0609-044":
             programmatic_status = _programmatic_044_status(documents)
+            if programmatic_status is not None:
+                status, reason_code = programmatic_status
+                results.append(
+                    _result(rule_id, status, reason_code, executor_type="program")
+                )
+                continue
+        if rule_id == "LX0609-045":
+            programmatic_status = _programmatic_045_status(documents)
+            if programmatic_status is not None:
+                status, reason_code = programmatic_status
+                results.append(
+                    _result(rule_id, status, reason_code, executor_type="program")
+                )
+                continue
+        if rule_id == "LX0609-046":
+            programmatic_status = _programmatic_046_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
                 results.append(

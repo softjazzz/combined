@@ -210,7 +210,14 @@ async def test_no_dedicated_transfusion_source_rows_returns_not_applicable_witho
 async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_call_model(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client(
-        [{"is_compliant": index % 2 == 0} for index in range(len(transfusion.TRANSFUSION_RULE_IDS))]
+        [
+            {"is_compliant": True},
+            {"is_compliant": False},
+            {"is_compliant": True},
+            {"is_compliant": True},
+            {"is_compliant": False},
+            {"is_compliant": True},
+        ]
     )
 
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -239,14 +246,14 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         "non_compliant",
         "data_gap",
         "compliant",
-        "non_compliant",
+        "compliant",
         "compliant",
         "compliant",
         "non_compliant",
         "compliant",
     ]
-    assert result.llm_call_count == 7
-    assert result.total_tokens == 770
+    assert result.llm_call_count == 6
+    assert result.total_tokens == 660
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
 
@@ -290,6 +297,136 @@ async def test_typed_transfusion_event_triggers_but_shell_record_fails_closed(mo
     )
     assert shell.results[0]["status"] == "data_gap"
     assert shell.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_045_substantive_dedicated_course_record_is_compliant_without_model(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": False}])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-045",),
+        wrapper_rules=[_wrapper("LX0609-045")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
+                        "结束时间16:10。输血过程中严密观察，生命体征平稳，"
+                        "未见寒战、发热及其他输血不良反应。"
+                    )
+                }
+            ],
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_course_record_present"
+    )
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_046_each_complete_dedicated_record_is_compliant_without_model(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": False}])
+
+    complete_rows = [
+        {
+            "content": (
+                "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
+                "结束时间16:10。输血过程中严密观察，生命体征平稳，"
+                "未见寒战、发热及其他输血不良反应。"
+            )
+        },
+        {
+            "content": (
+                "输血指征：凝血功能异常；开始时间18:00，输注血浆200ml，"
+                "结束时间19:00。输注过程中严密观察，过程顺利，"
+                "未见皮疹、胸闷及输血反应。"
+            )
+        },
+    ]
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=complete_rows,
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_course_record_complete"
+    )
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_046_incomplete_or_cross_record_fields_keep_exactly_one_cropped_model_call(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": True}])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "输血目的：纠正贫血；开始时间14:20，结束时间16:10。"
+                        "输血过程中严密观察，未见寒战及输血不良反应。"
+                    )
+                },
+                {
+                    "content": (
+                        "输注去白悬浮红细胞2U，开始时间18:00，结束时间19:00。"
+                        "过程顺利，未见皮疹及输血反应。"
+                    )
+                },
+            ],
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_customer_prompt"
+    )
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
