@@ -4,6 +4,12 @@ from dataclasses import replace
 
 import pytest
 
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from app.services.luxian_0609.execution_contract import (
     FamilyExecutionEnvelope,
     validate_family_execution_envelope,
@@ -41,6 +47,20 @@ def _envelope(*results: dict) -> FamilyExecutionEnvelope:
     )
 
 
+def _decision(rule_id: str) -> RuleDecision:
+    return RuleDecision(
+        rule_id=rule_id,
+        snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.SATISFIED,
+        reason_code="requirement_satisfied",
+        fact_refs=("b" * 64,),
+        evaluator_version="execution-contract-test-v1",
+        confidence=1.0,
+    )
+
+
 @pytest.mark.unit
 def test_exact_family_execution_envelope_passes_without_rebuilding_results():
     envelope = _envelope(*(_result(rule_id) for rule_id in EXPECTED))
@@ -53,6 +73,45 @@ def test_exact_family_execution_envelope_passes_without_rebuilding_results():
     assert validated.valid is True
     assert validated.reason_code == ""
     assert validated.envelope is envelope
+
+
+@pytest.mark.unit
+def test_mixed_legacy_results_and_typed_decisions_preserve_partition_order():
+    envelope = FamilyExecutionEnvelope(
+        results=(_result("LX0609-002"),),
+        decisions=(_decision("LX0609-001"),),
+        planned_rule_ids=EXPECTED,
+    )
+
+    validated = validate_family_execution_envelope(
+        envelope=envelope,
+        expected_rule_ids=EXPECTED,
+    )
+
+    assert validated.valid is True
+    assert validated.envelope is envelope
+
+
+@pytest.mark.unit
+def test_result_and_decision_overlap_fails_closed_for_whole_family():
+    envelope = FamilyExecutionEnvelope(
+        results=(_result("LX0609-001"), _result("LX0609-002")),
+        decisions=(_decision("LX0609-001"),),
+        planned_rule_ids=EXPECTED,
+    )
+
+    validated = validate_family_execution_envelope(
+        envelope=envelope,
+        expected_rule_ids=EXPECTED,
+    )
+
+    assert validated.valid is False
+    assert validated.reason_code == "family_result_duplicate"
+    assert [item["status"] for item in validated.envelope.results] == [
+        "technical_error",
+        "technical_error",
+    ]
+    assert validated.envelope.decisions == ()
 
 
 @pytest.mark.unit

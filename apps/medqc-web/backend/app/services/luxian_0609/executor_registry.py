@@ -236,6 +236,7 @@ def _to_envelope(
     return FamilyExecutionEnvelope(
         results=results,
         planned_rule_ids=planned_rule_ids,
+        decisions=getattr(raw, "decisions", ()),
         llm_call_count=int(getattr(raw, "llm_call_count", 0) or 0),
         prompt_tokens=int(getattr(raw, "prompt_tokens", 0) or 0),
         completion_tokens=int(getattr(raw, "completion_tokens", 0) or 0),
