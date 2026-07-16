@@ -8,6 +8,12 @@ from app.services.luxian_0609.engine import (
     FamilyExecutionSuccess,
     Luxian0609ExecutionEngine,
 )
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from app.services.luxian_0609.evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
@@ -23,6 +29,7 @@ from app.services.luxian_0609.executor_registry import (
     LegacyNativeExecutorFunctions,
     build_luxian_0609_legacy_executor_registry,
     resolve_legacy_executor_material_source_keys,
+    _to_envelope,
 )
 from app.services.luxian_0609.native_execution import build_luxian_0609_native_result
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
@@ -74,6 +81,37 @@ def _result(rule_id: str) -> dict:
         finding_kind="test_result",
         reason_code="test_result",
     )
+
+
+def test_single_result_typed_envelope_omits_none_customer_result() -> None:
+    marker = RuleDecision(
+        rule_id="LX0609-040",
+        snapshot_hash="a" * 64,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.SATISFIED,
+        reason_code="requirement_satisfied",
+        fact_refs=("b" * 64,),
+        evaluator_version="executor-registry-test-v1",
+        confidence=1.0,
+    )
+    envelope = _to_envelope(
+        SimpleNamespace(
+            result=None,
+            decisions=(marker,),
+            llm_call_count=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            api_time=0.0,
+        ),
+        selected_rule_ids=("LX0609-040",),
+        single_result=True,
+    )
+
+    assert envelope.results == ()
+    assert envelope.decisions == (marker,)
+    assert envelope.planned_rule_ids == ("LX0609-040",)
 
 
 def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> None:

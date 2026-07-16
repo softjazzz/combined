@@ -239,6 +239,26 @@ def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
     )
 
 
+@pytest.mark.parametrize(
+    "setting_name",
+    (
+        "LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED",
+    ),
+)
+def test_luxian_rule_decision_next_batch_defaults_off_and_can_be_enabled(
+    monkeypatch,
+    setting_name,
+):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert getattr(Settings(_env_file=None), setting_name) is False
+
+    monkeypatch.setenv(setting_name, "true")
+    assert getattr(Settings(_env_file=None), setting_name) is True
+
+
 def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")

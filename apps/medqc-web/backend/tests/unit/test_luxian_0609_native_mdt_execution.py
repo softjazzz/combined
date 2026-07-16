@@ -7,6 +7,18 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+)
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
+)
 
 
 class _LLM:
@@ -40,6 +52,248 @@ def _reader(rows_by_source: dict[str, list[dict]]):
         return [dict(row) for row in rows_by_source.get(kwargs["source_key"], [])]
 
     return read
+
+
+def _session(
+    rows_by_source: dict[str, list[dict]],
+    *,
+    failed_source: str = "",
+    unavailable: bool = False,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == failed_source:
+            error_type = SourceEvidenceUnavailable if unavailable else SourceEvidenceQueryError
+            raise error_type("private source error")
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-040",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T18:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=(
+            "mr_surgery",
+            "presurg_discussion",
+            "consultation_record",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_builds_bound_decision_from_same_session_without_customer_dto(
+    monkeypatch,
+):
+    marker = "PRIVATE-MDT-BODY-MARKER"
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgery_name": "测试手术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "record_time": "2026-01-01T09:00:00",
+                    "record_content": f"经多学科讨论后一致认为可实施手术。{marker}",
+                }
+            ],
+            "consultation_record": [],
+        }
+    )
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.result is None
+    assert len(execution.decisions) == 1
+    decision = execution.decisions[0]
+    assert decision.applicability is ApplicabilityState.APPLICABLE
+    assert decision.evidence_state is EvidenceState.SUFFICIENT
+    assert decision.qc_direction is QcDirection.SATISFIED
+    assert decision.reason_code == "requirement_satisfied"
+    expected_refs = {
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in session.snapshot.observations
+        if item.source_key
+        in {"mr_surgery", "presurg_discussion", "consultation_record"}
+    }
+    assert set(decision.fact_refs) == expected_refs
+    assert execution.llm_call_count == 0
+    assert marker not in repr(execution)
+    assert "2026-01-02" not in repr(execution)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-040",),
+        snapshot=session.snapshot,
+    )
+    assert reduced[0].final_state == "compliant"
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_complete_empty_trigger_is_bound_not_applicable():
+    session = _session(
+        {
+            "mr_surgery": [],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    decision = execution.decisions[0]
+    assert execution.result is None
+    assert decision.applicability is ApplicabilityState.NOT_APPLICABLE
+    assert decision.reason_code == "trigger_absent_complete"
+    assert decision.fact_refs
+    assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_preserves_raw_llm_state_calls_and_tokens(monkeypatch):
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgery_name": "测试手术",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [],
+            "consultation_record": [
+                {
+                    "record_time": "2026-01-01T09:00:00",
+                    "record_content": "请单一专科协助评估手术风险。",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        native_mdt_execution,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    raw = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM("absent"),
+        evidence_materials=session.materials,
+    )
+    typed = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM("absent"),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert raw.result["status"] == "non_compliant"
+    assert typed.result is None
+    assert typed.decisions[0].qc_direction is QcDirection.DEFECT
+    assert typed.llm_call_count == raw.llm_call_count == 1
+    assert typed.prompt_tokens == raw.prompt_tokens == 120
+    assert typed.completion_tokens == raw.completion_tokens == 12
+    assert typed.total_tokens == raw.total_tokens == 132
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failed_source", "unavailable", "evidence_state", "reason_code"),
+    (
+        ("mr_surgery", True, EvidenceState.DATA_GAP, "source_unavailable"),
+        ("mr_surgery", False, EvidenceState.TECHNICAL_ERROR, "source_query_error"),
+    ),
+)
+async def test_typed_mdt_preserves_source_failure_states(
+    failed_source,
+    unavailable,
+    evidence_state,
+    reason_code,
+):
+    session = _session({}, failed_source=failed_source, unavailable=unavailable)
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.result is None
+    assert execution.decisions[0].evidence_state is evidence_state
+    assert execution.decisions[0].reason_code == reason_code
+    assert execution.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_mdt_rejects_mixed_snapshot_and_material_store():
+    first = _session({"mr_surgery": []})
+    second = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgical_level": "三级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="one evidence session"):
+        await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+            institute_id="I",
+            patient_id="P",
+            visit_id="V",
+            source_schema=None,
+            llm_client=_LLM(),
+            evidence_materials=second.materials,
+            evidence_snapshot=first.snapshot,
+            decision_rule_ids=("LX0609-040",),
+        )
 
 
 @pytest.mark.asyncio

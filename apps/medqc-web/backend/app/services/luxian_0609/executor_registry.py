@@ -253,7 +253,11 @@ def _to_envelope(
     selected_rule_ids: tuple[str, ...],
     single_result: bool = False,
 ) -> FamilyExecutionEnvelope:
-    results = (getattr(raw, "result"),) if single_result else tuple(getattr(raw, "results"))
+    if single_result:
+        single = getattr(raw, "result")
+        results = () if single is None else (single,)
+    else:
+        results = tuple(getattr(raw, "results"))
     planned_rule_ids = (
         selected_rule_ids
         if single_result
@@ -380,6 +384,11 @@ def build_luxian_0609_legacy_executor_registry(
                 llm_client=resources.llm_client,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
@@ -441,7 +450,13 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
             )
         )
         return _to_envelope(

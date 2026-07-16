@@ -527,6 +527,19 @@ def test_consultation_decision_support_retains_private_material_once_without_saf
         )
 
 
+def test_mdt_040_decision_support_includes_consultation_record() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        calls.append(kwargs["source_key"])
+        return _rows(kwargs["source_key"], [])
+
+    _build(selected_rule_ids=("LX0609-040",), row_reader=reader)
+
+    assert "consultation_record" in calls
+    assert calls.count("consultation_record") == 1
+
+
 def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 

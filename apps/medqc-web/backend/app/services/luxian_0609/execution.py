@@ -254,6 +254,36 @@ async def prepare_luxian_0609_execution(
                     )
                 )
             )
+            or (
+                rule_id == "LX0609-017"
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id == "LX0609-019"
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id == "LX0609-040"
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED",
+                        False,
+                    )
+                )
+            )
         )
     )
     if (

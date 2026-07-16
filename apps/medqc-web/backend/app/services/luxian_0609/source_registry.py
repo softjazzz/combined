@@ -255,6 +255,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": ("senior_course_record",),
     "LX0609-023": ("senior_course_record",),
+    # 040 的 MDT 结论允许使用同次就诊会诊记录，必须将该来源绑定进决策 refs。
+    "LX0609-040": ("consultation_record",),
 })
 
 

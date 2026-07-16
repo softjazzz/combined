@@ -1218,10 +1218,46 @@ def _normalized_for_similarity(content: str) -> str:
 
 
 @dataclass(frozen=True)
+class _CopyRuleOutcome:
+    status: str
+    reason_code: str
+    executor_type: str
+    safe_metadata: Mapping[str, Any]
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+    findings: str = ""
+    evidence: str = ""
+    suggestion: str = ""
+
+
+@dataclass(frozen=True)
 class _CopyAssessment:
-    terminal_result: dict[str, Any] | None
+    terminal_outcome: _CopyRuleOutcome | None
     gray_context: str
     safe_metadata: Mapping[str, Any]
+
+
+def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
+    item = _result(
+        "LX0609-017",
+        outcome.status,
+        outcome.reason_code,
+        executor_type=outcome.executor_type,
+        prompt_tokens=outcome.prompt_tokens,
+        completion_tokens=outcome.completion_tokens,
+        total_tokens=outcome.total_tokens,
+        api_time=outcome.api_time,
+        extra_metadata=outcome.safe_metadata,
+    )
+    if outcome.findings:
+        item["findings"] = outcome.findings
+    if outcome.evidence:
+        item["evidence"] = outcome.evidence
+    if outcome.suggestion:
+        item["suggestion"] = outcome.suggestion
+    return item
 
 
 def _copy_gray_context(
@@ -1283,28 +1319,26 @@ def _assess_copy(
     }
     if not rows:
         return _CopyAssessment(
-            terminal_result=_result(
-                "LX0609-017",
-                "not_applicable" if source_complete else "data_gap",
-                (
+            terminal_outcome=_CopyRuleOutcome(
+                status="not_applicable" if source_complete else "data_gap",
+                reason_code=(
                     "insufficient_comparable_course_records"
                     if source_complete
                     else "course_comparison_material_unavailable"
                 ),
                 executor_type="program",
-                extra_metadata=safe_metadata,
+                safe_metadata=safe_metadata,
             ),
             gray_context="",
             safe_metadata=safe_metadata,
         )
     if len(comparable) < 2:
         return _CopyAssessment(
-            terminal_result=_result(
-                "LX0609-017",
-                "not_applicable",
-                "insufficient_comparable_course_records",
+            terminal_outcome=_CopyRuleOutcome(
+                status="not_applicable",
+                reason_code="insufficient_comparable_course_records",
                 executor_type="program",
-                extra_metadata=safe_metadata,
+                safe_metadata=safe_metadata,
             ),
             gray_context="",
             safe_metadata=safe_metadata,
@@ -1343,21 +1377,23 @@ def _assess_copy(
     # Python 只强判近乎全文复制；70%～95%统一交给一次裁剪语义判断。
     strong_copy = maximum >= _COPY_STRONG_EXACT_THRESHOLD
     if maximum > _COPY_SIMILARITY_THRESHOLD and strong_copy:
-        item = _result(
-            "LX0609-017",
-            "non_compliant",
-            "strong_copy_evidence",
-            executor_type="program",
-            extra_metadata=safe_metadata,
+        return _CopyAssessment(
+            _CopyRuleOutcome(
+                status="non_compliant",
+                reason_code="strong_copy_evidence",
+                executor_type="program",
+                safe_metadata=safe_metadata,
+                findings="发现两份病程/查房记录全文相似度超过70%，存在高度重复。",
+                evidence=evidence,
+                suggestion="请核对重复记录，补充本次病情变化、诊疗调整和查房意见。",
+            ),
+            "",
+            safe_metadata,
         )
-        item["findings"] = "发现两份病程/查房记录全文相似度超过70%，存在高度重复。"
-        item["evidence"] = evidence
-        item["suggestion"] = "请核对重复记录，补充本次病情变化、诊疗调整和查房意见。"
-        return _CopyAssessment(item, "", safe_metadata)
     if maximum > _COPY_SIMILARITY_THRESHOLD and best_pair is not None:
         left_source, left_content, right_source, right_content = best_pair
         return _CopyAssessment(
-            terminal_result=None,
+            terminal_outcome=None,
             gray_context=_copy_gray_context(
                 left_source=left_source,
                 left_content=left_content,
@@ -1367,15 +1403,17 @@ def _assess_copy(
             ),
             safe_metadata=safe_metadata,
         )
-    item = _result(
-        "LX0609-017",
-        "compliant",
-        "course_similarity_within_threshold",
-        executor_type="program",
-        extra_metadata=safe_metadata,
+    return _CopyAssessment(
+        _CopyRuleOutcome(
+            status="compliant",
+            reason_code="course_similarity_within_threshold",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+            evidence=evidence,
+        ),
+        "",
+        safe_metadata,
     )
-    item["evidence"] = evidence
-    return _CopyAssessment(item, "", safe_metadata)
 
 
 def _copy_result(
@@ -1384,14 +1422,108 @@ def _copy_result(
     """兼容纯函数测试；灰区必须由正式执行入口调用裁剪模型。"""
 
     assessment = _assess_copy(documents, source_complete=source_complete)
-    if assessment.terminal_result is not None:
-        return assessment.terminal_result
+    if assessment.terminal_outcome is not None:
+        return _render_copy_outcome(assessment.terminal_outcome)
     return _result(
         "LX0609-017",
         "data_gap",
         "copy_semantic_review_required",
         executor_type="program",
         extra_metadata=assessment.safe_metadata,
+    )
+
+
+def _rule_017_decision(
+    *,
+    outcome: _CopyRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> RuleDecision:
+    """从同一材料仓计算出的复制 outcome 直接构造决策。"""
+
+    if (
+        type(snapshot) is not Luxian0609EvidenceSnapshot
+        or type(materials) is not Luxian0609EvidenceMaterialStore
+        or materials.snapshot_hash != snapshot.snapshot_hash
+    ):
+        raise ValueError("typed 017 evidence session mismatch")
+    source_keys = {"daily_course_record", "senior_course_record"}
+    observations = tuple(
+        item for item in snapshot.observations if item.source_key in source_keys
+    )
+    if {item.source_key for item in observations} != source_keys:
+        return RuleDecision(
+            rule_id="LX0609-017",
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            fact_refs=(),
+            evaluator_version="rule017-copy-v1",
+            confidence=None,
+        )
+    refs = tuple(item.snapshot_ref.removeprefix("sha256:") for item in observations)
+    if any(item.query_state.value == "error" for item in observations):
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            "source_query_error",
+        )
+    elif any(item.query_state.value == "unavailable" for item in observations):
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "source_unavailable",
+        )
+    elif any(item.completeness.value == "truncated" for item in observations):
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "source_truncated",
+        )
+    elif outcome.status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif outcome.status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif outcome.status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        )
+    else:
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "required_field_missing",
+        )
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id="LX0609-017",
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version="rule017-copy-v1",
+        confidence=None,
     )
 
 
@@ -1454,7 +1586,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }
     if any(
-        rule_id not in {"LX0609-007", "LX0609-008", "LX0609-009"}
+        rule_id not in {"LX0609-007", "LX0609-008", "LX0609-009", "LX0609-017"}
         for rule_id in typed_requested
     ) or not typed_requested.issubset(set(selected)):
         raise ValueError("unsupported typed course rule scope")
@@ -1462,7 +1594,9 @@ async def execute_luxian_0609_native_course_quality_rules(
         rule_id for rule_id in selected if rule_id in typed_requested
     )
     if typed_selected and (
-        evidence_snapshot is None or evidence_materials is None
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
     ):
         raise ValueError("typed course rules require one evidence session")
 
@@ -1532,6 +1666,21 @@ async def execute_luxian_0609_native_course_quality_rules(
     decisions: list[RuleDecision] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+
+    def emit_copy(outcome: _CopyRuleOutcome) -> None:
+        if "LX0609-017" in typed_requested:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            decisions.append(
+                _rule_017_decision(
+                    outcome=outcome,
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+            )
+        else:
+            results.append(_render_copy_outcome(outcome))
+
     for rule_id in selected:
         if rule_id in projection_gap_rule_ids:
             continue
@@ -1558,12 +1707,12 @@ async def execute_luxian_0609_native_course_quality_rules(
             continue
         if rule_id == "LX0609-017":
             if copy_source_failure:
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        copy_source_failure,
+                emit_copy(
+                    _CopyRuleOutcome(
+                        status="data_gap",
+                        reason_code=copy_source_failure,
                         executor_type="program",
+                        safe_metadata={},
                     )
                 )
                 continue
@@ -1571,8 +1720,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                 copy_documents,
                 source_complete=copy_documents is not documents,
             )
-            if assessment.terminal_result is not None:
-                results.append(assessment.terminal_result)
+            if assessment.terminal_outcome is not None:
+                emit_copy(assessment.terminal_outcome)
                 continue
             wrapper = wrappers_by_id.get(rule_id)
             if (
@@ -1580,24 +1729,22 @@ async def execute_luxian_0609_native_course_quality_rules(
                 or not _clean(wrapper.get("custom_prompt"))
                 or not assessment.gray_context
             ):
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "copy_prompt_input_unavailable",
+                emit_copy(
+                    _CopyRuleOutcome(
+                        status="data_gap",
+                        reason_code="copy_prompt_input_unavailable",
                         executor_type="program",
-                        extra_metadata=assessment.safe_metadata,
+                        safe_metadata=assessment.safe_metadata,
                     )
                 )
                 continue
             if llm_client is None:
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "copy_llm_unavailable",
+                emit_copy(
+                    _CopyRuleOutcome(
+                        status="data_gap",
+                        reason_code="copy_llm_unavailable",
                         executor_type="program",
-                        extra_metadata=assessment.safe_metadata,
+                        safe_metadata=assessment.safe_metadata,
                     )
                 )
                 continue
@@ -1607,13 +1754,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                     _copy_gray_prompt(context=assessment.gray_context)
                 )
             except Exception:
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "copy_llm_failure",
+                emit_copy(
+                    _CopyRuleOutcome(
+                        status="data_gap",
+                        reason_code="copy_llm_failure",
                         executor_type="llm",
-                        extra_metadata=assessment.safe_metadata,
+                        safe_metadata=assessment.safe_metadata,
                     )
                 )
                 continue
@@ -1624,31 +1770,29 @@ async def execute_luxian_0609_native_course_quality_rules(
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
             if is_compliant is None:
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "copy_llm_invalid_output",
+                emit_copy(
+                    _CopyRuleOutcome(
+                        status="data_gap",
+                        reason_code="copy_llm_invalid_output",
                         executor_type="llm",
+                        safe_metadata=assessment.safe_metadata,
                         prompt_tokens=prompt,
                         completion_tokens=completion,
                         total_tokens=total,
                         api_time=elapsed,
-                        extra_metadata=assessment.safe_metadata,
                     )
                 )
                 continue
-            results.append(
-                _result(
-                    rule_id,
-                    "compliant" if is_compliant else "non_compliant",
-                    "copy_gray_llm",
+            emit_copy(
+                _CopyRuleOutcome(
+                    status="compliant" if is_compliant else "non_compliant",
+                    reason_code="copy_gray_llm",
                     executor_type="llm",
+                    safe_metadata=assessment.safe_metadata,
                     prompt_tokens=prompt,
                     completion_tokens=completion,
                     total_tokens=total,
                     api_time=elapsed,
-                    extra_metadata=assessment.safe_metadata,
                 )
             )
             continue

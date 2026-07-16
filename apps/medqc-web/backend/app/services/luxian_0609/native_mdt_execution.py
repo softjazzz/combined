@@ -8,7 +8,14 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
@@ -80,6 +87,10 @@ _PROJECTION_PATTERN = re.compile(
 )
 _MAX_DOCUMENT_CHARS = 3000
 _MAX_CONTEXT_CHARS = 6200
+_TYPED_EVALUATOR_VERSION = "mdt-ruledecision-shadow-v1"
+_DECISION_SOURCE_KEYS = frozenset(
+    {"mr_surgery", "presurg_discussion", "consultation_record"}
+)
 
 
 class MdtLLMClient(Protocol):
@@ -88,12 +99,21 @@ class MdtLLMClient(Protocol):
 
 @dataclass(frozen=True)
 class NativeMdtExecutionResult:
-    result: dict[str, Any]
+    result: dict[str, Any] | None
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _MdtRuleOutcome:
+    status: str
+    finding_kind: str
+    reason_code: str
+    executor_type: str = "program"
 
 
 def native_mdt_rule_selected(
@@ -281,6 +301,187 @@ def _result(
     return result
 
 
+def _typed_source_blockers(
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[_MdtRuleOutcome | None, _MdtRuleOutcome | None]:
+    """区分手术触发源的终局阻塞与MDT文书源的条件阻塞。"""
+
+    observations = {item.source_key: item for item in snapshot.observations}
+    trigger = observations.get("mr_surgery")
+    if trigger is None:
+        return (
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "snapshot_mismatch"
+            ),
+            None,
+        )
+    if trigger.query_state.value == "error":
+        return (
+            _MdtRuleOutcome(
+                "technical_error", "technical_failure", "source_query_error"
+            ),
+            None,
+        )
+    if trigger.query_state.value == "unavailable":
+        return (
+            _MdtRuleOutcome("data_gap", "data_gap", "source_unavailable"),
+            None,
+        )
+    if trigger.completeness.value == "truncated":
+        return (
+            _MdtRuleOutcome("data_gap", "data_gap", "source_truncated"),
+            None,
+        )
+
+    conditional: _MdtRuleOutcome | None = None
+    for source_key in ("presurg_discussion", "consultation_record"):
+        observation = observations.get(source_key)
+        if observation is None:
+            return (
+                _MdtRuleOutcome(
+                    "technical_error", "technical_failure", "snapshot_mismatch"
+                ),
+                None,
+            )
+        if observation.query_state.value == "error":
+            conditional = _MdtRuleOutcome(
+                "technical_error", "technical_failure", "source_query_error"
+            )
+        elif observation.query_state.value == "unavailable":
+            conditional = conditional or _MdtRuleOutcome(
+                "data_gap", "data_gap", "source_unavailable"
+            )
+        elif observation.completeness.value == "truncated":
+            conditional = conditional or _MdtRuleOutcome(
+                "data_gap", "data_gap", "source_truncated"
+            )
+    return None, conditional
+
+
+def _typed_decision_from_outcome(
+    *,
+    outcome: _MdtRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    """直接从040内核结果生成安全决策，不经过客户结果DTO。"""
+
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in _DECISION_SOURCE_KEYS
+    )
+    if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed mdt decision requires evidence refs")
+    if outcome.status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif outcome.status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif outcome.status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        )
+    elif outcome.status == "data_gap":
+        canonical_reason = (
+            outcome.reason_code
+            if outcome.reason_code in {"source_unavailable", "source_truncated"}
+            else "required_field_missing"
+        )
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            canonical_reason,
+        )
+    elif outcome.status == "technical_error":
+        canonical_reason = (
+            outcome.reason_code
+            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            else "executor_exception"
+        )
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            canonical_reason,
+        )
+    else:
+        raise ValueError("unsupported mdt final state")
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=RULE_ID,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
+
+
+def _finalize(
+    *,
+    outcome: _MdtRuleOutcome,
+    typed_requested: bool,
+    snapshot: Luxian0609EvidenceSnapshot | None,
+    conditional_blocker: _MdtRuleOutcome | None = None,
+    llm_call_count: int = 0,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    api_time: float = 0.0,
+) -> NativeMdtExecutionResult:
+    if typed_requested and conditional_blocker is not None and outcome.status in {
+        "non_compliant",
+        "data_gap",
+    }:
+        outcome = conditional_blocker
+    if typed_requested:
+        assert snapshot is not None
+        return NativeMdtExecutionResult(
+            result=None,
+            decisions=(
+                _typed_decision_from_outcome(outcome=outcome, snapshot=snapshot),
+            ),
+            llm_call_count=llm_call_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
+    return NativeMdtExecutionResult(
+        result=_result(
+            status=outcome.status,
+            finding_kind=outcome.finding_kind,
+            reason_code=outcome.reason_code,
+            executor_type=outcome.executor_type,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        ),
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
+
+
 def _prompt(*, surgery_names: Sequence[str], context: str) -> str:
     names = "、".join(name for name in surgery_names if name) or "已实施四级手术"
     return f"""你是泸县0609病历质控的事实抽取器，只判断 LX0609-040 的“该四级手术术前是否完成多学科讨论”。
@@ -303,17 +504,62 @@ async def execute_luxian_0609_native_mdt_rule(
     source_schema: str | None,
     llm_client: MdtLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeMdtExecutionResult:
     """执行 040；所有来源异常和模型不确定均保守为 data_gap。"""
+    typed_scope = tuple(
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    )
+    if typed_scope not in {(), (RULE_ID,)}:
+        raise ValueError("unsupported typed mdt rule scope")
+    typed_requested = typed_scope == (RULE_ID,)
+    if typed_requested and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed mdt rule requires one evidence session")
+    terminal_blocker: _MdtRuleOutcome | None = None
+    conditional_blocker: _MdtRuleOutcome | None = None
+    if typed_requested:
+        assert evidence_snapshot is not None
+        terminal_blocker, conditional_blocker = _typed_source_blockers(
+            evidence_snapshot
+        )
+
+    def finish(
+        outcome: _MdtRuleOutcome,
+        *,
+        llm_call_count: int = 0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        api_time: float = 0.0,
+    ) -> NativeMdtExecutionResult:
+        return _finalize(
+            outcome=outcome,
+            typed_requested=typed_requested,
+            snapshot=evidence_snapshot,
+            conditional_blocker=conditional_blocker,
+            llm_call_count=llm_call_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
+
+    if terminal_blocker is not None:
+        return finish(terminal_blocker)
     if not all(
         isinstance(value, str) and value.strip()
         for value in (institute_id, patient_id, visit_id)
     ):
-        return NativeMdtExecutionResult(
-            _result(
-                status="technical_error",
-                finding_kind="technical_failure",
-                reason_code="native_coordinates_unavailable",
+        return finish(
+            _MdtRuleOutcome(
+                "technical_error",
+                "technical_failure",
+                "native_coordinates_unavailable",
             )
         )
     try:
@@ -329,11 +575,9 @@ async def execute_luxian_0609_native_mdt_rule(
             )
         )
     except Exception:
-        return NativeMdtExecutionResult(
-            _result(
-                status="data_gap",
-                finding_kind="data_gap",
-                reason_code="surgery_source_unavailable",
+        return finish(
+            _MdtRuleOutcome(
+                "data_gap", "data_gap", "surgery_source_unavailable"
             )
         )
 
@@ -343,11 +587,9 @@ async def execute_luxian_0609_native_mdt_rule(
         if _parse_datetime(row.get("surgery_begin_datetime")) is not None
     ]
     if not performed:
-        return NativeMdtExecutionResult(
-            _result(
-                status="not_applicable",
-                finding_kind="trigger_absent",
-                reason_code="performed_surgery_absent",
+        return finish(
+            _MdtRuleOutcome(
+                "not_applicable", "trigger_absent", "performed_surgery_absent"
             )
         )
     level4 = [
@@ -368,20 +610,16 @@ async def execute_luxian_0609_native_mdt_rule(
             if state == "not_applicable"
             else "surgery_level_unavailable"
         )
-        return NativeMdtExecutionResult(
-            _result(status=state, finding_kind=kind, reason_code=reason)
-        )
+        return finish(_MdtRuleOutcome(state, kind, reason))
     level4_session_times = {
         start
         for row in level4
         if (start := _parse_datetime(row.get("surgery_begin_datetime"))) is not None
     }
     if len(level4_session_times) > 1:
-        return NativeMdtExecutionResult(
-            _result(
-                status="data_gap",
-                finding_kind="data_gap",
-                reason_code="multiple_level4_sessions_unresolved",
+        return finish(
+            _MdtRuleOutcome(
+                "data_gap", "data_gap", "multiple_level4_sessions_unresolved"
             )
         )
 
@@ -409,12 +647,8 @@ async def execute_luxian_0609_native_mdt_rule(
                 )
                 documents.append((score, record_time, source_key, text))
     except Exception:
-        return NativeMdtExecutionResult(
-            _result(
-                status="data_gap",
-                finding_kind="data_gap",
-                reason_code="mdt_source_unavailable",
-            )
+        return finish(
+            _MdtRuleOutcome("data_gap", "data_gap", "mdt_source_unavailable")
         )
 
     # 只接受在每台四级手术前出现的完成态强证据；计划性“拟请多学科”不会命中。
@@ -440,11 +674,9 @@ async def execute_luxian_0609_native_mdt_rule(
             )
             for surgery in level4
         ):
-            return NativeMdtExecutionResult(
-                _result(
-                    status="compliant",
-                    finding_kind="requirement_satisfied",
-                    reason_code=reason_code,
+            return finish(
+                _MdtRuleOutcome(
+                    "compliant", "requirement_satisfied", reason_code
                 )
             )
 
@@ -453,20 +685,16 @@ async def execute_luxian_0609_native_mdt_rule(
     )
     eligible = [item for item in documents if item[1] <= earliest_level4]
     if not eligible:
-        return NativeMdtExecutionResult(
-            _result(
-                status="non_compliant",
-                finding_kind="required_document_missing",
-                reason_code="preoperative_mdt_absent",
+        return finish(
+            _MdtRuleOutcome(
+                "non_compliant",
+                "required_document_missing",
+                "preoperative_mdt_absent",
             )
         )
     if llm_client is None:
-        return NativeMdtExecutionResult(
-            _result(
-                status="data_gap",
-                finding_kind="data_gap",
-                reason_code="mdt_llm_unavailable",
-            )
+        return finish(
+            _MdtRuleOutcome("data_gap", "data_gap", "mdt_llm_unavailable")
         )
 
     eligible.sort(key=lambda item: (-item[0], item[1], item[2]))
@@ -485,10 +713,8 @@ async def execute_luxian_0609_native_mdt_rule(
             _prompt(surgery_names=names, context=context)
         )
     except Exception:
-        return NativeMdtExecutionResult(
-            _result(
-                status="data_gap", finding_kind="data_gap", reason_code="mdt_llm_error"
-            ),
+        return finish(
+            _MdtRuleOutcome("data_gap", "data_gap", "mdt_llm_error", "llm"),
             llm_call_count=1,
         )
     prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
@@ -504,17 +730,8 @@ async def execute_luxian_0609_native_mdt_rule(
         )
     else:
         status, kind, reason = "data_gap", "data_gap", "mdt_llm_unknown"
-    return NativeMdtExecutionResult(
-        _result(
-            status=status,
-            finding_kind=kind,
-            reason_code=reason,
-            executor_type="llm",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            api_time=api_time,
-        ),
+    return finish(
+        _MdtRuleOutcome(status, kind, reason, "llm"),
         llm_call_count=1,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

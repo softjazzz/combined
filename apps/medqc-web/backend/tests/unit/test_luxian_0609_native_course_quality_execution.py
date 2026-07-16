@@ -228,6 +228,241 @@ async def test_course_017_consumes_shared_material_without_live_reader(
 
 
 @pytest.mark.asyncio
+async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
+    monkeypatch,
+):
+    copied = "患者病情平稳，查体无明显变化，继续当前治疗方案并观察病情变化。"
+    private_marker = "PRIVATE_COPY_MATERIAL_MARKER"
+    rows_by_source = {
+        "daily_course_record": [
+            {
+                "document_id": "private-a",
+                "record_time": "2026-01-01 09:00:00",
+                "record_content": f"{private_marker}{copied}",
+            }
+        ],
+        "senior_course_record": [
+            {
+                "document_id": "private-b",
+                "record_time": "2026-01-02 09:00:00",
+                "record_content": f"{private_marker}{copied}",
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("typed copy path must use one evidence session")
+        ),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(
+            documents={"daily_course_record": [_row("stale payload must not win")]}
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([{"is_compliant": True}]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results == ()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].fact_refs
+    assert result.llm_call_count == 0
+    assert private_marker not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_state", "expected_state", "expected_reason"),
+    (
+        ("empty", CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete"),
+        ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
+        ("error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ),
+)
+async def test_typed_017_preserves_source_query_state_without_model(
+    source_state: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "daily_course_record":
+            if source_state == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if source_state == "error":
+                raise SourceEvidenceQueryError()
+            if source_state == "empty":
+                return SnapshotSourceRows.create(
+                    source_key=source_key,
+                    rows=[],
+                    truncated=False,
+                    limit_rows=50,
+                )
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=[{"record_content": "private material" * 4}],
+                truncated=True,
+                limit_rows=1,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_017_gray_llm_matches_raw_state_calls_tokens_and_privacy():
+    common = "患者神志清楚生命体征平稳腹部柔软双肺呼吸音清继续观察病情变化"
+    private_marker = "PRIVATE_GRAY_COPY_MARKER"
+    left = f"{private_marker}{common}今日腹痛减轻复查指标下降停止静脉补液{common}"
+    right = f"{private_marker}{common}今日仍有发热复查提示感染继续静脉抗感染{common}"
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [
+                {**_row(left), "document_id": "private-left"},
+                {
+                    **_row(right, "2026-06-02 09:00:00"),
+                    "document_id": "private-right",
+                },
+            ]
+            if source_key == "daily_course_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    raw_client = _Client([{"is_compliant": False}])
+    typed_client = _Client([{"is_compliant": False}])
+    raw = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=raw_client,
+        evidence_materials=session.materials,
+    )
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(
+            documents={"daily_course_record": [_row("stale payload is irrelevant")]}
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=typed_client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=typed.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert typed.results == ()
+    assert reduced[0].final_state.value == raw.results[0]["status"]
+    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.total_tokens == typed.total_tokens == 45
+    assert len(raw_client.prompts) == len(typed_client.prompts) == 1
+    assert private_marker not in repr(typed)
+    assert "private-left" not in repr(typed)
+
+
+@pytest.mark.asyncio
 async def test_course_017_preserves_truncated_material_reason() -> None:
     def read(**kwargs):
         source_key = kwargs["source_key"]

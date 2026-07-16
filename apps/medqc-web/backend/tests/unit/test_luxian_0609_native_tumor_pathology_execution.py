@@ -13,6 +13,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 from app.services.luxian_0609.executor_registry import (
     resolve_legacy_executor_material_source_keys,
 )
+from app.services.luxian_0609.decision_reducer import (
+    reduce_luxian_0609_rule_decision,
+)
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -88,7 +91,11 @@ class _Client:
         }
 
 
-def _material_session(*, truncated_master: bool = False):
+def _material_session(
+    *,
+    truncated_master: bool = False,
+    surgery_process: str = "术中切取病灶标本并送病理检查。",
+):
     rows_by_source = {
         "pathology_exam_master": (
             {"specimen_name": "手术标本", "record_content": "病理送检申请资料。"},
@@ -104,7 +111,7 @@ def _material_session(*, truncated_master: bool = False):
             )
         ),
         "surgery_record": (
-            {"surgery_process": "术中切取病灶标本并送病理检查。"},
+            {"surgery_process": surgery_process},
         ),
         "daily_course_record": (
             {"record_content": "病程记录中已记录病理结果与处理计划。"},
@@ -165,6 +172,277 @@ async def test_013_019_use_request_materials_without_family_live_query(monkeypat
     assert result.llm_call_count == 1
     assert result.total_tokens == 110
     assert "术中切取病灶标本" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
+    monkeypatch,
+):
+    session = _material_session()
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-019",),
+        wrapper_rules=[_wrapper("LX0609-019")],
+        evidence_payload=_payload(
+            pathology_exam_master=[],
+            pathology_exam_report=[],
+            surgery_record=[{"content": "旧投影明确未记录术中取材或送检。"}],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-019",),
+    )
+
+    assert result.results == ()
+    assert result.llm_call_count == 0
+    assert [item.rule_id for item in result.decisions] == ["LX0609-019"]
+    assert (
+        reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value
+        == "compliant"
+    )
+    assert result.decisions[0].snapshot_hash == session.snapshot.snapshot_hash
+    assert "旧投影明确未记录" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_019_material_change_updates_state_snapshot_and_refs(monkeypatch):
+    positive_session = _material_session()
+    negative_session = _material_session(
+        surgery_process="术中未取材，暂不送病理检查。"
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    common = {
+        "rule_ids": ("LX0609-019",),
+        "wrapper_rules": [_wrapper("LX0609-019")],
+        "evidence_payload": _payload(
+            surgery_record=[{"surgery_process": "旧投影始终称已送病理。"}]
+        ),
+        "institute_id": "safe-institute",
+        "patient_id": "safe-patient",
+        "visit_id": "safe-visit",
+        "source_schema": None,
+        "llm_client": None,
+        "decision_rule_ids": ("LX0609-019",),
+    }
+
+    positive = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        **common,
+        evidence_snapshot=positive_session.snapshot,
+        evidence_materials=positive_session.materials,
+    )
+    negative = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        **common,
+        evidence_snapshot=negative_session.snapshot,
+        evidence_materials=negative_session.materials,
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        positive.decisions[0]
+    ).final_state.value == "compliant"
+    assert reduce_luxian_0609_rule_decision(
+        negative.decisions[0]
+    ).final_state.value == "data_gap"
+    assert positive.decisions[0].snapshot_hash != negative.decisions[0].snapshot_hash
+    assert positive.decisions[0].fact_refs != negative.decisions[0].fact_refs
+
+
+@pytest.mark.asyncio
+async def test_typed_019_optional_llm_matches_raw_state_calls_tokens_and_prompt(
+    monkeypatch,
+):
+    process = "术中未取材，暂不送病理检查。"
+    session = _material_session(surgery_process=process)
+    payload = _payload(surgery_record=[{"surgery_process": process}])
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    raw_client = _Client([{"is_compliant": False}])
+    typed_client = _Client([{"is_compliant": False}])
+    common = {
+        "rule_ids": ("LX0609-019",),
+        "wrapper_rules": [_wrapper("LX0609-019")],
+        "evidence_payload": payload,
+        "institute_id": "safe-institute",
+        "patient_id": "safe-patient",
+        "visit_id": "safe-visit",
+        "source_schema": None,
+    }
+
+    raw = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        **common,
+        llm_client=raw_client,
+    )
+    typed = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        **common,
+        llm_client=typed_client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-019",),
+    )
+
+    assert raw.results[0]["status"] == "non_compliant"
+    assert reduce_luxian_0609_rule_decision(
+        typed.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert typed.results == ()
+    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.total_tokens == typed.total_tokens == 110
+    assert raw_client.prompts == typed_client.prompts
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_state", "expected_reason"),
+    (
+        ("available", "compliant", "requirement_satisfied"),
+        ("empty", "not_applicable", "trigger_absent_complete"),
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_typed_019_preserves_pathology_source_four_states(
+    monkeypatch,
+    mode,
+    expected_state,
+    expected_reason,
+):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key in {"pathology_exam_master", "pathology_exam_report"}:
+            if mode == "unavailable":
+                raise SourceEvidenceUnavailable("private unavailable detail")
+            if mode == "error":
+                raise SourceEvidenceQueryError("private query detail")
+            rows = (
+                []
+                if mode == "empty"
+                else [{"record_content": "病理送检资料。"}]
+            )
+        elif source_key == "surgery_record":
+            rows = [{"surgery_process": "术中切取标本并送病理检查。"}]
+        elif source_key == "daily_course_record":
+            rows = [{"record_content": "病程已记录病理送检。"}]
+        else:
+            rows = []
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-019",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=("LX0609-019",),
+        ),
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-019",),
+        wrapper_rules=[_wrapper("LX0609-019")],
+        evidence_payload=_payload(),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-019",),
+    )
+    decision = result.decisions[0]
+
+    assert reduce_luxian_0609_rule_decision(decision).final_state.value == expected_state
+    assert decision.reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert "private unavailable detail" not in repr(result)
+    assert "private query detail" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_019_target_query_error_is_technical_and_never_calls_model(
+    monkeypatch,
+):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record":
+            raise SourceEvidenceQueryError("private target query detail")
+        rows = (
+            [{"record_content": "病理送检资料。"}]
+            if source_key in {"pathology_exam_master", "pathology_exam_report"}
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-019",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=("LX0609-019",),
+        ),
+    )
+    client = _Client([])
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-019",),
+        wrapper_rules=[_wrapper("LX0609-019")],
+        evidence_payload=_payload(),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-019",),
+    )
+
+    decision = result.decisions[0]
+    assert reduce_luxian_0609_rule_decision(decision).final_state.value == "technical_error"
+    assert decision.reason_code == "source_query_error"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "private target query detail" not in repr(result)
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,12 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     SourceEvidenceUnavailable,
@@ -28,6 +34,14 @@ TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-027",
 )
 EXECUTOR_KEY = "tumor_pathology"
+_TYPED_DECISION_RULE_IDS = frozenset({"LX0609-019"})
+_TYPED_019_SOURCE_KEYS = (
+    "pathology_exam_master",
+    "pathology_exam_report",
+    "surgery_record",
+    "daily_course_record",
+)
+_TYPED_EVALUATOR_VERSION = "tumor-pathology-019-ruledecision-shadow-v1"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
@@ -125,11 +139,88 @@ class SourceMaterial:
 class NativeTumorPathologyExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _TumorRuleOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
+    executor_type: str
+
+
+def _typed_decision_from_outcome(
+    *,
+    outcome: _TumorRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in _TYPED_019_SOURCE_KEYS
+    )
+    if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed tumor decision requires evidence refs")
+
+    if outcome.status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif outcome.status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif outcome.status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        )
+    elif outcome.status == "data_gap":
+        source_gap = "unavailable" in outcome.reason_code
+        dimensions = (
+            ApplicabilityState.UNKNOWN if source_gap else ApplicabilityState.APPLICABLE,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "source_unavailable" if source_gap else "required_field_missing",
+        )
+    elif outcome.status == "technical_error":
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            "source_query_error"
+            if outcome.reason_code == "source_query_error"
+            else "executor_exception",
+        )
+    else:
+        raise ValueError("unsupported typed tumor final state")
+
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
 
 
 def _clean(value: Any) -> str:
@@ -222,6 +313,40 @@ def _load_source(
     except SourceEvidenceUnavailable:
         return SourceMaterial("unavailable")
     except Exception:
+        return SourceMaterial("error")
+    material = tuple(
+        row for row in rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
+    )
+    return SourceMaterial("present" if material else "empty", material)
+
+
+def _load_typed_source(
+    *,
+    source_key: str,
+    evidence_snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore,
+) -> SourceMaterial:
+    """typed 019 只读同一快照材料，不允许 payload 或族内查询回退。"""
+
+    if evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash:
+        return SourceMaterial("error")
+    observation = next(
+        (
+            item
+            for item in evidence_snapshot.observations
+            if item.source_key == source_key
+        ),
+        None,
+    )
+    if observation is None:
+        return SourceMaterial("error")
+    if observation.query_state.value in {"unavailable", "error"}:
+        return SourceMaterial(observation.query_state.value)
+    try:
+        rows = evidence_materials.rows(source_key)
+    except EvidenceMaterialTruncated:
+        return SourceMaterial("truncated")
+    except EvidenceMaterialUnavailable:
         return SourceMaterial("error")
     material = tuple(
         row for row in rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
@@ -452,6 +577,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     llm_client: TumorPathologyLLMClient | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeTumorPathologyExecutionResult:
     """按客户目录顺序执行；无受控适用事实时不调用模型。"""
 
@@ -459,12 +585,27 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     selected = tuple(
         rule_id for rule_id in TUMOR_PATHOLOGY_RULE_IDS if rule_id in requested
     )
+    typed_requested = {
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    }
+    if (
+        not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
+        or not typed_requested.issubset(set(selected))
+    ):
+        raise ValueError("unsupported typed tumor pathology rule scope")
+    if typed_requested and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed tumor pathology rules require one evidence session")
     if not selected:
         return NativeTumorPathologyExecutionResult((), ())
 
     documents = _documents(evidence_payload)
     facts = _timeline_facts(evidence_payload)
     cache: dict[str, SourceMaterial] = {}
+    typed_cache: dict[str, SourceMaterial] = {}
 
     def source(source_key: str) -> SourceMaterial:
         if source_key not in cache:
@@ -480,6 +621,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             )
         return cache[source_key]
 
+    def typed_source(source_key: str) -> SourceMaterial:
+        if source_key not in typed_cache:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            typed_cache[source_key] = _load_typed_source(
+                source_key=source_key,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
+            )
+        return typed_cache[source_key]
+
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "")
         .strip()
@@ -488,44 +640,83 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if isinstance(wrapper, Mapping)
     }
     results: list[dict[str, Any]] = []
+    decisions: list[RuleDecision] = []
+
+    def emit_outcome(
+        rule_id: str,
+        status: str,
+        reason_code: str,
+        *,
+        executor_type: str,
+    ) -> None:
+        outcome = _TumorRuleOutcome(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason_code,
+            executor_type=executor_type,
+        )
+        if rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            decisions.append(
+                _typed_decision_from_outcome(
+                    outcome=outcome,
+                    snapshot=evidence_snapshot,
+                )
+            )
+        else:
+            results.append(
+                _result(
+                    outcome.rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type=outcome.executor_type,
+                )
+            )
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
 
     for rule_id in selected:
+        source_for_rule = typed_source if rule_id in typed_requested else source
         context_sources: tuple[str, ...]
         if rule_id in {"LX0609-013", "LX0609-019"}:
-            master = source("pathology_exam_master")
-            report = source("pathology_exam_report")
+            master = source_for_rule("pathology_exam_master")
+            report = source_for_rule("pathology_exam_report")
+            if rule_id in typed_requested and any(
+                material.state == "error" for material in (master, report)
+            ):
+                emit_outcome(
+                    rule_id,
+                    "technical_error",
+                    "source_query_error",
+                    executor_type="program",
+                )
+                continue
             pathology_present = master.state == "present" or report.state == "present"
             if not pathology_present:
                 source_failed = any(
                     material.state in {"unavailable", "error", "truncated"}
                     for material in (master, report)
                 )
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap" if source_failed else "not_applicable",
-                        "pathology_source_unavailable"
-                        if source_failed
-                        else "pathology_fact_absent",
-                        executor_type="program",
-                    )
+                emit_outcome(
+                    rule_id,
+                    "data_gap" if source_failed else "not_applicable",
+                    "pathology_source_unavailable"
+                    if source_failed
+                    else "pathology_fact_absent",
+                    executor_type="program",
                 )
                 continue
             if rule_id == "LX0609-013" and not _has_complete_pathology_result(report):
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "pathology_final_result_or_report_time_unavailable",
-                        executor_type="program",
-                    )
+                emit_outcome(
+                    rule_id,
+                    "data_gap",
+                    "pathology_final_result_or_report_time_unavailable",
+                    executor_type="program",
                 )
                 continue
             context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
         else:
-            diagnosis = source("diagnosis")
+            diagnosis = source_for_rule("diagnosis")
             malignant_present = _has_fact(
                 facts,
                 _MALIGNANT_FACT_TYPES,
@@ -539,15 +730,13 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     "error",
                 } or not _has_any_diagnosis_code(diagnosis):
                     status = "data_gap"
-                results.append(
-                    _result(
-                        rule_id,
-                        status,
-                        "malignant_diagnosis_unavailable"
-                        if status == "data_gap"
-                        else "malignant_diagnosis_absent",
-                        executor_type="program",
-                    )
+                emit_outcome(
+                    rule_id,
+                    status,
+                    "malignant_diagnosis_unavailable"
+                    if status == "data_gap"
+                    else "malignant_diagnosis_absent",
+                    executor_type="program",
                 )
                 continue
             if rule_id == "LX0609-026":
@@ -557,20 +746,21 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     frozenset({"inpat_drug_order"}),
                 )
                 if not chemo_present:
-                    results.append(
-                        _result(
-                            rule_id,
-                            "data_gap",
-                            "chemotherapy_fact_unavailable",
-                            executor_type="program",
-                        )
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "chemotherapy_fact_unavailable",
+                        executor_type="program",
                     )
                     continue
                 context_sources = _CHEMO_TARGET_SOURCES
             else:
                 context_sources = _DISCHARGE_TARGET_SOURCES
 
-        materials = {source_key: source(source_key) for source_key in context_sources}
+        materials = {
+            source_key: source_for_rule(source_key)
+            for source_key in context_sources
+        }
         required_sources = (
             ("surgery_record", "daily_course_record")
             if rule_id in {"LX0609-013", "LX0609-019"}
@@ -578,21 +768,31 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             if rule_id == "LX0609-026"
             else ("discharge_record",)
         )
+        if rule_id in typed_requested and any(
+            materials[source_key].state == "error"
+            for source_key in required_sources
+        ):
+            emit_outcome(
+                rule_id,
+                "technical_error",
+                "source_query_error",
+                executor_type="program",
+            )
+            continue
         if any(
             materials[source_key].state != "present" for source_key in required_sources
         ):
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "tumor_target_projection_unavailable",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_target_projection_unavailable",
+                executor_type="program",
             )
             continue
         sampling_surgery = materials.get("surgery_record")
         if (
             rule_id == "LX0609-019"
+            and rule_id not in typed_requested
             and sampling_surgery is not None
             and not any("surgery_process" in row for row in sampling_surgery.rows)
         ):
@@ -612,13 +812,11 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             sampling_surgery or materials["surgery_record"],
             materials["daily_course_record"],
         ):
-            results.append(
-                _result(
-                    rule_id,
-                    "compliant",
-                    "pathology_sampling_recorded",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "compliant",
+                "pathology_sampling_recorded",
+                executor_type="program",
             )
             continue
         context = "\n".join(
@@ -628,31 +826,30 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         )[:_MAX_CONTEXT_CHARS]
         wrapper = wrappers_by_id.get(rule_id)
         if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "tumor_prompt_input_unavailable",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_prompt_input_unavailable",
+                executor_type="program",
             )
             continue
         if llm_client is None:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "tumor_llm_unavailable",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_llm_unavailable",
+                executor_type="program",
             )
             continue
         llm_call_count += 1
         try:
             response = await llm_client.generate(_prompt(wrapper, context=context))
         except Exception:
-            results.append(
-                _result(rule_id, "data_gap", "tumor_llm_failure", executor_type="llm")
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_llm_failure",
+                executor_type="llm",
             )
             continue
         prompt, completion, total, elapsed = _usage(response)
@@ -662,20 +859,25 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         api_time += elapsed
         is_compliant = _parse_is_compliant(response)
         if is_compliant is None:
-            results.append(
-                _result(
-                    rule_id, "data_gap", "tumor_llm_invalid_output", executor_type="llm"
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_llm_invalid_output",
+                executor_type="llm",
             )
             continue
         status = "compliant" if is_compliant else "non_compliant"
-        results.append(
-            _result(rule_id, status, "tumor_customer_prompt", executor_type="llm")
+        emit_outcome(
+            rule_id,
+            status,
+            "tumor_customer_prompt",
+            executor_type="llm",
         )
 
     return NativeTumorPathologyExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,
+        decisions=tuple(decisions),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
