@@ -15,6 +15,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_snapshot,
 )
 from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
 )
@@ -48,6 +49,113 @@ def _rows(source_key: str, rows, *, truncated: bool = False, limit_rows: int = 5
         rows=rows,
         truncated=truncated,
         limit_rows=limit_rows,
+    )
+
+
+@pytest.mark.parametrize(
+    ("present", "query_state", "assertion"),
+    [
+        (True, SourceQueryState.AVAILABLE, "affirmed"),
+        (False, SourceQueryState.EMPTY, "negated"),
+    ],
+)
+def test_007_builds_exact_unstable_order_fact_once(
+    present: bool,
+    query_state: SourceQueryState,
+    assertion: str,
+) -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"present": True}] if present else [],
+                limit_rows=1,
+            )
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="institute-private-001",
+        patient_id="patient-private-001",
+        visit_id="visit-private-001",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls.count(CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY) == 1
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY
+    )
+    assert observation.query_state is query_state
+    fact = next(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_unstable_order"
+    )
+    assert fact.assertion.value == assertion
+    assert fact.normalized_value["present"] is present
+    safe_output = repr((session.snapshot.to_safe_dict(), session.materials))
+    assert "病危" not in safe_output
+    assert "病重" not in safe_output
+    assert "institute-private-001" not in safe_output
+
+
+def test_non_007_does_not_query_unstable_order_fact() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(source_key, [])
+
+    _build(selected_rule_ids=("LX0609-017",), row_reader=reader)
+
+    assert CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY not in calls
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_state"),
+    [
+        (SourceEvidenceUnavailable(), SourceQueryState.UNAVAILABLE),
+        (SourceEvidenceQueryError(), SourceQueryState.ERROR),
+    ],
+)
+def test_007_controlled_fact_preserves_source_failure_state(
+    failure: Exception,
+    expected_state: SourceQueryState,
+) -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            raise failure
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY
+    )
+    assert observation.query_state is expected_state
+    assert not any(
+        item.fact_type == "current_visit_unstable_order"
+        for item in session.snapshot.facts
     )
 
 
@@ -180,9 +288,11 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
         }
     )
     assert len(selected) == 49
-    assert calls == expected_bounded
+    assert calls == sorted(
+        [*expected_bounded, CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY]
+    )
     assert len(calls) == len(set(calls))
-    assert len(snapshot.observations) == len(expected_bounded) + sum(
+    assert len(snapshot.observations) == 1 + len(expected_bounded) + sum(
         entry.access_mode is not SourceAccessMode.BOUNDED_SOURCE_V1
         for entry in registry.values()
     )
@@ -197,7 +307,10 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         if entry.access_mode is SourceAccessMode.BOUNDED_SOURCE_V1
         for source_key in entry.physical_source_keys
     }
-    assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == expected
+    assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
+        *expected,
+        CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+    }
 
 
 @pytest.mark.parametrize(
@@ -331,6 +444,9 @@ class _FakeResult:
     def all(self):
         return self.rows
 
+    def first(self):
+        return self.rows[0] if self.rows else None
+
 
 class _FakeConnection:
     def __init__(self, rows):
@@ -340,6 +456,55 @@ class _FakeConnection:
     def execute(self, statement, params):
         self.calls.append((str(statement), dict(params)))
         return _FakeResult(self.rows)
+
+
+@pytest.mark.parametrize("rows", [[{"match": 1}], []])
+def test_controlled_unstable_order_reader_uses_exact_bound_predicate(
+    monkeypatch,
+    rows: list[dict],
+) -> None:
+    connection = _FakeConnection(rows)
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, source_key: (
+            ["institute_id", "patient_id", "visit_id", "order_name"]
+            if source_key == "inpat_nondrug_order"
+            else []
+        ),
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+    )
+
+    assert [dict(row) for row in result.rows] == (
+        [{"present": True}] if rows else []
+    )
+    assert result.truncated is False
+    assert len(connection.calls) == 1
+    sql, params = connection.calls[0]
+    assert 'FROM "cdm"."inpat_nondrug_order"' in sql
+    assert '"order_name" LIKE :critical_name' in sql
+    assert "LIMIT 1" in sql
+    assert "private-institute" not in sql
+    assert params["institute_id"] == "private-institute"
+    assert params["patient_id"] == "private-patient"
+    assert params["visit_id"] == "private-visit"
 
 
 class _FakeEngine:
@@ -463,6 +628,8 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
     monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_get_table_columns", columns)
 
     for source_key in sorted(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS):
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            continue
         active_source = source_key
         source_evidence_reader.read_luxian_0609_snapshot_source_rows(
             source_key=source_key,
@@ -472,9 +639,16 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
             source_schema=None,
         )
 
-    assert len(connection.calls) == len(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS)
+    assert len(connection.calls) == (
+        len(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) - 1
+    )
+    bounded_source_keys = [
+        source_key
+        for source_key in sorted(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS)
+        if source_key != CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY
+    ]
     for source_key, (sql, params) in zip(
-        sorted(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS),
+        bounded_source_keys,
         connection.calls,
     ):
         assert "SELECT *" not in sql.upper()

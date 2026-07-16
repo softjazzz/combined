@@ -52,11 +52,17 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-004",
         "LX0609-005",
         "LX0609-006",
+        "LX0609-007",
         "LX0609-029",
         "LX0609-030",
         "LX0609-032",
     }
-    assert typed_shadow == {"LX0609-029", "LX0609-030", "LX0609-032"}
+    assert typed_shadow == {
+        "LX0609-007",
+        "LX0609-029",
+        "LX0609-030",
+        "LX0609-032",
+    }
     assert all(contract.golden_gate_state == "pending" for contract in contracts)
     assert all(contract.data_dependencies for contract in contracts)
     assert all(

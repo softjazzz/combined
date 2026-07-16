@@ -249,8 +249,10 @@ async def _evaluate_runtime_flag_ab_case(
     from app.services.luxian_0609 import (
         native_basic_timeliness,
         native_consultation_execution,
+        native_course_quality_execution,
         native_mdt_execution,
         native_transfusion_execution,
+        source_evidence_reader,
     )
     from app.services import sichuan_qc_service as service_module
 
@@ -272,6 +274,7 @@ async def _evaluate_runtime_flag_ab_case(
     snapshot_hashes: list[str] = []
     reader_phase = "baseline"
     family_reader_calls = {"baseline": 0, "candidate": 0}
+    controlled_fact_query_count = 0
     original_consultation_reader = (
         native_consultation_execution.read_luxian_0609_native_source_rows
     )
@@ -281,6 +284,15 @@ async def _evaluate_runtime_flag_ab_case(
     )
     original_transfusion_reader = (
         native_transfusion_execution.read_luxian_0609_native_source_rows
+    )
+    original_course_reader = (
+        native_course_quality_execution.read_luxian_0609_native_source_rows
+    )
+    original_unstable_order_reader = (
+        native_course_quality_execution.has_luxian_0609_current_visit_unstable_order
+    )
+    original_controlled_fact_reader = (
+        source_evidence_reader.has_luxian_0609_current_visit_unstable_order
     )
 
     def counted_consultation_reader(**kwargs):
@@ -298,6 +310,19 @@ async def _evaluate_runtime_flag_ab_case(
     def counted_transfusion_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_transfusion_reader(**kwargs)
+
+    def counted_course_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_course_reader(**kwargs)
+
+    def counted_unstable_order_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_unstable_order_reader(**kwargs)
+
+    def counted_controlled_fact_reader(**kwargs):
+        nonlocal controlled_fact_query_count
+        controlled_fact_query_count += 1
+        return original_controlled_fact_reader(**kwargs)
 
     def counted_provider(**kwargs):
         snapshot = original_provider(**kwargs)
@@ -325,6 +350,15 @@ async def _evaluate_runtime_flag_ab_case(
             )
             native_transfusion_execution.read_luxian_0609_native_source_rows = (
                 counted_transfusion_reader
+            )
+            native_course_quality_execution.read_luxian_0609_native_source_rows = (
+                counted_course_reader
+            )
+            native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
+                counted_unstable_order_reader
+            )
+            source_evidence_reader.has_luxian_0609_current_visit_unstable_order = (
+                counted_controlled_fact_reader
             )
         service.adjudicator_client.generate = replay.record
         baseline = await evaluate_full_luxian_0609_case(
@@ -365,6 +399,15 @@ async def _evaluate_runtime_flag_ab_case(
         native_transfusion_execution.read_luxian_0609_native_source_rows = (
             original_transfusion_reader
         )
+        native_course_quality_execution.read_luxian_0609_native_source_rows = (
+            original_course_reader
+        )
+        native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
+            original_unstable_order_reader
+        )
+        source_evidence_reader.has_luxian_0609_current_visit_unstable_order = (
+            original_controlled_fact_reader
+        )
         luxian_execution.build_luxian_0609_evidence_snapshot = original_provider
         luxian_execution.build_luxian_0609_evidence_read_session = (
             original_session_provider
@@ -395,6 +438,8 @@ async def _evaluate_runtime_flag_ab_case(
         "snapshot_build_count": len(snapshot_hashes),
         "result_count": len(candidate_states),
     }
+    if mode_label == "unified_engine" and family_reader_calls["baseline"] > 0:
+        comparison["controlled_fact_query_count"] = controlled_fact_query_count
     if baseline_states != candidate_states:
         comparison["state_differences"] = [
             {
@@ -408,6 +453,11 @@ async def _evaluate_runtime_flag_ab_case(
             if baseline_row != candidate_row
         ]
     if mode_label == "unified_engine":
+        if (
+            family_reader_calls["baseline"] > 0
+            and controlled_fact_query_count != 1
+        ):
+            raise RuntimeError("007受控医嘱事实每病例必须且只能查询一次")
         if family_reader_calls["candidate"] != 0:
             raise RuntimeError("统一引擎已迁移规则族仍在自行查库")
         comparison.update(

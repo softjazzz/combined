@@ -131,6 +131,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
         visit_id="safe-visit",
         source_schema="cdm",
         llm_client=object(),
+        evidence_snapshot=snapshot,
         evidence_materials=materials,
     )
     registry = build_luxian_0609_legacy_executor_registry(
@@ -167,5 +168,6 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[4][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_materials"] is materials
+    assert calls[6][1]["evidence_snapshot"] is snapshot
     assert calls[-1][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-1][1]

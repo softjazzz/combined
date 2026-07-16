@@ -299,6 +299,7 @@ async def prepare_luxian_0609_execution(
             visit_id=str(visit_id or ""),
             source_schema=source_schema,
             llm_client=llm_client,
+            evidence_snapshot=evidence_snapshot,
             evidence_materials=evidence_materials,
         )
         functions = LegacyNativeExecutorFunctions(

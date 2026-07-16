@@ -9,7 +9,9 @@ from .evidence_snapshot import (
     Luxian0609EvidenceSnapshot,
     SourceCompleteness,
     SourceObservation,
+    build_luxian_0609_visit_ref,
 )
+from .fact_schema import FACT_SCHEMA_VERSION, FactV2
 from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
     Luxian0609EvidenceReadSession,
@@ -17,6 +19,7 @@ from .evidence_material import (
     build_material_snapshot_ref,
 )
 from .source_evidence_reader import (
+    CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SnapshotSourceRows,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -26,6 +29,7 @@ from .source_manifest import QueryStatus
 from .source_registry import (
     SOURCE_REGISTRY_VERSION,
     SourceAccessMode,
+    resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_rule_sources,
     resolve_luxian_0609_physical_source_entry,
 )
@@ -89,6 +93,7 @@ def build_luxian_0609_evidence_read_session(
     }
 
     observations: list[SourceObservation] = []
+    facts: list[FactV2] = []
     all_document_refs: list[str] = []
     bounded_requests: dict[str, Any] = {}
     for document_type in sorted(entries_by_document):
@@ -113,6 +118,13 @@ def build_luxian_0609_evidence_read_session(
         existing = bounded_requests.get(source_key)
         if existing is not None and existing.query_version != entry.query_version:
             raise ValueError("conflicting source query versions")
+        bounded_requests[source_key] = entry
+    for source_key in resolve_luxian_0609_controlled_fact_source_keys(
+        selected_rule_ids
+    ):
+        entry = resolve_luxian_0609_physical_source_entry(source_key)
+        if entry.access_mode is not SourceAccessMode.CONTROLLED_FACT_V1:
+            raise ValueError("controlled fact source has invalid access mode")
         bounded_requests[source_key] = entry
 
     material_sources: dict[str, SnapshotSourceRows] = {}
@@ -170,6 +182,74 @@ def build_luxian_0609_evidence_read_session(
         # reader 之外的契约或组装错误必须显式失败，不能伪装成数据库查询 ERROR。
         if not isinstance(result, SnapshotSourceRows) or result.source_key != source_key:
             raise TypeError("invalid snapshot row reader result")
+        if entry.access_mode is SourceAccessMode.CONTROLLED_FACT_V1:
+            if result.truncated or len(result.rows) > 1:
+                raise ValueError("controlled fact result must be exact")
+            if result.rows:
+                if len(result.rows) != 1 or result.rows[0].get("present") is not True:
+                    raise ValueError("invalid controlled fact positive result")
+                query_state = QueryStatus.AVAILABLE
+                record_count = 1
+                assertion = "affirmed"
+                present = True
+            else:
+                query_state = QueryStatus.EMPTY
+                record_count = 0
+                assertion = "negated"
+                present = False
+            completeness = SourceCompleteness.COMPLETE
+            snapshot_ref = build_material_snapshot_ref(
+                source_key=source_key,
+                query_version=entry.query_version,
+                query_state=query_state,
+                completeness=completeness,
+                document_refs=(),
+            )
+            observation = SourceObservation.create(
+                source_key=source_key,
+                query_state=query_state,
+                completeness=completeness,
+                record_count=record_count,
+                query_version=entry.query_version,
+                snapshot_ref=snapshot_ref,
+            )
+            observations.append(observation)
+            if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+                facts.append(
+                    FactV2.create(
+                        visit_ref=build_luxian_0609_visit_ref(
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                        ),
+                        family="course_quality",
+                        fact_type="current_visit_unstable_order",
+                        normalized_value={"present": present},
+                        trigger_scope="current_visit",
+                        current_visit_relevance="relevant",
+                        assertion=assertion,
+                        assertion_context="other",
+                        event_status="ordered" if present else "unknown",
+                        source_key=source_key,
+                        source_document_id="",
+                        source_document_type="medical_order",
+                        record_time=None,
+                        submit_time=None,
+                        update_time=None,
+                        quote="",
+                        redaction_terms=(),
+                        confidence=1.0,
+                        extractor="deterministic",
+                        extractor_version="snapshot-provider-unstable-order-v1",
+                        fact_schema_version=FACT_SCHEMA_VERSION,
+                        source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
+                        created_at=created_at,
+                        extensions={},
+                        known_upstream_fact_ids=(),
+                    )
+                )
+            continue
+
         refs = build_material_document_refs(source_key, result.rows)
         if result.rows:
             query_state = QueryStatus.AVAILABLE
@@ -209,7 +289,7 @@ def build_luxian_0609_evidence_read_session(
         snapshot_schema_version=EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
         source_registry_version=SOURCE_REGISTRY_VERSION,
         observations=observations,
-        facts=(),
+        facts=facts,
         document_refs=all_document_refs,
         created_at=created_at,
     )

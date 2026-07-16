@@ -17,18 +17,20 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v1"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v2"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
 
 class SourceAccessMode(str, Enum):
     BOUNDED_SOURCE_V1 = "bounded_source_v1"
+    CONTROLLED_FACT_V1 = "controlled_fact_v1"
     LEGACY_PROJECTION_V1 = "legacy_projection_v1"
     DERIVED_PROJECTION_V1 = "derived_projection_v1"
 
 
 class CompletenessAttestationPolicy(str, Enum):
+    EXACT_PREDICATE_V1 = "exact_predicate_v1"
     UNPROVEN_ONLY = "unproven_only"
     PROVIDER_LIMIT_PLUS_ONE_V1 = "provider_limit_plus_one_v1"
 
@@ -53,11 +55,14 @@ class SourceRegistryEntry:
 
     @property
     def complete_capable(self) -> bool:
-        """仅 snapshot provider 的 limit+1 协议可证明查询结果未截断。"""
+        """只有 provider 的受控完整性协议可声明 COMPLETE/TRUNCATED。"""
 
         return (
             self.completeness_attestation_policy
-            is CompletenessAttestationPolicy.PROVIDER_LIMIT_PLUS_ONE_V1
+            in (
+                CompletenessAttestationPolicy.EXACT_PREDICATE_V1,
+                CompletenessAttestationPolicy.PROVIDER_LIMIT_PLUS_ONE_V1,
+            )
         )
 
     def __post_init__(self) -> None:
@@ -92,6 +97,12 @@ class SourceRegistryEntry:
             and self.access_mode is not SourceAccessMode.BOUNDED_SOURCE_V1
         ):
             raise ValueError("only bounded source may use limit-plus-one attestation")
+        if (
+            self.completeness_attestation_policy
+            is CompletenessAttestationPolicy.EXACT_PREDICATE_V1
+            and self.access_mode is not SourceAccessMode.CONTROLLED_FACT_V1
+        ):
+            raise ValueError("only controlled fact may use exact predicate attestation")
         if self.default_completeness is not SourceCompleteness.UNPROVEN:
             raise ValueError("registry cannot predeclare source completeness")
 
@@ -106,7 +117,11 @@ def _entry(
     completeness_policy = (
         CompletenessAttestationPolicy.PROVIDER_LIMIT_PLUS_ONE_V1
         if access_mode is SourceAccessMode.BOUNDED_SOURCE_V1
-        else CompletenessAttestationPolicy.UNPROVEN_ONLY
+        else (
+            CompletenessAttestationPolicy.EXACT_PREDICATE_V1
+            if access_mode is SourceAccessMode.CONTROLLED_FACT_V1
+            else CompletenessAttestationPolicy.UNPROVEN_ONLY
+        )
     )
     return SourceRegistryEntry(
         document_type=document_type,
@@ -120,7 +135,11 @@ def _entry(
         query_version=(
             f"snapshot-provider-{document_type}-v1"
             if access_mode is SourceAccessMode.BOUNDED_SOURCE_V1
-            else f"{access_mode.value}-{document_type}"
+            else (
+                f"controlled-fact-{document_type}-v1"
+                if access_mode is SourceAccessMode.CONTROLLED_FACT_V1
+                else f"{access_mode.value}-{document_type}"
+            )
         ),
         binding_fields=EXACT_VISIT_BINDING_FIELDS,
         access_mode=access_mode,
@@ -130,6 +149,7 @@ def _entry(
 
 
 _BOUNDED = SourceAccessMode.BOUNDED_SOURCE_V1
+_CONTROLLED = SourceAccessMode.CONTROLLED_FACT_V1
 _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 
 _REGISTRY_ENTRIES = (
@@ -177,6 +197,14 @@ _REGISTRY_ENTRIES = (
     _entry("surgery_safecheck_record", access_mode=_BOUNDED),
 )
 
+_INTERNAL_SOURCE_ENTRIES = (
+    _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
+)
+
+_CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
+    {"LX0609-007": ("inpat_nondrug_order.unstable_order",)}
+)
+
 
 @lru_cache(maxsize=1)
 def load_luxian_0609_source_registry() -> Mapping[str, SourceRegistryEntry]:
@@ -216,8 +244,33 @@ def _entries_for_source_key(source_key: str) -> tuple[SourceRegistryEntry, ...]:
         return ()
     return tuple(
         entry
-        for entry in load_luxian_0609_source_registry().values()
+        for entry in (
+            *load_luxian_0609_source_registry().values(),
+            *_INTERNAL_SOURCE_ENTRIES,
+        )
         if normalized == entry.document_type or normalized in entry.source_keys
+    )
+
+
+def resolve_luxian_0609_controlled_fact_source_keys(
+    selected_rule_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    """解析所选规则的内部受控事实查询；不得扩展客户文书范围。"""
+
+    if len(selected_rule_ids) != len(set(selected_rule_ids)):
+        raise ValueError("duplicate LX0609 rule id")
+    contracts = {item.rule_id for item in load_luxian_0609_rule_contracts()}
+    normalized = tuple(str(item or "").strip().upper() for item in selected_rule_ids)
+    if any(item not in contracts for item in normalized):
+        raise ValueError("unknown LX0609 rule id")
+    return tuple(
+        sorted(
+            {
+                source_key
+                for rule_id in normalized
+                for source_key in _CONTROLLED_FACT_SOURCES_BY_RULE.get(rule_id, ())
+            }
+        )
     )
 
 
@@ -233,7 +286,10 @@ def resolve_luxian_0609_physical_source_entry(
     normalized = str(source_key or "").strip().lower()
     matches = tuple(
         entry
-        for entry in load_luxian_0609_source_registry().values()
+        for entry in (
+            *load_luxian_0609_source_registry().values(),
+            *_INTERNAL_SOURCE_ENTRIES,
+        )
         if normalized in entry.physical_source_keys
     )
     if len(matches) != 1:

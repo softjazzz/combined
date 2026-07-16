@@ -82,7 +82,11 @@ def _validate_document_ref(value: Any) -> str:
     return text
 
 
-def _safe_visit_ref(*, institute_id: str, patient_id: str, visit_id: str) -> str:
+def build_luxian_0609_visit_ref(
+    *, institute_id: str, patient_id: str, visit_id: str
+) -> str:
+    """构造不暴露三坐标的稳定就诊引用，供 snapshot 与 FactV2 共用。"""
+
     coordinates = (institute_id, patient_id, visit_id)
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise ValueError("three visit coordinates are required")
@@ -196,7 +200,7 @@ class Luxian0609EvidenceSnapshot:
         document_refs: Iterable[str],
         created_at: str,
     ) -> Luxian0609EvidenceSnapshot:
-        visit_ref = _safe_visit_ref(
+        visit_ref = build_luxian_0609_visit_ref(
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,

@@ -13,6 +13,7 @@ from .evidence_material import (
     EvidenceMaterialTruncated,
     Luxian0609EvidenceMaterialStore,
 )
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     has_luxian_0609_current_visit_unstable_order,
@@ -321,6 +322,8 @@ def _rule_007_result(
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> dict[str, Any]:
     if serious_state == "present" or critical_state == "present":
         return _result(
@@ -340,12 +343,19 @@ def _rule_007_result(
         )
 
     try:
-        if has_luxian_0609_current_visit_unstable_order(
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
-        ):
+        if evidence_snapshot is not None:
+            unstable_order_state = _snapshot_unstable_order_state(evidence_snapshot)
+            if unstable_order_state == "unavailable":
+                raise ValueError("controlled fact unavailable")
+            unstable_order_present = unstable_order_state == "present"
+        else:
+            unstable_order_present = has_luxian_0609_current_visit_unstable_order(
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+            )
+        if unstable_order_present:
             return _result(
                 "LX0609-007",
                 "not_applicable",
@@ -356,12 +366,16 @@ def _rule_007_result(
         record_times: set[datetime] = set()
         substantive_record_without_time = False
         for source_key in _RULE_007_RECORD_SOURCES:
-            rows = read_luxian_0609_native_source_rows(
-                source_key=source_key,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                source_schema=source_schema,
+            rows = (
+                [dict(row) for row in evidence_materials.rows(source_key)]
+                if evidence_materials is not None
+                else read_luxian_0609_native_source_rows(
+                    source_key=source_key,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                )
             )
             if len(rows) >= luxian_0609_native_source_row_limit(source_key):
                 return _result(
@@ -376,6 +390,13 @@ def _rule_007_result(
                     record_times.add(parsed)
                 elif _row_text(row):
                     substantive_record_without_time = True
+    except EvidenceMaterialTruncated:
+        return _result(
+            "LX0609-007",
+            "data_gap",
+            "course_time_source_truncated",
+            executor_type="program",
+        )
     except Exception:
         return _result(
             "LX0609-007",
@@ -416,6 +437,42 @@ def _rule_007_result(
         "course_record_interval_within_72h",
         executor_type="program",
     )
+
+
+def _snapshot_unstable_order_state(
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> str:
+    source_key = "inpat_nondrug_order.unstable_order"
+    observations = tuple(
+        item for item in snapshot.observations if item.source_key == source_key
+    )
+    facts = tuple(
+        item
+        for item in snapshot.facts
+        if item.source_key == source_key
+        and item.fact_type == "current_visit_unstable_order"
+    )
+    if len(observations) != 1 or len(facts) != 1:
+        return "unavailable"
+    observation = observations[0]
+    fact = facts[0]
+    normalized_value = fact.normalized_value
+    if not isinstance(normalized_value, Mapping):
+        return "unavailable"
+    present = normalized_value.get("present")
+    if (
+        observation.query_state.value == "available"
+        and fact.assertion.value == "affirmed"
+        and present is True
+    ):
+        return "present"
+    if (
+        observation.query_state.value == "empty"
+        and fact.assertion.value == "negated"
+        and present is False
+    ):
+        return "absent"
+    return "unavailable"
 
 
 def _context(
@@ -742,6 +799,7 @@ async def execute_luxian_0609_native_course_quality_rules(
     visit_id: str = "",
     source_schema: str | None = None,
     llm_client: CourseQualityLLMClient | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeCourseQualityExecutionResult:
     """按客户目录顺序执行；每条适用语义规则最多调用模型一次。"""
@@ -926,6 +984,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                     patient_id=patient_id,
                     visit_id=visit_id,
                     source_schema=source_schema,
+                    evidence_snapshot=evidence_snapshot,
+                    evidence_materials=evidence_materials,
                 )
             )
             continue

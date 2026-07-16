@@ -10,6 +10,11 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
+)
 
 
 def _row(content: str, record_time: str = "2026-06-01 09:00:00") -> dict:
@@ -184,6 +189,141 @@ async def test_course_017_preserves_truncated_material_reason() -> None:
     assert result.results[0]["metadata"]["reason_code"] == (
         "course_comparison_source_truncated"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("present", "expected_status", "expected_reason"),
+    [
+        (True, "not_applicable", "unstable_patient_order_present"),
+        (False, "compliant", "course_record_interval_within_72h"),
+    ],
+)
+async def test_course_007_consumes_snapshot_fact_without_live_queries(
+    monkeypatch,
+    present: bool,
+    expected_status: str,
+    expected_reason: str,
+) -> None:
+    rows_by_source = {
+        CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: (
+            [{"present": True}] if present else []
+        ),
+        "daily_course_record": [
+            _row("患者病情稳定，继续当前治疗。", "2026-01-01 09:00:00"),
+            _row("患者病情稳定，继续当前治疗。", "2026-01-02 09:00:00"),
+        ],
+        "senior_course_record": [],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+    monkeypatch.setattr(
+        course,
+        "has_luxian_0609_current_visit_unstable_order",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("007 must consume the request snapshot fact")
+        ),
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("007 must consume request materials")
+        ),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure",
+    [SourceEvidenceUnavailable(), SourceEvidenceQueryError()],
+)
+async def test_course_007_source_failure_is_data_gap_without_live_query(
+    monkeypatch,
+    failure: Exception,
+) -> None:
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            raise failure
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+    monkeypatch.setattr(
+        course,
+        "has_luxian_0609_current_visit_unstable_order",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("007 must not retry a failed snapshot query")
+        ),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "course_time_source_unavailable"
+    )
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

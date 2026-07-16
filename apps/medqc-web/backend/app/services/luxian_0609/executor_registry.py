@@ -17,6 +17,7 @@ from .execution_contract import FamilyExecutionEnvelope
 
 if TYPE_CHECKING:
     from .engine import FamilyExecutionContext
+    from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
 _EXECUTOR_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -165,6 +166,7 @@ class LegacyFamilyExecutionResources:
     visit_id: str
     source_schema: str | None
     llm_client: Any
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
 
 
@@ -322,6 +324,7 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
             )
         )

@@ -201,7 +201,7 @@ def test_snapshot_or_version_change_changes_fingerprint(changed: dict[str, objec
     "changed",
     [
         {"snapshot_schema_version": "lx0609-evidence-snapshot-v2"},
-        {"source_registry_version": "lx0609-source-registry-v2"},
+        {"source_registry_version": "lx0609-source-registry-v999"},
     ],
 )
 def test_unregistered_contract_versions_fail_closed(changed: dict[str, object]) -> None:

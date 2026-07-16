@@ -18,6 +18,7 @@ SURGERY_TIME_FIELDS = (
     "surgery_end_time",
     "surgery_end_datetime",
 )
+CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
 
 _NATIVE_SOURCE_FIELDS = {
     "mr_bloodtrans": (
@@ -142,6 +143,7 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "surgery_record",
     )
 }
+_SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
 _SNAPSHOT_SOURCE_FIELDS.update({
     "presurg_summary": (
         "document_id",
@@ -385,7 +387,10 @@ def has_luxian_0609_current_visit_unstable_order(
     if engine is None:
         raise SourceEvidenceUnavailable()
     source_key = "inpat_nondrug_order"
-    columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+    try:
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+    except Exception:
+        raise SourceEvidenceQueryError() from None
     required = {"institute_id", "patient_id", "visit_id", "order_name"}
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
@@ -398,17 +403,20 @@ def has_luxian_0609_current_visit_unstable_order(
         f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
         f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) LIMIT 1"
     )
-    with engine.connect() as connection:
-        row = connection.execute(
-            bundle_assembly.text(sql),
-            {
-                "institute_id": institute_id,
-                "patient_id": patient_id,
-                "visit_id": visit_id,
-                "critical_name": "%病危%",
-                "serious_name": "%病重%",
-            },
-        ).first()
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "critical_name": "%病危%",
+                    "serious_name": "%病重%",
+                },
+            ).first()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
     return row is not None
 
 
@@ -540,6 +548,19 @@ def read_luxian_0609_snapshot_source_rows(
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()
     normalized_source = str(source_key or "").strip().lower()
+    if normalized_source == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+        present = has_luxian_0609_current_visit_unstable_order(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+        return SnapshotSourceRows.create(
+            source_key=normalized_source,
+            rows=({"present": True},) if present else (),
+            truncated=False,
+            limit_rows=1,
+        )
     approved_fields = _SNAPSHOT_SOURCE_FIELDS.get(normalized_source)
     if approved_fields is None:
         raise SourceEvidenceUnavailable()
