@@ -164,3 +164,24 @@ def test_pr_no_model_rule_contract_gate_includes_evidence_snapshot_contract() ->
     assert "tests/unit/test_settings_llm_env_alias.py" in mainline_gate.args
     assert "tests/unit/test_luxian_0609_preproduction_runner.py" in mainline_gate.args
     assert "tests/unit/test_luxian_0609_preproduction_api.py" in mainline_gate.args
+
+
+@pytest.mark.unit
+def test_accepted_golden_profile_is_separate_and_propagates_blocked_state() -> None:
+    executed: list[str] = []
+
+    def runner(gate):
+        executed.append(gate.name)
+        return GateExecution(return_code=3, duration_ms=5)
+
+    summary, exit_code = run_luxian_0609_quality_gate(
+        profile="accepted-golden",
+        command_runner=runner,
+    )
+
+    assert exit_code == 1
+    assert executed == ["accepted_golden"]
+    assert summary["profile"] == "accepted-golden"
+    assert summary["failures"] == [
+        {"gate": "accepted_golden", "failure_kind": "blocked"}
+    ]

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lx0609-golden-ledger-v1.schema.json",
+  "title": "LX0609 accepted Golden ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ledger_version",
+    "rule_set_digest",
+    "selector_version",
+    "selector_digest",
+    "sample_count",
+    "accepted_count",
+    "parent_ledger_digest",
+    "accepted_from_candidate_digest",
+    "generated_at",
+    "entries",
+    "ledger_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "lx0609-golden-ledger-v1" },
+    "ledger_version": { "$ref": "#/$defs/safeCode" },
+    "rule_set_digest": { "$ref": "#/$defs/sha256" },
+    "selector_version": { "$ref": "#/$defs/safeCode" },
+    "selector_digest": { "$ref": "#/$defs/sha256" },
+    "sample_count": { "type": "integer", "minimum": 1 },
+    "accepted_count": { "type": "integer", "minimum": 1 },
+    "parent_ledger_digest": {
+      "oneOf": [{ "const": "" }, { "$ref": "#/$defs/sha256" }]
+    },
+    "accepted_from_candidate_digest": { "$ref": "#/$defs/sha256" },
+    "generated_at": { "$ref": "#/$defs/utcTimestamp" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/acceptedEntry" }
+    },
+    "ledger_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "safeCode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "acceptedEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_label",
+        "selector_digest",
+        "rule_id",
+        "decision_kind",
+        "expected_state",
+        "expected_reason_code",
+        "evidence_ref_hashes",
+        "reviewer_code",
+        "accepted_at",
+        "review_revision"
+      ],
+      "properties": {
+        "case_label": {
+          "type": "string",
+          "pattern": "^case-[0-9]{2,4}$"
+        },
+        "selector_digest": { "$ref": "#/$defs/sha256" },
+        "rule_id": {
+          "type": "string",
+          "pattern": "^LX0609-[0-9]{3}$"
+        },
+        "decision_kind": {
+          "enum": ["deterministic", "semantic"]
+        },
+        "expected_state": {
+          "enum": ["compliant", "non_compliant", "not_applicable", "data_gap", "evaluation_unknown"]
+        },
+        "expected_reason_code": { "$ref": "#/$defs/safeCode" },
+        "evidence_ref_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "reviewer_code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9_.-]{2,63}$"
+        },
+        "accepted_at": { "$ref": "#/$defs/utcTimestamp" },
+        "review_revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

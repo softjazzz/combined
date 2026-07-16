@@ -14,6 +14,7 @@ from typing import Any, Callable, Sequence
 
 SCHEMA_VERSION = "lx0609-quality-gate-v1"
 PROFILE_PR_NO_MODEL = "pr-no-model"
+PROFILE_ACCEPTED_GOLDEN = "accepted-golden"
 EXIT_PASSED = 0
 EXIT_QUALITY_FAILURE = 1
 EXIT_CONFIGURATION_ERROR = 2
@@ -90,6 +91,13 @@ _PR_NO_MODEL_GATES = (
             "tests/unit/test_luxian_0609_result_aggregator.py",
             "tests/unit/test_settings_llm_env_alias.py",
         ),
+    ),
+)
+_ACCEPTED_GOLDEN_GATES = (
+    GateSpec(
+        name="accepted_golden",
+        args=("scripts/run_luxian_0609_golden_gate.py",),
+        timeout_seconds=1800,
     ),
 )
 
@@ -183,7 +191,11 @@ def run_luxian_0609_quality_gate(
     """运行一个质量门 profile，返回仅含安全指标的摘要和进程退出码。"""
 
     normalized = str(profile or "").strip().lower()
-    if normalized != PROFILE_PR_NO_MODEL:
+    if normalized == PROFILE_PR_NO_MODEL:
+        selected_gates = _PR_NO_MODEL_GATES
+    elif normalized == PROFILE_ACCEPTED_GOLDEN:
+        selected_gates = _ACCEPTED_GOLDEN_GATES
+    else:
         return _configuration_error(normalized, "unknown_profile")
 
     gate_rows: list[dict[str, Any]] = []
@@ -191,7 +203,7 @@ def run_luxian_0609_quality_gate(
     metrics = _empty_metrics()
     duration_ms = 0
     environment_unavailable = False
-    for gate in _PR_NO_MODEL_GATES:
+    for gate in selected_gates:
         try:
             execution = command_runner(gate)
         except Exception:
@@ -213,6 +225,8 @@ def run_luxian_0609_quality_gate(
                 environment_unavailable = True
             elif execution.timed_out:
                 failure_kind = "timeout"
+            elif execution.return_code == 3:
+                failure_kind = "blocked"
             else:
                 failure_kind = "test_failure"
             failures.append({"gate": gate.name, "failure_kind": failure_kind})
