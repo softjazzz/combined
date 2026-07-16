@@ -21,7 +21,11 @@ PUBLIC_EXACT_PATHS = {
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
     "/api/v1/auth/logout",
+    # 仅绕过应用级认证：准生产路由会先检查关闭开关，开启后再自行认证。
+    "/api/v1/qc/luxian-0609/preproduction/evaluate",
 }
+
+_DEFERRED_ROUTE_AUTH_PATH = "/api/v1/qc/luxian-0609/preproduction/evaluate"
 
 PUBLIC_PREFIX_PATHS = {
     "/docs/",
@@ -47,6 +51,9 @@ async def enforce_default_auth(
     """
     path = request.url.path
     if request.method == "OPTIONS" or is_public_path(path):
+        # 该入口必须保证开关关闭时零认证存储访问；令牌由路由在开关开启后解析。
+        if path == _DEFERRED_ROUTE_AUTH_PATH:
+            return
         if credentials is not None:
             try:
                 request.state.current_user = resolve_current_user_from_token(credentials.credentials)

@@ -163,3 +163,4 @@ def test_pr_no_model_rule_contract_gate_includes_evidence_snapshot_contract() ->
     )
     assert "tests/unit/test_settings_llm_env_alias.py" in mainline_gate.args
     assert "tests/unit/test_luxian_0609_preproduction_runner.py" in mainline_gate.args
+    assert "tests/unit/test_luxian_0609_preproduction_api.py" in mainline_gate.args

@@ -85,6 +85,7 @@ _PR_NO_MODEL_GATES = (
         args=(
             *_PYTEST_PREFIX,
             "tests/unit/test_luxian_0609_preproduction_runner.py",
+            "tests/unit/test_luxian_0609_preproduction_api.py",
             "tests/unit/test_luxian_0609_mainline_services.py",
             "tests/unit/test_luxian_0609_result_aggregator.py",
             "tests/unit/test_settings_llm_env_alias.py",

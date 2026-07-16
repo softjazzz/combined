@@ -156,6 +156,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
+    # LX0609 独立准生产 API；默认关闭，人工验收后才允许显式开启。
+    LUXIAN_0609_PREPRODUCTION_API_ENABLED: bool = False
 
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
