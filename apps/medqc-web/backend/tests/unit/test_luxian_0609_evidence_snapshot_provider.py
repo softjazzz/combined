@@ -24,6 +24,9 @@ from app.services.luxian_0609.source_registry import (
     SourceAccessMode,
     load_luxian_0609_source_registry,
 )
+from app.services.luxian_0609.executor_registry import (
+    resolve_legacy_executor_material_source_keys,
+)
 
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
@@ -118,6 +121,126 @@ def test_non_007_does_not_query_unstable_order_fact() -> None:
     _build(selected_rule_ids=("LX0609-017",), row_reader=reader)
 
     assert CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY not in calls
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_state", "expected_assertion", "expected_performed"),
+    [
+        ("exact", SourceQueryState.AVAILABLE, "affirmed", True),
+        ("empty", SourceQueryState.EMPTY, "negated", False),
+        ("nonexact", SourceQueryState.AVAILABLE, None, None),
+        ("unavailable", SourceQueryState.UNAVAILABLE, None, None),
+        ("error", SourceQueryState.ERROR, None, None),
+    ],
+)
+def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
+    mode: str,
+    expected_state: SourceQueryState,
+    expected_assertion: str | None,
+    expected_performed: bool | None,
+) -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "mr_surgery":
+            return _rows(source_key, [])
+        if source_key != "surgery_record":
+            return _rows(source_key, [])
+        if mode == "exact":
+            return _rows(
+                source_key,
+                [{"surgery_begin_time": " 2026-01-01 08:00:00+08 "}],
+            )
+        if mode == "empty":
+            return _rows(source_key, [])
+        if mode == "nonexact":
+            return _rows(
+                source_key,
+                [{"surgery_begin_time": "2026-01-01 08:00:00+08:00"}],
+            )
+        if mode == "unavailable":
+            raise SourceEvidenceUnavailable("private source marker")
+        raise SourceEvidenceQueryError("raw SQL Bearer_secret 13800138000")
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-003",),
+        institute_id="institute-private-001",
+        patient_id="patient-private-001",
+        visit_id="visit-private-001",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "surgery_record"
+    )
+    assert observation.query_state is expected_state
+    facts = tuple(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_confirmed"
+    )
+    if expected_assertion is None:
+        assert facts == ()
+    else:
+        assert len(facts) == 1
+        assert facts[0].assertion.value == expected_assertion
+        assert facts[0].normalized_value["performed"] is expected_performed
+        assert facts[0].source_snapshot_hash == observation.snapshot_ref.removeprefix(
+            "sha256:"
+        )
+    safe_output = repr((session.snapshot.to_safe_dict(), session.materials))
+    for marker in (
+        "2026-01-01",
+        "institute-private-001",
+        "private source marker",
+        "raw SQL",
+        "Bearer_secret",
+        "13800138000",
+    ):
+        assert marker not in safe_output
+    assert calls.count("surgery_record") == 1
+
+
+def test_single_028_prefetches_surgery_record_for_surgery_gate() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows = (
+            ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            if source_key == "surgery_record"
+            else ()
+        )
+        return _rows(source_key, rows)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-028",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("surgery_gate",)
+        ),
+    )
+
+    assert "surgery_record" in calls
+    fact = next(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_confirmed"
+    )
+    assert fact.assertion.value == "affirmed"
+    assert fact.normalized_value["performed"] is True
 
 
 @pytest.mark.parametrize(

@@ -32,7 +32,7 @@ def _observation(
     query_state: SourceQueryState | str = SourceQueryState.AVAILABLE,
     completeness: SourceCompleteness | str = SourceCompleteness.COMPLETE,
     record_count: int | None = 1,
-    query_version: str = "snapshot-provider-surgery_record-v1",
+    query_version: str = "snapshot-provider-surgery_record-v2",
     snapshot_ref: str = f"sha256:{SNAPSHOT_A}",
     error_code: str = "",
     reason_code: str = "",
@@ -318,7 +318,7 @@ def test_source_registry_covers_every_document_type_declared_by_all_49_rules() -
 def test_only_bounded_registered_sources_may_claim_complete_or_truncated() -> None:
     assert source_key_supports_proven_completeness(
         "surgery_record",
-        "snapshot-provider-surgery_record-v1",
+        "snapshot-provider-surgery_record-v2",
     ) is True
     assert source_key_supports_proven_completeness(
         "surgery_record",

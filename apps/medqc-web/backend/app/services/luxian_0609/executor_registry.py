@@ -124,6 +124,7 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "daily_course_record",
         "senior_course_record",
     ),
+    "surgery_gate": ("surgery_record",),
     "surgery_mdt": (
         "mr_surgery",
         "presurg_discussion",
@@ -341,6 +342,7 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 llm_client=resources.llm_client,
+                evidence_snapshot=resources.evidence_snapshot,
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

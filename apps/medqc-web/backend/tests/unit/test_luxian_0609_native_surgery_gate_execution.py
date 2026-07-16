@@ -5,6 +5,17 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_surgery_gate_execution as surgery
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
+)
+
+
+CREATED_AT = "2026-07-16T12:00:00+08:00"
 
 
 def _fact(
@@ -93,6 +104,133 @@ class _Client:
 
 def _performed() -> dict:
     return _fact("current_visit_surgery_confirmed", state="performed")
+
+
+def _snapshot_for_surgery(mode: str, *, selected_rule_id: str = "LX0609-024"):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record":
+            if mode == "exact":
+                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif mode == "empty":
+                rows = ()
+            elif mode == "nonexact":
+                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08:00"},)
+            elif mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            else:
+                raise SourceEvidenceQueryError()
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows,
+                truncated=False,
+                limit_rows=50,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=(selected_rule_id,),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    ).snapshot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "expected_status", "expected_calls"),
+    [
+        ("exact", "compliant", 1),
+        ("empty", "not_applicable", 0),
+        ("nonexact", "data_gap", 0),
+        ("unavailable", "data_gap", 0),
+        ("error", "data_gap", 0),
+    ],
+)
+async def test_snapshot_performed_fact_replaces_surgery_gate_live_query(
+    monkeypatch,
+    mode: str,
+    expected_status: str,
+    expected_calls: int,
+) -> None:
+    def forbidden_reader(**_kwargs):
+        raise AssertionError("统一引擎候选路径不得自行读取手术来源")
+
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_runtime_source_rows",
+        forbidden_reader,
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_native_source_rows",
+        forbidden_reader,
+    )
+    client = _Client([{"is_compliant": True}] if expected_calls else [])
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-024",),
+        wrapper_rules=[_wrapper("LX0609-024")],
+        evidence_payload=_payload(
+            facts=[_fact("current_visit_malignant_surgery_confirmed")]
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=_snapshot_for_surgery(mode),
+    )
+
+    assert result.results[0]["status"] == expected_status
+    assert result.llm_call_count == expected_calls
+    assert len(client.prompts) == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_003_snapshot_path_never_falls_back_to_mr_surgery_reader(monkeypatch):
+    def forbidden_reader(**_kwargs):
+        raise AssertionError("统一引擎候选路径不得自行读取 mr_surgery")
+
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_runtime_source_rows",
+        forbidden_reader,
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_native_source_rows",
+        forbidden_reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=_payload(
+            facts=[_performed()],
+            surgery_record=[{"surgery_begin_time": "NOT_A_TIME"}],
+            anesthesia_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=_snapshot_for_surgery(
+            "exact", selected_rule_id="LX0609-003"
+        ),
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == "surgery_time_unavailable"
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

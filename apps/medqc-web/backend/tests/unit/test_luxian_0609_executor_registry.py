@@ -22,6 +22,7 @@ from app.services.luxian_0609.executor_registry import (
     LegacyFamilyExecutionResources,
     LegacyNativeExecutorFunctions,
     build_luxian_0609_legacy_executor_registry,
+    resolve_legacy_executor_material_source_keys,
 )
 from app.services.luxian_0609.native_execution import build_luxian_0609_native_result
 from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
@@ -56,7 +57,7 @@ def _snapshot() -> Luxian0609EvidenceSnapshot:
                 query_state=QueryStatus.AVAILABLE,
                 completeness=SourceCompleteness.COMPLETE,
                 record_count=1,
-                query_version="snapshot-provider-surgery_record-v1",
+                query_version="snapshot-provider-surgery_record-v2",
                 snapshot_ref="sha256:" + "a" * 64,
             ),
         ),
@@ -72,6 +73,12 @@ def _result(rule_id: str) -> dict:
         final_state="compliant",
         finding_kind="test_result",
         reason_code="test_result",
+    )
+
+
+def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> None:
+    assert resolve_legacy_executor_material_source_keys(("surgery_gate",)) == (
+        "surgery_record",
     )
 
 
@@ -169,5 +176,6 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     assert calls[4][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_snapshot"] is snapshot
+    assert calls[7][1]["evidence_snapshot"] is snapshot
     assert calls[-1][1]["evidence_materials"] is materials
     assert "rule_ids" not in calls[-1][1]

@@ -23,6 +23,7 @@ from .source_evidence_reader import (
     SnapshotSourceRows,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
+    has_strict_performed_time,
     read_luxian_0609_snapshot_source_rows,
 )
 from .source_manifest import QueryStatus
@@ -263,22 +264,58 @@ def build_luxian_0609_evidence_read_session(
             query_state = QueryStatus.EMPTY
             completeness = SourceCompleteness.COMPLETE
             record_count = 0
-        observations.append(
-            SourceObservation.create(
-                source_key=source_key,
-                query_state=query_state,
-                completeness=completeness,
-                record_count=record_count,
-                query_version=entry.query_version,
-                snapshot_ref=build_material_snapshot_ref(
-                    source_key=source_key,
-                    query_version=entry.query_version,
-                    query_state=query_state,
-                    completeness=completeness,
-                    document_refs=refs,
-                ),
-            )
+        snapshot_ref = build_material_snapshot_ref(
+            source_key=source_key,
+            query_version=entry.query_version,
+            query_state=query_state,
+            completeness=completeness,
+            document_refs=refs,
         )
+        observation = SourceObservation.create(
+            source_key=source_key,
+            query_state=query_state,
+            completeness=completeness,
+            record_count=record_count,
+            query_version=entry.query_version,
+            snapshot_ref=snapshot_ref,
+        )
+        observations.append(observation)
+        if source_key == "surgery_record":
+            performed = any(has_strict_performed_time(row) for row in result.rows)
+            if performed or query_state is QueryStatus.EMPTY:
+                facts.append(
+                    FactV2.create(
+                        visit_ref=build_luxian_0609_visit_ref(
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                        ),
+                        family="surgery_anesthesia",
+                        fact_type="current_visit_surgery_confirmed",
+                        normalized_value={"performed": performed},
+                        trigger_scope="current_visit",
+                        current_visit_relevance="relevant",
+                        assertion="affirmed" if performed else "negated",
+                        assertion_context="other",
+                        event_status="performed" if performed else "unknown",
+                        source_key=source_key,
+                        source_document_id="",
+                        source_document_type="surgery_record",
+                        record_time=None,
+                        submit_time=None,
+                        update_time=None,
+                        quote="",
+                        redaction_terms=(),
+                        confidence=1.0,
+                        extractor="deterministic",
+                        extractor_version="snapshot-provider-surgery-record-v1",
+                        fact_schema_version=FACT_SCHEMA_VERSION,
+                        source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
+                        created_at=created_at,
+                        extensions={},
+                        known_upstream_fact_ids=(),
+                    )
+                )
         all_document_refs.extend(refs)
         material_sources[source_key] = result
 

@@ -183,7 +183,7 @@ def _safe_evidence_snapshot() -> Luxian0609EvidenceSnapshot:
                 query_state=QueryStatus.EMPTY,
                 completeness=SourceCompleteness.COMPLETE,
                 record_count=0,
-                query_version="snapshot-provider-surgery_record-v1",
+                query_version="snapshot-provider-surgery_record-v2",
                 snapshot_ref=f"sha256:{'a' * 64}",
             ),
         ),

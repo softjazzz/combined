@@ -42,7 +42,7 @@ def _snapshot() -> Luxian0609EvidenceSnapshot:
                 query_state=QueryStatus.AVAILABLE,
                 completeness=SourceCompleteness.COMPLETE,
                 record_count=1,
-                query_version="snapshot-provider-surgery_record-v1",
+                query_version="snapshot-provider-surgery_record-v2",
                 snapshot_ref="sha256:" + "a" * 64,
             ),
         ),

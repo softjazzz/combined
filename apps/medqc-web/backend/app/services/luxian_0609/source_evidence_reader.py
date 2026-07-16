@@ -144,6 +144,11 @@ _SNAPSHOT_SOURCE_FIELDS = {
     )
 }
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
+_SNAPSHOT_SOURCE_FIELDS["surgery_record"] = tuple(
+    dict.fromkeys(
+        (*_SNAPSHOT_SOURCE_FIELDS["surgery_record"], *SURGERY_TIME_FIELDS)
+    )
+)
 _SNAPSHOT_SOURCE_FIELDS.update({
     "presurg_summary": (
         "document_id",

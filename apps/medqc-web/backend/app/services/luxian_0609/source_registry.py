@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v2"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v3"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -113,6 +113,7 @@ def _entry(
     access_mode: SourceAccessMode = SourceAccessMode.LEGACY_PROJECTION_V1,
     derived_from_source_keys: tuple[str, ...] = (),
     projection_aliases: tuple[str, ...] = (),
+    query_version: str = "",
 ) -> SourceRegistryEntry:
     completeness_policy = (
         CompletenessAttestationPolicy.PROVIDER_LIMIT_PLUS_ONE_V1
@@ -132,7 +133,8 @@ def _entry(
         ),
         derived_from_source_keys=derived_from_source_keys,
         projection_aliases=projection_aliases,
-        query_version=(
+        query_version=query_version
+        or (
             f"snapshot-provider-{document_type}-v1"
             if access_mode is SourceAccessMode.BOUNDED_SOURCE_V1
             else (
@@ -192,7 +194,13 @@ _REGISTRY_ENTRIES = (
     _entry("presurg_summary", access_mode=_BOUNDED),
     _entry("rescue_record"),
     _entry("senior_course_record", access_mode=_BOUNDED),
-    _entry("surgery_record", "surgery_record", "mr_surgery", access_mode=_BOUNDED),
+    _entry(
+        "surgery_record",
+        "surgery_record",
+        "mr_surgery",
+        access_mode=_BOUNDED,
+        query_version="snapshot-provider-surgery_record-v2",
+    ),
     _entry("surgery_risk_assessment"),
     _entry("surgery_safecheck_record", access_mode=_BOUNDED),
 )

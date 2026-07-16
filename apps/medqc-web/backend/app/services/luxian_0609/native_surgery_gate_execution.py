@@ -10,6 +10,7 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     has_strict_performed_time,
@@ -257,9 +258,14 @@ def _resolve_performed_state(
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
 ) -> str:
     state = _fact_state(facts, "current_visit_surgery_confirmed")
-    if state != "unknown" or not all((institute_id, patient_id, visit_id)):
+    if state != "unknown":
+        return state
+    if evidence_snapshot is not None:
+        return _snapshot_performed_surgery_state(evidence_snapshot)
+    if not all((institute_id, patient_id, visit_id)):
         return state
     try:
         rows = read_luxian_0609_runtime_source_rows(
@@ -276,6 +282,55 @@ def _resolve_performed_state(
     return "negative" if not rows else "unknown"
 
 
+def _snapshot_performed_surgery_state(
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> str:
+    observations = tuple(
+        item for item in snapshot.observations if item.source_key == "surgery_record"
+    )
+    facts = tuple(
+        item
+        for item in snapshot.facts
+        if item.source_key == "surgery_record"
+        and item.fact_type == "current_visit_surgery_confirmed"
+    )
+    if len(observations) != 1 or len(facts) != 1:
+        return "unknown"
+    observation = observations[0]
+    fact = facts[0]
+    normalized_value = fact.normalized_value
+    if not isinstance(normalized_value, Mapping):
+        return "unknown"
+    performed = normalized_value.get("performed")
+    if (
+        observation.query_state.value == "available"
+        and fact.assertion.value == "affirmed"
+        and performed is True
+    ):
+        return "present"
+    if (
+        observation.query_state.value == "empty"
+        and fact.assertion.value == "negated"
+        and performed is False
+    ):
+        return "negative"
+    return "unknown"
+
+
+def _snapshot_source_failed(
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_key: str,
+) -> bool:
+    observation = next(
+        (item for item in snapshot.observations if item.source_key == source_key),
+        None,
+    )
+    return bool(
+        observation is None
+        or observation.query_state.value in {"unavailable", "error"}
+    )
+
+
 def _terminal_status(
     rule_id: str,
     *,
@@ -286,6 +341,7 @@ def _terminal_status(
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
 ) -> tuple[str, str] | None:
     if performed_state == "negative":
         return "not_applicable", "performed_surgery_explicitly_absent"
@@ -321,7 +377,13 @@ def _terminal_status(
         rows = _source_rows(documents, "surgery_record") + _source_rows(
             documents, "anesthesia_record"
         )
-        if not _has_exact_time(rows) and institute_id and patient_id and visit_id:
+        if (
+            not _has_exact_time(rows)
+            and evidence_snapshot is None
+            and institute_id
+            and patient_id
+            and visit_id
+        ):
             try:
                 rows = tuple(
                     read_luxian_0609_native_source_rows(
@@ -335,6 +397,10 @@ def _terminal_status(
             except Exception:
                 return "data_gap", "surgery_time_source_error"
         if not _has_exact_time(rows):
+            if evidence_snapshot is not None and _snapshot_source_failed(
+                evidence_snapshot, "mr_surgery"
+            ):
+                return "data_gap", "surgery_time_source_error"
             return "data_gap", "surgery_time_unavailable"
     elif rule_id == "LX0609-031":
         if not _has_signature(_source_rows(documents, "surgery_record")):
@@ -361,6 +427,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     visit_id: str,
     source_schema: str | None,
     llm_client: SurgeryGateLLMClient | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
 ) -> NativeSurgeryGateExecutionResult:
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(
@@ -390,6 +457,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         patient_id=patient_id,
         visit_id=visit_id,
         source_schema=source_schema,
+        evidence_snapshot=evidence_snapshot,
     )
     wrappers = {
         str(item.get("rule_id") or item.get("rule_code") or "").strip().upper(): item
@@ -410,6 +478,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             patient_id=patient_id,
             visit_id=visit_id,
             source_schema=source_schema,
+            evidence_snapshot=evidence_snapshot,
         )
         if terminal:
             status, reason = terminal
