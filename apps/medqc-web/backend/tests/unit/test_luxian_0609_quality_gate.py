@@ -6,9 +6,19 @@ from scripts.run_luxian_0609_quality_gate import (
     GateExecution,
     GateSpec,
     _PR_NO_MODEL_GATES,
+    _parse_args,
     run_gate_subprocess,
     run_luxian_0609_quality_gate,
 )
+
+
+@pytest.mark.unit
+def test_planned_changed_no_model_cli_is_supported_conservatively() -> None:
+    args = _parse_args(["--changed", "--no-model"])
+
+    assert args.profile == "pr-no-model"
+    assert args.changed is True
+    assert args.no_model is True
 
 
 @pytest.mark.unit

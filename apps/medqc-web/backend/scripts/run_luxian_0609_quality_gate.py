@@ -249,7 +249,20 @@ def run_luxian_0609_quality_gate(
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LX0609统一自动质量门")
     parser.add_argument("--profile", default=PROFILE_PR_NO_MODEL)
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--changed",
+        action="store_true",
+        help="兼容计划命令；当前保守运行全部快速门，不跳过未识别影响范围",
+    )
+    parser.add_argument(
+        "--no-model",
+        action="store_true",
+        help="显式选择零模型快速门；等价于 pr-no-model profile",
+    )
+    args = parser.parse_args(argv)
+    if (args.changed or args.no_model) and args.profile != PROFILE_PR_NO_MODEL:
+        parser.error("--changed/--no-model only support pr-no-model profile")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
