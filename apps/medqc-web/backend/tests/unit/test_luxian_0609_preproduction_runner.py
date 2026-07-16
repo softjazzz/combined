@@ -152,9 +152,9 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     assert tuple(item["rule_id"] for item in result["results"]) == selected
     assert result["metrics"]["llm_call_count"] == 2
     assert result["metrics"]["total_tokens"] == 40
-    assert result["metrics"]["rule_decision_count"] == 8
+    assert result["metrics"]["rule_decision_count"] == 11
     assert result["metrics"]["typed_shadow_adapter_count"] == 3
-    assert result["metrics"]["legacy_projection_count"] == 38
+    assert result["metrics"]["legacy_projection_count"] == 35
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
     first = result["results"][0]

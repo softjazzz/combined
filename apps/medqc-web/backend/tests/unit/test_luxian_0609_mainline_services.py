@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -172,6 +173,7 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_RULE_DECISION_007_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED": False,
+        "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -357,6 +359,52 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
             "rescue_record",
             "senior_course_record",
         ),
+    )
+
+
+def _transfusion_045_047_evidence_session() -> Luxian0609EvidenceReadSession:
+    course_text = (
+        "输血目的：纠正贫血；2026-01-01 14:20 开始输血，"
+        "输注去白悬浮红细胞2U。输血过程中严密观察，生命体征平稳；"
+        "2026-01-01 16:10 输血结束后评价未见异常，无输血不良反应。"
+    )
+    rows_by_source = {
+        "mr_bloodtrans": [
+            {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
+        ],
+        "bloodtrans_record": [
+            {
+                "document_id": "typed-transfusion-document",
+                "record_content": course_text,
+                "record_time": "2026-01-01 16:20:00",
+            }
+        ],
+        "daily_course_record": [
+            {
+                "document_id": "typed-daily-document",
+                "record_content": "输血后继续观察，生命体征平稳。",
+                "record_time": "2026-01-01 17:00:00",
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-045", "LX0609-046", "LX0609-047"),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
     )
 
 
@@ -782,6 +830,162 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
     ]
     assert "RAW-LX0609" not in repr(orchestrated["results"])
     assert "fact_refs" not in repr(orchestrated["results"])
+
+
+@pytest.mark.asyncio
+async def test_transfusion_045_047_typed_decisions_replace_raw_results_without_drift(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-045", "LX0609-046", "LX0609-047")
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("transfusion", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    session = _transfusion_045_047_evidence_session()
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+    course_text = (
+        "输血目的：纠正贫血；2026-01-01 14:20 开始输血，"
+        "输注去白悬浮红细胞2U。输血过程中严密观察，生命体征平稳；"
+        "2026-01-01 16:10 输血结束后评价未见异常，无输血不良反应。"
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "bloodtrans_record": [{"content": course_text}],
+                    "daily_course_record": [
+                        {
+                            "content": "输血后继续观察，生命体征平稳。",
+                            "record_time": "2026-01-01 17:00:00",
+                        }
+                    ],
+                }
+            }
+        },
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    assert [item.final_state.value for item in context.reduced_decisions] == [
+        "compliant",
+        "compliant",
+        "compliant",
+    ]
+    assert all(item.fact_refs for item in context.reduced_decisions)
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-045",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("transfusion", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: _transfusion_045_047_evidence_session(),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-045",
+                name="LX0609-045",
+                mapped_rule_ids=["RAW-LX0609-045"],
+                trigger_condition="test",
+            )
+        ],
+    )
+    course_text = (
+        "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
+        "结束时间16:10。输血过程中严密观察，未见不良反应。"
+    )
+
+    _, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={
+            "programmatic_timeline": {
+                "documents": {
+                    "bloodtrans_record": [{"content": course_text}],
+                    "daily_course_record": [{"content": "输血后继续观察。"}],
+                }
+            }
+        },
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=False,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert [item["rule_id"] for item in context.native_results] == list(selected)
+    assert [item["status"] for item in context.native_results] == ["compliant"]
+    assert context.reduced_decisions == ()
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
 
 
 @pytest.mark.asyncio

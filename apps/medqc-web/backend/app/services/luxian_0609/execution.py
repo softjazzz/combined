@@ -233,6 +233,16 @@ async def prepare_luxian_0609_execution(
                     )
                 )
             )
+            or (
+                rule_id in {"LX0609-045", "LX0609-046", "LX0609-047"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED",
+                        False,
+                    )
+                )
+            )
         )
     )
     if (

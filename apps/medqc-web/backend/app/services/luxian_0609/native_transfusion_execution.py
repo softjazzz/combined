@@ -8,13 +8,29 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
 
 TRANSFUSION_RULE_IDS = tuple(f"LX0609-{number:03d}" for number in range(41, 50))
 EXECUTOR_KEY = "transfusion"
+_TYPED_DECISION_RULE_IDS = frozenset(
+    {"LX0609-045", "LX0609-046", "LX0609-047"}
+)
+_TYPED_DECISION_SOURCE_KEYS = (
+    "bloodtrans_record",
+    "daily_course_record",
+    "mr_bloodtrans",
+)
+_TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-shadow-v1"
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
 _MAX_ROWS_PER_SOURCE = 8
@@ -166,11 +182,128 @@ class TransfusionLLMClient(Protocol):
 class NativeTransfusionExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _TransfusionRuleOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
+    executor_type: str
+
+
+def _typed_decision_from_outcome(
+    *,
+    outcome: _TransfusionRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    """从受控内核 outcome 生成 typed decision，不经过客户结果 DTO。"""
+
+    status = outcome.status
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in _TYPED_DECISION_SOURCE_KEYS
+    )
+    if status in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed transfusion decision requires evidence refs")
+
+    if status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        )
+    elif status == "data_gap":
+        source_gap = "source_unavailable" in outcome.reason_code
+        dimensions = (
+            (
+                ApplicabilityState.UNKNOWN
+                if source_gap
+                else ApplicabilityState.APPLICABLE
+            ),
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "source_unavailable" if source_gap else "required_field_missing",
+        )
+    elif status == "evaluation_unknown":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+            "semantic_output_unknown",
+        )
+    elif status == "technical_error":
+        technical_reason = (
+            outcome.reason_code
+            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            else "executor_exception"
+        )
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            technical_reason,
+        )
+    else:
+        raise ValueError("unsupported transfusion final state")
+
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
+
+
+def _finalize_execution_result(
+    *,
+    results: Sequence[dict[str, Any]],
+    decisions: Sequence[RuleDecision],
+    planned_rule_ids: tuple[str, ...],
+    llm_call_count: int = 0,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    api_time: float = 0.0,
+) -> NativeTransfusionExecutionResult:
+    return NativeTransfusionExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=planned_rule_ids,
+        decisions=tuple(decisions),
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
 
 
 def _clean(value: Any) -> str:
@@ -185,6 +318,43 @@ def _documents(evidence_payload: Mapping[str, Any] | None) -> Mapping[str, Any] 
         return None
     documents = timeline.get("documents")
     return documents if isinstance(documents, Mapping) else None
+
+
+def _typed_documents_from_evidence_session(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[Mapping[str, Any] | None, str, str]:
+    """只从同一快照材料构造 typed 文书投影，禁止回读旧 payload。"""
+
+    required_sources = _TYPED_DECISION_SOURCE_KEYS
+    observation_by_source = {
+        observation.source_key: observation
+        for observation in snapshot.observations
+    }
+    for source_key in required_sources:
+        observation = observation_by_source.get(source_key)
+        if observation is None:
+            return None, "technical_error", "snapshot_mismatch"
+        if observation.query_state.value == "error":
+            return None, "technical_error", "source_query_error"
+        if (
+            observation.query_state.value == "unavailable"
+            or observation.completeness.value == "truncated"
+        ):
+            return None, "data_gap", "transfusion_source_unavailable"
+
+    documents: dict[str, list[dict[str, Any]]] = {}
+    try:
+        for source_key in ("bloodtrans_record", "daily_course_record"):
+            documents[source_key] = [
+                dict(row) for row in materials.rows(source_key)
+            ]
+        # performed-state 会从同一个材料仓读取该结构化来源；这里先证明可读。
+        materials.rows("mr_bloodtrans")
+    except Exception:
+        return None, "technical_error", "snapshot_mismatch"
+    return documents, "", ""
 
 
 def _row_text(row: Mapping[str, Any]) -> str:
@@ -657,140 +827,227 @@ async def execute_luxian_0609_native_transfusion_rules(
     source_schema: str | None,
     llm_client: TransfusionLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeTransfusionExecutionResult:
     """先证明本次存在专用输血来源，再按客户规则逐条裁剪执行。"""
 
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(rule_id for rule_id in TRANSFUSION_RULE_IDS if rule_id in requested)
+    typed_requested = {
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    }
+    if (
+        not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
+        or not typed_requested.issubset(set(selected))
+    ):
+        raise ValueError("unsupported typed transfusion rule scope")
+    typed_selected = tuple(
+        rule_id for rule_id in selected if rule_id in typed_requested
+    )
+    if typed_selected and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed transfusion rules require one evidence session")
     if not selected:
         return NativeTransfusionExecutionResult((), ())
+    results: list[dict[str, Any]] = []
+    decisions: list[RuleDecision] = []
 
-    documents = _documents(evidence_payload)
-    source_state = _performed_source_state(
-        documents=documents,
+    def emit_outcome(
+        rule_id: str,
+        status: str,
+        reason_code: str,
+        *,
+        executor_type: str,
+    ) -> None:
+        outcome = _TransfusionRuleOutcome(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason_code,
+            executor_type=executor_type,
+        )
+        if rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            decisions.append(
+                _typed_decision_from_outcome(
+                    outcome=outcome,
+                    snapshot=evidence_snapshot,
+                )
+            )
+        else:
+            results.append(
+                _result(
+                    outcome.rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type=outcome.executor_type,
+                )
+            )
+
+    legacy_documents = _documents(evidence_payload)
+    typed_documents: Mapping[str, Any] | None = None
+    typed_material_status = ""
+    typed_material_reason = ""
+    if typed_selected:
+        assert evidence_snapshot is not None
+        assert evidence_materials is not None
+        (
+            typed_documents,
+            typed_material_status,
+            typed_material_reason,
+        ) = _typed_documents_from_evidence_session(
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+        )
+    legacy_source_state = _performed_source_state(
+        documents=legacy_documents,
         institute_id=str(institute_id or ""),
         patient_id=str(patient_id or ""),
         visit_id=str(visit_id or ""),
         source_schema=source_schema,
         evidence_materials=evidence_materials,
     )
-    if source_state != "present":
-        status = "not_applicable" if source_state == "absent" else "data_gap"
-        reason_code = (
-            "transfusion_fact_absent"
-            if source_state == "absent"
-            else "transfusion_source_unavailable"
+    typed_source_state = (
+        _performed_source_state(
+            documents=typed_documents,
+            institute_id=str(institute_id or ""),
+            patient_id=str(patient_id or ""),
+            visit_id=str(visit_id or ""),
+            source_schema=source_schema,
+            evidence_materials=evidence_materials,
         )
-        return NativeTransfusionExecutionResult(
-            results=tuple(
-                _result(rule_id, status, reason_code, executor_type="program")
-                for rule_id in selected
-            ),
-            planned_rule_ids=selected,
-        )
-
-    if documents is None:
-        return NativeTransfusionExecutionResult(
-            results=tuple(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_projection_unavailable",
-                    executor_type="program",
-                )
-                for rule_id in selected
-            ),
-            planned_rule_ids=selected,
-        )
+        if typed_selected and not typed_material_status
+        else "data_gap"
+    )
 
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper(): wrapper
         for wrapper in wrapper_rules
         if isinstance(wrapper, Mapping)
     }
-    results: list[dict[str, Any]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     for rule_id in selected:
+        typed_rule = rule_id in typed_requested
+        documents = typed_documents if typed_rule else legacy_documents
+        if typed_rule and typed_material_status:
+            emit_outcome(
+                rule_id,
+                typed_material_status,
+                typed_material_reason,
+                executor_type="program",
+            )
+            continue
+        source_state = typed_source_state if typed_rule else legacy_source_state
+        if source_state != "present":
+            emit_outcome(
+                rule_id,
+                "not_applicable" if source_state == "absent" else "data_gap",
+                (
+                    "transfusion_fact_absent"
+                    if source_state == "absent"
+                    else "transfusion_source_unavailable"
+                ),
+                executor_type="program",
+            )
+            continue
+        if documents is None:
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_projection_unavailable",
+                executor_type="program",
+            )
+            continue
         if not _has_required_projection(rule_id, documents):
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_rule_projection_incomplete",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_rule_projection_incomplete",
+                executor_type="program",
             )
             continue
         if rule_id == "LX0609-043":
             status, reason_code = _programmatic_043_status()
-            results.append(
-                _result(rule_id, status, reason_code, executor_type="program")
+            emit_outcome(
+                rule_id,
+                status,
+                reason_code,
+                executor_type="program",
             )
             continue
         if rule_id == "LX0609-044":
             programmatic_status = _programmatic_044_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
-                results.append(
-                    _result(rule_id, status, reason_code, executor_type="program")
+                emit_outcome(
+                    rule_id,
+                    status,
+                    reason_code,
+                    executor_type="program",
                 )
                 continue
         if rule_id == "LX0609-045":
             programmatic_status = _programmatic_045_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
-                results.append(
-                    _result(rule_id, status, reason_code, executor_type="program")
+                emit_outcome(
+                    rule_id,
+                    status,
+                    reason_code,
+                    executor_type="program",
                 )
                 continue
         if rule_id == "LX0609-046":
             programmatic_status = _programmatic_046_status(documents)
             if programmatic_status is not None:
                 status, reason_code = programmatic_status
-                results.append(
-                    _result(rule_id, status, reason_code, executor_type="program")
+                emit_outcome(
+                    rule_id,
+                    status,
+                    reason_code,
+                    executor_type="program",
                 )
                 continue
         if rule_id == "LX0609-047":
             status, reason_code = _programmatic_047_status(documents)
-            results.append(
-                _result(rule_id, status, reason_code, executor_type="program")
+            emit_outcome(
+                rule_id,
+                status,
+                reason_code,
+                executor_type="program",
             )
             continue
         wrapper = wrappers_by_id.get(rule_id)
         context = _context(rule_id, documents)
         if wrapper is None or not str(wrapper.get("custom_prompt") or "").strip() or not context:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_prompt_input_unavailable",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_prompt_input_unavailable",
+                executor_type="program",
             )
             continue
         if llm_client is None:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_llm_unavailable",
-                    executor_type="program",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_llm_unavailable",
+                executor_type="program",
             )
             continue
         llm_call_count += 1
         try:
             response = await llm_client.generate(_prompt(wrapper, context=context))
         except Exception:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_llm_failure",
-                    executor_type="llm",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_llm_failure",
+                executor_type="llm",
             )
             continue
         prompt, completion, total, elapsed = _usage(response)
@@ -800,22 +1057,24 @@ async def execute_luxian_0609_native_transfusion_rules(
         api_time += elapsed
         is_compliant = _parse_is_compliant(response)
         if is_compliant is None:
-            results.append(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "transfusion_llm_invalid_output",
-                    executor_type="llm",
-                )
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "transfusion_llm_invalid_output",
+                executor_type="llm",
             )
             continue
         status = "compliant" if is_compliant else "non_compliant"
-        results.append(
-            _result(rule_id, status, "transfusion_customer_prompt", executor_type="llm")
+        emit_outcome(
+            rule_id,
+            status,
+            "transfusion_customer_prompt",
+            executor_type="llm",
         )
 
-    return NativeTransfusionExecutionResult(
+    return _finalize_execution_result(
         results=tuple(results),
+        decisions=tuple(decisions),
         planned_rule_ids=selected,
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
