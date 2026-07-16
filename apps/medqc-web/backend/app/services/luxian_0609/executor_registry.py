@@ -190,6 +190,7 @@ class LegacyFamilyExecutionResources:
     llm_client: Any
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
+    decision_rule_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -353,6 +354,11 @@ def build_luxian_0609_legacy_executor_registry(
                 llm_client=resources.llm_client,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

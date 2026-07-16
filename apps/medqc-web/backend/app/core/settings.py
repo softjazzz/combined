@@ -148,6 +148,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = False
     # 统一执行信封迁移开关；关闭时保留冻结旧调度链作为回滚。
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = False
+    # 007 使用 EvidenceSnapshot 权威 record_time 生成 RuleDecision；独立回滚。
+    LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

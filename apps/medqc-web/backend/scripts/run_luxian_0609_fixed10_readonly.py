@@ -262,6 +262,7 @@ async def _evaluate_runtime_flag_ab_case(
     managed_flags = (
         "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_007_ENABLED",
     )
     missing = object()
     original_flags = {
@@ -272,12 +273,16 @@ async def _evaluate_runtime_flag_ab_case(
     original_session_provider = (
         luxian_execution.build_luxian_0609_evidence_read_session
     )
+    original_decision_binder = (
+        luxian_execution.bind_and_reduce_luxian_0609_rule_decisions
+    )
     original_get_settings = service_module.get_settings
     replay = InMemoryLlmReplay(original_generate)
     snapshot_hashes: list[str] = []
     reader_phase = "baseline"
     family_reader_calls = {"baseline": 0, "candidate": 0}
     controlled_fact_query_count = 0
+    typed_007_audits: list[dict[str, Any]] = []
     original_consultation_reader = (
         native_consultation_execution.read_luxian_0609_native_source_rows
     )
@@ -374,6 +379,18 @@ async def _evaluate_runtime_flag_ab_case(
         snapshot_hashes.append(str(session.snapshot.snapshot_hash))
         return session
 
+    def audited_decision_binder(**kwargs):
+        reduced = original_decision_binder(**kwargs)
+        for item in reduced:
+            if item.rule_id == "LX0609-007":
+                typed_007_audits.append(
+                    {
+                        "final_state": item.final_state.value,
+                        "fact_ref_count": len(item.fact_refs),
+                    }
+                )
+        return reduced
+
     try:
         service_module.get_settings = lambda: settings
         for name in managed_flags:
@@ -421,11 +438,16 @@ async def _evaluate_runtime_flag_ab_case(
         )
 
         setattr(settings, candidate_flag, True)
+        if mode_label == "unified_engine":
+            settings.LUXIAN_0609_RULE_DECISION_007_ENABLED = True
         reader_phase = "candidate"
         service.adjudicator_client.generate = replay.replay
         luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
         luxian_execution.build_luxian_0609_evidence_read_session = (
             counted_session_provider
+        )
+        luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = (
+            audited_decision_binder
         )
         candidate = await evaluate_full_luxian_0609_case(
             service=service,
@@ -476,6 +498,9 @@ async def _evaluate_runtime_flag_ab_case(
         luxian_execution.build_luxian_0609_evidence_read_session = (
             original_session_provider
         )
+        luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = (
+            original_decision_binder
+        )
         service_module.get_settings = original_get_settings
 
     baseline_states = build_safe_rule_states(_result_rows(baseline))
@@ -493,6 +518,9 @@ async def _evaluate_runtime_flag_ab_case(
         snapshot_hashes[0] in candidate_repr
         or "evidence_snapshot" in candidate_repr
         or "unified_engine_used" in candidate_repr
+        or "fact_refs" in candidate_repr
+        or "decision_fingerprint" in candidate_repr
+        or "rule007-authoritative-time" in candidate_repr
     ):
         raise RuntimeError(f"{mode_label}内部执行对象进入客户返回")
     comparison = {
@@ -517,6 +545,10 @@ async def _evaluate_runtime_flag_ab_case(
             if baseline_row != candidate_row
         ]
     if mode_label == "unified_engine":
+        if len(typed_007_audits) != 1:
+            raise RuntimeError("007每病例必须且只能形成一个类型化决策")
+        if typed_007_audits[0]["fact_ref_count"] <= 0:
+            raise RuntimeError("007类型化决策必须绑定安全证据引用")
         if (
             family_reader_calls["baseline"] > 0
             and controlled_fact_query_count != 1
@@ -528,6 +560,9 @@ async def _evaluate_runtime_flag_ab_case(
             {
                 "baseline_family_reader_calls": family_reader_calls["baseline"],
                 "candidate_family_reader_calls": family_reader_calls["candidate"],
+                "typed_007_decision_count": len(typed_007_audits),
+                "typed_007_fact_ref_count": typed_007_audits[0]["fact_ref_count"],
+                "typed_007_model_call_count": 0,
             }
         )
     return comparison

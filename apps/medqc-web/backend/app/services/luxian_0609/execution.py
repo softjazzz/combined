@@ -15,6 +15,9 @@ from .customer_rule_package import (
 )
 from .input_builder import build_luxian_0609_input_profile
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .decision_binding import bind_and_reduce_luxian_0609_rule_decisions
+from .decision_model import RuleDecision
+from .decision_reducer import ReducedRuleDecision
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
@@ -101,6 +104,7 @@ class Luxian0609ExecutionContext:
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
     unified_engine_used: bool = False
+    reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
 
 
 def build_luxian_0609_evidence_snapshot_rule_refs(
@@ -186,6 +190,15 @@ async def prepare_luxian_0609_execution(
     unified_engine_enabled = bool(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
+    typed_decision_rule_ids = tuple(
+        rule_id
+        for rule_id in package_plan.selected_rule_ids
+        if rule_id == "LX0609-007"
+        and unified_engine_enabled
+        and bool(
+            getattr(settings, "LUXIAN_0609_RULE_DECISION_007_ENABLED", False)
+        )
+    )
     if (
         bool(
             getattr(
@@ -260,6 +273,8 @@ async def prepare_luxian_0609_execution(
         *package_plan.native_async_rule_ids,
     }
     unified_engine_used = False
+    native_rule_decisions: list[RuleDecision] = []
+    reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
     if (
         unified_engine_enabled
         and evidence_snapshot is None
@@ -304,6 +319,7 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
             evidence_snapshot=evidence_snapshot,
             evidence_materials=evidence_materials,
+            decision_rule_ids=typed_decision_rule_ids,
         )
         functions = LegacyNativeExecutorFunctions(
             surgery_presence=execute_luxian_0609_native_rules,
@@ -358,11 +374,25 @@ async def prepare_luxian_0609_execution(
             for outcome in engine_report.outcomes:
                 envelope = outcome.envelope
                 native_results.extend(envelope.results)
+                native_rule_decisions.extend(envelope.decisions)
                 native_llm_call_count += envelope.llm_call_count
                 native_prompt_tokens += envelope.prompt_tokens
                 native_completion_tokens += envelope.completion_tokens
                 native_total_tokens += envelope.total_tokens
                 native_api_time += envelope.api_time
+    if typed_decision_rule_ids and evidence_snapshot is not None:
+        reduced_decisions = bind_and_reduce_luxian_0609_rule_decisions(
+            decisions=tuple(native_rule_decisions),
+            expected_rule_ids=typed_decision_rule_ids,
+            snapshot=evidence_snapshot,
+        )
+        typed_decision_rule_id_set = set(typed_decision_rule_ids)
+        native_results = [
+            item
+            for item in native_results
+            if str(item.get("rule_id") or "").strip().upper()
+            not in typed_decision_rule_id_set
+        ]
     surgery_presence_rule_ids = package_plan.native_rule_ids_for_executor(
         EXECUTOR_SURGERY_PRESENCE
     )
@@ -625,6 +655,7 @@ async def prepare_luxian_0609_execution(
         evidence_snapshot=evidence_snapshot,
         evidence_snapshot_rule_refs=evidence_snapshot_rule_refs,
         unified_engine_used=unified_engine_used,
+        reduced_decisions=reduced_decisions,
     )
 
 
@@ -688,6 +719,7 @@ def aggregate_luxian_0609_orchestrated_results(
             "model_name": str(model_name or ""),
             "evidence_payload": evidence_payload,
         },
+        reduced_decisions=context.reduced_decisions,
     )
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
     orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])

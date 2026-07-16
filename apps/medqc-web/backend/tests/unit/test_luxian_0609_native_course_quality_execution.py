@@ -6,6 +6,10 @@ from datetime import datetime
 import pytest
 
 from app.services.luxian_0609 import native_course_quality_execution as course
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.decision_reducer import CustomerFinalState
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -266,6 +270,175 @@ async def test_course_007_consumes_snapshot_fact_without_live_queries(
     assert [item["status"] for item in result.results] == [expected_status]
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_result(
+    monkeypatch,
+) -> None:
+    rows_by_source = {
+        CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY: [],
+        "daily_course_record": [
+            _row("患者病情稳定，继续当前治疗。", "2026-01-01 09:00:00"),
+            _row("患者症状改善，继续观察。", "2026-01-02 09:00:00"),
+        ],
+        "senior_course_record": [],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("typed 007 must consume request materials")
+        ),
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == ["LX0609-007"]
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert reduced[0].fact_refs
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scenario", "expected_state", "expected_reason"),
+    [
+        ("unstable", CustomerFinalState.NOT_APPLICABLE, "eligibility_not_met"),
+        ("over_72h", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        ("missing_time", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
+        ("query_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ],
+)
+async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
+    scenario: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    normal_rows = [
+        _row("患者病情稳定，继续当前治疗。", "2026-01-01 09:00:00"),
+        _row("患者症状改善，继续观察。", "2026-01-02 09:00:00"),
+    ]
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+            rows = [{"present": True}] if scenario == "unstable" else []
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows,
+                truncated=False,
+                limit_rows=50,
+            )
+        if source_key == "daily_course_record":
+            if scenario == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if scenario == "query_error":
+                raise SourceEvidenceQueryError()
+            if scenario == "over_72h":
+                rows = [
+                    _row("首次查房。", "2026-01-01 09:00:00"),
+                    _row("再次查房。", "2026-01-05 09:00:01"),
+                ]
+            elif scenario == "missing_time":
+                rows = [
+                    {
+                        "record_content": "实质查房记录。",
+                        "record_time": None,
+                        "update_time": "2026-01-03 09:00:00",
+                    }
+                ]
+            else:
+                rows = normal_rows
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows,
+                truncated=scenario == "truncated",
+                limit_rows=50,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-007",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        decision_rule_ids=("LX0609-007",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-007",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert "2026-01" not in repr(result.decisions)
 
 
 @pytest.mark.asyncio
