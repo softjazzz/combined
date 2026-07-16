@@ -8,7 +8,14 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
 
@@ -20,6 +27,22 @@ CONSULTATION_RULE_IDS = (
     "LX0609-023",
 )
 EXECUTOR_KEY = "consultation_quality"
+_TYPED_DECISION_RULE_IDS = frozenset(CONSULTATION_RULE_IDS)
+_TYPED_EVALUATOR_VERSION = "consultation-ruledecision-shadow-v1"
+_DECISION_SOURCE_KEYS_BY_RULE = {
+    "LX0609-020": (
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+    ),
+    "LX0609-021": ("consultation_record",),
+    "LX0609-022": ("consultation_record",),
+    "LX0609-023": (
+        "consultation_record",
+        "daily_course_record",
+        "senior_course_record",
+    ),
+}
 _SOURCE_KEYS = (
     "consultation_record",
     "daily_course_record",
@@ -182,11 +205,20 @@ class ConsultationLLMClient(Protocol):
 class NativeConsultationExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _ConsultationRuleOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
+    executor_type: str
 
 
 def _clean(value: Any) -> str:
@@ -912,10 +944,190 @@ def _result(rule_id: str, status: str, reason_code: str, *, executor_type: str) 
     return item
 
 
-def _terminal_results(
+def _typed_decision_from_outcome(
+    *,
+    outcome: _ConsultationRuleOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    """由会诊内核 outcome 直接生成决策，不经过客户结果 DTO。"""
+
+    source_keys = frozenset(_DECISION_SOURCE_KEYS_BY_RULE[outcome.rule_id])
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in source_keys
+    )
+    status = outcome.status
+    if status in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed consultation decision requires evidence refs")
+    if status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        )
+    elif status == "data_gap":
+        reason_code = (
+            "source_truncated"
+            if "truncated" in outcome.reason_code
+            else (
+                "source_unavailable"
+                if "source_unavailable" in outcome.reason_code
+                else "required_field_missing"
+            )
+        )
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            reason_code,
+        )
+    elif status == "technical_error":
+        reason_code = (
+            outcome.reason_code
+            if outcome.reason_code in {"source_query_error", "snapshot_mismatch"}
+            else "executor_exception"
+        )
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            reason_code,
+        )
+    else:
+        raise ValueError("unsupported consultation final state")
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
+
+
+def _terminal_outcomes(
     selected: Sequence[str], status: str, reason_code: str
-) -> tuple[dict[str, Any], ...]:
-    return tuple(_result(rule_id, status, reason_code, executor_type="program") for rule_id in selected)
+) -> tuple[_ConsultationRuleOutcome, ...]:
+    return tuple(
+        _ConsultationRuleOutcome(rule_id, status, reason_code, "program")
+        for rule_id in selected
+    )
+
+
+def _finalize_outcomes(
+    *,
+    outcomes: Sequence[_ConsultationRuleOutcome],
+    selected: tuple[str, ...],
+    typed_requested: frozenset[str],
+    snapshot: Luxian0609EvidenceSnapshot | None,
+    typed_terminal_blockers: Mapping[str, _ConsultationRuleOutcome] | None = None,
+    typed_conditional_blockers: Mapping[str, _ConsultationRuleOutcome] | None = None,
+    llm_call_count: int = 0,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    api_time: float = 0.0,
+) -> NativeConsultationExecutionResult:
+    terminal_blockers = typed_terminal_blockers or {}
+    conditional_blockers = typed_conditional_blockers or {}
+    results: list[dict[str, Any]] = []
+    decisions: list[RuleDecision] = []
+    for raw_outcome in outcomes:
+        outcome = terminal_blockers.get(raw_outcome.rule_id, raw_outcome)
+        if (
+            outcome is raw_outcome
+            and raw_outcome.status == "data_gap"
+            and raw_outcome.rule_id in conditional_blockers
+        ):
+            outcome = conditional_blockers[raw_outcome.rule_id]
+        if outcome.rule_id in typed_requested:
+            assert snapshot is not None
+            decisions.append(
+                _typed_decision_from_outcome(outcome=outcome, snapshot=snapshot)
+            )
+        else:
+            results.append(
+                _result(
+                    outcome.rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type=outcome.executor_type,
+                )
+            )
+    return NativeConsultationExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=selected,
+        decisions=tuple(decisions),
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+    )
+
+
+def _typed_source_blockers(
+    *,
+    selected: tuple[str, ...],
+    typed_requested: frozenset[str],
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> tuple[
+    dict[str, _ConsultationRuleOutcome],
+    dict[str, _ConsultationRuleOutcome],
+]:
+    observations = {item.source_key: item for item in snapshot.observations}
+    terminal: dict[str, _ConsultationRuleOutcome] = {}
+    conditional: dict[str, _ConsultationRuleOutcome] = {}
+    for rule_id in selected:
+        if rule_id not in typed_requested:
+            continue
+        for source_key in _DECISION_SOURCE_KEYS_BY_RULE[rule_id]:
+            observation = observations.get(source_key)
+            if observation is None:
+                blocker = _ConsultationRuleOutcome(
+                    rule_id, "technical_error", "snapshot_mismatch", "program"
+                )
+            elif observation.query_state.value == "error":
+                blocker = _ConsultationRuleOutcome(
+                    rule_id, "technical_error", "source_query_error", "program"
+                )
+            elif observation.query_state.value == "unavailable":
+                blocker = _ConsultationRuleOutcome(
+                    rule_id, "data_gap", "consultation_source_unavailable", "program"
+                )
+            elif observation.completeness.value == "truncated":
+                blocker = _ConsultationRuleOutcome(
+                    rule_id, "data_gap", "consultation_source_truncated", "program"
+                )
+            else:
+                continue
+            # consultation_record 是四条规则的必要来源；两个病程来源仅在
+            # 020/023 无法由会诊文书内嵌执行闭环直接判定时才是终局阻塞。
+            if source_key == "consultation_record":
+                terminal[rule_id] = blocker
+                break
+            conditional.setdefault(rule_id, blocker)
+    return terminal, conditional
 
 
 async def execute_luxian_0609_native_consultation_rules(
@@ -927,15 +1139,65 @@ async def execute_luxian_0609_native_consultation_rules(
     source_schema: str | None,
     llm_client: ConsultationLLMClient | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeConsultationExecutionResult:
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(rule_id for rule_id in CONSULTATION_RULE_IDS if rule_id in requested)
+    typed_requested = frozenset(
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    )
+    if (
+        not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
+        or not typed_requested.issubset(set(selected))
+    ):
+        raise ValueError("unsupported typed consultation rule scope")
+    if typed_requested and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed consultation rules require one evidence session")
     if not selected:
         return NativeConsultationExecutionResult((), ())
+    typed_terminal_blockers, typed_conditional_blockers = (
+        _typed_source_blockers(
+            selected=selected,
+            typed_requested=typed_requested,
+            snapshot=evidence_snapshot,
+        )
+        if typed_requested and evidence_snapshot is not None
+        else ({}, {})
+    )
+
+    def finalize(
+        outcomes: Sequence[_ConsultationRuleOutcome],
+        *,
+        llm_call_count: int = 0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        api_time: float = 0.0,
+    ) -> NativeConsultationExecutionResult:
+        return _finalize_outcomes(
+            outcomes=outcomes,
+            selected=selected,
+            typed_requested=typed_requested,
+            snapshot=evidence_snapshot,
+            typed_terminal_blockers=typed_terminal_blockers,
+            typed_conditional_blockers=typed_conditional_blockers,
+            llm_call_count=llm_call_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
+
     if not all(isinstance(value, str) and value.strip() for value in (institute_id, patient_id, visit_id)):
-        return NativeConsultationExecutionResult(
-            _terminal_results(selected, "technical_error", "native_coordinates_unavailable"),
-            selected,
+        return finalize(
+            _terminal_outcomes(
+                selected, "technical_error", "native_coordinates_unavailable"
+            )
         )
 
     rows_by_source: dict[str, list[dict[str, Any]]] = {}
@@ -964,17 +1226,17 @@ async def execute_luxian_0609_native_consultation_rules(
 
     consultation_rows = rows_by_source["consultation_record"]
     if not consultation_complete:
-        return NativeConsultationExecutionResult(
-            _terminal_results(selected, "data_gap", "consultation_source_unavailable"),
-            selected,
+        return finalize(
+            _terminal_outcomes(
+                selected, "data_gap", "consultation_source_unavailable"
+            )
         )
     if not consultation_rows:
         if not course_source_complete:
-            return NativeConsultationExecutionResult(
-                _terminal_results(
+            return finalize(
+                _terminal_outcomes(
                     selected, "data_gap", "consultation_source_incomplete"
-                ),
-                selected,
+                )
             )
         has_controlled_course_clue = any(
             _course_row_has_consultation_clue(row)
@@ -982,25 +1244,25 @@ async def execute_luxian_0609_native_consultation_rules(
             for row in rows_by_source.get(source_key) or ()
         )
         if has_controlled_course_clue:
-            return NativeConsultationExecutionResult(
-                _terminal_results(
+            return finalize(
+                _terminal_outcomes(
                     selected, "data_gap", "consultation_source_incomplete"
-                ),
-                selected,
+                )
             )
-        return NativeConsultationExecutionResult(
-            _terminal_results(selected, "not_applicable", "consultation_absent"),
-            selected,
+        return finalize(
+            _terminal_outcomes(selected, "not_applicable", "consultation_absent")
         )
     if len(consultation_rows) > _MAX_ROWS_BY_SOURCE["consultation_record"]:
-        return NativeConsultationExecutionResult(
-            _terminal_results(selected, "data_gap", "consultation_context_overflow"),
-            selected,
+        return finalize(
+            _terminal_outcomes(
+                selected, "data_gap", "consultation_context_overflow"
+            )
         )
     if not any(_clean(row.get("record_content")) for row in consultation_rows):
-        return NativeConsultationExecutionResult(
-            _terminal_results(selected, "data_gap", "consultation_content_unavailable"),
-            selected,
+        return finalize(
+            _terminal_outcomes(
+                selected, "data_gap", "consultation_content_unavailable"
+            )
         )
     course_source_complete = course_source_complete and _course_context_complete(
         rows_by_source
@@ -1017,25 +1279,33 @@ async def execute_luxian_0609_native_consultation_rules(
         # 完整复会诊闭环已经由严格 Python 条件唯一绑定，无需先把正文送模型。
         programmatic_reasons["LX0609-023"] = "execution_specific_summarized"
     semantic_selected = tuple(
-        rule_id for rule_id in selected if rule_id not in programmatic_reasons
+        rule_id
+        for rule_id in selected
+        if rule_id not in programmatic_reasons
+        and rule_id not in typed_terminal_blockers
     )
     if not semantic_selected:
-        return NativeConsultationExecutionResult(
+        return finalize(
             tuple(
-                _result(
+                _ConsultationRuleOutcome(
                     rule_id,
-                    _REASON_STATUS[rule_id][programmatic_reasons[rule_id]],
-                    programmatic_reasons[rule_id],
-                    executor_type="program",
+                    (
+                        _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
+                        if rule_id in programmatic_reasons
+                        else "data_gap"
+                    ),
+                    programmatic_reasons.get(
+                        rule_id, "consultation_source_unavailable"
+                    ),
+                    "program",
                 )
                 for rule_id in selected
-            ),
-            selected,
+            )
         )
     if llm_client is None:
-        return NativeConsultationExecutionResult(
+        return finalize(
             tuple(
-                _result(
+                _ConsultationRuleOutcome(
                     rule_id,
                     (
                         _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
@@ -1045,11 +1315,10 @@ async def execute_luxian_0609_native_consultation_rules(
                     programmatic_reasons.get(
                         rule_id, "consultation_llm_unavailable"
                     ),
-                    executor_type="program",
+                    "program",
                 )
                 for rule_id in selected
-            ),
-            selected,
+            )
         )
 
     try:
@@ -1064,9 +1333,9 @@ async def execute_luxian_0609_native_consultation_rules(
             )
         )
     except Exception:
-        return NativeConsultationExecutionResult(
+        return finalize(
             tuple(
-                _result(
+                _ConsultationRuleOutcome(
                     rule_id,
                     (
                         _REASON_STATUS[rule_id][programmatic_reasons[rule_id]]
@@ -1074,13 +1343,12 @@ async def execute_luxian_0609_native_consultation_rules(
                         else "data_gap"
                     ),
                     programmatic_reasons.get(rule_id, "consultation_llm_failure"),
-                    executor_type=(
+                    (
                         "program" if rule_id in programmatic_reasons else "llm"
                     ),
                 )
                 for rule_id in selected
             ),
-            selected,
             llm_call_count=1,
         )
     prompt_tokens, completion_tokens, total_tokens, api_time = _usage(response)
@@ -1092,7 +1360,7 @@ async def execute_luxian_0609_native_consultation_rules(
         rows_by_source=rows_by_source,
         course_source_complete=course_source_complete,
     )
-    results: list[dict[str, Any]] = []
+    outcomes: list[_ConsultationRuleOutcome] = []
     for rule_id in selected:
         if rule_id in programmatic_reasons:
             reason_code = programmatic_reasons[rule_id]
@@ -1116,10 +1384,13 @@ async def execute_luxian_0609_native_consultation_rules(
             executor_type = "llm"
         if status == "data_gap" and not reason_code:
             reason_code = "consultation_llm_invalid_output"
-        results.append(_result(rule_id, status, reason_code, executor_type=executor_type))
-    return NativeConsultationExecutionResult(
-        results=tuple(results),
-        planned_rule_ids=selected,
+        outcomes.append(
+            _ConsultationRuleOutcome(
+                rule_id, status, reason_code, executor_type
+            )
+        )
+    return finalize(
+        outcomes,
         llm_call_count=1,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

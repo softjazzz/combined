@@ -8,9 +8,16 @@ from types import SimpleNamespace
 
 from app.services.luxian_0609 import execution as luxian_execution
 from app.services.luxian_0609 import native_consultation_execution as consultation
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
 )
 
 
@@ -98,6 +105,131 @@ async def test_consultation_consumes_shared_material_without_live_reader(monkeyp
     assert [item["status"] for item in execution.results] == [
         "not_applicable"
     ] * 4
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_typed_consultation_absent_emits_bound_decisions_without_customer_dto(
+    monkeypatch,
+):
+    session = _material_session({})
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("typed consultation path must use one evidence session")
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({}),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=consultation.CONSULTATION_RULE_IDS,
+    )
+
+    assert execution.results == ()
+    assert tuple(item.rule_id for item in execution.decisions) == (
+        consultation.CONSULTATION_RULE_IDS
+    )
+    assert {
+        item.snapshot_hash for item in execution.decisions
+    } == {session.snapshot.snapshot_hash}
+    assert {item.reason_code for item in execution.decisions} == {
+        "trigger_absent_complete"
+    }
+    assert all(item.fact_refs for item in execution.decisions)
+    assert execution.llm_call_count == 0
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        snapshot=session.snapshot,
+    )
+    assert {item.final_state.value for item in reduced} == {"not_applicable"}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_state", "expected_status", "expected_reason"),
+    (
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
+        ("truncated", "data_gap", "source_truncated"),
+    ),
+)
+async def test_typed_consultation_preserves_query_state_without_llm(
+    monkeypatch,
+    source_state: str,
+    expected_status: str,
+    expected_reason: str,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "consultation_record":
+            if source_state == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if source_state == "error":
+                raise SourceEvidenceQueryError()
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=[{"record_content": "private consultation material"}],
+                truncated=True,
+                limit_rows=1,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=("senior_course_record",),
+    )
+    client = _Client({})
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("typed consultation path must not query")
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=consultation.CONSULTATION_RULE_IDS,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        snapshot=session.snapshot,
+    )
+
+    assert execution.results == ()
+    assert {item.final_state.value for item in reduced} == {expected_status}
+    assert {item.reason_code for item in reduced} == {expected_reason}
+    assert execution.llm_call_count == 0
+    assert client.calls == []
 
 
 @pytest.mark.unit
@@ -230,6 +362,139 @@ async def test_four_rules_share_one_trimmed_llm_call_and_controlled_codes(monkey
     assert execution.llm_call_count == 1
     assert execution.total_tokens == 140
     assert all("record_content" not in repr(item) for item in execution.results)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_typed_consultation_matches_raw_states_and_ignores_stale_semantic_output(
+    monkeypatch,
+):
+    secret = "PRIVATE_CONSULTATION_BODY_MARKER"
+    rows = {
+        "consultation_record": [
+            {
+                "document_title": "会诊记录",
+                "record_time": "2026-06-01 10:00:00",
+                "record_content": f"{secret} 申请目的明确。会诊意见：包含具体治疗建议。",
+            }
+        ],
+        "daily_course_record": [
+            {
+                "document_title": "日常病程",
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "归纳会诊意见并记录具体执行措施。",
+            }
+        ],
+        "senior_course_record": [],
+    }
+    payload = {
+        "results": {
+            "LX0609-021": {"reason_code": "purpose_vague"},
+            "LX0609-022": {"reason_code": "opinion_clear"},
+        },
+        "execution_links": [
+            {
+                "consultation_ref": "consultation_record-1",
+                "course_ref": "daily_course_record-1",
+                "quality": "vague",
+            }
+        ],
+    }
+    session = _material_session(rows)
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("same-session path must not query")
+        ),
+    )
+    raw_client = _Client(payload)
+    typed_client = _Client(payload)
+
+    raw = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=raw_client,
+        evidence_materials=session.materials,
+    )
+    typed = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=typed_client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=consultation.CONSULTATION_RULE_IDS,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=typed.decisions,
+        expected_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        snapshot=session.snapshot,
+    )
+
+    assert typed.results == ()
+    assert [item.final_state.value for item in reduced] == [
+        item["status"] for item in raw.results
+    ]
+    assert tuple(item.rule_id for item in reduced) == consultation.CONSULTATION_RULE_IDS
+    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.total_tokens == typed.total_tokens == 140
+    assert secret not in repr(typed)
+
+    empty_session = _material_session({})
+    stale_client = _Client(payload)
+    absent = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=consultation.CONSULTATION_RULE_IDS,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=stale_client,
+        evidence_materials=empty_session.materials,
+        evidence_snapshot=empty_session.snapshot,
+        decision_rule_ids=consultation.CONSULTATION_RULE_IDS,
+    )
+    absent_reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=absent.decisions,
+        expected_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        snapshot=empty_session.snapshot,
+    )
+    assert {item.final_state.value for item in absent_reduced} == {"not_applicable"}
+    assert stale_client.calls == []
+    assert {
+        item.snapshot_hash for item in absent.decisions
+    } != {item.snapshot_hash for item in typed.decisions}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_typed_consultation_rejects_mixed_snapshot_and_material_store():
+    first = _material_session({})
+    second = _material_session(
+        {
+            "consultation_record": [
+                {"record_content": "会诊目的明确。会诊意见具体。"}
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="one evidence session"):
+        await consultation.execute_luxian_0609_native_consultation_rules(
+            rule_ids=consultation.CONSULTATION_RULE_IDS,
+            institute_id="I",
+            patient_id="P",
+            visit_id="V",
+            source_schema=None,
+            llm_client=_Client({}),
+            evidence_materials=first.materials,
+            evidence_snapshot=second.snapshot,
+            decision_rule_ids=consultation.CONSULTATION_RULE_IDS,
+        )
 
 
 @pytest.mark.unit

@@ -234,11 +234,22 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id in {"LX0609-045", "LX0609-046", "LX0609-047"}
+                rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}
                 and bool(
                     getattr(
                         settings,
                         "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id
+                in {"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED",
                         False,
                     )
                 )

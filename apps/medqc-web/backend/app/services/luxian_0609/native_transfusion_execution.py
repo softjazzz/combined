@@ -22,14 +22,7 @@ from .source_evidence_reader import read_luxian_0609_native_source_rows
 
 TRANSFUSION_RULE_IDS = tuple(f"LX0609-{number:03d}" for number in range(41, 50))
 EXECUTOR_KEY = "transfusion"
-_TYPED_DECISION_RULE_IDS = frozenset(
-    {"LX0609-045", "LX0609-046", "LX0609-047"}
-)
-_TYPED_DECISION_SOURCE_KEYS = (
-    "bloodtrans_record",
-    "daily_course_record",
-    "mr_bloodtrans",
-)
+_TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-shadow-v1"
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
@@ -166,6 +159,45 @@ _RULE_REQUIRED_SOURCE_GROUPS = {
     ),
 }
 
+# typed 路径只消费同一 Evidence Session 的物理材料。别名仅用于把已经进入
+# snapshot/material store 的白名单来源投影成旧临床内核所需的逻辑文书名；
+# 它不会查询数据库，也不会回读 legacy evidence_payload。
+_TYPED_SOURCE_ALIASES = {
+    "bloodtrans_record": ("bloodtrans_record",),
+    "consent_form": (
+        "consent_form",
+        "surgery_inform_consent",
+        "blood_transfusion_consent",
+    ),
+    "blood_transfusion_consent": (
+        "blood_transfusion_consent",
+        "consent_form",
+        "surgery_inform_consent",
+    ),
+    "labtest_master": ("labtest_master",),
+    "labtest_item_report": ("labtest_item_report",),
+    "exam_master": ("exam_master",),
+    "exam_item_report": ("exam_item_report",),
+    "blood_application": ("blood_application",),
+    "daily_course_record": ("daily_course_record",),
+    "surgery_record": ("surgery_record",),
+    "anesthesia_record": ("anesthesia_record",),
+    "postsurg_firstcourse_record": ("postsurg_firstcourse_record",),
+    "inpat_nondrug_order": ("inpat_nondrug_order",),
+    "inpat_bill_item": ("inpat_bill_item",),
+}
+
+
+def _typed_rule_source_keys(rule_id: str) -> frozenset[str]:
+    logical_sources = set(_TRIGGER_SOURCES)
+    logical_sources.update(_RULE_CONTEXT_SOURCES[rule_id])
+    physical_sources = set(_TRIGGER_SOURCES)
+    for logical_source in logical_sources:
+        physical_sources.update(
+            _TYPED_SOURCE_ALIASES.get(logical_source, (logical_source,))
+        )
+    return frozenset(physical_sources)
+
 _CONTROLLED_MESSAGES = {
     "compliant": ("输血相关记录满足该项要求。", ""),
     "non_compliant": ("输血相关记录未满足该项要求。", "请按该质控点补充或修正输血相关记录。"),
@@ -206,10 +238,11 @@ def _typed_decision_from_outcome(
     """从受控内核 outcome 生成 typed decision，不经过客户结果 DTO。"""
 
     status = outcome.status
+    allowed_source_keys = _typed_rule_source_keys(outcome.rule_id)
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
-        if observation.source_key in _TYPED_DECISION_SOURCE_KEYS
+        if observation.source_key in allowed_source_keys
     )
     if status in {"compliant", "non_compliant", "not_applicable"} and not refs:
         raise ValueError("typed transfusion decision requires evidence refs")
@@ -324,15 +357,18 @@ def _typed_documents_from_evidence_session(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    rule_id: str,
 ) -> tuple[Mapping[str, Any] | None, str, str]:
-    """只从同一快照材料构造 typed 文书投影，禁止回读旧 payload。"""
+    """只从同一快照材料构造单规则 typed 投影，禁止回读旧 payload。"""
 
-    required_sources = _TYPED_DECISION_SOURCE_KEYS
     observation_by_source = {
         observation.source_key: observation
         for observation in snapshot.observations
     }
-    for source_key in required_sources:
+
+    # 输血事实锚点的两个来源属于同一个已批准 trigger contract。缺少观察是
+    # snapshot 接线错误；查询错误/不可用则保持既有四态失败语义。
+    for source_key in _TRIGGER_SOURCES:
         observation = observation_by_source.get(source_key)
         if observation is None:
             return None, "technical_error", "snapshot_mismatch"
@@ -346,14 +382,66 @@ def _typed_documents_from_evidence_session(
 
     documents: dict[str, list[dict[str, Any]]] = {}
     try:
-        for source_key in ("bloodtrans_record", "daily_course_record"):
-            documents[source_key] = [
-                dict(row) for row in materials.rows(source_key)
-            ]
         # performed-state 会从同一个材料仓读取该结构化来源；这里先证明可读。
-        materials.rows("mr_bloodtrans")
+        for source_key in _TRIGGER_SOURCES:
+            materials.rows(source_key)
     except Exception:
         return None, "technical_error", "snapshot_mismatch"
+
+    logical_states: dict[str, str] = {}
+    projected_physical_sources: set[str] = set()
+    for logical_source in _RULE_CONTEXT_SOURCES[rule_id]:
+        rows: list[dict[str, Any]] = []
+        states: list[str] = []
+        for source_key in _TYPED_SOURCE_ALIASES.get(
+            logical_source, (logical_source,)
+        ):
+            if source_key in projected_physical_sources:
+                continue
+            observation = observation_by_source.get(source_key)
+            if observation is None:
+                continue
+            if observation.query_state.value == "error":
+                states.append("error")
+                continue
+            if (
+                observation.query_state.value == "unavailable"
+                or observation.completeness.value == "truncated"
+            ):
+                states.append("unavailable")
+                continue
+            try:
+                rows.extend(dict(row) for row in materials.rows(source_key))
+            except Exception:
+                return None, "technical_error", "snapshot_mismatch"
+            states.append("complete")
+            projected_physical_sources.add(source_key)
+        documents[logical_source] = rows
+        if rows:
+            logical_states[logical_source] = "available"
+        elif "error" in states:
+            logical_states[logical_source] = "error"
+        elif "unavailable" in states:
+            logical_states[logical_source] = "unavailable"
+        elif "complete" in states:
+            logical_states[logical_source] = "empty"
+        else:
+            logical_states[logical_source] = "missing"
+
+    # 每个 required group 只需一个逻辑来源具备实质材料；若均无材料，则按
+    # ERROR > contract mismatch > unavailable > complete-empty 的顺序 fail closed。
+    for group in _RULE_REQUIRED_SOURCE_GROUPS[rule_id]:
+        if any(_source_rows(documents, source_key) for source_key in group):
+            continue
+        group_states = tuple(
+            logical_states.get(source_key, "missing") for source_key in group
+        )
+        if "error" in group_states:
+            return None, "technical_error", "source_query_error"
+        if all(state == "missing" for state in group_states):
+            return None, "technical_error", "snapshot_mismatch"
+        if "unavailable" in group_states:
+            return None, "data_gap", "transfusion_source_unavailable"
     return documents, "", ""
 
 
@@ -888,20 +976,20 @@ async def execute_luxian_0609_native_transfusion_rules(
             )
 
     legacy_documents = _documents(evidence_payload)
-    typed_documents: Mapping[str, Any] | None = None
-    typed_material_status = ""
-    typed_material_reason = ""
+    typed_material_by_rule: dict[
+        str, tuple[Mapping[str, Any] | None, str, str]
+    ] = {}
     if typed_selected:
         assert evidence_snapshot is not None
         assert evidence_materials is not None
-        (
-            typed_documents,
-            typed_material_status,
-            typed_material_reason,
-        ) = _typed_documents_from_evidence_session(
-            snapshot=evidence_snapshot,
-            materials=evidence_materials,
-        )
+        for typed_rule_id in typed_selected:
+            typed_material_by_rule[typed_rule_id] = (
+                _typed_documents_from_evidence_session(
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                    rule_id=typed_rule_id,
+                )
+            )
     legacy_source_state = _performed_source_state(
         documents=legacy_documents,
         institute_id=str(institute_id or ""),
@@ -910,19 +998,6 @@ async def execute_luxian_0609_native_transfusion_rules(
         source_schema=source_schema,
         evidence_materials=evidence_materials,
     )
-    typed_source_state = (
-        _performed_source_state(
-            documents=typed_documents,
-            institute_id=str(institute_id or ""),
-            patient_id=str(patient_id or ""),
-            visit_id=str(visit_id or ""),
-            source_schema=source_schema,
-            evidence_materials=evidence_materials,
-        )
-        if typed_selected and not typed_material_status
-        else "data_gap"
-    )
-
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper(): wrapper
         for wrapper in wrapper_rules
@@ -932,8 +1007,15 @@ async def execute_luxian_0609_native_transfusion_rules(
     api_time = 0.0
     for rule_id in selected:
         typed_rule = rule_id in typed_requested
-        documents = typed_documents if typed_rule else legacy_documents
-        if typed_rule and typed_material_status:
+        if typed_rule:
+            documents, typed_material_status, typed_material_reason = (
+                typed_material_by_rule[rule_id]
+            )
+        else:
+            documents = legacy_documents
+            typed_material_status = ""
+            typed_material_reason = ""
+        if typed_material_status:
             emit_outcome(
                 rule_id,
                 typed_material_status,
@@ -941,7 +1023,18 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
-        source_state = typed_source_state if typed_rule else legacy_source_state
+        source_state = (
+            _performed_source_state(
+                documents=documents,
+                institute_id=str(institute_id or ""),
+                patient_id=str(patient_id or ""),
+                visit_id=str(visit_id or ""),
+                source_schema=source_schema,
+                evidence_materials=evidence_materials,
+            )
+            if typed_rule
+            else legacy_source_state
+        )
         if source_state != "present":
             emit_outcome(
                 rule_id,

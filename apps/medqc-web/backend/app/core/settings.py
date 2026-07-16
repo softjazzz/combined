@@ -154,8 +154,10 @@ class Settings(BaseSettings):
     LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED: bool = False
     # 001/005/006 共用权威入院锚点生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED: bool = False
-    # 045/046/047 从同一 Evidence Session 材料直接生成 RuleDecision；独立回滚。
+    # 044/045/046/047 从同一 Evidence Session 材料直接生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED: bool = False
+    # 020/021/022/023 从同一 Evidence Session 材料直接生成 RuleDecision；独立回滚。
+    LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
     # LX0609 独立准生产 API；默认关闭，人工验收后才允许显式开启。

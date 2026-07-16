@@ -362,7 +362,7 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
     )
 
 
-def _transfusion_045_047_evidence_session() -> Luxian0609EvidenceReadSession:
+def _transfusion_044_047_evidence_session() -> Luxian0609EvidenceReadSession:
     course_text = (
         "输血目的：纠正贫血；2026-01-01 14:20 开始输血，"
         "输注去白悬浮红细胞2U。输血过程中严密观察，生命体征平稳；"
@@ -398,7 +398,12 @@ def _transfusion_045_047_evidence_session() -> Luxian0609EvidenceReadSession:
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-045", "LX0609-046", "LX0609-047"),
+        selected_rule_ids=(
+            "LX0609-044",
+            "LX0609-045",
+            "LX0609-046",
+            "LX0609-047",
+        ),
         institute_id="private-institute",
         patient_id="private-patient",
         visit_id="private-visit",
@@ -833,10 +838,10 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
 
 
 @pytest.mark.asyncio
-async def test_transfusion_045_047_typed_decisions_replace_raw_results_without_drift(
+async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_drift(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-045", "LX0609-046", "LX0609-047")
+    selected = ("LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047")
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -851,7 +856,7 @@ async def test_transfusion_045_047_typed_decisions_replace_raw_results_without_d
         "build_luxian_0609_package_plan_from_settings",
         lambda **_kwargs: package_plan,
     )
-    session = _transfusion_045_047_evidence_session()
+    session = _transfusion_044_047_evidence_session()
     monkeypatch.setattr(
         luxian_execution,
         "build_luxian_0609_evidence_read_session",
@@ -911,6 +916,7 @@ async def test_transfusion_045_047_typed_decisions_replace_raw_results_without_d
         "compliant",
         "compliant",
         "compliant",
+        "compliant",
     ]
     assert all(item.fact_refs for item in context.reduced_decisions)
     assert context.native_llm_call_count == 0
@@ -939,7 +945,7 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
     monkeypatch.setattr(
         luxian_execution,
         "build_luxian_0609_evidence_read_session",
-        lambda **_kwargs: _transfusion_045_047_evidence_session(),
+        lambda **_kwargs: _transfusion_044_047_evidence_session(),
     )
     monkeypatch.setattr(
         luxian_execution,
@@ -984,6 +990,92 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
     assert [item["rule_id"] for item in context.native_results] == list(selected)
     assert [item["status"] for item in context.native_results] == ["compliant"]
     assert context.reduced_decisions == ()
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_consultation_020_023_typed_decisions_replace_raw_results(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("consultation_quality", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    assert [item.final_state.value for item in context.reduced_decisions] == [
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
+    ]
+    assert all(item.fact_refs for item in context.reduced_decisions)
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
 

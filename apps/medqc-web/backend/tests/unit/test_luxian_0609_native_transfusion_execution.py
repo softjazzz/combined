@@ -11,6 +11,7 @@ from app.services.luxian_0609 import native_transfusion_execution as transfusion
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
     build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.decision_reducer import (
@@ -149,7 +150,8 @@ def test_typed_transfusion_core_does_not_reverse_engineer_customer_result_dto():
     assert "metadata" not in decision_source
     assert "emit_outcome" in execution_source
     assert "_typed_documents_from_evidence_session" in execution_source
-    assert "documents = typed_documents if typed_rule else legacy_documents" in execution_source
+    assert "typed_material_by_rule[rule_id]" in execution_source
+    assert "documents = legacy_documents" in execution_source
 
 
 @pytest.mark.parametrize(
@@ -255,6 +257,325 @@ async def test_typed_045_uses_snapshot_material_not_conflicting_legacy_payload(
             for item in incomplete_session.snapshot.observations
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_typed_044_uses_same_session_material_and_ignores_stale_payload(
+    monkeypatch,
+):
+    session = _typed_decision_session(selected_rule_ids=("LX0609-044",))
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("typed path must use the supplied evidence session")
+        ),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        # 与同一 session 材料冲突：旧 payload 明确声称缺少输血前评估。
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "明确未记录输血前评估。"}],
+            blood_application=[],
+            daily_course_record=[],
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-044",),
+    )
+
+    assert result.results == ()
+    assert result.llm_call_count == 0
+    assert [item.rule_id for item in result.decisions] == ["LX0609-044"]
+    assert (
+        reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value
+        == "compliant"
+    )
+    assert result.decisions[0].snapshot_hash == session.snapshot.snapshot_hash
+    assert "明确未记录输血前评估" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeypatch):
+    complete_session = _typed_decision_session(selected_rule_ids=("LX0609-044",))
+    missing_session = _typed_decision_session(
+        selected_rule_ids=("LX0609-044",),
+        bloodtrans_content="输血过程中患者生命体征平稳。",
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    common = {
+        "rule_ids": ("LX0609-044",),
+        "wrapper_rules": [_wrapper("LX0609-044")],
+        "evidence_payload": _documents(
+            bloodtrans_record=[{"content": "输血前评估完整且风险已说明。"}]
+        ),
+        "institute_id": "I",
+        "patient_id": "P",
+        "visit_id": "V",
+        "source_schema": None,
+        "llm_client": None,
+        "decision_rule_ids": ("LX0609-044",),
+    }
+
+    complete = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        **common,
+        evidence_snapshot=complete_session.snapshot,
+        evidence_materials=complete_session.materials,
+    )
+    missing = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        **common,
+        evidence_snapshot=missing_session.snapshot,
+        evidence_materials=missing_session.materials,
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        complete.decisions[0]
+    ).final_state.value == "compliant"
+    assert reduce_luxian_0609_rule_decision(
+        missing.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert complete.decisions[0].snapshot_hash != missing.decisions[0].snapshot_hash
+    assert complete.decisions[0].fact_refs != missing.decisions[0].fact_refs
+
+
+@pytest.mark.parametrize(
+    ("source_mode", "expected_state", "expected_reason"),
+    (
+        ("available", "compliant", "requirement_satisfied"),
+        ("empty", "not_applicable", "trigger_absent_complete"),
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_typed_044_preserves_source_four_states(
+    monkeypatch,
+    source_mode,
+    expected_state,
+    expected_reason,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "daily_course_record" and source_mode == "unavailable":
+            raise SourceEvidenceUnavailable("private unavailable detail")
+        if source_key == "daily_course_record" and source_mode == "error":
+            raise SourceEvidenceQueryError("private query detail")
+        if source_mode == "empty" and source_key in {
+            "mr_bloodtrans",
+            "bloodtrans_record",
+        }:
+            rows = []
+        else:
+            rows = {
+                "mr_bloodtrans": [
+                    {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
+                ],
+                "bloodtrans_record": [
+                    {
+                        "record_content": (
+                            "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
+                            "结束时间16:10。输血过程中严密观察，未见不良反应。"
+                        )
+                    }
+                ],
+                "daily_course_record": [
+                    {"record_content": "输血后继续观察，生命体征平稳。"}
+                ],
+            }[source_key]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-044",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no fallback")),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044",),
+        wrapper_rules=[_wrapper("LX0609-044")],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-044",),
+    )
+    decision = result.decisions[0]
+
+    assert reduce_luxian_0609_rule_decision(decision).final_state.value == expected_state
+    assert decision.reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert "private unavailable detail" not in repr(result)
+    assert "private query detail" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_044_optional_llm_keeps_raw_call_token_and_state_semantics(
+    monkeypatch,
+):
+    grey_content = "输血前评估记录：患者存在输血指征，其他风险资料待结合判断。"
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-044",),
+        bloodtrans_content=grey_content,
+        daily_content="输血后继续观察。",
+    )
+    payload = _documents(
+        bloodtrans_record=[{"content": grey_content}],
+        blood_application=[],
+        daily_course_record=[{"content": "输血后继续观察。"}],
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    raw_client = _Client([{"is_compliant": False}])
+    typed_client = _Client([{"is_compliant": False}])
+    common = {
+        "rule_ids": ("LX0609-044",),
+        "wrapper_rules": [_wrapper("LX0609-044")],
+        "evidence_payload": payload,
+        "institute_id": "I",
+        "patient_id": "P",
+        "visit_id": "V",
+        "source_schema": None,
+    }
+
+    raw = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        **common,
+        llm_client=raw_client,
+    )
+    typed = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        **common,
+        llm_client=typed_client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-044",),
+    )
+
+    assert raw.results[0]["status"] == "non_compliant"
+    assert reduce_luxian_0609_rule_decision(
+        typed.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert typed.results == ()
+    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.total_tokens == typed.total_tokens == 110
+    assert raw_client.prompts == typed_client.prompts
+
+
+@pytest.mark.asyncio
+async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
+    monkeypatch,
+):
+    selected = (
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-044",
+        "LX0609-048",
+        "LX0609-049",
+    )
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = {
+            "mr_bloodtrans": [
+                {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
+            ],
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "输血目的：纠正贫血；开始时间14:20，输注红细胞2U，"
+                        "结束时间16:10。输血过程中严密观察，未见不良反应。"
+                    )
+                }
+            ],
+            "daily_course_record": [
+                {"record_content": "输血后继续观察，生命体征平稳。"}
+            ],
+        }.get(source_key, [])
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no legacy read")),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([{"is_compliant": True}] * len(selected)),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert result.results == ()
+    assert result.planned_rule_ids == selected
+    assert [item.rule_id for item in result.decisions] == list(selected)
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    states = {
+        item.rule_id: reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    }
+    assert states == {
+        "LX0609-041": "data_gap",
+        "LX0609-042": "data_gap",
+        "LX0609-043": "data_gap",
+        "LX0609-044": "compliant",
+        "LX0609-048": "technical_error",
+        "LX0609-049": "technical_error",
+    }
+    assert "输血目的" not in repr(result)
 
 
 @pytest.mark.parametrize(

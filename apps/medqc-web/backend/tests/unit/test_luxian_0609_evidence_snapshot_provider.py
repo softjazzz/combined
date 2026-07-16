@@ -465,7 +465,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert snapshot.facts == ()
 
 
-def test_read_session_retains_private_material_once_without_safe_output_leak() -> None:
+def test_consultation_decision_support_retains_private_material_once_without_safe_output_leak() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -484,7 +484,6 @@ def test_read_session_retains_private_material_once_without_safe_output_leak() -
         source_schema=None,
         created_at=CREATED_AT,
         row_reader=reader,
-        additional_source_keys=("senior_course_record",),
     )
 
     assert calls == [
