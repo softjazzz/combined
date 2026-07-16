@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import hashlib
 import json
+import re
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -19,6 +20,13 @@ SURGERY_TIME_FIELDS = (
     "surgery_end_datetime",
 )
 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
+_RESCUE_END_TIME_PATTERN = re.compile(
+    r"(?:^|[\n\r；;])\s*抢救结束时间\s*[:：]\s*(?P<value>"
+    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
+    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
+    r")",
+    flags=re.MULTILINE,
+)
 
 _NATIVE_SOURCE_FIELDS = {
     "inpat_registration": (
@@ -29,6 +37,18 @@ _NATIVE_SOURCE_FIELDS = {
         "document_title",
         "record_time",
         "admission_datetime",
+    ),
+    "first_course_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
+    "rescue_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
     ),
     "mr_bloodtrans": (
         "transfuse_variety",
@@ -143,6 +163,8 @@ _SNAPSHOT_SOURCE_FIELDS = {
     for source_key in (
         "inpat_registration",
         "admission_record",
+        "first_course_record",
+        "rescue_record",
         "mr_bloodtrans",
         "bloodtrans_record",
         "mr_surgery",
@@ -200,6 +222,27 @@ class SourceEvidenceQueryError(Exception):
 
 class SourceEvidenceTruncated(Exception):
     """受控来源超过读取上限，不能据截断结果作否定判断。"""
+
+
+def parse_luxian_0609_rescue_end_time(value: Any) -> datetime | None:
+    """只解析完整“抢救结束时间”标签值，不从任意正文猜测时间。"""
+
+    match = _RESCUE_END_TIME_PATTERN.search(str(value or ""))
+    if not match:
+        return None
+    normalized = (
+        match.group("value")
+        .strip()
+        .replace("年", "-")
+        .replace("月", "-")
+        .replace("日", "")
+    )
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 @dataclass(frozen=True)

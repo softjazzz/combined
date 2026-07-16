@@ -4,6 +4,10 @@ from datetime import datetime
 import re
 from typing import Any
 
+from .luxian_0609.source_evidence_reader import (
+    parse_luxian_0609_rescue_end_time,
+)
+
 
 _TARGET_RULE_IDS = {
     "LX0609-001",
@@ -39,14 +43,6 @@ _TARGET_RULE_IDS = {
     "LX0609-049",
 }
 
-_RESCUE_END_TIME_PATTERN = re.compile(
-    r"抢救结束时间\s*[:：]\s*(?P<value>"
-    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
-    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
-    r")"
-)
-
-
 def _norm(value: Any) -> str:
     return str(value or "").strip()
 
@@ -74,22 +70,7 @@ def _parse_dt(value: Any) -> datetime | None:
 
 
 def _parse_rescue_end_time(value: Any) -> datetime | None:
-    text = str(value or "")
-    match = _RESCUE_END_TIME_PATTERN.search(text)
-    if not match:
-        return None
-    candidate = match.group("value").strip()
-    normalized = (
-        candidate.replace("年", "-")
-        .replace("月", "-")
-        .replace("日", "")
-    )
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(normalized, fmt)
-        except ValueError:
-            continue
-    return None
+    return parse_luxian_0609_rescue_end_time(value)
 
 
 def _hours_between(start: datetime, end: datetime) -> float:

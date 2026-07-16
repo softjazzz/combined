@@ -145,6 +145,8 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
             )
             for rule_id in (
                 "LX0609-001",
+                "LX0609-002",
+                "LX0609-004",
                 "LX0609-005",
                 "LX0609-006",
                 "LX0609-007",
@@ -169,7 +171,7 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
         "result_count": 49,
         "baseline_family_reader_calls": 0,
         "candidate_family_reader_calls": 0,
-        "typed_decision_count": 4,
+        "typed_decision_count": 6,
         "typed_decision_min_fact_ref_count": 1,
         "typed_model_call_count": 0,
         "typed_007_decision_count": 1,

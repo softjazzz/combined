@@ -36,6 +36,11 @@ _LEGACY_RULE_IDS = ("SC-002", "CL-081", "SC-021", "SC-054", "SC-048", "SC-049", 
 def _typed_basic_session(
     rows_by_source: dict[str, list[dict]],
     *,
+    selected_rule_ids: tuple[str, ...] = (
+        "LX0609-001",
+        "LX0609-005",
+        "LX0609-006",
+    ),
     failures: dict[str, Exception] | None = None,
     truncated_sources: frozenset[str] = frozenset(),
 ):
@@ -51,7 +56,7 @@ def _typed_basic_session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        selected_rule_ids=selected_rule_ids,
         institute_id="I",
         patient_id="P",
         visit_id="V",
@@ -62,6 +67,8 @@ def _typed_basic_session(
             "admission_record",
             "inpat_registration",
             "daily_course_record",
+            "first_course_record",
+            "rescue_record",
             "senior_course_record",
         ),
     )
@@ -105,17 +112,24 @@ def _private_course_rows(attending_time: str, senior_time: str) -> dict[str, lis
     }
 
 
-def _reduce_typed_basic(session):
+def _reduce_typed_basic(
+    session,
+    rule_ids: tuple[str, ...] = (
+        "LX0609-001",
+        "LX0609-005",
+        "LX0609-006",
+    ),
+):
     execution = execute_luxian_0609_native_basic_timeliness(
-        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
-        decision_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        rule_ids=rule_ids,
+        decision_rule_ids=rule_ids,
         evidence_payload=None,
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=execution.decisions,
-        expected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        expected_rule_ids=rule_ids,
         snapshot=session.snapshot,
     )
     return execution, reduced
@@ -229,6 +243,116 @@ def test_001_005_006_reject_incomplete_admission_datetime(incomplete_time: str):
     assert {item.reason_code for item in reduced} == {
         "authoritative_time_missing"
     }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("record_time", "record_content", "expected_state", "expected_reason"),
+    [
+        (
+            "2026-06-01 16:00:00",
+            "患者入院后完成病史采集、体格检查和诊疗计划。",
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+        ),
+        (
+            "2026-06-01 16:00:01",
+            "患者入院后完成病史采集、体格检查和诊疗计划。",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+        (
+            None,
+            "首次病程记录 记录时间",
+            CustomerFinalState.DATA_GAP,
+            "required_field_missing",
+        ),
+    ],
+)
+def test_002_uses_authoritative_first_course_time_without_model(
+    record_time,
+    record_content: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [],
+            "first_course_record": [
+                {
+                    "document_title": "首次病程记录",
+                    "record_time": record_time,
+                    "record_content": record_content,
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-002",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+
+    assert execution.results == ()
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert "诊疗计划" not in repr(reduced[0])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rows", "expected_state", "expected_reason"),
+    [
+        ([], CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete"),
+        (
+            [
+                {
+                    "record_time": "2026-06-01 14:00:00",
+                    "record_content": "抢救结束时间：2026-06-01 08:00:00",
+                }
+            ],
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+        ),
+        (
+            [
+                {
+                    "record_time": "2026-06-01 14:00:01",
+                    "record_content": "抢救结束时间：2026-06-01 08:00:00",
+                }
+            ],
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+        (
+            [
+                {
+                    "record_time": "2026-06-01 10:00:00",
+                    "record_content": "拟抢救结束时间：2026-06-01 08:00:00",
+                }
+            ],
+            CustomerFinalState.DATA_GAP,
+            "required_field_missing",
+        ),
+    ],
+)
+def test_004_uses_exact_rescue_end_label_without_model(
+    rows: list[dict],
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    session = _typed_basic_session(
+        {"rescue_record": rows},
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert execution.results == ()
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert "抢救结束时间" not in repr(reduced[0])
 
 
 @pytest.mark.unit

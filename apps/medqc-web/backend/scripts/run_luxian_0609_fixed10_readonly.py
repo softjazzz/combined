@@ -551,6 +551,8 @@ async def _evaluate_runtime_flag_ab_case(
     if mode_label == "unified_engine":
         expected_typed_rule_ids = (
             "LX0609-001",
+            "LX0609-002",
+            "LX0609-004",
             "LX0609-005",
             "LX0609-006",
             "LX0609-007",

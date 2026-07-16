@@ -546,22 +546,27 @@ def test_provider_requires_three_coordinates_before_any_read(missing_field: str)
     assert calls == 0
 
 
-def test_legacy_or_derived_sources_fail_closed_without_querying_old_bundle() -> None:
+def test_rescue_record_uses_bounded_reader_after_typed_migration() -> None:
     calls = 0
 
     def reader(**_kwargs):
         nonlocal calls
         calls += 1
-        raise AssertionError("legacy source reader must not be called")
+        return SnapshotSourceRows.create(
+            source_key="rescue_record",
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
 
     snapshot = _build(selected_rule_ids=("LX0609-004",), row_reader=reader)
-    assert calls == 0
+    assert calls == 1
     assert len(snapshot.observations) == 1
     observation = snapshot.observations[0]
     assert observation.source_key == "rescue_record"
-    assert observation.query_state is SourceQueryState.UNAVAILABLE
-    assert observation.completeness is SourceCompleteness.UNPROVEN
-    assert observation.reason_code == "SOURCE_READER_NOT_REGISTERED"
+    assert observation.query_state is SourceQueryState.EMPTY
+    assert observation.completeness is SourceCompleteness.COMPLETE
+    assert observation.reason_code == ""
 
 
 @dataclass

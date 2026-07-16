@@ -20,6 +20,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
 from .source_evidence_reader import (
     build_luxian_0609_course_round_timeline_from_rows,
+    parse_luxian_0609_rescue_end_time,
     read_luxian_0609_course_round_timeline,
 )
 from ..luxian_0609_rule_catalog import load_luxian_0609_rules
@@ -59,18 +60,54 @@ _FIRST_COURSE_BODY_FIELDS = (
     "raw_text",
 )
 _MIN_FIRST_COURSE_BODY_CHARS = 6
-_TYPED_RULE_IDS = ("LX0609-001", "LX0609-005", "LX0609-006")
-_TYPED_SOURCE_KEYS = (
-    "admission_record",
-    "daily_course_record",
-    "inpat_registration",
-    "senior_course_record",
+_TYPED_RULE_IDS = (
+    "LX0609-001",
+    "LX0609-002",
+    "LX0609-004",
+    "LX0609-005",
+    "LX0609-006",
 )
+_TYPED_SOURCE_KEYS_BY_RULE = {
+    "LX0609-001": ("admission_record", "inpat_registration"),
+    "LX0609-002": (
+        "admission_record",
+        "first_course_record",
+        "inpat_registration",
+    ),
+    "LX0609-004": ("rescue_record",),
+    "LX0609-005": (
+        "admission_record",
+        "daily_course_record",
+        "inpat_registration",
+        "senior_course_record",
+    ),
+    "LX0609-006": (
+        "admission_record",
+        "daily_course_record",
+        "inpat_registration",
+        "senior_course_record",
+    ),
+}
 _ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主治查房")
 _SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
 _AUTHORITATIVE_DATETIME_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$"
 )
+
+
+def _is_substantive_first_course_text(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    normalized = re.sub(r"[\W_]+", "", value, flags=re.UNICODE)
+    shell_remainder = re.sub(
+        r"(?:首次病程记录|首次病程|记录时间|提交时间|文书类型|文书编号|正文|"
+        r"sourcetable|firstcourserecord|assemblystatus|partial|"
+        r"年|月|日|时|分|秒|\d+)",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    return len(shell_remainder) >= _MIN_FIRST_COURSE_BODY_CHARS
 
 
 def _technical_result(rule_id: str, reason_code: str) -> dict[str, Any]:
@@ -101,18 +138,7 @@ def _has_substantive_first_course_body(
             continue
         for field in _FIRST_COURSE_BODY_FIELDS:
             value = row.get(field)
-            if not isinstance(value, str):
-                continue
-            normalized = re.sub(r"[\W_]+", "", value, flags=re.UNICODE)
-            shell_remainder = re.sub(
-                r"(?:首次病程记录|首次病程|记录时间|提交时间|文书类型|文书编号|正文|"
-                r"sourcetable|firstcourserecord|assemblystatus|partial|"
-                r"年|月|日|时|分|秒|\d+)",
-                "",
-                normalized,
-                flags=re.IGNORECASE,
-            )
-            if len(shell_remainder) >= _MIN_FIRST_COURSE_BODY_CHARS:
+            if _is_substantive_first_course_text(value):
                 return True
     return False
 
@@ -216,6 +242,12 @@ def _typed_basic_decisions(
 
     allowed_sources = {
         "LX0609-001": ("admission_record", "inpat_registration"),
+        "LX0609-002": (
+            "admission_record",
+            "first_course_record",
+            "inpat_registration",
+        ),
+        "LX0609-004": ("rescue_record",),
         "LX0609-005": (
             "admission_record",
             "daily_course_record",
@@ -238,6 +270,7 @@ def _typed_basic_decisions(
         reason_code: str,
         confidence: float | None,
         sources: tuple[str, ...] | None = None,
+        applicability: ApplicabilityState | None = None,
     ) -> RuleDecision:
         refs = tuple(
             observation_by_source[source_key].snapshot_ref.removeprefix("sha256:")
@@ -248,9 +281,13 @@ def _typed_basic_decisions(
             rule_id=rule_id,
             snapshot_hash=snapshot.snapshot_hash,
             applicability=(
-                ApplicabilityState.ERROR
-                if evidence_state is EvidenceState.TECHNICAL_ERROR
-                else ApplicabilityState.APPLICABLE
+                applicability
+                if applicability is not None
+                else (
+                    ApplicabilityState.ERROR
+                    if evidence_state is EvidenceState.TECHNICAL_ERROR
+                    else ApplicabilityState.APPLICABLE
+                )
             ),
             evidence_state=evidence_state,
             qc_direction=qc_direction,
@@ -278,7 +315,12 @@ def _typed_basic_decisions(
             confidence=None,
         )
 
-    if any(source_key not in observation_by_source for source_key in _TYPED_SOURCE_KEYS):
+    required_source_keys = {
+        source_key
+        for rule_id in rule_ids
+        for source_key in _TYPED_SOURCE_KEYS_BY_RULE[rule_id]
+    }
+    if any(source_key not in observation_by_source for source_key in required_source_keys):
         return tuple(gap(rule_id, "snapshot_mismatch", technical=True) for rule_id in rule_ids)
 
     def source_issue(
@@ -307,30 +349,39 @@ def _typed_basic_decisions(
         except Exception as exc:
             raise ValueError("snapshot material mismatch") from exc
 
-    admission_issue = source_issue(("admission_record",))
-    registration_issue = source_issue(
-        ("inpat_registration",),
-        allow_unavailable=frozenset({"inpat_registration"}),
+    admission_needed = any(
+        rule_id in {"LX0609-001", "LX0609-002", "LX0609-005", "LX0609-006"}
+        for rule_id in rule_ids
     )
-    try:
-        admission_rows = (
-            rows("admission_record")
-            if observation_by_source["admission_record"].query_state.value
-            in {"available", "empty"}
-            else ()
+    admission_issue: tuple[str, bool] | None = None
+    registration_issue: tuple[str, bool] | None = None
+    admission_rows: tuple[Mapping[str, Any], ...] = ()
+    registration_rows: tuple[Mapping[str, Any], ...] = ()
+    if admission_needed:
+        admission_issue = source_issue(("admission_record",))
+        registration_issue = source_issue(
+            ("inpat_registration",),
+            allow_unavailable=frozenset({"inpat_registration"}),
         )
-        registration_rows = (
-            rows("inpat_registration")
-            if observation_by_source["inpat_registration"].query_state.value
-            in {"available", "empty"}
-            else ()
-        )
-    except EvidenceMaterialTruncated:
-        admission_issue = ("source_truncated", False)
-        admission_rows = registration_rows = ()
-    except ValueError:
-        admission_issue = ("snapshot_mismatch", True)
-        admission_rows = registration_rows = ()
+        try:
+            admission_rows = (
+                rows("admission_record")
+                if observation_by_source["admission_record"].query_state.value
+                in {"available", "empty"}
+                else ()
+            )
+            registration_rows = (
+                rows("inpat_registration")
+                if observation_by_source["inpat_registration"].query_state.value
+                in {"available", "empty"}
+                else ()
+            )
+        except EvidenceMaterialTruncated:
+            admission_issue = ("source_truncated", False)
+            admission_rows = registration_rows = ()
+        except ValueError:
+            admission_issue = ("snapshot_mismatch", True)
+            admission_rows = registration_rows = ()
 
     admission_record_times = tuple(
         sorted(
@@ -393,8 +444,141 @@ def _typed_basic_decisions(
             confidence=1.0,
         )
 
+    def not_applicable(rule_id: str, reason_code: str) -> RuleDecision:
+        return make(
+            rule_id,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            confidence=1.0,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+        )
+
     decisions: list[RuleDecision] = []
     for rule_id in rule_ids:
+        if rule_id == "LX0609-002":
+            anchor, anchor_gap = admission_anchor(rule_id)
+            if anchor_gap is not None or anchor is None:
+                decisions.append(
+                    anchor_gap or gap(rule_id, "authoritative_time_missing")
+                )
+                continue
+            first_course_issue = source_issue(("first_course_record",))
+            try:
+                first_course_rows = (
+                    rows("first_course_record")
+                    if observation_by_source["first_course_record"].query_state.value
+                    in {"available", "empty"}
+                    else ()
+                )
+            except EvidenceMaterialTruncated:
+                first_course_issue = ("source_truncated", False)
+                first_course_rows = ()
+            except ValueError:
+                first_course_issue = ("snapshot_mismatch", True)
+                first_course_rows = ()
+            if first_course_issue is not None:
+                reason, technical = first_course_issue
+                decisions.append(gap(rule_id, reason, technical=technical))
+                continue
+            if not first_course_rows:
+                decisions.append(gap(rule_id, "source_readiness_unproven"))
+                continue
+            complete_times: list[datetime] = []
+            incomplete = False
+            for row in first_course_rows:
+                record_time = _authoritative_time(row.get("record_time"))
+                substantive = _is_substantive_first_course_text(
+                    row.get("record_content")
+                )
+                if record_time is None or not substantive:
+                    incomplete = True
+                else:
+                    complete_times.append(record_time)
+            deltas = sorted(value - anchor for value in complete_times)
+            if any(timedelta(0) <= delta <= timedelta(hours=8) for delta in deltas):
+                decisions.append(
+                    conclusive(
+                        rule_id,
+                        QcDirection.SATISFIED,
+                        "requirement_within_threshold",
+                    )
+                )
+            elif incomplete:
+                decisions.append(gap(rule_id, "required_field_missing"))
+            elif any(delta < timedelta(0) for delta in deltas):
+                decisions.append(
+                    make(
+                        rule_id,
+                        evidence_state=EvidenceState.CONFLICT,
+                        qc_direction=QcDirection.UNKNOWN,
+                        reason_code="evidence_conflict",
+                        confidence=None,
+                    )
+                )
+            elif deltas:
+                decisions.append(
+                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+                )
+            else:
+                decisions.append(gap(rule_id, "required_field_missing"))
+            continue
+
+        if rule_id == "LX0609-004":
+            rescue_issue = source_issue(("rescue_record",))
+            try:
+                rescue_rows = (
+                    rows("rescue_record")
+                    if observation_by_source["rescue_record"].query_state.value
+                    in {"available", "empty"}
+                    else ()
+                )
+            except EvidenceMaterialTruncated:
+                rescue_issue = ("source_truncated", False)
+                rescue_rows = ()
+            except ValueError:
+                rescue_issue = ("snapshot_mismatch", True)
+                rescue_rows = ()
+            if rescue_issue is not None:
+                reason, technical = rescue_issue
+                decisions.append(gap(rule_id, reason, technical=technical))
+                continue
+            if not rescue_rows:
+                decisions.append(not_applicable(rule_id, "trigger_absent_complete"))
+                continue
+            rescue_deltas: list[timedelta] = []
+            incomplete = False
+            for row in rescue_rows:
+                record_time = _authoritative_time(row.get("record_time"))
+                rescue_end = parse_luxian_0609_rescue_end_time(
+                    row.get("record_content")
+                )
+                if record_time is None or rescue_end is None:
+                    incomplete = True
+                    continue
+                delta = record_time - rescue_end
+                if delta < timedelta(0):
+                    incomplete = True
+                else:
+                    rescue_deltas.append(delta)
+            if any(delta > timedelta(hours=6) for delta in rescue_deltas):
+                decisions.append(
+                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+                )
+            elif incomplete:
+                decisions.append(gap(rule_id, "required_field_missing"))
+            elif rescue_deltas:
+                decisions.append(
+                    conclusive(
+                        rule_id,
+                        QcDirection.SATISFIED,
+                        "requirement_within_threshold",
+                    )
+                )
+            else:
+                decisions.append(gap(rule_id, "required_field_missing"))
+            continue
+
         if rule_id == "LX0609-001":
             if admission_issue is not None:
                 reason, technical = admission_issue

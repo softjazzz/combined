@@ -249,7 +249,9 @@ def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
 
 def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
     rows_by_source = {
-        "inpat_registration": [],
+        "inpat_registration": [
+            {"admission_datetime": "2026-01-01 08:00:00"}
+        ],
         "admission_record": [
             {
                 "document_title": "入院记录",
@@ -263,6 +265,14 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
                 "record_time": "2026-01-02 09:00:00",
             }
         ],
+        "first_course_record": [
+            {
+                "document_title": "首次病程记录",
+                "record_time": "2026-01-01 15:00:00",
+                "record_content": "患者入院后完成病史采集、体格检查和诊疗计划。",
+            }
+        ],
+        "rescue_record": [],
         "senior_course_record": [
             {
                 "document_title": "副主任医师首次查房记录",
@@ -281,7 +291,13 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        selected_rule_ids=(
+            "LX0609-001",
+            "LX0609-002",
+            "LX0609-004",
+            "LX0609-005",
+            "LX0609-006",
+        ),
         institute_id="private-institute",
         patient_id="private-patient",
         visit_id="private-visit",
@@ -290,8 +306,10 @@ def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
         row_reader=read,
         additional_source_keys=(
             "admission_record",
-            "inpat_registration",
             "daily_course_record",
+            "first_course_record",
+            "inpat_registration",
+            "rescue_record",
             "senior_course_record",
         ),
     )
@@ -528,10 +546,16 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
 
 
 @pytest.mark.asyncio
-async def test_001_005_006_typed_decisions_share_snapshot_and_skip_legacy_results(
+async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_results(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-001", "LX0609-005", "LX0609-006")
+    selected = (
+        "LX0609-001",
+        "LX0609-002",
+        "LX0609-004",
+        "LX0609-005",
+        "LX0609-006",
+    )
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=selected,
@@ -587,6 +611,8 @@ async def test_001_005_006_typed_decisions_share_snapshot_and_skip_legacy_result
     assert [item.final_state.value for item in context.reduced_decisions] == [
         "compliant",
         "compliant",
+        "not_applicable",
+        "compliant",
         "compliant",
     ]
     assert all(item.fact_refs for item in context.reduced_decisions)
@@ -609,6 +635,8 @@ async def test_001_005_006_typed_decisions_share_snapshot_and_skip_legacy_result
     assert [item["rule_id"] for item in orchestrated["results"]] == list(selected)
     assert [item["status"] for item in orchestrated["results"]] == [
         "compliant",
+        "compliant",
+        "not_applicable",
         "compliant",
         "compliant",
     ]

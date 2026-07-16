@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v7"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v8"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -177,7 +177,7 @@ _REGISTRY_ENTRIES = (
         derived_from_source_keys=("exam_master", "exam_item_report"),
     ),
     _entry("exam_item_report"),
-    _entry("first_course_record"),
+    _entry("first_course_record", access_mode=_BOUNDED),
     _entry(
         "lab_attention_report",
         access_mode=_DERIVED,
@@ -192,7 +192,7 @@ _REGISTRY_ENTRIES = (
     _entry("postsurg_firstcourse_record"),
     _entry("presurg_discussion", access_mode=_BOUNDED),
     _entry("presurg_summary", access_mode=_BOUNDED),
-    _entry("rescue_record"),
+    _entry("rescue_record", access_mode=_BOUNDED),
     _entry("senior_course_record", access_mode=_BOUNDED),
     _entry(
         "surgery_record",
@@ -222,6 +222,12 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-001": ("inpat_registration",),
+    "LX0609-002": (
+        "admission_record",
+        "first_course_record",
+        "inpat_registration",
+    ),
+    "LX0609-004": ("rescue_record",),
     "LX0609-005": (
         "admission_record",
         "inpat_registration",

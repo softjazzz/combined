@@ -115,12 +115,6 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "inpat_nondrug_order",
         "surgery_application",
     ),
-    "basic_timeliness": (
-        "admission_record",
-        "inpat_registration",
-        "daily_course_record",
-        "senior_course_record",
-    ),
     "consultation_quality": (
         "consultation_record",
         "daily_course_record",
@@ -143,6 +137,25 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
 }
 
 LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
+    "LX0609-001": ("admission_record", "inpat_registration"),
+    "LX0609-002": (
+        "admission_record",
+        "first_course_record",
+        "inpat_registration",
+    ),
+    "LX0609-004": ("rescue_record",),
+    "LX0609-005": (
+        "admission_record",
+        "daily_course_record",
+        "inpat_registration",
+        "senior_course_record",
+    ),
+    "LX0609-006": (
+        "admission_record",
+        "daily_course_record",
+        "inpat_registration",
+        "senior_course_record",
+    ),
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-026": ("diagnosis", "inpat_drug_order"),
