@@ -53,6 +53,10 @@ from .native_package import (
     resolve_package_entry_execution_rule_ids,
     resolve_package_rollback_execution_rule_ids,
 )
+from .preproduction_runner import (
+    PREPRODUCTION_RUNNER_SCHEMA_VERSION,
+    run_luxian_0609_preproduction,
+)
 
 __all__ = [
     "LUXIAN_0609_RULE_SET_KEY",
@@ -94,4 +98,6 @@ __all__ = [
     "load_luxian_0609_dependency_inventory",
     "resolve_package_entry_execution_rule_ids",
     "resolve_package_rollback_execution_rule_ids",
+    "PREPRODUCTION_RUNNER_SCHEMA_VERSION",
+    "run_luxian_0609_preproduction",
 ]

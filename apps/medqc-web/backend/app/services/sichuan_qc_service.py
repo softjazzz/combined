@@ -4466,7 +4466,6 @@ class SichuanQCService:
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
         rule_set_key: str = "",
-        evaluation_as_of_date: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -4576,7 +4575,6 @@ class SichuanQCService:
                 institute_id=str((bundle or {}).get("institute_id") or ""),
                 patient_id=str((bundle or {}).get("patient_id") or ""),
                 source_schema=source_schema or None,
-                evaluation_as_of_date=evaluation_as_of_date,
                 selected_customer_rule_ids=selected_customer_rule_ids,
             )
 

@@ -10,9 +10,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
-from datetime import datetime
 from typing import Any, Mapping, Sequence
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -188,10 +186,6 @@ async def evaluate_full_luxian_0609_case(
             enable_selective_refine=False,
             use_execution_cache=False,
             rule_set_key="luxian_0609_qc_v1",
-            evaluation_as_of_date=str(
-                bundle.get("evaluation_as_of_date")
-                or datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
-            ),
         ),
         timeout=timeout_seconds,
     )
