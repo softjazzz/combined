@@ -435,6 +435,8 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         "pathology_exam_master",
         "pathology_exam_report",
+        "diagnosis",
+        "inpat_drug_order",
     }
 
 

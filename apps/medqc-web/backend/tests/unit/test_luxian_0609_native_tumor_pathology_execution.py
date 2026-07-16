@@ -268,6 +268,127 @@ async def test_snapshot_pathology_source_state_never_replays_family_reader(
     assert result.llm_call_count == 0
 
 
+def _chemo_discharge_material_session(*, truncated_drug: bool = False):
+    rows_by_source = {
+        "diagnosis": ({"diagnosis_code": "C18.9"},),
+        "inpat_drug_order": (
+            {"drug_code": "safe-drug", "order_status": "执行"},
+        ),
+        "daily_course_record": (
+            {"record_content": "病程记录中包含治疗经过。"},
+        ),
+        "discharge_record": (
+            {"treatment_course": "出院记录中包含后续治疗计划。"},
+        ),
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=truncated_drug and source_key == "inpat_drug_order",
+            limit_rows=1 if source_key == "inpat_drug_order" else 50,
+        )
+
+    selected = ("LX0609-026",) if truncated_drug else ("LX0609-026", "LX0609-027")
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=selected,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_026_027_use_request_materials_without_family_live_query(monkeypatch):
+    session = _chemo_discharge_material_session()
+
+    def forbidden_reader(**_kwargs):
+        raise AssertionError("统一引擎候选路径不得由肿瘤族自行查库")
+
+    monkeypatch.setattr(tumor, "read_luxian_0609_native_source_rows", forbidden_reader)
+    client = _Client([{"is_compliant": False}, {"is_compliant": True}])
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026", "LX0609-027"),
+        wrapper_rules=[_wrapper("LX0609-026"), _wrapper("LX0609-027")],
+        evidence_payload=_payload(
+            facts=[
+                {
+                    "fact_type": "current_visit_chemotherapy_order",
+                    "state": "present",
+                    "source_key": "inpat_drug_order",
+                    "current_visit_bound": True,
+                }
+            ],
+            diagnosis=[],
+            inpat_drug_order=[],
+            daily_course_record=[],
+            discharge_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 220
+
+
+@pytest.mark.asyncio
+async def test_026_truncated_drug_material_is_data_gap_without_reader_or_model(
+    monkeypatch,
+):
+    session = _chemo_discharge_material_session(truncated_drug=True)
+
+    def forbidden_reader(**_kwargs):
+        raise AssertionError("截断医嘱材料不得回退族内查库")
+
+    monkeypatch.setattr(tumor, "read_luxian_0609_native_source_rows", forbidden_reader)
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload=_payload(
+            facts=[
+                {
+                    "fact_type": "current_visit_chemotherapy_order",
+                    "state": "present",
+                    "source_key": "inpat_drug_order",
+                    "current_visit_bound": True,
+                }
+            ],
+            diagnosis=[],
+            inpat_drug_order=[],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.llm_call_count == 0
+
+
 @pytest.mark.asyncio
 async def test_pathology_source_triggers_013_019_once_each_and_keeps_customer_order():
     client = _Client([{"is_compliant": True}, {"is_compliant": False}])

@@ -139,6 +139,8 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
 LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-026": ("diagnosis", "inpat_drug_order"),
+    "LX0609-027": ("diagnosis",),
 }
 
 

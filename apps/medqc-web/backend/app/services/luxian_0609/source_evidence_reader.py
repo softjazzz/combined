@@ -141,6 +141,8 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "senior_course_record",
         "pathology_exam_master",
         "pathology_exam_report",
+        "diagnosis",
+        "inpat_drug_order",
         "discharge_record",
         "surgery_record",
     )

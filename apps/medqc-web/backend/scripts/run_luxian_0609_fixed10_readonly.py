@@ -340,6 +340,9 @@ async def _evaluate_runtime_flag_ab_case(
             "pathology_exam_report",
             "surgery_record",
             "daily_course_record",
+            "diagnosis",
+            "inpat_drug_order",
+            "discharge_record",
         }:
             family_reader_calls[reader_phase] += 1
         return original_tumor_reader(**kwargs)

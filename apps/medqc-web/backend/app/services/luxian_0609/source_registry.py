@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v4"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v5"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -209,6 +209,8 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
+    _entry("diagnosis", access_mode=_BOUNDED),
+    _entry("inpat_drug_order", access_mode=_BOUNDED),
 )
 
 _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(

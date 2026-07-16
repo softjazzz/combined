@@ -82,7 +82,7 @@ def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> No
     )
 
 
-def test_tumor_pathology_materials_are_scoped_only_to_013_019() -> None:
+def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-013", "LX0609-019"),
@@ -90,7 +90,11 @@ def test_tumor_pathology_materials_are_scoped_only_to_013_019() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-026", "LX0609-027"),
-    ) == ()
+    ) == ("diagnosis", "inpat_drug_order")
+    assert resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",),
+        selected_rule_ids=("LX0609-027",),
+    ) == ("diagnosis",)
 
 
 @pytest.mark.asyncio
