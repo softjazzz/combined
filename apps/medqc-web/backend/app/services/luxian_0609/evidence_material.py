@@ -142,6 +142,15 @@ class Luxian0609EvidenceMaterialStore:
     def rows(self, source_key: str) -> tuple[Mapping[str, object], ...]:
         return self.source(source_key).rows
 
+    def bounded_rows(self, source_key: str) -> tuple[Mapping[str, object], ...]:
+        """返回请求内有界前缀；是否可作否定结论必须另查 snapshot 完整性。"""
+
+        normalized = str(source_key or "").strip().lower()
+        material = self._sources.get(normalized)
+        if material is None:
+            raise EvidenceMaterialUnavailable()
+        return material.rows
+
     def safe_summary(self) -> dict[str, object]:
         return {
             "source_count": len(self._sources),

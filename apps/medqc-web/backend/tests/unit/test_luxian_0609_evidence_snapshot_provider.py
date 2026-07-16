@@ -437,6 +437,8 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "pathology_exam_report",
         "diagnosis",
         "inpat_drug_order",
+        "inpat_nondrug_order",
+        "surgery_application",
     }
 
 

@@ -7,6 +7,8 @@ from types import MappingProxyType
 from typing import Any, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
+from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
 NATIVE_RULE_IDS = ("LX0609-029", "LX0609-030", "LX0609-032")
@@ -155,6 +157,8 @@ def execute_luxian_0609_native_rules(
     institute_id: str,
     patient_id: str,
     source_schema: str | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> NativeExecutionResult:
     """同步运行已验收链；异常隔离为客户安全的 technical_error。"""
     selected = tuple(rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(rule_ids))
@@ -180,6 +184,8 @@ def execute_luxian_0609_native_rules(
             patient_id=patient_id,
             visit_id=visit_id,
             source_schema=source_schema,
+            evidence_snapshot=evidence_snapshot,
+            evidence_materials=evidence_materials,
         )
         assembly = runtime_shadow_assembler.assemble_luxian_0609_runtime_shadow_inputs(
             plan=plan,

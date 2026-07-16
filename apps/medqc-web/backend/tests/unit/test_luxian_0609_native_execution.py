@@ -8,6 +8,9 @@ from app.services.luxian_0609 import native_execution
 
 def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeypatch):
     calls: list[str] = []
+    provider_kwargs: dict[str, object] = {}
+    snapshot = object()
+    materials = object()
     plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id=rule_id) for rule_id in native_execution.NATIVE_RULE_IDS])
     provided = SimpleNamespace(
         evidence_payload={"programmatic_timeline": {"documents": {}}},
@@ -32,7 +35,16 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
         fingerprint=lambda: "a" * 64,
     )
     monkeypatch.setattr(native_execution.planner, "build_luxian_0609_shadow_plan", lambda **kwargs: plan)
-    monkeypatch.setattr(native_execution.runtime_shadow_input_provider, "provide_luxian_0609_runtime_shadow_inputs", lambda **kwargs: calls.append("provider") or provided)
+    def _provide(**kwargs):
+        calls.append("provider")
+        provider_kwargs.update(kwargs)
+        return provided
+
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "provide_luxian_0609_runtime_shadow_inputs",
+        _provide,
+    )
     monkeypatch.setattr(native_execution.runtime_shadow_assembler, "assemble_luxian_0609_runtime_shadow_inputs", lambda **kwargs: assembly)
     monkeypatch.setattr(native_execution.shadow_execution, "build_luxian_0609_shadow_execution", lambda **kwargs: execution)
 
@@ -42,9 +54,13 @@ def test_native_core_uses_provider_once_and_returns_exact_customer_order(monkeyp
         institute_id="inst-native-unit-001",
         patient_id="patient-native-unit-001",
         source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
     )
 
     assert calls == ["provider"]
+    assert provider_kwargs["evidence_snapshot"] is snapshot
+    assert provider_kwargs["evidence_materials"] is materials
     assert [item["rule_id"] for item in result.results] == list(native_execution.NATIVE_RULE_IDS)
     assert [item["status"] for item in result.results] == ["non_compliant", "compliant", "non_compliant"]
     assert all(item["metadata"]["executor_type"] == "program" for item in result.results)

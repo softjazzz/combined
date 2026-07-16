@@ -6,6 +6,14 @@ from datetime import datetime, timezone
 import pytest
 
 from app.services.luxian_0609 import planner, runtime_shadow_input_provider as provider, source_evidence_reader
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.evidence_material import EvidenceMaterialTruncated
+from app.services.luxian_0609.executor_registry import (
+    resolve_legacy_executor_material_source_keys,
+)
 from app.services.luxian_0609.source_manifest import QueryStatus
 
 VISIT = "visit-provider-001"
@@ -512,3 +520,169 @@ def test_runtime_reader_selects_and_stably_orders_typed_mr_surgery_before_limit(
         "visit_id": VISIT,
         "limit_rows": source_evidence_reader._source_limit("mr_surgery"),
     }
+
+
+def test_provider_reuses_single_snapshot_materials_without_family_self_query(monkeypatch):
+    rows_by_source = {
+        "inpat_nondrug_order": ({"order_id": "order-private"},),
+        "surgery_application": ({"order_id": "application-private"},),
+        "surgery_record": (
+            {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+        ),
+        "mr_surgery": (),
+        "presurg_summary": (
+            {
+                "record_content": "private substantive pre-surgery summary",
+                "record_time": "2026-01-01 07:00:00",
+            },
+        ),
+        "surgery_safecheck_record": (
+            {"record_content": "private substantive safety-check body"},
+        ),
+    }
+
+    def _snapshot_reader(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    plan = _plan("LX0609-029", "LX0609-030", "LX0609-032")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-029", "LX0609-030", "LX0609-032"),
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=_snapshot_reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("surgery_presence",)
+        ),
+    )
+    monkeypatch.setattr(
+        provider,
+        "read_luxian_0609_runtime_source_rows",
+        lambda **_kwargs: pytest.fail("候选统一链不得再次查询数据库"),
+    )
+
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=plan,
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    status_by_source = {
+        item.source_key: item.query_status
+        for item in result.source_query_observations
+    }
+    assert status_by_source == {
+        "inpat_nondrug_order": QueryStatus.AVAILABLE,
+        "mr_surgery": QueryStatus.EMPTY,
+        "presurg_summary": QueryStatus.AVAILABLE,
+        "surgery_application": QueryStatus.AVAILABLE,
+        "surgery_record": QueryStatus.AVAILABLE,
+        "surgery_safecheck_record": QueryStatus.AVAILABLE,
+    }
+    surgery_record_outcome = next(
+        item
+        for item in result.extraction_inputs
+        if item.source_key == "surgery_record"
+    )
+    assert len(surgery_record_outcome.positive_signals) == 1
+    assert surgery_record_outcome.positive_signals[0].event_status == "performed"
+    assert {
+        item.rule_id: item.qualified_document_count
+        for item in result.target_qualifications
+    } == {"LX0609-029": 1, "LX0609-032": 1}
+    safe_output = repr(result)
+    for marker in (
+        "order-private",
+        "application-private",
+        "private substantive",
+        "2026-01-01",
+    ):
+        assert marker not in safe_output
+
+
+def test_provider_reuses_truncated_bounded_prefix_without_hiding_snapshot_truth(monkeypatch):
+    def _snapshot_reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "inpat_nondrug_order":
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=({"order_id": "private-order"},),
+                truncated=True,
+                limit_rows=1,
+            )
+        rows = (
+            ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            if source_key == "surgery_record"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    plan = _plan("LX0609-030")
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-030",),
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=_snapshot_reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("surgery_presence",)
+        ),
+    )
+    monkeypatch.setattr(
+        provider,
+        "read_luxian_0609_runtime_source_rows",
+        lambda **_kwargs: pytest.fail("截断材料不得回查数据库"),
+    )
+
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=plan,
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    observation = next(
+        item
+        for item in result.source_query_observations
+        if item.source_key == "inpat_nondrug_order"
+    )
+    outcome = next(
+        item
+        for item in result.extraction_inputs
+        if item.source_key == "inpat_nondrug_order"
+    )
+    snapshot_observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "inpat_nondrug_order"
+    )
+    assert snapshot_observation.completeness.value == "truncated"
+    with pytest.raises(EvidenceMaterialTruncated):
+        session.materials.rows("inpat_nondrug_order")
+    assert len(session.materials.bounded_rows("inpat_nondrug_order")) == 1
+    assert observation.query_status is QueryStatus.AVAILABLE
+    assert observation.error_code == ""
+    assert outcome.state == "complete"
+    assert outcome.reason_code == ""
+    assert outcome.processed_record_count == 1
+    assert "private-order" not in repr(result)

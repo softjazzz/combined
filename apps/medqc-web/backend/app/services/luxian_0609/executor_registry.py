@@ -111,6 +111,10 @@ LEGACY_NATIVE_EXECUTION_ORDER = (
 
 # 第一批可由现有 bounded snapshot 投影完整承载的请求内材料来源。
 LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
+    "surgery_presence": (
+        "inpat_nondrug_order",
+        "surgery_application",
+    ),
     "basic_timeliness": (
         "daily_course_record",
         "senior_course_record",
@@ -257,6 +261,8 @@ def build_luxian_0609_legacy_executor_registry(
                 institute_id=resources.institute_id,
                 patient_id=resources.patient_id,
                 source_schema=resources.source_schema,
+                evidence_snapshot=resources.evidence_snapshot,
+                evidence_materials=resources.evidence_materials,
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

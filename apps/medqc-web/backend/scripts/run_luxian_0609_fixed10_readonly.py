@@ -254,6 +254,7 @@ async def _evaluate_runtime_flag_ab_case(
         native_surgery_gate_execution,
         native_tumor_pathology_execution,
         native_transfusion_execution,
+        runtime_shadow_input_provider,
         source_evidence_reader,
     )
     from app.services import sichuan_qc_service as service_module
@@ -298,6 +299,9 @@ async def _evaluate_runtime_flag_ab_case(
     )
     original_tumor_reader = (
         native_tumor_pathology_execution.read_luxian_0609_native_source_rows
+    )
+    original_presence_reader = (
+        runtime_shadow_input_provider.read_luxian_0609_runtime_source_rows
     )
     original_unstable_order_reader = (
         native_course_quality_execution.has_luxian_0609_current_visit_unstable_order
@@ -347,6 +351,10 @@ async def _evaluate_runtime_flag_ab_case(
             family_reader_calls[reader_phase] += 1
         return original_tumor_reader(**kwargs)
 
+    def counted_presence_reader(**kwargs):
+        family_reader_calls[reader_phase] += 1
+        return original_presence_reader(**kwargs)
+
     def counted_unstable_order_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_unstable_order_reader(**kwargs)
@@ -394,6 +402,9 @@ async def _evaluate_runtime_flag_ab_case(
             )
             native_tumor_pathology_execution.read_luxian_0609_native_source_rows = (
                 counted_tumor_reader
+            )
+            runtime_shadow_input_provider.read_luxian_0609_runtime_source_rows = (
+                counted_presence_reader
             )
             native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
                 counted_unstable_order_reader
@@ -451,6 +462,9 @@ async def _evaluate_runtime_flag_ab_case(
         )
         native_tumor_pathology_execution.read_luxian_0609_native_source_rows = (
             original_tumor_reader
+        )
+        runtime_shadow_input_provider.read_luxian_0609_runtime_source_rows = (
+            original_presence_reader
         )
         native_course_quality_execution.has_luxian_0609_current_visit_unstable_order = (
             original_unstable_order_reader

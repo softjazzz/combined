@@ -8,6 +8,11 @@ from typing import Any, Mapping
 from app.services.bundles import assembly as bundle_assembly
 
 from . import deterministic_gate, planner, runtime_shadow_assembler, source_manifest_builder
+from .evidence_material import (
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .source_manifest import QueryStatus
 from .source_evidence_reader import (
     SURGERY_TIME_FIELDS,
@@ -40,6 +45,44 @@ class RuntimeShadowProvidedInputs:
     extraction_inputs: tuple[runtime_shadow_assembler.RuntimePairExtractionInput, ...]
     target_qualifications: tuple[deterministic_gate.TargetQualification, ...]
     evidence_payload: Mapping[str, Any]
+
+
+def _read_snapshot_source_rows(
+    *,
+    source_key: str,
+    evidence_snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+) -> tuple[list[dict[str, Any]], QueryStatus, str, str]:
+    observations = tuple(
+        item
+        for item in evidence_snapshot.observations
+        if item.source_key == source_key
+    )
+    if len(observations) != 1:
+        raise ValueError("snapshot source observation is missing or duplicated")
+    observation = observations[0]
+    if observation.query_state is QueryStatus.UNAVAILABLE:
+        return [], QueryStatus.UNAVAILABLE, "source_table_unavailable", ""
+    if observation.query_state is QueryStatus.ERROR:
+        return [], QueryStatus.ERROR, "", "source_query_failed"
+    if (
+        evidence_materials is None
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("snapshot material store mismatch")
+    try:
+        # Phase 2 仅做旧执行器输入适配：snapshot 仍保留 TRUNCATED 真值，
+        # 此处读取有界前缀以保持旧 provider 行为；后续统一 reducer 才能据
+        # completeness 阻止用截断材料形成否定结论。
+        rows = evidence_materials.bounded_rows(source_key)
+    except EvidenceMaterialUnavailable:
+        raise ValueError("snapshot material source is unavailable") from None
+    return (
+        [dict(row) for row in rows],
+        observation.query_state,
+        "",
+        "",
+    )
 
 
 def _canonical(value: Any) -> str:
@@ -104,6 +147,8 @@ def _target_qualification_material_hash(source_key: str, row: Mapping[str, Any])
 def provide_luxian_0609_runtime_shadow_inputs(
     *, plan: planner.ShadowRulePlan, institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
 ) -> RuntimeShadowProvidedInputs:
     if not isinstance(plan, planner.ShadowRulePlan) or not plan.planned_rules:
         raise TypeError("plan must be nonzero ShadowRulePlan")
@@ -117,6 +162,23 @@ def provide_luxian_0609_runtime_shadow_inputs(
     rows_by_source: dict[str, list[dict[str, Any]]] = {}
     observations: list[source_manifest_builder.SourceQueryObservation] = []
     for source_key in expected_sources:
+        if evidence_snapshot is not None:
+            rows, query_status, reason_code, error_code = _read_snapshot_source_rows(
+                source_key=source_key,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
+            )
+            observations.append(
+                source_manifest_builder.SourceQueryObservation.create(
+                    source_key=source_key,
+                    query_status=query_status,
+                    query_version=_QUERY_VERSION,
+                    reason_code=reason_code,
+                    error_code=error_code,
+                )
+            )
+            rows_by_source[source_key] = rows
+            continue
         try:
             rows = read_luxian_0609_runtime_source_rows(
                 source_key=source_key, institute_id=institute_id, patient_id=patient_id,

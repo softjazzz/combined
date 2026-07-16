@@ -148,6 +148,16 @@ _SNAPSHOT_SOURCE_FIELDS = {
     )
 }
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
+_SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
+    "order_id",
+    "update_time",
+    "order_status",
+)
+_SNAPSHOT_SOURCE_FIELDS["surgery_application"] = (
+    "order_id",
+    "update_time",
+    "surgery_code",
+)
 _SNAPSHOT_SOURCE_FIELDS["surgery_record"] = tuple(
     dict.fromkeys(
         (*_SNAPSHOT_SOURCE_FIELDS["surgery_record"], *SURGERY_TIME_FIELDS)
