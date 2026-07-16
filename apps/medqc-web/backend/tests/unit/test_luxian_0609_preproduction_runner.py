@@ -73,7 +73,8 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
                         "rule_name": rule_id,
                         "status": "compliant",
                         "is_compliant": True,
-                        "findings": "安全结论",
+                        "findings": "就诊PRIVATE-VISIT-MARKER存在问题",
+                        "suggestion": "参考正文片段 PRIVATE-BODY-MA",
                         "issues": [{"category": "safe-category"}],
                         "evidence": {"summary": "安全证据摘要"},
                         "qc_point_id": rule_id,
@@ -90,7 +91,7 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
                                 "source_document_type": "日常病程记录",
                                 "field_path": "record_time",
                                 "evidence_role": "frequency_evidence",
-                                "quote": "PRIVATE-DOCUMENT-MARKER",
+                                "quote": "证据片段 PRIVATE-DOCUMENT-MA",
                                 "record_time": "2026-07-17 08:30:00",
                             },
                             {
@@ -157,6 +158,8 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
     first = result["results"][0]
+    assert first["findings"] == "[redacted]"
+    assert first["suggestion"] == "[redacted]"
     assert first["issues"] == [{"category": "safe-category"}]
     assert first["evidence"] == {"summary": "安全证据摘要"}
     assert first["evidence_items"][0] == {

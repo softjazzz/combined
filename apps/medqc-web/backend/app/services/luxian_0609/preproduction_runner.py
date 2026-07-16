@@ -134,6 +134,7 @@ _PRIVATE_VALUE_KEY_PARTS = (
     "raw_response",
     "llm_raw_output",
 )
+_MIN_PRIVATE_FRAGMENT_CHARS = 12
 
 
 class _ReadOnlySettingsOverlay:
@@ -206,8 +207,26 @@ def _collect_private_terms(value: Any, *, key: str = "") -> set[str]:
 
 def _safe_string(value: Any, *, private_terms: set[str]) -> str:
     text = str(value or "")
-    if any(term and text.strip() == term for term in private_terms):
-        return "[redacted]"
+    candidate = text.strip()
+    for raw_term in private_terms:
+        term = raw_term.strip()
+        if not term:
+            continue
+        # 坐标或完整正文即使被包裹在客户文案中，也必须整体脱敏。
+        if term in candidate:
+            return "[redacted]"
+        if len(candidate) < _MIN_PRIVATE_FRAGMENT_CHARS:
+            continue
+        # evidence quote 可能只携带正文前缀或中间片段；逐窗口检查避免
+        # 通过添加固定前后缀绕过完全相等比较。
+        if candidate in term:
+            return "[redacted]"
+        if len(term) < _MIN_PRIVATE_FRAGMENT_CHARS:
+            continue
+        for start in range(len(candidate) - _MIN_PRIVATE_FRAGMENT_CHARS + 1):
+            fragment = candidate[start : start + _MIN_PRIVATE_FRAGMENT_CHARS]
+            if fragment in term:
+                return "[redacted]"
     return text
 
 
