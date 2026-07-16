@@ -5,11 +5,45 @@ from dataclasses import asdict, replace
 import pytest
 
 from app.services.luxian_0609.deterministic_gate import GateDecision, GateFactRef, GateReport
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from app.services.luxian_0609.decision_reducer import (
+    ReducedRuleDecision,
+    reduce_luxian_0609_rule_decision,
+)
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+def _reduced_decision(
+    rule_id: str,
+    *,
+    direction: QcDirection = QcDirection.SATISFIED,
+) -> ReducedRuleDecision:
+    return reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash="a" * 64,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=direction,
+            reason_code=(
+                "requirement_violated"
+                if direction is QcDirection.DEFECT
+                else "requirement_satisfied"
+            ),
+            fact_refs=("b" * 64,),
+            evaluator_version="aggregator-test-v1",
+            confidence=0.9,
+        )
+    )
 
 
 def _gate(kind):
@@ -94,6 +128,186 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
         "cl-181", "sc-081", "mapped execution", "raw_text", "raw_response",
         "raw_visit_coord_029", "raw_patient_coord_029", "raw_body_029", "prompt_version",
     ))
+
+
+def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monkeypatch):
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    for function_name in (
+        "_copy_native_customer_fields",
+        "_copy_customer_fields",
+        "_guard_customer_display_result",
+        "_split_uncertain_customer_result",
+        "format_luxian_0609_evidence",
+        "apply_luxian_0609_result_schema",
+    ):
+        monkeypatch.setattr(
+            module,
+            function_name,
+            lambda *args, _name=function_name, **kwargs: pytest.fail(
+                f"typed decision reached legacy pipeline: {_name}"
+            ),
+        )
+
+    traces = []
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{
+            "rule_id": "LX0609-029",
+            "name": "UNTRUSTED_WRAPPER_NAME",
+            "mapped_rule_ids": ["CL-181", "SC-081"],
+        }],
+        execution_results=[{
+            "rule_id": "LX0609-029",
+            "status": "non_compliant",
+            "findings": "RAW_EXECUTION_MARKER",
+            "metadata": {"raw_text": "RAW_METADATA_MARKER"},
+        }],
+        gate_decisions={"LX0609-029": object()},
+        reduced_decisions=(_reduced_decision("LX0609-029"),),
+        decision_trace_sink=traces.append,
+        audit_context={"medical_text": "RAW_AUDIT_MARKER"},
+    )[0]
+
+    assert result["status"] == "compliant"
+    assert result["rule_id"] == "LX0609-029"
+    assert result["rule_name"] != "UNTRUSTED_WRAPPER_NAME"
+    assert "metadata" not in result and "audit" not in result
+    assert len(traces) == 1
+    assert traces[0]["rule_id"] == "LX0609-029"
+    assert all(
+        marker not in repr(result)
+        for marker in (
+            "RAW_EXECUTION_MARKER",
+            "RAW_METADATA_MARKER",
+            "RAW_AUDIT_MARKER",
+            "CL-181",
+            "SC-081",
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("reduced_decisions", "error_type", "message"),
+    [
+        ([_reduced_decision("LX0609-029")], TypeError, "tuple"),
+        (
+            (
+                _reduced_decision("LX0609-029"),
+                _reduced_decision("LX0609-029"),
+            ),
+            ValueError,
+            "duplicate",
+        ),
+        (
+            (_reduced_decision("LX0609-031"),),
+            ValueError,
+            "outside customer scope",
+        ),
+        (
+            (
+                _reduced_decision("LX0609-030"),
+                _reduced_decision("LX0609-029"),
+            ),
+            ValueError,
+            "order mismatch",
+        ),
+    ],
+)
+def test_reduced_decision_scope_contract_fails_closed(
+    reduced_decisions, error_type, message
+):
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    with pytest.raises(error_type, match=message):
+        aggregate(
+            wrapper_rules=[
+                {"rule_id": "LX0609-029"},
+                {"rule_id": "LX0609-030"},
+            ],
+            execution_results=[],
+            reduced_decisions=reduced_decisions,
+            format_evidence=False,
+        )
+
+
+def test_reduced_decision_rejects_duplicate_customer_wrapper_scope():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    with pytest.raises(ValueError, match="duplicate customer wrapper"):
+        aggregate(
+            wrapper_rules=[
+                {"rule_id": "LX0609-029"},
+                {"rule_id": "LX0609-029"},
+            ],
+            execution_results=[],
+            reduced_decisions=(_reduced_decision("LX0609-029"),),
+            format_evidence=False,
+        )
+
+
+def test_reduced_decision_requires_exact_tuple_type():
+    class SwitchingTuple(tuple):
+        pass
+
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    with pytest.raises(TypeError, match="tuple"):
+        aggregate(
+            wrapper_rules=[{"rule_id": "LX0609-029"}],
+            execution_results=[],
+            reduced_decisions=SwitchingTuple((_reduced_decision("LX0609-029"),)),
+            format_evidence=False,
+        )
+
+
+def test_reduced_decision_does_not_copy_covered_legacy_result():
+    class ExplosiveLegacyResult(dict):
+        def __iter__(self):
+            raise RuntimeError("legacy result touched")
+
+        def keys(self):
+            raise RuntimeError("legacy result touched")
+
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-029"}],
+        execution_results=[ExplosiveLegacyResult(rule_id="LX0609-029")],
+        reduced_decisions=(_reduced_decision("LX0609-029"),),
+        format_evidence=False,
+    )[0]
+    assert result["rule_id"] == "LX0609-029"
+    assert result["status"] == "compliant"
+    assert result["schema_version"] == "lx0609-customer-result-v2"
+
+
+def test_empty_reduced_tuple_preserves_legacy_native_branch():
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{"rule_id": "LX0609-029", "name": "术前小结"}],
+        execution_results=[{
+            "rule_id": "LX0609-029",
+            "status": "non_compliant",
+            "metadata": {"execution_source": "lx0609_native"},
+        }],
+        reduced_decisions=(),
+        format_evidence=False,
+    )[0]
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["execution_source"] == "lx0609_native"
 
 
 def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():
