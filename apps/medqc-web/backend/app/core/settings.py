@@ -150,6 +150,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = False
     # 007 使用 EvidenceSnapshot 权威 record_time 生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = False
+    # 001/005/006 共用权威入院锚点生成 RuleDecision；独立回滚。
+    LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
 

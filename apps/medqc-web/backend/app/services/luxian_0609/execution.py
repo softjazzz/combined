@@ -193,10 +193,28 @@ async def prepare_luxian_0609_execution(
     typed_decision_rule_ids = tuple(
         rule_id
         for rule_id in package_plan.selected_rule_ids
-        if rule_id == "LX0609-007"
-        and unified_engine_enabled
-        and bool(
-            getattr(settings, "LUXIAN_0609_RULE_DECISION_007_ENABLED", False)
+        if unified_engine_enabled
+        and (
+            (
+                rule_id == "LX0609-007"
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_007_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id in {"LX0609-001", "LX0609-005", "LX0609-006"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED",
+                        False,
+                    )
+                )
+            )
         )
     )
     if (

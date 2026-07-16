@@ -170,6 +170,7 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED": False,
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_007_ENABLED": False,
+        "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -243,6 +244,56 @@ def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+
+
+def _basic_timeliness_evidence_session() -> Luxian0609EvidenceReadSession:
+    rows_by_source = {
+        "inpat_registration": [],
+        "admission_record": [
+            {
+                "document_title": "入院记录",
+                "admission_datetime": "2026-01-01 08:00:00",
+                "record_time": "2026-01-01 09:00:00",
+            }
+        ],
+        "daily_course_record": [
+            {
+                "document_title": "主治医师首次查房记录",
+                "record_time": "2026-01-02 09:00:00",
+            }
+        ],
+        "senior_course_record": [
+            {
+                "document_title": "副主任医师首次查房记录",
+                "record_time": "2026-01-03 09:00:00",
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=(
+            "admission_record",
+            "inpat_registration",
+            "daily_course_record",
+            "senior_course_record",
+        ),
     )
 
 
@@ -474,6 +525,95 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
     assert orchestrated["results"][0]["status"] == "compliant"
     assert "metadata" not in orchestrated["results"][0]
     assert "LXE-18" not in repr(orchestrated["results"])
+
+
+@pytest.mark.asyncio
+async def test_001_005_006_typed_decisions_share_snapshot_and_skip_legacy_results(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-001", "LX0609-005", "LX0609-006")
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=selected,
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("basic_timeliness", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: _basic_timeliness_evidence_session(),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    assert [item.final_state.value for item in context.reduced_decisions] == [
+        "compliant",
+        "compliant",
+        "compliant",
+    ]
+    assert all(item.fact_refs for item in context.reduced_decisions)
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+    orchestrated = {
+        "results": [],
+        "total_tokens": 0,
+        "total_prompt_tokens": 0,
+        "total_completion_tokens": 0,
+    }
+    luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated=orchestrated,
+        context=context,
+        visit_id="private-visit",
+        model_name="",
+        evidence_payload=None,
+    )
+    assert [item["rule_id"] for item in orchestrated["results"]] == list(selected)
+    assert [item["status"] for item in orchestrated["results"]] == [
+        "compliant",
+        "compliant",
+        "compliant",
+    ]
+    assert "RAW-LX0609" not in repr(orchestrated["results"])
+    assert "fact_refs" not in repr(orchestrated["results"])
 
 
 @pytest.mark.asyncio

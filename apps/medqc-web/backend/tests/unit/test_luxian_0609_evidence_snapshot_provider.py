@@ -439,6 +439,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "inpat_drug_order",
         "inpat_nondrug_order",
         "surgery_application",
+        "inpat_registration",
     }
 
 
@@ -553,11 +554,11 @@ def test_legacy_or_derived_sources_fail_closed_without_querying_old_bundle() -> 
         calls += 1
         raise AssertionError("legacy source reader must not be called")
 
-    snapshot = _build(selected_rule_ids=("LX0609-001",), row_reader=reader)
+    snapshot = _build(selected_rule_ids=("LX0609-004",), row_reader=reader)
     assert calls == 0
     assert len(snapshot.observations) == 1
     observation = snapshot.observations[0]
-    assert observation.source_key == "admission_record"
+    assert observation.source_key == "rescue_record"
     assert observation.query_state is SourceQueryState.UNAVAILABLE
     assert observation.completeness is SourceCompleteness.UNPROVEN
     assert observation.reason_code == "SOURCE_READER_NOT_REGISTERED"

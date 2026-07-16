@@ -7,6 +7,7 @@ from types import MappingProxyType
 from typing import Any, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
+from .decision_model import RuleDecision
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
@@ -47,6 +48,7 @@ _PACKAGE_VERSION = "lx0609-native-v1"
 class NativeExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     execution_fingerprint: str = ""
     terminal_reason_code: str = ""
 

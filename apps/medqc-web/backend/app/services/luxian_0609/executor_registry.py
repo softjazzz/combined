@@ -116,6 +116,8 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "surgery_application",
     ),
     "basic_timeliness": (
+        "admission_record",
+        "inpat_registration",
         "daily_course_record",
         "senior_course_record",
     ),
@@ -279,6 +281,12 @@ def build_luxian_0609_legacy_executor_registry(
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
                 evidence_materials=resources.evidence_materials,
+                evidence_snapshot=resources.evidence_snapshot,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

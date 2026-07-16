@@ -17,6 +17,7 @@ from .decision_reducer import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
+    resolve_luxian_0609_decision_support_source_keys,
     resolve_luxian_0609_rule_sources,
 )
 
@@ -51,6 +52,7 @@ def _allowed_source_keys(rule_id: str) -> frozenset[str]:
             *(entry.document_type for entry in entries),
             *(source_key for entry in entries for source_key in entry.source_keys),
             *resolve_luxian_0609_controlled_fact_source_keys((rule_id,)),
+            *resolve_luxian_0609_decision_support_source_keys((rule_id,)),
         }
     )
 

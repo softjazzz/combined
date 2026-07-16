@@ -325,21 +325,21 @@ def test_only_bounded_registered_sources_may_claim_complete_or_truncated() -> No
         "legacy-query-v1",
     ) is False
     assert source_key_supports_proven_completeness(
-        "admission_record",
-        "legacy_projection_v1-admission_record",
+        "anesthesia_record",
+        "legacy_projection_v1-anesthesia_record",
     ) is False
 
     legacy_unproven = _observation(
-        source_key="admission_record",
+        source_key="anesthesia_record",
         completeness="unproven",
-        query_version="legacy_projection_v1-admission_record",
+        query_version="legacy_projection_v1-anesthesia_record",
     )
     _snapshot(legacy_unproven)
 
     legacy_complete = _observation(
-        source_key="admission_record",
+        source_key="anesthesia_record",
         completeness="complete",
-        query_version="legacy_projection_v1-admission_record",
+        query_version="legacy_projection_v1-anesthesia_record",
     )
     with pytest.raises(ValueError, match="not allowed to claim proven completeness"):
         _snapshot(legacy_complete)

@@ -58,6 +58,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-032",
     }
     assert typed_shadow == {
+        "LX0609-001",
+        "LX0609-005",
+        "LX0609-006",
         "LX0609-007",
         "LX0609-029",
         "LX0609-030",

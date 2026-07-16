@@ -137,12 +137,18 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
     monkeypatch.setattr(
         luxian_execution,
         "bind_and_reduce_luxian_0609_rule_decisions",
-        lambda **_kwargs: (
+        lambda **_kwargs: tuple(
             SimpleNamespace(
-                rule_id="LX0609-007",
+                rule_id=rule_id,
                 final_state=SimpleNamespace(value="compliant"),
                 fact_refs=("d" * 64,),
-            ),
+            )
+            for rule_id in (
+                "LX0609-001",
+                "LX0609-005",
+                "LX0609-006",
+                "LX0609-007",
+            )
         ),
     )
 
@@ -156,12 +162,16 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
 
     assert comparison == {
         "states_match": True,
+        "states_accepted": True,
         "tokens_match": True,
         "logical_llm_call_count": 1,
         "snapshot_build_count": 1,
         "result_count": 49,
         "baseline_family_reader_calls": 0,
         "candidate_family_reader_calls": 0,
+        "typed_decision_count": 4,
+        "typed_decision_min_fact_ref_count": 1,
+        "typed_model_call_count": 0,
         "typed_007_decision_count": 1,
         "typed_007_fact_ref_count": 1,
         "typed_007_model_call_count": 0,

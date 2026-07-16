@@ -15,6 +15,14 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.decision_reducer import CustomerFinalState
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
+)
 from app.services.luxian_0609_programmatic_rules import (
     evaluate_luxian_0609_programmatic_rules,
 )
@@ -23,6 +31,40 @@ from app.services import sample_programmatic_evidence as programmatic_evidence
 
 
 _LEGACY_RULE_IDS = ("SC-002", "CL-081", "SC-021", "SC-054", "SC-048", "SC-049", "CL-080")
+
+
+def _typed_basic_session(
+    rows_by_source: dict[str, list[dict]],
+    *,
+    failures: dict[str, Exception] | None = None,
+    truncated_sources: frozenset[str] = frozenset(),
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if failures and source_key in failures:
+            raise failures[source_key]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=source_key in truncated_sources,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=(
+            "admission_record",
+            "inpat_registration",
+            "daily_course_record",
+            "senior_course_record",
+        ),
+    )
 
 
 def _settings(*, basic_enabled: bool) -> SimpleNamespace:
@@ -61,6 +103,241 @@ def _private_course_rows(attending_time: str, senior_time: str) -> dict[str, lis
             }
         ],
     }
+
+
+def _reduce_typed_basic(session):
+    execution = execute_luxian_0609_native_basic_timeliness(
+        rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        decision_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        evidence_payload=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=execution.decisions,
+        expected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        snapshot=session.snapshot,
+    )
+    return execution, reduced
+
+
+@pytest.mark.unit
+def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anchor():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [],
+            "admission_record": [
+                {
+                    "document_id": "safe-admission-ref",
+                    "document_title": "入院记录",
+                    "admission_datetime": "2026-06-01 08:00:00",
+                    "record_time": "2026-06-01 08:00:00",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "document_id": "safe-attending-ref",
+                    "document_title": "主治医师首次查房记录",
+                    "record_time": "2026-06-02 08:00:00",
+                }
+            ],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-senior-ref",
+                    "document_title": "副主任医师首次查房记录",
+                    "record_time": "2026-06-03 08:00:00",
+                }
+            ],
+        }
+    )
+
+    execution, reduced = _reduce_typed_basic(session)
+
+    assert execution.results == ()
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert all(item.fact_refs for item in reduced)
+
+
+@pytest.mark.unit
+def test_001_005_006_do_not_use_admission_record_time_as_its_own_anchor():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-01 08:00:00",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "document_title": "主治医师首次查房记录",
+                    "record_time": "2026-06-02 08:00:00",
+                }
+            ],
+            "senior_course_record": [
+                {
+                    "document_title": "副主任医师首次查房记录",
+                    "record_time": "2026-06-03 08:00:00",
+                }
+            ],
+        }
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert {item.reason_code for item in reduced} == {
+        "authoritative_time_missing"
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("incomplete_time", ["2026-06-01", "2026-06-01T08"])
+def test_001_005_006_reject_incomplete_admission_datetime(incomplete_time: str):
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": incomplete_time}
+            ],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-01 09:00:00",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        }
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert {item.reason_code for item in reduced} == {
+        "authoritative_time_missing"
+    }
+
+
+@pytest.mark.unit
+def test_001_005_006_typed_thresholds_are_exact_and_senior_does_not_replace_attending():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-02 08:00:01",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_title": "副主任医师首次查房记录",
+                    "record_time": "2026-06-04 08:00:00",
+                }
+            ],
+        }
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "threshold_exceeded",
+        "required_document_missing",
+        "requirement_within_threshold",
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("scenario", "expected_state", "expected_reason"),
+    [
+        ("missing_time", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
+        ("ambiguous_role", CustomerFinalState.DATA_GAP, "required_field_missing"),
+        ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
+        ("query_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ],
+)
+def test_005_006_typed_fail_closed_without_text_time_guess(
+    scenario: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    failures = {}
+    truncated = frozenset()
+    rows = {
+        "inpat_registration": [],
+        "admission_record": [
+            {
+                "document_title": "入院记录",
+                "admission_datetime": "2026-06-01 07:00:00",
+                "record_time": "2026-06-01 08:00:00",
+            }
+        ],
+        "daily_course_record": [],
+        "senior_course_record": [],
+    }
+    if scenario == "missing_time":
+        rows["senior_course_record"] = [
+            {
+                "document_title": "副主任医师首次查房记录",
+                "record_time": None,
+                "update_time": "2026-06-02 08:00:00",
+            }
+        ]
+    elif scenario == "ambiguous_role":
+        rows["senior_course_record"] = [
+            {
+                "document_title": "上级医师查房记录",
+                "record_time": "2026-06-02 08:00:00",
+            }
+        ]
+    elif scenario == "unavailable":
+        failures["senior_course_record"] = SourceEvidenceUnavailable()
+    elif scenario == "query_error":
+        failures["senior_course_record"] = SourceEvidenceQueryError()
+    else:
+        rows["senior_course_record"] = [
+            {
+                "document_title": "主治医师首次查房记录",
+                "record_time": "2026-06-02 08:00:00",
+            }
+        ]
+        truncated = frozenset({"senior_course_record"})
+    session = _typed_basic_session(
+        rows,
+        failures=failures,
+        truncated_sources=truncated,
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    # 006 正好覆盖高级别查房；005在同一来源异常/字段缺失时也必须保守。
+    target = reduced[2]
+    assert target.final_state is expected_state
+    assert target.reason_code == expected_reason
+    assert "2026-06" not in repr(target)
 
 
 @pytest.mark.unit

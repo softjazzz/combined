@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v6"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v7"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -155,7 +155,7 @@ _CONTROLLED = SourceAccessMode.CONTROLLED_FACT_V1
 _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 
 _REGISTRY_ENTRIES = (
-    _entry("admission_record"),
+    _entry("admission_record", access_mode=_BOUNDED),
     _entry("anesthesia_record"),
     _entry("bloodtrans_record", "bloodtrans_record", "mr_bloodtrans", access_mode=_BOUNDED),
     _entry(
@@ -206,6 +206,7 @@ _REGISTRY_ENTRIES = (
 )
 
 _INTERNAL_SOURCE_ENTRIES = (
+    _entry("inpat_registration", access_mode=_BOUNDED),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
@@ -218,6 +219,16 @@ _INTERNAL_SOURCE_ENTRIES = (
 _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
     {"LX0609-007": ("inpat_nondrug_order.unstable_order",)}
 )
+
+_DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
+    "LX0609-001": ("inpat_registration",),
+    "LX0609-005": (
+        "admission_record",
+        "inpat_registration",
+        "daily_course_record",
+    ),
+    "LX0609-006": ("admission_record", "inpat_registration"),
+})
 
 
 @lru_cache(maxsize=1)
@@ -283,6 +294,28 @@ def resolve_luxian_0609_controlled_fact_source_keys(
                 source_key
                 for rule_id in normalized
                 for source_key in _CONTROLLED_FACT_SOURCES_BY_RULE.get(rule_id, ())
+            }
+        )
+    )
+
+
+def resolve_luxian_0609_decision_support_source_keys(
+    selected_rule_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    """解析规则裁决所需、但不改变客户适用文书范围的内部来源。"""
+
+    if len(selected_rule_ids) != len(set(selected_rule_ids)):
+        raise ValueError("duplicate LX0609 rule id")
+    contracts = {item.rule_id for item in load_luxian_0609_rule_contracts()}
+    normalized = tuple(str(item or "").strip().upper() for item in selected_rule_ids)
+    if any(item not in contracts for item in normalized):
+        raise ValueError("unknown LX0609 rule id")
+    return tuple(
+        sorted(
+            {
+                source_key
+                for rule_id in normalized
+                for source_key in _DECISION_SUPPORT_SOURCES_BY_RULE.get(rule_id, ())
             }
         )
     )

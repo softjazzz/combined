@@ -263,6 +263,7 @@ async def _evaluate_runtime_flag_ab_case(
         "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
         "LUXIAN_0609_RULE_DECISION_007_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED",
     )
     missing = object()
     original_flags = {
@@ -282,7 +283,7 @@ async def _evaluate_runtime_flag_ab_case(
     reader_phase = "baseline"
     family_reader_calls = {"baseline": 0, "candidate": 0}
     controlled_fact_query_count = 0
-    typed_007_audits: list[dict[str, Any]] = []
+    typed_decision_audits: list[dict[str, Any]] = []
     original_consultation_reader = (
         native_consultation_execution.read_luxian_0609_native_source_rows
     )
@@ -382,13 +383,14 @@ async def _evaluate_runtime_flag_ab_case(
     def audited_decision_binder(**kwargs):
         reduced = original_decision_binder(**kwargs)
         for item in reduced:
-            if item.rule_id == "LX0609-007":
-                typed_007_audits.append(
-                    {
-                        "final_state": item.final_state.value,
-                        "fact_ref_count": len(item.fact_refs),
-                    }
-                )
+            typed_decision_audits.append(
+                {
+                    "rule_id": item.rule_id,
+                    "final_state": item.final_state.value,
+                    "reason_code": getattr(item, "reason_code", ""),
+                    "fact_ref_count": len(item.fact_refs),
+                }
+            )
         return reduced
 
     try:
@@ -440,6 +442,7 @@ async def _evaluate_runtime_flag_ab_case(
         setattr(settings, candidate_flag, True)
         if mode_label == "unified_engine":
             settings.LUXIAN_0609_RULE_DECISION_007_ENABLED = True
+            settings.LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED = True
         reader_phase = "candidate"
         service.adjudicator_client.generate = replay.replay
         luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
@@ -533,7 +536,7 @@ async def _evaluate_runtime_flag_ab_case(
     if mode_label == "unified_engine" and family_reader_calls["baseline"] > 0:
         comparison["controlled_fact_query_count"] = controlled_fact_query_count
     if baseline_states != candidate_states:
-        comparison["state_differences"] = [
+        state_differences = [
             {
                 "rule_id": baseline_row["rule_id"],
                 "baseline_status": baseline_row["status"],
@@ -544,11 +547,50 @@ async def _evaluate_runtime_flag_ab_case(
             )
             if baseline_row != candidate_row
         ]
+        comparison["state_differences"] = state_differences
     if mode_label == "unified_engine":
-        if len(typed_007_audits) != 1:
-            raise RuntimeError("007每病例必须且只能形成一个类型化决策")
-        if typed_007_audits[0]["fact_ref_count"] <= 0:
-            raise RuntimeError("007类型化决策必须绑定安全证据引用")
+        expected_typed_rule_ids = (
+            "LX0609-001",
+            "LX0609-005",
+            "LX0609-006",
+            "LX0609-007",
+        )
+        if tuple(item["rule_id"] for item in typed_decision_audits) != (
+            expected_typed_rule_ids
+        ):
+            raise RuntimeError("类型化决策范围或顺序异常")
+        if any(item["fact_ref_count"] <= 0 for item in typed_decision_audits):
+            raise RuntimeError("类型化决策必须绑定安全证据引用")
+        typed_007_audit = next(
+            item
+            for item in typed_decision_audits
+            if item["rule_id"] == "LX0609-007"
+        )
+        typed_basic_audits = tuple(
+            item
+            for item in typed_decision_audits
+            if item["rule_id"] in {"LX0609-001", "LX0609-005", "LX0609-006"}
+        )
+        if family_reader_calls["baseline"] > 0 and any(
+            item["final_state"] != "data_gap"
+            or item["reason_code"] != "authoritative_time_missing"
+            for item in typed_basic_audits
+        ):
+            raise RuntimeError("固定10例缺少权威入院时间时基础时限族必须为data_gap")
+        expected_migration_rule_ids = {
+            "LX0609-001",
+            "LX0609-005",
+            "LX0609-006",
+        }
+        unexpected_state_differences = tuple(
+            item
+            for item in comparison.get("state_differences", ())
+            if item["rule_id"] not in expected_migration_rule_ids
+            or item["candidate_status"] != "data_gap"
+        )
+        if unexpected_state_differences:
+            raise RuntimeError("统一引擎出现非预期状态变化")
+        comparison["states_accepted"] = True
         if (
             family_reader_calls["baseline"] > 0
             and controlled_fact_query_count != 1
@@ -560,8 +602,13 @@ async def _evaluate_runtime_flag_ab_case(
             {
                 "baseline_family_reader_calls": family_reader_calls["baseline"],
                 "candidate_family_reader_calls": family_reader_calls["candidate"],
-                "typed_007_decision_count": len(typed_007_audits),
-                "typed_007_fact_ref_count": typed_007_audits[0]["fact_ref_count"],
+                "typed_decision_count": len(typed_decision_audits),
+                "typed_decision_min_fact_ref_count": min(
+                    item["fact_ref_count"] for item in typed_decision_audits
+                ),
+                "typed_model_call_count": 0,
+                "typed_007_decision_count": 1,
+                "typed_007_fact_ref_count": typed_007_audit["fact_ref_count"],
                 "typed_007_model_call_count": 0,
             }
         )
@@ -594,7 +641,10 @@ async def run(args: argparse.Namespace) -> int:
                     rule_ids=rule_ids,
                     timeout_seconds=float(args.timeout_seconds),
                 )
-                if not comparison["states_match"] or not comparison["tokens_match"]:
+                states_accepted = comparison.get(
+                    "states_accepted", comparison["states_match"]
+                )
+                if not states_accepted or not comparison["tokens_match"]:
                     raise RuntimeError("A/B状态或token发生变化")
                 summary = {
                     "case_label": case["case_label"],

@@ -21,6 +21,15 @@ SURGERY_TIME_FIELDS = (
 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
 
 _NATIVE_SOURCE_FIELDS = {
+    "inpat_registration": (
+        "admission_datetime",
+    ),
+    "admission_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "admission_datetime",
+    ),
     "mr_bloodtrans": (
         "transfuse_variety",
         "blood_transfusion_volume",
@@ -132,6 +141,8 @@ _NATIVE_SOURCE_FIELDS = {
 _SNAPSHOT_SOURCE_FIELDS = {
     source_key: _NATIVE_SOURCE_FIELDS[source_key]
     for source_key in (
+        "inpat_registration",
+        "admission_record",
         "mr_bloodtrans",
         "bloodtrans_record",
         "mr_surgery",
