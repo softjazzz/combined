@@ -147,13 +147,13 @@
     },
     {
       "rule_id": "LX0609-013",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
-      "source_contract_state": "legacy_projection_v1",
+      "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
     {
@@ -180,13 +180,13 @@
     },
     {
       "rule_id": "LX0609-016",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "course_quality",
       "executor_key": "course_quality",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
-      "source_contract_state": "legacy_projection_v1",
+      "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
     {
@@ -202,13 +202,13 @@
     },
     {
       "rule_id": "LX0609-018",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "course_quality",
       "executor_key": "course_quality",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
-      "source_contract_state": "legacy_projection_v1",
+      "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
     {
@@ -301,13 +301,13 @@
     },
     {
       "rule_id": "LX0609-027",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
       "max_llm_calls_per_rule": 1,
-      "source_contract_state": "legacy_projection_v1",
+      "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
     {

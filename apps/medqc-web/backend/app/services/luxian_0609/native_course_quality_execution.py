@@ -1233,6 +1233,18 @@ class _CopyRuleOutcome:
 
 
 @dataclass(frozen=True)
+class _CourseSemanticOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
+    executor_type: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+
+
+@dataclass(frozen=True)
 class _CopyAssessment:
     terminal_outcome: _CopyRuleOutcome | None
     gray_context: str
@@ -1527,6 +1539,136 @@ def _rule_017_decision(
     )
 
 
+def _typed_course_semantic_documents(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[Mapping[str, Any], _CourseSemanticOutcome | None]:
+    """只从同一 evidence session 取得 016/018 裁剪材料。"""
+
+    required_sources = {
+        "LX0609-016": ("admission_record", "first_course_record"),
+        "LX0609-018": ("admission_record",),
+    }[rule_id]
+    observations = {
+        item.source_key: item
+        for item in snapshot.observations
+        if item.source_key in required_sources
+    }
+    if set(observations) != set(required_sources):
+        return {}, _CourseSemanticOutcome(
+            rule_id=rule_id,
+            status="technical_error",
+            reason_code="snapshot_mismatch",
+            executor_type="program",
+        )
+    ordered_observations = tuple(observations[key] for key in required_sources)
+    if any(item.query_state.value == "error" for item in ordered_observations):
+        return {}, _CourseSemanticOutcome(
+            rule_id=rule_id,
+            status="technical_error",
+            reason_code="source_query_error",
+            executor_type="program",
+        )
+    if any(item.query_state.value == "unavailable" for item in ordered_observations):
+        return {}, _CourseSemanticOutcome(
+            rule_id=rule_id,
+            status="data_gap",
+            reason_code="source_unavailable",
+            executor_type="program",
+        )
+    if any(item.completeness.value == "truncated" for item in ordered_observations):
+        return {}, _CourseSemanticOutcome(
+            rule_id=rule_id,
+            status="data_gap",
+            reason_code="source_truncated",
+            executor_type="program",
+        )
+    try:
+        documents = {
+            source_key: [dict(row) for row in materials.rows(source_key)]
+            for source_key in required_sources
+        }
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return {}, _CourseSemanticOutcome(
+            rule_id=rule_id,
+            status="technical_error",
+            reason_code="snapshot_mismatch",
+            executor_type="program",
+        )
+    return documents, None
+
+
+def _course_semantic_decision(
+    *,
+    outcome: _CourseSemanticOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> RuleDecision:
+    """将同一材料仓上产生的 016/018 outcome 直接提交统一 reducer。"""
+
+    if (
+        type(snapshot) is not Luxian0609EvidenceSnapshot
+        or type(materials) is not Luxian0609EvidenceMaterialStore
+        or materials.snapshot_hash != snapshot.snapshot_hash
+    ):
+        raise ValueError("typed course semantic evidence session mismatch")
+    required_sources = {
+        "LX0609-016": ("admission_record", "first_course_record"),
+        "LX0609-018": ("admission_record",),
+    }[outcome.rule_id]
+    observations = tuple(
+        item for item in snapshot.observations if item.source_key in required_sources
+    )
+    refs = tuple(item.snapshot_ref.removeprefix("sha256:") for item in observations)
+    if outcome.status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif outcome.status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+        )
+    elif outcome.status == "technical_error":
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            outcome.reason_code,
+        )
+    else:
+        reason_code = (
+            outcome.reason_code
+            if outcome.reason_code in {"source_unavailable", "source_truncated"}
+            else "required_field_missing"
+        )
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            reason_code,
+        )
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version="course-semantic-v1",
+        confidence=None,
+    )
+
+
 def _admission_material_ready(
     documents: Mapping[str, Any], facts: Sequence[Any]
 ) -> bool:
@@ -1586,7 +1728,14 @@ async def execute_luxian_0609_native_course_quality_rules(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }
     if any(
-        rule_id not in {"LX0609-007", "LX0609-008", "LX0609-009", "LX0609-017"}
+        rule_id not in {
+            "LX0609-007",
+            "LX0609-008",
+            "LX0609-009",
+            "LX0609-016",
+            "LX0609-017",
+            "LX0609-018",
+        }
         for rule_id in typed_requested
     ) or not typed_requested.issubset(set(selected)):
         raise ValueError("unsupported typed course rule scope")
@@ -1681,6 +1830,17 @@ async def execute_luxian_0609_native_course_quality_rules(
         else:
             results.append(_render_copy_outcome(outcome))
 
+    def emit_course_semantic(outcome: _CourseSemanticOutcome) -> None:
+        assert evidence_snapshot is not None
+        assert evidence_materials is not None
+        decisions.append(
+            _course_semantic_decision(
+                outcome=outcome,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+        )
+
     for rule_id in selected:
         if rule_id in projection_gap_rule_ids:
             continue
@@ -1702,6 +1862,113 @@ async def execute_luxian_0609_native_course_quality_rules(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
+                )
+            )
+            continue
+        if rule_id in {"LX0609-016", "LX0609-018"} and rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            typed_documents, terminal_outcome = _typed_course_semantic_documents(
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+            if terminal_outcome is not None:
+                emit_course_semantic(terminal_outcome)
+                continue
+            if rule_id == "LX0609-016" and (
+                not _substantive_admission_rows(typed_documents)
+                or not _substantive_first_course_rows(typed_documents)
+            ):
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="admission_or_first_course_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if rule_id == "LX0609-018" and (
+                not _substantive_admission_rows(typed_documents)
+                or not _admission_material_ready(typed_documents, ())
+            ):
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="complaint_or_primary_diagnosis_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            context = _context(rule_id, typed_documents)
+            wrapper = wrappers_by_id.get(rule_id)
+            if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="course_prompt_input_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if llm_client is None:
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="course_llm_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            llm_call_count += 1
+            try:
+                response = await llm_client.generate(
+                    _prompt(wrapper, context=context)
+                )
+            except Exception:
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="course_llm_failure",
+                        executor_type="llm",
+                    )
+                )
+                continue
+            prompt, completion, total, elapsed = _usage(response)
+            prompt_tokens += prompt
+            completion_tokens += completion
+            total_tokens += total
+            api_time += elapsed
+            is_compliant = _parse_is_compliant(response)
+            if is_compliant is None:
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status="data_gap",
+                        reason_code="course_llm_invalid_output",
+                        executor_type="llm",
+                        prompt_tokens=prompt,
+                        completion_tokens=completion,
+                        total_tokens=total,
+                        api_time=elapsed,
+                    )
+                )
+                continue
+            emit_course_semantic(
+                _CourseSemanticOutcome(
+                    rule_id=rule_id,
+                    status="compliant" if is_compliant else "non_compliant",
+                    reason_code="course_customer_prompt",
+                    executor_type="llm",
+                    prompt_tokens=prompt,
+                    completion_tokens=completion,
+                    total_tokens=total,
+                    api_time=elapsed,
                 )
             )
             continue

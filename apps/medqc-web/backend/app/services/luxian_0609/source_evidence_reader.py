@@ -47,6 +47,7 @@ _NATIVE_SOURCE_FIELDS = {
         "document_title",
         "record_time",
         "admission_datetime",
+        "record_content",
     ),
     "first_course_record": (
         "document_id",

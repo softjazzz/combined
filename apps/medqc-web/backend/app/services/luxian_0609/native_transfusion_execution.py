@@ -166,13 +166,11 @@ _TYPED_SOURCE_ALIASES = {
     "bloodtrans_record": ("bloodtrans_record",),
     "consent_form": (
         "consent_form",
-        "surgery_inform_consent",
         "blood_transfusion_consent",
     ),
     "blood_transfusion_consent": (
         "blood_transfusion_consent",
         "consent_form",
-        "surgery_inform_consent",
     ),
     "labtest_master": ("labtest_master",),
     "labtest_item_report": ("labtest_item_report",),

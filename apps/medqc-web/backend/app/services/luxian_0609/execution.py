@@ -265,7 +265,17 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id == "LX0609-019"
+                rule_id in {"LX0609-016", "LX0609-018"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id in {"LX0609-013", "LX0609-019", "LX0609-027"}
                 and bool(
                     getattr(
                         settings,
@@ -470,6 +480,17 @@ async def prepare_luxian_0609_execution(
                 native_total_tokens += envelope.total_tokens
                 native_api_time += envelope.api_time
     if typed_decision_rule_ids and evidence_snapshot is not None:
+        decisions_by_rule_id = {
+            decision.rule_id: decision for decision in native_rule_decisions
+        }
+        if (
+            len(decisions_by_rule_id) == len(native_rule_decisions)
+            and set(decisions_by_rule_id) == set(typed_decision_rule_ids)
+        ):
+            native_rule_decisions = [
+                decisions_by_rule_id[rule_id]
+                for rule_id in typed_decision_rule_ids
+            ]
         reduced_decisions = bind_and_reduce_luxian_0609_rule_decisions(
             decisions=tuple(native_rule_decisions),
             expected_rule_ids=typed_decision_rule_ids,

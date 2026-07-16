@@ -34,14 +34,25 @@ TUMOR_PATHOLOGY_RULE_IDS = (
     "LX0609-027",
 )
 EXECUTOR_KEY = "tumor_pathology"
-_TYPED_DECISION_RULE_IDS = frozenset({"LX0609-019"})
-_TYPED_019_SOURCE_KEYS = (
-    "pathology_exam_master",
-    "pathology_exam_report",
-    "surgery_record",
-    "daily_course_record",
-)
-_TYPED_EVALUATOR_VERSION = "tumor-pathology-019-ruledecision-shadow-v1"
+_TYPED_DECISION_RULE_IDS = frozenset(TUMOR_PATHOLOGY_RULE_IDS)
+_TYPED_RULE_SOURCE_KEYS = {
+    "LX0609-013": (
+        "pathology_exam_master",
+        "pathology_exam_report",
+        "surgery_record",
+        "daily_course_record",
+    ),
+    "LX0609-019": (
+        "pathology_exam_master",
+        "pathology_exam_report",
+        "surgery_record",
+        "daily_course_record",
+    ),
+    # 026 仍缺受控化疗事实，只绑定真正读取的恶性诊断来源并保守 DG。
+    "LX0609-026": ("diagnosis",),
+    "LX0609-027": ("diagnosis", "discharge_record"),
+}
+_TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
 
 _PATHOLOGY_SOURCES = ("pathology_exam_master", "pathology_exam_report")
 _PATHOLOGY_TARGET_SOURCES = ("surgery_record", "daily_course_record")
@@ -163,7 +174,7 @@ def _typed_decision_from_outcome(
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
-        if observation.source_key in _TYPED_019_SOURCE_KEYS
+        if observation.source_key in _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
     )
     if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
         raise ValueError("typed tumor decision requires evidence refs")
@@ -676,7 +687,9 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     api_time = 0.0
 
     for rule_id in selected:
-        source_for_rule = typed_source if rule_id in typed_requested else source
+        typed_rule = rule_id in typed_requested
+        source_for_rule = typed_source if typed_rule else source
+        facts_for_rule = () if typed_rule else facts
         context_sources: tuple[str, ...]
         if rule_id in {"LX0609-013", "LX0609-019"}:
             master = source_for_rule("pathology_exam_master")
@@ -688,6 +701,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     rule_id,
                     "technical_error",
                     "source_query_error",
+                    executor_type="program",
+                )
+                continue
+            if rule_id in typed_requested and any(
+                material.state in {"unavailable", "truncated"}
+                for material in (master, report)
+            ):
+                emit_outcome(
+                    rule_id,
+                    "data_gap",
+                    "pathology_source_unavailable",
                     executor_type="program",
                 )
                 continue
@@ -717,19 +741,38 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             context_sources = (*_PATHOLOGY_SOURCES, *_PATHOLOGY_TARGET_SOURCES)
         else:
             diagnosis = source_for_rule("diagnosis")
+            if typed_rule and diagnosis.state == "error":
+                emit_outcome(
+                    rule_id,
+                    "technical_error",
+                    "source_query_error",
+                    executor_type="program",
+                )
+                continue
+            if typed_rule and diagnosis.state in {"unavailable", "truncated"}:
+                emit_outcome(
+                    rule_id,
+                    "data_gap",
+                    "malignant_diagnosis_unavailable",
+                    executor_type="program",
+                )
+                continue
             malignant_present = _has_fact(
-                facts,
+                facts_for_rule,
                 _MALIGNANT_FACT_TYPES,
                 frozenset({"diagnosis", "pathology_exam_report"}),
             ) or _has_malignant_code(diagnosis)
             if not malignant_present:
-                status = "not_applicable"
-                if diagnosis.state in {
-                    "empty",
-                    "unavailable",
-                    "error",
-                } or not _has_any_diagnosis_code(diagnosis):
-                    status = "data_gap"
+                if typed_rule and diagnosis.state == "empty":
+                    status = "not_applicable"
+                else:
+                    status = "not_applicable"
+                    if diagnosis.state in {
+                        "empty",
+                        "unavailable",
+                        "error",
+                    } or not _has_any_diagnosis_code(diagnosis):
+                        status = "data_gap"
                 emit_outcome(
                     rule_id,
                     status,
@@ -740,8 +783,18 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 )
                 continue
             if rule_id == "LX0609-026":
+                if typed_rule:
+                    # 当前快照没有受控 chemotherapy FactV2，普通药品医嘱不能
+                    # 被提升为化疗事实。保守闭合，不回读 legacy timeline_facts。
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "chemotherapy_fact_unavailable",
+                        executor_type="program",
+                    )
+                    continue
                 chemo_present = _has_fact(
-                    facts,
+                    facts_for_rule,
                     _CHEMO_FACT_TYPES,
                     frozenset({"inpat_drug_order"}),
                 )
@@ -776,6 +829,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 rule_id,
                 "technical_error",
                 "source_query_error",
+                executor_type="program",
+            )
+            continue
+        if rule_id in typed_requested and any(
+            materials[source_key].state in {"unavailable", "truncated"}
+            for source_key in required_sources
+        ):
+            emit_outcome(
+                rule_id,
+                "data_gap",
+                "tumor_target_projection_unavailable",
                 executor_type="program",
             )
             continue

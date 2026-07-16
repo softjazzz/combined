@@ -1971,3 +1971,10 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
     )
     assert invalid.results[0]["status"] == "data_gap"
     assert secret not in repr(invalid)
+
+
+def test_transfusion_consent_sources_never_alias_surgery_consent() -> None:
+    for rule_id in ("LX0609-041", "LX0609-042"):
+        assert "surgery_inform_consent" not in transfusion._typed_rule_source_keys(
+            rule_id
+        )

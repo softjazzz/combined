@@ -251,6 +251,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "senior_course_record",
     ),
+    # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
+    "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+    "LX0609-027": ("diagnosis",),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": ("senior_course_record",),

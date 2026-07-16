@@ -1081,6 +1081,103 @@ async def test_consultation_020_023_typed_decisions_replace_raw_results(
 
 
 @pytest.mark.asyncio
+async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
+    monkeypatch,
+) -> None:
+    selected = (
+        "LX0609-013",
+        "LX0609-016",
+        "LX0609-018",
+        "LX0609-019",
+        "LX0609-027",
+    )
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(
+            ("tumor_pathology", ("LX0609-013", "LX0609-019", "LX0609-027")),
+            ("course_quality", ("LX0609-016", "LX0609-018")),
+        ),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    def build_session(**kwargs):
+        return build_luxian_0609_evidence_read_session(
+            **kwargs,
+            row_reader=read,
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    decision_summary = [
+        (item.final_state.value, item.reason_code)
+        for item in context.reduced_decisions
+    ]
+    assert decision_summary == [
+        ("not_applicable", "trigger_absent_complete"),
+        ("data_gap", "required_field_missing"),
+        ("data_gap", "required_field_missing"),
+        ("not_applicable", "trigger_absent_complete"),
+        ("not_applicable", "trigger_absent_complete"),
+    ]
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
     monkeypatch,
 ) -> None:

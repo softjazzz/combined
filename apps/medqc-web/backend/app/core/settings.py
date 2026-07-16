@@ -160,7 +160,9 @@ class Settings(BaseSettings):
     LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED: bool = False
     # 017 复制病历从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED: bool = False
-    # 019 病理取材记录从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
+    # 016/018 入院记录语义规则从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
+    LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED: bool = False
+    # 013/019/027 病理与肿瘤记录从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED: bool = False
     # 040 四级手术 MDT 从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED: bool = False

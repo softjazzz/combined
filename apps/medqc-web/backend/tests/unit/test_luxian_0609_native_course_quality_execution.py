@@ -1444,6 +1444,194 @@ async def test_016_requires_admission_and_first_course_before_model():
 
 
 @pytest.mark.asyncio
+async def test_typed_016_018_use_same_material_session_without_legacy_payload():
+    private_marker = "PRIVATE_ADMISSION_MATERIAL_MARKER"
+    rows_by_source = {
+        "admission_record": [
+            _row(
+                f"{private_marker} 主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。"
+                "现病史与病例特点完整。"
+            )
+        ],
+        "first_course_record": [
+            _row("首次病程记录包含病例特点、诊断依据、鉴别诊断和诊疗计划。")
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-016", "LX0609-018"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": False}, {"is_compliant": True}])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016", "LX0609-018"),
+        decision_rule_ids=("LX0609-016", "LX0609-018"),
+        wrapper_rules=[_wrapper("LX0609-016"), _wrapper("LX0609-018")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results == ()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-016", "LX0609-018"),
+        snapshot=session.snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert all(item.fact_refs for item in reduced)
+    assert result.llm_call_count == 2
+    assert result.total_tokens == 90
+    assert private_marker not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_state", "expected_state", "expected_reason"),
+    (
+        ("empty", CustomerFinalState.DATA_GAP, "required_field_missing"),
+        ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
+        ("error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
+        ("truncated", CustomerFinalState.DATA_GAP, "source_truncated"),
+    ),
+)
+async def test_typed_018_preserves_source_state_without_model(
+    source_state: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "admission_record":
+            if source_state == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if source_state == "error":
+                raise SourceEvidenceQueryError()
+            rows = (
+                []
+                if source_state == "empty"
+                else [_row("主诉：胸痛。入院诊断：心绞痛。现病史完整。")]
+            )
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows,
+                truncated=source_state == "truncated",
+                limit_rows=1 if source_state == "truncated" else 50,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-018",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_018_matches_raw_state_calls_and_tokens():
+    admission_row = _row(
+        "主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。现病史完整。"
+    )
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[admission_row] if source_key == "admission_record" else [],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    raw = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=_payload(documents={"admission_record": [admission_row]}),
+        llm_client=_Client([{"is_compliant": False}]),
+    )
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload={"stale": "payload"},
+        llm_client=_Client([{"is_compliant": False}]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=typed.decisions,
+        expected_rule_ids=("LX0609-018",),
+        snapshot=session.snapshot,
+    )
+
+    assert raw.results[0]["status"] == reduced[0].final_state.value
+    assert typed.results == ()
+    assert typed.llm_call_count == raw.llm_call_count == 1
+    assert typed.total_tokens == raw.total_tokens == 45
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "first_course_row",
     [

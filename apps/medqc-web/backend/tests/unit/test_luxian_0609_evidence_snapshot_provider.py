@@ -540,6 +540,29 @@ def test_mdt_040_decision_support_includes_consultation_record() -> None:
     assert calls.count("consultation_record") == 1
 
 
+def test_admission_record_body_is_private_material_and_never_safe_snapshot_output() -> None:
+    private_marker = "private admission body marker"
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = [{"record_content": private_marker}] if source_key == "admission_record" else []
+        return _rows(source_key, rows)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-016", "LX0609-018"),
+        institute_id="institute-private-001",
+        patient_id="patient-private-001",
+        visit_id="visit-private-001",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert session.materials.rows("admission_record")[0]["record_content"] == private_marker
+    assert private_marker not in repr(session.snapshot)
+    assert private_marker not in repr(session.materials.safe_summary())
+
+
 def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
@@ -560,13 +583,16 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
     )
     assert len(selected) == 49
     assert calls == sorted(
-        [
+        {
             *expected_bounded,
             CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+            "diagnosis",
             "inpat_registration",
-        ]
+            "pathology_exam_master",
+            "pathology_exam_report",
+        }
     )
     assert len(calls) == len(set(calls))
     assert len(snapshot.observations) == len(
