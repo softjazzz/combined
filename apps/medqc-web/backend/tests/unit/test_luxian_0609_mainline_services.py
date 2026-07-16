@@ -171,6 +171,7 @@ def _all_native_settings(**overrides):
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_007_ENABLED": False,
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": False,
+        "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -244,6 +245,50 @@ def _rule_007_evidence_session() -> Luxian0609EvidenceReadSession:
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
         additional_source_keys=("daily_course_record", "senior_course_record"),
+    )
+
+
+def _course_severity_evidence_session() -> Luxian0609EvidenceReadSession:
+    rows_by_source = {
+        "inpat_nondrug_order.severity_order": [
+            {
+                "severity": "serious",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "a" * 64,
+            }
+        ],
+        "daily_course_record": [
+            {
+                "record_content": "病重患者日常病程记录。",
+                "record_time": "2026-01-01 00:01:00",
+            },
+            {
+                "record_content": "病重患者再次病程记录。",
+                "record_time": "2026-01-03 23:59:59",
+            },
+        ],
+        "senior_course_record": [],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date="2026-01-03",
+        row_reader=read,
+        additional_source_keys=("inpat_nondrug_order.severity_order",),
     )
 
 
@@ -543,6 +588,101 @@ async def test_rule_007_typed_decision_reaches_customer_renderer_without_legacy_
     assert orchestrated["results"][0]["status"] == "compliant"
     assert "metadata" not in orchestrated["results"][0]
     assert "LXE-18" not in repr(orchestrated["results"])
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_typed_decisions_use_natural_days_and_zero_model(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-008", "LX0609-009")
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("course_quality", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    provider_kwargs: dict[str, object] = {}
+
+    def build_session(**kwargs):
+        provider_kwargs.update(kwargs)
+        return _course_severity_evidence_session()
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                rule_id,
+                name=rule_id,
+                mapped_rule_ids=[f"RAW-{rule_id}"],
+                trigger_condition="test",
+            )
+            for rule_id in selected
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        evaluation_as_of_date="2026-01-03",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == list(selected)
+    assert [item.final_state.value for item in context.reduced_decisions] == [
+        "compliant",
+        "not_applicable",
+    ]
+    assert all(item.fact_refs for item in context.reduced_decisions)
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+    assert provider_kwargs["evaluation_as_of_date"] == "2026-01-03"
+
+    orchestrated = {
+        "results": [],
+        "total_tokens": 0,
+        "total_prompt_tokens": 0,
+        "total_completion_tokens": 0,
+    }
+    luxian_execution.aggregate_luxian_0609_orchestrated_results(
+        orchestrated=orchestrated,
+        context=context,
+        visit_id="private-visit",
+        model_name="",
+        evidence_payload=None,
+    )
+    assert [item["rule_id"] for item in orchestrated["results"]] == list(selected)
+    assert [item["status"] for item in orchestrated["results"]] == [
+        "compliant",
+        "not_applicable",
+    ]
+    assert "RAW-LX0609" not in repr(orchestrated["results"])
+    assert "2026-01" not in repr(orchestrated["results"])
 
 
 @pytest.mark.asyncio

@@ -15,10 +15,87 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
 )
+
+
+def _severity_session(
+    *,
+    rows: list[dict] | None = None,
+    failure: Exception | None = None,
+    truncated: bool = False,
+    daily_rows: list[dict] | None = None,
+    senior_rows: list[dict] | None = None,
+    course_failure: Exception | None = None,
+    course_truncated: bool = False,
+    evaluation_as_of_date: str | None = "2026-01-03",
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY:
+            if failure is not None:
+                raise failure
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows or [],
+                truncated=truncated,
+                limit_rows=50,
+            )
+        if source_key in {"daily_course_record", "senior_course_record"}:
+            if course_failure is not None:
+                raise course_failure
+            course_rows = (
+                daily_rows if source_key == "daily_course_record" else senior_rows
+            )
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=course_rows or [],
+                truncated=course_truncated and bool(course_rows),
+                limit_rows=50,
+            )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        evaluation_as_of_date=evaluation_as_of_date,
+        row_reader=read,
+        additional_source_keys=(CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,),
+    )
+
+
+async def _run_typed_severity(session):
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-008", "LX0609-009"),
+        decision_rule_ids=("LX0609-008", "LX0609-009"),
+        wrapper_rules=[],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-008", "LX0609-009"),
+        snapshot=session.snapshot,
+    )
+    return result, reduced
 
 
 def _row(content: str, record_time: str = "2026-06-01 09:00:00") -> dict:
@@ -439,6 +516,314 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     assert "2026-01" not in repr(result.decisions)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scenario", "expected_states", "expected_reasons"),
+    [
+        (
+            "no_order",
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.NOT_APPLICABLE),
+            ("trigger_absent_complete", "trigger_absent_complete"),
+        ),
+        (
+            "serious_within_two_days",
+            (CustomerFinalState.COMPLIANT, CustomerFinalState.NOT_APPLICABLE),
+            ("requirement_within_threshold", "trigger_absent_complete"),
+        ),
+        (
+            "serious_gap",
+            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.NOT_APPLICABLE),
+            ("threshold_exceeded", "trigger_absent_complete"),
+        ),
+        (
+            "serious_no_followup",
+            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.NOT_APPLICABLE),
+            ("threshold_exceeded", "trigger_absent_complete"),
+        ),
+        (
+            "critical_daily_complete",
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.DATA_GAP),
+            ("trigger_absent_complete", "required_field_missing"),
+        ),
+        (
+            "critical_missing_day",
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.NON_COMPLIANT),
+            ("trigger_absent_complete", "requirement_violated"),
+        ),
+        (
+            "order_time_missing",
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.NOT_APPLICABLE),
+            ("authoritative_time_missing", "trigger_absent_complete"),
+        ),
+        (
+            "record_time_missing",
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.NOT_APPLICABLE),
+            ("authoritative_time_missing", "trigger_absent_complete"),
+        ),
+        (
+            "malformed_severity",
+            (CustomerFinalState.TECHNICAL_ERROR, CustomerFinalState.TECHNICAL_ERROR),
+            ("snapshot_mismatch", "snapshot_mismatch"),
+        ),
+        (
+            "query_error",
+            (CustomerFinalState.TECHNICAL_ERROR, CustomerFinalState.TECHNICAL_ERROR),
+            ("source_query_error", "source_query_error"),
+        ),
+        (
+            "source_unavailable",
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("source_unavailable", "source_unavailable"),
+        ),
+        (
+            "source_truncated",
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("source_truncated", "source_truncated"),
+        ),
+    ],
+)
+async def test_course_008_009_typed_natural_day_truth_table_is_python_only(
+    scenario: str,
+    expected_states: tuple[CustomerFinalState, CustomerFinalState],
+    expected_reasons: tuple[str, str],
+) -> None:
+    severity_rows: list[dict] = []
+    daily_rows: list[dict] = []
+    failure: Exception | None = None
+    truncated = False
+    if scenario.startswith("serious") or scenario in {
+        "order_time_missing",
+        "record_time_missing",
+    }:
+        severity_rows = [
+            {
+                "severity": "serious",
+                "prescribed_datetime": (
+                    None if scenario == "order_time_missing" else "2026-01-01 23:59:59"
+                ),
+                "row_ref": "a" * 64,
+            }
+        ]
+    elif scenario.startswith("critical"):
+        severity_rows = [
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "b" * 64,
+            }
+        ]
+    elif scenario == "malformed_severity":
+        severity_rows = [
+            {
+                "severity": "unknown",
+                "prescribed_datetime": "2026-01-01 00:00:00",
+                "row_ref": "c" * 64,
+            }
+        ]
+    elif scenario == "query_error":
+        failure = SourceEvidenceQueryError()
+    elif scenario == "source_unavailable":
+        failure = SourceEvidenceUnavailable()
+    elif scenario == "source_truncated":
+        severity_rows = [
+            {
+                "severity": "serious",
+                "prescribed_datetime": "2026-01-01 00:00:00",
+                "row_ref": "d" * 64,
+            }
+        ]
+        truncated = True
+
+    if scenario == "serious_within_two_days":
+        daily_rows = [
+            _row("记录一", "2026-01-01 00:01:00"),
+            _row("记录二", "2026-01-03 23:59:59"),
+        ]
+    elif scenario == "serious_gap":
+        daily_rows = [_row("记录一", "2026-01-04 00:00:00")]
+    elif scenario == "critical_daily_complete":
+        daily_rows = [
+            _row("记录一", "2026-01-01 23:59:59"),
+            _row("记录二", "2026-01-02 00:00:01"),
+            _row("记录三", "2026-01-03 12:00:00"),
+        ]
+    elif scenario == "critical_missing_day":
+        daily_rows = [
+            _row("记录一", "2026-01-01 08:00:00"),
+            _row("记录三", "2026-01-03 08:00:00"),
+        ]
+    elif scenario == "record_time_missing":
+        daily_rows = [_row("有内容但无权威时间", None)]
+
+    session = _severity_session(
+        rows=severity_rows,
+        failure=failure,
+        truncated=truncated,
+        daily_rows=daily_rows,
+        evaluation_as_of_date=(
+            "2026-01-04"
+            if scenario in {"serious_gap", "serious_no_followup"}
+            else "2026-01-03"
+        ),
+    )
+    result, reduced = await _run_typed_severity(session)
+
+    assert tuple(item.final_state for item in reduced) == expected_states
+    assert tuple(item.reason_code for item in reduced) == expected_reasons
+    assert result.results == ()
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert "2026-01" not in repr(result.decisions)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("horizon", "record_times", "expected_state", "expected_reason"),
+    [
+        ("2026-01-03", [], CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("2026-01-04", [], CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        (
+            "2026-01-05",
+            ["2026-01-01 08:00:00", "2026-01-03 08:00:00"],
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+        ),
+        (
+            "2026-01-06",
+            ["2026-01-01 08:00:00", "2026-01-03 08:00:00"],
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+        (
+            None,
+            ["2026-01-01 08:00:00", "2026-01-03 08:00:00"],
+            CustomerFinalState.DATA_GAP,
+            "authoritative_time_missing",
+        ),
+        (
+            None,
+            ["2026-01-04 08:00:00"],
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+    ],
+)
+async def test_course_008_checks_anchor_internal_and_tail_natural_day_gaps(
+    horizon: str | None,
+    record_times: list[str],
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "8" * 64,
+            }
+        ],
+        daily_rows=[_row("查房记录", value) for value in record_times],
+        evaluation_as_of_date=horizon,
+    )
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    if horizon is not None:
+        horizon_fact = next(
+            fact for fact in session.snapshot.facts if fact.fact_type == "evaluation_horizon"
+        )
+        assert horizon_fact.fact_id in result.decisions[0].fact_refs
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("horizon", "record_times", "expected_state", "expected_reason"),
+    [
+        (
+            "2026-01-03",
+            ["2026-01-01 08:00:00", "2026-01-02 08:00:00"],
+            CustomerFinalState.NON_COMPLIANT,
+            "requirement_violated",
+        ),
+        (
+            "2026-01-03",
+            [
+                "2026-01-01 08:00:00",
+                "2026-01-02 08:00:00",
+                "2026-01-03 08:00:00",
+            ],
+            CustomerFinalState.DATA_GAP,
+            "required_field_missing",
+        ),
+        (
+            None,
+            ["2026-01-01 08:00:00", "2026-01-03 08:00:00"],
+            CustomerFinalState.NON_COMPLIANT,
+            "requirement_violated",
+        ),
+        (
+            None,
+            ["2026-01-01 08:00:00", "2026-01-02 08:00:00"],
+            CustomerFinalState.DATA_GAP,
+            "authoritative_time_missing",
+        ),
+    ],
+)
+async def test_course_009_checks_every_day_through_horizon_then_keeps_semantic_unknown(
+    horizon: str | None,
+    record_times: list[str],
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "9" * 64,
+            }
+        ],
+        senior_rows=[_row("上级医师查房", value) for value in record_times],
+        evaluation_as_of_date=horizon,
+    )
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[1].final_state is expected_state
+    assert reduced[1].reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_record_source_failure_is_fail_closed_after_trigger() -> None:
+    serious = [
+        {
+            "severity": "serious",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+            "row_ref": "e" * 64,
+        }
+    ]
+    session = _severity_session(
+        rows=serious,
+        course_failure=SourceEvidenceQueryError(),
+    )
+    result, reduced = await _run_typed_severity(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.TECHNICAL_ERROR,
+        CustomerFinalState.NOT_APPLICABLE,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "source_query_error",
+        "trigger_absent_complete",
+    ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio

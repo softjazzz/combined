@@ -10,7 +10,9 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 
@@ -81,7 +83,8 @@ class InMemoryLlmReplay:
     def __init__(self, original_generate: Any) -> None:
         self._original_generate = original_generate
         self._records: list[tuple[str, dict[str, Any]]] = []
-        self._replay_index = 0
+        self._used_record_indexes: set[int] = set()
+        self._replay_count = 0
 
     @staticmethod
     def _prompt_hash(prompt: str) -> str:
@@ -95,21 +98,22 @@ class InMemoryLlmReplay:
         return response
 
     async def replay(self, prompt: str) -> dict[str, Any]:
-        if self._replay_index >= len(self._records):
-            raise RuntimeError("A/B重放调用次数超过基线")
-        expected_hash, response = self._records[self._replay_index]
-        self._replay_index += 1
-        if self._prompt_hash(prompt) != expected_hash:
-            raise RuntimeError("A/B模型输入发生变化")
-        return copy.deepcopy(response)
+        prompt_hash = self._prompt_hash(prompt)
+        for index, (expected_hash, response) in enumerate(self._records):
+            if index in self._used_record_indexes or expected_hash != prompt_hash:
+                continue
+            self._used_record_indexes.add(index)
+            self._replay_count += 1
+            return copy.deepcopy(response)
+        raise RuntimeError("A/B候选模型输入未在基线prompt摘要中出现")
 
     @property
     def call_count(self) -> int:
         return len(self._records)
 
-    def assert_complete(self) -> None:
-        if self._replay_index != len(self._records):
-            raise RuntimeError("A/B重放调用次数少于基线")
+    @property
+    def replay_count(self) -> int:
+        return self._replay_count
 
 
 def load_private_case_map(path: Path, *, limit: int) -> list[dict[str, str]]:
@@ -184,6 +188,10 @@ async def evaluate_full_luxian_0609_case(
             enable_selective_refine=False,
             use_execution_cache=False,
             rule_set_key="luxian_0609_qc_v1",
+            evaluation_as_of_date=str(
+                bundle.get("evaluation_as_of_date")
+                or datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+            ),
         ),
         timeout=timeout_seconds,
     )
@@ -219,6 +227,7 @@ async def evaluate_unified_engine_ab_case(
     bundle: dict[str, Any],
     rule_ids: Sequence[str],
     timeout_seconds: float,
+    case_label: str = "",
 ) -> dict[str, Any]:
     """复用同一次真实模型响应，比较冻结旧链与统一执行信封正式入口。"""
 
@@ -230,6 +239,7 @@ async def evaluate_unified_engine_ab_case(
         timeout_seconds=timeout_seconds,
         candidate_flag="LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
         mode_label="unified_engine",
+        case_label=case_label,
     )
 
 
@@ -242,6 +252,7 @@ async def _evaluate_runtime_flag_ab_case(
     timeout_seconds: float,
     candidate_flag: str,
     mode_label: str,
+    case_label: str = "",
 ) -> dict[str, Any]:
     """冻结两条迁移开关，只改变一个候选变量，排除串扰和模型随机性。"""
 
@@ -264,6 +275,7 @@ async def _evaluate_runtime_flag_ab_case(
         "LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
         "LUXIAN_0609_RULE_DECISION_007_ENABLED",
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED",
     )
     missing = object()
     original_flags = {
@@ -443,6 +455,7 @@ async def _evaluate_runtime_flag_ab_case(
         if mode_label == "unified_engine":
             settings.LUXIAN_0609_RULE_DECISION_007_ENABLED = True
             settings.LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED = True
+            settings.LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED = True
         reader_phase = "candidate"
         service.adjudicator_client.generate = replay.replay
         luxian_execution.build_luxian_0609_evidence_snapshot = counted_provider
@@ -458,7 +471,6 @@ async def _evaluate_runtime_flag_ab_case(
             rule_ids=rule_ids,
             timeout_seconds=timeout_seconds,
         )
-        replay.assert_complete()
     finally:
         for name, value in original_flags.items():
             if value is missing:
@@ -528,8 +540,8 @@ async def _evaluate_runtime_flag_ab_case(
         raise RuntimeError(f"{mode_label}内部执行对象进入客户返回")
     comparison = {
         "states_match": baseline_states == candidate_states,
-        "tokens_match": baseline_tokens == candidate_tokens,
-        "logical_llm_call_count": replay.call_count,
+        "tokens_match": candidate_tokens <= baseline_tokens,
+        "logical_llm_call_count": replay.replay_count,
         "snapshot_build_count": len(snapshot_hashes),
         "result_count": len(candidate_states),
     }
@@ -556,6 +568,8 @@ async def _evaluate_runtime_flag_ab_case(
             "LX0609-005",
             "LX0609-006",
             "LX0609-007",
+            "LX0609-008",
+            "LX0609-009",
         )
         if tuple(item["rule_id"] for item in typed_decision_audits) != (
             expected_typed_rule_ids
@@ -583,12 +597,34 @@ async def _evaluate_runtime_flag_ab_case(
             "LX0609-001",
             "LX0609-005",
             "LX0609-006",
+            "LX0609-008",
+            "LX0609-009",
         }
+        fixed10_expected = {
+            label: {
+                "LX0609-008": "not_applicable",
+                "LX0609-009": (
+                    "data_gap" if label in {"case-04", "case-08"} else "not_applicable"
+                ),
+            }
+            for label in (f"case-{index:02d}" for index in range(1, 11))
+        }
+        candidate_by_rule = {
+            item["rule_id"]: item["status"] for item in candidate_states
+        }
+        if case_label in fixed10_expected and any(
+            candidate_by_rule.get(rule_id) != expected_status
+            for rule_id, expected_status in fixed10_expected[case_label].items()
+        ):
+            raise RuntimeError("008/009固定病例事实矩阵不匹配")
         unexpected_state_differences = tuple(
             item
             for item in comparison.get("state_differences", ())
             if item["rule_id"] not in expected_migration_rule_ids
-            or item["candidate_status"] != "data_gap"
+            or (
+                item["rule_id"] in {"LX0609-001", "LX0609-005", "LX0609-006"}
+                and item["candidate_status"] != "data_gap"
+            )
         )
         if unexpected_state_differences:
             raise RuntimeError("统一引擎出现非预期状态变化")
@@ -642,6 +678,11 @@ async def run(args: argparse.Namespace) -> int:
                     bundle=bundle,
                     rule_ids=rule_ids,
                     timeout_seconds=float(args.timeout_seconds),
+                    **(
+                        {"case_label": case["case_label"]}
+                        if args.unified_engine_ab
+                        else {}
+                    ),
                 )
                 states_accepted = comparison.get(
                     "states_accepted", comparison["states_match"]

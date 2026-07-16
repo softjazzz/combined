@@ -20,6 +20,16 @@ SURGERY_TIME_FIELDS = (
     "surgery_end_datetime",
 )
 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
+CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY = "inpat_nondrug_order.severity_order"
+CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
+EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
+_SEVERITY_ORDER_NEGATIVE_MARKERS = (
+    "解除",
+    "取消",
+    "停止",
+    "停病危",
+    "停病重",
+)
 _RESCUE_END_TIME_PATTERN = re.compile(
     r"(?:^|[\n\r；;])\s*抢救结束时间\s*[:：]\s*(?P<value>"
     r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
@@ -181,6 +191,20 @@ _SNAPSHOT_SOURCE_FIELDS = {
     )
 }
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
+_SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY] = (
+    "severity",
+    "prescribed_datetime",
+    "row_ref",
+)
+_SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY] = (
+    "discharge_datetime",
+    "row_ref",
+)
+_SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
+    "horizon_date",
+    "basis",
+    "row_ref",
+)
 _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
     "order_id",
     "update_time",
@@ -493,6 +517,181 @@ def has_luxian_0609_current_visit_unstable_order(
     return row is not None
 
 
+def read_luxian_0609_severity_order_rows(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """只读取病重/病危医嘱类别与权威开立时间，不返回医嘱原文。"""
+
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    source_key = "inpat_nondrug_order"
+    try:
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    required = {"institute_id", "patient_id", "visit_id", "order_name"}
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    selected = ["order_name"]
+    selected.extend(
+        field
+        for field in ("order_id", "prescribed_datetime")
+        if field in columns
+    )
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    order_columns = [
+        field for field in ("prescribed_datetime", "order_id", "order_name") if field in columns
+    ]
+    order_sql = ", ".join(
+        f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
+        for field in order_columns
+    )
+    limit_rows = 50
+    sql = (
+        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, source_key)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"AND ({bundle_assembly._quote_ident('order_name')} LIKE :critical_name "
+        f"OR {bundle_assembly._quote_ident('order_name')} LIKE :serious_name) "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :relieve_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :cancel_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :stop_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :halt_critical_name "
+        f"AND {bundle_assembly._quote_ident('order_name')} NOT LIKE :halt_serious_name "
+        f"ORDER BY {order_sql} LIMIT :limit_rows"
+    )
+    try:
+        with engine.connect() as connection:
+            raw_rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "critical_name": "%病危%",
+                    "serious_name": "%病重%",
+                    "relieve_name": "%解除%",
+                    "cancel_name": "%取消%",
+                    "stop_name": "%停止%",
+                    "halt_critical_name": "%停病危%",
+                    "halt_serious_name": "%停病重%",
+                    "limit_rows": limit_rows + 1,
+                },
+            ).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    safe_rows = []
+    for row in raw_rows:
+        order_name = str(row.get("order_name") or "")
+        if any(marker in order_name for marker in _SEVERITY_ORDER_NEGATIVE_MARKERS):
+            continue
+        has_critical = "病危" in order_name
+        has_serious = "病重" in order_name
+        severity = (
+            "critical"
+            if has_critical and not has_serious
+            else "serious" if has_serious and not has_critical else "unknown"
+        )
+        safe_rows.append(
+            {
+                "severity": severity,
+                "prescribed_datetime": row.get("prescribed_datetime"),
+                "row_ref": digest_source_evidence(
+                    (
+                        CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+                        row.get("order_id"),
+                        severity,
+                        row.get("prescribed_datetime"),
+                    )
+                ),
+            }
+        )
+    return SnapshotSourceRows.create(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        rows=safe_rows[:limit_rows],
+        truncated=len(safe_rows) > limit_rows,
+        limit_rows=limit_rows,
+    )
+
+
+def read_luxian_0609_discharge_horizon_rows(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """只读取住院主索引的权威出院时间；不扩展既有登记投影。"""
+
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
+    table_name = "inpat_registration"
+    try:
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, table_name))
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    required = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "discharge_datetime",
+    }
+    if not required.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    sql = (
+        f"SELECT {bundle_assembly._quote_ident('discharge_datetime')} "
+        f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        "LIMIT :limit_rows"
+    )
+    try:
+        with engine.connect() as connection:
+            raw_rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "limit_rows": 2,
+                },
+            ).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    safe_rows = tuple(
+        {
+            "discharge_datetime": row.get("discharge_datetime"),
+            "row_ref": digest_source_evidence(
+                (
+                    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+                    row.get("discharge_datetime"),
+                )
+            ),
+        }
+        for row in raw_rows[:1]
+    )
+    return SnapshotSourceRows.create(
+        source_key=CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        rows=safe_rows,
+        truncated=len(raw_rows) > 1,
+        limit_rows=1,
+    )
+
+
 def read_luxian_0609_runtime_source_rows(
     *, source_key: str, institute_id: str, patient_id: str, visit_id: str, source_schema: str | None
 ) -> list[dict[str, Any]]:
@@ -621,6 +820,24 @@ def read_luxian_0609_snapshot_source_rows(
     if not all(isinstance(value, str) and value.strip() for value in coordinates):
         raise SourceEvidenceUnavailable()
     normalized_source = str(source_key or "").strip().lower()
+    if normalized_source == EVALUATION_HORIZON_SOURCE_KEY:
+        # 该来源由 Evidence Session 根据权威出院源与显式任务日期派生，
+        # 永远不能被解释成数据库物理表。
+        raise SourceEvidenceUnavailable()
+    if normalized_source == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY:
+        return read_luxian_0609_discharge_horizon_rows(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+    if normalized_source == CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY:
+        return read_luxian_0609_severity_order_rows(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
     if normalized_source == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
         present = has_luxian_0609_current_visit_unstable_order(
             institute_id=institute_id,

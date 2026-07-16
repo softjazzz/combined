@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v8"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v10"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -206,7 +206,10 @@ _REGISTRY_ENTRIES = (
 )
 
 _INTERNAL_SOURCE_ENTRIES = (
+    _entry("evaluation_context.horizon", access_mode=_BOUNDED),
     _entry("inpat_registration", access_mode=_BOUNDED),
+    _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED),
+    _entry("inpat_nondrug_order.severity_order", access_mode=_BOUNDED),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
@@ -234,6 +237,20 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
     ),
     "LX0609-006": ("admission_record", "inpat_registration"),
+    "LX0609-008": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.severity_order",
+        "daily_course_record",
+        "senior_course_record",
+    ),
+    "LX0609-009": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.severity_order",
+        "daily_course_record",
+        "senior_course_record",
+    ),
 })
 
 

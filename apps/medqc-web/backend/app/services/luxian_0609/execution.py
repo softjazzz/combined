@@ -149,6 +149,7 @@ async def prepare_luxian_0609_execution(
     institute_id: str = "",
     patient_id: str = "",
     source_schema: str | None = None,
+    evaluation_as_of_date: str | None = None,
     selected_customer_rule_ids: Iterable[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
@@ -222,6 +223,16 @@ async def prepare_luxian_0609_execution(
                     )
                 )
             )
+            or (
+                rule_id in {"LX0609-008", "LX0609-009"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED",
+                        False,
+                    )
+                )
+            )
         )
     )
     if (
@@ -247,6 +258,7 @@ async def prepare_luxian_0609_execution(
                     visit_id=str(visit_id),
                     source_schema=source_schema,
                     created_at=datetime.now(timezone.utc).isoformat(),
+                    evaluation_as_of_date=evaluation_as_of_date,
                     additional_source_keys=(
                         resolve_legacy_executor_material_source_keys(
                             tuple(
@@ -268,6 +280,7 @@ async def prepare_luxian_0609_execution(
                     visit_id=str(visit_id),
                     source_schema=source_schema,
                     created_at=datetime.now(timezone.utc).isoformat(),
+                    evaluation_as_of_date=evaluation_as_of_date,
                 )
             evidence_snapshot_rule_refs = (
                 build_luxian_0609_evidence_snapshot_rule_refs(

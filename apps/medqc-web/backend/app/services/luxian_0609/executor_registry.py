@@ -156,6 +156,16 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
         "inpat_registration",
         "senior_course_record",
     ),
+    "LX0609-008": (
+        "inpat_nondrug_order.severity_order",
+        "daily_course_record",
+        "senior_course_record",
+    ),
+    "LX0609-009": (
+        "inpat_nondrug_order.severity_order",
+        "daily_course_record",
+        "senior_course_record",
+    ),
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-026": ("diagnosis", "inpat_drug_order"),

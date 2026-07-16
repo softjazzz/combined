@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 import json
 import re
@@ -17,11 +17,15 @@ from .decision_model import (
 )
 from .evidence_material import (
     EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+    CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+    EVALUATION_HORIZON_SOURCE_KEY,
     has_luxian_0609_current_visit_unstable_order,
     luxian_0609_native_source_row_limit,
     read_luxian_0609_native_source_rows,
@@ -105,6 +109,7 @@ _RULE_CONTEXT_SOURCES = {
 }
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
+_RULE_008_MAX_GAP_DAYS = 2
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("查房病程相关记录满足该项要求。", ""),
@@ -319,6 +324,25 @@ def _authoritative_course_time(value: Any) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo is None else None
+
+
+def _authoritative_natural_date(value: Any) -> date | None:
+    """把权威时间字段收敛为自然日；不读取正文，也不比较时分秒。"""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    try:
+        return datetime.fromisoformat(normalized).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(normalized)
+        except ValueError:
+            return None
 
 
 def _rule_007_result(
@@ -711,6 +735,384 @@ def _rule_007_decision(
     )
 
 
+def _rule_008_009_decision(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> RuleDecision:
+    """按医嘱开立日及病程权威记录日裁决病重/病危查房时限。"""
+
+    if (
+        rule_id not in {"LX0609-008", "LX0609-009"}
+        or type(snapshot) is not Luxian0609EvidenceSnapshot
+        or type(materials) is not Luxian0609EvidenceMaterialStore
+        or materials.snapshot_hash != snapshot.snapshot_hash
+    ):
+        raise ValueError("typed severity evidence session mismatch")
+    evaluator_version = "course-severity-natural-day-v1"
+    observation_by_source = {
+        item.source_key: item for item in snapshot.observations
+    }
+
+    def decision(
+        *,
+        applicability: ApplicabilityState,
+        evidence_state: EvidenceState,
+        qc_direction: QcDirection,
+        reason_code: str,
+        refs: set[str],
+        confidence: float | None,
+    ) -> RuleDecision:
+        return RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=applicability,
+            evidence_state=evidence_state,
+            qc_direction=qc_direction,
+            reason_code=reason_code,
+            fact_refs=tuple(refs),
+            evaluator_version=evaluator_version,
+            confidence=confidence,
+        )
+
+    required_sources = (
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        EVALUATION_HORIZON_SOURCE_KEY,
+        *_RULE_007_RECORD_SOURCES,
+    )
+    observations = {
+        source_key: observation_by_source.get(source_key)
+        for source_key in required_sources
+    }
+    if any(item is None for item in observations.values()):
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=set(),
+            confidence=None,
+        )
+    refs = {
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in observations.values()
+        if item is not None
+    }
+
+    order_observation = observations[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY]
+    assert order_observation is not None
+    if order_observation.query_state.value == "error":
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_query_error",
+            refs=refs,
+            confidence=None,
+        )
+    if (
+        order_observation.query_state.value == "unavailable"
+        or order_observation.completeness.value == "truncated"
+    ):
+        return decision(
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=(
+                "source_truncated"
+                if order_observation.completeness.value == "truncated"
+                else "source_unavailable"
+            ),
+            refs=refs,
+            confidence=None,
+        )
+    try:
+        order_rows = tuple(
+            materials.rows(CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY)
+        )
+    except EvidenceMaterialTruncated:
+        return decision(
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_truncated",
+            refs=refs,
+            confidence=None,
+        )
+    except Exception:
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+    if any(row.get("severity") not in {"serious", "critical"} for row in order_rows):
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+    target = "serious" if rule_id == "LX0609-008" else "critical"
+    relevant_orders = tuple(row for row in order_rows if row.get("severity") == target)
+    if not relevant_orders:
+        return decision(
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="trigger_absent_complete",
+            refs=refs,
+            confidence=1.0,
+        )
+
+    discharge_observation = observations[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY]
+    horizon_observation = observations[EVALUATION_HORIZON_SOURCE_KEY]
+    assert discharge_observation is not None
+    assert horizon_observation is not None
+    if discharge_observation.query_state.value == "error":
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_query_error",
+            refs=refs,
+            confidence=None,
+        )
+    if (
+        discharge_observation.query_state.value == "unavailable"
+        or discharge_observation.completeness.value == "truncated"
+    ):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=(
+                "source_truncated"
+                if discharge_observation.completeness.value == "truncated"
+                else "source_unavailable"
+            ),
+            refs=refs,
+            confidence=None,
+        )
+    order_dates = tuple(
+        _authoritative_natural_date(row.get("prescribed_datetime"))
+        for row in relevant_orders
+    )
+    if any(item is None for item in order_dates):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
+    anchor_date = min(item for item in order_dates if item is not None)
+
+    horizon_date: date | None = None
+    if horizon_observation.query_state.value == "available":
+        try:
+            horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+        except Exception:
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="snapshot_mismatch",
+                refs=refs,
+                confidence=None,
+            )
+        if len(horizon_rows) != 1:
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="snapshot_mismatch",
+                refs=refs,
+                confidence=None,
+            )
+        horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
+        if horizon_date is None or horizon_date < anchor_date:
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="snapshot_mismatch",
+                refs=refs,
+                confidence=None,
+            )
+        horizon_fact = next(
+            (
+                fact
+                for fact in snapshot.facts
+                if fact.fact_type == "evaluation_horizon"
+                and fact.source_key == EVALUATION_HORIZON_SOURCE_KEY
+            ),
+            None,
+        )
+        if horizon_fact is None:
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="snapshot_mismatch",
+                refs=refs,
+                confidence=None,
+            )
+        refs.add(horizon_fact.fact_id)
+    elif horizon_observation.query_state.value != "empty":
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+
+    record_dates: set[date] = set()
+    for source_key in _RULE_007_RECORD_SOURCES:
+        observation = observations[source_key]
+        assert observation is not None
+        if observation.query_state.value == "error":
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_query_error",
+                refs=refs,
+                confidence=None,
+            )
+        if (
+            observation.query_state.value == "unavailable"
+            or observation.completeness.value == "truncated"
+        ):
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code=(
+                    "source_truncated"
+                    if observation.completeness.value == "truncated"
+                    else "source_unavailable"
+                ),
+                refs=refs,
+                confidence=None,
+            )
+        try:
+            rows = tuple(materials.rows(source_key))
+        except EvidenceMaterialTruncated:
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_truncated",
+                refs=refs,
+                confidence=None,
+            )
+        except Exception:
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="snapshot_mismatch",
+                refs=refs,
+                confidence=None,
+            )
+        for row in rows:
+            parsed_date = _authoritative_natural_date(row.get("record_time"))
+            if parsed_date is None:
+                return decision(
+                    applicability=ApplicabilityState.APPLICABLE,
+                    evidence_state=EvidenceState.DATA_GAP,
+                    qc_direction=QcDirection.UNKNOWN,
+                    reason_code="authoritative_time_missing",
+                    refs=refs,
+                    confidence=None,
+                )
+            if parsed_date >= anchor_date and (
+                horizon_date is None or parsed_date <= horizon_date
+            ):
+                record_dates.add(parsed_date)
+
+    ordered_dates = sorted(record_dates)
+    if rule_id == "LX0609-008":
+        dates_with_anchor = [anchor_date, *ordered_dates]
+        if horizon_date is not None:
+            dates_with_anchor.append(horizon_date)
+        interval_exceeded = any(
+            (current - previous).days > _RULE_008_MAX_GAP_DAYS
+            for previous, current in zip(
+                dates_with_anchor,
+                dates_with_anchor[1:],
+            )
+        )
+        if not interval_exceeded and horizon_date is None:
+            return decision(
+                applicability=ApplicabilityState.APPLICABLE,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="authoritative_time_missing",
+                refs=refs,
+                confidence=None,
+            )
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=(
+                QcDirection.DEFECT
+                if interval_exceeded
+                else QcDirection.SATISFIED
+            ),
+            reason_code=(
+                "threshold_exceeded"
+                if interval_exceeded
+                else "requirement_within_threshold"
+            ),
+            refs=refs,
+            confidence=1.0,
+        )
+
+    prefix_end = horizon_date or (ordered_dates[-1] if ordered_dates else anchor_date)
+    expected_dates = {
+        anchor_date + timedelta(days=offset)
+        for offset in range((prefix_end - anchor_date).days + 1)
+    }
+    if expected_dates.difference(record_dates):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            refs=refs,
+            confidence=1.0,
+        )
+    if horizon_date is None:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="authoritative_time_missing",
+            refs=refs,
+            confidence=None,
+        )
+    # 逐日记录已满足；“病情变化时是否记录”仍需 Phase 5 裁剪语义判断。
+    return decision(
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=EvidenceState.DATA_GAP,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="required_field_missing",
+        refs=refs,
+        confidence=None,
+    )
+
+
 def _context(
     rule_id: str,
     documents: Mapping[str, Any],
@@ -1051,9 +1453,10 @@ async def execute_luxian_0609_native_course_quality_rules(
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }
-    if any(rule_id != "LX0609-007" for rule_id in typed_requested) or not typed_requested.issubset(
-        set(selected)
-    ):
+    if any(
+        rule_id not in {"LX0609-007", "LX0609-008", "LX0609-009"}
+        for rule_id in typed_requested
+    ) or not typed_requested.issubset(set(selected)):
         raise ValueError("unsupported typed course rule scope")
     typed_selected = tuple(
         rule_id for rule_id in selected if rule_id in typed_requested
@@ -1137,6 +1540,17 @@ async def execute_luxian_0609_native_course_quality_rules(
             assert evidence_materials is not None
             decisions.append(
                 _rule_007_decision(
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+            )
+            continue
+        if rule_id in {"LX0609-008", "LX0609-009"} and rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            assert evidence_materials is not None
+            decisions.append(
+                _rule_008_009_decision(
+                    rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
                 )

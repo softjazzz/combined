@@ -15,6 +15,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_snapshot,
 )
 from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+    CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+    EVALUATION_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -30,6 +33,139 @@ from app.services.luxian_0609.executor_registry import (
 
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
+HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
+
+
+def test_008_009_horizon_is_single_read_safe_fact_and_snapshot_identity() -> None:
+    calls: list[str] = []
+    discharge_value = "2026-07-13 09:00:00"
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"discharge_datetime": discharge_value}],
+                limit_rows=1,
+            )
+        return _rows(source_key, [])
+
+    def build(*, evaluation_as_of_date: str, created_at: str):
+        return build_luxian_0609_evidence_read_session(
+            selected_rule_ids=("LX0609-008", "LX0609-009"),
+            institute_id="institute-private-horizon",
+            patient_id="patient-private-horizon",
+            visit_id="visit-private-horizon",
+            source_schema=None,
+            evaluation_as_of_date=evaluation_as_of_date,
+            created_at=created_at,
+            row_reader=reader,
+        )
+
+    discharged = build(
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-16T12:00:00+08:00",
+    )
+    same_horizon_later_created_at = build(
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-17T12:00:00+08:00",
+    )
+    discharge_value = "2026-07-15 09:00:00"
+    changed_horizon = build(
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-16T12:00:00+08:00",
+    )
+
+    assert calls.count(HORIZON_SOURCE_KEY) == 3
+    horizon_facts = [
+        next(
+            fact
+            for fact in session.snapshot.facts
+            if fact.fact_type == "evaluation_horizon"
+        )
+        for session in (
+            discharged,
+            same_horizon_later_created_at,
+            changed_horizon,
+        )
+    ]
+    assert horizon_facts[0].normalized_value["basis"] == "discharge_date"
+    assert horizon_facts[0].fact_id == horizon_facts[1].fact_id
+    assert discharged.snapshot.snapshot_hash == same_horizon_later_created_at.snapshot.snapshot_hash
+    assert horizon_facts[0].fact_id != horizon_facts[2].fact_id
+    assert discharged.snapshot.snapshot_hash != changed_horizon.snapshot.snapshot_hash
+
+    safe_output = repr(
+        (
+            discharged.snapshot.to_safe_dict(),
+            discharged,
+            discharged.materials,
+        )
+    )
+    for forbidden in (
+        "2026-07-13",
+        "09:00:00",
+        "institute-private-horizon",
+        "patient-private-horizon",
+        "visit-private-horizon",
+        "discharge_datetime",
+    ):
+        assert forbidden not in safe_output
+
+
+@pytest.mark.parametrize(
+    ("discharge_value", "evaluation_as_of_date", "expected_basis"),
+    [
+        (None, "2026-07-16", "evaluation_as_of"),
+        ("2026-07-20 09:00:00", "2026-07-16", "evaluation_as_of"),
+        ("2026-07-13 09:00:00", None, "discharge_date"),
+    ],
+)
+def test_008_009_horizon_uses_authoritative_discharge_or_frozen_as_of(
+    discharge_value: str | None,
+    evaluation_as_of_date: str | None,
+    expected_basis: str,
+) -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == HORIZON_SOURCE_KEY and discharge_value is not None:
+            return _rows(source_key, [{"discharge_datetime": discharge_value}], limit_rows=1)
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-008", "LX0609-009"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_as_of_date=evaluation_as_of_date,
+        row_reader=reader,
+    )
+
+    fact = next(item for item in session.snapshot.facts if item.fact_type == "evaluation_horizon")
+    assert fact.normalized_value["basis"] == expected_basis
+
+
+def test_008_009_invalid_nonempty_discharge_datetime_fails_closed() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(source_key, [{"discharge_datetime": "not-a-date"}], limit_rows=1)
+        return _rows(source_key, [])
+
+    with pytest.raises(ValueError, match="discharge_datetime must be a valid date"):
+        build_luxian_0609_evidence_read_session(
+            selected_rule_ids=("LX0609-008",),
+            institute_id="I",
+            patient_id="P",
+            visit_id="V",
+            source_schema=None,
+            created_at=CREATED_AT,
+            evaluation_as_of_date="2026-07-16",
+            row_reader=reader,
+        )
 
 
 def _build(*, selected_rule_ids=("LX0609-030",), row_reader, **overrides):
@@ -412,12 +548,20 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
     )
     assert len(selected) == 49
     assert calls == sorted(
-        [*expected_bounded, CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY]
+        [
+            *expected_bounded,
+            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+            CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+            CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+            "inpat_registration",
+        ]
     )
     assert len(calls) == len(set(calls))
-    assert len(snapshot.observations) == 1 + len(expected_bounded) + sum(
-        entry.access_mode is not SourceAccessMode.BOUNDED_SOURCE_V1
-        for entry in registry.values()
+    assert len(snapshot.observations) == len(
+        {item.source_key for item in snapshot.observations}
+    )
+    assert set(calls).issubset(
+        {item.source_key for item in snapshot.observations}
     )
     assert all(item.query_state in SourceQueryState for item in snapshot.observations)
 
@@ -432,7 +576,10 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
     }
     assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
         *expected,
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+        EVALUATION_HORIZON_SOURCE_KEY,
         "pathology_exam_master",
         "pathology_exam_report",
         "diagnosis",
@@ -642,6 +789,132 @@ def test_controlled_unstable_order_reader_uses_exact_bound_predicate(
     assert params["visit_id"] == "private-visit"
 
 
+def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
+    monkeypatch,
+) -> None:
+    rows = [
+        {
+            "order_name": "下病危医嘱",
+            "order_id": f"order-{index}",
+            "prescribed_datetime": "2026-01-01 23:59:59",
+        }
+        for index in range(51)
+    ] + [
+        {
+            "order_name": "解除病危",
+            "order_id": "private-stop-order",
+            "prescribed_datetime": "2026-01-02 00:00:00",
+        }
+    ]
+    connection = _FakeConnection(rows)
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, source_key: (
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "order_name",
+                "order_id",
+                "prescribed_datetime",
+            ]
+            if source_key == "inpat_nondrug_order"
+            else []
+        ),
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+    )
+
+    assert result.source_key == CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY
+    assert len(result.rows) == 50
+    assert result.truncated is True
+    assert {row["severity"] for row in result.rows} == {"critical"}
+    assert all(len(str(row["row_ref"])) == 64 for row in result.rows)
+    safe_repr = repr(result)
+    assert "order_name" not in safe_repr
+    assert "private-stop-order" not in safe_repr
+    assert "private-institute" not in safe_repr
+    sql, params = connection.calls[0]
+    assert 'FROM "cdm"."inpat_nondrug_order"' in sql
+    assert '"order_name" LIKE :critical_name' in sql
+    assert '"order_name" NOT LIKE :relieve_name' in sql
+    assert '"order_name" NOT LIKE :halt_critical_name' in sql
+    assert "private-institute" not in sql
+    assert params["institute_id"] == "private-institute"
+    assert params["patient_id"] == "private-patient"
+    assert params["visit_id"] == "private-visit"
+    assert params["limit_rows"] == 51
+
+
+@pytest.mark.parametrize(
+    "order_name",
+    ["解除病危", "取消病重", "停止病危", "停病危", "停病重"],
+)
+def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
+    monkeypatch,
+    order_name: str,
+) -> None:
+    connection = _FakeConnection(
+        [
+            {
+                "order_name": order_name,
+                "order_id": "private-order",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_name",
+            "order_id",
+            "prescribed_datetime",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+
+    assert result.rows == ()
+    assert result.truncated is False
+
+
 class _FakeEngine:
     def __init__(self, connection):
         self.connection = connection
@@ -762,8 +1035,14 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
 
     monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_get_table_columns", columns)
 
+    special_sources = {
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+        EVALUATION_HORIZON_SOURCE_KEY,
+    }
     for source_key in sorted(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS):
-        if source_key == CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY:
+        if source_key in special_sources:
             continue
         active_source = source_key
         source_evidence_reader.read_luxian_0609_snapshot_source_rows(
@@ -775,12 +1054,12 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
         )
 
     assert len(connection.calls) == (
-        len(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) - 1
+        len(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) - len(special_sources)
     )
     bounded_source_keys = [
         source_key
         for source_key in sorted(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS)
-        if source_key != CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY
+        if source_key not in special_sources
     ]
     for source_key, (sql, params) in zip(
         bounded_source_keys,

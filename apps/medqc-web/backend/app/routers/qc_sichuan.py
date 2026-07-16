@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
@@ -2800,6 +2801,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             refine_confidence_threshold=refine_confidence_threshold,
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
+                            evaluation_as_of_date=str(
+                                filters.get("evaluation_as_of_date") or ""
+                            ).strip()
+                            or None,
                             cancellation_check=_is_cancelled,
                         )
                         used_bundle_path = True
@@ -3962,6 +3967,9 @@ async def create_workspace_batch_job(
             "run_mode": run_mode,
             "idempotency_key": idempotency_key,
             "idempotency_payload": idempotency_payload,
+            "evaluation_as_of_date": datetime.now(
+                ZoneInfo("Asia/Shanghai")
+            ).date().isoformat(),
             **(
                 {
                     "selected_rule_ids": list(direct_native_rule_ids),
