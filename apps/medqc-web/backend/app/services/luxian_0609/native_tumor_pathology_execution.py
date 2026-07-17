@@ -359,9 +359,9 @@ def _load_typed_source(
         return SourceMaterial("truncated")
     except EvidenceMaterialUnavailable:
         return SourceMaterial("error")
-    material = tuple(
-        row for row in rows[:_MAX_ROWS_PER_SOURCE] if isinstance(row, Mapping)
-    )
+    # typed 判定必须消费本次 Evidence Session 的完整 bounded 材料；只在构造
+    # 模型上下文时限行，不能让第9行以后的强触发事实被静默丢弃。
+    material = tuple(row for row in rows if isinstance(row, Mapping))
     return SourceMaterial("present" if material else "empty", material)
 
 
@@ -397,7 +397,9 @@ def _row_text(row: Mapping[str, Any]) -> str:
 def _source_text(source_key: str, material: SourceMaterial) -> list[str]:
     return [
         f"[{source_key}-{index}] {text[:_MAX_ROW_CHARS]}"
-        for index, row in enumerate(material.rows, start=1)
+        for index, row in enumerate(
+            material.rows[:_MAX_ROWS_PER_SOURCE], start=1
+        )
         if (text := _row_text(row))
     ]
 

@@ -224,6 +224,8 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 )
 
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
+    # 003 优先使用 surgery_record 自带时间，缺失时仅允许唯一 mr_surgery 时间配对。
+    "LX0609-003": ("mr_surgery",),
     "LX0609-001": ("inpat_registration",),
     "LX0609-002": (
         "admission_record",
@@ -254,6 +256,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+    # 018 仅接受 diagnosis_type=主要诊断 的结构化首页诊断作为对照事实。
+    "LX0609-018": ("diagnosis",),
     "LX0609-027": ("diagnosis",),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。

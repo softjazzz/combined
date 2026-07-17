@@ -1632,6 +1632,123 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
 
 
 @pytest.mark.asyncio
+async def test_typed_018_accepts_only_controlled_primary_diagnosis_material():
+    rows_by_source = {
+        "admission_record": [
+            _row("主诉：反复腹痛2个月。现病史与既往诊疗经过记录完整。")
+        ],
+        "diagnosis": [
+            *[
+                {"diagnosis_type": "其他诊断", "diagnosis_name": f"不应采信的诊断{index}"}
+                for index in range(8)
+            ],
+            {"diagnosis_type": "主要诊断", "diagnosis_name": "结肠恶性肿瘤"},
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": False}])
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=typed.decisions,
+        expected_rule_ids=("LX0609-018",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert typed.llm_call_count == 1
+    assert "结肠恶性肿瘤" in client.prompts[0]
+    assert "不应采信的诊断" not in client.prompts[0]
+    assert "结肠恶性肿瘤" not in repr(typed)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "expected_reason", "expected_tokens"),
+    (
+        (RuntimeError("private model transport detail"), "model_transport_error", 0),
+        ("not-json private model output", "model_invalid_output", 45),
+    ),
+)
+async def test_typed_016_model_failures_are_explicit_technical_errors(
+    model_output: object,
+    expected_reason: str,
+    expected_tokens: int,
+):
+    rows_by_source = {
+        "admission_record": [
+            _row("主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。现病史完整。")
+        ],
+        "first_course_record": [
+            _row("首次病程记录包含病例特点、诊断依据、鉴别诊断和诊疗计划。")
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-016",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016",),
+        decision_rule_ids=("LX0609-016",),
+        wrapper_rules=[_wrapper("LX0609-016")],
+        evidence_payload=None,
+        llm_client=_Client([model_output]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=typed.decisions,
+        expected_rule_ids=("LX0609-016",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == expected_reason
+    assert typed.total_tokens == expected_tokens
+    assert "private model" not in repr(typed)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "first_course_row",
     [

@@ -446,6 +446,61 @@ async def test_typed_019_target_query_error_is_technical_and_never_calls_model(
 
 
 @pytest.mark.asyncio
+async def test_typed_027_late_malignant_code_is_not_lost_by_prompt_row_limit() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "diagnosis":
+            rows = [
+                {"diagnosis_code": f"D{index:02d}"}
+                for index in range(8)
+            ] + [{"diagnosis_code": "C18.9"}]
+        elif source_key == "discharge_record":
+            rows = [{"record_content": "出院后继续肿瘤专科治疗计划。"}]
+        else:
+            rows = []
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-027",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=resolve_legacy_executor_material_source_keys(
+            ("tumor_pathology",),
+            selected_rule_ids=("LX0609-027",),
+        ),
+    )
+    client = _Client([{"is_compliant": True}])
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-027",),
+        wrapper_rules=[_wrapper("LX0609-027")],
+        evidence_payload=None,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-027",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "compliant"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
 async def test_truncated_pathology_material_fails_closed_without_model_or_live_query(
     monkeypatch,
 ):

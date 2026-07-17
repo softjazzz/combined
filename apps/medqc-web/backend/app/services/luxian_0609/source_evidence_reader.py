@@ -79,6 +79,7 @@ _NATIVE_SOURCE_FIELDS = {
         "surgery_name",
         "surgical_level",
         "surgery_begin_datetime",
+        "surgery_end_datetime",
     ),
     "presurg_discussion": (
         "document_id",
@@ -130,6 +131,7 @@ _NATIVE_SOURCE_FIELDS = {
     ),
     "diagnosis": (
         "diagnosis_code",
+        "diagnosis_name",
         "diagnosis_type",
         "diagnosis_source",
         "diagnosis_datetime",
@@ -162,6 +164,8 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         "record_time",
+        "surgery_begin_time",
+        "surgery_end_time",
         "surgery_name",
         "surgery_code",
         "surgery_process",
@@ -451,8 +455,11 @@ def trusted_performed_surgery_times(
             if (parsed := parse_strict_performed_time(row.get(field))) is not None
         )
     if source_key == "mr_surgery":
-        value = row.get("surgery_begin_datetime")
-        return (value,) if isinstance(value, datetime) and value.tzinfo is None else ()
+        return tuple(
+            value
+            for field in ("surgery_begin_datetime", "surgery_end_datetime")
+            if isinstance((value := row.get(field)), datetime) and value.tzinfo is None
+        )
     return ()
 
 

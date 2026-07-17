@@ -1178,6 +1178,94 @@ async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
 
 
 @pytest.mark.asyncio
+async def test_surgery_003_typed_flag_reaches_unified_reducer_without_model(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-003",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("surgery_gate", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            (
+                {
+                    "surgery_end_time": "2026-01-01 08:00:00+08",
+                    "record_time": datetime(2026, 1, 2, 8, 0, 0),
+                },
+            )
+            if source_key == "surgery_record"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    def build_session(**kwargs):
+        return build_luxian_0609_evidence_read_session(
+            **kwargs,
+            row_reader=read,
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-003",
+                name="手术记录24小时完成",
+                mapped_rule_ids=["RAW-003"],
+                trigger_condition="test",
+            )
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-003"]
+    assert context.reduced_decisions[0].final_state.value == "compliant"
+    assert context.reduced_decisions[0].reason_code == "requirement_within_threshold"
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_unified_engine_infrastructure_failure_never_replays_legacy_chain(
     monkeypatch,
 ) -> None:

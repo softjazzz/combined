@@ -234,6 +234,16 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
+                rule_id == "LX0609-003"
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
                 rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}
                 and bool(
                     getattr(

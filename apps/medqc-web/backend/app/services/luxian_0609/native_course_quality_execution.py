@@ -105,7 +105,7 @@ _RULE_CONTEXT_SOURCES = {
     "LX0609-008": _TIMELINE_SOURCES,
     "LX0609-009": _TIMELINE_SOURCES,
     "LX0609-016": ("admission_record", "first_course_record"),
-    "LX0609-018": ("admission_record",),
+    "LX0609-018": ("admission_record", "diagnosis"),
 }
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
@@ -180,6 +180,8 @@ def _row_text(row: Mapping[str, Any]) -> str:
         or row.get("raw_text")
         or row.get("content_preview")
         or row.get("text_preview")
+        or row.get("diagnosis_name")
+        or row.get("diagnosis_code")
     )
 
 
@@ -1120,9 +1122,26 @@ def _context(
     controlled_fact: str = "",
 ) -> str:
     parts = [f"[受控事实] {controlled_fact}"] if controlled_fact else []
-    for source_key, row, content in _substantive_rows(
-        documents, _RULE_CONTEXT_SOURCES[rule_id]
-    ):
+    context_rows = list(
+        _substantive_rows(documents, _RULE_CONTEXT_SOURCES[rule_id])
+    )
+    if rule_id == "LX0609-018":
+        # trigger 读取完整 bounded diagnosis，模型上下文只保留最多8条受控主要诊断。
+        context_rows = [item for item in context_rows if item[0] != "diagnosis"]
+        context_rows.extend(
+            (
+                "diagnosis",
+                row,
+                content,
+            )
+            for row in _source_rows(documents, "diagnosis", limit=None)
+            if _clean(row.get("diagnosis_type")) == "主要诊断"
+            and (content := _row_text(row))
+        )
+        admission_rows = [item for item in context_rows if item[0] == "admission_record"]
+        diagnosis_rows = [item for item in context_rows if item[0] == "diagnosis"]
+        context_rows = admission_rows[:_MAX_ROWS_PER_SOURCE] + diagnosis_rows[:_MAX_ROWS_PER_SOURCE]
+    for source_key, row, content in context_rows:
         record_time = _clean(row.get("record_time")) or "未提供"
         parts.append(f"[{source_key}] 记录时间={record_time}；内容={content[:_MAX_ROW_CHARS]}")
     return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
@@ -1549,7 +1568,7 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": ("admission_record", "diagnosis"),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -1616,7 +1635,7 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": ("admission_record", "diagnosis"),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -1697,6 +1716,13 @@ def _admission_material_ready(
                 or row.get("diagnosis")
             )
             or _DIAGNOSIS_PATTERN.search(_row_text(row))
+        )
+    # 只采信受控类型“主要诊断”；其他诊断、诊断史或任意文本都不能补齐018。
+    for row in _source_rows(documents, "diagnosis", limit=None):
+        if _clean(row.get("diagnosis_type")) != "主要诊断":
+            continue
+        diagnosis_text = diagnosis_text or bool(
+            _clean(row.get("diagnosis_name") or row.get("diagnosis_code"))
         )
     return (complaint_fact or complaint_text) and (diagnosis_fact or diagnosis_text)
 
@@ -1933,8 +1959,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
-                        status="data_gap",
-                        reason_code="course_llm_failure",
+                        status="technical_error",
+                        reason_code="model_transport_error",
                         executor_type="llm",
                     )
                 )
@@ -1949,8 +1975,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
-                        status="data_gap",
-                        reason_code="course_llm_invalid_output",
+                        status="technical_error",
+                        reason_code="model_invalid_output",
                         executor_type="llm",
                         prompt_tokens=prompt,
                         completion_tokens=completion,

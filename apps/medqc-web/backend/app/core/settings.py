@@ -166,6 +166,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED: bool = False
     # 040 四级手术 MDT 从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED: bool = False
+    # 003 手术记录24小时完成时限的纯 RuleDecision 路径；默认关闭便于回滚。
+    LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED: bool = False
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
     # LX0609 独立准生产 API；默认关闭，人工验收后才允许显式开启。

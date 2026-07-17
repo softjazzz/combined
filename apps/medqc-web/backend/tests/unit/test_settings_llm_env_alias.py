@@ -246,6 +246,7 @@ def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
         "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED",
         "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
         "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
     ),
 )
 def test_luxian_rule_decision_next_batch_defaults_off_and_can_be_enabled(

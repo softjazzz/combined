@@ -6,14 +6,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     has_strict_performed_time,
+    parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
     read_luxian_0609_runtime_source_rows,
 )
@@ -35,6 +48,11 @@ _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*
 _MAX_ROWS_PER_SOURCE = 6
 _MAX_ROW_CHARS = 1000
 _MAX_CONTEXT_CHARS = 12000
+_TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
+_AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
+    r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
+    r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
+)
 
 _RULE_SOURCES = {
     "LX0609-003": ("surgery_record", "anesthesia_record"),
@@ -62,6 +80,7 @@ class SurgeryGateLLMClient(Protocol):
 class NativeSurgeryGateExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -251,6 +270,187 @@ def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
     )
 
 
+def _authoritative_record_time(value: Any) -> datetime | None:
+    """只接受 record_time 整值；不从正文、标题或局部文本提取时间。"""
+
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        candidate = value.strip()
+        if not _AUTHORITATIVE_RECORD_TIME_PATTERN.fullmatch(candidate):
+            return None
+        try:
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return parsed
+    offset = parsed.utcoffset()
+    if offset != timedelta(hours=8):
+        return None
+    return parsed.replace(tzinfo=None)
+
+
+def _authoritative_surgery_end_time(
+    *, source_key: str, row: Mapping[str, Any]
+) -> datetime | None:
+    """003 只以受控手术结束时间为锚，不用开始时间替代。"""
+
+    if source_key == "surgery_record":
+        parsed = tuple(
+            value
+            for field in ("surgery_end_time", "surgery_end_datetime")
+            if (value := parse_strict_performed_time(row.get(field))) is not None
+        )
+        return max(parsed) if parsed else None
+    if source_key == "mr_surgery":
+        value = row.get("surgery_end_datetime")
+        return value if isinstance(value, datetime) and value.tzinfo is None else None
+    return None
+
+
+def _typed_003_decision(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> RuleDecision:
+    """用同一 Evidence Session 的权威时间完成 003 判定。"""
+
+    if (
+        type(snapshot) is not Luxian0609EvidenceSnapshot
+        or type(materials) is not Luxian0609EvidenceMaterialStore
+        or materials.snapshot_hash != snapshot.snapshot_hash
+    ):
+        raise ValueError("typed 003 requires one evidence session")
+    source_keys = ("surgery_record", "mr_surgery")
+    observations = {
+        item.source_key: item
+        for item in snapshot.observations
+        if item.source_key in source_keys
+    }
+    refs = tuple(
+        observations[key].snapshot_ref.removeprefix("sha256:")
+        for key in source_keys
+        if key in observations
+    )
+
+    def decision(final_state: str, reason_code: str) -> RuleDecision:
+        applicability, evidence_state, qc_direction = {
+            "compliant": (
+                ApplicabilityState.APPLICABLE,
+                EvidenceState.SUFFICIENT,
+                QcDirection.SATISFIED,
+            ),
+            "non_compliant": (
+                ApplicabilityState.APPLICABLE,
+                EvidenceState.SUFFICIENT,
+                QcDirection.DEFECT,
+            ),
+            "not_applicable": (
+                ApplicabilityState.NOT_APPLICABLE,
+                EvidenceState.SUFFICIENT,
+                QcDirection.UNKNOWN,
+            ),
+            "data_gap": (
+                ApplicabilityState.UNKNOWN,
+                EvidenceState.DATA_GAP,
+                QcDirection.UNKNOWN,
+            ),
+            "technical_error": (
+                ApplicabilityState.ERROR,
+                EvidenceState.TECHNICAL_ERROR,
+                QcDirection.UNKNOWN,
+            ),
+        }[final_state]
+        return RuleDecision(
+            rule_id="LX0609-003",
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=applicability,
+            evidence_state=evidence_state,
+            qc_direction=qc_direction,
+            reason_code=reason_code,
+            fact_refs=refs,
+            evaluator_version=_TYPED_003_EVALUATOR_VERSION,
+            confidence=None,
+        )
+
+    if set(observations) != set(source_keys):
+        return decision("technical_error", "snapshot_mismatch")
+    ordered = tuple(observations[key] for key in source_keys)
+    if any(item.query_state.value == "error" for item in ordered):
+        return decision("technical_error", "source_query_error")
+    if any(item.query_state.value == "unavailable" for item in ordered):
+        return decision("data_gap", "source_unavailable")
+    if any(item.completeness.value == "truncated" for item in ordered):
+        return decision("data_gap", "source_truncated")
+    try:
+        surgery_rows = tuple(materials.rows("surgery_record"))
+        mr_rows = tuple(materials.rows("mr_surgery"))
+    except EvidenceMaterialTruncated:
+        return decision("data_gap", "source_truncated")
+    except EvidenceMaterialUnavailable:
+        return decision("technical_error", "snapshot_mismatch")
+
+    if not surgery_rows and not mr_rows:
+        return decision("not_applicable", "performed_event_absent")
+
+    intervals: list[timedelta] = []
+    incomplete_performed_row = False
+    fallback_resolved = False
+    for row in surgery_rows:
+        surgery_end_time = _authoritative_surgery_end_time(
+            source_key="surgery_record", row=row
+        )
+        record_time = _authoritative_record_time(row.get("record_time"))
+        if surgery_end_time is None or record_time is None:
+            incomplete_performed_row = True
+            continue
+        interval = record_time - surgery_end_time
+        if interval.total_seconds() < 0:
+            incomplete_performed_row = True
+            continue
+        intervals.append(interval)
+
+    # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
+    # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
+    if not intervals:
+        mr_end_times = tuple(
+            sorted({
+                time
+                for row in mr_rows
+                if (time := _authoritative_surgery_end_time(
+                    source_key="mr_surgery", row=row
+                )) is not None
+            })
+        )
+        record_times = tuple(
+            sorted({
+                parsed
+                for row in surgery_rows
+                if (parsed := _authoritative_record_time(row.get("record_time")))
+                is not None
+            })
+        )
+        if (
+            len(mr_rows) == 1
+            and len(surgery_rows) == 1
+            and len(mr_end_times) == 1
+            and len(record_times) == 1
+        ):
+            interval = record_times[0] - mr_end_times[0]
+            if interval.total_seconds() >= 0:
+                intervals.append(interval)
+                fallback_resolved = True
+
+    if any(interval > timedelta(hours=24) for interval in intervals):
+        return decision("non_compliant", "threshold_exceeded")
+    if intervals and (not incomplete_performed_row or fallback_resolved):
+        return decision("compliant", "requirement_within_threshold")
+    return decision("data_gap", "authoritative_time_missing")
+
+
 def _resolve_performed_state(
     *,
     facts: Sequence[Mapping[str, Any]],
@@ -428,6 +628,8 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     source_schema: str | None,
     llm_client: SurgeryGateLLMClient | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeSurgeryGateExecutionResult:
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
     selected = tuple(
@@ -435,6 +637,39 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     )
     if not selected:
         return NativeSurgeryGateExecutionResult((), ())
+
+    typed_requested = {
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    }
+    if not typed_requested.issubset({"LX0609-003"}) or not typed_requested.issubset(
+        set(selected)
+    ):
+        raise ValueError("unsupported typed surgery gate rule scope")
+    if typed_requested and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed 003 requires one evidence session")
+    decisions = (
+        (
+            _typed_003_decision(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            ),
+        )
+        if "LX0609-003" in typed_requested
+        else ()
+    )
+    legacy_selected = tuple(
+        rule_id for rule_id in selected if rule_id not in typed_requested
+    )
+    if not legacy_selected:
+        return NativeSurgeryGateExecutionResult(
+            results=(),
+            planned_rule_ids=selected,
+            decisions=decisions,
+        )
 
     documents = _documents(evidence_payload)
     if documents is None:
@@ -446,9 +681,10 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     "surgery_projection_unavailable",
                     executor_type="program",
                 )
-                for rule_id in selected
+                for rule_id in legacy_selected
             ),
             selected,
+            decisions,
         )
     facts = _facts(evidence_payload)
     performed_state = _resolve_performed_state(
@@ -468,7 +704,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
 
-    for rule_id in selected:
+    for rule_id in legacy_selected:
         terminal = _terminal_status(
             rule_id,
             facts=facts,
@@ -540,6 +776,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     return NativeSurgeryGateExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,
+        decisions=decisions,
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

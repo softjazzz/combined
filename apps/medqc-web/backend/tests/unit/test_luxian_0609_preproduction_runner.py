@@ -67,6 +67,7 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         assert kwargs["settings"].LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED is True
         assert kwargs["settings"].LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED is True
         assert kwargs["settings"].LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED is True
+        assert kwargs["settings"].LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED is True
         return [], _FakeContext()
 
     def _fake_aggregate(*, orchestrated, context, **_):
@@ -158,9 +159,9 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     assert tuple(item["rule_id"] for item in result["results"]) == selected
     assert result["metrics"]["llm_call_count"] == 2
     assert result["metrics"]["total_tokens"] == 40
-    assert result["metrics"]["rule_decision_count"] == 23
+    assert result["metrics"]["rule_decision_count"] == 24
     assert result["metrics"]["typed_shadow_adapter_count"] == 3
-    assert result["metrics"]["legacy_projection_count"] == 23
+    assert result["metrics"]["legacy_projection_count"] == 22
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
     first = result["results"][0]

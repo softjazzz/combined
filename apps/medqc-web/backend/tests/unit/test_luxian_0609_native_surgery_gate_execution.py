@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -12,6 +13,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
+)
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
 )
 
 
@@ -193,6 +197,319 @@ async def test_snapshot_performed_fact_replaces_surgery_gate_live_query(
     assert result.results[0]["status"] == expected_status
     assert result.llm_call_count == expected_calls
     assert len(client.prompts) == expected_calls
+
+
+def _typed_003_session(
+    *,
+    record_time: object = None,
+    surgery_time: object = None,
+    surgery_begin_time: object = None,
+    mr_surgery_time: object = None,
+    source_mode: str = "available",
+):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record" and source_mode == "unavailable":
+            raise SourceEvidenceUnavailable()
+        if source_key == "surgery_record" and source_mode == "error":
+            raise SourceEvidenceQueryError()
+        rows = {
+            "surgery_record": () if source_mode == "empty" else (
+                {
+                    "surgery_begin_time": surgery_begin_time,
+                    "surgery_end_time": surgery_time,
+                    "record_time": record_time,
+                },
+            ),
+            "mr_surgery": (
+                ({
+                    "surgery_begin_datetime": mr_surgery_time - timedelta(hours=7),
+                    "surgery_end_datetime": mr_surgery_time,
+                },)
+                if mr_surgery_time is not None
+                else ()
+            ),
+        }.get(source_key, ())
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=(source_key == "surgery_record" and source_mode == "truncated"),
+            limit_rows=1 if source_mode == "truncated" else 50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-003",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+
+@pytest.mark.asyncio
+async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
+    monkeypatch,
+):
+    session = _typed_003_session(
+        surgery_time="2026-01-01 08:00:00+08",
+        record_time=datetime(2026, 1, 2, 8, 0, 0),
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_runtime_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    client = _Client([{"is_compliant": False}])
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=_payload(
+            facts=[_performed()],
+            surgery_record=[{"surgery_begin_time": "NOT_A_TIME"}],
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "source_mode",
+        "surgery_time",
+        "record_time",
+        "expected_state",
+        "expected_reason",
+    ),
+    (
+        (
+            "available",
+            "2026-01-01 08:00:00+08",
+            datetime(2026, 1, 2, 8, 0, 1),
+            "non_compliant",
+            "threshold_exceeded",
+        ),
+        (
+            "available",
+            "2026-01-01 08:00:00+08",
+            None,
+            "data_gap",
+            "authoritative_time_missing",
+        ),
+        (
+            "available",
+            "2026-01-01 08:00:00+08",
+            "NOT_A_TIME",
+            "data_gap",
+            "authoritative_time_missing",
+        ),
+        ("empty", None, None, "not_applicable", "performed_event_absent"),
+        ("unavailable", None, None, "data_gap", "source_unavailable"),
+        ("truncated", "2026-01-01 08:00:00+08", datetime(2026, 1, 1, 9), "data_gap", "source_truncated"),
+        ("error", None, None, "technical_error", "source_query_error"),
+    ),
+)
+async def test_typed_003_preserves_time_and_source_boundaries(
+    monkeypatch,
+    source_mode,
+    surgery_time,
+    record_time,
+    expected_state,
+    expected_reason,
+):
+    session = _typed_003_session(
+        source_mode=source_mode,
+        surgery_time=surgery_time,
+        record_time=record_time,
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_runtime_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    monkeypatch.setattr(
+        surgery,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+    client = _Client([{"is_compliant": True}])
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=_payload(
+            facts=[_performed()],
+            surgery_record=[
+                {
+                    "surgery_begin_time": "2026-01-01 08:00:00+08",
+                    "record_time": "2026-01-01 08:00:01+08",
+                }
+            ],
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+    assert "NOT_A_TIME" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_003_uses_unique_mr_surgery_time_without_keyword_fallback():
+    session = _typed_003_session(
+        surgery_time=None,
+        record_time=datetime(2026, 1, 2, 7, 59, 59),
+        mr_surgery_time=datetime(2026, 1, 1, 8, 0, 0),
+    )
+    client = _Client([{"is_compliant": False}])
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=_payload(surgery_record=[{"record_content": "手术关键词"}]),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_003_prefers_surgery_end_time_over_begin_time():
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            (
+                {
+                    "surgery_begin_time": "2026-01-01 01:00:00+08",
+                    "surgery_end_time": "2026-01-01 08:00:00+08",
+                    "record_time": datetime(2026, 1, 2, 8, 0, 0),
+                },
+            )
+            if source_key == "surgery_record"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-003",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_within_threshold"
+
+
+@pytest.mark.asyncio
+async def test_typed_003_begin_time_without_end_time_is_data_gap():
+    session = _typed_003_session(
+        surgery_begin_time="2026-01-01 01:00:00+08",
+        surgery_time=None,
+        record_time=datetime(2026, 1, 2, 1, 0, 0),
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
