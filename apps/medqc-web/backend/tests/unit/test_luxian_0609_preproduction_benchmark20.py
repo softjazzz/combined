@@ -37,7 +37,6 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
             "status": "compliant",
             "metadata": {
                 "reason_code": "verified",
-                "executor_type": "program",
                 "prompt_tokens": 99,
             },
             "evidence_items": [],
@@ -125,9 +124,9 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         generated_at="2026-07-17T00:00:00Z",
     )
     assert candidate["candidate_count"] == 980
-    assert {row["decision_kind"] for row in candidate["rows"]} == {
-        "deterministic"
-    }
+    decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
+    assert decision_kinds.count("deterministic") == 580
+    assert decision_kinds.count("semantic") == 400
 
     rendered = repr(batch)
     for private_marker in (
@@ -250,6 +249,72 @@ async def test_benchmark20_rejects_incomplete_response_without_echo():
             base_settings=SimpleNamespace(),
         )
     assert "PRIVATE-RESPONSE-MARKER" not in str(captured.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("authority", ["", "unknown_authority"])
+async def test_benchmark20_fails_before_read_when_rule_authority_is_missing_or_unknown(
+    monkeypatch, authority
+):
+    contracts = [
+        SimpleNamespace(
+            rule_id=f"LX0609-{index:03d}",
+            decision_authority=(
+                authority if index == 49 else "program_only"
+            ),
+        )
+        for index in range(1, 50)
+    ]
+    monkeypatch.setattr(
+        benchmark20,
+        "load_luxian_0609_rule_contracts",
+        lambda: contracts,
+    )
+    reads = 0
+
+    def fake_loader(**_):
+        nonlocal reads
+        reads += 1
+        return {}
+
+    with pytest.raises(BenchmarkContractError) as captured:
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-17",
+            bundle_loader=fake_loader,
+            runner=lambda **_: None,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+        )
+
+    assert reads == 0
+    assert str(captured.value) == "invalid LX0609 decision authority"
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_ignores_untrusted_customer_executor_type():
+    async def fake_runner(**_):
+        response = _safe_response()
+        for result in response["results"]:
+            result["metadata"]["executor_type"] = "llm"
+        return response
+
+    batch = await build_benchmark_batch(
+        case_map=_case_map(),
+        evaluation_as_of_date="2026-07-17",
+        bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+        runner=fake_runner,
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+    )
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="benchmark-authority-test-v1",
+        generated_at="2026-07-17T00:00:00Z",
+    )
+    decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
+    assert decision_kinds.count("deterministic") == 580
+    assert decision_kinds.count("semantic") == 400
 
 
 def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(

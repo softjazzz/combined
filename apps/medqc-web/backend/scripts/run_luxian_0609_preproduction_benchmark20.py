@@ -44,6 +44,10 @@ _CASE_KEYS = {
     "patient_id",
     "visit_id",
 }
+_AUTHORITY_EXECUTOR_TYPES = {
+    "program_only": "program",
+    "program_then_optional_llm": "llm",
+}
 
 BundleLoader = Callable[..., Mapping[str, Any]]
 Runner = Callable[..., Awaitable[Mapping[str, Any]]]
@@ -53,12 +57,22 @@ class BenchmarkContractError(ValueError):
     """固定且不回显输入的20例验收合同错误。"""
 
 
-def _rule_ids() -> tuple[str, ...]:
-    rule_ids = tuple(item.rule_id for item in load_luxian_0609_rule_contracts())
+def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
+    contracts = tuple(load_luxian_0609_rule_contracts())
+    rule_ids = tuple(str(getattr(item, "rule_id", "") or "") for item in contracts)
     expected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
     if rule_ids != expected:
         raise BenchmarkContractError("LX0609 rule catalog is not the expected 49 rules")
-    return rule_ids
+    executor_types: dict[str, str] = {}
+    for contract in contracts:
+        authority = str(getattr(contract, "decision_authority", "") or "").strip()
+        executor_type = _AUTHORITY_EXECUTOR_TYPES.get(authority)
+        if executor_type is None:
+            raise BenchmarkContractError("invalid LX0609 decision authority")
+        executor_types[str(contract.rule_id)] = executor_type
+    if len(executor_types) != 49:
+        raise BenchmarkContractError("invalid LX0609 decision authority attestation")
+    return rule_ids, executor_types
 
 
 def _validate_evaluation_date(value: str) -> str:
@@ -183,6 +197,7 @@ def _golden_response(
     response: Mapping[str, Any],
     *,
     results: Sequence[Mapping[str, Any]],
+    executor_types: Mapping[str, str],
 ) -> dict[str, Any]:
     """投影Golden所需最小响应，排除runner性能字段和客户长文本。"""
 
@@ -190,16 +205,16 @@ def _golden_response(
     for result in results:
         metadata = result.get("metadata")
         reason_code = ""
-        executor_type = ""
         if isinstance(metadata, Mapping):
             reason_code = str(metadata.get("reason_code") or "").strip()
-            executor_type = str(metadata.get("executor_type") or "").strip()
-        if not executor_type:
-            executor_type = str(result.get("executor_type") or "").strip()
+        rule_id = str(result.get("rule_id") or "").strip().upper()
+        executor_type = str(executor_types.get(rule_id) or "").strip()
+        if executor_type not in {"program", "llm"}:
+            raise BenchmarkContractError("missing LX0609 decision authority attestation")
         evidence_items = result.get("evidence_items")
         projected_results.append(
             {
-                "rule_id": str(result.get("rule_id") or "").strip().upper(),
+                "rule_id": rule_id,
                 "status": str(result.get("status") or "").strip().lower(),
                 "metadata": {
                     "reason_code": reason_code,
@@ -230,8 +245,16 @@ async def build_benchmark_batch(
 
     selector_version, cases = _validate_case_map(case_map)
     as_of_date = _validate_evaluation_date(evaluation_as_of_date)
-    selected_rule_ids = _rule_ids()
-    rule_set_digest = canonical_digest(list(selected_rule_ids))
+    selected_rule_ids, executor_types = _rule_attestations()
+    rule_set_digest = canonical_digest(
+        [
+            {
+                "rule_id": rule_id,
+                "executor_type": executor_types[rule_id],
+            }
+            for rule_id in selected_rule_ids
+        ]
+    )
     safe_selector: list[dict[str, str]] = []
     output_cases: list[dict[str, Any]] = []
     status_counts: Counter[str] = Counter()
@@ -278,7 +301,11 @@ async def build_benchmark_batch(
             {
                 "case_label": case["case_label"],
                 "coordinate_hash": coordinate_hash,
-                "response": _golden_response(response, results=results),
+                "response": _golden_response(
+                    response,
+                    results=results,
+                    executor_types=executor_types,
+                ),
             }
         )
         status_counts.update(str(item.get("status") or "technical_error") for item in results)
