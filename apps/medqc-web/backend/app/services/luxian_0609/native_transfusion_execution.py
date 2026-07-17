@@ -408,7 +408,7 @@ def _typed_documents_from_evidence_session(
         ):
             return None, "data_gap", "transfusion_source_unavailable"
 
-    documents: dict[str, list[dict[str, Any]]] = {}
+    documents: dict[str, Any] = {}
     try:
         # performed-state 会从同一个材料仓读取该结构化来源；这里先证明可读。
         for source_key in _TRIGGER_SOURCES:
@@ -456,20 +456,10 @@ def _typed_documents_from_evidence_session(
         else:
             logical_states[logical_source] = "missing"
 
-    # 每个 required group 只需一个逻辑来源具备实质材料；若均无材料，则按
-    # ERROR > contract mismatch > unavailable > complete-empty 的顺序 fail closed。
-    for group in _RULE_REQUIRED_SOURCE_GROUPS[rule_id]:
-        if any(_source_rows(documents, source_key) for source_key in group):
-            continue
-        group_states = tuple(
-            logical_states.get(source_key, "missing") for source_key in group
-        )
-        if "error" in group_states:
-            return None, "technical_error", "source_query_error"
-        if all(state == "missing" for state in group_states):
-            return None, "technical_error", "snapshot_mismatch"
-        if "unavailable" in group_states:
-            return None, "data_gap", "transfusion_source_unavailable"
+    # 这里只构造同一快照内的材料和四态，不在辅助来源为空时提前终止。
+    # 专用输血记录可能已足以给出确定结论；辅助来源四态只能在程序化判断
+    # 无法定论后参与 fail-closed，不能覆盖专用记录的强事实。
+    documents["__logical_source_states__"] = logical_states
     return documents, "", ""
 
 
@@ -595,11 +585,29 @@ def _source_document_rows(
     ]
 
 
-def _has_required_projection(rule_id: str, documents: Mapping[str, Any]) -> bool:
-    return all(
-        any(_source_rows(documents, source_key) for source_key in group)
-        for group in _RULE_REQUIRED_SOURCE_GROUPS[rule_id]
-    )
+def _required_projection_failure(
+    rule_id: str, documents: Mapping[str, Any]
+) -> tuple[str, str] | None:
+    """仅在专用程序化事实无法定论后解释辅助投影四态。"""
+
+    raw_states = documents.get("__logical_source_states__")
+    logical_states = raw_states if isinstance(raw_states, Mapping) else None
+    for group in _RULE_REQUIRED_SOURCE_GROUPS[rule_id]:
+        if any(_source_rows(documents, source_key) for source_key in group):
+            continue
+        if logical_states is None:
+            return "data_gap", "transfusion_rule_projection_incomplete"
+        group_states = tuple(
+            str(logical_states.get(source_key) or "missing") for source_key in group
+        )
+        if "error" in group_states:
+            return "technical_error", "source_query_error"
+        if all(state == "missing" for state in group_states):
+            return "technical_error", "snapshot_mismatch"
+        if "unavailable" in group_states:
+            return "data_gap", "transfusion_source_unavailable"
+        return "data_gap", "transfusion_rule_projection_incomplete"
+    return None
 
 
 def _programmatic_043_status() -> tuple[str, str]:
@@ -642,6 +650,19 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     if form_complete:
         return "compliant", "pretransfusion_assessment_complete"
 
+    has_dedicated_purpose_or_indication = any(
+        _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+        or _PRETRANSFUSION_CORE_PATTERNS[0].search(entry)
+        for entry in bloodtrans_entries
+    )
+    has_application = bool(_source_entries(documents, "blood_application"))
+    if (
+        bloodtrans_entries
+        and not has_dedicated_purpose_or_indication
+        and not has_application
+    ):
+        return "non_compliant", "pretransfusion_assessment_missing"
+
     if any(
         _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry)
         and all(pattern.search(entry) for pattern in _PRETRANSFUSION_CORE_PATTERNS)
@@ -658,7 +679,6 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
         and _PRETRANSFUSION_CORE_PATTERNS[1].search(entry)
         for entry in bloodtrans_entries
     )
-    has_application = bool(_source_entries(documents, "blood_application"))
     # 输血过程中的生命体征、发热或不良反应不能反向充当“输血前评估”。
     # 没有评估标识且连指征/必要性也未记录时，可确定为缺失；其余灰区仍交给模型。
     if (
@@ -734,6 +754,15 @@ def _programmatic_046_status(
     entries = tuple(_source_entries(documents, "bloodtrans_record"))
     if entries and all(_is_complete_transfusion_course_entry(entry) for entry in entries):
         return "compliant", "transfusion_course_record_complete"
+    if entries and all(
+        _is_substantive_transfusion_course_entry(entry)
+        and not (
+            _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+            or _PRETRANSFUSION_CORE_PATTERNS[0].search(entry)
+        )
+        for entry in entries
+    ):
+        return "non_compliant", "transfusion_purpose_or_indication_missing"
     return None
 
 
@@ -1173,23 +1202,8 @@ async def execute_luxian_0609_native_transfusion_rules(
                 executor_type="program",
             )
             continue
-        if not _has_required_projection(rule_id, documents):
-            emit_outcome(
-                rule_id,
-                "data_gap",
-                "transfusion_rule_projection_incomplete",
-                executor_type="program",
-            )
-            continue
-        if rule_id == "LX0609-043":
-            status, reason_code = _programmatic_043_status()
-            emit_outcome(
-                rule_id,
-                status,
-                reason_code,
-                executor_type="program",
-            )
-            continue
+        # 044–047 的专用输血记录具有更高证据优先级。先尝试确定性判定，
+        # 只有不能定论时才检查日常病程等辅助投影并进入裁剪模型。
         if rule_id == "LX0609-044":
             programmatic_status = _programmatic_044_status(documents)
             if programmatic_status is not None:
@@ -1225,6 +1239,25 @@ async def execute_luxian_0609_native_transfusion_rules(
                 continue
         if rule_id == "LX0609-047":
             status, reason_code = _programmatic_047_status(documents)
+            emit_outcome(
+                rule_id,
+                status,
+                reason_code,
+                executor_type="program",
+            )
+            continue
+        projection_failure = _required_projection_failure(rule_id, documents)
+        if projection_failure is not None:
+            status, reason_code = projection_failure
+            emit_outcome(
+                rule_id,
+                status,
+                reason_code,
+                executor_type="program",
+            )
+            continue
+        if rule_id == "LX0609-043":
+            status, reason_code = _programmatic_043_status()
             emit_outcome(
                 rule_id,
                 status,

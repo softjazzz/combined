@@ -354,12 +354,12 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
     (
         ("available", "compliant", "requirement_satisfied"),
         ("empty", "not_applicable", "trigger_absent_complete"),
-        ("unavailable", "data_gap", "source_unavailable"),
-        ("error", "technical_error", "source_query_error"),
+        ("unavailable", "compliant", "requirement_satisfied"),
+        ("error", "compliant", "requirement_satisfied"),
     ),
 )
 @pytest.mark.asyncio
-async def test_typed_044_preserves_source_four_states(
+async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
     monkeypatch,
     source_mode,
     expected_state,
@@ -1035,13 +1035,13 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         "data_gap",
         "compliant",
         "compliant",
+        "non_compliant",
         "compliant",
         "compliant",
         "non_compliant",
-        "compliant",
     ]
-    assert result.llm_call_count == 6
-    assert result.total_tokens == 660
+    assert result.llm_call_count == 5
+    assert result.total_tokens == 550
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
 
@@ -1528,20 +1528,34 @@ async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_bl
 
 
 @pytest.mark.asyncio
-async def test_missing_daily_course_keeps_045_046_047_data_gap_without_model(
+async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([])
 
+    complete_record = {
+        "content": (
+            "输血目的：纠正贫血；输血前评估：患者血红蛋白下降，存在输血指征，"
+            "已说明输血风险。2026年6月5日14:20开始输注红细胞2U，"
+            "2026年6月5日16:10输血结束。输血过程中严密观察，生命体征平稳，"
+            "未见发热及输血不良反应。输血后复查血红蛋白改善。"
+        )
+    }
+
     result = await transfusion.execute_luxian_0609_native_transfusion_rules(
-        rule_ids=("LX0609-045", "LX0609-046", "LX0609-047"),
+        rule_ids=("LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"),
         wrapper_rules=[
+            _wrapper("LX0609-044"),
             _wrapper("LX0609-045"),
             _wrapper("LX0609-046"),
             _wrapper("LX0609-047"),
         ],
-        evidence_payload=_documents(daily_course_record=[]),
+        evidence_payload=_documents(
+            bloodtrans_record=[complete_record],
+            blood_application=[],
+            daily_course_record=[],
+        ),
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -1549,13 +1563,86 @@ async def test_missing_daily_course_keeps_045_046_047_data_gap_without_model(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap"] * 3
-    assert {
-        item["metadata"]["reason_code"] for item in result.results
-    } == {"transfusion_rule_projection_incomplete"}
+    assert [item["status"] for item in result.results] == ["compliant"] * 4
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([])
+    record_without_purpose = {
+        "content": (
+            "2026年6月5日14:20开始输注红细胞2U，"
+            "2026年6月5日16:10输血结束。"
+            "输血过程中严密观察，生命体征平稳，未见发热及输血不良反应。"
+        )
+    }
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-044", "LX0609-046", "LX0609-047"),
+        wrapper_rules=[
+            _wrapper("LX0609-044"),
+            _wrapper("LX0609-046"),
+            _wrapper("LX0609-047"),
+        ],
+        evidence_payload=_documents(
+            bloodtrans_record=[record_without_purpose],
+            blood_application=[],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results[:2]] == [
+        "non_compliant",
+        "non_compliant",
+    ]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "pretransfusion_assessment_missing"
+    )
+    assert result.results[1]["metadata"]["reason_code"] == (
+        "transfusion_purpose_or_indication_missing"
+    )
+    assert result.results[2]["status"] == "compliant"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_047_missing_authoritative_end_stays_data_gap_without_daily_projection(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-047",),
+        wrapper_rules=[_wrapper("LX0609-047")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"content": "输血结束，继续观察，未见输血不良反应。"}],
+            daily_course_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_end_time_unavailable"
+    )
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

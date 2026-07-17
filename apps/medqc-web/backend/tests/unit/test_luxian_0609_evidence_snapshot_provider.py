@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 import json
 
 import pytest
@@ -341,6 +342,58 @@ def test_surgery_record_builds_only_exact_performed_or_complete_empty_fact(
     ):
         assert marker not in safe_output
     assert calls.count("surgery_record") == 1
+
+
+def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
+    calls: list[str] = []
+    typed_begin = datetime(2026, 1, 1, 8, 0, 0)
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows = (
+            ({"surgery_begin_datetime": typed_begin},)
+            if source_key == "mr_surgery"
+            else ()
+        )
+        return _rows(source_key, rows)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-039",),
+        institute_id="institute-private-039",
+        patient_id="patient-private-039",
+        visit_id="visit-private-039",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "mr_surgery"
+    )
+    fact = next(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_surgery_confirmed"
+        and item.source_key == "mr_surgery"
+    )
+    assert calls.count("mr_surgery") == 1
+    assert fact.assertion.value == "affirmed"
+    assert fact.normalized_value == {"performed": True}
+    assert fact.source_snapshot_hash == observation.snapshot_ref.removeprefix(
+        "sha256:"
+    )
+    safe_output = repr((session.snapshot.to_safe_dict(), session.materials))
+    for marker in (
+        "2026-01-01",
+        "08:00:00",
+        "institute-private-039",
+        "patient-private-039",
+        "visit-private-039",
+    ):
+        assert marker not in safe_output
 
 
 def test_single_028_prefetches_surgery_record_for_surgery_gate() -> None:

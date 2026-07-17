@@ -28,7 +28,7 @@ from .source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
     digest_source_evidence,
-    has_strict_performed_time,
+    has_trusted_performed_surgery,
     read_luxian_0609_snapshot_source_rows,
 )
 from .source_manifest import QueryStatus
@@ -351,8 +351,13 @@ def build_luxian_0609_evidence_read_session(
             snapshot_ref=snapshot_ref,
         )
         observations.append(observation)
-        if source_key == "surgery_record":
-            performed = any(has_strict_performed_time(row) for row in result.rows)
+        if source_key == "surgery_record" or (
+            source_key == "mr_surgery" and "LX0609-039" in selected_rule_ids
+        ):
+            performed = any(
+                has_trusted_performed_surgery(source_key=source_key, row=row)
+                for row in result.rows
+            )
             if performed or query_state is QueryStatus.EMPTY:
                 facts.append(
                     FactV2.create(
@@ -371,7 +376,7 @@ def build_luxian_0609_evidence_read_session(
                         event_status="performed" if performed else "unknown",
                         source_key=source_key,
                         source_document_id="",
-                        source_document_type="surgery_record",
+                        source_document_type=source_key,
                         record_time=None,
                         submit_time=None,
                         update_time=None,
@@ -379,7 +384,11 @@ def build_luxian_0609_evidence_read_session(
                         redaction_terms=(),
                         confidence=1.0,
                         extractor="deterministic",
-                        extractor_version="snapshot-provider-surgery-record-v1",
+                        extractor_version=(
+                            "snapshot-provider-surgery-record-v1"
+                            if source_key == "surgery_record"
+                            else "snapshot-provider-mr-surgery-v1"
+                        ),
                         fact_schema_version=FACT_SCHEMA_VERSION,
                         source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
                         created_at=created_at,

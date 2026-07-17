@@ -845,9 +845,29 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 executor_type="program",
             )
             continue
-        if any(
-            materials[source_key].state != "present" for source_key in required_sources
+        target_states = tuple(
+            materials[source_key].state for source_key in required_sources
+        )
+        if rule_id == "LX0609-019" and all(
+            state == "empty" for state in target_states
         ):
+            emit_outcome(
+                rule_id,
+                "non_compliant",
+                "pathology_sampling_not_documented",
+                executor_type="program",
+            )
+            continue
+        if rule_id == "LX0609-019":
+            target_material_available = (
+                all(state in {"present", "empty"} for state in target_states)
+                and "present" in target_states
+            )
+        else:
+            target_material_available = all(
+                state == "present" for state in target_states
+            )
+        if not target_material_available:
             emit_outcome(
                 rule_id,
                 "data_gap",

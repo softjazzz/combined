@@ -308,7 +308,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 禁止从病程关键词推断当前手术。
     "LX0609-028": ("surgery_record", "mr_surgery"),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
-    "LX0609-039": ("surgery_record", "rescue_record"),
+    "LX0609-039": ("surgery_record", "mr_surgery", "rescue_record"),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": ("senior_course_record",),

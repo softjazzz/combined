@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 
 import pytest
@@ -14,6 +15,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 )
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
 )
 
 
@@ -102,6 +104,7 @@ def _strong_facts(*, anesthesia_method: str = "全身麻醉") -> list[dict]:
 def _typed_session(
     *,
     surgery_mode: str = "exact",
+    mr_surgery_mode: str = "empty",
     discussion_mode: str = "available",
     selected_rule_ids: tuple[str, ...] = surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
 ):
@@ -110,9 +113,21 @@ def _typed_session(
         if source_key == "surgery_record":
             if surgery_mode == "error":
                 raise SourceEvidenceQueryError()
+            if surgery_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
             rows = (
                 ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
                 if surgery_mode == "exact"
+                else ()
+            )
+        elif source_key == "mr_surgery":
+            if mr_surgery_mode == "error":
+                raise SourceEvidenceQueryError()
+            if mr_surgery_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            rows = (
+                ({"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0, 0)},)
+                if mr_surgery_mode == "exact"
                 else ()
             )
         elif source_key == "presurg_discussion":
@@ -437,6 +452,48 @@ async def test_typed_039_empty_surgery_is_not_applicable_after_binding_contract(
 
 
 @pytest.mark.asyncio
+async def test_typed_039_mr_surgery_positive_prevents_false_not_applicable():
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            ({"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0, 0)},)
+            if source_key == "mr_surgery"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-039",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-07-17T06:00:00+08:00",
+        row_reader=reader,
+    )
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.results == ()
+    assert result.decisions[0].applicability.value == "unknown"
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "applicability_source_gap"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_typed_039_does_not_call_empty_discussion_defect_without_emergency_contract(
     monkeypatch,
 ):
@@ -485,6 +542,48 @@ async def test_typed_039_source_query_error_is_technical_error_without_echo(monk
     assert result.decisions[0].evidence_state.value == "technical_error"
     assert result.decisions[0].reason_code == "source_query_error"
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_039_dual_source_failure_semantics_and_positive_precedence():
+    unavailable = _typed_session(
+        surgery_mode="unavailable",
+        mr_surgery_mode="empty",
+        discussion_mode="available",
+        selected_rule_ids=("LX0609-039",),
+    )
+    unavailable_result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=unavailable.snapshot,
+        evidence_materials=unavailable.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+    assert unavailable_result.decisions[0].evidence_state.value == "data_gap"
+    assert unavailable_result.decisions[0].reason_code == "source_unavailable"
+
+    positive = _typed_session(
+        surgery_mode="error",
+        mr_surgery_mode="exact",
+        discussion_mode="available",
+        selected_rule_ids=("LX0609-039",),
+    )
+    positive_result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=positive.snapshot,
+        evidence_materials=positive.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+    # mr_surgery 的可信肯定事实优先；后续仍因急救例外事实未解析而 DG，
+    # 不能被另一手术来源的查询失败覆盖成技术错误。
+    assert positive_result.decisions[0].evidence_state.value == "data_gap"
+    assert positive_result.decisions[0].reason_code == "applicability_source_gap"
+    assert positive_result.llm_call_count == positive_result.total_tokens == 0
 
 
 @pytest.mark.asyncio

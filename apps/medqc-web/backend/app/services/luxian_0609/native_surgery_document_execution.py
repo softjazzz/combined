@@ -52,7 +52,12 @@ _TYPED_RULE_SOURCE_KEYS = {
     ),
     # 客户目录把038写成consent_form，但临床适用条件仍必须先有受控麻醉事实。
     "LX0609-038": ("anesthesia_record", "consent_form"),
-    "LX0609-039": ("surgery_record", "rescue_record", "presurg_discussion"),
+    "LX0609-039": (
+        "surgery_record",
+        "mr_surgery",
+        "rescue_record",
+        "presurg_discussion",
+    ),
 }
 
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})
@@ -460,30 +465,57 @@ def _typed_terminal_outcome(
     """typed 迁移首版只做受控事实/来源四态判定，绝不回读旧 payload。"""
 
     if rule_id == "LX0609-039":
-        if "surgery_record" not in _typed_binding_source_keys(rule_id):
+        performed_sources = ("surgery_record", "mr_surgery")
+        binding_source_keys = _typed_binding_source_keys(rule_id)
+        if not set(performed_sources).issubset(binding_source_keys):
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "performed_surgery_source_unavailable", "program"
             )
-        blocker = _typed_source_gate(
-            rule_id=rule_id,
-            source_key="surgery_record",
-            snapshot=snapshot,
-        )
-        if blocker is not None:
-            return blocker
-        surgery_state, _ = _typed_fact_state(
-            snapshot,
-            fact_types=_SURGERY_FACT_TYPES,
-            source_key="surgery_record",
-        )
-        if surgery_state == "absent":
-            return _SurgeryDocumentOutcome(
-                rule_id, "not_applicable", "performed_surgery_absent", "program"
+        source_states: list[str] = []
+        source_blockers: list[_SurgeryDocumentOutcome] = []
+        for source_key in performed_sources:
+            blocker = _typed_source_gate(
+                rule_id=rule_id,
+                source_key=source_key,
+                snapshot=snapshot,
             )
-        if surgery_state != "present":
+            if blocker is not None:
+                source_blockers.append(blocker)
+            fact_state, _ = _typed_fact_state(
+                snapshot,
+                fact_types=_SURGERY_FACT_TYPES,
+                source_key=source_key,
+            )
+            source_states.append(fact_state)
+
+        # 任一批准来源的可信已实施事实足以进入后续急救/术前讨论判定；
+        # 另一来源的缺口不能覆盖这个肯定事实。
+        if "present" not in source_states:
+            technical_blocker = next(
+                (
+                    item
+                    for item in source_blockers
+                    if item.status == "technical_error"
+                ),
+                None,
+            )
+            if technical_blocker is not None:
+                return technical_blocker
+            if source_blockers:
+                return _SurgeryDocumentOutcome(
+                    rule_id,
+                    "data_gap",
+                    "performed_surgery_source_unavailable",
+                    "program",
+                )
+            if source_states == ["absent", "absent"]:
+                return _SurgeryDocumentOutcome(
+                    rule_id, "not_applicable", "performed_surgery_absent", "program"
+                )
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
             )
+
         if "rescue_record" not in _typed_binding_source_keys(rule_id):
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "emergency_exception_source_unavailable", "program"
