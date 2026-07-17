@@ -100,12 +100,17 @@ def _assert_safe_api_dto(value: Any) -> None:
         for child in value:
             _assert_safe_api_dto(child)
         return
-    if isinstance(value, str) and (
-        _PHONE_RE.search(value)
-        or _ID_CARD_RE.search(value)
-        or _CREDENTIAL_RE.search(value)
-    ):
-        raise ValueError("unsafe API DTO")
+    if isinstance(value, str):
+        # 内部引用统一为精确小写 SHA-256；摘要中偶然出现证件/手机号形数字
+        # 不代表原值泄漏。键名禁用已在上方先执行，非精确摘要仍照常扫描。
+        if _SHA256_RE.fullmatch(value):
+            return
+        if (
+            _PHONE_RE.search(value)
+            or _ID_CARD_RE.search(value)
+            or _CREDENTIAL_RE.search(value)
+        ):
+            raise ValueError("unsafe API DTO")
     if not isinstance(value, (str, int, float, bool, type(None))):
         raise ValueError("unsafe API DTO")
 

@@ -191,6 +191,62 @@ def test_candidate_builder_rejects_phi_or_internal_api_fields_without_echo(
     assert forbidden_value not in repr(raised.value)
 
 
+def test_candidate_accepts_exact_lowercase_sha256_with_phone_shaped_digits() -> None:
+    opaque_digest = "a" * 20 + "13800138000" + "b" * 33
+    assert len(opaque_digest) == 64
+    payload = _safe_api_batch()
+    payload["selector_digest"] = opaque_digest
+
+    candidate = ledger_builder.build_candidate_ledger(
+        payload,
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+
+    assert candidate["selector_digest"] == opaque_digest
+
+
+@pytest.mark.parametrize(
+    "unsafe_value",
+    [
+        "A" * 20 + "13800138000" + "B" * 33,
+        "a" * 19 + "13800138000" + "b" * 33,
+        "prefix-" + "a" * 20 + "13800138000" + "b" * 33,
+        "a" * 20 + "13800138000" + "b" * 33 + "-suffix",
+        "13800138000",
+        "11010519491231002X",
+        "Bearer PRIVATE-CREDENTIAL",
+    ],
+)
+def test_nonexact_digest_or_raw_sensitive_value_remains_non_echo_rejected(
+    unsafe_value: str,
+) -> None:
+    payload = _safe_api_batch()
+    payload["selector_digest"] = unsafe_value
+
+    with pytest.raises(ValueError) as raised:
+        ledger_builder.build_candidate_ledger(
+            payload,
+            candidate_version="candidate20-v1",
+            generated_at="2026-07-17T10:00:00Z",
+        )
+
+    assert str(raised.value) == "unsafe API DTO"
+    assert unsafe_value not in repr(raised.value)
+
+
+def test_forbidden_key_is_rejected_even_when_value_is_exact_digest() -> None:
+    payload = _safe_api_batch()
+    payload["visit_id"] = "a" * 64
+
+    with pytest.raises(ValueError, match="unsafe API DTO"):
+        ledger_builder.build_candidate_ledger(
+            payload,
+            candidate_version="candidate20-v1",
+            generated_at="2026-07-17T10:00:00Z",
+        )
+
+
 def _accepted_review(candidate: dict[str, object]) -> dict[str, str]:
     row = candidate["rows"][0]
     return {
