@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date
 from typing import Any, Dict, List, Optional
 from types import SimpleNamespace
 
@@ -1460,6 +1461,12 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     assert filters["scoped_customer_rule_ids"] == native_rule_ids
     assert filters["validation_mode"] == "programmatic"
     assert filters["customer_rule_count"] == filters["execution_rule_count"] == 3
+    evaluation_as_of_date = filters["evaluation_as_of_date"]
+    assert date.fromisoformat(evaluation_as_of_date).isoformat() == evaluation_as_of_date
+    assert (
+        filters["idempotency_payload"]["evaluation_as_of_date"]
+        == evaluation_as_of_date
+    )
     assert filters["record_rule_map"] == {
         "visit-001": native_rule_ids,
         "visit-002": native_rule_ids,
@@ -2166,7 +2173,7 @@ async def test_luxian_runtime_shadow_flag_off_does_not_call_hook(monkeypatch):
 @pytest.mark.asyncio
 async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persists_completed(monkeypatch):
     workspace = _WorkspaceStub()
-    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic"}
+    workspace.job["filters"] = {"rule_ids": ["LX0609-030"], "selected_rule_ids": ["LX0609-030"], "scoped_customer_rule_ids": ["LX0609-030"], "record_rule_map": {"visit-001": ["LX0609-030"], "visit-002": ["LX0609-030"]}, "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY, "validation_mode": "programmatic", "evaluation_as_of_date": "2026-07-17"}
     workspace.hydrate_records_with_medical_text = lambda rows: [{**row, "institute_id": "i", "patient_id": "p", "medical_text": "ignored"} for row in rows]  # type: ignore[assignment]
     service = _ServiceStub()
     service_calls: List[Dict[str, Any]] = []
@@ -2192,6 +2199,7 @@ async def test_luxian_runtime_shadow_router_uses_provider_coordinates_and_persis
     summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
     assert summary and summary["disposition"] == "completed" and summary["final_state_counts"]["compliant_count"] == 1 and summary["llm_total_tokens"] == 0
     assert len(service_calls) == 2
+    assert {call["evaluation_as_of_date"] for call in service_calls} == {"2026-07-17"}
     assert {
         (
             call["bundle"]["institute_id"],

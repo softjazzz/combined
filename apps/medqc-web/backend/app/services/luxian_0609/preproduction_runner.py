@@ -21,6 +21,7 @@ from .execution import (
     prepare_luxian_0609_execution,
 )
 from .rule_contracts import load_luxian_0609_rule_contracts
+from .rule_decision_settings import build_full_rule_decision_settings
 
 
 PREPRODUCTION_RUNNER_SCHEMA_VERSION = "lx0609-preproduction-runner-v1"
@@ -40,39 +41,6 @@ _OBSERVED_STATES = frozenset(
     }
 )
 EvidenceAttestationSink = Callable[[Sequence[Mapping[str, str]]], None]
-
-_SETTING_OVERRIDES = {
-    "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
-    "LUXIAN_0609_TRIGGER_GATE_ENABLED": False,
-    "LUXIAN_0609_LLM_TRIGGER_GATE_ENABLED": False,
-    "LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED": False,
-    "LUXIAN_0609_NATIVE_EXECUTION_ENABLED": True,
-    "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": True,
-    "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED": True,
-    "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED": True,
-    "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED": True,
-    "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED": True,
-    "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED": True,
-    "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
-    "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
-    "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
-    "LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED": True,
-    "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_007_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED": True,
-    "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED": True,
-    "LUXIAN_0609_RUNTIME_SHADOW_ENABLED": False,
-}
 
 _SCALAR_RESULT_FIELDS = (
     "rule_id",
@@ -164,23 +132,6 @@ _PRIVATE_VALUE_KEY_PARTS = (
     "llm_raw_output",
 )
 _MIN_PRIVATE_FRAGMENT_CHARS = 12
-
-
-class _ReadOnlySettingsOverlay:
-    """仅覆盖本次旁路运行开关，不修改基础设置或进程环境。"""
-
-    __slots__ = ("_base",)
-
-    def __init__(self, base: Any) -> None:
-        object.__setattr__(self, "_base", base)
-
-    def __getattr__(self, name: str) -> Any:
-        if name in _SETTING_OVERRIDES:
-            return _SETTING_OVERRIDES[name]
-        return getattr(self._base, name)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise AttributeError("preproduction settings overlay is read-only")
 
 
 def _catalog_rule_ids() -> tuple[str, ...]:
@@ -536,7 +487,10 @@ async def run_luxian_0609_preproduction(
     private_terms = _collect_private_terms(bundle_dict)
     adapted = adapt_bundle_to_sichuan_eval_args(bundle_dict, rule_ids=[])
     evidence_payload = dict(adapted.get("evidence_payload") or {})
-    settings = _ReadOnlySettingsOverlay(base_settings)
+    settings = build_full_rule_decision_settings(
+        base_settings,
+        preproduction=True,
+    )
     started = perf_counter()
     context: Any = None
     decision_trace_rows: list[Mapping[str, Any]] = []

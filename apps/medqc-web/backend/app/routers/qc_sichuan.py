@@ -45,6 +45,9 @@ from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
+from ..services.luxian_0609.rule_decision_settings import (
+    resolve_mainline_rule_decision_settings,
+)
 from ..services.sample_validation_rule_sets import (
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
@@ -109,6 +112,7 @@ def _luxian_0609_compatibility_rule_ids(
 
     if not customer_rule_ids:
         return ()
+    settings = resolve_mainline_rule_decision_settings(settings)
     if not getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False):
         return _luxian_0609_rollback_rule_ids(customer_rule_ids)
     plan = build_luxian_0609_package_plan_from_settings(
@@ -2138,7 +2142,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         is_programmatic_mode = (
             validation_mode == "programmatic" or rule_set_key == programmatic_rule_set.key
         )
-        settings = get_settings()
+        settings = resolve_mainline_rule_decision_settings(get_settings())
         native_requested_rule_ids = _ordered_luxian_0609_customer_rule_ids(
             requested_rule_ids
         )
@@ -2800,6 +2804,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             refine_confidence_threshold=refine_confidence_threshold,
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
+                            evaluation_as_of_date=(
+                                str(filters.get("evaluation_as_of_date") or "").strip()
+                                or None
+                            ),
                             cancellation_check=_is_cancelled,
                         )
                         used_bundle_path = True
@@ -3876,6 +3884,11 @@ async def create_workspace_batch_job(
             if str(record.get("record_id") or record.get("visit_id") or "").strip()
         }
     )
+    evaluation_as_of_date = (
+        datetime.now().astimezone().date().isoformat()
+        if is_direct_native_selection
+        else ""
+    )
     idempotency_payload = {
         "scope": normalized_scope,
         "department": payload.department or "",
@@ -3892,6 +3905,11 @@ async def create_workspace_batch_job(
         "bucket_strategy": bucket_strategy,
         "batch_output_mode": batch_output_mode,
         "run_mode": run_mode,
+        **(
+            {"evaluation_as_of_date": evaluation_as_of_date}
+            if evaluation_as_of_date
+            else {}
+        ),
     }
     idempotency_digest = hashlib.sha256(
         json.dumps(idempotency_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -3960,6 +3978,11 @@ async def create_workspace_batch_job(
             "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
             "run_mode": run_mode,
+            **(
+                {"evaluation_as_of_date": evaluation_as_of_date}
+                if evaluation_as_of_date
+                else {}
+            ),
             "idempotency_key": idempotency_key,
             "idempotency_payload": idempotency_payload,
             **(

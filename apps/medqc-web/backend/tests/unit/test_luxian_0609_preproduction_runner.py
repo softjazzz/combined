@@ -522,7 +522,7 @@ def test_preproduction_runner_does_not_depend_on_router_or_sichuan_service():
     assert "workspace" not in text.lower()
 
 
-def test_preproduction_runner_as_of_does_not_preconnect_mainline():
+def test_preproduction_as_of_contract_is_shared_without_runner_dependency():
     backend_dir = Path(__file__).resolve().parents[2]
     router_text = (backend_dir / "app/routers/qc_sichuan.py").read_text(
         encoding="utf-8"
@@ -530,8 +530,10 @@ def test_preproduction_runner_as_of_does_not_preconnect_mainline():
     service_text = (backend_dir / "app/services/sichuan_qc_service.py").read_text(
         encoding="utf-8"
     )
-    assert "evaluation_as_of_date" not in router_text
-    assert "evaluation_as_of_date" not in service_text
+    assert "evaluation_as_of_date" in router_text
+    assert "evaluation_as_of_date" in service_text
+    assert "preproduction_runner" not in router_text
+    assert "preproduction_runner" not in service_text
 
 
 def test_preproduction_runner_cold_process_does_not_load_sichuan_service():

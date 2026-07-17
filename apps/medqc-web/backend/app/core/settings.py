@@ -148,6 +148,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = False
     # 统一执行信封迁移开关；关闭时保留冻结旧调度链作为回滚。
     LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = False
+    # 49条 RuleDecision 接入正式 LX0609 主链；关闭后恢复接入前的执行行为。
+    LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED: bool = False
     # 007 使用 EvidenceSnapshot 权威 record_time 生成 RuleDecision；独立回滚。
     LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = False
     # 008/009 使用受控病重/病危医嘱来源形成适用性 RuleDecision；独立回滚。

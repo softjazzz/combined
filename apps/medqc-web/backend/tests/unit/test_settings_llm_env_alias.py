@@ -28,6 +28,7 @@ LLM_ENV_KEYS = [
     "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED",
     "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED",
     "LUXIAN_0609_NATIVE_MDT_040_ENABLED",
+    "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
     "LUXIAN_0609_PREPRODUCTION_API_ENABLED",
 ]
 
@@ -42,6 +43,17 @@ def test_luxian_preproduction_api_defaults_off_and_parses_boolean_env(monkeypatc
 
     monkeypatch.setenv("LUXIAN_0609_PREPRODUCTION_API_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_PREPRODUCTION_API_ENABLED is False
+
+
+def test_luxian_mainline_rule_decision_defaults_off_and_can_be_enabled(
+    monkeypatch,
+):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is False
+
+    monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "true")
+    assert Settings(_env_file=None).LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
 
 
 def _clear_env(monkeypatch):

@@ -1516,6 +1516,109 @@ async def test_public_entry_all_49_native_rules_do_not_load_legacy_mappings(monk
 
 
 @pytest.mark.asyncio
+async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_of(
+    monkeypatch,
+):
+    selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
+    captured: dict[str, object] = {}
+    base_settings = _all_native_settings(
+        LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+        LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_007_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED=False,
+        LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED=False,
+    )
+
+    async def _prepare(**kwargs):
+        settings = kwargs["settings"]
+        captured["selected"] = tuple(kwargs["selected_customer_rule_ids"])
+        captured["as_of"] = kwargs["evaluation_as_of_date"]
+        captured["unified"] = settings.LUXIAN_0609_UNIFIED_ENGINE_ENABLED
+        captured["decision_flags"] = tuple(
+            getattr(settings, name)
+            for name in (
+                "LUXIAN_0609_RULE_DECISION_007_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED",
+                "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED",
+            )
+        )
+        return [], SimpleNamespace(enabled=True)
+
+    def _aggregate(*, orchestrated, **_kwargs):
+        orchestrated["results"] = [
+            {
+                "rule_id": rule_id,
+                "status": "data_gap",
+                "is_compliant": None,
+                "metadata": {"execution_source": "lx0609_native"},
+            }
+            for rule_id in selected
+        ]
+
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.get_settings", lambda: base_settings
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.prepare_luxian_0609_execution", _prepare
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.aggregate_luxian_0609_orchestrated_results",
+        _aggregate,
+    )
+    monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
+    service = SichuanQCService()
+    monkeypatch.setattr(
+        service,
+        "get_rule_by_id",
+        lambda rule_id: (_ for _ in ()).throw(
+            AssertionError(f"主链总开关开启后不得加载旧规则: {rule_id}")
+        ),
+    )
+
+    result = await service.evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "visit_id": "safe-visit",
+            "structured_context": {"documents": {}},
+            "text_available": False,
+        },
+        rule_ids=selected,
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        evaluation_as_of_date="2026-07-17",
+        use_execution_cache=False,
+    )
+
+    assert captured == {
+        "selected": tuple(selected),
+        "as_of": "2026-07-17",
+        "unified": True,
+        "decision_flags": (True,) * 13,
+    }
+    assert [item["rule_id"] for item in result["evaluation_results"]] == selected
+
+
+@pytest.mark.asyncio
 async def test_public_entry_snapshot_sidecar_is_once_internal_and_output_compatible(
     monkeypatch,
 ) -> None:

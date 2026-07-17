@@ -71,6 +71,9 @@ from .luxian_0609.execution import (
     prepare_luxian_0609_execution,
 )
 from .luxian_0609 import source_evidence_reader
+from .luxian_0609.rule_decision_settings import (
+    resolve_mainline_rule_decision_settings,
+)
 from .luxian_0609_trigger_gate import build_luxian_0609_033_live_source_decision
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
@@ -4466,6 +4469,7 @@ class SichuanQCService:
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
         rule_set_key: str = "",
+        evaluation_as_of_date: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -4492,6 +4496,8 @@ class SichuanQCService:
         normalized_rule_set_key = str(rule_set_key or "").strip()
         quality_profile_normalized = normalize_quality_profile(quality_profile)
         settings = get_settings()
+        if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            settings = resolve_mainline_rule_decision_settings(settings)
         selected_customer_rule_ids: tuple[str, ...] | None = None
         if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
             normalized_requested_ids = tuple(
@@ -4575,6 +4581,7 @@ class SichuanQCService:
                 institute_id=str((bundle or {}).get("institute_id") or ""),
                 patient_id=str((bundle or {}).get("patient_id") or ""),
                 source_schema=source_schema or None,
+                evaluation_as_of_date=evaluation_as_of_date,
                 selected_customer_rule_ids=selected_customer_rule_ids,
             )
 
