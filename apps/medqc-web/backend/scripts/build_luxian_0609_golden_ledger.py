@@ -40,6 +40,7 @@ _FORBIDDEN_KEY_PARTS = (
     "address",
     "medicaltext",
     "recordcontent",
+    "body",
     "primarydocumenttext",
     "supportingdocuments",
     "sourcecoordinates",
@@ -48,6 +49,10 @@ _FORBIDDEN_KEY_PARTS = (
     "snapshot",
     "prompt",
     "rawresponse",
+    "rawcontent",
+    "rawoutput",
+    "rawpayload",
+    "rawtext",
     "llmrawoutput",
     "sql",
     "jobid",
@@ -63,6 +68,10 @@ _OBSERVED_STATES = {
 }
 _EXPECTED_STATES = _OBSERVED_STATES - {"technical_error"}
 _DECISION_KINDS = {"deterministic", "semantic"}
+_EXECUTOR_DECISION_KINDS = {
+    "program": "deterministic",
+    "llm": "semantic",
+}
 
 
 def _normalized_key(value: Any) -> str:
@@ -177,21 +186,35 @@ def build_candidate_ledger(
             seen_pairs.add(pair)
             metadata = result.get("metadata")
             reason_code = ""
+            decision_kind = ""
+            executor_type = ""
             if isinstance(metadata, Mapping):
                 reason_code = str(metadata.get("reason_code") or "").strip()
+                executor_type = str(
+                    metadata.get("executor_type") or ""
+                ).strip().lower()
+                decision_kind = _EXECUTOR_DECISION_KINDS.get(
+                    executor_type,
+                    "",
+                )
             if reason_code and not _SAFE_CODE_RE.fullmatch(reason_code):
                 raise ValueError("invalid observed reason")
-            rows.append(
-                {
-                    "case_label": case_label,
-                    "selector_digest": selector_digest,
-                    "rule_id": rule_id,
-                    "observed_state": state,
-                    "observed_reason_code": reason_code,
-                    "evidence_ref_hashes": [_evidence_hash(result)],
-                    "review_status": "candidate",
-                }
-            )
+            if executor_type and decision_kind not in _DECISION_KINDS:
+                raise ValueError("invalid decision kind")
+            row = {
+                "case_label": case_label,
+                "selector_digest": selector_digest,
+                "rule_id": rule_id,
+                "observed_state": state,
+                "observed_reason_code": reason_code,
+                "evidence_ref_hashes": [_evidence_hash(result)],
+                "review_status": "candidate",
+            }
+            # v1 历史候选没有 executor_type；保留其 promotion 兼容性。
+            # 新准生产安全 DTO 会显式携带该字段，review-template 只接受新候选。
+            if decision_kind:
+                row["decision_kind"] = decision_kind
+            rows.append(row)
 
     candidate: dict[str, Any] = {
         "schema_version": CANDIDATE_SCHEMA_VERSION,
@@ -208,7 +231,7 @@ def build_candidate_ledger(
     return candidate
 
 
-_REVIEW_FIELDS = {
+_REVIEW_FIELD_ORDER = (
     "candidate_digest",
     "case_label",
     "selector_digest",
@@ -220,6 +243,16 @@ _REVIEW_FIELDS = {
     "reviewer_code",
     "accepted_at",
     "review_revision",
+    "review_status",
+)
+_REVIEW_FIELDS = set(_REVIEW_FIELD_ORDER)
+_CANDIDATE_ROW_REQUIRED_FIELDS = {
+    "case_label",
+    "selector_digest",
+    "rule_id",
+    "observed_state",
+    "observed_reason_code",
+    "evidence_ref_hashes",
     "review_status",
 }
 
@@ -234,7 +267,110 @@ def _validate_candidate(candidate: Mapping[str, Any]) -> str:
     material = {key: value for key, value in candidate.items() if key != "candidate_digest"}
     if canonical_digest(material) != claimed:
         raise ValueError("invalid candidate ledger")
+    rows = candidate.get("rows")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or int(candidate.get("candidate_count") or 0) != len(rows)
+    ):
+        raise ValueError("invalid candidate ledger")
+    selector_digest = _require_digest(
+        candidate.get("selector_digest"), field="selector_digest"
+    )
+    seen_pairs: set[tuple[str, str]] = set()
+    seen_cases: set[str] = set()
+    for row in rows:
+        if not isinstance(row, Mapping) or set(row) not in (
+            _CANDIDATE_ROW_REQUIRED_FIELDS,
+            _CANDIDATE_ROW_REQUIRED_FIELDS | {"decision_kind"},
+        ):
+            raise ValueError("invalid candidate ledger")
+        case_label = str(row.get("case_label") or "").strip()
+        rule_id = str(row.get("rule_id") or "").strip().upper()
+        pair = (case_label, rule_id)
+        reason_code = str(row.get("observed_reason_code") or "").strip()
+        if (
+            not _CASE_LABEL_RE.fullmatch(case_label)
+            or not _RULE_ID_RE.fullmatch(rule_id)
+            or pair in seen_pairs
+            or str(row.get("selector_digest") or "").strip() != selector_digest
+            or (
+                "decision_kind" in row
+                and str(row.get("decision_kind") or "").strip().lower()
+                not in _DECISION_KINDS
+            )
+            or str(row.get("observed_state") or "").strip().lower()
+            not in _OBSERVED_STATES
+            or (reason_code and not _SAFE_CODE_RE.fullmatch(reason_code))
+            or str(row.get("review_status") or "").strip().lower() != "candidate"
+        ):
+            raise ValueError("invalid candidate ledger")
+        _review_hashes(row.get("evidence_ref_hashes"))
+        seen_pairs.add(pair)
+        seen_cases.add(case_label)
+    if int(candidate.get("sample_count") or 0) != len(seen_cases):
+        raise ValueError("invalid candidate ledger")
     return claimed
+
+
+def _review_sort_key(row: Mapping[str, Any]) -> tuple[int, int]:
+    return (
+        int(str(row.get("case_label") or "").removeprefix("case-")),
+        int(str(row.get("rule_id") or "").removeprefix("LX0609-")),
+    )
+
+
+def build_review_template_rows(
+    candidate: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    """从候选生成空白人工复核矩阵；绝不复制 observed 判定。"""
+
+    candidate_digest = _validate_candidate(candidate)
+    candidate_rows = candidate.get("rows")
+    assert isinstance(candidate_rows, list)
+    rows: list[dict[str, str]] = []
+    for candidate_row in sorted(candidate_rows, key=_review_sort_key):
+        assert isinstance(candidate_row, Mapping)
+        decision_kind = str(candidate_row.get("decision_kind") or "").strip().lower()
+        if decision_kind not in _DECISION_KINDS:
+            raise ValueError("invalid candidate ledger")
+        rows.append(
+            {
+                "candidate_digest": candidate_digest,
+                "case_label": str(candidate_row.get("case_label") or ""),
+                "selector_digest": str(
+                    candidate_row.get("selector_digest") or ""
+                ),
+                "rule_id": str(candidate_row.get("rule_id") or ""),
+                "decision_kind": decision_kind,
+                "expected_state": "",
+                "expected_reason_code": "",
+                "evidence_ref_hashes": ";".join(
+                    _review_hashes(candidate_row.get("evidence_ref_hashes"))
+                ),
+                "reviewer_code": "",
+                "accepted_at": "",
+                "review_revision": "",
+                "review_status": "",
+            }
+        )
+    return rows
+
+
+def write_review_template_csv(
+    path: Path,
+    review_rows: Sequence[Mapping[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=_REVIEW_FIELD_ORDER,
+            lineterminator="\n",
+            extrasaction="raise",
+        )
+        writer.writeheader()
+        writer.writerows(review_rows)
 
 
 def _review_hashes(value: Any) -> list[str]:
@@ -307,6 +443,8 @@ def promote_candidate_ledger(
         reviewer_code = str(review.get("reviewer_code") or "").strip().upper()
         accepted_at = str(review.get("accepted_at") or "").strip()
         decision_kind = str(review.get("decision_kind") or "").strip().lower()
+        review_hashes = _review_hashes(review.get("evidence_ref_hashes"))
+        candidate_hashes = _review_hashes(candidate_row.get("evidence_ref_hashes"))
         try:
             revision = int(str(review.get("review_revision") or "").strip())
         except ValueError as exc:
@@ -321,6 +459,12 @@ def promote_candidate_ledger(
             or not _REVIEWER_CODE_RE.fullmatch(reviewer_code)
             or not _UTC_RE.fullmatch(accepted_at)
             or decision_kind not in _DECISION_KINDS
+            or (
+                "decision_kind" in candidate_row
+                and decision_kind
+                != str(candidate_row.get("decision_kind") or "").strip().lower()
+            )
+            or review_hashes != candidate_hashes
             or revision < 1
         ):
             raise ValueError("incomplete accepted review")
@@ -332,9 +476,7 @@ def promote_candidate_ledger(
                 "decision_kind": decision_kind,
                 "expected_state": expected_state,
                 "expected_reason_code": expected_reason,
-                "evidence_ref_hashes": _review_hashes(
-                    review.get("evidence_ref_hashes")
-                ),
+                "evidence_ref_hashes": review_hashes,
                 "reviewer_code": reviewer_code,
                 "accepted_at": accepted_at,
                 "review_revision": revision,
@@ -381,6 +523,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     candidate.add_argument("--generated-at", required=True)
     candidate.add_argument("--out", type=Path, required=True)
 
+    review_template = subparsers.add_parser("review-template")
+    review_template.add_argument("--candidate", type=Path, required=True)
+    review_template.add_argument("--out", type=Path, required=True)
+
     promote = subparsers.add_parser("promote")
     promote.add_argument("--candidate", type=Path, required=True)
     promote.add_argument("--review", type=Path, required=True)
@@ -402,6 +548,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             count_field = "candidate_count"
             digest_field = "candidate_digest"
+        elif args.command == "review-template":
+            candidate = _read_json_object(args.candidate)
+            review_rows = build_review_template_rows(candidate)
+            write_review_template_csv(args.out, review_rows)
+            output = {
+                "review_count": len(review_rows),
+                "candidate_digest": str(candidate.get("candidate_digest") or ""),
+            }
+            count_field = "review_count"
+            digest_field = "candidate_digest"
         else:
             candidate = _read_json_object(args.candidate)
             with args.review.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -415,7 +571,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             count_field = "accepted_count"
             digest_field = "ledger_digest"
-        _write_json(args.out, output)
+        if args.command != "review-template":
+            _write_json(args.out, output)
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         print(
             json.dumps(

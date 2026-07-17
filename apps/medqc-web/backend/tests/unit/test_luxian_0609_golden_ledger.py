@@ -38,7 +38,10 @@ def _safe_api_batch(*, status: str = "non_compliant") -> dict[str, object]:
                         {
                             "rule_id": "LX0609-001",
                             "status": status,
-                            "metadata": {"reason_code": "deadline_exceeded"},
+                            "metadata": {
+                                "reason_code": "deadline_exceeded",
+                                "executor_type": "program",
+                            },
                             "evidence_items": [
                                 {
                                     "source_table": "admission_record",
@@ -75,6 +78,7 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
             "case_label": "case-01",
             "selector_digest": "a" * 64,
             "rule_id": "LX0609-001",
+            "decision_kind": "deterministic",
             "observed_state": "non_compliant",
             "observed_reason_code": "deadline_exceeded",
             "evidence_ref_hashes": candidate["rows"][0]["evidence_ref_hashes"],
@@ -86,6 +90,75 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
     assert "expected_state" not in candidate["rows"][0]
 
 
+def test_candidate_exports_stable_blank_human_review_template(tmp_path: Path) -> None:
+    candidate = ledger_builder.build_candidate_ledger(
+        _safe_api_batch(status="non_compliant"),
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+    review_rows = ledger_builder.build_review_template_rows(candidate)
+
+    assert review_rows == [
+        {
+            "candidate_digest": candidate["candidate_digest"],
+            "case_label": "case-01",
+            "selector_digest": "a" * 64,
+            "rule_id": "LX0609-001",
+            "decision_kind": "deterministic",
+            "expected_state": "",
+            "expected_reason_code": "",
+            "evidence_ref_hashes": ";".join(
+                candidate["rows"][0]["evidence_ref_hashes"]
+            ),
+            "reviewer_code": "",
+            "accepted_at": "",
+            "review_revision": "",
+            "review_status": "",
+        }
+    ]
+    assert "observed_state" not in review_rows[0]
+    assert "observed_reason_code" not in review_rows[0]
+
+    output = tmp_path / "review.csv"
+    ledger_builder.write_review_template_csv(output, review_rows)
+    raw = output.read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert b"\r\n" not in raw
+    with output.open("r", encoding="utf-8", newline="") as handle:
+        assert list(csv.DictReader(handle)) == review_rows
+
+
+def test_review_template_uses_explicit_llm_executor_as_semantic() -> None:
+    payload = _safe_api_batch()
+    payload["cases"][0]["response"]["results"][0]["metadata"][
+        "executor_type"
+    ] = "llm"
+    candidate = ledger_builder.build_candidate_ledger(
+        payload,
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+
+    assert ledger_builder.build_review_template_rows(candidate)[0][
+        "decision_kind"
+    ] == "semantic"
+
+
+def test_review_template_never_guesses_missing_decision_kind() -> None:
+    payload = _safe_api_batch()
+    del payload["cases"][0]["response"]["results"][0]["metadata"][
+        "executor_type"
+    ]
+    candidate = ledger_builder.build_candidate_ledger(
+        payload,
+        candidate_version="legacy-candidate-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+
+    with pytest.raises(ValueError, match="invalid candidate ledger"):
+        ledger_builder.build_review_template_rows(candidate)
+
+
 @pytest.mark.parametrize(
     ("forbidden_key", "forbidden_value"),
     [
@@ -94,6 +167,10 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
         ("medical_text", "PRIVATE-BODY-MARKER"),
         ("prompt", "PRIVATE-PROMPT-MARKER"),
         ("raw_response", "PRIVATE-RAW-MARKER"),
+        ("document_body", "PRIVATE-BODY-MARKER"),
+        ("raw_output", "PRIVATE-RAW-OUTPUT-MARKER"),
+        ("sql", "PRIVATE-SQL-MARKER"),
+        ("source_coordinates", "PRIVATE-COORDINATES-MARKER"),
     ],
 )
 def test_candidate_builder_rejects_phi_or_internal_api_fields_without_echo(
@@ -121,7 +198,7 @@ def _accepted_review(candidate: dict[str, object]) -> dict[str, str]:
         "case_label": str(row["case_label"]),
         "selector_digest": str(row["selector_digest"]),
         "rule_id": str(row["rule_id"]),
-        "decision_kind": "deterministic",
+        "decision_kind": str(row["decision_kind"]),
         "expected_state": "compliant",
         "expected_reason_code": "deadline_met",
         "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
@@ -172,6 +249,81 @@ def test_promotion_uses_human_expected_state_not_model_observed_state() -> None:
     assert ledger["ledger_digest"] == ledger_builder.canonical_digest(
         {key: value for key, value in ledger.items() if key != "ledger_digest"}
     )
+
+
+def test_review_template_cli_sorts_matrix_and_preserves_row_count(
+    tmp_path: Path,
+) -> None:
+    payload = _safe_api_batch()
+    second = json.loads(json.dumps(payload["cases"][0]))
+    second["case_label"] = "case-02"
+    second["response"]["results"][0]["rule_id"] = "LX0609-009"
+    payload["cases"] = [second, payload["cases"][0]]
+    candidate = ledger_builder.build_candidate_ledger(
+        payload,
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+    candidate_path = tmp_path / "candidate.json"
+    output_path = tmp_path / "review.csv"
+    candidate_path.write_text(
+        json.dumps(candidate, ensure_ascii=False), encoding="utf-8", newline="\n"
+    )
+
+    assert ledger_builder.main(
+        [
+            "review-template",
+            "--candidate",
+            str(candidate_path),
+            "--out",
+            str(output_path),
+        ]
+    ) == 0
+
+    with output_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == candidate["candidate_count"] == 2
+    assert [(row["case_label"], row["rule_id"]) for row in rows] == [
+        ("case-01", "LX0609-001"),
+        ("case-02", "LX0609-009"),
+    ]
+    assert all(row["expected_state"] == "" for row in rows)
+
+
+def test_review_template_rejects_unsafe_tampered_candidate_without_echo() -> None:
+    candidate = ledger_builder.build_candidate_ledger(
+        _safe_api_batch(),
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+    candidate["rows"][0]["record_content"] = "PRIVATE-BODY-MARKER"
+    candidate["candidate_digest"] = ledger_builder.canonical_digest(
+        {key: value for key, value in candidate.items() if key != "candidate_digest"}
+    )
+
+    with pytest.raises(ValueError) as raised:
+        ledger_builder.build_review_template_rows(candidate)
+
+    assert str(raised.value) == "unsafe API DTO"
+    assert "PRIVATE-BODY-MARKER" not in repr(raised.value)
+
+
+def test_promotion_rejects_changed_immutable_decision_kind() -> None:
+    candidate = ledger_builder.build_candidate_ledger(
+        _safe_api_batch(),
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )
+    review = _accepted_review(candidate)
+    review["decision_kind"] = "semantic"
+
+    with pytest.raises(ValueError, match="incomplete accepted review"):
+        ledger_builder.promote_candidate_ledger(
+            candidate,
+            [review],
+            ledger_version="accepted20-v1",
+            generated_at="2026-07-17T10:31:00Z",
+        )
 
 
 def test_schema_and_empty_review_template_are_safe_and_do_not_fake_acceptance() -> None:

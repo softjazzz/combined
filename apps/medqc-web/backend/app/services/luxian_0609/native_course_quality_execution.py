@@ -1115,6 +1115,154 @@ def _rule_008_009_decision(
     )
 
 
+def _rule_009_semantic_context(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> str:
+    """仅投影病危评价区间内的日常病程和上级医师查房正文。"""
+
+    if (
+        type(snapshot) is not Luxian0609EvidenceSnapshot
+        or type(materials) is not Luxian0609EvidenceMaterialStore
+        or materials.snapshot_hash != snapshot.snapshot_hash
+    ):
+        return ""
+    try:
+        critical_dates = tuple(
+            _authoritative_natural_date(row.get("prescribed_datetime"))
+            for row in materials.rows(CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY)
+            if row.get("severity") == "critical"
+        )
+        horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
+    except Exception:
+        return ""
+    if (
+        not critical_dates
+        or any(item is None for item in critical_dates)
+        or len(horizon_rows) != 1
+    ):
+        return ""
+    anchor_date = min(item for item in critical_dates if item is not None)
+    horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
+    if horizon_date is None or horizon_date < anchor_date:
+        return ""
+
+    parts: list[str] = []
+    for source_key in _RULE_007_RECORD_SOURCES:
+        try:
+            rows = materials.rows(source_key)
+        except Exception:
+            return ""
+        accepted = 0
+        for row in rows:
+            record_date = _authoritative_natural_date(row.get("record_time"))
+            content = _row_text(row)
+            if (
+                record_date is None
+                or not anchor_date <= record_date <= horizon_date
+                or not content
+            ):
+                continue
+            parts.append(
+                f"[{source_key}] 记录日={record_date.isoformat()}；"
+                f"内容={content[:_MAX_ROW_CHARS]}"
+            )
+            accepted += 1
+            if accepted >= _MAX_ROWS_PER_SOURCE:
+                break
+    return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
+
+
+def _rule_009_semantic_prompt(*, context: str) -> str:
+    return f"""你是 LX0609-009 病危病程语义核对器。
+
+Python 已确认：从病危医嘱开立自然日至权威评价终点，每个自然日均存在日常病程或上级医师查房记录。不要重新判断每日频次。
+你只判断已提供记录中出现的病情变化，是否有及时、对应的病情记录与处置说明：
+- satisfied：记录明确显示病情稳定无变化，或出现的病情变化均有及时对应记录；
+- defect：记录明确显示发生病情变化，但对应记录或处置明显不及时；
+- unknown：材料不足以可靠判断，禁止猜测。
+
+只能使用以下当前就诊、评价区间内的裁剪记录：
+{context}
+
+只输出 JSON：{{"semantic_state":"satisfied|defect|unknown"}}"""
+
+
+def _parse_rule_009_semantic_state(response: Mapping[str, Any]) -> str | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>",
+        "",
+        _response_text(response),
+        flags=re.IGNORECASE,
+    ).strip()
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (TypeError, ValueError):
+        return None
+    state = payload.get("semantic_state") if isinstance(payload, Mapping) else None
+    return state if state in {"satisfied", "defect", "unknown"} else None
+
+
+def _rule_009_semantic_decision(
+    *,
+    base_decision: RuleDecision,
+    semantic_state: str | None = None,
+    error_reason: str = "",
+) -> RuleDecision:
+    """将009的三态语义结果与已通过的Python频次判断合成。"""
+
+    if base_decision.rule_id != "LX0609-009":
+        raise ValueError("009 semantic decision requires LX0609-009")
+    if error_reason:
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            error_reason,
+            None,
+        )
+    elif semantic_state == "satisfied":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+            1.0,
+        )
+    elif semantic_state == "defect":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "requirement_violated",
+            1.0,
+        )
+    else:
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "required_field_missing",
+            None,
+        )
+    applicability, evidence_state, qc_direction, reason_code, confidence = dimensions
+    return RuleDecision(
+        rule_id=base_decision.rule_id,
+        snapshot_hash=base_decision.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=base_decision.fact_refs,
+        evaluator_version="course-severity-semantic-v1",
+        confidence=confidence,
+    )
+
+
 def _context(
     rule_id: str,
     documents: Mapping[str, Any],
@@ -1883,11 +2031,50 @@ async def execute_luxian_0609_native_course_quality_rules(
         if rule_id in {"LX0609-008", "LX0609-009"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
+            severity_decision = _rule_008_009_decision(
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+            if (
+                rule_id != "LX0609-009"
+                or severity_decision.reason_code != "required_field_missing"
+            ):
+                decisions.append(severity_decision)
+                continue
+            semantic_context = _rule_009_semantic_context(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+            if not semantic_context or llm_client is None:
+                decisions.append(severity_decision)
+                continue
+            llm_call_count += 1
+            try:
+                response = await llm_client.generate(
+                    _rule_009_semantic_prompt(context=semantic_context)
+                )
+            except Exception:
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=severity_decision,
+                        error_reason="model_transport_error",
+                    )
+                )
+                continue
+            prompt, completion, total, elapsed = _usage(response)
+            prompt_tokens += prompt
+            completion_tokens += completion
+            total_tokens += total
+            api_time += elapsed
+            semantic_state = _parse_rule_009_semantic_state(response)
             decisions.append(
-                _rule_008_009_decision(
-                    rule_id=rule_id,
-                    snapshot=evidence_snapshot,
-                    materials=evidence_materials,
+                _rule_009_semantic_decision(
+                    base_decision=severity_decision,
+                    semantic_state=semantic_state,
+                    error_reason=(
+                        "model_invalid_output" if semantic_state is None else ""
+                    ),
                 )
             )
             continue
