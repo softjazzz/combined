@@ -294,6 +294,11 @@ def build_luxian_0609_legacy_executor_registry(
                 source_schema=resources.source_schema,
                 evidence_snapshot=resources.evidence_snapshot,
                 evidence_materials=resources.evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
             )
         )
         return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)

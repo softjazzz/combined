@@ -323,7 +323,7 @@
     },
     {
       "rule_id": "LX0609-029",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_presence",
       "execution_mode": "native_sync",
@@ -334,7 +334,7 @@
     },
     {
       "rule_id": "LX0609-030",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_presence",
       "execution_mode": "native_sync",
@@ -356,7 +356,7 @@
     },
     {
       "rule_id": "LX0609-032",
-      "contract_version": "v1",
+      "contract_version": "v2",
       "family_key": "surgery_anesthesia",
       "executor_key": "surgery_presence",
       "execution_mode": "native_sync",

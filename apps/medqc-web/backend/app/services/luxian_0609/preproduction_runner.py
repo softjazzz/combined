@@ -26,7 +26,6 @@ from .rule_contracts import load_luxian_0609_rule_contracts
 PREPRODUCTION_RUNNER_SCHEMA_VERSION = "lx0609-preproduction-runner-v1"
 EVIDENCE_ATTESTATION_VERSION = "lx0609-evidence-attestation-v1"
 
-_ADAPTER_RULE_IDS = frozenset({"LX0609-029", "LX0609-030", "LX0609-032"})
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _REASON_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
@@ -376,22 +375,6 @@ def _canonical_digest(value: Any) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-def _adapter_evaluator_version(rule_id: str) -> str:
-    contract = next(
-        (item for item in load_luxian_0609_rule_contracts() if item.rule_id == rule_id),
-        None,
-    )
-    if contract is None or rule_id not in _ADAPTER_RULE_IDS:
-        raise ValueError("missing trusted adapter contract")
-    identity = (
-        f"adapter-{contract.executor_key}-{contract.contract_version}-"
-        f"{contract.rule_version}"
-    )
-    if not _VERSION_RE.fullmatch(identity):
-        raise ValueError("invalid trusted adapter contract")
-    return identity
-
-
 def _build_evidence_attestations(
     *,
     selected_rule_ids: tuple[str, ...],
@@ -432,9 +415,7 @@ def _build_evidence_attestations(
     }
 
     traced_by_rule: dict[str, tuple[str, tuple[str, ...], str, str, str]] = {}
-    expected_traced_ids = tuple(
-        rule_id for rule_id in selected_rule_ids if rule_id not in _ADAPTER_RULE_IDS
-    )
+    expected_traced_ids = selected_rule_ids
     for trace in trace_rows:
         if not isinstance(trace, Mapping):
             raise ValueError("invalid decision trace")
@@ -480,31 +461,13 @@ def _build_evidence_attestations(
     rows: list[dict[str, str]] = []
     seen_hashes: set[str] = set()
     for rule_id in selected_rule_ids:
-        if rule_id in _ADAPTER_RULE_IDS:
-            snapshot_hash = snapshot_by_rule[rule_id]
-            fact_refs: tuple[str, ...] = ()
-            evaluator_version = _adapter_evaluator_version(rule_id)
-            raw_result = result_by_rule[rule_id]
-            observed_state = str(raw_result.get("status") or "").strip().lower()
-            raw_metadata = raw_result.get("metadata")
-            reason_code = (
-                str(raw_metadata.get("reason_code") or "").strip().lower()
-                if isinstance(raw_metadata, Mapping)
-                else ""
-            )
-            if (
-                observed_state not in _OBSERVED_STATES
-                or not _REASON_CODE_RE.fullmatch(reason_code)
-            ):
-                raise ValueError("invalid adapter attestation result")
-        else:
-            (
-                snapshot_hash,
-                fact_refs,
-                evaluator_version,
-                observed_state,
-                reason_code,
-            ) = traced_by_rule[rule_id]
+        (
+            snapshot_hash,
+            fact_refs,
+            evaluator_version,
+            observed_state,
+            reason_code,
+        ) = traced_by_rule[rule_id]
         evidence_hash = _canonical_digest(
             {
                 "attestation_version": EVIDENCE_ATTESTATION_VERSION,

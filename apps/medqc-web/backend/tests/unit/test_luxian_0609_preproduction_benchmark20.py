@@ -56,8 +56,8 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
             "completion_tokens": 2,
             "total_tokens": 12,
             "technical_error_count": 0,
-            "rule_decision_count": 46,
-            "typed_shadow_adapter_count": 3,
+            "rule_decision_count": 49,
+            "typed_shadow_adapter_count": 0,
             "legacy_projection_count": 0,
         },
     }
@@ -146,8 +146,8 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
     assert batch["summary"]["rule_maturity"] == {
-        "rule_decision_count": 46,
-        "typed_shadow_adapter_count": 3,
+        "rule_decision_count": 49,
+        "typed_shadow_adapter_count": 0,
         "legacy_projection_count": 0,
     }
     assert len(batch["selector_digest"]) == 64

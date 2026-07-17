@@ -358,6 +358,16 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
+                rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_NATIVE_EXECUTION_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
                 rule_id == "LX0609-040"
                 and bool(
                     getattr(

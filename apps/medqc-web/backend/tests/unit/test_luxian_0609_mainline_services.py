@@ -22,6 +22,12 @@ from app.services.luxian_0609_trigger_gate import (
 )
 from app.services.luxian_0609_llm_gate import evaluate_luxian_0609_trigger_gates_with_llm
 from app.services.luxian_0609 import execution as luxian_execution
+from app.services.luxian_0609.decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from app.services.luxian_0609.native_execution import NativeExecutionResult
 from app.services.luxian_0609.native_consultation_execution import (
     NativeConsultationExecutionResult,
@@ -477,10 +483,28 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     def _sync(name: str):
         def invoke(**kwargs):
             rule_ids = tuple(kwargs["rule_ids"])
+            decision_rule_ids = tuple(kwargs.get("decision_rule_ids") or ())
             calls.append((name, rule_ids))
             return NativeExecutionResult(
-                results=tuple(_native_result(rule_id) for rule_id in rule_ids),
+                results=tuple(
+                    _native_result(rule_id)
+                    for rule_id in rule_ids
+                    if rule_id not in decision_rule_ids
+                ),
                 planned_rule_ids=rule_ids,
+                decisions=tuple(
+                    RuleDecision(
+                        rule_id=rule_id,
+                        snapshot_hash=snapshot.snapshot_hash,
+                        applicability=ApplicabilityState.APPLICABLE,
+                        evidence_state=EvidenceState.SUFFICIENT,
+                        qc_direction=QcDirection.SATISFIED,
+                        reason_code="requirement_satisfied",
+                        fact_refs=("a" * 64,),
+                        evaluator_version="test-ruledecision-v1",
+                    )
+                    for rule_id in decision_rule_ids
+                ),
             )
 
         return invoke
@@ -557,7 +581,12 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
         ("basic_timeliness", ("LX0609-001",)),
         ("exam_lab", ("LX0609-010",)),
     ]
-    assert [item["rule_id"] for item in context.native_results] == list(selected)
+    assert [item["rule_id"] for item in context.native_results] == [
+        "LX0609-001",
+        "LX0609-010",
+    ]
+    assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-029"]
+    assert context.reduced_decisions[0].final_state.value == "compliant"
     assert context.native_llm_call_count == 1
     assert context.native_total_tokens == 15
     assert context.unified_engine_used is True

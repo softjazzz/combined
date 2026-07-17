@@ -7,7 +7,12 @@ from types import MappingProxyType
 from typing import Any, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
-from .decision_model import RuleDecision
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
@@ -42,6 +47,18 @@ _AGGREGATION_POLICY = "aggregation-v1"
 _EXECUTION_SCHEMA = "execution-v1"
 _EXECUTION_POLICY = "native-v1"
 _PACKAGE_VERSION = "lx0609-native-v1"
+_TYPED_EVALUATOR_VERSION = "surgery-presence-ruledecision-v2"
+_TYPED_RULE_SOURCE_KEYS = MappingProxyType(
+    {
+        "LX0609-029": frozenset(
+            {"presurg_summary", "surgery_record", "mr_surgery"}
+        ),
+        "LX0609-030": frozenset({"surgery_record", "mr_surgery"}),
+        "LX0609-032": frozenset(
+            {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
+        ),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -152,6 +169,76 @@ def build_luxian_0609_native_technical_results(
     return _technical_results(selected, reason_code=reason_code)
 
 
+def _typed_rule_decision(
+    *,
+    rule_id: str,
+    final_state: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in _TYPED_RULE_SOURCE_KEYS[rule_id]
+    )
+    if final_state in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed surgery presence decision requires evidence refs")
+    dimensions = {
+        "compliant": (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        ),
+        "non_compliant": (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "required_document_missing",
+        ),
+        "not_applicable": (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "trigger_absent_complete",
+        ),
+        "data_gap": (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            "required_field_missing",
+        ),
+        "technical_error": (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            "executor_exception",
+        ),
+        "evaluation_unknown": (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+            "evidence_conflict",
+        ),
+    }
+    try:
+        applicability, evidence_state, qc_direction, reason_code = dimensions[
+            final_state
+        ]
+    except KeyError:
+        raise ValueError("unsupported surgery presence final state") from None
+    return RuleDecision(
+        rule_id=rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
+
+
 def execute_luxian_0609_native_rules(
     *,
     rule_ids: Sequence[str],
@@ -161,11 +248,26 @@ def execute_luxian_0609_native_rules(
     source_schema: str | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeExecutionResult:
     """同步运行已验收链；异常隔离为客户安全的 technical_error。"""
     selected = tuple(rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(rule_ids))
     if not selected:
         return NativeExecutionResult((), ())
+    typed_requested = frozenset(
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    )
+    if not typed_requested.issubset(set(selected)):
+        raise ValueError("unsupported typed surgery presence scope")
+    typed_selected = tuple(
+        rule_id for rule_id in selected if rule_id in typed_requested
+    )
+    if typed_selected and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed surgery presence rules require one evidence session")
     if not all(isinstance(value, str) and value.strip() for value in (visit_id, institute_id, patient_id)):
         return _technical_results(selected, reason_code="native_coordinates_unavailable")
     try:
@@ -235,7 +337,7 @@ def execute_luxian_0609_native_rules(
         )
     except Exception:
         return _technical_results(selected, reason_code="native_execution_failure")
-    results = tuple(
+    all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
             final_state=result.final_state.value,
@@ -244,6 +346,25 @@ def execute_luxian_0609_native_rules(
         )
         for result in execution.results
     )
-    if tuple(item["rule_id"] for item in results) != planned:
+    if tuple(item["rule_id"] for item in all_results) != planned:
         return _technical_results(planned, reason_code="native_result_incomplete")
-    return NativeExecutionResult(results=results, planned_rule_ids=planned, execution_fingerprint=execution.fingerprint())
+    typed_set = set(typed_selected)
+    final_state_by_rule_id = {
+        result.rule_id: result.final_state.value for result in execution.results
+    }
+    decisions = tuple(
+        _typed_rule_decision(
+            rule_id=str(item["rule_id"]),
+            final_state=final_state_by_rule_id[str(item["rule_id"])],
+            snapshot=evidence_snapshot,
+        )
+        for item in all_results
+        if item["rule_id"] in typed_set and evidence_snapshot is not None
+    )
+    results = tuple(item for item in all_results if item["rule_id"] not in typed_set)
+    return NativeExecutionResult(
+        results=results,
+        planned_rule_ids=planned,
+        decisions=decisions,
+        execution_fingerprint=execution.fingerprint(),
+    )

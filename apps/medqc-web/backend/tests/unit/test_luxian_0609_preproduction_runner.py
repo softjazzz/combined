@@ -165,8 +165,8 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     assert tuple(item["rule_id"] for item in result["results"]) == selected
     assert result["metrics"]["llm_call_count"] == 2
     assert result["metrics"]["total_tokens"] == 40
-    assert result["metrics"]["rule_decision_count"] == 46
-    assert result["metrics"]["typed_shadow_adapter_count"] == 3
+    assert result["metrics"]["rule_decision_count"] == 49
+    assert result["metrics"]["typed_shadow_adapter_count"] == 0
     assert result["metrics"]["legacy_projection_count"] == 0
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
@@ -226,8 +226,6 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
     def fake_aggregate(*, orchestrated, decision_trace_sink=None, **_):
         assert decision_trace_sink is not None
         for rule_id in selected:
-            if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}:
-                continue
             decision_trace_sink(
                 {
                     "rule_id": rule_id,
@@ -245,11 +243,7 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
                 "rule_id": rule_id,
                 "status": "compliant",
                 "executor_type": "program",
-                "metadata": (
-                    {"reason_code": "adapter_verified"}
-                    if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}
-                    else {}
-                ),
+                "metadata": {},
             }
             for rule_id in selected
         ]
@@ -287,14 +281,14 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
         "observed_state": "compliant",
         "reason_code": "verified",
     }
-    adapter_row = next(
+    direct_row = next(
         item for item in captured_attestations if item["rule_id"] == "LX0609-029"
     )
-    assert adapter_row == {
+    assert direct_row == {
         "rule_id": "LX0609-029",
-        "evidence_hash": adapter_row["evidence_hash"],
+        "evidence_hash": direct_row["evidence_hash"],
         "observed_state": "compliant",
-        "reason_code": "adapter_verified",
+        "reason_code": "verified",
     }
     rendered_results = repr(result["results"])
     assert snapshot_hash not in rendered_results
@@ -323,8 +317,6 @@ def _attestation_inputs(
     }
     traces = []
     for rule_id in selected:
-        if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}:
-            continue
         traces.append(
             {
                 "rule_id": rule_id,
@@ -452,7 +444,7 @@ def test_evidence_attestation_rejects_incomplete_or_ambiguous_trace(invalid_kind
 
 @pytest.mark.parametrize(
     "invalid_kind",
-    ["empty_direct_reason", "direct_state_mismatch", "empty_adapter_reason"],
+    ["empty_direct_reason", "direct_state_mismatch", "empty_029_reason"],
 )
 def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     invalid_kind,
@@ -463,8 +455,8 @@ def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
     elif invalid_kind == "direct_state_mismatch":
         raw_results[0]["status"] = "non_compliant"
     else:
-        adapter_index = selected.index("LX0609-029")
-        raw_results[adapter_index]["metadata"] = {}
+        trace_index = selected.index("LX0609-029")
+        traces[trace_index]["reason_code"] = ""
 
     with pytest.raises(ValueError, match="attestation|decision trace"):
         preproduction_runner._build_evidence_attestations(
