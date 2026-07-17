@@ -79,7 +79,7 @@ _EMBEDDED_EXECUTION_HEADING_RE = re.compile(
 _ROLE_OPINION_MARKER_RE = re.compile(
     r"(?:(?<!申请)(?:医师|医生|药师)会诊|会诊(?:医师|医生|药师))\s*[:：]"
 )
-_SIGNATURE_RE = re.compile(r"(?:会诊医师|申请医师|医师)?签名\s*[:：]")
+_SIGNATURE_RE = re.compile(r"(?:会诊医师|申请医师|医师|医生)?签名\s*[:：]")
 _EXECUTION_ANCHOR_RE = re.compile(
     r"(?:已)?(?:遵(?:照|从)?|按|根据|结合).{0,12}(?:会诊意见|会诊医嘱|医嘱)"
 )
@@ -153,6 +153,15 @@ _PURPOSE_GENERIC_ONLY_RE = re.compile(
 )
 _PURPOSE_NEGATED_CLINICAL_RE = re.compile(
     r"(?:无|未诉|否认)[^，,。；;!?！？]{0,24}"
+)
+_OPINION_EXECUTION_ONLY_RE = re.compile(
+    r"(?:以上)?(?:已)?(?:遵嘱|遵医嘱|遵会诊意见)(?:执行)?"
+)
+_EXPLICIT_OPINION_ASSESSMENT_RE = re.compile(
+    r"(?:综合评估|考虑诊断|结合患者既往病史及检查结果)"
+)
+_EXPLICIT_OPINION_DISPOSITION_RE = re.compile(
+    r"(?:暂无特殊处理|同意手术麻醉|观察随访)"
 )
 
 _REASON_STATUS = {
@@ -570,6 +579,48 @@ def _programmatic_purpose_reason(
     if "purpose_vague" in states:
         return "purpose_vague"
     return "purpose_clear"
+
+
+def _opinion_state_from_record(content: str) -> str | None:
+    """只裁决没有实际意见的强负例；其余内容继续交给语义模型。"""
+
+    _application, opinion = _split_consultation_content(content)
+    normalized = _clean(_trim_before_signature(opinion))
+    if not normalized:
+        whole_before_signature = _clean(_trim_before_signature(content))
+        whole_residual = re.sub(
+            r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", whole_before_signature
+        )
+        if _SIGNATURE_RE.search(content) and not whole_residual:
+            return "opinion_missing"
+        return None
+    compact = normalized
+    for marker in _CONSULTATION_OPINION_MARKERS:
+        compact = compact.replace(marker, "")
+    compact = _CONSULTATION_OPINION_HEADING_RE.sub("", compact)
+    compact = _ROLE_OPINION_MARKER_RE.sub("", compact)
+    compact = re.sub(r"[\s,，;；。:：!?！？、()（）\[\]【】]+", "", compact)
+    if _OPINION_EXECUTION_ONLY_RE.fullmatch(compact):
+        return "opinion_missing"
+    assessment_count = len(_EXPLICIT_OPINION_ASSESSMENT_RE.findall(normalized))
+    dispositions = set(_EXPLICIT_OPINION_DISPOSITION_RE.findall(normalized))
+    if assessment_count >= 2 and len(dispositions) >= 2 and "必要时" not in normalized:
+        return "opinion_clear"
+    return None
+
+
+def _programmatic_opinion_reason(
+    consultation_rows: Sequence[Mapping[str, Any]],
+) -> str | None:
+    states = [
+        _opinion_state_from_record(_clean(row.get("record_content")))
+        for row in consultation_rows
+    ]
+    if "opinion_missing" in states:
+        return "opinion_missing"
+    if states and all(state == "opinion_clear" for state in states):
+        return "opinion_clear"
+    return None
 
 
 def _project_row(source_key: str, row: Mapping[str, Any], index: int) -> str:
@@ -1282,6 +1333,10 @@ async def execute_luxian_0609_native_consultation_rules(
         purpose_reason = _programmatic_purpose_reason(consultation_rows)
         if purpose_reason is not None:
             programmatic_reasons["LX0609-021"] = purpose_reason
+    if "LX0609-022" in selected:
+        opinion_reason = _programmatic_opinion_reason(consultation_rows)
+        if opinion_reason is not None:
+            programmatic_reasons["LX0609-022"] = opinion_reason
     if (
         "LX0609-023" in selected
         and _reconsultation_execution_by_ref(rows_by_source)

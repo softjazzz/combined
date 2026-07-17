@@ -1214,6 +1214,115 @@ async def test_021_programmatic_purpose_uses_application_segment_only(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_022_execution_only_opinion_is_programmatic_missing_without_llm(
+    monkeypatch,
+):
+    client = _Client(
+        {"results": {"LX0609-022": {"reason_code": "opinion_clear"}}}
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_content": (
+                            "患者胸闷，请心内科会诊。"
+                            "会诊意见：建议复查心电图并调整治疗。"
+                        )
+                    },
+                    {
+                        "record_content": "会诊意见遵嘱执行。医生签名：某医师"
+                    },
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-022",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert client.calls == []
+    assert execution.llm_call_count == 0
+    assert [item["status"] for item in execution.results] == ["non_compliant"]
+    assert execution.results[0]["metadata"]["reason_code"] == "opinion_missing"
+    assert execution.results[0]["metadata"]["executor_type"] == "program"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("consultation_rows", "expected_status", "expected_reason"),
+    (
+        (
+            [{"record_content": "医生签名：某医师"}],
+            "non_compliant",
+            "opinion_missing",
+        ),
+        (
+            [
+                {
+                    "record_content": (
+                        "患者术前请相关科室会诊。病史敬悉，综合评估风险较低，"
+                        "我科暂无特殊处理意见，同意手术麻醉。"
+                        "结合患者既往病史及检查结果，目前暂无特殊处理。"
+                        "另科考虑诊断为良性结节，建议观察随访。医生签名：某医师"
+                    )
+                }
+            ],
+            "compliant",
+            "opinion_clear",
+        ),
+    ),
+)
+async def test_022_strong_record_facts_are_programmatic_and_stable(
+    monkeypatch,
+    consultation_rows: list[dict],
+    expected_status: str,
+    expected_reason: str,
+):
+    client = _Client(
+        {"results": {"LX0609-022": {"reason_code": "opinion_vague"}}}
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": consultation_rows,
+                "daily_course_record": [],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-022",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert client.calls == []
+    assert execution.llm_call_count == 0
+    assert [item["status"] for item in execution.results] == [expected_status]
+    assert execution.results[0]["metadata"]["reason_code"] == expected_reason
+    assert execution.results[0]["metadata"]["executor_type"] == "program"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "application_text",
     [
