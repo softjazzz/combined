@@ -589,7 +589,9 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
             "diagnosis",
+            "exam_master",
             "inpat_registration",
+            "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
         }
@@ -621,10 +623,12 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "pathology_exam_master",
         "pathology_exam_report",
         "diagnosis",
+        "exam_master",
         "inpat_drug_order",
         "inpat_nondrug_order",
         "surgery_application",
         "inpat_registration",
+        "labtest_master",
     }
 
 

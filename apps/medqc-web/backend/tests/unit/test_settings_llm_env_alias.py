@@ -247,6 +247,9 @@ def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
         "LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED",
         "LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED",
         "LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED",
+        "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED",
     ),
 )
 def test_luxian_rule_decision_next_batch_defaults_off_and_can_be_enabled(

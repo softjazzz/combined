@@ -94,6 +94,23 @@ def test_optional_source_document_ref_accepts_only_exact_lowercase_sha256_before
         assert invalid not in str(error.value)
 
 
+def test_visit_ref_accepts_only_exact_prefixed_lowercase_sha256_before_identifier_scan():
+    digest = "a" * 20 + "13800138000" + "b" * 33
+    fact = _fact(visit_ref="sha256:" + digest)
+
+    assert fact.visit_ref == "sha256:" + digest
+    for invalid in (
+        "sha256:" + digest.upper(),
+        "sha256:" + digest[:-1],
+        "prefix-sha256:" + digest,
+        "sha256:" + digest + "suffix",
+        "13800138000",
+    ):
+        with pytest.raises(ValueError) as error:
+            _fact(visit_ref=invalid)
+        assert invalid not in str(error.value)
+
+
 @pytest.mark.parametrize(
     ("enum_type", "expected"),
     [

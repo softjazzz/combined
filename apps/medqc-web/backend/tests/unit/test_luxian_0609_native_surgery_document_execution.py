@@ -5,6 +5,16 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_surgery_document_execution as surgery_doc
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+)
 
 
 def _wrapper(rule_id: str) -> dict:
@@ -87,6 +97,51 @@ def _strong_facts(*, anesthesia_method: str = "全身麻醉") -> list[dict]:
         ),
         _fact("current_visit_surgery_confirmed", source_key="surgery_record"),
     ]
+
+
+def _typed_session(
+    *,
+    surgery_mode: str = "exact",
+    discussion_mode: str = "available",
+    selected_rule_ids: tuple[str, ...] = surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
+):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record":
+            if surgery_mode == "error":
+                raise SourceEvidenceQueryError()
+            rows = (
+                ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+                if surgery_mode == "exact"
+                else ()
+            )
+        elif source_key == "presurg_discussion":
+            if discussion_mode == "error":
+                raise SourceEvidenceQueryError()
+            rows = (
+                ({"record_content": "术前讨论已记录手术指征、风险及处理预案。"},)
+                if discussion_mode == "available"
+                else ()
+            )
+        else:
+            rows = ()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected_rule_ids,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-07-17T06:00:00+08:00",
+        row_reader=reader,
+        additional_source_keys=("surgery_record",),
+    )
 
 
 @pytest.mark.asyncio
@@ -315,3 +370,147 @@ async def test_llm_failure_and_invalid_json_are_sanitized_data_gap():
     ]
     assert result.llm_call_count == 2
     assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_all_six_are_ordered_fail_closed_and_never_read_legacy_payload():
+    session = _typed_session()
+    secret = "RAW_BODY_Bearer_secret_13800138000"
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=tuple(reversed(surgery_doc.SURGERY_DOCUMENT_RULE_IDS)),
+        wrapper_rules=[
+            _wrapper(rule_id) for rule_id in surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+        ],
+        evidence_payload={"medical_text": secret},
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
+    )
+
+    assert result.planned_rule_ids == surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == list(
+        surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+    )
+    # 034-038当前来源契约不可用；039有手术强事实但术者参与关联仍未获批准。
+    assert [
+        bind_and_reduce_luxian_0609_rule_decisions(
+            expected_rule_ids=(decision.rule_id,),
+            snapshot=session.snapshot,
+            decisions=(decision,),
+        )[0].final_state
+        for decision in result.decisions
+    ] == ["data_gap"] * 6
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+    assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_039_empty_surgery_is_not_applicable_after_binding_contract(
+    monkeypatch,
+):
+    original = surgery_doc._typed_binding_source_keys
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda rule_id: original(rule_id) | {"surgery_record"},
+    )
+    session = _typed_session(surgery_mode="empty", discussion_mode="empty")
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.results == ()
+    assert result.decisions[0].applicability.value == "not_applicable"
+    assert result.decisions[0].reason_code == "performed_event_absent"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_039_does_not_call_empty_discussion_defect_without_emergency_contract(
+    monkeypatch,
+):
+    original = surgery_doc._typed_binding_source_keys
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda rule_id: original(rule_id) | {"surgery_record"},
+    )
+    session = _typed_session(surgery_mode="exact", discussion_mode="empty")
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.decisions[0].applicability.value == "unknown"
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].qc_direction.value == "unknown"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_039_source_query_error_is_technical_error_without_echo(monkeypatch):
+    original = surgery_doc._typed_binding_source_keys
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda rule_id: original(rule_id) | {"surgery_record"},
+    )
+    session = _typed_session(surgery_mode="error", discussion_mode="available")
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.decisions[0].evidence_state.value == "technical_error"
+    assert result.decisions[0].reason_code == "source_query_error"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_scope_and_snapshot_material_binding_fail_closed():
+    session = _typed_session(selected_rule_ids=("LX0609-039",))
+    with pytest.raises(ValueError, match="unsupported typed surgery document rule scope"):
+        await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+            rule_ids=("LX0609-039",),
+            wrapper_rules=[_wrapper("LX0609-039")],
+            evidence_payload=None,
+            llm_client=None,
+            evidence_snapshot=session.snapshot,
+            evidence_materials=session.materials,
+            decision_rule_ids=("LX0609-034",),
+        )
+
+    other_session = _typed_session(
+        selected_rule_ids=("LX0609-039",), discussion_mode="empty"
+    )
+    with pytest.raises(ValueError, match="require one evidence session"):
+        await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+            rule_ids=("LX0609-039",),
+            wrapper_rules=[_wrapper("LX0609-039")],
+            evidence_payload=None,
+            llm_client=None,
+            evidence_snapshot=session.snapshot,
+            evidence_materials=other_session.materials,
+            decision_rule_ids=("LX0609-039",),
+        )

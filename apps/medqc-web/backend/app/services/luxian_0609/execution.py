@@ -209,6 +209,23 @@ async def prepare_luxian_0609_execution(
             or (
                 rule_id
                 in {
+                    "LX0609-010",
+                    "LX0609-011",
+                    "LX0609-012",
+                    "LX0609-014",
+                    "LX0609-015",
+                }
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id
+                in {
                     "LX0609-001",
                     "LX0609-002",
                     "LX0609-004",
@@ -244,7 +261,53 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id in {"LX0609-044", "LX0609-045", "LX0609-046", "LX0609-047"}
+                rule_id
+                in {
+                    "LX0609-034",
+                    "LX0609-035",
+                    "LX0609-036",
+                    "LX0609-037",
+                    "LX0609-038",
+                    "LX0609-039",
+                }
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id
+                in {
+                    "LX0609-024",
+                    "LX0609-025",
+                    "LX0609-028",
+                    "LX0609-031",
+                    "LX0609-033",
+                }
+                and bool(
+                    getattr(
+                        settings,
+                        "LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED",
+                        False,
+                    )
+                )
+            )
+            or (
+                rule_id
+                in {
+                    "LX0609-041",
+                    "LX0609-042",
+                    "LX0609-043",
+                    "LX0609-044",
+                    "LX0609-045",
+                    "LX0609-046",
+                    "LX0609-047",
+                    "LX0609-048",
+                    "LX0609-049",
+                }
                 and bool(
                     getattr(
                         settings,
@@ -285,7 +348,7 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id in {"LX0609-013", "LX0609-019", "LX0609-027"}
+                rule_id in {"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}
                 and bool(
                     getattr(
                         settings,

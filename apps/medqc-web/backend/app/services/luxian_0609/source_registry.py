@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v10"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v11"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -176,14 +176,14 @@ _REGISTRY_ENTRIES = (
         access_mode=_DERIVED,
         derived_from_source_keys=("exam_master", "exam_item_report"),
     ),
-    _entry("exam_item_report"),
+    _entry("exam_item_report", access_mode=_BOUNDED),
     _entry("first_course_record", access_mode=_BOUNDED),
     _entry(
         "lab_attention_report",
         access_mode=_DERIVED,
         derived_from_source_keys=("labtest_master", "labtest_item_report"),
     ),
-    _entry("labtest_item_report"),
+    _entry("labtest_item_report", access_mode=_BOUNDED),
     _entry(
         "medical_order",
         access_mode=_DERIVED,
@@ -214,6 +214,8 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("diagnosis", access_mode=_BOUNDED),
+    _entry("exam_master", access_mode=_BOUNDED),
+    _entry("labtest_master", access_mode=_BOUNDED),
     _entry("inpat_drug_order", access_mode=_BOUNDED),
     _entry("inpat_nondrug_order", access_mode=_BOUNDED),
     _entry("surgery_application", access_mode=_BOUNDED),
@@ -253,18 +255,76 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "senior_course_record",
     ),
+    "LX0609-010": (
+        "exam_master",
+        "exam_item_report",
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record",
+    ),
+    "LX0609-011": (
+        "exam_master",
+        "exam_item_report",
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record",
+    ),
+    "LX0609-012": (
+        "exam_master",
+        "exam_item_report",
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record",
+    ),
+    "LX0609-014": (
+        "labtest_master",
+        "labtest_item_report",
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record",
+    ),
+    "LX0609-015": (
+        "labtest_master",
+        "labtest_item_report",
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record",
+    ),
     # 病理/肿瘤规则的适用触发来源也必须参与 RuleDecision 引用绑定。
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
+    # 026 的旧客户文书范围没有结构化诊断，RuleDecision 只允许同一快照
+    # 中受控诊断代码决定恶性肿瘤适用性；化疗事实仍缺失时保守 DG。
+    "LX0609-026": ("diagnosis",),
     # 018 仅接受 diagnosis_type=主要诊断 的结构化首页诊断作为对照事实。
     "LX0609-018": ("diagnosis",),
     "LX0609-027": ("diagnosis",),
+    # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
+    # 禁止从病程关键词推断当前手术。
+    "LX0609-028": ("surgery_record", "mr_surgery"),
+    # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
+    "LX0609-039": ("surgery_record", "rescue_record"),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": ("senior_course_record",),
     "LX0609-023": ("senior_course_record",),
     # 040 的 MDT 结论允许使用同次就诊会诊记录，必须将该来源绑定进决策 refs。
     "LX0609-040": ("consultation_record",),
+    # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
+    # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。
+    "LX0609-042": ("bloodtrans_record",),
+    "LX0609-043": (
+        "bloodtrans_record",
+        "exam_master",
+        "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-049": ("bloodtrans_record",),
 })
 
 

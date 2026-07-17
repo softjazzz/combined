@@ -7,7 +7,22 @@ import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
+from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
+from .source_manifest import QueryStatus
+from .source_registry import (
+    resolve_luxian_0609_controlled_fact_source_keys,
+    resolve_luxian_0609_decision_support_source_keys,
+    resolve_luxian_0609_rule_sources,
+)
 
 
 SURGERY_DOCUMENT_RULE_IDS = (
@@ -19,6 +34,26 @@ SURGERY_DOCUMENT_RULE_IDS = (
     "LX0609-039",
 )
 EXECUTOR_KEY = "surgery_document"
+_TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
+_TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v1"
+_TYPED_RULE_SOURCE_KEYS = {
+    "LX0609-034": ("anesthesia_record", "consent_form"),
+    "LX0609-035": ("anesthesia_record", "consent_form"),
+    "LX0609-036": (
+        "anesthesia_record",
+        "preane_surveil_record",
+        "postane_surveil_record",
+    ),
+    "LX0609-037": (
+        "anesthesia_record",
+        "consent_form",
+        "preane_surveil_record",
+        "postane_surveil_record",
+    ),
+    # 客户目录把038写成consent_form，但临床适用条件仍必须先有受控麻醉事实。
+    "LX0609-038": ("anesthesia_record", "consent_form"),
+    "LX0609-039": ("surgery_record", "rescue_record", "presurg_discussion"),
+}
 
 _ANESTHESIA_CONSENT_RULE_IDS = frozenset({"LX0609-034", "LX0609-035"})
 _ANESTHESIA_VISIT_RULE_IDS = frozenset({"LX0609-036", "LX0609-037"})
@@ -84,11 +119,108 @@ class SurgeryDocumentLLMClient(Protocol):
 class NativeSurgeryDocumentExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _SurgeryDocumentOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
+    executor_type: str
+
+
+def _typed_binding_source_keys(rule_id: str) -> frozenset[str]:
+    entries = resolve_luxian_0609_rule_sources((rule_id,))[rule_id]
+    return frozenset(
+        {
+            *(entry.document_type for entry in entries),
+            *(source_key for entry in entries for source_key in entry.source_keys),
+            *resolve_luxian_0609_controlled_fact_source_keys((rule_id,)),
+            *resolve_luxian_0609_decision_support_source_keys((rule_id,)),
+        }
+    )
+
+
+def _typed_decision_from_outcome(
+    *,
+    outcome: _SurgeryDocumentOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    source_keys = _typed_binding_source_keys(outcome.rule_id).intersection(
+        _TYPED_RULE_SOURCE_KEYS[outcome.rule_id]
+    )
+    refs = tuple(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key in source_keys
+    )
+    if outcome.status in {"compliant", "non_compliant", "not_applicable"} and not refs:
+        raise ValueError("typed surgery document decision requires evidence refs")
+
+    if outcome.status == "compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            "requirement_satisfied",
+        )
+    elif outcome.status == "non_compliant":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            "required_document_missing",
+        )
+    elif outcome.status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+            "performed_event_absent",
+        )
+    elif outcome.status == "data_gap":
+        dimensions = (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            (
+                "source_unavailable"
+                if "source" in outcome.reason_code
+                else "applicability_source_gap"
+            ),
+        )
+    elif outcome.status == "technical_error":
+        dimensions = (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            (
+                "source_query_error"
+                if outcome.reason_code == "source_query_error"
+                else "snapshot_mismatch"
+            ),
+        )
+    else:
+        raise ValueError("unsupported surgery document final state")
+
+    applicability, evidence_state, qc_direction, reason_code = dimensions
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version=_TYPED_EVALUATOR_VERSION,
+        confidence=None,
+    )
 
 
 def _clean(value: Any) -> str:
@@ -234,6 +366,245 @@ def _has_emergency_exception(facts: Sequence[Any]) -> bool:
             fact_types=_EMERGENCY_FACT_TYPES,
             source_keys=frozenset({"surgery_record", "rescue_record"}),
         )
+    )
+
+
+def _typed_fact_state(
+    snapshot: Luxian0609EvidenceSnapshot,
+    *,
+    fact_types: frozenset[str],
+    source_key: str,
+) -> tuple[str, str]:
+    """只接受同一快照中的明确肯定/否定事实，并返回受控麻醉方式。"""
+
+    states: set[str] = set()
+    methods: set[str] = set()
+    for fact in snapshot.facts:
+        if fact.fact_type not in fact_types or fact.source_key != source_key:
+            continue
+        if fact.assertion is Assertion.NEGATED:
+            states.add("absent")
+            continue
+        if (
+            fact.assertion is Assertion.AFFIRMED
+            and fact.event_status is EventStatus.PERFORMED
+        ):
+            states.add("present")
+            normalized = fact.normalized_value
+            if isinstance(normalized, Mapping):
+                method = _clean(
+                    normalized.get("anesthesia_method") or normalized.get("method")
+                )
+                if method:
+                    methods.add(method)
+    if len(states) != 1:
+        return "unknown", ""
+    method = next(iter(methods)) if len(methods) == 1 else ""
+    return next(iter(states)), method
+
+
+def _typed_source_gate(
+    *,
+    rule_id: str,
+    source_key: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> _SurgeryDocumentOutcome | None:
+    observation = next(
+        (
+            item
+            for item in snapshot.observations
+            if item.source_key == source_key
+        ),
+        None,
+    )
+    if observation is None:
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "required_source_missing", "program"
+        )
+    if observation.query_state is QueryStatus.ERROR:
+        return _SurgeryDocumentOutcome(
+            rule_id, "technical_error", "source_query_error", "program"
+        )
+    if (
+        observation.query_state is QueryStatus.UNAVAILABLE
+        or observation.completeness is SourceCompleteness.UNPROVEN
+        or observation.completeness is SourceCompleteness.TRUNCATED
+    ):
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "required_source_unavailable", "program"
+        )
+    return None
+
+
+def _typed_observation_state(
+    snapshot: Luxian0609EvidenceSnapshot, source_key: str
+) -> str:
+    observation = next(
+        (
+            item
+            for item in snapshot.observations
+            if item.source_key == source_key
+        ),
+        None,
+    )
+    if observation is None:
+        return "missing"
+    return observation.query_state.value
+
+
+def _typed_terminal_outcome(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> _SurgeryDocumentOutcome:
+    """typed 迁移首版只做受控事实/来源四态判定，绝不回读旧 payload。"""
+
+    if rule_id == "LX0609-039":
+        if "surgery_record" not in _typed_binding_source_keys(rule_id):
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "performed_surgery_source_unavailable", "program"
+            )
+        blocker = _typed_source_gate(
+            rule_id=rule_id,
+            source_key="surgery_record",
+            snapshot=snapshot,
+        )
+        if blocker is not None:
+            return blocker
+        surgery_state, _ = _typed_fact_state(
+            snapshot,
+            fact_types=_SURGERY_FACT_TYPES,
+            source_key="surgery_record",
+        )
+        if surgery_state == "absent":
+            return _SurgeryDocumentOutcome(
+                rule_id, "not_applicable", "performed_surgery_absent", "program"
+            )
+        if surgery_state != "present":
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
+            )
+        if "rescue_record" not in _typed_binding_source_keys(rule_id):
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "emergency_exception_source_unavailable", "program"
+            )
+        blocker = _typed_source_gate(
+            rule_id=rule_id,
+            source_key="rescue_record",
+            snapshot=snapshot,
+        )
+        if blocker is not None:
+            return blocker
+        emergency_state, _ = _typed_fact_state(
+            snapshot,
+            fact_types=_EMERGENCY_FACT_TYPES,
+            source_key="rescue_record",
+        )
+        if emergency_state == "present":
+            return _SurgeryDocumentOutcome(
+                rule_id, "not_applicable", "emergency_rescue_exception", "program"
+            )
+        if emergency_state != "absent":
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "emergency_exception_unresolved", "program"
+            )
+        blocker = _typed_source_gate(
+            rule_id=rule_id,
+            source_key="presurg_discussion",
+            snapshot=snapshot,
+        )
+        if blocker is not None:
+            return blocker
+        if _typed_observation_state(snapshot, "presurg_discussion") == "empty":
+            return _SurgeryDocumentOutcome(
+                rule_id, "non_compliant", "preop_discussion_missing", "program"
+            )
+        # “术者是否参与”尚无受控身份关联，不能用姓名/正文关键词强判。
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "surgeon_participation_unresolved", "program"
+        )
+
+    if "anesthesia_record" not in _typed_binding_source_keys(rule_id):
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "performed_anesthesia_source_unavailable", "program"
+        )
+    blocker = _typed_source_gate(
+        rule_id=rule_id,
+        source_key="anesthesia_record",
+        snapshot=snapshot,
+    )
+    if blocker is not None:
+        return blocker
+    anesthesia_state, anesthesia_method = _typed_fact_state(
+        snapshot,
+        fact_types=_ANESTHESIA_FACT_TYPES,
+        source_key="anesthesia_record",
+    )
+    if anesthesia_state == "absent":
+        return _SurgeryDocumentOutcome(
+            rule_id, "not_applicable", "performed_anesthesia_absent", "program"
+        )
+    if anesthesia_state != "present":
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "performed_anesthesia_fact_unavailable", "program"
+        )
+    is_local = anesthesia_method in _LOCAL_ANESTHESIA_VALUES
+    if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"} and is_local:
+        return _SurgeryDocumentOutcome(
+            rule_id, "not_applicable", "local_anesthesia_exception", "program"
+        )
+
+    if rule_id in _ANESTHESIA_CONSENT_RULE_IDS:
+        blocker = _typed_source_gate(
+            rule_id=rule_id,
+            source_key="consent_form",
+            snapshot=snapshot,
+        )
+        if blocker is not None:
+            return blocker
+        if _typed_observation_state(snapshot, "consent_form") == "empty":
+            return _SurgeryDocumentOutcome(
+                rule_id, "non_compliant", "anesthesia_consent_missing", "program"
+            )
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "consent_semantics_unresolved", "program"
+        )
+
+    if rule_id in _ANESTHESIA_VISIT_RULE_IDS:
+        typed_visit_sources = (
+            "preane_surveil_record",
+            "postane_surveil_record",
+        )
+        for source_key in typed_visit_sources:
+            blocker = _typed_source_gate(
+                rule_id=rule_id,
+                source_key=source_key,
+                snapshot=snapshot,
+            )
+            if blocker is not None:
+                return blocker
+        if any(
+            _typed_observation_state(snapshot, source_key) == "empty"
+            for source_key in typed_visit_sources
+        ):
+            return _SurgeryDocumentOutcome(
+                rule_id, "non_compliant", "anesthesia_visit_missing", "program"
+            )
+        if rule_id == "LX0609-036":
+            return _SurgeryDocumentOutcome(
+                rule_id, "compliant", "anesthesia_visits_present", "program"
+            )
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "anesthesia_visit_semantics_unresolved", "program"
+        )
+
+    # 038只判麻醉记录单存在；具体字段规范不在该客户质控点范围。
+    if _typed_observation_state(snapshot, "anesthesia_record") == "available":
+        return _SurgeryDocumentOutcome(
+            rule_id, "compliant", "anesthesia_record_present", "program"
+        )
+    return _SurgeryDocumentOutcome(
+        rule_id, "data_gap", "anesthesia_record_fact_conflict", "program"
     )
 
 
@@ -436,6 +807,9 @@ async def execute_luxian_0609_native_surgery_document_rules(
     wrapper_rules: Sequence[Mapping[str, Any]],
     evidence_payload: Mapping[str, Any] | None,
     llm_client: SurgeryDocumentLLMClient | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None = None,
+    decision_rule_ids: Sequence[str] = (),
 ) -> NativeSurgeryDocumentExecutionResult:
     """按客户目录顺序执行；强事实不足时零模型并保守降级。"""
 
@@ -443,24 +817,28 @@ async def execute_luxian_0609_native_surgery_document_rules(
     selected = tuple(
         rule_id for rule_id in SURGERY_DOCUMENT_RULE_IDS if rule_id in requested
     )
+    typed_requested = frozenset(
+        str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    )
+    if (
+        not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
+        or not typed_requested.issubset(set(selected))
+    ):
+        raise ValueError("unsupported typed surgery document rule scope")
+    if typed_requested and (
+        type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("typed surgery document rules require one evidence session")
     if not selected:
         return NativeSurgeryDocumentExecutionResult((), ())
 
-    documents = _documents(evidence_payload)
-    facts = _timeline_facts(evidence_payload)
-    if documents is None or facts is None:
-        return NativeSurgeryDocumentExecutionResult(
-            results=tuple(
-                _result(
-                    rule_id,
-                    "data_gap",
-                    "surgery_document_projection_unavailable",
-                    executor_type="program",
-                )
-                for rule_id in selected
-            ),
-            planned_rule_ids=selected,
-        )
+    legacy_selected = tuple(
+        rule_id for rule_id in selected if rule_id not in typed_requested
+    )
+    documents = _documents(evidence_payload) if legacy_selected else None
+    facts = _timeline_facts(evidence_payload) if legacy_selected else None
 
     wrappers_by_id = {
         str(wrapper.get("rule_id") or wrapper.get("rule_code") or "")
@@ -470,10 +848,34 @@ async def execute_luxian_0609_native_surgery_document_rules(
         if isinstance(wrapper, Mapping)
     }
     results: list[dict[str, Any]] = []
+    decisions: list[RuleDecision] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
 
     for rule_id in selected:
+        if rule_id in typed_requested:
+            assert evidence_snapshot is not None
+            outcome = _typed_terminal_outcome(
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+            )
+            decisions.append(
+                _typed_decision_from_outcome(
+                    outcome=outcome,
+                    snapshot=evidence_snapshot,
+                )
+            )
+            continue
+        if documents is None or facts is None:
+            results.append(
+                _result(
+                    rule_id,
+                    "data_gap",
+                    "surgery_document_projection_unavailable",
+                    executor_type="program",
+                )
+            )
+            continue
         terminal = _terminal_result(rule_id, facts=facts, documents=documents)
         if terminal is not None:
             results.append(terminal)
@@ -551,6 +953,7 @@ async def execute_luxian_0609_native_surgery_document_rules(
     return NativeSurgeryDocumentExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,
+        decisions=tuple(decisions),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

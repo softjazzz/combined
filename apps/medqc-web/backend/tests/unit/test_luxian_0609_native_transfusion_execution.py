@@ -572,10 +572,216 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         "LX0609-042": "data_gap",
         "LX0609-043": "data_gap",
         "LX0609-044": "compliant",
-        "LX0609-048": "technical_error",
-        "LX0609-049": "technical_error",
+        "LX0609-048": "data_gap",
+        "LX0609-049": "data_gap",
     }
+    bound = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+    assert all(item.final_state.value != "technical_error" for item in bound)
     assert "输血目的" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model():
+    selected = (
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-048",
+        "LX0609-049",
+    )
+    private_marker = "PRIVATE_TRANSFUSION_PROXY_MARKER"
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            "mr_bloodtrans": [
+                {"transfution_datetime": datetime(2026, 1, 1, 14, 20)}
+            ],
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "输注去白悬浮红细胞2U，过程平稳。"
+                        f"{private_marker}"
+                    )
+                }
+            ],
+            # 该条是手术同意书代理来源，不得当作输血同意书。
+            "consent_form": [
+                {"record_content": "手术治疗知情同意书，患者已签字。"}
+            ],
+            "exam_item_report": [
+                {"record_content": "检验结果摘要，无版本化输血九项清单。"}
+            ],
+            "daily_course_record": [
+                {"record_content": "病程中记录了输血后观察。"}
+            ],
+            "first_course_record": [{"record_content": "首次病程记录。"}],
+            "mr_surgery": [{"record_content": "手术结构化摘要。"}],
+            "postsurg_firstcourse_record": [
+                {"record_content": "术后首次病程记录。"}
+            ],
+            "presurg_discussion": [{"record_content": "术前讨论。"}],
+            "presurg_summary": [{"record_content": "术前小结。"}],
+            "senior_course_record": [{"record_content": "上级医师查房。"}],
+            "surgery_record": [{"record_content": "手术记录。"}],
+            "medical_order": [{"record_content": "通用医嘱投影。"}],
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}] * len(selected))
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == list(selected)
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["data_gap"] * len(selected)
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+    assert private_marker not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_remaining_typed_rules_are_not_applicable_only_after_complete_no_transfusion():
+    selected = (
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-048",
+        "LX0609-049",
+    )
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=[],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == list(selected)
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["not_applicable"] * len(selected)
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_remaining_typed_rules_surface_shared_trigger_query_error_without_echo():
+    selected = (
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-048",
+        "LX0609-049",
+    )
+    private_error = "PRIVATE SQL Bearer_secret 13800138000"
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "mr_bloodtrans":
+            raise SourceEvidenceQueryError(private_error)
+        rows = (
+            [{"record_content": "实际输血记录，输注红细胞2U。"}]
+            if source_key == "bloodtrans_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert result.results == ()
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["technical_error"] * len(selected)
+    assert all(item.reason_code == "source_query_error" for item in result.decisions)
+    assert result.llm_call_count == result.total_tokens == 0
+    assert private_error not in repr(result)
 
 
 @pytest.mark.parametrize(

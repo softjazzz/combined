@@ -18,12 +18,34 @@ from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import read_luxian_0609_native_source_rows
+from .source_registry import (
+    resolve_luxian_0609_controlled_fact_source_keys,
+    resolve_luxian_0609_decision_support_source_keys,
+    resolve_luxian_0609_rule_sources,
+)
 
 
 TRANSFUSION_RULE_IDS = tuple(f"LX0609-{number:03d}" for number in range(41, 50))
 EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-shadow-v1"
+
+# 当前资料契约尚不能安全证明以下五条的合规或缺陷：
+# - 041/042 没有专用输血同意书来源，通用 consent_form 实际可能是手术同意书；
+# - 043 没有版本化“输血前九项”项目清单和完整结果时间；
+# - 048 没有可受控关联的麻醉/手术/术后首次病程输血三元组；
+# - 049 没有可受控关联的输血医嘱、实际输注和收费数量。
+# typed 路径只完成“是否确有输血”和来源四态判定，存在输血时保守 DATA_GAP，
+# 不调用模型，也不借助费用、标题或关键词制造临床结论。
+_CONSERVATIVE_DATA_GAP_RULE_IDS = frozenset(
+    {
+        "LX0609-041",
+        "LX0609-042",
+        "LX0609-043",
+        "LX0609-048",
+        "LX0609-049",
+    }
+)
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
 _MAX_ROWS_PER_SOURCE = 8
@@ -164,14 +186,10 @@ _RULE_REQUIRED_SOURCE_GROUPS = {
 # 它不会查询数据库，也不会回读 legacy evidence_payload。
 _TYPED_SOURCE_ALIASES = {
     "bloodtrans_record": ("bloodtrans_record",),
-    "consent_form": (
-        "consent_form",
-        "blood_transfusion_consent",
-    ),
-    "blood_transfusion_consent": (
-        "blood_transfusion_consent",
-        "consent_form",
-    ),
+    # 通用 consent_form 当前可能来自 surgery_inform_consent，绝不能把它
+    # 反向别名为输血治疗知情同意书。
+    "consent_form": ("consent_form",),
+    "blood_transfusion_consent": ("blood_transfusion_consent",),
     "labtest_master": ("labtest_master",),
     "labtest_item_report": ("labtest_item_report",),
     "exam_master": ("exam_master",),
@@ -181,7 +199,8 @@ _TYPED_SOURCE_ALIASES = {
     "surgery_record": ("surgery_record",),
     "anesthesia_record": ("anesthesia_record",),
     "postsurg_firstcourse_record": ("postsurg_firstcourse_record",),
-    "inpat_nondrug_order": ("inpat_nondrug_order",),
+    # medical_order 仅用于识别来源 ERROR；保守规则不会读取其内容推断输血医嘱。
+    "inpat_nondrug_order": ("inpat_nondrug_order", "medical_order"),
     "inpat_bill_item": ("inpat_bill_item",),
 }
 
@@ -236,7 +255,18 @@ def _typed_decision_from_outcome(
     """从受控内核 outcome 生成 typed decision，不经过客户结果 DTO。"""
 
     status = outcome.status
-    allowed_source_keys = _typed_rule_source_keys(outcome.rule_id)
+    entries = resolve_luxian_0609_rule_sources((outcome.rule_id,))[outcome.rule_id]
+    binding_source_keys = frozenset(
+        {
+            *(entry.document_type for entry in entries),
+            *(source_key for entry in entries for source_key in entry.source_keys),
+            *resolve_luxian_0609_controlled_fact_source_keys((outcome.rule_id,)),
+            *resolve_luxian_0609_decision_support_source_keys((outcome.rule_id,)),
+        }
+    )
+    allowed_source_keys = _typed_rule_source_keys(outcome.rule_id).intersection(
+        binding_source_keys
+    )
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
@@ -441,6 +471,72 @@ def _typed_documents_from_evidence_session(
         if "unavailable" in group_states:
             return None, "data_gap", "transfusion_source_unavailable"
     return documents, "", ""
+
+
+def _typed_conservative_material_status(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    rule_id: str,
+) -> tuple[Mapping[str, Any], str, str]:
+    """校验保守迁移规则的安全来源四态，不消费代理材料作临床判断。"""
+
+    observation_by_source = {
+        observation.source_key: observation
+        for observation in snapshot.observations
+    }
+    # 先只校验输血触发锚点。规则详细材料是否可用必须在确认
+    # 实际输血之后再判断，否则会把“明确无输血”错误降级为 DATA_GAP。
+    for source_key in _TRIGGER_SOURCES:
+        observation = observation_by_source.get(source_key)
+        if observation is None:
+            continue
+        if observation.query_state.value == "error":
+            return {}, "technical_error", "source_query_error"
+        if (
+            observation.query_state.value == "unavailable"
+            or observation.completeness.value == "truncated"
+        ):
+            return {}, "data_gap", "transfusion_source_unavailable"
+
+    # 只对当前 session 真正包含的专用输血锚点做材料身份校验。单规则尚未把
+    # 两个锚点都接入 snapshot 时不能伪装为“确认无输血”，后续 source_state
+    # 会保持 DATA_GAP；任一锚点有确定阳性仍可证明规则适用。
+    for source_key in _TRIGGER_SOURCES:
+        observation = observation_by_source.get(source_key)
+        if observation is None:
+            continue
+        try:
+            materials.rows(source_key)
+        except Exception:
+            return {}, "technical_error", "snapshot_mismatch"
+    return {}, "", ""
+
+
+def _typed_conservative_contract_outcome(
+    *, snapshot: Luxian0609EvidenceSnapshot, rule_id: str
+) -> tuple[str, str]:
+    """确认实际输血后，再按规则详细来源四态 fail closed。"""
+
+    observation_by_source = {
+        observation.source_key: observation
+        for observation in snapshot.observations
+    }
+    context_source_keys = _typed_rule_source_keys(rule_id).difference(
+        _TRIGGER_SOURCES
+    )
+    for source_key in sorted(context_source_keys):
+        observation = observation_by_source.get(source_key)
+        if observation is None:
+            continue
+        if observation.query_state.value == "error":
+            return "technical_error", "source_query_error"
+        if (
+            observation.query_state.value == "unavailable"
+            or observation.completeness.value == "truncated"
+        ):
+            return "data_gap", "transfusion_source_unavailable"
+    return "data_gap", "transfusion_rule_contract_unavailable"
 
 
 def _row_text(row: Mapping[str, Any]) -> str:
@@ -981,13 +1077,22 @@ async def execute_luxian_0609_native_transfusion_rules(
         assert evidence_snapshot is not None
         assert evidence_materials is not None
         for typed_rule_id in typed_selected:
-            typed_material_by_rule[typed_rule_id] = (
-                _typed_documents_from_evidence_session(
-                    snapshot=evidence_snapshot,
-                    materials=evidence_materials,
-                    rule_id=typed_rule_id,
+            if typed_rule_id in _CONSERVATIVE_DATA_GAP_RULE_IDS:
+                typed_material_by_rule[typed_rule_id] = (
+                    _typed_conservative_material_status(
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                        rule_id=typed_rule_id,
+                    )
                 )
-            )
+            else:
+                typed_material_by_rule[typed_rule_id] = (
+                    _typed_documents_from_evidence_session(
+                        snapshot=evidence_snapshot,
+                        materials=evidence_materials,
+                        rule_id=typed_rule_id,
+                    )
+                )
     legacy_source_state = _performed_source_state(
         documents=legacy_documents,
         institute_id=str(institute_id or ""),
@@ -1042,6 +1147,21 @@ async def execute_luxian_0609_native_transfusion_rules(
                     if source_state == "absent"
                     else "transfusion_source_unavailable"
                 ),
+                executor_type="program",
+            )
+            continue
+        if typed_rule and rule_id in _CONSERVATIVE_DATA_GAP_RULE_IDS:
+            assert evidence_snapshot is not None
+            conservative_status, conservative_reason = (
+                _typed_conservative_contract_outcome(
+                    snapshot=evidence_snapshot,
+                    rule_id=rule_id,
+                )
+            )
+            emit_outcome(
+                rule_id,
+                conservative_status,
+                conservative_reason,
                 executor_type="program",
             )
             continue

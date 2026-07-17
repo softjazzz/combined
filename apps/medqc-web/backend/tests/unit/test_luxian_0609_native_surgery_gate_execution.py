@@ -294,8 +294,150 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_within_threshold"
     assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_mode", "expected_state", "expected_reason"),
+    [
+        ("available", "data_gap", None),
+        ("empty", "not_applicable", "performed_event_absent"),
+        ("mr_only", "data_gap", "applicability_source_gap"),
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
+    ],
+)
+async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_closed(
+    source_mode: str,
+    expected_state: str,
+    expected_reason: str | None,
+) -> None:
+    selected = (
+        "LX0609-024",
+        "LX0609-025",
+        "LX0609-028",
+        "LX0609-031",
+        "LX0609-033",
+    )
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record":
+            if source_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if source_mode == "error":
+                raise SourceEvidenceQueryError()
+            rows = (
+                ({"surgery_end_time": "2026-01-01 08:00:00+08"},)
+                if source_mode == "available"
+                else ()
+            )
+        elif source_key == "mr_surgery" and source_mode == "mr_only":
+            rows = ({"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},)
+        else:
+            rows = ()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+        additional_source_keys=("surgery_record",),
+    )
+    client = _Client([])
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == list(selected)
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == [expected_state] * 5
+    if expected_reason is not None:
+        assert {item.reason_code for item in result.decisions} == {expected_reason}
+    elif source_mode == "available":
+        assert {item.reason_code for item in result.decisions} == {
+            "applicability_source_gap",
+            "required_field_missing",
+            "source_readiness_unproven",
+        }
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_mismatch() -> None:
+    def reader(**kwargs):
+        rows = (
+            ({"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},)
+            if kwargs["source_key"] == "mr_surgery"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-028",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-028",),
+        decision_rule_ids=("LX0609-028",),
+        wrapper_rules=[_wrapper("LX0609-028")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-028",),
+        snapshot=session.snapshot,
+    )
+
+    assert result.results == ()
+    assert result.llm_call_count == result.total_tokens == 0
+    assert reduced[0].final_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "applicability_source_gap"
+    assert len(result.decisions[0].fact_refs) == 2
 
 
 @pytest.mark.asyncio

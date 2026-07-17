@@ -49,6 +49,8 @@ _MAX_ROWS_PER_SOURCE = 6
 _MAX_ROW_CHARS = 1000
 _MAX_CONTEXT_CHARS = 12000
 _TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
+_TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v1"
+_TYPED_DECISION_RULE_IDS = frozenset(SURGERY_GATE_RULE_IDS)
 _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
@@ -451,6 +453,136 @@ def _typed_003_decision(
     return decision("data_gap", "authoritative_time_missing")
 
 
+def _typed_conservative_surgery_gate_decision(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> RuleDecision:
+    """迁移高风险手术门控，但不把旧关键词/文书存在提升为临床事实。"""
+
+    if rule_id not in _TYPED_DECISION_RULE_IDS - {"LX0609-003"}:
+        raise ValueError("unsupported typed surgery gate rule")
+    if materials.snapshot_hash != snapshot.snapshot_hash:
+        raise ValueError("typed surgery gate requires one evidence session")
+    source_keys = ("surgery_record", "mr_surgery")
+    observation_by_source = {
+        item.source_key: item
+        for item in snapshot.observations
+        if item.source_key in source_keys
+    }
+    observations = tuple(
+        observation_by_source[key]
+        for key in source_keys
+        if key in observation_by_source
+    )
+    refs = tuple(
+        item.snapshot_ref.removeprefix("sha256:") for item in observations
+    )
+
+    def decision(
+        *,
+        applicability: ApplicabilityState,
+        evidence_state: EvidenceState,
+        qc_direction: QcDirection,
+        reason_code: str,
+    ) -> RuleDecision:
+        return RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=applicability,
+            evidence_state=evidence_state,
+            qc_direction=qc_direction,
+            reason_code=reason_code,
+            fact_refs=refs,
+            evaluator_version=_TYPED_SURGERY_GATE_EVALUATOR_VERSION,
+            confidence=None,
+        )
+
+    if set(observation_by_source) != set(source_keys):
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+        )
+    surgery_observation = observation_by_source["surgery_record"]
+    mr_observation = observation_by_source["mr_surgery"]
+    if surgery_observation.query_state.value == "error":
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_query_error",
+        )
+    if surgery_observation.query_state.value == "unavailable":
+        return decision(
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_unavailable",
+        )
+    if surgery_observation.completeness.value == "truncated":
+        return decision(
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_truncated",
+        )
+
+    performed_state = _snapshot_performed_surgery_state(snapshot)
+    if performed_state == "negative":
+        if mr_observation.query_state.value == "error":
+            return decision(
+                applicability=ApplicabilityState.ERROR,
+                evidence_state=EvidenceState.TECHNICAL_ERROR,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="source_query_error",
+            )
+        if (
+            mr_observation.query_state.value != "empty"
+            or mr_observation.completeness.value == "truncated"
+        ):
+            return decision(
+                applicability=ApplicabilityState.UNKNOWN,
+                evidence_state=EvidenceState.DATA_GAP,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="applicability_source_gap",
+            )
+        return decision(
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="performed_event_absent",
+        )
+    if performed_state != "present":
+        return decision(
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="applicability_source_gap",
+        )
+
+    # 现库尚无可审计的恶性手术关联、植入物实际使用、预防用药实际区间、
+    # 术者签名关联或同意书同步完整性事实。迁移只改变执行契约，不制造结论。
+    return decision(
+        applicability=(
+            ApplicabilityState.UNKNOWN
+            if rule_id in {"LX0609-024", "LX0609-025", "LX0609-028"}
+            else ApplicabilityState.APPLICABLE
+        ),
+        evidence_state=EvidenceState.DATA_GAP,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code=(
+            "source_readiness_unproven"
+            if rule_id == "LX0609-033"
+            else "applicability_source_gap"
+            if rule_id in {"LX0609-024", "LX0609-025", "LX0609-028"}
+            else "required_field_missing"
+        ),
+    )
+
+
 def _resolve_performed_state(
     *,
     facts: Sequence[Mapping[str, Any]],
@@ -641,7 +773,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }
-    if not typed_requested.issubset({"LX0609-003"}) or not typed_requested.issubset(
+    if not typed_requested.issubset(_TYPED_DECISION_RULE_IDS) or not typed_requested.issubset(
         set(selected)
     ):
         raise ValueError("unsupported typed surgery gate rule scope")
@@ -650,16 +782,20 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         or type(evidence_materials) is not Luxian0609EvidenceMaterialStore
         or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
     ):
-        raise ValueError("typed 003 requires one evidence session")
-    decisions = (
-        (
-            _typed_003_decision(
-                snapshot=evidence_snapshot,
-                materials=evidence_materials,
-            ),
+        raise ValueError("typed surgery gate requires one evidence session")
+    decisions = tuple(
+        _typed_003_decision(
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
         )
-        if "LX0609-003" in typed_requested
-        else ()
+        if rule_id == "LX0609-003"
+        else _typed_conservative_surgery_gate_decision(
+            rule_id=rule_id,
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+        )
+        for rule_id in selected
+        if rule_id in typed_requested
     )
     legacy_selected = tuple(
         rule_id for rule_id in selected if rule_id not in typed_requested

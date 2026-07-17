@@ -171,6 +171,16 @@ def _validate_optional_ref(field_name: str, value: Any, *, max_length: int = 128
     return _validate_code(field_name, value, max_length=max_length)
 
 
+def _validate_visit_ref(value: Any) -> str:
+    """允许 EvidenceSnapshot 生成的精确哈希引用，仍拒绝任意前后缀。"""
+
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("sha256:") and _SHA256_PATTERN.fullmatch(text[7:]):
+            return text
+    return _validate_code("visit_ref", value, max_length=128)
+
+
 def _validate_sha256(field_name: str, value: Any) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{field_name} must be str")
@@ -585,7 +595,7 @@ class FactV2:
                 raise ValueError("projection derived_from_fact_ids must reference known upstream facts")
 
         values: dict[str, Any] = {
-            "visit_ref": _validate_code("visit_ref", visit_ref, max_length=128),
+            "visit_ref": _validate_visit_ref(visit_ref),
             "family": _validate_code("family", family),
             "fact_type": _validate_code("fact_type", fact_type),
             "normalized_value": _canonicalize_json_value(
