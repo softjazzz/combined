@@ -28,7 +28,7 @@ CONSULTATION_RULE_IDS = (
 )
 EXECUTOR_KEY = "consultation_quality"
 _TYPED_DECISION_RULE_IDS = frozenset(CONSULTATION_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "consultation-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "consultation-ruledecision-shadow-v2"
 _DECISION_SOURCE_KEYS_BY_RULE = {
     "LX0609-020": (
         "consultation_record",
@@ -881,10 +881,10 @@ def _derive_execution_reasons(
     )
     if complete_deterministic_embedded:
         reason_020 = "execution_specific"
-    elif unresolved:
-        reason_020 = "execution_source_incomplete"
     elif all_consultations_covered:
         reason_020 = "execution_specific"
+    elif unresolved:
+        reason_020 = "execution_source_incomplete"
     elif not course_source_complete:
         reason_020 = "execution_source_incomplete"
     else:
@@ -894,6 +894,14 @@ def _derive_execution_reasons(
         quality == "vague"
         for qualities in valid_qualities_by_consultation.values()
         for quality in qualities
+    )
+    all_consultations_specific = bool(consultation_refs) and (
+        consultation_refs <= set(valid_qualities_by_consultation)
+        and all(
+            set(valid_qualities_by_consultation.get(consultation_ref) or ())
+            == {"specific"}
+            for consultation_ref in consultation_refs
+        )
     )
     embedded_without_quality = embedded_consultation_refs - set(
         valid_qualities_by_consultation
@@ -905,10 +913,12 @@ def _derive_execution_reasons(
             if deterministic_has_vague
             else "execution_specific_summarized"
         )
-    elif unresolved:
-        reason_023 = "execution_time_unresolved"
     elif has_vague:
         reason_023 = "execution_vague_or_copied"
+    elif all_consultations_specific:
+        reason_023 = "execution_specific_summarized"
+    elif unresolved:
+        reason_023 = "execution_time_unresolved"
     elif embedded_without_quality:
         reason_023 = "execution_time_unresolved"
     elif not covered_consultation_refs:

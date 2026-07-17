@@ -143,6 +143,9 @@ async def test_typed_consultation_absent_emits_bound_decisions_without_customer_
     assert {item.reason_code for item in execution.decisions} == {
         "trigger_absent_complete"
     }
+    assert {item.evaluator_version for item in execution.decisions} == {
+        "consultation-ruledecision-shadow-v2"
+    }
     assert all(item.fact_refs for item in execution.decisions)
     assert execution.llm_call_count == 0
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
@@ -934,7 +937,7 @@ async def test_deterministic_embedded_quality_overrides_conflicting_model_label(
         (
             "会诊意见：建议治疗。执行情况：遵会诊意见调整治疗。",
             [],
-            ("data_gap", "data_gap"),
+            ("compliant", "data_gap"),
         ),
         (
             "会诊意见：建议治疗。执行情况：遵会诊意见，调整药物剂量并监测血压变化。",
@@ -944,7 +947,7 @@ async def test_deterministic_embedded_quality_overrides_conflicting_model_label(
                     "record_content": "遵会诊意见，已调整具体治疗。",
                 }
             ],
-            ("data_gap", "data_gap"),
+            ("compliant", "compliant"),
         ),
     ],
 )
@@ -990,6 +993,7 @@ async def test_complete_deterministic_embedded_controls_unknown_model_link_prior
     )
 
     assert tuple(item["status"] for item in execution.results) == expected_statuses
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
@@ -1466,6 +1470,237 @@ async def test_embedded_coverage_keeps_020_compliant_when_llm_omits_links(monkey
     )
 
     assert [item["status"] for item in execution.results] == ["compliant", "data_gap"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_020_complete_embedded_coverage_dominates_invalid_extra_model_link(
+    monkeypatch,
+):
+    client = _Client(
+        {
+            "results": {},
+            "execution_links": [
+                {
+                    "consultation_ref": "consultation_record-99",
+                    "execution_ref": "daily_course_record-99",
+                    "quality": "specific",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": (
+                            "会诊意见：建议治疗。"
+                            "执行情况：遵会诊意见执行。"
+                        ),
+                    }
+                ],
+                "daily_course_record": [
+                    {
+                        "record_time": "2026-06-01 12:00:00",
+                        "record_content": "遵会诊意见，调整具体治疗。",
+                    }
+                ],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert len(client.calls) == 1
+    assert [item["status"] for item in execution.results] == ["compliant"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_known_vague_execution_dominates_invalid_extra_model_link(
+    monkeypatch,
+):
+    client = _Client(
+        {
+            "results": {},
+            "execution_links": [
+                {
+                    "consultation_ref": "consultation_record-99",
+                    "execution_ref": "daily_course_record-99",
+                    "quality": "specific",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": (
+                            "会诊意见：建议治疗。"
+                            "执行情况：遵会诊意见执行。"
+                        ),
+                    }
+                ],
+                "daily_course_record": [
+                    {
+                        "record_time": "2026-06-01 12:00:00",
+                        "record_content": "遵会诊意见，调整具体治疗。",
+                    }
+                ],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-023",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert len(client.calls) == 1
+    assert [item["status"] for item in execution.results] == ["non_compliant"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_all_known_specific_execution_dominates_invalid_extra_model_link(
+    monkeypatch,
+):
+    client = _Client(
+        {
+            "results": {},
+            "execution_links": [
+                {
+                    "consultation_ref": "consultation_record-99",
+                    "execution_ref": "daily_course_record-99",
+                    "quality": "specific",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": (
+                            "会诊意见：建议治疗。"
+                            "执行情况：遵会诊意见，已调整具体治疗方案并复查血压120/80mmHg。"
+                        ),
+                    }
+                ],
+                "daily_course_record": [
+                    {
+                        "record_time": "2026-06-01 12:00:00",
+                        "record_content": "遵会诊意见，调整具体治疗。",
+                    }
+                ],
+                "senior_course_record": [],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert len(client.calls) == 1
+    assert [item["status"] for item in execution.results] == [
+        "compliant",
+        "compliant",
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_vague_defect_survives_uncovered_consultation_and_course_truncation(
+    monkeypatch,
+):
+    client = _Client(
+        {
+            "results": {},
+            "execution_links": [
+                {
+                    "consultation_ref": "consultation_record-2",
+                    "execution_ref": "senior_course_record-4",
+                    "quality": "specific",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        consultation,
+        "read_luxian_0609_native_source_rows",
+        _reader(
+            {
+                "consultation_record": [
+                    {
+                        "record_time": "2026-06-01 10:00:00",
+                        "record_content": (
+                            "会诊意见：建议治疗。"
+                            "执行情况：遵会诊意见执行。"
+                        ),
+                    },
+                    {
+                        "record_time": "2026-06-02 10:00:00",
+                        "record_content": "会诊意见：建议复查血压并调整治疗。",
+                    },
+                ],
+                "daily_course_record": [],
+                "senior_course_record": [
+                    {
+                        "record_time": f"2026-06-0{index + 2} 12:00:00",
+                        "record_content": "今日已申请心内科会诊。",
+                    }
+                    for index in range(4)
+                ],
+            }
+        ),
+    )
+
+    execution = await consultation.execute_luxian_0609_native_consultation_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert len(client.calls) == 1
+    assert [item["status"] for item in execution.results] == [
+        "data_gap",
+        "non_compliant",
+    ]
 
 
 @pytest.mark.unit
