@@ -69,8 +69,7 @@ def _api_batch(*, state: str = "non_compliant") -> dict[str, object]:
                             "metadata": {"reason_code": "deadline_exceeded"},
                             "evidence_items": [
                                 {
-                                    "source_table": "admission_record",
-                                    "field_path": "record_time",
+                                    "evidence_attestation": "c" * 64,
                                 }
                             ],
                         }
@@ -207,8 +206,7 @@ def _semantic_batch() -> dict[str, object]:
                         "metadata": {"reason_code": "deadline_exceeded"},
                         "evidence_items": [
                             {
-                                "source_table": "admission_record",
-                                "field_path": "record_time",
+                                "evidence_attestation": "d" * 64,
                             }
                         ],
                     }
@@ -521,7 +519,7 @@ def test_semantic_sample_threshold_is_enforced_per_rule_not_only_in_aggregate() 
             "status": "non_compliant",
             "metadata": {"reason_code": "deadline_exceeded"},
             "evidence_items": [
-                {"source_table": "first_course_record", "field_path": "record_time"}
+                {"evidence_attestation": "e" * 64}
             ],
         }
     )

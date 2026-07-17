@@ -123,9 +123,17 @@ def _require_digest(value: Any, *, field: str) -> str:
 
 
 def _evidence_hash(result: Mapping[str, Any]) -> str:
-    # 证据引用与模型/判定状态解耦；状态和原因分别进入 Golden 比较。
-    evidence_material = {"evidence_items": list(result.get("evidence_items") or [])}
-    return canonical_digest(evidence_material)
+    # benchmark只允许逐规则opaque attestation，禁止再哈希任意客户证据文案。
+    evidence_items = result.get("evidence_items")
+    if not isinstance(evidence_items, list) or len(evidence_items) != 1:
+        raise ValueError("missing evidence attestation")
+    item = evidence_items[0]
+    if not isinstance(item, Mapping) or set(item) != {"evidence_attestation"}:
+        raise ValueError("invalid evidence attestation")
+    return _require_digest(
+        item.get("evidence_attestation"),
+        field="evidence_attestation",
+    )
 
 
 def build_candidate_ledger(

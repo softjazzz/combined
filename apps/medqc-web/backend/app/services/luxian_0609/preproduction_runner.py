@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date
+import hashlib
+import json
+import re
 from time import perf_counter
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .customer_rule_package import LUXIAN_0609_RULE_SET_KEY
 from .execution import (
@@ -21,6 +24,12 @@ from .rule_contracts import load_luxian_0609_rule_contracts
 
 
 PREPRODUCTION_RUNNER_SCHEMA_VERSION = "lx0609-preproduction-runner-v1"
+EVIDENCE_ATTESTATION_VERSION = "lx0609-evidence-attestation-v1"
+
+_ADAPTER_RULE_IDS = frozenset({"LX0609-029", "LX0609-030", "LX0609-032"})
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_VERSION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+EvidenceAttestationSink = Callable[[Sequence[Mapping[str, str]]], None]
 
 _SETTING_OVERRIDES = {
     "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
@@ -346,6 +355,116 @@ def _technical_results(rule_ids: tuple[str, ...]) -> list[dict[str, Any]]:
     ]
 
 
+def _canonical_digest(value: Any) -> str:
+    material = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _adapter_evaluator_version(rule_id: str) -> str:
+    contract = next(
+        (item for item in load_luxian_0609_rule_contracts() if item.rule_id == rule_id),
+        None,
+    )
+    if contract is None or rule_id not in _ADAPTER_RULE_IDS:
+        raise ValueError("missing trusted adapter contract")
+    identity = (
+        f"adapter-{contract.executor_key}-{contract.contract_version}-"
+        f"{contract.rule_version}"
+    )
+    if not _VERSION_RE.fullmatch(identity):
+        raise ValueError("invalid trusted adapter contract")
+    return identity
+
+
+def _build_evidence_attestations(
+    *,
+    selected_rule_ids: tuple[str, ...],
+    trace_rows: Sequence[Mapping[str, Any]],
+    context: Any,
+) -> tuple[dict[str, str], ...]:
+    """把内部决策事实链压缩为逐规则opaque摘要，不返回内部材料。"""
+
+    snapshot_pairs = tuple(getattr(context, "evidence_snapshot_rule_refs", ()) or ())
+    if (
+        len(snapshot_pairs) != len(selected_rule_ids)
+        or tuple(str(item[0] or "").strip().upper() for item in snapshot_pairs)
+        != selected_rule_ids
+    ):
+        raise ValueError("invalid evidence snapshot rule refs")
+    snapshot_by_rule: dict[str, str] = {}
+    for raw_rule_id, raw_snapshot_hash in snapshot_pairs:
+        rule_id = str(raw_rule_id or "").strip().upper()
+        snapshot_hash = str(raw_snapshot_hash or "").strip().lower()
+        if rule_id in snapshot_by_rule or not _SHA256_RE.fullmatch(snapshot_hash):
+            raise ValueError("invalid evidence snapshot rule refs")
+        snapshot_by_rule[rule_id] = snapshot_hash
+
+    traced_by_rule: dict[str, tuple[str, tuple[str, ...], str]] = {}
+    expected_traced_ids = tuple(
+        rule_id for rule_id in selected_rule_ids if rule_id not in _ADAPTER_RULE_IDS
+    )
+    for trace in trace_rows:
+        if not isinstance(trace, Mapping):
+            raise ValueError("invalid decision trace")
+        rule_id = str(trace.get("rule_id") or "").strip().upper()
+        snapshot_hash = str(trace.get("snapshot_hash") or "").strip().lower()
+        evaluator_version = str(trace.get("evaluator_version") or "").strip().lower()
+        raw_fact_refs = trace.get("fact_refs")
+        if not isinstance(raw_fact_refs, (list, tuple)):
+            raise ValueError("invalid decision trace")
+        fact_refs = tuple(sorted(str(item or "").strip().lower() for item in raw_fact_refs))
+        if (
+            rule_id not in expected_traced_ids
+            or rule_id in traced_by_rule
+            or not _SHA256_RE.fullmatch(snapshot_hash)
+            or snapshot_by_rule.get(rule_id) != snapshot_hash
+            or len(fact_refs) != len(set(fact_refs))
+            or any(not _SHA256_RE.fullmatch(item) for item in fact_refs)
+            or not _VERSION_RE.fullmatch(evaluator_version)
+        ):
+            raise ValueError("invalid decision trace")
+        traced_by_rule[rule_id] = (snapshot_hash, fact_refs, evaluator_version)
+    traced_rule_ids = tuple(
+        rule_id for rule_id in expected_traced_ids if rule_id in traced_by_rule
+    )
+    if (
+        traced_rule_ids != expected_traced_ids
+        or len(traced_by_rule) != len(expected_traced_ids)
+    ):
+        raise ValueError("incomplete decision trace")
+
+    rows: list[dict[str, str]] = []
+    seen_hashes: set[str] = set()
+    for rule_id in selected_rule_ids:
+        if rule_id in _ADAPTER_RULE_IDS:
+            snapshot_hash = snapshot_by_rule[rule_id]
+            fact_refs: tuple[str, ...] = ()
+            evaluator_version = _adapter_evaluator_version(rule_id)
+        else:
+            snapshot_hash, fact_refs, evaluator_version = traced_by_rule[rule_id]
+        evidence_hash = _canonical_digest(
+            {
+                "attestation_version": EVIDENCE_ATTESTATION_VERSION,
+                "rule_id": rule_id,
+                "snapshot_hash": snapshot_hash,
+                "fact_refs": list(fact_refs),
+                "evaluator_version": evaluator_version,
+            }
+        )
+        if evidence_hash in seen_hashes:
+            raise ValueError("duplicate evidence attestation")
+        seen_hashes.add(evidence_hash)
+        rows.append({"rule_id": rule_id, "evidence_hash": evidence_hash})
+    if len(rows) != len(selected_rule_ids):
+        raise ValueError("incomplete evidence attestation")
+    return tuple(rows)
+
+
 def _validate_result_scope(
     results: list[Mapping[str, Any]],
     *,
@@ -365,6 +484,7 @@ async def run_luxian_0609_preproduction(
     base_settings: Any,
     model_name: str,
     source_schema: str | None = None,
+    evidence_attestation_sink: EvidenceAttestationSink | None = None,
 ) -> dict[str, Any]:
     """只读运行 LX0609 独立包并返回安全客户 DTO 与聚合指标。"""
 
@@ -391,6 +511,7 @@ async def run_luxian_0609_preproduction(
     settings = _ReadOnlySettingsOverlay(base_settings)
     started = perf_counter()
     context: Any = None
+    decision_trace_rows: list[Mapping[str, Any]] = []
     orchestrated: dict[str, Any] = {
         "results": [],
         "total_prompt_tokens": 0,
@@ -423,6 +544,11 @@ async def run_luxian_0609_preproduction(
             model_name=str(model_name or ""),
             evidence_payload=evidence_payload,
             execution_rule_count=0,
+            decision_trace_sink=(
+                decision_trace_rows.append
+                if evidence_attestation_sink is not None
+                else None
+            ),
         )
         raw_results = list(orchestrated.get("results") or [])
         _validate_result_scope(raw_results, selected_rule_ids=selected)
@@ -431,6 +557,13 @@ async def run_luxian_0609_preproduction(
             for item in raw_results
             if isinstance(item, Mapping)
         ]
+        if evidence_attestation_sink is not None:
+            evidence_attestations = _build_evidence_attestations(
+                selected_rule_ids=selected,
+                trace_rows=decision_trace_rows,
+                context=context,
+            )
+            evidence_attestation_sink(evidence_attestations)
     except Exception:
         results = _technical_results(selected)
         orchestrated = {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import hashlib
+from itertools import count
 import json
 from pathlib import Path
 
@@ -61,6 +63,21 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
     }
 
 
+def _emit_attestations(kwargs: dict, *, salt: str) -> None:
+    sink = kwargs["evidence_attestation_sink"]
+    sink(
+        [
+            {
+                "rule_id": f"LX0609-{index:03d}",
+                "evidence_hash": hashlib.sha256(
+                    f"{salt}:LX0609-{index:03d}".encode()
+                ).hexdigest(),
+            }
+            for index in range(1, 50)
+        ]
+    )
+
+
 @pytest.mark.asyncio
 async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_batch():
     loader_calls: list[tuple[str, str, str, str]] = []
@@ -78,6 +95,7 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
 
     async def fake_runner(**kwargs):
         runner_calls.append(tuple(kwargs["selected_customer_rule_ids"]))
+        _emit_attestations(kwargs, salt=str(len(runner_calls)))
         return _safe_response(wall_time_ms=float(len(runner_calls)))
 
     batch = await build_benchmark_batch(
@@ -127,6 +145,15 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
     assert decision_kinds.count("deterministic") == 580
     assert decision_kinds.count("semantic") == 400
+    attestation_hashes = [
+        evidence_hash
+        for case in batch["cases"]
+        for evidence_hash in case["evidence_attestations"].values()
+    ]
+    assert len(attestation_hashes) == len(set(attestation_hashes)) == 980
+    assert [row["evidence_ref_hashes"][0] for row in candidate["rows"]] == (
+        attestation_hashes
+    )
 
     rendered = repr(batch)
     for private_marker in (
@@ -149,9 +176,10 @@ async def test_benchmark20_fails_fast_on_technical_error_without_echo():
     def fake_loader(**kwargs):
         return {"scene": kwargs["scene"]}
 
-    async def fake_runner(**_):
+    async def fake_runner(**kwargs):
         nonlocal runner_calls
         runner_calls += 1
+        _emit_attestations(kwargs, salt=str(runner_calls))
         response = _safe_response()
         response["results"][0]["status"] = "technical_error"
         response["results"][0]["metadata"]["reason_code"] = (
@@ -176,7 +204,10 @@ async def test_benchmark20_fails_fast_on_technical_error_without_echo():
 
 @pytest.mark.asyncio
 async def test_benchmark20_can_emit_diagnostic_batch_when_technical_error_is_allowed():
-    async def fake_runner(**_):
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_attestations(kwargs, salt=str(next(call_numbers)))
         response = _safe_response()
         response["results"][0]["status"] = "technical_error"
         response["metrics"]["technical_error_count"] = 1
@@ -233,7 +264,8 @@ async def test_benchmark20_rejects_noncanonical_case_maps_before_reading(invalid
 
 @pytest.mark.asyncio
 async def test_benchmark20_rejects_incomplete_response_without_echo():
-    async def fake_runner(**_):
+    async def fake_runner(**kwargs):
+        _emit_attestations(kwargs, salt="incomplete")
         response = _safe_response()
         response["results"].pop()
         response["private_error"] = "PRIVATE-RESPONSE-MARKER"
@@ -293,7 +325,10 @@ async def test_benchmark20_fails_before_read_when_rule_authority_is_missing_or_u
 
 @pytest.mark.asyncio
 async def test_benchmark20_ignores_untrusted_customer_executor_type():
-    async def fake_runner(**_):
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_attestations(kwargs, salt=str(next(call_numbers)))
         response = _safe_response()
         for result in response["results"]:
             result["metadata"]["executor_type"] = "llm"

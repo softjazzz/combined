@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .customer_rule_package import (
     LUXIAN_0609_RULE_SET_KEY,
@@ -870,6 +870,7 @@ def aggregate_luxian_0609_orchestrated_results(
     model_name: str,
     evidence_payload: dict[str, Any] | None,
     execution_rule_count: int | None = None,
+    decision_trace_sink: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     if not context.enabled:
         return orchestrated
@@ -903,6 +904,7 @@ def aggregate_luxian_0609_orchestrated_results(
             "evidence_payload": evidence_payload,
         },
         reduced_decisions=context.reduced_decisions,
+        decision_trace_sink=decision_trace_sink,
     )
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
     orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])

@@ -198,6 +198,7 @@ def _golden_response(
     *,
     results: Sequence[Mapping[str, Any]],
     executor_types: Mapping[str, str],
+    evidence_attestations: Mapping[str, str],
 ) -> dict[str, Any]:
     """投影Golden所需最小响应，排除runner性能字段和客户长文本。"""
 
@@ -211,7 +212,9 @@ def _golden_response(
         executor_type = str(executor_types.get(rule_id) or "").strip()
         if executor_type not in {"program", "llm"}:
             raise BenchmarkContractError("missing LX0609 decision authority attestation")
-        evidence_items = result.get("evidence_items")
+        evidence_attestation = str(evidence_attestations.get(rule_id) or "").strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", evidence_attestation):
+            raise BenchmarkContractError("missing rule evidence attestation")
         projected_results.append(
             {
                 "rule_id": rule_id,
@@ -220,9 +223,9 @@ def _golden_response(
                     "reason_code": reason_code,
                     "executor_type": executor_type,
                 },
-                "evidence_items": (
-                    list(evidence_items) if isinstance(evidence_items, list) else []
-                ),
+                "evidence_items": [
+                    {"evidence_attestation": evidence_attestation}
+                ],
             }
         )
     return {
@@ -265,6 +268,7 @@ async def build_benchmark_batch(
     total_tokens = 0
     technical_error_count = 0
     maturity: dict[str, int] | None = None
+    all_evidence_hashes: set[str] = set()
     batch_started = perf_counter()
 
     for case in cases:
@@ -275,6 +279,7 @@ async def build_benchmark_batch(
                 "coordinate_hash": coordinate_hash,
             }
         )
+        evidence_attestation_rows: list[Mapping[str, str]] = []
         try:
             bundle = bundle_loader(
                 scene=case["scene"],
@@ -290,6 +295,7 @@ async def build_benchmark_batch(
                 llm_client=llm_client,
                 base_settings=base_settings,
                 model_name=str(getattr(llm_client, "model", "") or ""),
+                evidence_attestation_sink=evidence_attestation_rows.extend,
             )
         except Exception:
             raise BenchmarkContractError("benchmark case execution failed") from None
@@ -297,14 +303,47 @@ async def build_benchmark_batch(
             response,
             expected_rule_ids=selected_rule_ids,
         )
+        if (
+            len(evidence_attestation_rows) != len(selected_rule_ids)
+            or tuple(
+                str(item.get("rule_id") or "").strip().upper()
+                for item in evidence_attestation_rows
+                if isinstance(item, Mapping)
+            )
+            != selected_rule_ids
+        ):
+            raise BenchmarkContractError("invalid evidence attestation scope")
+        evidence_attestations: dict[str, str] = {}
+        for item in evidence_attestation_rows:
+            if not isinstance(item, Mapping) or set(item) != {
+                "rule_id",
+                "evidence_hash",
+            }:
+                raise BenchmarkContractError("invalid evidence attestation")
+            rule_id = str(item.get("rule_id") or "").strip().upper()
+            evidence_hash = str(item.get("evidence_hash") or "").strip().lower()
+            if (
+                rule_id in evidence_attestations
+                or not re.fullmatch(r"[0-9a-f]{64}", evidence_hash)
+            ):
+                raise BenchmarkContractError("invalid evidence attestation")
+            evidence_attestations[rule_id] = evidence_hash
+        if len(set(evidence_attestations.values())) != len(selected_rule_ids):
+            raise BenchmarkContractError("duplicate evidence attestation")
+        case_evidence_hashes = set(evidence_attestations.values())
+        if all_evidence_hashes.intersection(case_evidence_hashes):
+            raise BenchmarkContractError("duplicate cross-case evidence attestation")
+        all_evidence_hashes.update(case_evidence_hashes)
         output_cases.append(
             {
                 "case_label": case["case_label"],
                 "coordinate_hash": coordinate_hash,
+                "evidence_attestations": evidence_attestations,
                 "response": _golden_response(
                     response,
                     results=results,
                     executor_types=executor_types,
+                    evidence_attestations=evidence_attestations,
                 ),
             }
         )
@@ -338,6 +377,8 @@ async def build_benchmark_batch(
             "selector": safe_selector,
         }
     )
+    if len(all_evidence_hashes) != 20 * len(selected_rule_ids):
+        raise BenchmarkContractError("incomplete benchmark evidence attestations")
     summary = {
         "case_count": len(output_cases),
         "judgment_count": sum(status_counts.values()),

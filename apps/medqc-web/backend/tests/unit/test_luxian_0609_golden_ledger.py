@@ -44,9 +44,7 @@ def _safe_api_batch(*, status: str = "non_compliant") -> dict[str, object]:
                             },
                             "evidence_items": [
                                 {
-                                    "source_table": "admission_record",
-                                    "field_path": "record_time",
-                                    "evidence_role": "deadline_evidence",
+                                    "evidence_attestation": "c" * 64,
                                 }
                             ],
                         }
@@ -87,7 +85,42 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
     ]
     assert len(candidate["rows"][0]["evidence_ref_hashes"]) == 1
     assert len(candidate["rows"][0]["evidence_ref_hashes"][0]) == 64
+    assert candidate["rows"][0]["evidence_ref_hashes"] == ["c" * 64]
     assert "expected_state" not in candidate["rows"][0]
+
+
+@pytest.mark.parametrize("invalid_kind", ["missing", "empty", "arbitrary", "malformed"])
+def test_candidate_rejects_missing_or_untrusted_evidence_attestation(
+    invalid_kind: str,
+) -> None:
+    payload = _safe_api_batch()
+    result = payload["cases"][0]["response"]["results"][0]
+    if invalid_kind == "missing":
+        result.pop("evidence_items")
+    elif invalid_kind == "empty":
+        result["evidence_items"] = []
+    elif invalid_kind == "arbitrary":
+        result["evidence_items"] = [
+            {"source_table": "PRIVATE-TABLE-MARKER", "field_path": "record_time"}
+        ]
+    else:
+        result["evidence_items"] = [
+            {"evidence_attestation": "PRIVATE-MALFORMED-MARKER"}
+        ]
+
+    with pytest.raises(ValueError) as raised:
+        ledger_builder.build_candidate_ledger(
+            payload,
+            candidate_version="candidate20-v1",
+            generated_at="2026-07-17T10:00:00Z",
+        )
+
+    assert str(raised.value) in {
+        "missing evidence attestation",
+        "invalid evidence attestation",
+        "invalid evidence_attestation",
+    }
+    assert "PRIVATE-" not in repr(raised.value)
 
 
 def test_candidate_exports_stable_blank_human_review_template(tmp_path: Path) -> None:

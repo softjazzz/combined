@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 import os
 import subprocess
@@ -42,6 +43,7 @@ class _FakeContext:
     native_completion_tokens: int = 10
     native_total_tokens: int = 40
     native_api_time: float = 0.25
+    evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
 
 
 @pytest.mark.asyncio
@@ -159,6 +161,7 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         source_schema="cdm",
     )
 
+    assert set(result) == {"schema_version", "results", "metrics"}
     assert tuple(item["rule_id"] for item in result["results"]) == selected
     assert result["metrics"]["llm_call_count"] == 2
     assert result["metrics"]["total_tokens"] == 40
@@ -203,6 +206,210 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     ):
         assert marker not in rendered
     assert base_settings.__dict__ == {"UNRELATED_SETTING": "kept"}
+
+
+@pytest.mark.asyncio
+async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestations(
+    monkeypatch,
+):
+    selected = _all_rule_ids()
+    snapshot_hash = hashlib.sha256(b"snapshot-v1").hexdigest()
+    context = _FakeContext(
+        evidence_snapshot_rule_refs=tuple(
+            (rule_id, snapshot_hash) for rule_id in selected
+        )
+    )
+
+    async def fake_prepare(**_):
+        return [], context
+
+    def fake_aggregate(*, orchestrated, decision_trace_sink=None, **_):
+        assert decision_trace_sink is not None
+        for rule_id in selected:
+            if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}:
+                continue
+            decision_trace_sink(
+                {
+                    "rule_id": rule_id,
+                    "snapshot_hash": snapshot_hash,
+                    "fact_refs": (
+                        hashlib.sha256(f"fact:{rule_id}".encode()).hexdigest(),
+                    ),
+                    "evaluator_version": "trusted-evaluator-v1",
+                    "final_state": "compliant",
+                    "reason_code": "verified",
+                }
+            )
+        orchestrated["results"] = [
+            {
+                "rule_id": rule_id,
+                "status": "compliant",
+                "executor_type": "program",
+                "metadata": {"reason_code": "verified"},
+            }
+            for rule_id in selected
+        ]
+        return orchestrated
+
+    monkeypatch.setattr(preproduction_runner, "prepare_luxian_0609_execution", fake_prepare)
+    monkeypatch.setattr(
+        preproduction_runner,
+        "aggregate_luxian_0609_orchestrated_results",
+        fake_aggregate,
+    )
+
+    captured_attestations: list[dict[str, str]] = []
+    result = await preproduction_runner.run_luxian_0609_preproduction(
+        bundle=_bundle(),
+        selected_customer_rule_ids=selected,
+        evaluation_as_of_date="2026-07-17",
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        model_name="model",
+        evidence_attestation_sink=captured_attestations.extend,
+    )
+
+    assert "evidence_attestations" not in result
+    assert [item["rule_id"] for item in captured_attestations] == list(selected)
+    evidence_hashes = [item["evidence_hash"] for item in captured_attestations]
+    assert len(evidence_hashes) == len(set(evidence_hashes)) == 49
+    assert all(
+        len(value) == 64 and value == value.lower()
+        for value in evidence_hashes
+    )
+    rendered_results = repr(result["results"])
+    assert snapshot_hash not in rendered_results
+    assert "fact_refs" not in rendered_results
+    assert "decision_trace" not in rendered_results
+
+
+def _attestation_inputs(
+    *,
+    state: str = "compliant",
+    reason_code: str = "verified",
+    snapshot_overrides: dict[str, str] | None = None,
+    fact_overrides: dict[str, tuple[str, ...]] | None = None,
+    evaluator_overrides: dict[str, str] | None = None,
+):
+    selected = _all_rule_ids()
+    snapshot_overrides = snapshot_overrides or {}
+    fact_overrides = fact_overrides or {}
+    evaluator_overrides = evaluator_overrides or {}
+    snapshots = {
+        rule_id: snapshot_overrides.get(
+            rule_id,
+            hashlib.sha256(f"snapshot:{rule_id}".encode()).hexdigest(),
+        )
+        for rule_id in selected
+    }
+    traces = []
+    for rule_id in selected:
+        if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}:
+            continue
+        traces.append(
+            {
+                "rule_id": rule_id,
+                "snapshot_hash": snapshots[rule_id],
+                "fact_refs": fact_overrides.get(
+                    rule_id,
+                    (hashlib.sha256(f"fact:{rule_id}".encode()).hexdigest(),),
+                ),
+                "evaluator_version": evaluator_overrides.get(
+                    rule_id, "trusted-evaluator-v1"
+                ),
+                "final_state": state,
+                "reason_code": reason_code,
+            }
+        )
+    context = _FakeContext(
+        evidence_snapshot_rule_refs=tuple(snapshots.items())
+    )
+    return selected, traces, context
+
+
+def _attestation_map(*, selected, traces, context):
+    return {
+        item["rule_id"]: item["evidence_hash"]
+        for item in preproduction_runner._build_evidence_attestations(
+            selected_rule_ids=selected,
+            trace_rows=traces,
+            context=context,
+        )
+    }
+
+
+def test_evidence_attestation_identity_uses_only_bound_evidence_material():
+    selected, traces, context = _attestation_inputs()
+    baseline = _attestation_map(selected=selected, traces=traces, context=context)
+
+    same_selected, state_traces, same_context = _attestation_inputs(
+        state="non_compliant",
+        reason_code="changed_reason",
+    )
+    assert _attestation_map(
+        selected=same_selected,
+        traces=state_traces,
+        context=same_context,
+    ) == baseline
+
+    changed_fact = hashlib.sha256(b"changed-fact").hexdigest()
+    fact_selected, fact_traces, fact_context = _attestation_inputs(
+        fact_overrides={"LX0609-001": (changed_fact,)}
+    )
+    fact_hashes = _attestation_map(
+        selected=fact_selected,
+        traces=fact_traces,
+        context=fact_context,
+    )
+    assert fact_hashes["LX0609-001"] != baseline["LX0609-001"]
+    assert fact_hashes["LX0609-002"] == baseline["LX0609-002"]
+
+    changed_snapshot = hashlib.sha256(b"changed-snapshot").hexdigest()
+    snap_selected, snap_traces, snap_context = _attestation_inputs(
+        snapshot_overrides={"LX0609-002": changed_snapshot}
+    )
+    snap_hashes = _attestation_map(
+        selected=snap_selected,
+        traces=snap_traces,
+        context=snap_context,
+    )
+    assert snap_hashes["LX0609-002"] != baseline["LX0609-002"]
+
+    eval_selected, eval_traces, eval_context = _attestation_inputs(
+        evaluator_overrides={"LX0609-003": "trusted-evaluator-v2"}
+    )
+    eval_hashes = _attestation_map(
+        selected=eval_selected,
+        traces=eval_traces,
+        context=eval_context,
+    )
+    assert eval_hashes["LX0609-003"] != baseline["LX0609-003"]
+
+
+@pytest.mark.parametrize("invalid_kind", ["missing", "duplicate", "extra"])
+def test_evidence_attestation_rejects_incomplete_or_ambiguous_trace(invalid_kind):
+    selected, traces, context = _attestation_inputs()
+    if invalid_kind == "missing":
+        traces.pop()
+    elif invalid_kind == "duplicate":
+        traces.append(dict(traces[0]))
+    else:
+        traces.append(
+            {
+                **traces[0],
+                "rule_id": "LX0609-029",
+                "snapshot_hash": dict(context.evidence_snapshot_rule_refs)[
+                    "LX0609-029"
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError, match="decision trace"):
+        preproduction_runner._build_evidence_attestations(
+            selected_rule_ids=selected,
+            trace_rows=traces,
+            context=context,
+        )
 
 
 @pytest.mark.asyncio
