@@ -110,6 +110,9 @@ _RULE_CONTEXT_SOURCES = {
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
 _RULE_008_MAX_GAP_DAYS = 2
+_RULE_009_TEMPLATE_VALUES = frozenset(
+    {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
+)
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("查房病程相关记录满足该项要求。", ""),
@@ -183,6 +186,14 @@ def _row_text(row: Mapping[str, Any]) -> str:
         or row.get("diagnosis_name")
         or row.get("diagnosis_code")
     )
+
+
+def _rule_009_substantive_text(row: Mapping[str, Any]) -> str:
+    """拒绝空正文和固定模板壳，避免把只有时间的壳记录当作每日病程。"""
+
+    content = _row_text(row)
+    normalized = re.sub(r"[\W_]+", "", content, flags=re.UNICODE).lower()
+    return content if normalized not in _RULE_009_TEMPLATE_VALUES else ""
 
 
 def _first_course_body_text(row: Mapping[str, Any]) -> str:
@@ -978,7 +989,8 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
-    record_dates: set[date] = set()
+    timed_record_dates: set[date] = set()
+    substantive_record_dates: set[date] = set()
     for source_key in _RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
         assert observation is not None
@@ -1041,9 +1053,11 @@ def _rule_008_009_decision(
             if parsed_date >= anchor_date and (
                 horizon_date is None or parsed_date <= horizon_date
             ):
-                record_dates.add(parsed_date)
+                timed_record_dates.add(parsed_date)
+                if _rule_009_substantive_text(row):
+                    substantive_record_dates.add(parsed_date)
 
-    ordered_dates = sorted(record_dates)
+    ordered_dates = sorted(timed_record_dates)
     if rule_id == "LX0609-008":
         dates_with_anchor = [anchor_date, *ordered_dates]
         if horizon_date is not None:
@@ -1086,7 +1100,7 @@ def _rule_008_009_decision(
         anchor_date + timedelta(days=offset)
         for offset in range((prefix_end - anchor_date).days + 1)
     }
-    if expected_dates.difference(record_dates):
+    if expected_dates.difference(timed_record_dates):
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -1094,6 +1108,15 @@ def _rule_008_009_decision(
             reason_code="requirement_violated",
             refs=refs,
             confidence=1.0,
+        )
+    if expected_dates.difference(substantive_record_dates):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            refs=refs,
+            confidence=None,
         )
     if horizon_date is None:
         return decision(
@@ -1119,15 +1142,15 @@ def _rule_009_semantic_context(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
-) -> str:
-    """仅投影病危评价区间内的日常病程和上级医师查房正文。"""
+) -> tuple[str, bool, bool]:
+    """返回完整语义投影及截断标记；不允许静默裁剪后交给模型。"""
 
     if (
         type(snapshot) is not Luxian0609EvidenceSnapshot
         or type(materials) is not Luxian0609EvidenceMaterialStore
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
-        return ""
+        return "", False, False
     try:
         critical_dates = tuple(
             _authoritative_natural_date(row.get("prescribed_datetime"))
@@ -1136,42 +1159,58 @@ def _rule_009_semantic_context(
         )
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
     except Exception:
-        return ""
+        return "", False, False
     if (
         not critical_dates
         or any(item is None for item in critical_dates)
         or len(horizon_rows) != 1
     ):
-        return ""
+        return "", False, False
     anchor_date = min(item for item in critical_dates if item is not None)
     horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
     if horizon_date is None or horizon_date < anchor_date:
-        return ""
+        return "", False, False
 
     parts: list[str] = []
+    substantive_dates: set[date] = set()
     for source_key in _RULE_007_RECORD_SOURCES:
         try:
             rows = materials.rows(source_key)
         except Exception:
-            return ""
-        accepted = 0
+            return "", False, False
+        eligible: list[tuple[date, str]] = []
         for row in rows:
             record_date = _authoritative_natural_date(row.get("record_time"))
-            content = _row_text(row)
+            content = _rule_009_substantive_text(row)
             if (
                 record_date is None
                 or not anchor_date <= record_date <= horizon_date
                 or not content
             ):
                 continue
+            eligible.append((record_date, content))
+            substantive_dates.add(record_date)
+        if len(eligible) > _MAX_ROWS_PER_SOURCE:
+            return "", True, False
+        for record_date, content in eligible:
+            if len(content) > _MAX_ROW_CHARS:
+                return "", True, False
             parts.append(
                 f"[{source_key}] 记录日={record_date.isoformat()}；"
-                f"内容={content[:_MAX_ROW_CHARS]}"
+                f"内容={content}"
             )
-            accepted += 1
-            if accepted >= _MAX_ROWS_PER_SOURCE:
-                break
-    return "\n".join(parts)[:_MAX_CONTEXT_CHARS]
+    expected_dates = {
+        anchor_date + timedelta(days=offset)
+        for offset in range((horizon_date - anchor_date).days + 1)
+    }
+    if expected_dates.difference(substantive_dates):
+        return "", False, False
+    context = "\n".join(parts)
+    return (
+        ("", True, False)
+        if len(context) > _MAX_CONTEXT_CHARS
+        else (context, False, True)
+    )
 
 
 def _rule_009_semantic_prompt(*, context: str) -> str:
@@ -1212,6 +1251,7 @@ def _rule_009_semantic_decision(
     base_decision: RuleDecision,
     semantic_state: str | None = None,
     error_reason: str = "",
+    data_gap_reason: str = "required_field_missing",
 ) -> RuleDecision:
     """将009的三态语义结果与已通过的Python频次判断合成。"""
 
@@ -1246,7 +1286,7 @@ def _rule_009_semantic_decision(
             ApplicabilityState.APPLICABLE,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            "required_field_missing",
+            data_gap_reason,
             None,
         )
     applicability, evidence_state, qc_direction, reason_code, confidence = dimensions
@@ -2042,11 +2082,27 @@ async def execute_luxian_0609_native_course_quality_rules(
             ):
                 decisions.append(severity_decision)
                 continue
-            semantic_context = _rule_009_semantic_context(
+            (
+                semantic_context,
+                semantic_context_truncated,
+                semantic_context_complete,
+            ) = _rule_009_semantic_context(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
-            if not semantic_context or llm_client is None:
+            if semantic_context_truncated:
+                decisions.append(
+                    _rule_009_semantic_decision(
+                        base_decision=severity_decision,
+                        data_gap_reason="source_truncated",
+                    )
+                )
+                continue
+            if (
+                not semantic_context_complete
+                or not semantic_context
+                or llm_client is None
+            ):
                 decisions.append(severity_decision)
                 continue
             llm_call_count += 1

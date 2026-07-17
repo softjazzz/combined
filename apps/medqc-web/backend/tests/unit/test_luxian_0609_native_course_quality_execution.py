@@ -98,6 +98,28 @@ async def _run_typed_severity(session):
     return result, reduced
 
 
+async def _run_typed_009(session, client):
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-009",),
+        decision_rule_ids=("LX0609-009",),
+        wrapper_rules=[_wrapper("LX0609-009")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-009",),
+        snapshot=session.snapshot,
+    )
+    return result, reduced
+
+
 def _row(content: str, record_time: str = "2026-06-01 09:00:00") -> dict:
     return {"record_content": content, "record_time": record_time}
 
@@ -1236,13 +1258,13 @@ async def test_course_008_remains_python_only_with_client_available() -> None:
 @pytest.mark.asyncio
 async def test_course_009_semantic_prompt_uses_only_bounded_daily_and_senior_rows() -> None:
     daily_rows = [_row("OUTSIDE_WINDOW_MUST_NOT_LEAK", "2025-12-31 23:59:59")] + [
-        _row(f"DAILY_ALLOWED_{index} " + "甲" * 1600, "2026-01-01 08:00:00")
+        _row(f"DAILY_ALLOWED_{index} " + "甲" * 500, "2026-01-01 08:00:00")
         for index in range(8)
-    ] + [_row("DAILY_NINTH_MUST_NOT_LEAK", "2026-01-01 09:00:00")]
+    ]
     senior_rows = [
         _row(f"SENIOR_ALLOWED_{index}", "2026-01-01 10:00:00")
         for index in range(8)
-    ] + [_row("SENIOR_NINTH_MUST_NOT_LEAK", "2026-01-01 11:00:00")]
+    ]
     session = _severity_session(
         rows=[
             {
@@ -1282,20 +1304,97 @@ async def test_course_009_semantic_prompt_uses_only_bounded_daily_and_senior_row
     prompt = client.prompts[0]
     assert "DAILY_ALLOWED_0" in prompt
     assert "SENIOR_ALLOWED_0" in prompt
-    assert "DAILY_NINTH_MUST_NOT_LEAK" not in prompt
-    assert "SENIOR_NINTH_MUST_NOT_LEAK" not in prompt
     assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in prompt
     assert all(marker not in prompt for marker in forbidden.values())
     assert "SHOULD_NOT_LEAK" not in prompt
-    assert "甲" * 1401 not in prompt
-    assert len(
-        course._rule_009_semantic_context(
-            snapshot=session.snapshot,
-            materials=session.materials,
-        )
-    ) <= 18000
+    (
+        semantic_context,
+        context_truncated,
+        context_complete,
+    ) = course._rule_009_semantic_context(
+        snapshot=session.snapshot,
+        materials=session.materials,
+    )
+    assert len(semantic_context) <= 18000
+    assert context_truncated is False
+    assert context_complete is True
     assert "DAILY_ALLOWED_0" not in repr(result)
     assert all(marker not in repr(result) for marker in forbidden.values())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shell_content", ["", "[]", "空模板"])
+async def test_course_009_timed_shell_only_day_is_data_gap_without_model(
+    shell_content: str,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 00:00:00",
+                "row_ref": "e" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日实质病程。", "2026-01-01 08:00:00"),
+            _row(shell_content, "2026-01-02 08:00:00"),
+            _row("第三日实质病程。", "2026-01-03 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+    client = _Client([{"semantic_state": "satisfied"}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overflow_kind", ["ninth_row", "long_row", "total_context"])
+async def test_course_009_semantic_projection_overflow_is_data_gap_without_model(
+    overflow_kind: str,
+) -> None:
+    daily_rows = [_row("第一日病程。", "2026-01-01 08:00:00")]
+    senior_rows: list[dict] = []
+    if overflow_kind == "ninth_row":
+        daily_rows = [
+            _row(f"同日实质病程{index}。", f"2026-01-01 {index:02d}:00:00")
+            for index in range(9)
+        ]
+    elif overflow_kind == "long_row":
+        daily_rows = [_row("甲" * 1401, "2026-01-01 08:00:00")]
+    else:
+        daily_rows = [
+            _row(f"日常{index}" + "甲" * 1195, "2026-01-01 08:00:00")
+            for index in range(8)
+        ]
+        senior_rows = [
+            _row(f"上级{index}" + "乙" * 1195, "2026-01-01 09:00:00")
+            for index in range(8)
+        ]
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 00:00:00",
+                "row_ref": "f" * 64,
+            }
+        ],
+        daily_rows=daily_rows,
+        senior_rows=senior_rows,
+        evaluation_as_of_date="2026-01-01",
+    )
+    client = _Client([{"semantic_state": "satisfied"}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "source_truncated"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
