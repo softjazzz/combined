@@ -245,7 +245,11 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
                 "rule_id": rule_id,
                 "status": "compliant",
                 "executor_type": "program",
-                "metadata": {"reason_code": "verified"},
+                "metadata": (
+                    {"reason_code": "adapter_verified"}
+                    if rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}
+                    else {}
+                ),
             }
             for rule_id in selected
         ]
@@ -277,6 +281,21 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
         len(value) == 64 and value == value.lower()
         for value in evidence_hashes
     )
+    assert captured_attestations[0] == {
+        "rule_id": "LX0609-001",
+        "evidence_hash": captured_attestations[0]["evidence_hash"],
+        "observed_state": "compliant",
+        "reason_code": "verified",
+    }
+    adapter_row = next(
+        item for item in captured_attestations if item["rule_id"] == "LX0609-029"
+    )
+    assert adapter_row == {
+        "rule_id": "LX0609-029",
+        "evidence_hash": adapter_row["evidence_hash"],
+        "observed_state": "compliant",
+        "reason_code": "adapter_verified",
+    }
     rendered_results = repr(result["results"])
     assert snapshot_hash not in rendered_results
     assert "fact_refs" not in rendered_results
@@ -324,63 +343,81 @@ def _attestation_inputs(
     context = _FakeContext(
         evidence_snapshot_rule_refs=tuple(snapshots.items())
     )
-    return selected, traces, context
+    raw_results = [
+        {
+            "rule_id": rule_id,
+            "status": state,
+            "metadata": {"reason_code": reason_code},
+        }
+        for rule_id in selected
+    ]
+    return selected, traces, raw_results, context
 
 
-def _attestation_map(*, selected, traces, context):
+def _attestation_map(*, selected, traces, raw_results, context):
     return {
         item["rule_id"]: item["evidence_hash"]
         for item in preproduction_runner._build_evidence_attestations(
             selected_rule_ids=selected,
             trace_rows=traces,
+            raw_results=raw_results,
             context=context,
         )
     }
 
 
 def test_evidence_attestation_identity_uses_only_bound_evidence_material():
-    selected, traces, context = _attestation_inputs()
-    baseline = _attestation_map(selected=selected, traces=traces, context=context)
+    selected, traces, raw_results, context = _attestation_inputs()
+    baseline = _attestation_map(
+        selected=selected,
+        traces=traces,
+        raw_results=raw_results,
+        context=context,
+    )
 
-    same_selected, state_traces, same_context = _attestation_inputs(
+    same_selected, state_traces, state_results, same_context = _attestation_inputs(
         state="non_compliant",
         reason_code="changed_reason",
     )
     assert _attestation_map(
         selected=same_selected,
         traces=state_traces,
+        raw_results=state_results,
         context=same_context,
     ) == baseline
 
     changed_fact = hashlib.sha256(b"changed-fact").hexdigest()
-    fact_selected, fact_traces, fact_context = _attestation_inputs(
+    fact_selected, fact_traces, fact_results, fact_context = _attestation_inputs(
         fact_overrides={"LX0609-001": (changed_fact,)}
     )
     fact_hashes = _attestation_map(
         selected=fact_selected,
         traces=fact_traces,
+        raw_results=fact_results,
         context=fact_context,
     )
     assert fact_hashes["LX0609-001"] != baseline["LX0609-001"]
     assert fact_hashes["LX0609-002"] == baseline["LX0609-002"]
 
     changed_snapshot = hashlib.sha256(b"changed-snapshot").hexdigest()
-    snap_selected, snap_traces, snap_context = _attestation_inputs(
+    snap_selected, snap_traces, snap_results, snap_context = _attestation_inputs(
         snapshot_overrides={"LX0609-002": changed_snapshot}
     )
     snap_hashes = _attestation_map(
         selected=snap_selected,
         traces=snap_traces,
+        raw_results=snap_results,
         context=snap_context,
     )
     assert snap_hashes["LX0609-002"] != baseline["LX0609-002"]
 
-    eval_selected, eval_traces, eval_context = _attestation_inputs(
+    eval_selected, eval_traces, eval_results, eval_context = _attestation_inputs(
         evaluator_overrides={"LX0609-003": "trusted-evaluator-v2"}
     )
     eval_hashes = _attestation_map(
         selected=eval_selected,
         traces=eval_traces,
+        raw_results=eval_results,
         context=eval_context,
     )
     assert eval_hashes["LX0609-003"] != baseline["LX0609-003"]
@@ -388,7 +425,7 @@ def test_evidence_attestation_identity_uses_only_bound_evidence_material():
 
 @pytest.mark.parametrize("invalid_kind", ["missing", "duplicate", "extra"])
 def test_evidence_attestation_rejects_incomplete_or_ambiguous_trace(invalid_kind):
-    selected, traces, context = _attestation_inputs()
+    selected, traces, raw_results, context = _attestation_inputs()
     if invalid_kind == "missing":
         traces.pop()
     elif invalid_kind == "duplicate":
@@ -408,6 +445,32 @@ def test_evidence_attestation_rejects_incomplete_or_ambiguous_trace(invalid_kind
         preproduction_runner._build_evidence_attestations(
             selected_rule_ids=selected,
             trace_rows=traces,
+            raw_results=raw_results,
+            context=context,
+        )
+
+
+@pytest.mark.parametrize(
+    "invalid_kind",
+    ["empty_direct_reason", "direct_state_mismatch", "empty_adapter_reason"],
+)
+def test_evidence_attestation_rejects_missing_or_mismatched_decision_truth(
+    invalid_kind,
+):
+    selected, traces, raw_results, context = _attestation_inputs()
+    if invalid_kind == "empty_direct_reason":
+        traces[0]["reason_code"] = ""
+    elif invalid_kind == "direct_state_mismatch":
+        raw_results[0]["status"] = "non_compliant"
+    else:
+        adapter_index = selected.index("LX0609-029")
+        raw_results[adapter_index]["metadata"] = {}
+
+    with pytest.raises(ValueError, match="attestation|decision trace"):
+        preproduction_runner._build_evidence_attestations(
+            selected_rule_ids=selected,
+            trace_rows=traces,
+            raw_results=raw_results,
             context=context,
         )
 

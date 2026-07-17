@@ -63,7 +63,15 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
     }
 
 
-def _emit_attestations(kwargs: dict, *, salt: str) -> None:
+def _emit_attestations(
+    kwargs: dict,
+    *,
+    salt: str,
+    state_overrides: dict[str, str] | None = None,
+    reason_overrides: dict[str, str] | None = None,
+) -> None:
+    state_overrides = state_overrides or {}
+    reason_overrides = reason_overrides or {}
     sink = kwargs["evidence_attestation_sink"]
     sink(
         [
@@ -72,6 +80,12 @@ def _emit_attestations(kwargs: dict, *, salt: str) -> None:
                 "evidence_hash": hashlib.sha256(
                     f"{salt}:LX0609-{index:03d}".encode()
                 ).hexdigest(),
+                "observed_state": state_overrides.get(
+                    f"LX0609-{index:03d}", "compliant"
+                ),
+                "reason_code": reason_overrides.get(
+                    f"LX0609-{index:03d}", "verified"
+                ),
             }
             for index in range(1, 50)
         ]
@@ -96,7 +110,10 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     async def fake_runner(**kwargs):
         runner_calls.append(tuple(kwargs["selected_customer_rule_ids"]))
         _emit_attestations(kwargs, salt=str(len(runner_calls)))
-        return _safe_response(wall_time_ms=float(len(runner_calls)))
+        response = _safe_response(wall_time_ms=float(len(runner_calls)))
+        for result in response["results"]:
+            result["metadata"].pop("reason_code")
+        return response
 
     batch = await build_benchmark_batch(
         case_map=_case_map(),
@@ -154,6 +171,9 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert [row["evidence_ref_hashes"][0] for row in candidate["rows"]] == (
         attestation_hashes
     )
+    assert {row["observed_reason_code"] for row in candidate["rows"]} == {
+        "verified"
+    }
 
     rendered = repr(batch)
     for private_marker in (
@@ -179,11 +199,16 @@ async def test_benchmark20_fails_fast_on_technical_error_without_echo():
     async def fake_runner(**kwargs):
         nonlocal runner_calls
         runner_calls += 1
-        _emit_attestations(kwargs, salt=str(runner_calls))
         response = _safe_response()
         response["results"][0]["status"] = "technical_error"
         response["results"][0]["metadata"]["reason_code"] = (
             "PRIVATE-ERROR-MARKER"
+        )
+        _emit_attestations(
+            kwargs,
+            salt=str(runner_calls),
+            state_overrides={"LX0609-001": "technical_error"},
+            reason_overrides={"LX0609-001": "runner_failed"},
         )
         response["metrics"]["technical_error_count"] = 1
         return response
@@ -207,9 +232,14 @@ async def test_benchmark20_can_emit_diagnostic_batch_when_technical_error_is_all
     call_numbers = count(1)
 
     async def fake_runner(**kwargs):
-        _emit_attestations(kwargs, salt=str(next(call_numbers)))
         response = _safe_response()
         response["results"][0]["status"] = "technical_error"
+        _emit_attestations(
+            kwargs,
+            salt=str(next(call_numbers)),
+            state_overrides={"LX0609-001": "technical_error"},
+            reason_overrides={"LX0609-001": "runner_failed"},
+        )
         response["metrics"]["technical_error_count"] = 1
         return response
 
@@ -350,6 +380,32 @@ async def test_benchmark20_ignores_untrusted_customer_executor_type():
     decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
     assert decision_kinds.count("deterministic") == 580
     assert decision_kinds.count("semantic") == 400
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_rejects_attested_state_mismatch_without_echo():
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_attestations(
+            kwargs,
+            salt=str(next(call_numbers)),
+            state_overrides={"LX0609-001": "non_compliant"},
+            reason_overrides={"LX0609-001": "mismatch_reason"},
+        )
+        return _safe_response()
+
+    with pytest.raises(BenchmarkContractError) as raised:
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-17",
+            bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+            runner=fake_runner,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+        )
+
+    assert str(raised.value) == "attested result state mismatch"
 
 
 def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(

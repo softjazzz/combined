@@ -37,6 +37,17 @@ CASE_MAP_SCHEMA_VERSION = "lx0609-preproduction-benchmark20-case-map-v1"
 SELECTOR_VERSION_DEFAULT = "lx0609-preproduction-benchmark20-v1"
 _CASE_LABEL_RE = re.compile(r"^case-(?:0[1-9]|1[0-9]|20)$")
 _SAFE_CODE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
+_ATTESTED_REASON_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}$")
+_ATTESTED_STATES = frozenset(
+    {
+        "compliant",
+        "non_compliant",
+        "not_applicable",
+        "data_gap",
+        "evaluation_unknown",
+        "technical_error",
+    }
+)
 _CASE_KEYS = {
     "case_label",
     "scene",
@@ -198,27 +209,30 @@ def _golden_response(
     *,
     results: Sequence[Mapping[str, Any]],
     executor_types: Mapping[str, str],
-    evidence_attestations: Mapping[str, str],
+    evidence_attestations: Mapping[str, Mapping[str, str]],
 ) -> dict[str, Any]:
     """投影Golden所需最小响应，排除runner性能字段和客户长文本。"""
 
     projected_results: list[dict[str, Any]] = []
     for result in results:
-        metadata = result.get("metadata")
-        reason_code = ""
-        if isinstance(metadata, Mapping):
-            reason_code = str(metadata.get("reason_code") or "").strip()
         rule_id = str(result.get("rule_id") or "").strip().upper()
         executor_type = str(executor_types.get(rule_id) or "").strip()
         if executor_type not in {"program", "llm"}:
             raise BenchmarkContractError("missing LX0609 decision authority attestation")
-        evidence_attestation = str(evidence_attestations.get(rule_id) or "").strip()
+        attestation = evidence_attestations.get(rule_id)
+        if not isinstance(attestation, Mapping):
+            raise BenchmarkContractError("missing rule evidence attestation")
+        evidence_attestation = str(attestation.get("evidence_hash") or "").strip()
+        observed_state = str(attestation.get("observed_state") or "").strip()
+        reason_code = str(attestation.get("reason_code") or "").strip()
         if not re.fullmatch(r"[0-9a-f]{64}", evidence_attestation):
             raise BenchmarkContractError("missing rule evidence attestation")
+        if str(result.get("status") or "").strip().lower() != observed_state:
+            raise BenchmarkContractError("attested result state mismatch")
         projected_results.append(
             {
                 "rule_id": rule_id,
-                "status": str(result.get("status") or "").strip().lower(),
+                "status": observed_state,
                 "metadata": {
                     "reason_code": reason_code,
                     "executor_type": executor_type,
@@ -313,32 +327,47 @@ async def build_benchmark_batch(
             != selected_rule_ids
         ):
             raise BenchmarkContractError("invalid evidence attestation scope")
-        evidence_attestations: dict[str, str] = {}
+        evidence_attestations: dict[str, dict[str, str]] = {}
         for item in evidence_attestation_rows:
             if not isinstance(item, Mapping) or set(item) != {
                 "rule_id",
                 "evidence_hash",
+                "observed_state",
+                "reason_code",
             }:
                 raise BenchmarkContractError("invalid evidence attestation")
             rule_id = str(item.get("rule_id") or "").strip().upper()
             evidence_hash = str(item.get("evidence_hash") or "").strip().lower()
+            observed_state = str(item.get("observed_state") or "").strip().lower()
+            reason_code = str(item.get("reason_code") or "").strip().lower()
             if (
                 rule_id in evidence_attestations
                 or not re.fullmatch(r"[0-9a-f]{64}", evidence_hash)
+                or observed_state not in _ATTESTED_STATES
+                or not _ATTESTED_REASON_RE.fullmatch(reason_code)
             ):
                 raise BenchmarkContractError("invalid evidence attestation")
-            evidence_attestations[rule_id] = evidence_hash
-        if len(set(evidence_attestations.values())) != len(selected_rule_ids):
+            evidence_attestations[rule_id] = {
+                "evidence_hash": evidence_hash,
+                "observed_state": observed_state,
+                "reason_code": reason_code,
+            }
+        evidence_hashes = {
+            item["evidence_hash"] for item in evidence_attestations.values()
+        }
+        if len(evidence_hashes) != len(selected_rule_ids):
             raise BenchmarkContractError("duplicate evidence attestation")
-        case_evidence_hashes = set(evidence_attestations.values())
-        if all_evidence_hashes.intersection(case_evidence_hashes):
+        if all_evidence_hashes.intersection(evidence_hashes):
             raise BenchmarkContractError("duplicate cross-case evidence attestation")
-        all_evidence_hashes.update(case_evidence_hashes)
+        all_evidence_hashes.update(evidence_hashes)
         output_cases.append(
             {
                 "case_label": case["case_label"],
                 "coordinate_hash": coordinate_hash,
-                "evidence_attestations": evidence_attestations,
+                "evidence_attestations": {
+                    rule_id: item["evidence_hash"]
+                    for rule_id, item in evidence_attestations.items()
+                },
                 "response": _golden_response(
                     response,
                     results=results,

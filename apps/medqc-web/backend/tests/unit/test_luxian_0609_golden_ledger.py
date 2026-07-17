@@ -89,6 +89,40 @@ def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> Non
     assert "expected_state" not in candidate["rows"][0]
 
 
+def test_candidate_observation_changes_without_changing_bound_evidence_hash() -> None:
+    first_payload = _safe_api_batch(status="compliant")
+    first_payload["cases"][0]["response"]["results"][0]["metadata"][
+        "reason_code"
+    ] = "first_reason"
+    second_payload = _safe_api_batch(status="non_compliant")
+    second_payload["cases"][0]["response"]["results"][0]["metadata"][
+        "reason_code"
+    ] = "second_reason"
+
+    first = ledger_builder.build_candidate_ledger(
+        first_payload,
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )["rows"][0]
+    second = ledger_builder.build_candidate_ledger(
+        second_payload,
+        candidate_version="candidate20-v1",
+        generated_at="2026-07-17T10:00:00Z",
+    )["rows"][0]
+
+    assert (first["observed_state"], first["observed_reason_code"]) == (
+        "compliant",
+        "first_reason",
+    )
+    assert (second["observed_state"], second["observed_reason_code"]) == (
+        "non_compliant",
+        "second_reason",
+    )
+    assert first["evidence_ref_hashes"] == second["evidence_ref_hashes"] == [
+        "c" * 64
+    ]
+
+
 @pytest.mark.parametrize("invalid_kind", ["missing", "empty", "arbitrary", "malformed"])
 def test_candidate_rejects_missing_or_untrusted_evidence_attestation(
     invalid_kind: str,
