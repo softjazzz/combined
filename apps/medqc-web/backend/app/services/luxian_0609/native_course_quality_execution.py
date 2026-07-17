@@ -93,7 +93,8 @@ _MAX_CONTEXT_CHARS = 18000
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
-_COPY_STRONG_EXACT_THRESHOLD = 0.95
+_COPY_CONFIDENCE_VALUES = {"high": 0.9, "medium": 0.6, "low": 0.3}
+_COPY_UPDATE_DIMENSIONS = ("symptom", "objective", "assessment", "plan")
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 _DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
 _TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?")
@@ -124,6 +125,10 @@ _CONTROLLED_MESSAGES = {
     "data_gap": (
         "当前查房病程资料不足，暂不能形成可靠结论。",
         "请补齐相关资料后重新质控。",
+    ),
+    "evaluation_unknown": (
+        "当前查房病程证据尚不能形成稳定结论。",
+        "请结合当日病情变化、客观检查和诊疗调整进行人工确认。",
     ),
 }
 
@@ -1437,6 +1442,7 @@ class _CopyRuleOutcome:
     findings: str = ""
     evidence: str = ""
     suggestion: str = ""
+    confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1458,6 +1464,14 @@ class _CopyAssessment:
     safe_metadata: Mapping[str, Any]
 
 
+@dataclass(frozen=True)
+class _CopySemanticVerdict:
+    state: str
+    confidence_bucket: str
+    substantive_updates: Mapping[str, bool]
+    template_only_overlap: bool
+
+
 def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
     item = _result(
         "LX0609-017",
@@ -1476,6 +1490,8 @@ def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
         item["evidence"] = outcome.evidence
     if outcome.suggestion:
         item["suggestion"] = outcome.suggestion
+    if outcome.confidence is not None:
+        item["confidence"] = outcome.confidence
     return item
 
 
@@ -1485,7 +1501,7 @@ def _copy_gray_context(
 ) -> str:
     return (
         f"[Python候选] 全文相似度={maximum_similarity * 100:.2f}%，"
-        "但未达到强复制证据标准。只比较以下两份当前就诊病程，不得引用其他病历。\n"
+        "相似度只用于筛选，不直接证明不合理复制。只比较以下两份当前就诊病程，不得引用其他病历。\n"
         f"[文书A:{left_source}]\n{left_content[:_MAX_ROW_CHARS]}\n"
         f"[文书B:{right_source}]\n{right_content[:_MAX_ROW_CHARS]}"
     )[:_MAX_CONTEXT_CHARS]
@@ -1495,7 +1511,7 @@ def _copy_gray_prompt(*, context: str) -> str:
     return f"""你是病历复制质控裁决器，只判断 LX0609-017：两份病程是否属于不合理复制。
 
 判定约束：
-1. Python 已发现全文相似度略高于70%，但这本身不能直接判缺陷。
+1. Python 已发现全文相似度高于70%，但这本身不能直接判缺陷，即使接近或达到100%。
 2. 常规查体模板、共同诊断背景和固定格式重复，不等于不合理复制。
 3. 如果症状变化、客观检查数值、病情评估或治疗计划存在明确实质更新，应判合规。
 4. 只有核心临床内容大段复用，且缺少针对当日病情的实质变化和处置更新，才判不合规。
@@ -1503,7 +1519,114 @@ def _copy_gray_prompt(*, context: str) -> str:
 
 {context}
 
-只输出JSON：{{"is_compliant": true/false}}"""
+请分别判断症状变化、客观检查/数值、病情评估、治疗计划是否存在实质更新；
+如果重合内容只是空模板或固定格式，将 template_only_overlap 设为 true。
+
+只输出JSON，不得增加其他字段：
+{{"state":"copy|not_copy|unknown","confidence_bucket":"high|medium|low","substantive_updates":{{"symptom":true/false,"objective":true/false,"assessment":true/false,"plan":true/false}},"template_only_overlap":true/false}}"""
+
+
+def _parse_copy_semantic_verdict(
+    response: Mapping[str, Any],
+) -> _CopySemanticVerdict | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>",
+        "",
+        _response_text(response),
+        flags=re.IGNORECASE,
+    ).strip()
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    state = payload.get("state")
+    confidence_bucket = payload.get("confidence_bucket")
+    updates = payload.get("substantive_updates")
+    template_only_overlap = payload.get("template_only_overlap")
+    if state not in {"copy", "not_copy", "unknown"}:
+        return None
+    if confidence_bucket not in _COPY_CONFIDENCE_VALUES:
+        return None
+    if not isinstance(updates, Mapping) or set(updates) != set(_COPY_UPDATE_DIMENSIONS):
+        return None
+    if any(not isinstance(updates.get(key), bool) for key in _COPY_UPDATE_DIMENSIONS):
+        return None
+    if not isinstance(template_only_overlap, bool):
+        return None
+    return _CopySemanticVerdict(
+        state=str(state),
+        confidence_bucket=str(confidence_bucket),
+        substantive_updates={
+            key: bool(updates[key]) for key in _COPY_UPDATE_DIMENSIONS
+        },
+        template_only_overlap=template_only_overlap,
+    )
+
+
+def _copy_semantic_outcome(
+    *,
+    verdict: _CopySemanticVerdict,
+    safe_metadata: Mapping[str, Any],
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    api_time: float,
+) -> _CopyRuleOutcome:
+    metadata = dict(safe_metadata)
+    metadata.update(
+        {
+            "semantic_state": verdict.state,
+            "confidence_bucket": verdict.confidence_bucket,
+            "substantive_update_dimensions": [
+                key for key in _COPY_UPDATE_DIMENSIONS if verdict.substantive_updates[key]
+            ],
+            "template_only_overlap": verdict.template_only_overlap,
+        }
+    )
+    confidence = _COPY_CONFIDENCE_VALUES[verdict.confidence_bucket]
+    common = {
+        "executor_type": "llm",
+        "safe_metadata": metadata,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "api_time": api_time,
+        "confidence": confidence,
+    }
+    if verdict.template_only_overlap:
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code="copy_semantic_template_overlap",
+            **common,
+        )
+    if any(verdict.substantive_updates.values()):
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code="copy_semantic_substantive_update",
+            **common,
+        )
+    if verdict.state == "copy" and verdict.confidence_bucket == "high":
+        return _CopyRuleOutcome(
+            status="non_compliant",
+            reason_code="copy_semantic_confirmed_copy",
+            **common,
+        )
+    if verdict.state == "not_copy" and verdict.confidence_bucket == "high":
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code="copy_semantic_not_copy",
+            **common,
+        )
+    return _CopyRuleOutcome(
+        status="evaluation_unknown",
+        reason_code="semantic_low_confidence",
+        **common,
+    )
 
 
 def _assess_copy(
@@ -1592,23 +1715,8 @@ def _assess_copy(
         f"已比较 {len(comparable)} 份病程/查房记录，最高全文相似度 "
             f"{maximum * 100:.4f}%，判定阈值 {_COPY_SIMILARITY_THRESHOLD * 100:.0f}%。"
     )
-    # 长模板块会显著抬高匹配长度和覆盖率，但不能证明动态临床内容被复制。
-    # Python 只强判近乎全文复制；70%～95%统一交给一次裁剪语义判断。
-    strong_copy = maximum >= _COPY_STRONG_EXACT_THRESHOLD
-    if maximum > _COPY_SIMILARITY_THRESHOLD and strong_copy:
-        return _CopyAssessment(
-            _CopyRuleOutcome(
-                status="non_compliant",
-                reason_code="strong_copy_evidence",
-                executor_type="program",
-                safe_metadata=safe_metadata,
-                findings="发现两份病程/查房记录全文相似度超过70%，存在高度重复。",
-                evidence=evidence,
-                suggestion="请核对重复记录，补充本次病情变化、诊疗调整和查房意见。",
-            ),
-            "",
-            safe_metadata,
-        )
+    # 相似度只负责筛选。所有超过70%的候选（包括100%）统一进入一次裁剪语义判断，
+    # 避免固定模板遮蔽当日症状、客观检查、评估或计划更新。
     if maximum > _COPY_SIMILARITY_THRESHOLD and best_pair is not None:
         left_source, left_content, right_source, right_content = best_pair
         return _CopyAssessment(
@@ -1725,6 +1833,13 @@ def _rule_017_decision(
             QcDirection.UNKNOWN,
             "trigger_absent_complete",
         )
+    elif outcome.status == "evaluation_unknown":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+            "semantic_low_confidence",
+        )
     else:
         dimensions = (
             ApplicabilityState.UNKNOWN,
@@ -1742,7 +1857,7 @@ def _rule_017_decision(
         reason_code=reason_code,
         fact_refs=refs,
         evaluator_version="rule017-copy-v1",
-        confidence=None,
+        confidence=outcome.confidence,
     )
 
 
@@ -2304,8 +2419,8 @@ async def execute_luxian_0609_native_course_quality_rules(
             completion_tokens += completion
             total_tokens += total
             api_time += elapsed
-            is_compliant = _parse_is_compliant(response)
-            if is_compliant is None:
+            verdict = _parse_copy_semantic_verdict(response)
+            if verdict is None:
                 emit_copy(
                     _CopyRuleOutcome(
                         status="data_gap",
@@ -2320,10 +2435,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
             emit_copy(
-                _CopyRuleOutcome(
-                    status="compliant" if is_compliant else "non_compliant",
-                    reason_code="copy_gray_llm",
-                    executor_type="llm",
+                _copy_semantic_outcome(
+                    verdict=verdict,
                     safe_metadata=assessment.safe_metadata,
                     prompt_tokens=prompt,
                     completion_tokens=completion,

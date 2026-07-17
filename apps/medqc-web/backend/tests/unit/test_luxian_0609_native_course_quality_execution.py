@@ -10,6 +10,7 @@ from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
 from app.services.luxian_0609.decision_reducer import CustomerFinalState
+from app.services.luxian_0609.decision_model import EvidenceState
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -158,6 +159,29 @@ def _strong_fact(fact_type: str, *, state: str = "present") -> dict:
     }
 
 
+def _copy_verdict(
+    *,
+    state: str = "copy",
+    confidence_bucket: str = "high",
+    symptom: bool = False,
+    objective: bool = False,
+    assessment: bool = False,
+    plan: bool = False,
+    template_only_overlap: bool = False,
+) -> dict:
+    return {
+        "state": state,
+        "confidence_bucket": confidence_bucket,
+        "substantive_updates": {
+            "symptom": symptom,
+            "objective": objective,
+            "assessment": assessment,
+            "plan": plan,
+        },
+        "template_only_overlap": template_only_overlap,
+    }
+
+
 class _Client:
     def __init__(self, outputs: list[object]) -> None:
         self.outputs = list(outputs)
@@ -240,12 +264,12 @@ async def test_course_017_consumes_shared_material_without_live_reader(
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=None,
+        llm_client=_Client([_copy_verdict()]),
         evidence_materials=session.materials,
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     assert "private-a" not in repr(result)
 
 
@@ -310,7 +334,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
         patient_id="P",
         visit_id="V",
         source_schema=None,
-        llm_client=_Client([{"is_compliant": True}]),
+        llm_client=_Client([_copy_verdict()]),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -323,7 +347,7 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
     )
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].fact_refs
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     assert private_marker not in repr(result)
 
 
@@ -441,8 +465,8 @@ async def test_typed_017_gray_llm_matches_raw_state_calls_tokens_and_privacy():
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    raw_client = _Client([{"is_compliant": False}])
-    typed_client = _Client([{"is_compliant": False}])
+    raw_client = _Client([_copy_verdict()])
+    typed_client = _Client([_copy_verdict()])
     raw = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         wrapper_rules=[_wrapper("LX0609-017")],
@@ -2206,7 +2230,8 @@ async def test_017_requires_two_comparable_records_and_never_outputs_review_pend
         },
         source_complete=True,
     )
-    assert similar["status"] == "non_compliant"
+    assert similar["status"] == "data_gap"
+    assert similar["metadata"]["reason_code"] == "copy_semantic_review_required"
     assert "复核" not in repr(similar)
 
     different = course._copy_result(
@@ -2241,8 +2266,8 @@ async def test_017_requires_two_comparable_records_and_never_outputs_review_pend
 @pytest.mark.parametrize(
     ("llm_output", "expected_status"),
     [
-        ({"is_compliant": True}, "compliant"),
-        ({"is_compliant": False}, "non_compliant"),
+        (_copy_verdict(symptom=True), "compliant"),
+        (_copy_verdict(), "non_compliant"),
     ],
 )
 async def test_017_gray_similarity_uses_one_cropped_llm_call(
@@ -2302,7 +2327,10 @@ async def test_017_gray_similarity_uses_one_cropped_llm_call(
     )
 
     assert [item["status"] for item in result.results] == [expected_status]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_gray_llm"
+    assert result.results[0]["metadata"]["reason_code"] in {
+        "copy_semantic_substantive_update",
+        "copy_semantic_confirmed_copy",
+    }
     assert result.results[0]["metadata"]["executor_type"] == "llm"
     assert result.llm_call_count == 1
     assert result.total_tokens == 45
@@ -2344,7 +2372,7 @@ async def test_017_long_template_block_below_95_percent_uses_one_cropped_llm_cal
         if kwargs["source_key"] == "senior_course_record"
         else [],
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client([_copy_verdict(template_only_overlap=True)])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2359,7 +2387,9 @@ async def test_017_long_template_block_below_95_percent_uses_one_cropped_llm_cal
 
     assert [item["status"] for item in result.results] == ["compliant"]
     assert 0.70 < result.results[0]["metadata"]["maximum_similarity"] < 0.95
-    assert result.results[0]["metadata"]["reason_code"] == "copy_gray_llm"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "copy_semantic_template_overlap"
+    )
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     assert "只比较以下两份" in client.prompts[0]
@@ -2368,7 +2398,59 @@ async def test_017_long_template_block_below_95_percent_uses_one_cropped_llm_cal
 
 
 @pytest.mark.asyncio
-async def test_017_strong_copy_uses_python_without_model(monkeypatch):
+@pytest.mark.parametrize(
+    ("llm_output", "expected_status", "expected_reason"),
+    [
+        (
+            {
+                "state": "copy",
+                "confidence_bucket": "high",
+                "substantive_updates": {
+                    "symptom": True,
+                    "objective": False,
+                    "assessment": False,
+                    "plan": False,
+                },
+                "template_only_overlap": False,
+            },
+            "compliant",
+            "copy_semantic_substantive_update",
+        ),
+        (
+            {
+                "state": "copy",
+                "confidence_bucket": "high",
+                "substantive_updates": {
+                    "symptom": False,
+                    "objective": False,
+                    "assessment": False,
+                    "plan": False,
+                },
+                "template_only_overlap": False,
+            },
+            "non_compliant",
+            "copy_semantic_confirmed_copy",
+        ),
+        (
+            {
+                "state": "copy",
+                "confidence_bucket": "high",
+                "substantive_updates": {
+                    "symptom": False,
+                    "objective": False,
+                    "assessment": False,
+                    "plan": False,
+                },
+                "template_only_overlap": True,
+            },
+            "compliant",
+            "copy_semantic_template_overlap",
+        ),
+    ],
+)
+async def test_017_strong_similarity_uses_one_structured_semantic_call(
+    monkeypatch, llm_output, expected_status, expected_reason
+):
     copied = (
         "患者神志清楚，生命体征平稳，查体无明显变化。"
         "复查结果与前次一致，继续当前治疗方案并密切观察病情变化。"
@@ -2386,7 +2468,7 @@ async def test_017_strong_copy_uses_python_without_model(monkeypatch):
         if kwargs["source_key"] == "daily_course_record"
         else [],
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client([llm_output])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2399,11 +2481,106 @@ async def test_017_strong_copy_uses_python_without_model(monkeypatch):
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "strong_copy_evidence"
-    assert result.results[0]["metadata"]["executor_type"] == "program"
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert copied not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_017_medium_unknown_is_conflict_without_raw_material():
+    private_marker = "PRIVATE_017_UNKNOWN_MATERIAL"
+    copied = f"{private_marker}患者病情平稳，查体无明显变化，继续当前治疗方案。"
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [
+                {**_row(copied), "document_id": "private-left"},
+                {
+                    **_row(copied, "2026-06-02 09:00:00"),
+                    "document_id": "private-right",
+                },
+            ]
+            if source_key == "daily_course_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client(
+        [
+            {
+                "state": "unknown",
+                "confidence_bucket": "medium",
+                "substantive_updates": {
+                    "symptom": False,
+                    "objective": False,
+                    "assessment": False,
+                    "plan": False,
+                },
+                "template_only_overlap": False,
+            }
+        ]
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.EVALUATION_UNKNOWN
+    assert reduced[0].reason_code == "semantic_low_confidence"
+    assert result.decisions[0].evidence_state is EvidenceState.CONFLICT
+    assert result.decisions[0].confidence == 0.6
+    assert result.llm_call_count == 1
+    assert private_marker not in repr(result)
+    assert "private-left" not in repr(result)
+
+
+def test_017_non_typed_unknown_renders_safe_customer_result():
+    item = course._render_copy_outcome(
+        course._CopyRuleOutcome(
+            status="evaluation_unknown",
+            reason_code="semantic_low_confidence",
+            executor_type="llm",
+            safe_metadata={"confidence_bucket": "medium"},
+            confidence=0.6,
+        )
+    )
+
+    assert item["status"] == "uncertain"
+    assert item["metadata"]["source_state"] == "evaluation_unknown"
+    assert item["metadata"]["reason_code"] == "semantic_low_confidence"
+    assert item["confidence"] == 0.6
 
 
 @pytest.mark.asyncio
@@ -2493,12 +2670,12 @@ async def test_017_uses_complete_current_visit_sources_instead_of_truncated_bund
         patient_id="safe-patient",
         visit_id="safe-visit",
         source_schema=None,
-        llm_client=_Client([]),
+        llm_client=_Client([_copy_verdict()]),
     )
 
     assert reader_calls == ["daily_course_record", "senior_course_record"]
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     metadata = result.results[0]["metadata"]
     assert metadata["comparable_document_count"] == 11
     assert metadata["maximum_similarity"] == 1.0
