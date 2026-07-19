@@ -20,9 +20,11 @@ from scripts.build_luxian_0609_golden_ledger import canonical_digest
 
 
 SELECTOR_VERSION = "lx0609-consultation-ordinary-v1"
-CONDITION_VERSION = "single-consultation-row-nonreconsult-v1"
+CONDITION_VERSION = "single-consultation-row-nonreconsult-v2"
 _CASE_COUNT = 20
-_RECONSULTATION_RE = re.compile(r"(?:再次请会诊|再会诊)")
+_RECONSULTATION_RE = re.compile(
+    r"(?:再次请(?:[一-鿿A-Za-z0-9（）()·、-]{1,32})?\s*会诊|再会诊)"
+)
 _REQUIRED_ROW_FIELDS = {
     "institute_id",
     "patient_id",

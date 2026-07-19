@@ -94,3 +94,19 @@ def test_ordinary_selector_fails_closed_for_duplicate_or_insufficient_rows() -> 
         ordinary.select_ordinary_consultation_cases(
             _rows()[:19], schema_mode="split", snapshot_as_of="2026-07-19"
         )
+
+
+def test_ordinary_selector_excludes_explicit_reconsultation_but_keeps_normal_request() -> None:
+    rows = _rows()
+    rows[0]["record_content"] = "再次请肾病内科会诊。" + ("会诊申请及会诊意见记录" * 12)
+    rows[1]["record_content"] = "现请中医科会诊。" + ("会诊申请及会诊意见记录" * 12)
+
+    selected = ordinary.select_ordinary_consultation_cases(
+        rows, schema_mode="split", snapshot_as_of="2026-07-19"
+    )
+
+    reconsult_hash = ordinary._coordinate_hash(rows[0])
+    normal_request_hash = ordinary._coordinate_hash(rows[1])
+    selected_hashes = {item["coordinate_hash"] for item in selected["cases"]}
+    assert reconsult_hash not in selected_hashes
+    assert normal_request_hash in selected_hashes
