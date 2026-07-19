@@ -664,7 +664,10 @@ def test_023_ambiguous_association_is_unknown_even_when_quality_is_specific():
 
 
 @pytest.mark.unit
-def test_023_contextual_evidence_cannot_be_reused_across_consultation_episodes():
+@pytest.mark.parametrize("association_state", ("contextual", "explicit"))
+def test_023_evidence_cannot_be_reused_across_consultation_episodes(
+    association_state,
+):
     from app.services.luxian_0609 import native_consultation_021_023_execution as module
 
     first = _stage1(
@@ -685,7 +688,7 @@ def test_023_contextual_evidence_cannot_be_reused_across_consultation_episodes()
             "recommendation_ref": episode.recommendations[0][0],
             "execution_record_quality": "specific",
             "implementation_match": "supported",
-            "association_state": "contextual",
+            "association_state": association_state,
             "evidence_refs": ["daily_course_record-1"],
             "confidence": "high",
         }

@@ -522,7 +522,10 @@ def _parse_stage2(
         refs = raw.get("evidence_refs")
         if episode_ref and isinstance(refs, list):
             for ref in refs:
-                if isinstance(ref, str):
+                if (
+                    isinstance(ref, str)
+                    and ref in allowed_refs_by_episode.get(episode_ref, frozenset())
+                ):
                     reused_refs.setdefault(ref, set()).add(episode_ref)
     seen: set[tuple[str, str]] = set()
     states: list[tuple[str, str]] = []
@@ -569,9 +572,8 @@ def _parse_stage2(
         linked_without_refs = (
             association in _LINKED_ASSOCIATION_STATES and not safe_refs
         )
-        contextual_ref_reused_across_episodes = (
-            association == "contextual"
-            and any(len(reused_refs.get(ref, set())) > 1 for ref in safe_refs)
+        ref_reused_across_episodes = any(
+            len(reused_refs.get(ref, set())) > 1 for ref in safe_refs
         )
         invalid_absent_shape = quality == "absent" and not (
             match == "unknown" and association == "none" and not safe_refs
@@ -582,7 +584,7 @@ def _parse_stage2(
             association_is_ambiguous
             or linked_quality_without_link
             or linked_without_refs
-            or contextual_ref_reused_across_episodes
+            or ref_reused_across_episodes
             or invalid_absent_shape
         ):
             states.append(("unknown", "semantic_low_confidence"))
