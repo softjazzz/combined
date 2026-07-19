@@ -344,8 +344,12 @@ def _stage1_prompt(documents: Sequence[Mapping[str, Any]]) -> str:
         "vague表示只有泛化措辞；clear表示有明确临床目的或具体意见。"
         "application_state中，具体症状、检查、诊断或评估判为clear；"
         "只有申请会诊、协助诊治等泛化目的判为vague。"
+        "申请已明确本次住院中的具体处置、程序、营养、药物、检查或风险，"
+        "并邀请对应专科评估或处理时必须判为clear；不得因结尾使用“协助诊治”"
+        "或“请会诊”而降为vague或absent。"
         "opinion_state中，具体诊断、检查、治疗、用药、复查或处置判为clear；"
-        "泛化原则判为vague。"
+        "会诊意见已经给出具体处理建议，且同文书出现“遵会诊意见”或具体执行回填时，"
+        "意见仍必须判为clear；泛化原则判为vague。"
         "application_state只评申请段，不得用意见段、标题或签名补足；"
         "opinion_state只评意见段，不得用申请段、标题或签名补足。"
         "normalized_recommendations仅从会诊意见提取，元素字段只能为"
@@ -881,11 +885,28 @@ async def execute_luxian_0609_native_consultation_021_023_rules(
     if course_source_technical:
         outcomes["LX0609-023"] = _Outcome("LX0609-023", "technical_error", "source_query_error")
         return _finish(selected=selected, outcomes=tuple(outcomes.values()), decision_rule_ids=typed, snapshot=evidence_snapshot, calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time)
-    stage2_docs = tuple(
-        document
-        for source in _STAGE2_SOURCES
-        for document in _documents(source, stage2_rows[source])
-    )
+    try:
+        stage2_docs = tuple(
+            document
+            for source in _STAGE2_SOURCES
+            for document in _documents(source, stage2_rows[source])
+        )
+    except _SourceGap:
+        # 第一阶段的021/022已经得到受控结论；仅023依赖这批后续材料。
+        outcomes["LX0609-023"] = _Outcome(
+            "LX0609-023", "data_gap", "source_truncated"
+        )
+        return _finish(
+            selected=selected,
+            outcomes=tuple(outcomes.values()),
+            decision_rule_ids=typed,
+            snapshot=evidence_snapshot,
+            calls=calls,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
     consultation_uses_timezone = actionable_times[0].utcoffset() is not None
     comparable_stage2_docs: list[dict[str, Any]] = []
     for document in stage2_docs:

@@ -395,6 +395,8 @@ def test_stage_one_prompt_keeps_clinical_clear_vague_and_action_rubric():
     assert "每个可执行动作" in prompt
     assert "application_state只评申请段" in prompt
     assert "opinion_state只评意见段" in prompt
+    assert "具体处置、程序、营养、药物、检查或风险" in prompt
+    assert "同文书出现“遵会诊意见”或具体执行回填" in prompt
 
 
 @pytest.mark.unit
@@ -1090,6 +1092,44 @@ async def test_023_both_course_sources_truncated_fail_closed_before_stage_two(mo
 
     assert result.llm_call_count == 1
     assert result.results[0]["status"] == "data_gap"
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_oversized_stage_two_document_only_degrades_023(monkeypatch):
+    """后续材料超出裁剪上限时，已完成的021/022结论不能随023一起丢失。"""
+
+    client = _QueueClient(
+        _stage1(recommendations=[_recommendation()]),
+        AssertionError("stage two model must not be called"),
+    )
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {
+                    "record_time": "2026-01-02 09:00:00",
+                    "record_content": "超出受控裁剪上限的后续病程" * 200,
+                }
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+            labtest_item_report=[],
+            surgery_record=[],
+        ),
+        client=client,
+        rule_ids=("LX0609-021", "LX0609-022", "LX0609-023"),
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "compliant",
+        "compliant",
+        "data_gap",
+    ]
+    assert result.results[2]["metadata"]["reason_code"] == "source_truncated"
+    assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
 
