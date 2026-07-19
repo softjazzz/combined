@@ -264,6 +264,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-011": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
         "exam_master",
         "exam_item_report",
         "daily_course_record",
@@ -272,6 +274,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-012": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
         "exam_master",
         "exam_item_report",
         "daily_course_record",
@@ -280,6 +284,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-014": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
         "labtest_master",
         "labtest_item_report",
         "daily_course_record",
@@ -288,6 +294,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "senior_course_record",
     ),
     "LX0609-015": (
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
         "labtest_master",
         "labtest_item_report",
         "daily_course_record",

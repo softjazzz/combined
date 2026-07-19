@@ -137,7 +137,14 @@ def build_luxian_0609_evidence_read_session(
     if not selected_rule_ids:
         raise ValueError("selected_rule_ids must not be empty")
     needs_evaluation_horizon = bool(
-        {"LX0609-008", "LX0609-009"}.intersection(selected_rule_ids)
+        {
+            "LX0609-008",
+            "LX0609-009",
+            "LX0609-011",
+            "LX0609-012",
+            "LX0609-014",
+            "LX0609-015",
+        }.intersection(selected_rule_ids)
     )
     explicit_as_of_date = (
         _parse_evaluation_as_of_date(evaluation_as_of_date)

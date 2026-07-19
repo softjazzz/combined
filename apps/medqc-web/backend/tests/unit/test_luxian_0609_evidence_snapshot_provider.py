@@ -37,6 +37,37 @@ CREATED_AT = "2026-07-16T12:00:00+08:00"
 HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 
 
+def test_exam_lab_post_rules_freeze_existing_horizon_sources() -> None:
+    discharge_value = "2026-07-13 09:00:00"
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            ({"discharge_datetime": discharge_value},)
+            if source_key == HORIZON_SOURCE_KEY
+            else ()
+        )
+        return _rows(source_key, rows, limit_rows=1 if rows else 50)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-011", "LX0609-015"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evaluation_as_of_date="2026-07-16",
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert session.materials.rows(HORIZON_SOURCE_KEY)[0]["discharge_datetime"] == discharge_value
+    assert session.materials.has_source(EVALUATION_HORIZON_SOURCE_KEY)
+    assert any(
+        fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
+    )
+    assert discharge_value not in repr((session.snapshot, session.materials))
+
+
 def test_008_009_horizon_is_single_read_safe_fact_and_snapshot_identity() -> None:
     calls: list[str] = []
     discharge_value = "2026-07-13 09:00:00"
