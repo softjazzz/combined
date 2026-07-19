@@ -58,6 +58,7 @@ _MAX_STAGE1_CHARS = 48000
 _MAX_STAGE2_CHARS = 56000
 _APPLICATION_STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _OPINION_STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
+_EXECUTION_STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _RECOMMENDATION_TYPES = frozenset(
     {
         "medication",
@@ -78,6 +79,7 @@ _ASSOCIATION_STATES = frozenset(
     {"explicit", "contextual", "ambiguous", "none", "unknown"}
 )
 _LINKED_ASSOCIATION_STATES = frozenset({"explicit", "contextual"})
+_RECOVERY_ACTIONABILITY = frozenset({"present", "absent", "unknown"})
 _EVALUATOR_VERSION = "consultation-021-023-v2"
 
 
@@ -101,9 +103,14 @@ class NativeConsultationExecutionResult:
 class _Episode:
     episode_ref: str
     application_state: str
+    application_ref: str | None
     opinion_state: str
+    opinion_ref: str | None
+    execution_state: str
+    execution_ref: str | None
     recommendations: tuple[tuple[str, str, str], ...]
     confidence: float
+    recommendation_contract_invalid: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +118,13 @@ class _Outcome:
     rule_id: str
     status: str
     reason_code: str
+
+
+@dataclass(frozen=True)
+class _RecoveryAssessment:
+    actionability: str
+    confidence: float
+    execution_states: tuple[tuple[str, str], ...]
 
 
 class _SemanticInvalid(Exception):
@@ -339,30 +353,87 @@ def _stage1_prompt(documents: Sequence[Mapping[str, Any]]) -> str:
         raise _SourceGap()
     return (
         "你只做本次住院会诊事实抽取，不做质控结论。每个输入ref必须且只能输出一次。"
-        "application_state和opinion_state只能为clear/vague/missing/absent/unknown。"
+        "application_state、opinion_state和execution_state只能为clear/vague/missing/absent/unknown。"
         "absent表示对应角色在该文书中不存在；missing表示角色存在但内容空缺；"
         "vague表示只有泛化措辞；clear表示有明确临床目的或具体意见。"
-        "application_state中，具体症状、检查、诊断或评估判为clear；"
-        "只有申请会诊、协助诊治等泛化目的判为vague。"
-        "申请已明确本次住院中的具体处置、程序、营养、药物、检查或风险，"
-        "并邀请对应专科评估或处理时必须判为clear；不得因结尾使用“协助诊治”"
-        "或“请会诊”而降为vague或absent。"
-        "opinion_state中，具体诊断、检查、治疗、用药、复查或处置判为clear；"
-        "会诊意见已经给出具体处理建议，且同文书出现“遵会诊意见”或具体执行回填时，"
-        "意见仍必须判为clear；泛化原则判为vague。"
-        "application_state只评申请段，不得用意见段、标题或签名补足；"
-        "opinion_state只评意见段，不得用申请段、标题或签名补足。"
+        "每个角色同时输出对应的application_ref、opinion_ref或execution_ref："
+            "clear/vague/missing必须填写当前episode_ref；absent/unknown必须为null。"
+        "角色识别必须先分段再判状态：申请角色只能依据独立的申请、请求或会诊目的段；"
+        "意见角色只能依据受邀专科的意见、评估或处置段；不得把一个角色段的事实补到另一个角色。"
+        "没有独立申请、请求或会诊目的段时，application_state=absent；即使意见段有丰富病情、"
+        "诊断或治疗内容也不得反推申请。申请段存在但内容空缺为missing；申请段任意位置有本次住院的"
+        "具体症状、诊断、检查异常、风险、治疗问题、待解决会诊问题或具体处置请求时为clear；"
+        "段尾“协助诊治”“协助治疗”“请会诊”等泛化词不得把前述具体问题降为vague。"
+        "拟、计划、考虑或需要进行某项具体治疗、检查、手术或处置，因而请求对应专科会诊时必须为clear。"
+        "只有申请段存在且全文仅有泛化请求、没有任何具体当前问题时才为vague。"
+        "意见判定不依赖“会诊意见”标题。具名专科医师的病史判断、专科评估、诊断、手术指征、"
+        "治疗建议、用药、检查、处置计划、治法或方选均为opinion_state=clear。"
+        "意见角色不存在为absent，存在但内容空缺为missing，仅有泛化原则且无具体意见为vague；"
+        "不得用申请段、标题或签名补足意见。"
+        "execution_state只依据明确的执行回填；不得由申请或意见本身推定执行。"
         "normalized_recommendations仅从会诊意见提取，元素字段只能为"
         "type(medication/examination/laboratory/surgery/treatment/monitoring/follow_up/other)、"
-        "item（不超过80字的归一化事项）。每个可执行动作必须逐项列入"
-        "normalized_recommendations，不得由Python猜测或补全动作。不得引用输入外信息。"
-        "严格输出JSON对象{episodes:[{episode_ref,application_state,opinion_state,"
-        "normalized_recommendations,confidence,input_refs}]}。输入：" + payload
+            "item（不超过80字的归一化事项）。normalized_recommendations只能从clear意见中提取明确可执行安排；"
+        "每个独立行动必须逐项输出，一条长句含多个行动时按原文语义拆为多个保真原子事项。"
+        "每个item不超过80字，保留原文支持的行动，不得因单项较长遗漏其他已明确事项，也不得添加原文没有的行动。"
+        "会诊意见中的明确可执行行动不得因同文书出现“已执行”“已处理”“已遵嘱”或其他执行语义而删除、"
+        "降为absent；必须先抽取行动，执行语义只交后续关联核对。"
+        "没有明确可执行事项时输出空列表；opinion_state为missing、absent或unknown时不得输出建议。"
+        "不得由Python猜测或补全动作，也不得引用输入外信息。"
+        "单输入时系统会绑定内部引用，不能因ID形态影响角色语义；多输入时episode_ref与input_refs必须逐字复用输入提供的内部引用，不得自造、改写或省略。"
+        "严格输出JSON对象{episodes:[{episode_ref,application_state,application_ref,opinion_state,"
+        "opinion_ref,execution_state,execution_ref,normalized_recommendations,confidence,input_refs}]}。输入：" + payload
     )
 
 
 def _invalid_episode(episode_ref: str) -> _Episode:
-    return _Episode(episode_ref, "unknown", "unknown", (), 0.0)
+    return _Episode(
+        episode_ref,
+        "unknown",
+        None,
+        "unknown",
+        None,
+        "unknown",
+        None,
+        (),
+        0.0,
+    )
+
+
+def _validate_role_ref(*, state: str, ref: Any, episode_ref: str) -> str | None:
+    if state in {"clear", "vague"}:
+        if ref != episode_ref:
+            raise _SemanticInvalid()
+        return episode_ref
+    if state == "missing":
+        if ref is None or ref == episode_ref:
+            return episode_ref
+        raise _SemanticInvalid()
+    if state in {"absent", "unknown"} and ref is None:
+        return None
+    raise _SemanticInvalid()
+
+
+def _bind_single_episode_refs(
+    *, raw: Mapping[str, Any], expected_refs: tuple[str, ...]
+) -> Mapping[str, Any]:
+    """唯一输入文书时由受信任边界绑定内部引用，LLM只负责语义状态。"""
+    if len(expected_refs) != 1:
+        return raw
+    canonical = expected_refs[0]
+    normalized = dict(raw)
+    normalized["episode_ref"] = canonical
+    normalized["input_refs"] = [canonical]
+    for state_key, ref_key in (
+        ("application_state", "application_ref"),
+        ("opinion_state", "opinion_ref"),
+        ("execution_state", "execution_ref"),
+    ):
+        state = _clean(normalized.get(state_key)).lower()
+        normalized[ref_key] = (
+            canonical if state in {"clear", "vague", "missing"} else None
+        )
+    return normalized
 
 
 def _parse_stage1(
@@ -377,6 +448,11 @@ def _parse_stage1(
     for raw in raw_episodes:
         if not isinstance(raw, Mapping):
             raise _SemanticInvalid()
+        if len(raw_episodes) == 1:
+            raw = _bind_single_episode_refs(
+                raw=raw,
+                expected_refs=expected_refs,
+            )
         episode_ref = _clean(raw.get("episode_ref"))
         if episode_ref not in expected_refs or episode_ref in seen:
             raise _SemanticInvalid()
@@ -391,22 +467,48 @@ def _parse_stage1(
             input_refs = raw.get("input_refs")
             if not isinstance(input_refs, list) or input_refs != [episode_ref]:
                 raise _SemanticInvalid()
+            if not {
+                "application_ref",
+                "opinion_ref",
+                "execution_state",
+                "execution_ref",
+            }.issubset(raw):
+                raise _SemanticInvalid()
             application = _clean(raw.get("application_state")).lower()
             opinion = _clean(raw.get("opinion_state")).lower()
+            execution = _clean(raw.get("execution_state")).lower()
             if (
                 application not in _APPLICATION_STATES
                 or opinion not in _OPINION_STATES
+                or execution not in _EXECUTION_STATES
             ):
                 raise _SemanticInvalid()
+            application_ref = _validate_role_ref(
+                state=application,
+                ref=raw.get("application_ref"),
+                episode_ref=episode_ref,
+            )
+            opinion_ref = _validate_role_ref(
+                state=opinion,
+                ref=raw.get("opinion_ref"),
+                episode_ref=episode_ref,
+            )
+            execution_ref = _validate_role_ref(
+                state=execution,
+                ref=raw.get("execution_ref"),
+                episode_ref=episode_ref,
+            )
             confidence = _confidence(raw.get("confidence"))
             recommendations_raw = raw.get("normalized_recommendations")
-            if not isinstance(recommendations_raw, list):
-                raise _SemanticInvalid()
+            recommendation_contract_invalid = not isinstance(recommendations_raw, list)
+            if recommendation_contract_invalid:
+                recommendations_raw = []
             recommendations: list[tuple[str, str, str]] = []
             local_facts: set[tuple[str, str]] = set()
             for item in recommendations_raw:
                 if not isinstance(item, Mapping):
-                    raise _SemanticInvalid()
+                    recommendation_contract_invalid = True
+                    continue
                 kind = _clean(item.get("type")).lower()
                 normalized = _clean(item.get("item"))
                 if (
@@ -414,15 +516,17 @@ def _parse_stage1(
                     or not normalized
                     or len(normalized) > 80
                 ):
-                    raise _SemanticInvalid()
+                    recommendation_contract_invalid = True
+                    continue
                 fact_key = (kind, normalized)
                 if fact_key in local_facts:
                     continue
                 local_facts.add(fact_key)
                 ref = f"{episode_ref}-recommendation-{len(recommendations) + 1}"
                 recommendations.append((ref, kind, normalized))
-            if opinion in {"missing", "absent", "unknown"} and recommendations:
-                raise _SemanticInvalid()
+            if opinion != "clear" and recommendations:
+                recommendation_contract_invalid = True
+                recommendations = []
         except _SemanticInvalid:
             episodes.append(_invalid_episode(episode_ref))
             continue
@@ -430,9 +534,14 @@ def _parse_stage1(
             _Episode(
                 episode_ref,
                 application,
+                application_ref,
                 opinion,
+                opinion_ref,
+                execution,
+                execution_ref,
                 tuple(recommendations),
                 confidence,
+                recommendation_contract_invalid,
             )
         )
     return tuple(sorted(episodes, key=lambda item: expected_refs.index(item.episode_ref)))
@@ -495,6 +604,10 @@ def _stage2_prompt(
         "必须是同一episode的allowed_evidence_refs子集，禁止跨episode或引用会诊前材料；"
         "时间先后只用于排除不可能证据，绝不能仅因发生在会诊后就判定有关联。"
         "多次会诊重叠时必须分别核对，无法唯一归属就输出association_state=ambiguous。"
+        "当已存在明确会诊建议，后续材料仅有“经治疗”“治疗后好转”“继续原治疗”“巩固治疗”“遵意见”等泛化续治表述，"
+        "未点名且不能依上下文唯一关联到某条具体建议时，必须输出execution_record_quality=vague_or_copied、"
+        "implementation_match=unknown、association_state=none或ambiguous；不得笼统输出unknown。"
+        "unknown仅用于确实文本不可判定、材料截断或输入冲突。"
         "没有合法执行证据时必须输出execution_record_quality=absent、"
         "implementation_match=unknown、association_state=none、evidence_refs=[]。"
         "严格输出JSON对象"
@@ -582,16 +695,26 @@ def _parse_stage2(
         invalid_absent_shape = quality == "absent" and not (
             match == "unknown" and association == "none" and not safe_refs
         )
+        generic_unlinked_continuation = (
+            quality == "vague_or_copied"
+            and match == "unknown"
+            and association in {"none", "ambiguous"}
+            and not safe_refs
+            and confidence is not None
+            and confidence >= 0.8
+        )
         if item_invalid:
-            states.append(("unknown", "semantic_low_confidence"))
+            states.append(("unknown", "semantic_output_unknown"))
         elif (
-            association_is_ambiguous
-            or linked_quality_without_link
+            (association_is_ambiguous and not generic_unlinked_continuation)
+            or (linked_quality_without_link and not generic_unlinked_continuation)
             or linked_without_refs
             or ref_reused_across_episodes
             or invalid_absent_shape
         ):
             states.append(("unknown", "semantic_low_confidence"))
+        elif generic_unlinked_continuation:
+            states.append(("vague_or_copied", "unknown"))
         elif quality == "absent":
             states.append(("absent", "unknown"))
         elif (
@@ -612,6 +735,361 @@ def _parse_stage2(
     if seen != expected:
         raise _SemanticInvalid()
     return tuple(states)
+
+
+def _stage2_recovery_prompt(
+    episodes: Sequence[_Episode],
+    recovery_episode_refs: frozenset[str],
+    consultation_documents_by_ref: Mapping[str, Mapping[str, Any]],
+    course_documents: Sequence[Mapping[str, Any]],
+    consultation_time_by_ref: Mapping[str, datetime],
+    allowed_refs_by_episode: Mapping[str, frozenset[str]],
+) -> str:
+    """第二阶段兼顾既有建议执行核对与第一阶段漏提建议的受控恢复。
+
+    这一分支只投放会诊原文及会诊后的两类病程文书，禁止把医嘱、检查或手术
+    当作执行事实或建议来源。
+    """
+
+    facts = []
+    for episode in episodes:
+        document = consultation_documents_by_ref[episode.episode_ref]
+        facts.append(
+            {
+                "episode_ref": episode.episode_ref,
+                "consultation_time": consultation_time_by_ref[
+                    episode.episode_ref
+                ].isoformat(sep=" "),
+                "consultation_document": document,
+                "recovery_required": episode.episode_ref in recovery_episode_refs,
+                "known_recommendations": [
+                    {"type": kind, "item": item}
+                    for _ref, kind, item in episode.recommendations
+                ],
+                "allowed_evidence_refs": sorted(
+                    allowed_refs_by_episode[episode.episode_ref]
+                ),
+            }
+        )
+    payload = json.dumps(
+        {
+            "consultation_facts": facts,
+            "post_consultation_course_evidence": list(course_documents),
+        },
+        ensure_ascii=False,
+    )
+    if len(payload) > _MAX_STAGE2_CHARS:
+        raise _SourceGap()
+    return (
+        "你只做会诊建议与会诊后病程执行事实抽取，不做质控结论。每个episode必须输出一次。"
+        "recovery_required=true时，上游已确认该会诊存在明确专科意见；先只审会诊文书，"
+        "逐项保留明确可执行行动，不得遗漏、杜撰或由Python补全。治疗、检查、手术或处置安排"
+        "即使同文书有“已执行”“已处理”“已遵嘱”或其他执行语义，也不得判absent或删除。"
+        "会诊文书自身的“已执行”“已处理”“已遵嘱”措辞绝不可作为后续执行证据。"
+        "recovery_required=false时，known_recommendations是已确认建议，必须逐字逐项复用，"
+        "不得增加、删除或改写。每个建议都要给出执行核对。"
+        "recommendations元素字段只能为type(medication/examination/laboratory/surgery/treatment/monitoring/follow_up/other)、"
+        "item（不超过80字）、execution_record_quality(specific/vague_or_copied/absent/unknown)、"
+        "implementation_match(supported/contradicted/unknown)、"
+        "association_state(explicit/contextual/ambiguous/none/unknown)、evidence_refs、confidence。"
+        "再只用会诊后的daily_course_record或senior_course_record核对执行；必须只引用当前episode的"
+        "allowed_evidence_refs中会诊后病程。没有合法执行证据时必须输出"
+        "execution_record_quality=absent、implementation_match=unknown、association_state=none、evidence_refs=[]。"
+        "actionability只能为present/absent/unknown：present表示会诊意见有明确可执行安排，"
+        "actionability=absent只在意见确无明确行动时，unknown表示无法稳定判断；"
+        "actionability=absent或unknown时recommendations必须为空列表。"
+        "时间先后只能排除不可能证据，不能仅因会诊后出现就推定执行；无法唯一归属必须unknown或ambiguous。"
+        "当已存在明确会诊建议，后续材料仅有“经治疗”“治疗后好转”“继续原治疗”“巩固治疗”“遵意见”等泛化续治表述，"
+        "未点名且不能依上下文唯一关联到某条具体建议时，必须输出execution_record_quality=vague_or_copied、"
+        "implementation_match=unknown、association_state=none或ambiguous；不得笼统输出unknown。"
+        "unknown仅用于确实文本不可判定、材料截断或输入冲突。"
+        "严格输出JSON对象{episodes:[{episode_ref,actionability,recommendations,confidence}]}。输入："
+        + payload
+    )
+
+
+def _recovery_execution_state(
+    *,
+    raw: Mapping[str, Any],
+    allowed_refs: frozenset[str],
+) -> tuple[str, str]:
+    quality = _clean(raw.get("execution_record_quality")).lower()
+    match = _clean(raw.get("implementation_match")).lower()
+    association = _clean(raw.get("association_state")).lower()
+    refs = raw.get("evidence_refs")
+    refs_are_valid = (
+        isinstance(refs, list)
+        and all(isinstance(ref, str) for ref in refs)
+        and len(refs) == len(set(refs))
+    )
+    safe_refs = refs if refs_are_valid else []
+    try:
+        confidence = _confidence(raw.get("confidence"))
+    except _SemanticInvalid:
+        confidence = None
+    if (
+        quality not in _EXECUTION_QUALITIES
+        or match not in _IMPLEMENTATION_MATCHES
+        or association not in _ASSOCIATION_STATES
+        or confidence is None
+        or not refs_are_valid
+        or any(ref not in allowed_refs for ref in safe_refs)
+    ):
+        return "unknown", "semantic_output_unknown"
+    if quality == "absent":
+        if match == "unknown" and association == "none" and not safe_refs:
+            return "absent", "unknown"
+        return "unknown", "semantic_low_confidence"
+    if (
+        quality == "vague_or_copied"
+        and match == "unknown"
+        and association in {"none", "ambiguous"}
+        and not safe_refs
+        and confidence >= 0.8
+    ):
+        return "vague_or_copied", "unknown"
+    if (
+        confidence < 0.8
+        or quality == "unknown"
+        or association not in _LINKED_ASSOCIATION_STATES
+        or not safe_refs
+        or (match == "unknown" and quality != "vague_or_copied")
+    ):
+        return "unknown", "semantic_low_confidence"
+    return quality, match
+
+
+def _parse_stage2_recovery(
+    payload: Mapping[str, Any],
+    episodes: Sequence[_Episode],
+    recovery_episode_refs: frozenset[str],
+    allowed_refs_by_episode: Mapping[str, frozenset[str]],
+) -> tuple[_RecoveryAssessment, ...]:
+    """严格解析恢复输出；任何模型结构越界只产生未知，不生成临床建议。"""
+
+    by_ref = {episode.episode_ref: episode for episode in episodes}
+    raw_episodes = payload.get("episodes")
+    if not isinstance(raw_episodes, list) or len(raw_episodes) != len(by_ref):
+        raise _SemanticInvalid()
+    seen: set[str] = set()
+    assessments: list[_RecoveryAssessment] = []
+    for raw in raw_episodes:
+        if not isinstance(raw, Mapping):
+            raise _SemanticInvalid()
+        episode_ref = _clean(raw.get("episode_ref"))
+        episode = by_ref.get(episode_ref)
+        if episode is None or episode_ref in seen:
+            raise _SemanticInvalid()
+        seen.add(episode_ref)
+        actionability = _clean(raw.get("actionability")).lower()
+        recommendations = raw.get("recommendations")
+        try:
+            confidence = _confidence(raw.get("confidence"))
+        except _SemanticInvalid:
+            raise _SemanticInvalid()
+        if actionability not in _RECOVERY_ACTIONABILITY or not isinstance(
+            recommendations, list
+        ):
+            raise _SemanticInvalid()
+        if episode_ref not in recovery_episode_refs and actionability != "present":
+            # 已由第一阶段确认的建议不能被第二阶段改写为“无行动”或未知。
+            raise _SemanticInvalid()
+        if actionability in {"absent", "unknown"}:
+            if recommendations:
+                raise _SemanticInvalid()
+            assessments.append(_RecoveryAssessment(actionability, confidence, ()))
+            continue
+        if not recommendations:
+            raise _SemanticInvalid()
+        expected_known = {
+            (kind, item) for _ref, kind, item in episode.recommendations
+        }
+        parsed_items: set[tuple[str, str]] = set()
+        states: list[tuple[str, str]] = []
+        invalid = False
+        for item in recommendations:
+            if not isinstance(item, Mapping):
+                raise _SemanticInvalid()
+            kind = _clean(item.get("type")).lower()
+            normalized = _clean(item.get("item"))
+            key = (kind, normalized)
+            if (
+                kind not in _RECOMMENDATION_TYPES
+                or not normalized
+                or len(normalized) > 80
+                or key in parsed_items
+            ):
+                raise _SemanticInvalid()
+            parsed_items.add(key)
+            states.append(
+                _recovery_execution_state(
+                    raw=item,
+                    allowed_refs=allowed_refs_by_episode[episode_ref],
+                )
+            )
+        if invalid or not parsed_items or (
+            episode_ref not in recovery_episode_refs
+            and parsed_items != expected_known
+        ):
+            raise _SemanticInvalid()
+        assessments.append(
+            _RecoveryAssessment("present", confidence, tuple(states))
+        )
+    if seen != set(by_ref):
+        raise _SemanticInvalid()
+    return tuple(assessments)
+
+
+def _recovery_outcome(
+    assessments: Sequence[_RecoveryAssessment],
+) -> _Outcome:
+    if any(item.actionability == "unknown" or item.confidence < 0.8 for item in assessments):
+        return _Outcome("LX0609-023", "data_gap", "semantic_low_confidence")
+    present = tuple(item for item in assessments if item.actionability == "present")
+    if not present:
+        return _Outcome("LX0609-023", "not_applicable", "trigger_absent_complete")
+    states = tuple(state for item in present for state in item.execution_states)
+    qualities = tuple(item[0] for item in states)
+    matches = tuple(item[1] for item in states)
+    if "semantic_output_unknown" in matches:
+        return _Outcome("LX0609-023", "evaluation_unknown", "semantic_output_unknown")
+    if "vague_or_copied" in qualities or "contradicted" in matches or "absent" in qualities:
+        return _Outcome("LX0609-023", "non_compliant", "requirement_violated")
+    if "unknown" in qualities or "semantic_low_confidence" in matches:
+        return _Outcome("LX0609-023", "data_gap", "semantic_low_confidence")
+    if all(quality == "specific" for quality in qualities) and all(
+        match == "supported" for match in matches
+    ):
+        return _Outcome("LX0609-023", "compliant", "requirement_satisfied")
+    return _Outcome("LX0609-023", "evaluation_unknown", "semantic_output_unknown")
+
+
+async def _recover_023_recommendations(
+    *,
+    episodes: Sequence[_Episode],
+    recovery_episode_refs: frozenset[str],
+    consultation_documents: Sequence[Mapping[str, Any]],
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+    llm_client: ConsultationLLMClient,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+) -> tuple[_Outcome, int, int, int, int, float]:
+    """用一次受控 LLM 补抽建议并核对执行；不读取非病程来源。"""
+
+    consultation_documents_by_ref = {
+        _clean(document.get("ref")): document for document in consultation_documents
+    }
+    consultation_time_by_ref = {
+        episode.episode_ref: _parse_time(
+            consultation_documents_by_ref[episode.episode_ref].get("time")
+        )
+        for episode in episodes
+    }
+    if (
+        any(value is None for value in consultation_time_by_ref.values())
+        or _has_mixed_timezone(
+            tuple(value for value in consultation_time_by_ref.values() if value is not None)
+        )
+    ):
+        return _Outcome("LX0609-023", "data_gap", "required_field_missing"), 0, 0, 0, 0, 0.0
+    course_rows: dict[str, list[dict[str, Any]]] = {}
+    try:
+        for source_key in _COURSE_SOURCES:
+            course_rows[source_key] = _read_source(
+                source_key=source_key,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+                evidence_materials=evidence_materials,
+                evidence_snapshot=evidence_snapshot,
+            )
+        course_documents = tuple(
+            document
+            for source_key in _COURSE_SOURCES
+            for document in _documents(source_key, course_rows[source_key])
+        )
+    except _SourceGap:
+        return _Outcome("LX0609-023", "data_gap", "source_truncated"), 0, 0, 0, 0, 0.0
+    except _SourceTechnical:
+        return _Outcome("LX0609-023", "technical_error", "source_query_error"), 0, 0, 0, 0, 0.0
+    course_times = tuple(_parse_time(document.get("time")) for document in course_documents)
+    if any(value is None for value in course_times):
+        return _Outcome("LX0609-023", "data_gap", "required_field_missing"), 0, 0, 0, 0, 0.0
+    consultation_uses_timezone = next(iter(consultation_time_by_ref.values())).utcoffset() is not None
+    if any(
+        (value.utcoffset() is not None) != consultation_uses_timezone
+        for value in course_times
+        if value is not None
+    ):
+        return _Outcome("LX0609-023", "data_gap", "required_field_missing"), 0, 0, 0, 0, 0.0
+    earliest = min(value for value in consultation_time_by_ref.values() if value is not None)
+    post_course_documents = tuple(
+        document
+        for document in course_documents
+        if _parse_time(document.get("time")) >= earliest
+    )
+    allowed_refs_by_episode = {
+        episode.episode_ref: frozenset(
+            document["ref"]
+            for document in post_course_documents
+            if _parse_time(document.get("time"))
+            >= consultation_time_by_ref[episode.episode_ref]
+        )
+        for episode in episodes
+    }
+    prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    try:
+        prompt = _stage2_recovery_prompt(
+            episodes,
+            recovery_episode_refs,
+            consultation_documents_by_ref,
+            post_course_documents,
+            {
+                key: value
+                for key, value in consultation_time_by_ref.items()
+                if value is not None
+            },
+            allowed_refs_by_episode,
+        )
+        started = time.perf_counter()
+        response = await llm_client.generate(prompt)
+        if not isinstance(response, Mapping):
+            raise _SemanticInvalid()
+        elapsed = time.perf_counter() - started
+        prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
+        api_time = response_time or elapsed
+        assessments = _parse_stage2_recovery(
+            _payload(response),
+            episodes,
+            recovery_episode_refs,
+            allowed_refs_by_episode,
+        )
+    except _SourceGap:
+        return _Outcome("LX0609-023", "data_gap", "source_truncated"), 0, 0, 0, 0, 0.0
+    except _SemanticInvalid:
+        return (
+            _Outcome("LX0609-023", "evaluation_unknown", "semantic_output_unknown"),
+            1,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            api_time,
+        )
+    except Exception:
+        return _Outcome("LX0609-023", "technical_error", "model_transport_error"), 1, 0, 0, 0, 0.0
+    return (
+        _recovery_outcome(assessments),
+        1,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        api_time,
+    )
 
 
 def _result(outcome: _Outcome) -> dict[str, Any]:
@@ -832,13 +1310,83 @@ async def execute_luxian_0609_native_consultation_021_023_rules(
     if "LX0609-023" not in selected:
         return _finish(selected=selected, outcomes=tuple(outcomes.values()), decision_rule_ids=typed, snapshot=evidence_snapshot, calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time)
 
+    recommendation_contract_invalid = any(
+        item.recommendation_contract_invalid for item in episodes
+    )
+    recoverable_episode_refs = frozenset(
+        item.episode_ref
+        for item in episodes
+        if (
+            item.opinion_state == "clear"
+            and not item.recommendations
+            and not item.recommendation_contract_invalid
+        )
+    )
     stage1_unknown_for_023 = any(
         item.opinion_state == "unknown"
         or item.confidence < 0.8
-        or (item.opinion_state == "clear" and not item.recommendations)
+        or (
+            item.opinion_state == "clear"
+            and not item.recommendations
+            and item.episode_ref not in recoverable_episode_refs
+        )
         for item in episodes
     )
     actionable = tuple(item for item in episodes if item.recommendations)
+    if recommendation_contract_invalid and not actionable:
+        outcomes["LX0609-023"] = _Outcome(
+            "LX0609-023",
+            "data_gap",
+            "recommendation_contract_invalid",
+        )
+        return _finish(
+            selected=selected,
+            outcomes=tuple(outcomes.values()),
+            decision_rule_ids=typed,
+            snapshot=evidence_snapshot,
+            calls=calls,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        )
+    if recoverable_episode_refs and not recommendation_contract_invalid:
+        recovery_scope = tuple(
+            item
+            for item in episodes
+            if item.recommendations or item.episode_ref in recoverable_episode_refs
+        )
+        (
+            recovery_outcome,
+            recovery_calls,
+            recovery_prompt_tokens,
+            recovery_completion_tokens,
+            recovery_total_tokens,
+            recovery_api_time,
+        ) = await _recover_023_recommendations(
+            episodes=recovery_scope,
+            recovery_episode_refs=recoverable_episode_refs,
+            consultation_documents=consultation_docs,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+            llm_client=llm_client,
+            evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot,
+        )
+        outcomes["LX0609-023"] = recovery_outcome
+        return _finish(
+            selected=selected,
+            outcomes=tuple(outcomes.values()),
+            decision_rule_ids=typed,
+            snapshot=evidence_snapshot,
+            calls=calls + recovery_calls,
+            prompt_tokens=prompt_tokens + recovery_prompt_tokens,
+            completion_tokens=completion_tokens + recovery_completion_tokens,
+            total_tokens=total_tokens + recovery_total_tokens,
+            api_time=api_time + recovery_api_time,
+        )
     if not actionable:
         outcomes["LX0609-023"] = _Outcome(
             "LX0609-023",
@@ -925,11 +1473,6 @@ async def execute_luxian_0609_native_consultation_021_023_rules(
         comparable_stage2_docs.append(document)
     stage2_docs = tuple(comparable_stage2_docs)
     earliest = min(consultation_time_by_ref[item.episode_ref] for item in actionable)
-    course_docs = tuple(
-        document
-        for document in stage2_docs
-        if document["ref"].split("-", 1)[0] in _COURSE_SOURCES
-    )
     post_docs = tuple(
         document
         for document in stage2_docs
@@ -941,11 +1484,12 @@ async def execute_luxian_0609_native_consultation_021_023_rules(
         for document in post_docs
         if document["ref"].split("-", 1)[0] in _COURSE_SOURCES
     )
-    if not course_refs and (course_docs or course_source_gap):
-        outcomes["LX0609-023"] = _Outcome("LX0609-023", "data_gap", "linkage_unresolved")
-        return _finish(selected=selected, outcomes=tuple(outcomes.values()), decision_rule_ids=typed, snapshot=evidence_snapshot, calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time)
     if not course_refs:
-        outcomes["LX0609-023"] = _Outcome("LX0609-023", "not_applicable", "trigger_absent_complete")
+        outcomes["LX0609-023"] = _Outcome(
+            "LX0609-023",
+            "data_gap" if course_source_gap else "non_compliant",
+            "source_truncated" if course_source_gap else "requirement_violated",
+        )
         return _finish(selected=selected, outcomes=tuple(outcomes.values()), decision_rule_ids=typed, snapshot=evidence_snapshot, calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time)
     try:
         allowed_refs_by_episode = {
@@ -997,13 +1541,29 @@ async def execute_luxian_0609_native_consultation_021_023_rules(
             outcomes["LX0609-023"] = _Outcome(
                 "LX0609-023", "non_compliant", "requirement_violated"
             )
+        elif recommendation_contract_invalid:
+            outcomes["LX0609-023"] = _Outcome(
+                "LX0609-023",
+                "data_gap",
+                "recommendation_contract_invalid",
+            )
+        elif "semantic_output_unknown" in matches:
+            outcomes["LX0609-023"] = _Outcome(
+                "LX0609-023",
+                "evaluation_unknown",
+                "semantic_output_unknown",
+            )
         elif stage1_unknown_for_023 or "unknown" in qualities:
-            outcomes["LX0609-023"] = _Outcome("LX0609-023", "evaluation_unknown", "semantic_low_confidence")
+            outcomes["LX0609-023"] = _Outcome(
+                "LX0609-023",
+                "data_gap",
+                "semantic_low_confidence",
+            )
         elif all(item == "absent" for item in qualities):
             outcomes["LX0609-023"] = _Outcome(
                 "LX0609-023",
-                "data_gap" if course_source_gap else "not_applicable",
-                "source_truncated" if course_source_gap else "trigger_absent_complete",
+                "data_gap" if course_source_gap else "non_compliant",
+                "source_truncated" if course_source_gap else "requirement_violated",
             )
         elif "absent" in qualities:
             outcomes["LX0609-023"] = _Outcome(

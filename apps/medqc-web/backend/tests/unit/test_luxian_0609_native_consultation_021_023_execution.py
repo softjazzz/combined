@@ -55,13 +55,29 @@ def _rows(**overrides):
     return values
 
 
-def _stage1(*, application="clear", opinion="clear", confidence="high", recommendations=None, ref="consultation_record-1"):
+def _role_ref(state, ref):
+    return ref if state in {"clear", "vague", "missing"} else None
+
+
+def _stage1(
+    *,
+    application="clear",
+    opinion="clear",
+    execution="absent",
+    confidence="high",
+    recommendations=None,
+    ref="consultation_record-1",
+):
     return {
         "episodes": [
             {
                 "episode_ref": ref,
                 "application_state": application,
+                "application_ref": _role_ref(application, ref),
                 "opinion_state": opinion,
+                "opinion_ref": _role_ref(opinion, ref),
+                "execution_state": execution,
+                "execution_ref": _role_ref(execution, ref),
                 "normalized_recommendations": list(recommendations or []),
                 "confidence": confidence,
                 "input_refs": [ref],
@@ -106,6 +122,326 @@ async def _execute(monkeypatch, *, rows, client, rule_ids=("LX0609-021", "LX0609
         source_schema=None,
         llm_client=client,
     )
+
+
+def _recovery_episode(
+    *, actionability="present", recommendations=None, confidence="high", ref="consultation_record-1"
+):
+    return {
+        "episode_ref": ref,
+        "actionability": actionability,
+        "confidence": confidence,
+        "recommendations": list(recommendations or []),
+    }
+
+
+def _recovery_recommendation(*, quality="specific", match="supported", refs=None):
+    return {
+        "type": "treatment",
+        "item": "调整治疗方案",
+        "execution_record_quality": quality,
+        "implementation_match": "unknown" if quality == "absent" else match,
+        "association_state": "contextual" if quality in {"specific", "vague_or_copied"} else "none",
+        "evidence_refs": list(refs or []),
+        "confidence": "high",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_clear_opinion_without_stage1_recommendations_uses_single_recovery_call(
+    monkeypatch,
+):
+    stage1 = _stage1(recommendations=[])
+    recovery = {
+        "episodes": [
+            _recovery_episode(
+                recommendations=[
+                    _recovery_recommendation(refs=["daily_course_record-1"])
+                ]
+            )
+        ]
+    }
+    client = _QueueClient(stage1, recovery)
+
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行记录"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[
+                {"prescribed_datetime": "2026-01-02 10:00:00", "generic_name": "超过常规上限的非病程资料"}
+                for _ in range(64)
+            ],
+            exam_item_report=[],
+        ),
+        client=client,
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+    assert "inpat_drug_order" not in client.prompts[1]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_keeps_explicit_action_despite_same_document_execution_language(
+    monkeypatch,
+):
+    client = _QueueClient(
+        _stage1(recommendations=[]),
+        {
+            "episodes": [
+                _recovery_episode(
+                    actionability="present",
+                    recommendations=[
+                        _recovery_recommendation(refs=["daily_course_record-1"])
+                    ],
+                )
+            ]
+        },
+    )
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            consultation_record=[
+                {
+                    "record_time": "2026-01-01 09:00:00",
+                    "record_content": "会诊意见建议调整治疗方案，已遵嘱执行。",
+                }
+            ],
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "后续病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=client,
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.results[0]["status"] == "compliant"
+    assert "即使同文书有“已执行”“已处理”“已遵嘱”" in client.prompts[1]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("recovery", "expected_status", "expected_reason"),
+    [
+        (
+            {"episodes": [_recovery_episode(actionability="absent")]},
+            "not_applicable",
+            "trigger_absent_complete",
+        ),
+        (
+            {
+                "episodes": [
+                    _recovery_episode(
+                        recommendations=[_recovery_recommendation(quality="absent")]
+                    )
+                ]
+            },
+            "non_compliant",
+            "requirement_violated",
+        ),
+        (
+            {
+                "episodes": [
+                    _recovery_episode(
+                        confidence="low",
+                        recommendations=[
+                            _recovery_recommendation(
+                                refs=["daily_course_record-1"]
+                            )
+                        ],
+                    )
+                ]
+            },
+            "data_gap",
+            "semantic_low_confidence",
+        ),
+    ],
+)
+async def test_023_recovery_maps_actionability_and_execution_states(
+    monkeypatch, recovery, expected_status, expected_reason
+):
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[]), recovery),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.results[0]["status"] == expected_status
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_fails_closed_before_second_call_when_course_source_truncated(
+    monkeypatch,
+):
+    client = _QueueClient(_stage1(recommendations=[]), AssertionError("no recovery call"))
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "病程"}
+                for _ in range(48)
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=client,
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 1
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == "source_truncated"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_invalid_output_is_evaluation_unknown(monkeypatch):
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[]), {"episodes": []}),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.results[0]["status"] == "uncertain"
+    assert result.results[0]["metadata"]["finding_kind"] == "evaluation_unknown"
+    assert result.results[0]["metadata"]["reason_code"] == "semantic_output_unknown"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_invalid_output_keeps_second_call_usage(monkeypatch):
+    class MeteredInvalidClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, _prompt):
+            self.calls += 1
+            payload = _stage1(recommendations=[]) if self.calls == 1 else {"episodes": []}
+            return {
+                "content": json.dumps(payload, ensure_ascii=False),
+                "usage": {
+                    "prompt_tokens": 11 if self.calls == 2 else 7,
+                    "completion_tokens": 5 if self.calls == 2 else 3,
+                    "total_tokens": 16 if self.calls == 2 else 10,
+                },
+                "_api_time": 0.25,
+            }
+
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=MeteredInvalidClient(),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "uncertain"
+    assert result.prompt_tokens == 18
+    assert result.completion_tokens == 8
+    assert result.total_tokens == 26
+    assert result.api_time == 0.5
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_cannot_erase_stage1_known_recommendation(monkeypatch):
+    first = _stage1(recommendations=[_recommendation()])["episodes"][0]
+    second = _stage1(recommendations=[], ref="consultation_record-2")["episodes"][0]
+    stage1 = {"episodes": [first, second]}
+    recovery = {
+        "episodes": [
+            _recovery_episode(actionability="absent", recommendations=[]),
+            _recovery_episode(
+                ref="consultation_record-2",
+                recommendations=[
+                    _recovery_recommendation(refs=["daily_course_record-1"])
+                ],
+            ),
+        ]
+    }
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            consultation_record=[
+                {"record_time": "2026-01-01 09:00:00", "record_content": "会诊一"},
+                {"record_time": "2026-01-01 10:00:00", "record_content": "会诊二"},
+            ],
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(stage1, recovery),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.results[0]["status"] == "uncertain"
+    assert result.results[0]["metadata"]["finding_kind"] == "evaluation_unknown"
+    assert result.results[0]["metadata"]["reason_code"] == "semantic_output_unknown"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_transport_failure_is_technical_error(monkeypatch):
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[]), RuntimeError("transport")),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.llm_call_count == 2
+    assert result.results[0]["status"] == "technical_error"
+    assert result.results[0]["metadata"]["reason_code"] == "model_transport_error"
 
 
 def _typed_session(monkeypatch, *, rows, source_states=None, omit_material=()):
@@ -267,13 +603,15 @@ async def test_021_specific_problem_with_tail_request_is_modelled_as_clear(monke
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_stage_one_requires_exact_episode_coverage_and_refs(monkeypatch):
-    client = _QueueClient(_stage1(ref="consultation_record-2"))
+async def test_stage_one_single_input_binds_trusted_episode_ref(monkeypatch):
+    payload = _stage1(ref="consultation_record-2")
+    payload["episodes"][0]["input_refs"] = ["consultation_record-1"]
+    client = _QueueClient(payload)
     result = await _execute(monkeypatch, rows=_rows(), client=client)
 
     assert [item["status"] for item in result.results] == [
-        "uncertain",
-        "uncertain",
+        "compliant",
+        "compliant",
     ]
     assert "会诊材料" not in repr(result)
 
@@ -284,8 +622,8 @@ async def test_stage_one_requires_exact_episode_coverage_and_refs(monkeypatch):
     (
         "input_refs",
         "application_state",
+        "execution_state",
         "confidence",
-        "normalized_recommendations",
     ),
 )
 def test_stage_one_invalid_episode_is_isolated_without_inventing_missing_or_vague(
@@ -300,10 +638,8 @@ def test_stage_one_invalid_episode_is_isolated_without_inventing_missing_or_vagu
     invalid_values = {
         "input_refs": ["consultation_record-1"],
         "application_state": "unsupported",
+        "execution_state": "unsupported",
         "confidence": "unsupported",
-        "normalized_recommendations": [
-            {"type": "unsupported", "item": "调整方案"}
-        ],
     }
     invalid[invalid_field] = invalid_values[invalid_field]
 
@@ -316,6 +652,10 @@ def test_stage_one_invalid_episode_is_isolated_without_inventing_missing_or_vagu
     assert episodes[0].opinion_state == "clear"
     assert episodes[1].application_state == "unknown"
     assert episodes[1].opinion_state == "unknown"
+    assert episodes[1].execution_state == "unknown"
+    assert episodes[1].application_ref is None
+    assert episodes[1].opinion_ref is None
+    assert episodes[1].execution_ref is None
     assert episodes[1].confidence < 0.8
     assert episodes[1].recommendations == ()
 
@@ -389,19 +729,376 @@ def test_stage_one_prompt_keeps_clinical_clear_vague_and_action_rubric():
         ({"ref": "consultation_record-1", "text": "会诊材料"},)
     )
 
-    assert "具体症状、检查、诊断或评估" in prompt
-    assert "具体诊断、检查、治疗、用药、复查或处置" in prompt
-    assert "泛化原则判为vague" in prompt
-    assert "每个可执行动作" in prompt
-    assert "application_state只评申请段" in prompt
-    assert "opinion_state只评意见段" in prompt
-    assert "具体处置、程序、营养、药物、检查或风险" in prompt
-    assert "同文书出现“遵会诊意见”或具体执行回填" in prompt
+    assert "角色识别必须先分段再判状态" in prompt
+    assert "即使意见段有丰富病情" in prompt
+    assert "段尾“协助诊治”" in prompt
+    assert "拟、计划、考虑或需要进行某项具体治疗" in prompt
+    assert "意见判定不依赖“会诊意见”标题" in prompt
+    assert "手术指征" in prompt
+    assert "execution_state只依据明确的执行回填" in prompt
+    assert "execution_state" in prompt
+    assert "application_ref、opinion_ref或execution_ref" in prompt
+    assert "clear/vague/missing必须填写当前episode_ref" in prompt
+    assert "保真原子事项" in prompt
+    assert "每个item不超过80字" in prompt
+    assert "不得因同文书出现“已执行”“已处理”“已遵嘱”" in prompt
+    assert "单输入时系统会绑定内部引用" in prompt
+    assert "多输入时episode_ref与input_refs必须逐字复用输入提供的内部引用" in prompt
+
+
+@pytest.mark.unit
+def test_023_recovery_prompt_orders_action_extraction_before_course_execution_check():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    episode = module._Episode(
+        "consultation_record-1",
+        "clear",
+        "consultation_record-1",
+        "clear",
+        "consultation_record-1",
+        "absent",
+        None,
+        (),
+        0.9,
+    )
+    prompt = module._stage2_recovery_prompt(
+        (episode,),
+        frozenset({"consultation_record-1"}),
+        {
+            "consultation_record-1": {
+                "ref": "consultation_record-1",
+                "time": "2026-01-01 09:00:00",
+                "text": "会诊意见",
+            }
+        },
+        (),
+        {"consultation_record-1": module.datetime(2026, 1, 1, 9, 0, 0)},
+        {"consultation_record-1": frozenset()},
+    )
+
+    action_index = prompt.index("上游已确认该会诊存在明确专科意见")
+    course_index = prompt.index("再只用会诊后的daily_course_record或senior_course_record核对执行")
+    absent_index = prompt.index("actionability=absent只在意见确无明确行动时")
+    assert action_index < course_index < absent_index
+    assert "会诊文书自身的“已执行”“已处理”“已遵嘱”措辞绝不可作为后续执行证据" in prompt
+    assert "known_recommendations是已确认建议，必须逐字逐项复用" in prompt
+
+
+@pytest.mark.unit
+def test_023_stage2_prompts_require_vague_continuation_not_unknown():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    episode = module._Episode(
+        "consultation_record-1",
+        "clear",
+        "consultation_record-1",
+        "clear",
+        "consultation_record-1",
+        "absent",
+        None,
+        (("consultation_record-1-recommendation-1", "treatment", "调整治疗方案"),),
+        0.9,
+    )
+    documents = ({"ref": "daily_course_record-1", "time": "2026-01-02 09:00:00", "text": "泛化续治"},)
+    stage2_prompt = module._stage2_prompt(
+        (episode,),
+        documents,
+        {"consultation_record-1": module.datetime(2026, 1, 1, 9, 0, 0)},
+        {"consultation_record-1": frozenset({"daily_course_record-1"})},
+    )
+    recovery_prompt = module._stage2_recovery_prompt(
+        (episode,),
+        frozenset(),
+        {
+            "consultation_record-1": {
+                "ref": "consultation_record-1",
+                "time": "2026-01-01 09:00:00",
+                "text": "会诊意见",
+            }
+        },
+        documents,
+        {"consultation_record-1": module.datetime(2026, 1, 1, 9, 0, 0)},
+        {"consultation_record-1": frozenset({"daily_course_record-1"})},
+    )
+
+    for prompt in (stage2_prompt, recovery_prompt):
+        assert "仅有“经治疗”“治疗后好转”“继续原治疗”“巩固治疗”“遵意见”等泛化续治表述" in prompt
+        assert "必须输出execution_record_quality=vague_or_copied" in prompt
+        assert "不得笼统输出unknown" in prompt
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda item: item.pop("execution_state"),
+        lambda item: item.pop("application_state"),
+        lambda item: item.pop("opinion_state"),
+        lambda item: item.__setitem__("execution_state", "unsupported"),
+        lambda item: item.__setitem__("application_ref", "consultation_record-1"),
+        lambda item: item.__setitem__("opinion_ref", "consultation_record-1"),
+        lambda item: item.__setitem__("execution_ref", "consultation_record-1"),
+        lambda item: item.update(
+            execution_state="unknown",
+            execution_ref="consultation_record-1",
+        ),
+    ),
+)
+def test_stage_one_role_states_fail_closed_without_text_inference(mutate):
+    from app.services.luxian_0609 import native_consultation_021_023_execution as module
+
+    valid = _stage1(ref="consultation_record-1")["episodes"][0]
+    invalid = _stage1(ref="consultation_record-2")["episodes"][0]
+    mutate(invalid)
+    episodes = module._parse_stage1(
+        {"episodes": [valid, invalid]},
+        ("consultation_record-1", "consultation_record-2"),
+    )
+    valid_episode, episode = episodes
+
+    assert valid_episode.application_state == "clear"
+    assert valid_episode.opinion_state == "clear"
+    assert episode.application_state == "unknown"
+    assert episode.opinion_state == "unknown"
+    assert episode.execution_state == "unknown"
+    assert episode.application_ref is None
+    assert episode.opinion_ref is None
+    assert episode.execution_ref is None
+
+
+@pytest.mark.unit
+def test_stage_one_missing_execution_without_ref_is_normalized_to_episode_ref():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    payload = _stage1(execution="missing")
+    payload["episodes"][0]["execution_ref"] = None
+
+    episode = module._parse_stage1(payload, ("consultation_record-1",))[0]
+
+    assert episode.application_state == "clear"
+    assert episode.opinion_state == "clear"
+    assert episode.execution_state == "missing"
+    assert episode.execution_ref == "consultation_record-1"
+
+
+@pytest.mark.unit
+def test_stage_one_multi_episode_missing_execution_cross_ref_fails_closed():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    first = _stage1(ref="consultation_record-1")["episodes"][0]
+    second = _stage1(ref="consultation_record-2", execution="missing")["episodes"][0]
+    second["execution_ref"] = "consultation_record-1"
+
+    episodes = module._parse_stage1(
+        {"episodes": [first, second]},
+        ("consultation_record-1", "consultation_record-2"),
+    )
+    episode = episodes[1]
+
+    assert episode.execution_state == "unknown"
+    assert episode.execution_ref is None
+
+
+@pytest.mark.unit
+def test_stage_one_single_episode_self_consistent_alias_is_canonicalized():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    payload = _stage1()
+    item = payload["episodes"][0]
+    alias = "model_alias"
+    item["episode_ref"] = alias
+    item["input_refs"] = [alias]
+    item["application_ref"] = alias
+    item["opinion_ref"] = alias
+
+    episode = module._parse_stage1(payload, ("consultation_record-1",))[0]
+
+    assert episode.episode_ref == "consultation_record-1"
+    assert episode.application_ref == "consultation_record-1"
+    assert episode.opinion_ref == "consultation_record-1"
+    assert alias not in repr(episode)
+
+
+@pytest.mark.unit
+def test_stage_one_multi_episode_alias_remains_fail_closed():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    first = _stage1(ref="consultation_record-1")["episodes"][0]
+    second = _stage1(ref="consultation_record-2")["episodes"][0]
+    for item in (first, second):
+        item["episode_ref"] = "model_alias"
+        item["input_refs"] = ["model_alias"]
+        item["application_ref"] = "model_alias"
+        item["opinion_ref"] = "model_alias"
+
+    with pytest.raises(module._SemanticInvalid):
+        module._parse_stage1(
+            {"episodes": [first, second]},
+            ("consultation_record-1", "consultation_record-2"),
+        )
+
+
+@pytest.mark.unit
+def test_stage_one_single_episode_ref_shape_is_bound_by_trusted_input():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    payload = _stage1()
+    item = payload["episodes"][0]
+    item["episode_ref"] = "model_alias"
+    item["input_refs"] = ["model_alias"]
+    item["application_ref"] = "other_alias"
+    item["opinion_ref"] = "model_alias"
+
+    episode = module._parse_stage1(payload, ("consultation_record-1",))[0]
+
+    assert episode.episode_ref == "consultation_record-1"
+    assert episode.application_ref == "consultation_record-1"
+    assert episode.opinion_ref == "consultation_record-1"
+
+
+@pytest.mark.unit
+def test_stage_one_single_episode_empty_ref_is_bound_by_trusted_input():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    payload = _stage1()
+    item = payload["episodes"][0]
+    item["episode_ref"] = ""
+    item["input_refs"] = []
+    item["application_ref"] = None
+    item["opinion_ref"] = None
+
+    episode = module._parse_stage1(payload, ("consultation_record-1",))[0]
+
+    assert episode.episode_ref == "consultation_record-1"
+    assert episode.application_ref == "consultation_record-1"
+    assert episode.opinion_ref == "consultation_record-1"
+
+
+@pytest.mark.asyncio
+async def test_023_invalid_recommendation_contract_keeps_roles_and_stops_stage_two(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _QueueClient(
+        _stage1(
+            recommendations=[
+                {"type": "treatment", "item": "过长建议" * 30},
+            ]
+        ),
+        AssertionError("invalid recommendation must not reach stage two"),
+    )
+
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(),
+        client=client,
+        rule_ids=("LX0609-021", "LX0609-022", "LX0609-023"),
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "compliant",
+        "compliant",
+        "data_gap",
+    ]
+    assert result.results[2]["metadata"]["reason_code"] == "recommendation_contract_invalid"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.unit
+def test_stage_one_mixed_recommendation_contract_keeps_valid_items():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    episodes = module._parse_stage1(
+        _stage1(
+            recommendations=[
+                _recommendation(),
+                {"type": "treatment", "item": "过长建议" * 30},
+                {"type": "unsupported", "item": "不支持类型"},
+            ]
+        ),
+        ("consultation_record-1",),
+    )
+
+    assert episodes[0].recommendation_contract_invalid is True
+    assert episodes[0].recommendations == (
+        ("consultation_record-1-recommendation-1", "treatment", "调整治疗方案"),
+    )
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_023_clear_opinion_without_recommendations_is_unknown_not_na(
+@pytest.mark.parametrize(
+    ("quality", "match", "expected_status"),
+    [
+        ("vague_or_copied", "supported", "non_compliant"),
+        ("specific", "supported", "data_gap"),
+    ],
+)
+async def test_023_mixed_recommendation_contract_preserves_defect_but_not_compliance(
+    monkeypatch, quality, match, expected_status
+):
+    stage1 = _stage1(
+        recommendations=[
+            _recommendation(),
+            {"type": "treatment", "item": "过长建议" * 30},
+        ]
+    )
+    stage2 = {
+        "executions": [
+            {
+                "episode_ref": "consultation_record-1",
+                "recommendation_ref": "consultation_record-1-recommendation-1",
+                "execution_record_quality": quality,
+                "implementation_match": match,
+                "association_state": "contextual",
+                "evidence_refs": ["daily_course_record-1"],
+                "confidence": "high",
+            }
+        ]
+    }
+    client = _QueueClient(stage1, stage2)
+
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            senior_course_record=[],
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "执行记录。"}
+            ],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=client,
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == expected_status
+    if expected_status == "data_gap":
+        assert result.results[0]["metadata"]["reason_code"] == "recommendation_contract_invalid"
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_clear_opinion_without_recommendations_is_data_gap_when_course_source_truncated(
     monkeypatch,
 ):
     client = _QueueClient(_stage1(opinion="clear", recommendations=[]))
@@ -412,7 +1109,8 @@ async def test_023_clear_opinion_without_recommendations_is_unknown_not_na(
         rule_ids=("LX0609-023",),
     )
 
-    assert result.results[0]["status"] == "uncertain"
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == "source_truncated"
     assert result.llm_call_count == 1
 
 
@@ -421,7 +1119,7 @@ async def test_023_clear_opinion_without_recommendations_is_unknown_not_na(
 @pytest.mark.parametrize(
     ("quality", "expected_status"),
     (
-        ("specific", "uncertain"),
+        ("specific", "data_gap"),
         ("vague_or_copied", "non_compliant"),
     ),
 )
@@ -530,7 +1228,9 @@ async def test_stage_one_transport_error_is_technical(monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_023_support_sources_cannot_replace_course_execution_record(monkeypatch):
+async def test_023_missing_post_course_is_non_compliant_when_support_sources_cannot_replace_execution(
+    monkeypatch,
+):
     client = _QueueClient(_stage1(recommendations=[_recommendation()]))
     result = await _execute(
         monkeypatch,
@@ -547,13 +1247,15 @@ async def test_023_support_sources_cannot_replace_course_execution_record(monkey
         rule_ids=("LX0609-023",),
     )
 
-    assert result.results[0]["status"] == "not_applicable"
+    assert result.results[0]["status"] == "non_compliant"
     assert result.llm_call_count == 1
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_023_execution_before_opinion_is_data_gap(monkeypatch):
+async def test_023_execution_before_opinion_is_non_compliant_when_complete_sources_have_no_post_course(
+    monkeypatch,
+):
     client = _QueueClient(_stage1(recommendations=[_recommendation()]))
     result = await _execute(
         monkeypatch,
@@ -570,7 +1272,7 @@ async def test_023_execution_before_opinion_is_data_gap(monkeypatch):
         rule_ids=("LX0609-023",),
     )
 
-    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["status"] == "non_compliant"
     assert result.llm_call_count == 1
 
 
@@ -583,9 +1285,9 @@ async def test_023_execution_before_opinion_is_data_gap(monkeypatch):
         ("specific", "contradicted", ["daily_course_record-1"], "non_compliant"),
         ("vague_or_copied", "supported", ["daily_course_record-1"], "non_compliant"),
         ("vague_or_copied", "unknown", ["daily_course_record-1"], "non_compliant"),
-        ("absent", "unknown", [], "not_applicable"),
-        ("unknown", "unknown", [], "uncertain"),
-        ("specific", "supported", ["inpat_drug_order-1"], "uncertain"),
+        ("absent", "unknown", [], "non_compliant"),
+        ("unknown", "unknown", [], "data_gap"),
+        ("specific", "supported", ["inpat_drug_order-1"], "data_gap"),
     ],
 )
 async def test_023_execution_quality_mapping(
@@ -632,6 +1334,8 @@ async def test_023_execution_quality_mapping(
     )
 
     assert result.results[0]["status"] == expected
+    if expected == "data_gap":
+        assert result.results[0]["metadata"]["reason_code"] == "semantic_low_confidence"
     assert result.llm_call_count == 2
 
 
@@ -664,6 +1368,39 @@ def test_023_ambiguous_association_is_unknown_even_when_quality_is_specific():
     )
 
     assert states == (("unknown", "semantic_low_confidence"),)
+
+
+@pytest.mark.unit
+def test_023_invalid_stage_two_item_is_semantic_output_unknown():
+    from app.services.luxian_0609 import (
+        native_consultation_021_023_execution as module,
+    )
+
+    episodes = module._parse_stage1(
+        _stage1(recommendations=[_recommendation()]),
+        ("consultation_record-1",),
+    )
+    states = module._parse_stage2(
+        {
+            "executions": [
+                {
+                    "episode_ref": "consultation_record-1",
+                    "recommendation_ref": "consultation_record-1-recommendation-1",
+                    "execution_record_quality": "unsupported",
+                    "implementation_match": "supported",
+                    "association_state": "contextual",
+                    "evidence_refs": ["daily_course_record-1"],
+                    "confidence": "high",
+                }
+            ]
+        },
+        episodes,
+        frozenset({"daily_course_record-1"}),
+        frozenset({"daily_course_record-1"}),
+        {"consultation_record-1": frozenset({"daily_course_record-1"})},
+    )
+
+    assert states == (("unknown", "semantic_output_unknown"),)
 
 
 @pytest.mark.unit
@@ -812,6 +1549,201 @@ async def test_023_partial_execution_missing_is_non_compliant(monkeypatch):
 
     assert result.results[0]["status"] == "non_compliant"
     assert result.llm_call_count == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_generic_continuation_after_clear_recommendation_is_non_compliant(
+    monkeypatch,
+):
+    stage2 = {
+        "executions": [
+            {
+                "episode_ref": "consultation_record-1",
+                "recommendation_ref": "consultation_record-1-recommendation-1",
+                "execution_record_quality": "vague_or_copied",
+                "implementation_match": "unknown",
+                "association_state": "none",
+                "evidence_refs": [],
+                "confidence": "high",
+            }
+        ]
+    }
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "继续原治疗"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[_recommendation()]), stage2),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "requirement_violated"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_recovery_generic_continuation_after_clear_opinion_is_non_compliant(
+    monkeypatch,
+):
+    generic_recommendation = _recovery_recommendation(
+        quality="vague_or_copied",
+        match="unknown",
+        refs=[],
+    )
+    generic_recommendation["association_state"] = "none"
+    recovery = {
+        "episodes": [
+            _recovery_episode(
+                recommendations=[generic_recommendation]
+            )
+        ]
+    }
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "治疗后好转"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[]), recovery),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "requirement_violated"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_true_ambiguous_execution_remains_data_gap(monkeypatch):
+    stage2 = {
+        "executions": [
+            {
+                "episode_ref": "consultation_record-1",
+                "recommendation_ref": "consultation_record-1-recommendation-1",
+                "execution_record_quality": "specific",
+                "implementation_match": "unknown",
+                "association_state": "ambiguous",
+                "evidence_refs": [],
+                "confidence": "high",
+            }
+        ]
+    }
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "无法唯一关联"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[_recommendation()]), stage2),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == "semantic_low_confidence"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_all_known_recommendations_absent_in_complete_post_course_is_non_compliant(
+    monkeypatch,
+):
+    stage2 = {
+        "executions": [
+            {
+                "episode_ref": "consultation_record-1",
+                "recommendation_ref": "consultation_record-1-recommendation-1",
+                "execution_record_quality": "absent",
+                "implementation_match": "unknown",
+                "association_state": "none",
+                "evidence_refs": [],
+                "confidence": "high",
+            }
+        ]
+    }
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "会诊后病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[_recommendation()]), stage2),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "requirement_violated"
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_known_recommendation_without_post_course_in_complete_sources_is_non_compliant(
+    monkeypatch,
+):
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2025-12-31 09:00:00", "record_content": "会诊前病程"}
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(_stage1(recommendations=[_recommendation()])),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == "requirement_violated"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_023_known_recommendation_with_truncated_course_source_is_data_gap_before_stage_two(
+    monkeypatch,
+):
+    result = await _execute(
+        monkeypatch,
+        rows=_rows(
+            daily_course_record=[
+                {"record_time": "2026-01-02 09:00:00", "record_content": "会诊后病程"}
+                for _ in range(48)
+            ],
+            senior_course_record=[],
+            inpat_drug_order=[],
+            exam_item_report=[],
+        ),
+        client=_QueueClient(
+            _stage1(recommendations=[_recommendation()]),
+            AssertionError("stage two must not be called"),
+        ),
+        rule_ids=("LX0609-023",),
+    )
+
+    assert result.results[0]["status"] == "data_gap"
+    assert result.results[0]["metadata"]["reason_code"] == "source_truncated"
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.unit
@@ -1005,9 +1937,13 @@ async def test_023_stage_two_consumes_stage_one_recommendation(monkeypatch):
                 payload = {
                     "episodes": [
                         {
-                            "episode_ref": "consultation_record-1",
+                            "episode_ref": "model_alias",
                             "application_state": "clear",
+                            "application_ref": "model_alias",
                             "opinion_state": "clear",
+                            "opinion_ref": "model_alias",
+                            "execution_state": "absent",
+                            "execution_ref": None,
                             "normalized_recommendations": [
                                 {
                                     "type": "medication",
@@ -1015,13 +1951,14 @@ async def test_023_stage_two_consumes_stage_one_recommendation(monkeypatch):
                                 }
                             ],
                             "confidence": "high",
-                            "input_refs": ["consultation_record-1"],
+                            "input_refs": ["model_alias"],
                         }
                     ]
                 }
             else:
                 assert "受控归一化事项A" in prompt
                 assert "consultation_record-1-recommendation-1" in prompt
+                assert "model_alias" not in prompt
                 assert "allowed_evidence_refs" in prompt
                 assert "时间合法但语义无关的病程也必须交给模型判断关联" in prompt
                 assert "association_state" in prompt
@@ -1150,7 +2087,11 @@ async def test_023_rejects_course_evidence_before_its_own_consultation(
             {
                 "episode_ref": "consultation_record-1",
                 "application_state": "clear",
+                "application_ref": "consultation_record-1",
                 "opinion_state": "clear",
+                "opinion_ref": "consultation_record-1",
+                "execution_state": "absent",
+                "execution_ref": None,
                 "normalized_recommendations": [
                     {"type": "treatment", "item": "事项一"}
                 ],
@@ -1160,7 +2101,11 @@ async def test_023_rejects_course_evidence_before_its_own_consultation(
             {
                 "episode_ref": "consultation_record-2",
                 "application_state": "clear",
+                "application_ref": "consultation_record-2",
                 "opinion_state": "clear",
+                "opinion_ref": "consultation_record-2",
+                "execution_state": "absent",
+                "execution_ref": None,
                 "normalized_recommendations": [
                     {"type": "monitoring", "item": "事项二"}
                 ],
