@@ -8,7 +8,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.routers import luxian_0609_preproduction
+from app.services.luxian_0609 import evidence_snapshot_provider, execution
 from app.services.luxian_0609 import preproduction_bundle_reader
+from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
 
 
 @pytest.fixture(autouse=True)
@@ -243,6 +245,162 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
         "llm_client": fake_client,
         "base_settings": base_settings,
         "model_name": "model-for-preproduction",
+    }
+
+
+@pytest.mark.unit
+def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
+    monkeypatch,
+    caplog,
+) -> None:
+    """公共旁路只执行所选010-015 typed规则，不派发旧映射或其他客户规则。"""
+
+    selected = (
+        "LX0609-010",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-014",
+        "LX0609-015",
+    )
+    captured: dict[str, object] = {"executor_calls": 0, "llm_calls": 0}
+
+    class _NoCallClient:
+        model = "controlled-test-model"
+
+        async def generate(self, _prompt):
+            captured["llm_calls"] = int(captured["llm_calls"]) + 1
+            raise AssertionError("强确定性事实不得调用模型")
+
+    real_build_session = evidence_snapshot_provider.build_luxian_0609_evidence_read_session
+
+    def build_session(**kwargs):
+        rows_by_source = {
+            "exam_master": ({
+                "exam_name": "胸部CT",
+                "exam_type": "CT",
+                "exam_time": "2026-04-26 08:00:00",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "右肺占位，考虑恶性，建议进一步处理。",
+            },),
+            "labtest_master": ({
+                "labtest_subject": "血培养及药敏",
+                "specimen": "血液",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "培养阳性，药敏结果已报告。",
+            },),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-04-26 07:00:00",
+                    "record_content": "因持续咳嗽伴胸痛，为明确肺部病因拟行胸部CT检查。",
+                },
+                {
+                    "record_time": "2026-04-26 13:00:00",
+                    "record_content": (
+                        "已查看胸部CT报告并分析肺部占位的后续处理；"
+                        "同时复核血培养阳性和药敏结果并调整抗感染方案。"
+                    ),
+                },
+            ),
+            "inpat_registration.discharge_horizon": ({
+                "discharge_datetime": "2026-04-30 12:00:00",
+            },),
+        }
+
+        def controlled_reader(**reader_kwargs):
+            source_key = reader_kwargs["source_key"]
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=rows_by_source.get(source_key, ()),
+                truncated=False,
+                limit_rows=50,
+            )
+
+        return real_build_session(**kwargs, row_reader=controlled_reader)
+
+    real_executor = execution.execute_luxian_0609_native_exam_lab_rules
+
+    async def execute_exam_lab(**kwargs):
+        # 透明观测 spy：不改变 executor 输入或返回值，真实 reducer/aggregator
+        # 仍由公共 HTTP 路径完成。
+        captured["executor_calls"] = int(captured["executor_calls"]) + 1
+        captured["rule_ids"] = tuple(kwargs["rule_ids"])
+        captured["decision_rule_ids"] = tuple(kwargs["decision_rule_ids"])
+        captured["has_snapshot"] = kwargs["evidence_snapshot"] is not None
+        captured["has_materials"] = kwargs["evidence_materials"] is not None
+        result = await real_executor(**kwargs)
+        captured["decision_count"] = len(result.decisions)
+        captured["raw_result_count"] = len(result.results)
+        return result
+
+    monkeypatch.setattr(
+        luxian_0609_preproduction,
+        "load_running_final_bundle",
+        lambda **_: {
+            "scene": "running",
+            "institute_id": "institute-safe-coordinate",
+            "patient_id": "patient-safe-coordinate",
+            "visit_id": "visit-safe-coordinate",
+            "structured_context": {"documents": {}},
+        },
+    )
+    monkeypatch.setattr(
+        luxian_0609_preproduction,
+        "_build_llm_client",
+        _NoCallClient,
+    )
+    monkeypatch.setattr(
+        execution,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    monkeypatch.setattr(
+        execution,
+        "execute_luxian_0609_native_exam_lab_rules",
+        execute_exam_lab,
+    )
+
+    request_body = {
+        "scene": "running",
+        "institute_id": "institute-safe-coordinate",
+        "patient_id": "patient-safe-coordinate",
+        "visit_id": "visit-safe-coordinate",
+        "selected_customer_rule_ids": list(selected),
+        "evaluation_as_of_date": "2026-07-19",
+    }
+    with _build_client(enabled=True) as client:
+        response = client.post(
+            "/api/v1/qc/luxian-0609/preproduction/evaluate",
+            json=request_body,
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert tuple(item["rule_id"] for item in payload["results"]) == selected
+    assert {item["status"] for item in payload["results"]} == {"compliant"}
+    assert payload["metrics"]["customer_rule_count"] == 5
+    assert payload["metrics"]["llm_call_count"] == 0
+    rendered = repr(payload) + caplog.text
+    for private_marker in (
+        "institute-safe-coordinate",
+        "patient-safe-coordinate",
+        "visit-safe-coordinate",
+        "右肺占位",
+        "血培养阳性",
+        "持续咳嗽伴胸痛",
+        "2026-04-26 08:00:00",
+        "evidence_payload",
+        "fact_refs",
+    ):
+        assert private_marker not in rendered
+    assert captured == {
+        "executor_calls": 1,
+        "llm_calls": 0,
+        "rule_ids": selected,
+        "decision_rule_ids": selected,
+        "has_snapshot": True,
+        "has_materials": True,
+        "decision_count": 5,
+        "raw_result_count": 0,
     }
 
 
