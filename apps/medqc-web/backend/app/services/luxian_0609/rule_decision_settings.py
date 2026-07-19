@@ -67,6 +67,13 @@ def build_full_rule_decision_settings(
     preproduction: bool = False,
 ) -> ReadOnlySettingsOverlay:
     overrides = dict(FULL_RULE_DECISION_OVERRIDES)
+    # 总开关开启时仍尊重咨询族显式关闭，保证020兼容链与021-023原生链
+    # 可以独立回滚，不牵连其余规则族。
+    if not bool(
+        getattr(base_settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", True)
+    ):
+        overrides["LUXIAN_0609_NATIVE_CONSULTATION_ENABLED"] = False
+        overrides["LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED"] = False
     if preproduction:
         overrides.update(PREPRODUCTION_ONLY_OVERRIDES)
     return ReadOnlySettingsOverlay(base_settings, overrides)

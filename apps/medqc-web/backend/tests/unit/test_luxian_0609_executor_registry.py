@@ -127,6 +127,20 @@ def test_surgery_presence_declares_trigger_material_dependencies() -> None:
     )
 
 
+def test_consultation_declares_relation_and_support_material_dependencies() -> None:
+    assert resolve_legacy_executor_material_source_keys(
+        ("consultation_quality",)
+    ) == (
+        "consultation_record",
+        "daily_course_record",
+        "exam_item_report",
+        "inpat_drug_order",
+        "labtest_item_report",
+        "senior_course_record",
+        "surgery_record",
+    )
+
+
 def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),

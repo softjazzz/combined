@@ -2,6 +2,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.settings import Settings
+from app.services.luxian_0609.rule_decision_settings import (
+    build_full_rule_decision_settings,
+    resolve_mainline_rule_decision_settings,
+)
 
 
 LLM_ENV_KEYS = [
@@ -251,6 +255,19 @@ def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
     )
 
 
+def test_mainline_respects_explicit_consultation_family_rollback(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "true")
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "false")
+
+    resolved = resolve_mainline_rule_decision_settings(Settings(_env_file=None))
+
+    assert resolved.LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
+    assert resolved.LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED is False
+    assert resolved.LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED is True
+
+
 @pytest.mark.parametrize(
     "setting_name",
     (
@@ -285,13 +302,28 @@ def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypa
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED is False
 
 
-def test_luxian_native_consultation_defaults_on_and_can_be_disabled(monkeypatch):
+def test_luxian_native_consultation_defaults_off_and_parses_boolean_env(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
+
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
+
+
+def test_preproduction_overlay_can_explicitly_enable_native_consultation(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+    monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "true")
+    base = Settings(_env_file=None)
+
+    resolved = build_full_rule_decision_settings(base, preproduction=True)
+
+    assert resolved.LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
+    assert resolved.LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED is True
 
 
 def test_luxian_native_exam_lab_defaults_on_and_can_be_disabled(monkeypatch):

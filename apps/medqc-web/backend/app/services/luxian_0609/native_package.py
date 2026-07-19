@@ -282,7 +282,11 @@ def build_luxian_0609_package_plan(
         if item.execution_mode == EXECUTION_MODE_NATIVE_ASYNC
         and (
             (item.executor_key == EXAM_LAB_EXECUTOR_KEY and native_exam_lab_enabled)
-            or (item.executor_key == CONSULTATION_EXECUTOR_KEY and native_consultation_enabled)
+            or (
+                item.executor_key == CONSULTATION_EXECUTOR_KEY
+                and native_consultation_enabled
+                and item.rule_id != "LX0609-020"
+            )
             or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
             or (
                 item.executor_key == TUMOR_PATHOLOGY_EXECUTOR_KEY
@@ -325,21 +329,25 @@ def build_luxian_0609_package_plan(
                 tuple(item.rule_id for item in native if item.executor_key == executor_key),
             )
         )
+    compatibility_execution_rule_ids = _ordered_unique(
+        execution_rule_id
+        for item in compatibility
+        for execution_rule_id in item.compatibility_rule_ids
+    )
+    compatibility_execution_rule_id_set = set(compatibility_execution_rule_ids)
+    bypassed_execution_rule_ids = _ordered_unique(
+        execution_rule_id
+        for item in native
+        for execution_rule_id in item.compatibility_rule_ids
+        if execution_rule_id not in compatibility_execution_rule_id_set
+    )
     return Luxian0609PackagePlan(
         selected_rule_ids=tuple(item.rule_id for item in selected),
         native_sync_rule_ids=native_sync_rule_ids,
         native_async_rule_ids=native_async_rule_ids,
         compatibility_rule_ids=tuple(item.rule_id for item in compatibility),
-        compatibility_execution_rule_ids=_ordered_unique(
-            execution_rule_id
-            for item in compatibility
-            for execution_rule_id in item.compatibility_rule_ids
-        ),
-        bypassed_execution_rule_ids=_ordered_unique(
-            execution_rule_id
-            for item in native
-            for execution_rule_id in item.compatibility_rule_ids
-        ),
+        compatibility_execution_rule_ids=compatibility_execution_rule_ids,
+        bypassed_execution_rule_ids=bypassed_execution_rule_ids,
         native_executor_batches=tuple(native_executor_batches),
     )
 

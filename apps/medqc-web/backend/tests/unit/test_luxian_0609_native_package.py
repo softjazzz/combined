@@ -261,9 +261,9 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         native_surgery_document_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 49
-    assert plan.compatibility_rule_ids == ()
-    assert plan.compatibility_execution_rule_ids == ()
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 48
+    assert plan.compatibility_rule_ids == ("LX0609-020",)
+    assert plan.compatibility_execution_rule_ids == ("LX-017", "CL-250")
 
 
 @pytest.mark.unit
@@ -298,6 +298,42 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
             native_sync_enabled=True,
             native_async_enabled=False,
         )
+
+
+@pytest.mark.unit
+def test_consultation_native_flag_keeps_020_compatibility_and_native_scopes_021_023():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+
+    plan = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=[
+            "LX0609-020",
+            "LX0609-021",
+            "LX0609-022",
+            "LX0609-023",
+        ],
+        native_sync_enabled=True,
+        native_async_enabled=False,
+        native_consultation_enabled=True,
+    )
+
+    assert plan.native_async_rule_ids == (
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
+    )
+    assert plan.compatibility_rule_ids == ("LX0609-020",)
+    assert plan.native_executor_batches == (
+        (
+            "consultation_quality",
+            ("LX0609-021", "LX0609-022", "LX0609-023"),
+        ),
+    )
+    assert plan.compatibility_execution_rule_ids == ("LX-017", "CL-250")
+    assert "CL-250" not in plan.bypassed_execution_rule_ids
 
 
 @pytest.mark.unit

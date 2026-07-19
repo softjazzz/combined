@@ -133,7 +133,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
     assert all(
         contract.max_llm_calls_per_rule == 0
         if contract.decision_authority == "program_only"
-        else contract.max_llm_calls_per_rule == 1 and bool(contract.prompt_version)
+        else contract.max_llm_calls_per_rule
+        == (2 if contract.rule_id == "LX0609-023" else 1)
+        and bool(contract.prompt_version)
         for contract in contracts
     )
 

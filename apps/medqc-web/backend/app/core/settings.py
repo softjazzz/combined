@@ -128,8 +128,8 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_EXECUTION_ENABLED: bool = True
     # 001/002/004/005/006 使用基础时限族原生确定性执行；关闭后回退旧映射链。
     LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED: bool = True
-    # 020/021/022/023 使用一次裁剪会诊语义执行；关闭后整族回退旧映射链。
-    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = True
+    # 021/022/023 使用两阶段裁剪会诊语义执行；020 保持旧映射链。
+    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = False
     # 检查检验族原生入口；关闭时回滚到旧映射执行链。
     LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED: bool = True
     # 输血族041-049独立包开关；关闭时精确回退现有映射执行链。

@@ -119,6 +119,10 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "consultation_record",
         "daily_course_record",
         "senior_course_record",
+        "inpat_drug_order",
+        "exam_item_report",
+        "labtest_item_report",
+        "surgery_record",
     ),
     "course_quality": (
         "daily_course_record",

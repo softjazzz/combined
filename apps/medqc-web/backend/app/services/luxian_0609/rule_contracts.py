@@ -81,7 +81,13 @@ class Luxian0609RuleContract:
             raise ValueError("invalid LX0609 Golden gate state")
         if self.allowed_final_states != ALLOWED_FINAL_STATES:
             raise ValueError("invalid LX0609 final-state contract")
-        expected_calls = 0 if self.decision_authority == "program_only" else 1
+        expected_calls = (
+            0
+            if self.decision_authority == "program_only"
+            else 2
+            if self.rule_id == "LX0609-023"
+            else 1
+        )
         if self.max_llm_calls_per_rule != expected_calls:
             raise ValueError("invalid LX0609 LLM call budget")
         if not self.applicable_documents:
