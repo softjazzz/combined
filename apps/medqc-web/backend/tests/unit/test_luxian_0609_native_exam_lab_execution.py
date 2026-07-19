@@ -10,6 +10,7 @@ from app.services.luxian_0609.exam_lab_fact_extraction import (
     ExamLabEventFact,
     ExamLabSingleEvent,
     ExamLabTextProjection,
+    build_exam_lab_fact_prompt,
     build_exam_lab_text_projection,
     parse_exam_lab_fact_response,
 )
@@ -661,6 +662,89 @@ def test_fact_parser_requires_exact_rule_ids_and_rejects_event_or_time_fields():
             selected_rule_ids=("LX0609-010",),
             projection=projection,
         )
+
+
+def test_fact_prompt_supplies_one_replaceable_json_slot_per_selected_rule():
+    selected = ("LX0609-010", "LX0609-012", "LX0609-015")
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "labtest_master": ({"test_type": "血培养", "report_time": "2026-04-26 10:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 11:00:00",
+                "record_content": "已记录检查及培养结果。",
+            },),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=selected,
+        projection=projection,
+    )
+
+    assert "facts绝不能是空数组" in prompt
+    assert "即使无法判断也必须保留该条并填写unknown" in prompt
+    skeleton = json.loads(prompt.rsplit("\n", 1)[-1])
+    assert skeleton["schema_version"] == "lx0609-exam-lab-text-facts-v3"
+    assert [item["rule_id"] for item in skeleton["facts"]] == list(selected)
+    assert len(skeleton["facts"]) == len(selected)
+    assert skeleton["facts"][0]["positive_state"] == "not_relevant"
+    assert skeleton["facts"][1]["positive_state"] == "unknown"
+    assert skeleton["facts"][2]["positive_state"] == "unknown"
+
+
+@pytest.mark.parametrize("payload", (
+    {"schema_version": "lx0609-exam-lab-text-facts-v3", "facts": []},
+    {
+        "schema_version": "lx0609-exam-lab-text-facts-v3",
+        "facts": [{
+            "rule_id": "LX0609-010",
+            "applicability": "applicable",
+            "semantic_state": "present",
+            "positive_state": "not_relevant",
+            "course_doc_refs": ["D06-01"],
+        }],
+    },
+))
+def test_fact_parser_rejects_empty_or_partial_selected_rule_facts(payload):
+    selected = ("LX0609-010", "LX0609-011")
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 07:00:00",
+                "record_content": "已记录检查原因与结果。",
+            },),
+        }
+    )
+
+    with pytest.raises(ValueError, match="scope mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=selected,
+            projection=projection,
+        )
+
+
+def test_fact_parser_accepts_complete_multi_rule_response_after_prompt_contract():
+    selected = ("LX0609-010", "LX0609-011")
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 07:00:00",
+                "record_content": "已记录检查原因与结果。",
+            },),
+        }
+    )
+
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(_fact_response(selected))},
+        selected_rule_ids=selected,
+        projection=projection,
+    )
+
+    assert [fact.rule_id for fact in facts] == list(selected)
 
 
 def test_fact_parser_python_owns_nonpositive_rule_applicability():
