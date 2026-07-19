@@ -580,6 +580,7 @@ async def test_023_execution_before_opinion_is_data_gap(monkeypatch):
         ("specific", "supported", ["daily_course_record-1"], "compliant"),
         ("specific", "contradicted", ["daily_course_record-1"], "non_compliant"),
         ("vague_or_copied", "supported", ["daily_course_record-1"], "non_compliant"),
+        ("vague_or_copied", "unknown", ["daily_course_record-1"], "non_compliant"),
         ("absent", "unknown", [], "not_applicable"),
         ("unknown", "unknown", [], "uncertain"),
         ("specific", "supported", ["inpat_drug_order-1"], "uncertain"),

@@ -590,7 +590,11 @@ def _parse_stage2(
             states.append(("unknown", "semantic_low_confidence"))
         elif quality == "absent":
             states.append(("absent", "unknown"))
-        elif confidence < 0.8 or quality == "unknown" or match == "unknown":
+        elif (
+            confidence < 0.8
+            or quality == "unknown"
+            or (match == "unknown" and quality != "vague_or_copied")
+        ):
             states.append(("unknown", "semantic_low_confidence"))
         elif quality in {"specific", "vague_or_copied"} and not (
             set(safe_refs) & course_refs
