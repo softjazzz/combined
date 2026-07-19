@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import copy
+from datetime import date
 import hashlib
 import json
 import re
@@ -22,6 +23,20 @@ EXPECTED_LUXIAN_0609_RULE_IDS = tuple(
     f"LX0609-{number:03d}" for number in range(1, 50)
 )
 _CASE_LABEL = re.compile(r"case-\d{2}")
+_FIXED10_CASE_LABELS = tuple(f"case-{index:02d}" for index in range(1, 11))
+_COURSE_SEVERITY_RULE_IDS = ("LX0609-008", "LX0609-009")
+_SAFE_CODE = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
+_SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_RULE_STATES = frozenset(
+    {
+        "compliant",
+        "non_compliant",
+        "not_applicable",
+        "data_gap",
+        "evaluation_unknown",
+        "technical_error",
+    }
+)
 _JSON_FIELDS = (
     "structured_context",
     "document_hits",
@@ -31,6 +46,93 @@ _JSON_FIELDS = (
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
+
+
+def _validate_evaluation_as_of_date(value: str | None) -> str:
+    """仅接受完整 ISO 自然日，防止回归时用运行时刻替代冻结终点。"""
+
+    normalized = str(value or "").strip()
+    try:
+        parsed = date.fromisoformat(normalized)
+    except ValueError as exc:
+        raise RuntimeError("evaluation_as_of_date必须是YYYY-MM-DD") from exc
+    if parsed.isoformat() != normalized:
+        raise RuntimeError("evaluation_as_of_date必须是YYYY-MM-DD")
+    return normalized
+
+
+def _evaluation_as_of_hash(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _validate_course_severity_expected_matrix(
+    value: Sequence[Mapping[str, Any]] | None,
+    *,
+    evaluation_as_of_date: str,
+) -> dict[tuple[str, str], dict[str, str]]:
+    """验证固定10例008/009人工事实矩阵，拒绝正文、坐标和原始日期。"""
+
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise RuntimeError("008/009固定病例事实矩阵无效")
+    expected_keys = {
+        "case_label",
+        "rule_id",
+        "expected_state",
+        "expected_reason",
+        "manual_fact_basis",
+        "horizon_basis",
+        "evidence_attestation_hash",
+        "evaluation_as_of_hash",
+    }
+    expected_pairs = tuple(
+        (case_label, rule_id)
+        for case_label in _FIXED10_CASE_LABELS
+        for rule_id in _COURSE_SEVERITY_RULE_IDS
+    )
+    matrix: dict[tuple[str, str], dict[str, str]] = {}
+    expected_as_of_hash = _evaluation_as_of_hash(evaluation_as_of_date)
+    for item in value:
+        if not isinstance(item, Mapping) or set(item) != expected_keys:
+            raise RuntimeError("008/009固定病例事实矩阵无效")
+        row = {key: str(item.get(key) or "").strip() for key in expected_keys}
+        pair = (row["case_label"], row["rule_id"])
+        if (
+            pair not in expected_pairs
+            or pair in matrix
+            or row["expected_state"] not in _RULE_STATES
+            or any(
+                not _SAFE_CODE.fullmatch(row[key])
+                for key in (
+                    "expected_reason",
+                    "manual_fact_basis",
+                    "horizon_basis",
+                )
+            )
+            or not _SHA256.fullmatch(row["evidence_attestation_hash"])
+            or row["evaluation_as_of_hash"] != expected_as_of_hash
+        ):
+            raise RuntimeError("008/009固定病例事实矩阵无效")
+        matrix[pair] = row
+    if tuple(matrix) != expected_pairs:
+        raise RuntimeError("008/009固定病例事实矩阵不完整")
+    return matrix
+
+
+def load_course_severity_expected_matrix(
+    path: Path,
+    *,
+    evaluation_as_of_date: str,
+) -> dict[tuple[str, str], dict[str, str]]:
+    """只读取外置的安全人工矩阵；解析错误不回显文件内容或路径。"""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("008/009固定病例事实矩阵不可读取") from exc
+    return _validate_course_severity_expected_matrix(
+        payload,
+        evaluation_as_of_date=evaluation_as_of_date,
+    )
 
 
 def resolve_full_luxian_0609_rule_ids(
@@ -173,20 +275,26 @@ async def evaluate_full_luxian_0609_case(
     bundle: dict[str, Any],
     rule_ids: Sequence[str],
     timeout_seconds: float,
+    evaluation_as_of_date: str | None = None,
 ) -> dict[str, Any]:
     if tuple(rule_ids) != EXPECTED_LUXIAN_0609_RULE_IDS:
         raise RuntimeError("全49点回归禁止使用空列表或非客户规则范围")
+    request_kwargs: dict[str, Any] = {
+        "bundle": bundle,
+        "rule_ids": list(rule_ids),
+        "bucket_strategy": "domain_only",
+        "quality_profile": "throughput_v1",
+        "batch_output_mode": "full",
+        "enable_selective_refine": False,
+        "use_execution_cache": False,
+        "rule_set_key": "luxian_0609_qc_v1",
+    }
+    if evaluation_as_of_date is not None:
+        request_kwargs["evaluation_as_of_date"] = _validate_evaluation_as_of_date(
+            evaluation_as_of_date
+        )
     result = await asyncio.wait_for(
-        service.evaluate_running_final_bundle_input(
-            bundle=bundle,
-            rule_ids=list(rule_ids),
-            bucket_strategy="domain_only",
-            quality_profile="throughput_v1",
-            batch_output_mode="full",
-            enable_selective_refine=False,
-            use_execution_cache=False,
-            rule_set_key="luxian_0609_qc_v1",
-        ),
+        service.evaluate_running_final_bundle_input(**request_kwargs),
         timeout=timeout_seconds,
     )
     validate_full_luxian_0609_results(result)
@@ -200,6 +308,7 @@ async def evaluate_snapshot_sidecar_ab_case(
     bundle: dict[str, Any],
     rule_ids: Sequence[str],
     timeout_seconds: float,
+    evaluation_as_of_date: str | None = None,
 ) -> dict[str, Any]:
     """同一次真实模型响应内存重放，隔离模型随机性比较 sidecar。"""
 
@@ -211,6 +320,7 @@ async def evaluate_snapshot_sidecar_ab_case(
         timeout_seconds=timeout_seconds,
         candidate_flag="LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED",
         mode_label="sidecar",
+        evaluation_as_of_date=evaluation_as_of_date,
     )
 
 
@@ -222,9 +332,28 @@ async def evaluate_unified_engine_ab_case(
     rule_ids: Sequence[str],
     timeout_seconds: float,
     case_label: str = "",
+    evaluation_as_of_date: str | None = None,
+    course_severity_expected_matrix: (
+        Sequence[Mapping[str, Any]]
+        | Mapping[tuple[str, str], Mapping[str, Any]]
+        | None
+    ) = None,
 ) -> dict[str, Any]:
     """复用同一次真实模型响应，比较冻结旧链与统一执行信封正式入口。"""
 
+    normalized_as_of_date = _validate_evaluation_as_of_date(evaluation_as_of_date)
+    normalized_case_label = str(case_label or "").strip()
+    if normalized_case_label not in _FIXED10_CASE_LABELS:
+        raise RuntimeError("统一引擎008/009回归必须使用固定10例安全标签")
+    raw_matrix_rows = (
+        tuple(course_severity_expected_matrix.values())
+        if isinstance(course_severity_expected_matrix, Mapping)
+        else course_severity_expected_matrix
+    )
+    matrix = _validate_course_severity_expected_matrix(
+        raw_matrix_rows,
+        evaluation_as_of_date=normalized_as_of_date,
+    )
     return await _evaluate_runtime_flag_ab_case(
         service=service,
         settings=settings,
@@ -233,7 +362,9 @@ async def evaluate_unified_engine_ab_case(
         timeout_seconds=timeout_seconds,
         candidate_flag="LUXIAN_0609_UNIFIED_ENGINE_ENABLED",
         mode_label="unified_engine",
-        case_label=case_label,
+        case_label=normalized_case_label,
+        evaluation_as_of_date=normalized_as_of_date,
+        course_severity_expected_matrix=matrix,
     )
 
 
@@ -247,6 +378,8 @@ async def _evaluate_runtime_flag_ab_case(
     candidate_flag: str,
     mode_label: str,
     case_label: str = "",
+    evaluation_as_of_date: str | None = None,
+    course_severity_expected_matrix: Mapping[tuple[str, str], Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """冻结两条迁移开关，只改变一个候选变量，排除串扰和模型随机性。"""
 
@@ -289,6 +422,10 @@ async def _evaluate_runtime_flag_ab_case(
     reader_phase = "baseline"
     family_reader_calls = {"baseline": 0, "candidate": 0}
     controlled_fact_query_count = 0
+    course_severity_envelope_calls: dict[str, list[int]] = {
+        "baseline": [],
+        "candidate": [],
+    }
     typed_decision_audits: list[dict[str, Any]] = []
     original_consultation_reader = (
         native_consultation_execution.read_luxian_0609_native_source_rows
@@ -302,6 +439,9 @@ async def _evaluate_runtime_flag_ab_case(
     )
     original_course_reader = (
         native_course_quality_execution.read_luxian_0609_native_source_rows
+    )
+    original_course_executor = (
+        luxian_execution.execute_luxian_0609_native_course_quality_rules
     )
     original_surgery_runtime_reader = (
         native_surgery_gate_execution.read_luxian_0609_runtime_source_rows
@@ -341,6 +481,15 @@ async def _evaluate_runtime_flag_ab_case(
     def counted_course_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
         return original_course_reader(**kwargs)
+
+    async def counted_course_executor(**kwargs):
+        envelope = await original_course_executor(**kwargs)
+        selected_rule_ids = tuple(str(value) for value in kwargs.get("rule_ids", ()))
+        if set(selected_rule_ids).intersection(_COURSE_SEVERITY_RULE_IDS):
+            course_severity_envelope_calls[reader_phase].append(
+                int(getattr(envelope, "llm_call_count", 0) or 0)
+            )
+        return envelope
 
     def counted_surgery_runtime_reader(**kwargs):
         family_reader_calls[reader_phase] += 1
@@ -419,6 +568,9 @@ async def _evaluate_runtime_flag_ab_case(
             native_course_quality_execution.read_luxian_0609_native_source_rows = (
                 counted_course_reader
             )
+            luxian_execution.execute_luxian_0609_native_course_quality_rules = (
+                counted_course_executor
+            )
             native_surgery_gate_execution.read_luxian_0609_runtime_source_rows = (
                 counted_surgery_runtime_reader
             )
@@ -443,6 +595,7 @@ async def _evaluate_runtime_flag_ab_case(
             bundle=bundle,
             rule_ids=rule_ids,
             timeout_seconds=timeout_seconds,
+            evaluation_as_of_date=evaluation_as_of_date,
         )
 
         setattr(settings, candidate_flag, True)
@@ -464,6 +617,7 @@ async def _evaluate_runtime_flag_ab_case(
             bundle=bundle,
             rule_ids=rule_ids,
             timeout_seconds=timeout_seconds,
+            evaluation_as_of_date=evaluation_as_of_date,
         )
     finally:
         for name, value in original_flags.items():
@@ -484,6 +638,9 @@ async def _evaluate_runtime_flag_ab_case(
         )
         native_course_quality_execution.read_luxian_0609_native_source_rows = (
             original_course_reader
+        )
+        luxian_execution.execute_luxian_0609_native_course_quality_rules = (
+            original_course_executor
         )
         native_surgery_gate_execution.read_luxian_0609_runtime_source_rows = (
             original_surgery_runtime_reader
@@ -594,23 +751,21 @@ async def _evaluate_runtime_flag_ab_case(
             "LX0609-008",
             "LX0609-009",
         }
-        fixed10_expected = {
-            label: {
-                "LX0609-008": "not_applicable",
-                "LX0609-009": (
-                    "data_gap" if label in {"case-04", "case-08"} else "not_applicable"
-                ),
-            }
-            for label in (f"case-{index:02d}" for index in range(1, 11))
-        }
+        if course_severity_expected_matrix is None:
+            raise RuntimeError("008/009固定病例事实矩阵不完整")
         candidate_by_rule = {
             item["rule_id"]: item["status"] for item in candidate_states
         }
-        if case_label in fixed10_expected and any(
-            candidate_by_rule.get(rule_id) != expected_status
-            for rule_id, expected_status in fixed10_expected[case_label].items()
-        ):
-            raise RuntimeError("008/009固定病例事实矩阵不匹配")
+        typed_by_rule = {item["rule_id"]: item for item in typed_decision_audits}
+        for rule_id in _COURSE_SEVERITY_RULE_IDS:
+            expected = course_severity_expected_matrix[(case_label, rule_id)]
+            typed = typed_by_rule[rule_id]
+            if (
+                candidate_by_rule.get(rule_id) != expected["expected_state"]
+                or typed["final_state"] != expected["expected_state"]
+                or typed["reason_code"] != expected["expected_reason"]
+            ):
+                raise RuntimeError("008/009固定病例事实矩阵不匹配")
         unexpected_state_differences = tuple(
             item
             for item in comparison.get("state_differences", ())
@@ -630,6 +785,23 @@ async def _evaluate_runtime_flag_ab_case(
             raise RuntimeError("007受控医嘱事实每病例必须且只能查询一次")
         if family_reader_calls["candidate"] != 0:
             raise RuntimeError("统一引擎已迁移规则族仍在自行查库")
+        from app.services.luxian_0609.rule_contracts import (
+            load_luxian_0609_rule_contracts,
+        )
+
+        contracts_by_id = {
+            item.rule_id: item for item in load_luxian_0609_rule_contracts()
+        }
+        if (
+            int(contracts_by_id["LX0609-008"].max_llm_calls_per_rule) != 0
+            or int(contracts_by_id["LX0609-009"].max_llm_calls_per_rule) > 1
+        ):
+            raise RuntimeError("008/009模型调用合同异常")
+        course_severity_candidate_llm_calls = sum(
+            course_severity_envelope_calls["candidate"]
+        )
+        if course_severity_candidate_llm_calls > 1:
+            raise RuntimeError("008/009模型调用超出上限")
         comparison.update(
             {
                 "baseline_family_reader_calls": family_reader_calls["baseline"],
@@ -642,6 +814,9 @@ async def _evaluate_runtime_flag_ab_case(
                 "typed_007_decision_count": 1,
                 "typed_007_fact_ref_count": typed_007_audit["fact_ref_count"],
                 "typed_007_model_call_count": 0,
+                "typed_008_model_call_count": 0,
+                "typed_009_model_call_count": course_severity_candidate_llm_calls,
+                "course_severity_matrix_accepted": True,
             }
         )
     return comparison
@@ -651,6 +826,19 @@ async def run(args: argparse.Namespace) -> int:
     from app.core.settings import get_settings
     from app.services.sichuan_qc_service import SichuanQCService
 
+    evaluation_as_of_date = _validate_evaluation_as_of_date(
+        args.evaluation_as_of_date
+    )
+    if args.unified_engine_ab and int(args.limit) != len(_FIXED10_CASE_LABELS):
+        raise RuntimeError("统一引擎008/009验收必须固定10例")
+    course_severity_expected_matrix = (
+        load_course_severity_expected_matrix(
+            Path(args.course_severity_expected_matrix),
+            evaluation_as_of_date=evaluation_as_of_date,
+        )
+        if args.unified_engine_ab
+        else None
+    )
     cases = load_private_case_map(Path(args.case_map), limit=int(args.limit))
     rule_ids = resolve_full_luxian_0609_rule_ids()
     service = SichuanQCService()
@@ -673,9 +861,13 @@ async def run(args: argparse.Namespace) -> int:
                     rule_ids=rule_ids,
                     timeout_seconds=float(args.timeout_seconds),
                     **(
-                        {"case_label": case["case_label"]}
+                        {
+                            "case_label": case["case_label"],
+                            "evaluation_as_of_date": evaluation_as_of_date,
+                            "course_severity_expected_matrix": course_severity_expected_matrix,
+                        }
                         if args.unified_engine_ab
-                        else {}
+                        else {"evaluation_as_of_date": evaluation_as_of_date}
                     ),
                 )
                 states_accepted = comparison.get(
@@ -694,6 +886,7 @@ async def run(args: argparse.Namespace) -> int:
                     bundle=bundle,
                     rule_ids=rule_ids,
                     timeout_seconds=float(args.timeout_seconds),
+                    evaluation_as_of_date=evaluation_as_of_date,
                 )
                 rows = _result_rows(result)
                 status_counts = dict(
@@ -727,6 +920,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--timeout-seconds", type=float, default=60.0)
     parser.add_argument(
+        "--evaluation-as-of-date",
+        required=True,
+        help="冻结本次只读回归的权威评价终点，格式YYYY-MM-DD",
+    )
+    parser.add_argument(
         "--assert-49",
         action="store_true",
         help="显式声明并校验全49个客户规则ID和返回顺序",
@@ -742,7 +940,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="捕获一次真实模型响应并内存重放，比较旧链与统一执行信封",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--course-severity-expected-matrix",
+        help="仅统一引擎A/B使用的私有008/009安全人工事实矩阵JSON",
+    )
+    args = parser.parse_args(argv)
+    try:
+        args.evaluation_as_of_date = _validate_evaluation_as_of_date(
+            args.evaluation_as_of_date
+        )
+    except RuntimeError as exc:
+        parser.error(str(exc))
+    if args.unified_engine_ab and not str(
+        args.course_severity_expected_matrix or ""
+    ).strip():
+        parser.error("--unified-engine-ab必须提供--course-severity-expected-matrix")
+    if not args.unified_engine_ab and args.course_severity_expected_matrix:
+        parser.error("--course-severity-expected-matrix仅可用于--unified-engine-ab")
+    return args
 
 
 if __name__ == "__main__":

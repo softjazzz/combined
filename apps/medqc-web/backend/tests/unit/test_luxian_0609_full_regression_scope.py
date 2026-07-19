@@ -1,32 +1,116 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
 
 from scripts.run_luxian_0609_fixed10_readonly import (
     EXPECTED_LUXIAN_0609_RULE_IDS,
+    InMemoryLlmReplay,
     build_safe_rule_states,
     evaluate_full_luxian_0609_case,
     evaluate_snapshot_sidecar_ab_case,
     evaluate_unified_engine_ab_case,
+    load_course_severity_expected_matrix,
     parse_args,
     resolve_full_luxian_0609_rule_ids,
     validate_full_luxian_0609_results,
 )
 
 
+def _course_severity_matrix(
+    *,
+    evaluation_as_of_date: str = "2026-01-03",
+    state_008: str = "compliant",
+    reason_008: str = "unit_test",
+    state_009: str = "compliant",
+    reason_009: str = "unit_test",
+) -> list[dict[str, str]]:
+    """只构造安全的固定10例矩阵；不含坐标、正文或原始时间。"""
+
+    as_of_hash = hashlib.sha256(evaluation_as_of_date.encode("utf-8")).hexdigest()
+    rows: list[dict[str, str]] = []
+    for case_index in range(1, 11):
+        case_label = f"case-{case_index:02d}"
+        for rule_id, state, reason in (
+            ("LX0609-008", state_008, reason_008),
+            ("LX0609-009", state_009, reason_009),
+        ):
+            rows.append(
+                {
+                    "case_label": case_label,
+                    "rule_id": rule_id,
+                    "expected_state": state,
+                    "expected_reason": reason,
+                    "manual_fact_basis": "unit_test",
+                    "horizon_basis": "evaluation_as_of",
+                    "evidence_attestation_hash": "a" * 64,
+                    "evaluation_as_of_hash": as_of_hash,
+                }
+            )
+    return rows
+
+
 def test_full_regression_accepts_explicit_assert_49_cli_contract() -> None:
-    args = parse_args(["--assert-49", "--snapshot-sidecar-ab"])
+    args = parse_args(
+        [
+            "--assert-49",
+            "--snapshot-sidecar-ab",
+            "--evaluation-as-of-date",
+            "2026-01-03",
+        ]
+    )
     assert args.assert_49 is True
     assert args.snapshot_sidecar_ab is True
+    assert args.evaluation_as_of_date == "2026-01-03"
 
-    unified_args = parse_args(["--assert-49", "--unified-engine-ab"])
+    unified_args = parse_args(
+        [
+            "--assert-49",
+            "--unified-engine-ab",
+            "--evaluation-as-of-date",
+            "2026-01-03",
+            "--course-severity-expected-matrix",
+            "safe-matrix.json",
+        ]
+    )
     assert unified_args.assert_49 is True
     assert unified_args.unified_engine_ab is True
 
     with pytest.raises(SystemExit):
-        parse_args(["--snapshot-sidecar-ab", "--unified-engine-ab"])
+        parse_args(
+            [
+                "--snapshot-sidecar-ab",
+                "--unified-engine-ab",
+                "--evaluation-as-of-date",
+                "2026-01-03",
+            ]
+        )
+
+    with pytest.raises(SystemExit):
+        parse_args(["--assert-49", "--snapshot-sidecar-ab"])
+
+    with pytest.raises(SystemExit):
+        parse_args(
+            [
+                "--assert-49",
+                "--snapshot-sidecar-ab",
+                "--evaluation-as-of-date",
+                "2026-1-3",
+            ]
+        )
+
+    with pytest.raises(SystemExit):
+        parse_args(
+            [
+                "--assert-49",
+                "--unified-engine-ab",
+                "--evaluation-as-of-date",
+                "2026-01-03",
+            ]
+        )
 
 
 @pytest.mark.asyncio
@@ -141,6 +225,7 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
             SimpleNamespace(
                 rule_id=rule_id,
                 final_state=SimpleNamespace(value="compliant"),
+                reason_code="unit_test",
                 fact_refs=("d" * 64,),
             )
             for rule_id in (
@@ -162,6 +247,9 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
         bundle={"scene": "running"},
         rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
         timeout_seconds=1.0,
+        case_label="case-01",
+        evaluation_as_of_date="2026-01-03",
+        course_severity_expected_matrix=_course_severity_matrix(),
     )
 
     assert comparison == {
@@ -179,6 +267,9 @@ async def test_unified_engine_ab_replays_same_model_response_and_counts_one_snap
         "typed_007_decision_count": 1,
         "typed_007_fact_ref_count": 1,
         "typed_007_model_call_count": 0,
+        "typed_008_model_call_count": 0,
+        "typed_009_model_call_count": 0,
+        "course_severity_matrix_accepted": True,
     }
     assert original_calls == 1
 
@@ -217,6 +308,35 @@ def test_full_regression_safe_rows_only_keep_customer_rule_states() -> None:
     assert safe_rows == [{"rule_id": "LX0609-001", "status": "compliant"}]
 
 
+def test_course_severity_matrix_rejects_raw_date_and_as_of_mismatch(
+    tmp_path,
+) -> None:
+    matrix = _course_severity_matrix()
+    matrix[0]["horizon_basis"] = "2026-01-03"
+    matrix_path = tmp_path / "course-matrix.json"
+    matrix_path.write_text(json.dumps(matrix), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="008/009固定病例事实矩阵"):
+        load_course_severity_expected_matrix(
+            matrix_path,
+            evaluation_as_of_date="2026-01-03",
+        )
+
+
+@pytest.mark.asyncio
+async def test_prompt_hash_replay_allows_unused_baseline_records() -> None:
+    async def generate(prompt: str):
+        return {"prompt": prompt}
+
+    replay = InMemoryLlmReplay(generate)
+    await replay.record("legacy-unused")
+    await replay.record("candidate-matched")
+
+    assert await replay.replay("candidate-matched") == {"prompt": "candidate-matched"}
+    assert replay.call_count == 2
+    assert replay.replay_count == 1
+
+
 @pytest.mark.asyncio
 async def test_full_regression_passes_explicit_customer_ids_to_public_entry() -> None:
     captured = {}
@@ -235,9 +355,11 @@ async def test_full_regression_passes_explicit_customer_ids_to_public_entry() ->
         bundle={"scene": "running"},
         rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
         timeout_seconds=1.0,
+        evaluation_as_of_date="2026-01-03",
     )
 
     assert captured["rule_ids"] == list(EXPECTED_LUXIAN_0609_RULE_IDS)
+    assert captured["evaluation_as_of_date"] == "2026-01-03"
     assert captured["rule_ids"]
     assert len(result["evaluation_results"]) == 49
 
@@ -261,3 +383,26 @@ async def test_full_regression_rejects_empty_scope_before_public_entry() -> None
         )
 
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_unified_engine_requires_complete_attested_008_009_matrix() -> None:
+    settings = SimpleNamespace(
+        LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=False,
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+    )
+
+    class Service:
+        adjudicator_client = SimpleNamespace(generate=None)
+
+    with pytest.raises(RuntimeError, match="008/009固定病例事实矩阵"):
+        await evaluate_unified_engine_ab_case(
+            service=Service(),
+            settings=settings,
+            bundle={"scene": "running"},
+            rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
+            timeout_seconds=1.0,
+            case_label="case-01",
+            evaluation_as_of_date="2026-01-03",
+            course_severity_expected_matrix=(),
+        )
