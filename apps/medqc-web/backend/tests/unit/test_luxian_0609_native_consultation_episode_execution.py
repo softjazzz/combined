@@ -121,6 +121,13 @@ async def test_split_application_and_opinion_keep_distinct_role_refs(monkeypatch
     assert "application_refs" in client.prompts[0]
 
 
+def test_episode_prompt_treats_one_sentence_reason_and_recommendation_as_clear():
+    prompt = episode._prompt(({"ref": "consultation_record-1", "time": "", "text": "安全文书"},))
+    assert "会诊原因、临床问题或请求专科建议" in prompt
+    assert "处理或诊疗建议" in prompt
+    assert "纯“请会诊”或“遵会诊意见”" in prompt
+
+
 @pytest.mark.asyncio
 async def test_duplicate_sync_and_non_target_do_not_create_extra_episode(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请", "同步申请", "非会诊文书"))
@@ -404,3 +411,67 @@ async def test_stage_two_source_error_is_technical_without_second_call(monkeypat
     assert {item["status"] for item in result.results} == {"technical_error"}
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
+
+
+def _mixed_candidate_sources():
+    return {
+        "consultation_record": _rows("申请与明确会诊意见"),
+        "daily_course_record": _rows("已落实会诊意见"),
+        "senior_course_record": _rows(*[f"上级查房{index}" for index in range(13)]),
+        "inpat_drug_order": [{"generic_name": "无时间医嘱"}],
+        "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("execution_state", "expected"),
+    [
+        ("linked_specific", ("compliant", "compliant")),
+        ("absent", ("data_gap", "data_gap")),
+    ],
+)
+async def test_positive_execution_survives_unrelated_incomplete_sources_but_absence_does_not(monkeypatch, execution_state, expected):
+    source_rows = _mixed_candidate_sources()
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    refs = ["daily_course_record-1"] if execution_state == "linked_specific" else []
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": execution_state, "execution_refs": refs, "confidence": "high"}),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert tuple(item["status"] for item in result.results) == expected
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_complete_empty_candidate_sources_use_absence_without_second_call(monkeypatch):
+    source_rows = {source_key: [] for source_key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("申请与明确会诊意见")
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_no_usable_candidate_with_technical_source_is_technical_without_second_call(monkeypatch):
+    def _read(*, source_key, **_):
+        if source_key == "consultation_record":
+            return _rows("申请与明确会诊意见")
+        if source_key == "daily_course_record":
+            raise SourceEvidenceQueryError("safe")
+        return []
+
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", _read)
+    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert {item["status"] for item in result.results} == {"technical_error"}
+    assert result.llm_call_count == 1

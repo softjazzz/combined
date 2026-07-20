@@ -100,6 +100,13 @@ class _CandidateDocument:
     text: str
 
 
+@dataclass(frozen=True)
+class _CandidateProjection:
+    candidates: tuple[_CandidateDocument, ...]
+    source_incomplete: bool
+    source_technical: bool
+
+
 class _SourceGap(Exception):
     pass
 
@@ -258,32 +265,47 @@ def _candidate_documents(
     source_schema: str | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
-) -> tuple[_CandidateDocument, ...]:
+) -> _CandidateProjection:
     candidates: list[_CandidateDocument] = []
+    source_incomplete = False
+    source_technical = False
     for source_key in _EXECUTION_SOURCE_KEYS:
-        rows = _read_rows(
-            source_key=source_key,
-            institute_id=institute_id,
-            patient_id=patient_id,
-            visit_id=visit_id,
-            source_schema=source_schema,
-            evidence_materials=evidence_materials,
-            evidence_snapshot=evidence_snapshot,
-        )
+        try:
+            rows = _read_rows(
+                source_key=source_key,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                source_schema=source_schema,
+                evidence_materials=evidence_materials,
+                evidence_snapshot=evidence_snapshot,
+            )
+        except _SourceGap:
+            source_incomplete = True
+            continue
+        except _SourceTechnical:
+            source_technical = True
+            continue
         if len(rows) > _MAX_CANDIDATES_PER_SOURCE:
-            raise _SourceGap()
+            source_incomplete = True
+            continue
         for index, row in enumerate(rows, start=1):
             observed_date = _row_time(row)
             text = _candidate_text(row)
             if observed_date is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
-                raise _SourceGap()
+                source_incomplete = True
+                continue
             candidates.append(_CandidateDocument(
                 ref=f"{source_key}-{index}",
                 source_key=source_key,
                 observed_date=observed_date,
                 text=text,
             ))
-    return tuple(candidates)
+    return _CandidateProjection(
+        candidates=tuple(candidates),
+        source_incomplete=source_incomplete,
+        source_technical=source_technical,
+    )
 
 
 def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
@@ -297,6 +319,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "application_state和opinion_state只能是clear/vague/missing/absent/unknown："
         "clear为有明确目的或具体意见，vague为只有泛化措辞，missing为角色存在但内容空缺，"
         "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
+        "明确写出会诊原因、临床问题或请求专科建议，即使只有一句，也属于application_state=clear；"
+        "明确给出处理或诊疗建议，即使只有一句，也属于opinion_state=clear；"
+        "只有纯“请会诊”或“遵会诊意见”且没有具体内容时才为vague。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
         "每个episode还必须给出application_refs和opinion_refs，二者只能引用本episode.member_refs；"
@@ -484,6 +509,8 @@ def _execution_outcome(
     *,
     episodes: Sequence[_Episode],
     assessments: Sequence[_ExecutionAssessment] | None,
+    source_incomplete: bool = False,
+    source_technical: bool = False,
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -495,16 +522,26 @@ def _execution_outcome(
     if not completed:
         return "not_applicable", "trigger_absent_complete"
     if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
+        if source_technical:
+            return "technical_error", "source_query_error"
         return "data_gap", "linkage_unresolved"
     states = tuple(item.execution_state for item in assessments)
     if rule_id == "LX0609-020":
         if "absent" in states:
+            if source_technical:
+                return "technical_error", "source_query_error"
+            if source_incomplete:
+                return "data_gap", "linkage_unresolved"
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
     if "linked_vague" in states:
         return "non_compliant", "requirement_violated"
     if "linked_specific" in states:
         return "compliant", "requirement_satisfied"
+    if source_technical:
+        return "technical_error", "source_query_error"
+    if source_incomplete:
+        return "data_gap", "linkage_unresolved"
     return "not_applicable", "trigger_absent_complete"
 
 
@@ -634,6 +671,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
+    execution_source_incomplete = False
+    execution_source_technical = False
     stage_two_rule_ids = tuple(
         rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
     )
@@ -654,23 +693,33 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("not_applicable", "trigger_absent_complete")
             elif completed:
-                try:
-                    candidates = _candidate_documents(
-                        institute_id=institute_id,
-                        patient_id=patient_id,
-                        visit_id=visit_id,
-                        source_schema=source_schema,
-                        evidence_materials=evidence_materials,
-                        evidence_snapshot=evidence_snapshot,
-                    )
-                    second_prompt, allowed_refs = _execution_prompt(completed=completed, candidates=candidates)
-                except _SourceGap:
-                    for rule_id in stage_two_rule_ids:
-                        statuses[rule_id] = ("data_gap", "linkage_unresolved")
-                except _SourceTechnical:
-                    for rule_id in stage_two_rule_ids:
-                        statuses[rule_id] = ("technical_error", "source_query_error")
+                projection = _candidate_documents(
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                    evidence_materials=evidence_materials,
+                    evidence_snapshot=evidence_snapshot,
+                )
+                execution_source_incomplete = projection.source_incomplete
+                execution_source_technical = projection.source_technical
+                if not projection.candidates:
+                    if execution_source_technical:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = ("technical_error", "source_query_error")
+                    elif execution_source_incomplete:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = ("data_gap", "linkage_unresolved")
+                    else:
+                        execution_assessments = tuple(
+                            _ExecutionAssessment(item.episode_ref, "absent", (), "high")
+                            for item, _, _ in completed
+                        )
                 else:
+                    second_prompt, allowed_refs = _execution_prompt(
+                        completed=completed,
+                        candidates=projection.candidates,
+                    )
                     calls += 1
                     try:
                         started = time.perf_counter()
@@ -686,8 +735,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             _payload(response), completed=completed, allowed_refs=allowed_refs,
                         )
                     except _SemanticInvalid:
+                        status = "technical_error" if execution_source_technical else "data_gap"
+                        reason = "source_query_error" if execution_source_technical else "linkage_unresolved"
                         for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = ("data_gap", "linkage_unresolved")
+                            statuses[rule_id] = (status, reason)
                     except Exception:
                         for rule_id in stage_two_rule_ids:
                             statuses[rule_id] = ("technical_error", "model_transport_error")
@@ -697,7 +748,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         if execution_assessments is not None:
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
-                    rule_id, episodes=episodes, assessments=execution_assessments,
+                    rule_id,
+                    episodes=episodes,
+                    assessments=execution_assessments,
+                    source_incomplete=execution_source_incomplete,
+                    source_technical=execution_source_technical,
                 )
     results = []
     for rule_id in selected:
