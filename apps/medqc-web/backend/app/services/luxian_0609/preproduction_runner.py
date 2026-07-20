@@ -131,6 +131,24 @@ _PRIVATE_VALUE_KEY_PARTS = (
     "raw_response",
     "llm_raw_output",
 )
+_PUBLIC_DURATION_KEYS = frozenset(
+    {
+        "elapsed_ms",
+        "wall_time_ms",
+        "api_time",
+        "total_api_time",
+    }
+)
+_PUBLIC_DATETIME_EXACT_KEYS = frozenset(
+    {
+        "record_time",
+        "executed_at",
+        "created_at",
+        "updated_at",
+        "occurred_at",
+    }
+)
+_PUBLIC_DATETIME_SUFFIXES = ("_time", "_date", "_datetime", "_timestamp")
 _MIN_PRIVATE_FRAGMENT_CHARS = 12
 
 
@@ -210,6 +228,17 @@ def _safe_string(value: Any, *, private_terms: set[str]) -> str:
     return text
 
 
+def _is_public_datetime_field(key: str, value: Any) -> bool:
+    """公开旁路不得返回原始日期/时间字段，纯数值性能指标例外。"""
+    normalized_key = str(key or "").strip().lower()
+    if normalized_key in _PUBLIC_DURATION_KEYS and isinstance(value, (int, float)):
+        return False
+    return (
+        normalized_key in _PUBLIC_DATETIME_EXACT_KEYS
+        or normalized_key.endswith(_PUBLIC_DATETIME_SUFFIXES)
+    )
+
+
 def _sanitize_metadata(value: Any, *, private_terms: set[str]) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
@@ -238,6 +267,8 @@ def _sanitize_public_value(value: Any, *, private_terms: set[str]) -> Any:
             key = str(raw_key or "")
             normalized_key = key.strip().lower()
             if any(part in normalized_key for part in _PRIVATE_KEY_PARTS):
+                continue
+            if _is_public_datetime_field(key, item):
                 continue
             safe[key] = _sanitize_public_value(item, private_terms=private_terms)
         return safe
@@ -296,7 +327,9 @@ def _contract_maturity() -> dict[str, int]:
     }
 
 
-def _technical_results(rule_ids: tuple[str, ...]) -> list[dict[str, Any]]:
+def _technical_results(
+    rule_ids: tuple[str, ...], *, reason_code: str
+) -> list[dict[str, Any]]:
     return [
         {
             "rule_id": rule_id,
@@ -308,7 +341,7 @@ def _technical_results(rule_ids: tuple[str, ...]) -> list[dict[str, Any]]:
             "suggestion": "请稍后重试或回退旧引擎。",
             "metadata": {
                 "execution_source": "lx0609_preproduction",
-                "reason_code": "preproduction_runner_failed",
+                "reason_code": reason_code,
                 "customer_rule_id": rule_id,
             },
         }
@@ -379,6 +412,11 @@ def _build_evidence_attestations(
         if not isinstance(raw_fact_refs, (list, tuple)):
             raise ValueError("invalid decision trace")
         fact_refs = tuple(sorted(str(item or "").strip().lower() for item in raw_fact_refs))
+        public_result_state = str(
+            result_by_rule[rule_id].get("status") or ""
+        ).strip().lower()
+        if public_result_state == "uncertain":
+            public_result_state = "evaluation_unknown"
         if (
             rule_id not in expected_traced_ids
             or rule_id in traced_by_rule
@@ -389,8 +427,7 @@ def _build_evidence_attestations(
             or not _VERSION_RE.fullmatch(evaluator_version)
             or observed_state not in _OBSERVED_STATES
             or not _REASON_CODE_RE.fullmatch(reason_code)
-            or str(result_by_rule[rule_id].get("status") or "").strip().lower()
-            != observed_state
+            or public_result_state != observed_state
         ):
             raise ValueError("invalid decision trace")
         traced_by_rule[rule_id] = (
@@ -502,6 +539,7 @@ async def run_luxian_0609_preproduction(
         "total_api_time": 0.0,
         "executor_breakdown": {},
     }
+    failure_reason_code = "prepare_execution_failed"
     try:
         executable_rules, context = await prepare_luxian_0609_execution(
             rule_set_key=LUXIAN_0609_RULE_SET_KEY,
@@ -517,8 +555,10 @@ async def run_luxian_0609_preproduction(
             evaluation_as_of_date=as_of_date,
             selected_customer_rule_ids=selected,
         )
+        failure_reason_code = "legacy_dispatch_violation"
         if executable_rules:
             raise ValueError("preproduction runner must not dispatch legacy rules")
+        failure_reason_code = "aggregate_results_failed"
         aggregate_luxian_0609_orchestrated_results(
             orchestrated=orchestrated,
             context=context,
@@ -533,13 +573,16 @@ async def run_luxian_0609_preproduction(
             ),
         )
         raw_results = list(orchestrated.get("results") or [])
+        failure_reason_code = "result_scope_validation_failed"
         _validate_result_scope(raw_results, selected_rule_ids=selected)
+        failure_reason_code = "customer_sanitization_failed"
         results = [
             _sanitize_customer_result(item, private_terms=private_terms)
             for item in raw_results
             if isinstance(item, Mapping)
         ]
         if evidence_attestation_sink is not None:
+            failure_reason_code = "evidence_attestation_failed"
             evidence_attestations = _build_evidence_attestations(
                 selected_rule_ids=selected,
                 trace_rows=decision_trace_rows,
@@ -548,7 +591,10 @@ async def run_luxian_0609_preproduction(
             )
             evidence_attestation_sink(evidence_attestations)
     except Exception:
-        results = _technical_results(selected)
+        results = _technical_results(
+            selected,
+            reason_code=failure_reason_code,
+        )
         orchestrated = {
             "total_prompt_tokens": 0,
             "total_completion_tokens": 0,

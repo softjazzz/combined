@@ -105,6 +105,8 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
                                 "evidence_role": "frequency_evidence",
                                 "quote": "证据片段 PRIVATE-DOCUMENT-MA",
                                 "record_time": "2026-07-17 08:30:00",
+                                "observed_timestamp": "2026-07-17T08:30:00+08:00",
+                                "elapsed_ms": 3.5,
                             },
                             {
                                 "source_table": "daily_course_record",
@@ -127,6 +129,11 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
                             "executed_at": "2026-07-17T08:31:00+08:00",
                             "elapsed_ms": 12.5,
                             "technical_status": "success",
+                            "nested": {
+                                "review_date": "2026-07-17",
+                                "wall_time_ms": 7.25,
+                                "api_time": 0.5,
+                            },
                         },
                         "evidence_payload": {"content": "PRIVATE-BODY-MARKER"},
                         "metadata": {
@@ -181,17 +188,18 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
         "field_path": "record_time",
         "evidence_role": "frequency_evidence",
         "quote": "[redacted]",
-        "record_time": "2026-07-17 08:30:00",
+        "elapsed_ms": 3.5,
     }
     assert first["evidence_items"][1]["quote"] == "相邻记录间隔未超过两个自然日。"
-    assert first["evidence_items"][1]["record_time"] == "2026-07-17 09:00:00"
+    assert "record_time" not in first["evidence_items"][1]
     assert first["decision"] == {"decision_summary": "安全判定"}
     assert first["review"] == {"review_status": "not_required"}
     assert first["audit"] == {
-        "executed_at": "2026-07-17T08:31:00+08:00",
         "elapsed_ms": 12.5,
         "technical_status": "success",
+        "nested": {"wall_time_ms": 7.25, "api_time": 0.5},
     }
+    assert "2026-07-17" not in repr(result)
     rendered = repr(result)
     for marker in (
         "PRIVATE-INSTITUTE-MARKER",
@@ -358,6 +366,27 @@ def _attestation_map(*, selected, traces, raw_results, context):
     }
 
 
+def test_evidence_attestation_accepts_public_uncertain_for_internal_unknown():
+    selected, traces, raw_results, context = _attestation_inputs(
+        state="evaluation_unknown",
+        reason_code="semantic_output_unknown",
+    )
+    for result in raw_results:
+        result["status"] = "uncertain"
+
+    attestations = preproduction_runner._build_evidence_attestations(
+        selected_rule_ids=selected,
+        trace_rows=traces,
+        raw_results=raw_results,
+        context=context,
+    )
+
+    assert len(attestations) == len(selected)
+    assert {item["observed_state"] for item in attestations} == {
+        "evaluation_unknown"
+    }
+
+
 def test_evidence_attestation_identity_uses_only_bound_evidence_material():
     selected, traces, raw_results, context = _attestation_inputs()
     baseline = _attestation_map(
@@ -510,7 +539,102 @@ async def test_preproduction_runner_isolates_infrastructure_failure_without_echo
     assert {item["status"] for item in result["results"]} == {"technical_error"}
     assert result["metrics"]["technical_error_count"] == 49
     assert result["metrics"]["llm_call_count"] == 0
+    assert {
+        item["metadata"]["reason_code"] for item in result["results"]
+    } == {"prepare_execution_failed"}
     assert "PRIVATE-EXCEPTION-MARKER" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure_phase", "expected_reason_code"),
+    (
+        ("prepare", "prepare_execution_failed"),
+        ("legacy", "legacy_dispatch_violation"),
+        ("aggregate", "aggregate_results_failed"),
+        ("scope", "result_scope_validation_failed"),
+        ("sanitize", "customer_sanitization_failed"),
+        ("attestation", "evidence_attestation_failed"),
+    ),
+)
+async def test_preproduction_runner_reports_fixed_safe_failure_phase(
+    monkeypatch,
+    failure_phase,
+    expected_reason_code,
+):
+    selected = _all_rule_ids()
+    marker = f"PRIVATE-{failure_phase.upper()}-EXCEPTION-MARKER"
+
+    async def _prepare(**_):
+        if failure_phase == "prepare":
+            raise RuntimeError(marker)
+        if failure_phase == "legacy":
+            return [object()], _FakeContext()
+        return [], _FakeContext()
+
+    def _aggregate(*, orchestrated, **_):
+        if failure_phase == "aggregate":
+            raise RuntimeError(marker)
+        orchestrated["results"] = [
+            {"rule_id": rule_id, "status": "compliant", "metadata": {}}
+            for rule_id in selected
+        ]
+        return orchestrated
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError(marker)
+
+    monkeypatch.setattr(
+        preproduction_runner,
+        "prepare_luxian_0609_execution",
+        _prepare,
+    )
+    monkeypatch.setattr(
+        preproduction_runner,
+        "aggregate_luxian_0609_orchestrated_results",
+        _aggregate,
+    )
+    if failure_phase == "scope":
+        monkeypatch.setattr(
+            preproduction_runner,
+            "_validate_result_scope",
+            _raise,
+        )
+    elif failure_phase == "sanitize":
+        monkeypatch.setattr(
+            preproduction_runner,
+            "_sanitize_customer_result",
+            _raise,
+        )
+    elif failure_phase == "attestation":
+        monkeypatch.setattr(
+            preproduction_runner,
+            "_build_evidence_attestations",
+            _raise,
+        )
+
+    captured_attestations: list[dict] = []
+    result = await preproduction_runner.run_luxian_0609_preproduction(
+        bundle=_bundle(),
+        selected_customer_rule_ids=selected,
+        evaluation_as_of_date="2026-07-17",
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        model_name="model",
+        evidence_attestation_sink=(
+            captured_attestations.extend
+            if failure_phase == "attestation"
+            else None
+        ),
+    )
+
+    assert {item["status"] for item in result["results"]} == {
+        "technical_error"
+    }
+    assert {
+        item["metadata"]["reason_code"] for item in result["results"]
+    } == {expected_reason_code}
+    assert marker not in repr(result)
 
 
 def test_preproduction_runner_does_not_depend_on_router_or_sichuan_service():
