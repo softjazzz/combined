@@ -15,9 +15,9 @@ from .native_basic_timeliness import (
     EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
 )
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
-from .native_consultation_execution import (
-    CONSULTATION_RULE_IDS,
-    EXECUTOR_KEY as CONSULTATION_EXECUTOR_KEY,
+from .native_consultation_episode_execution import (
+    CONSULTATION_EPISODE_RULE_IDS,
+    EXECUTOR_KEY as CONSULTATION_EPISODE_EXECUTOR_KEY,
 )
 from .native_exam_lab_execution import (
     EXAM_LAB_RULE_IDS,
@@ -59,6 +59,12 @@ _VALID_EXECUTION_MODES = frozenset(
 EXECUTOR_COMPATIBILITY = "compatibility"
 EXECUTOR_SURGERY_PRESENCE = "surgery_presence"
 EXECUTOR_SURGERY_MDT = "surgery_mdt"
+_CONSULTATION_FAMILY_RULE_IDS = (
+    "LX0609-020",
+    "LX0609-021",
+    "LX0609-022",
+    "LX0609-023",
+)
 
 
 def _normalize_rule_id(value: Any) -> str:
@@ -178,9 +184,9 @@ def build_luxian_0609_dependency_inventory(
         elif rule_id in EXAM_LAB_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXAM_LAB_EXECUTOR_KEY
-        elif rule_id in CONSULTATION_RULE_IDS:
+        elif rule_id in _CONSULTATION_FAMILY_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
-            executor_key = CONSULTATION_EXECUTOR_KEY
+            executor_key = CONSULTATION_EPISODE_EXECUTOR_KEY
         elif rule_id in TRANSFUSION_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = TRANSFUSION_EXECUTOR_KEY
@@ -283,8 +289,9 @@ def build_luxian_0609_package_plan(
         and (
             (item.executor_key == EXAM_LAB_EXECUTOR_KEY and native_exam_lab_enabled)
             or (
-                item.executor_key == CONSULTATION_EXECUTOR_KEY
+                item.executor_key == CONSULTATION_EPISODE_EXECUTOR_KEY
                 and native_consultation_enabled
+                and item.rule_id in CONSULTATION_EPISODE_RULE_IDS
                 and item.rule_id != "LX0609-020"
             )
             or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
@@ -307,7 +314,7 @@ def build_luxian_0609_package_plan(
             or (
                 item.executor_key not in {
                     EXAM_LAB_EXECUTOR_KEY,
-                    CONSULTATION_EXECUTOR_KEY,
+                    CONSULTATION_EPISODE_EXECUTOR_KEY,
                     TRANSFUSION_EXECUTOR_KEY,
                     TUMOR_PATHOLOGY_EXECUTOR_KEY,
                     COURSE_QUALITY_EXECUTOR_KEY,

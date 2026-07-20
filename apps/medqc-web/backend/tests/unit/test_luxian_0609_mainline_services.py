@@ -29,8 +29,8 @@ from app.services.luxian_0609.decision_model import (
     RuleDecision,
 )
 from app.services.luxian_0609.native_execution import NativeExecutionResult
-from app.services.luxian_0609.native_consultation_021_023_execution import (
-    NativeConsultationExecutionResult,
+from app.services.luxian_0609.native_consultation_episode_execution import (
+    NativeConsultationEpisodeExecutionResult,
 )
 from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.evidence_snapshot import (
@@ -1024,10 +1024,10 @@ async def test_transfusion_rule_decision_flag_off_preserves_raw_result_contract(
 
 
 @pytest.mark.asyncio
-async def test_consultation_021_023_typed_decisions_replace_raw_results(
+async def test_consultation_episode_typed_decisions_replace_raw_results(
     monkeypatch,
 ) -> None:
-    selected = ("LX0609-021", "LX0609-022", "LX0609-023")
+    selected = ("LX0609-021", "LX0609-022")
     package_plan = Luxian0609PackagePlan(
         selected_rule_ids=selected,
         native_sync_rule_ids=(),
@@ -1099,7 +1099,6 @@ async def test_consultation_021_023_typed_decisions_replace_raw_results(
     assert context.native_results == []
     assert [item.rule_id for item in context.reduced_decisions] == list(selected)
     assert [item.final_state.value for item in context.reduced_decisions] == [
-        "not_applicable",
         "not_applicable",
         "not_applicable",
     ]
@@ -1445,7 +1444,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
-async def test_public_entry_keeps_020_compatibility_and_48_native_rules(monkeypatch):
+async def test_public_entry_keeps_020_023_compatibility_and_47_native_rules(monkeypatch):
     selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
     captured: dict[str, object] = {}
 
@@ -1491,9 +1490,9 @@ async def test_public_entry_keeps_020_compatibility_and_48_native_rules(monkeypa
     service = SichuanQCService()
 
     def _legacy_lookup(rule_id):
-        if rule_id in {"LX-017", "CL-250"}:
+        if rule_id in {"LX-017", "CL-250", "CL-248", "CL-071"}:
             return {"rule_id": rule_id, "rule_name": rule_id}
-        raise AssertionError(f"除020兼容映射外不应加载旧规则: {rule_id}")
+        raise AssertionError(f"除020/023兼容映射外不应加载旧规则: {rule_id}")
 
     monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
 
@@ -1510,7 +1509,7 @@ async def test_public_entry_keeps_020_compatibility_and_48_native_rules(monkeypa
     )
 
     assert captured == {
-        "prepared_rule_ids": ["LX-017", "CL-250"],
+        "prepared_rule_ids": ["LX-017", "CL-250", "CL-248", "CL-071"],
         "selected_customer_rule_ids": tuple(selected),
     }
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
@@ -1594,9 +1593,9 @@ async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_
         "get_rule_by_id",
         lambda rule_id: (
             {"rule_id": rule_id, "rule_name": rule_id}
-            if rule_id in {"LX-017", "CL-250"}
+            if rule_id in {"LX-017", "CL-250", "CL-248", "CL-071"}
             else (_ for _ in ()).throw(
-                AssertionError(f"除020兼容映射外不得加载旧规则: {rule_id}")
+                AssertionError(f"除020/023兼容映射外不得加载旧规则: {rule_id}")
             )
         ),
     )
@@ -2015,7 +2014,7 @@ async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_r
 
 
 @pytest.mark.asyncio
-async def test_native_consultation_public_entry_keeps_020_legacy_and_runs_021_023_natively(monkeypatch):
+async def test_native_consultation_public_entry_keeps_020_023_legacy_and_runs_021_022_natively(monkeypatch):
     wrappers = [
         _wrapper(
             "LX0609-020",
@@ -2076,7 +2075,7 @@ async def test_native_consultation_public_entry_keeps_020_legacy_and_runs_021_02
 
     async def _consultation(**kwargs):
         consultation_calls.append(tuple(kwargs["rule_ids"]))
-        return NativeConsultationExecutionResult(
+        return NativeConsultationEpisodeExecutionResult(
             results=tuple(
                 {
                     "rule_id": rule_id,
@@ -2107,7 +2106,7 @@ async def test_native_consultation_public_entry_keeps_020_legacy_and_runs_021_02
     monkeypatch.setattr(luxian_execution, "load_luxian_0609_rules", lambda: wrappers)
     monkeypatch.setattr(
         luxian_execution,
-        "execute_luxian_0609_native_consultation_021_023_rules",
+        "execute_luxian_0609_native_consultation_episode_rules",
         _consultation,
     )
     service = SichuanQCService()
@@ -2132,8 +2131,8 @@ async def test_native_consultation_public_entry_keeps_020_legacy_and_runs_021_02
         use_execution_cache=False,
     )
 
-    assert dispatched == [["LX-017", "CL-250"]]
-    assert consultation_calls == [("LX0609-021", "LX0609-022", "LX0609-023")]
+    assert dispatched == [["LX-017", "CL-250", "CL-248", "CL-071"]]
+    assert consultation_calls == [("LX0609-021", "LX0609-022")]
     assert [item["rule_id"] for item in result["evaluation_results"]] == [
         "LX0609-020",
         "LX0609-021",

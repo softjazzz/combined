@@ -41,9 +41,9 @@ from .native_basic_timeliness import (
     EXECUTOR_KEY as BASIC_TIMELINESS_EXECUTOR_KEY,
     execute_luxian_0609_native_basic_timeliness,
 )
-from .native_consultation_021_023_execution import (
+from .native_consultation_episode_execution import (
     EXECUTOR_KEY as CONSULTATION_EXECUTOR_KEY,
-    execute_luxian_0609_native_consultation_021_023_rules,
+    execute_luxian_0609_native_consultation_episode_rules,
 )
 from .native_exam_lab_execution import (
     EXECUTOR_KEY as EXAM_LAB_EXECUTOR_KEY,
@@ -508,7 +508,7 @@ async def prepare_luxian_0609_execution(
             surgery_presence=execute_luxian_0609_native_rules,
             basic_timeliness=execute_luxian_0609_native_basic_timeliness,
             exam_lab=execute_luxian_0609_native_exam_lab_rules,
-            consultation_quality=execute_luxian_0609_native_consultation_021_023_rules,
+            consultation_quality=execute_luxian_0609_native_consultation_episode_rules,
             transfusion=execute_luxian_0609_native_transfusion_rules,
             tumor_pathology=execute_luxian_0609_native_tumor_pathology_rules,
             course_quality=execute_luxian_0609_native_course_quality_rules,
@@ -649,7 +649,7 @@ async def prepare_luxian_0609_execution(
         CONSULTATION_EXECUTOR_KEY
     )
     if consultation_rule_ids and not unified_engine_used:
-        consultation_execution = await execute_luxian_0609_native_consultation_021_023_rules(
+        consultation_execution = await execute_luxian_0609_native_consultation_episode_rules(
             rule_ids=consultation_rule_ids,
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
