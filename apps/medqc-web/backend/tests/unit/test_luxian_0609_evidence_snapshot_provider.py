@@ -924,6 +924,7 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
             "order_name": "下病危医嘱",
             "order_id": f"order-{index}",
             "prescribed_datetime": "2026-01-01 23:59:59",
+            "order_status": "新开",
         }
         for index in range(51)
     ] + [
@@ -931,6 +932,7 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
             "order_name": "解除病危",
             "order_id": "private-stop-order",
             "prescribed_datetime": "2026-01-02 00:00:00",
+            "order_status": "停止",
         }
     ]
     connection = _FakeConnection(rows)
@@ -955,6 +957,7 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
                 "order_name",
                 "order_id",
                 "prescribed_datetime",
+                "order_status",
             ]
             if source_key == "inpat_nondrug_order"
             else []
@@ -981,6 +984,7 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
     sql, params = connection.calls[0]
     assert 'FROM "cdm"."inpat_nondrug_order"' in sql
     assert '"order_name" LIKE :critical_name' in sql
+    assert '"order_status"' in sql
     assert '"order_name" NOT LIKE :relieve_name' in sql
     assert '"order_name" NOT LIKE :halt_critical_name' in sql
     assert "private-institute" not in sql
@@ -1004,6 +1008,7 @@ def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
                 "order_name": order_name,
                 "order_id": "private-order",
                 "prescribed_datetime": "2026-01-01 08:00:00",
+                "order_status": "新开",
             }
         ]
     )
@@ -1027,6 +1032,7 @@ def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
             "order_name",
             "order_id",
             "prescribed_datetime",
+            "order_status",
         ],
     )
 
@@ -1040,6 +1046,157 @@ def test_severity_order_reader_does_not_treat_negative_order_as_open_order(
 
     assert result.rows == ()
     assert result.truncated is False
+
+
+@pytest.mark.parametrize("order_status", ["新开", "执行中", "停止"])
+def test_severity_order_reader_accepts_only_audited_effective_statuses_without_echo(
+    monkeypatch,
+    order_status: str,
+) -> None:
+    connection = _FakeConnection(
+        [
+            {
+                "order_name": "下病危医嘱",
+                "order_id": "private-order",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "order_status": order_status,
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_name",
+            "order_id",
+            "prescribed_datetime",
+            "order_status",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+
+    assert result.rows[0]["severity"] == "critical"
+    assert result.rows[0]["status_state"] == "effective"
+    assert result.rows[0]["row_ref"] == source_evidence_reader.digest_source_evidence(
+        (
+            CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+            "private-order",
+            "critical",
+            "effective",
+            order_status,
+            "2026-01-01 08:00:00",
+        )
+    )
+    assert order_status not in repr(result)
+
+
+@pytest.mark.parametrize("order_status", ["取消", "撤销", "作废"])
+def test_severity_order_reader_excludes_initially_cancelled_status(
+    monkeypatch,
+    order_status: str | None,
+) -> None:
+    connection = _FakeConnection(
+        [
+            {
+                "order_name": "下病重医嘱",
+                "order_id": "private-order",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "order_status": order_status,
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "order_name",
+            "order_id",
+            "prescribed_datetime",
+            "order_status",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+
+    assert result.rows[0]["status_state"] == "excluded"
+    assert order_status not in repr(result)
+
+
+@pytest.mark.parametrize("order_status", ["未知", None, ""])
+def test_severity_order_reader_marks_unknown_initial_status_unresolved(
+    monkeypatch,
+    order_status: str | None,
+) -> None:
+    connection = _FakeConnection(
+        [
+            {
+                "order_name": "下病重医嘱",
+                "order_id": "private-order",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "order_status": order_status,
+            }
+        ]
+    )
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "engine", _FakeEngine(connection))
+    monkeypatch.setattr(source_evidence_reader.bundle_assembly, "_default_source_schema", lambda: "cdm")
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, _source: [
+            "institute_id", "patient_id", "visit_id", "order_name", "order_id",
+            "prescribed_datetime", "order_status",
+        ],
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+    )
+
+    assert result.rows[0]["status_state"] == "unresolved"
+    assert not order_status or order_status not in repr(result)
 
 
 class _FakeEngine:

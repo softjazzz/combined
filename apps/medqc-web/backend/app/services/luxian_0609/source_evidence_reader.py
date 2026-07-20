@@ -30,6 +30,8 @@ _SEVERITY_ORDER_NEGATIVE_MARKERS = (
     "停病危",
     "停病重",
 )
+_EFFECTIVE_SEVERITY_ORDER_STATUSES = frozenset(("新开", "执行中", "停止"))
+_EXCLUDED_SEVERITY_ORDER_STATUSES = frozenset(("取消", "撤销", "作废"))
 _RESCUE_END_TIME_PATTERN = re.compile(
     r"(?:^|[\n\r；;])\s*抢救结束时间\s*[:：]\s*(?P<value>"
     r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
@@ -626,13 +628,19 @@ def read_luxian_0609_severity_order_rows(
         columns = set(bundle_assembly._get_table_columns(trusted_schema, source_key))
     except Exception:
         raise SourceEvidenceQueryError() from None
-    required = {"institute_id", "patient_id", "visit_id", "order_name"}
+    required = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "order_name",
+        "order_status",
+    }
     if not required.issubset(columns):
         raise SourceEvidenceUnavailable()
     selected = ["order_name"]
     selected.extend(
         field
-        for field in ("order_id", "prescribed_datetime")
+        for field in ("order_id", "prescribed_datetime", "order_status")
         if field in columns
     )
     select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
@@ -690,15 +698,31 @@ def read_luxian_0609_severity_order_rows(
             if has_critical and not has_serious
             else "serious" if has_serious and not has_critical else "unknown"
         )
+        # 停止状态表示该次医嘱曾有效，不作为评价区间终点。初始取消、撤销、
+        # 作废行不产生触发；空值及未审计状态则保守保留为 unresolved，交由
+        # 008/009 映射为 data_gap，避免把未知状态伪装成无医嘱。
+        order_status = row.get("order_status")
+        normalized_status = (
+            order_status.strip() if isinstance(order_status, str) else ""
+        )
+        if normalized_status in _EFFECTIVE_SEVERITY_ORDER_STATUSES:
+            status_state = "effective"
+        elif normalized_status in _EXCLUDED_SEVERITY_ORDER_STATUSES:
+            status_state = "excluded"
+        else:
+            status_state = "unresolved"
         safe_rows.append(
             {
                 "severity": severity,
+                "status_state": status_state,
                 "prescribed_datetime": row.get("prescribed_datetime"),
                 "row_ref": digest_source_evidence(
                     (
                         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
                         row.get("order_id"),
                         severity,
+                        status_state,
+                        order_status,
                         row.get("prescribed_datetime"),
                     )
                 ),
