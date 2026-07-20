@@ -126,6 +126,20 @@ def test_episode_prompt_treats_one_sentence_reason_and_recommendation_as_clear()
     assert "会诊原因、临床问题或请求专科建议" in prompt
     assert "处理或诊疗建议" in prompt
     assert "纯“请会诊”或“遵会诊意见”" in prompt
+    assert "application_state必须为absent且application_refs为空" in prompt
+    assert "同一输入ref不得被拆入多个episode" in prompt
+
+
+@pytest.mark.asyncio
+async def test_opinion_only_document_is_application_absent_and_021_not_applicable(monkeypatch):
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("明确专科处理意见"))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=_Client(_payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"], application="absent",
+        )])),
+    )
+    assert [item["status"] for item in result.results] == ["not_applicable", "compliant"]
 
 
 @pytest.mark.asyncio
@@ -306,6 +320,26 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
     )
     assert tuple(item["status"] for item in result.results) == expected
     assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("意见：使用康复排痰设备"),
+        "daily_course_record": _rows("仅给予祛痰药治疗"),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert "措施不同，必须为absent" in client.prompts[1]
 
 
 @pytest.mark.asyncio

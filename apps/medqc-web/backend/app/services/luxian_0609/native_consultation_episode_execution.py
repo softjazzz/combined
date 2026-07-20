@@ -322,7 +322,11 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "明确写出会诊原因、临床问题或请求专科建议，即使只有一句，也属于application_state=clear；"
         "明确给出处理或诊疗建议，即使只有一句，也属于opinion_state=clear；"
         "只有纯“请会诊”或“遵会诊意见”且没有具体内容时才为vague。"
+        "文书只含明确会诊意见、没有申请目的或请求时，application_state必须为absent且application_refs为空；"
+        "只含明确申请目的、没有会诊意见时，opinion_state必须为absent且opinion_refs为空。"
+        "missing只用于角色明确存在但内容空或模板，vague只用于角色存在但内容泛化。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
+        "同一输入ref不得被拆入多个episode。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
         "每个episode还必须给出application_refs和opinion_refs，二者只能引用本episode.member_refs；"
         "申请或意见为clear时对应refs不得为空。"
@@ -442,9 +446,13 @@ def _execution_prompt(
     prompt = (
         "你只判断每个已完成会诊意见与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
         "同一执行文书可同时落实多个episode，禁止要求唯一归属。"
+        "linked_specific只在候选明确落实同一条意见的具体措施，或直接点名该会诊意见且包含明确措施时使用。"
+        "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
+        "仅治疗同一症状、部位或一般治疗但措施不同，必须为absent，不能关联。"
         "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
         "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
         "execution_refs只能引用该episode输入candidate_documents中的ref；absent或unknown必须返回空数组。"
+        "每个输入episode_ref恰好输出一项，禁止重复。"
         "严格输出JSON：{executions:[{episode_ref,execution_state,execution_refs,confidence}]}。输入："
         + payload
     )
