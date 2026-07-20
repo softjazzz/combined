@@ -892,40 +892,58 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     if event is None:
                         emit_typed(rule_id, "not_applicable", "exam_lab_target_event_absent")
                         typed_processed.add(rule_id)
+                    elif event.target_explicitly_absent:
+                        # 单事件口径下，腹超/血常规这类可验证的非目标项目可直接
+                        # 排除；类型含混的候选仍保留给一次受控 LLM，不能混为阴性。
+                        emit_typed(rule_id, "not_applicable", "exam_lab_target_event_absent")
+                        typed_processed.add(rule_id)
+                    elif "event_binding" in event.conflict_roles:
+                        emit_typed(rule_id, "data_gap", "multiple_event_or_time_conflict")
+                        typed_processed.add(rule_id)
+                    elif not event.target_confirmed and not event.readable_text:
+                        emit_typed(rule_id, "data_gap", "exam_lab_candidate_text_missing")
+                        typed_processed.add(rule_id)
+                    elif event.target_confirmed and (
+                        (
+                            rule_id == "LX0609-010"
+                            and (
+                                "exam_time" in event.conflict_roles
+                                or event.exam_time is None
+                            )
+                        )
+                        or (
+                            rule_id != "LX0609-010"
+                            and (
+                                "report_time" in event.conflict_roles
+                                or event.report_time is None
+                            )
+                        )
+                    ):
+                        # 时间窗只能由受控字段计算；模型不能补造或推断时间。
+                        emit_typed(rule_id, "data_gap", "authoritative_time_missing")
+                        typed_processed.add(rule_id)
+                    elif projection.course_projection_truncated:
+                        emit_typed(rule_id, "data_gap", "course_projection_incomplete")
+                        typed_processed.add(rule_id)
                     else:
                         semantic_rule_ids.append(rule_id)
                 eligible_rule_ids = semantic_rule_ids
             if not eligible_rule_ids:
                 projection = None
-            if eligible_rule_ids and projection is not None:
-                unresolved: list[str] = []
-                for rule_id in eligible_rule_ids:
-                    fact = _strong_semantic_fact(
-                        rule_id=rule_id,
-                        projection=projection,
-                    )
-                    if fact is None:
-                        unresolved.append(rule_id)
-                        continue
-                    outcome = _text_fact_outcome(
-                        rule_id=rule_id,
-                        facts=(fact,),
-                        projection=projection,
-                    )
-                    emit_typed(
-                        rule_id,
-                        outcome.status,
-                        outcome.reason_code,
-                        outcome.fact_refs,
-                    )
-                    typed_processed.add(rule_id)
-                eligible_rule_ids = unresolved
             if (
                 eligible_rule_ids
                 and projection is not None
                 and not projection.course_times
                 and not projection.course_time_incomplete
                 and not projection.course_projection_truncated
+                and all(
+                    (
+                        projection.imaging_event
+                        if rule_id in EXAM_RULE_IDS
+                        else projection.culture_event
+                    ).target_confirmed
+                    for rule_id in eligible_rule_ids
+                )
             ):
                 # 来源完整且确实没有任何相关病程时，010/011/014 的“未记录”
                 # 可由 Python 直接确定；012/015 仅接受事件结果中的强阳性/阴性

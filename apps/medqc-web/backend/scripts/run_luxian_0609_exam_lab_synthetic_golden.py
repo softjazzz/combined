@@ -28,6 +28,10 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.exam_lab_fact_extraction import (
+    build_exam_lab_text_projection,
+    parse_exam_lab_fact_response,
+)
 from app.services.luxian_0609.native_exam_lab_execution import (
     EXAM_LAB_RULE_IDS,
     execute_luxian_0609_native_exam_lab_rules,
@@ -44,6 +48,18 @@ class Scenario:
     culture_rows: tuple[Mapping[str, Any], ...] = ()
     course_rows: tuple[Mapping[str, Any], ...] = ()
     discharge_datetime: str = "2026-04-30 12:00:00"
+
+
+class _CapturingLLMClient:
+    """只在本次合成 Golden 内保留响应，最终仅报告安全枚举。"""
+
+    def __init__(self, delegate: SichuanQCLLMClient) -> None:
+        self._delegate = delegate
+        self.response: Mapping[str, Any] | None = None
+
+    async def generate(self, prompt: str) -> dict[str, Any]:
+        self.response = await self._delegate.generate(prompt)
+        return dict(self.response)
 
 
 _POSITIVE_EXAM = {
@@ -69,6 +85,7 @@ SCENARIOS = (
     Scenario(
         "golden-01-all-compliant",
         ("compliant",) * 5,
+        expected_llm_calls=1,
         exam_rows=(_POSITIVE_EXAM,),
         culture_rows=(_POSITIVE_CULTURE,),
         course_rows=(
@@ -92,6 +109,7 @@ SCENARIOS = (
     Scenario(
         "golden-03-exact-24h",
         ("compliant",) * 5,
+        expected_llm_calls=1,
         exam_rows=(_POSITIVE_EXAM,),
         culture_rows=(_POSITIVE_CULTURE,),
         course_rows=(
@@ -114,6 +132,7 @@ SCENARIOS = (
             "non_compliant",
             "non_compliant",
         ),
+        expected_llm_calls=1,
         exam_rows=(_POSITIVE_EXAM,),
         culture_rows=(_POSITIVE_CULTURE,),
         course_rows=(
@@ -130,6 +149,7 @@ SCENARIOS = (
     Scenario(
         "golden-05-negative-results",
         ("compliant", "compliant", "not_applicable", "compliant", "not_applicable"),
+        expected_llm_calls=1,
         exam_rows=({
             **_POSITIVE_EXAM,
             "exam_conclusion": "胸部CT未见明显异常。",
@@ -221,10 +241,56 @@ def _session_for(scenario: Scenario):
     )
 
 
+def _safe_parsed_fact_states(
+    *,
+    scenario: Scenario,
+    response: Mapping[str, Any] | None,
+) -> tuple[tuple[str, str, str, str, int], ...] | tuple[()]:
+    """诊断 parse/reducer 边界；绝不输出正文、提示词或模型响应。"""
+    if response is None:
+        return ()
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": scenario.exam_rows,
+            "exam_item_report": (),
+            "labtest_master": scenario.culture_rows,
+            "labtest_item_report": (),
+            "first_course_record": (),
+            "daily_course_record": scenario.course_rows,
+            "senior_course_record": (),
+            "rescue_record": (),
+            "inpat_registration.discharge_horizon": ({
+                "discharge_datetime": scenario.discharge_datetime,
+            },),
+        }
+    )
+    try:
+        facts = parse_exam_lab_fact_response(
+            response=response,
+            selected_rule_ids=EXAM_LAB_RULE_IDS,
+            projection=projection,
+        )
+    except ValueError:
+        return (("parse_error", "", "", "", 0),)
+    return tuple(
+        (
+            fact.rule_id,
+            fact.applicability,
+            fact.semantic_state,
+            fact.positive_state,
+            len(fact.course_doc_refs),
+        )
+        for fact in facts
+    )
+
+
 async def _run() -> dict[str, Any]:
-    client = SichuanQCLLMClient(build_adjudicator_runtime_config())
+    client = _CapturingLLMClient(
+        SichuanQCLLMClient(build_adjudicator_runtime_config())
+    )
     rows: list[dict[str, Any]] = []
     for scenario in SCENARIOS:
+        client.response = None
         session = _session_for(scenario)
         started = perf_counter()
         result = await execute_luxian_0609_native_exam_lab_rules(
@@ -268,6 +334,10 @@ async def _run() -> dict[str, Any]:
             "total_tokens": int(result.total_tokens),
             "elapsed_ms": round((perf_counter() - started) * 1000, 2),
             "privacy_safe": privacy_safe,
+            "parsed_fact_states": _safe_parsed_fact_states(
+                scenario=scenario,
+                response=client.response,
+            ),
         })
     return {
         "schema_version": "lx0609-exam-lab-single-event-golden-v1",

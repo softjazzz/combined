@@ -1252,7 +1252,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_explicit_report_and_culture_action_phrases_are_zero_model(monkeypatch):
+async def test_explicit_report_and_culture_action_phrases_use_one_controlled_fact_call(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({
@@ -1274,7 +1274,7 @@ async def test_explicit_report_and_culture_action_phrases_are_zero_model(monkeyp
             ),
         },),
     )
-    client = _Client([])
+    client = _Client([_fact_response(("LX0609-011", "LX0609-014", "LX0609-015"))])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-011", "LX0609-014", "LX0609-015"),
@@ -1295,9 +1295,9 @@ async def test_explicit_report_and_culture_action_phrases_are_zero_model(monkeyp
         "satisfied",
         "satisfied",
     ]
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
 
 
 def test_pending_or_conditional_report_phrases_are_not_strong_evidence():
@@ -1340,19 +1340,14 @@ def test_pending_or_conditional_report_phrases_are_not_strong_evidence():
 
 
 @pytest.mark.asyncio
-async def test_typed_generic_non_target_rows_are_not_applicable_without_model(monkeypatch):
+async def test_typed_explicit_non_target_rows_are_not_applicable_without_model(monkeypatch):
+    """腹超/血常规是可验证的非目标事件，不应浪费一次模型调用。"""
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({"exam_type": "普通超声"},),
         culture_rows=({"test_type": "血常规"},),
     )
-    client = _Client([
-        _fact_response(
-            exam_lab.EXAM_LAB_RULE_IDS,
-            applicability="not_applicable",
-            semantic_state="unknown",
-        )
-    ])
+    client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
@@ -1369,6 +1364,140 @@ async def test_typed_generic_non_target_rows_are_not_applicable_without_model(mo
     ] * 5
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event():
+    """模型不得把最终 unknown 骨架当作逐规则的默认答案。"""
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({
+                "exam_name": "胸部CT",
+                "exam_time": "2026-04-26 08:00:00",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "右肺占位。",
+            },),
+            "labtest_master": ({
+                "labtest_subject": "血培养及药敏",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "培养阳性，药敏结果已报告。",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "已记录影像报告和培养结果，并根据药敏调整治疗。",
+            },),
+        }
+    )
+
+    prompt = build_exam_lab_fact_prompt(
+        selected_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        projection=projection,
+    )
+
+    assert "逐规则决策表" in prompt
+    assert "unknown 不是默认答案" in prompt
+    assert "最小有效引用示例" in prompt
+    assert '"D06-01"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_typed_generic_rows_with_readable_text_use_one_fact_call_and_stay_data_gap(
+    monkeypatch,
+):
+    """泛检查/检验行不是可靠阴性，必须让一次受控事实抽取保留未知。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({"exam_name": "影像检查待明确", "record_content": "检查资料未标明类型"},),
+        culture_rows=({"labtest_subject": "微生物检验待明确", "record_content": "检验资料未标明项目"},),
+    )
+    client = _Client([
+        _fact_response(
+            exam_lab.EXAM_LAB_RULE_IDS,
+            applicability="unknown",
+            semantic_state="unknown",
+        )
+    ])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+    )
+
+    assert [item.evidence_state.value for item in result.decisions] == ["data_gap"] * 5
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "检查资料未标明类型" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_text_first_synthetic_missing_ct_reason_is_non_compliant_after_one_call(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_name": "胸部CT",
+            "exam_time": "2026-04-26 08:00:00",
+            "report_time": "2026-04-26 12:00:00",
+            "exam_conclusion": "检查已完成。",
+        },),
+        course_rows=({
+            "record_time": "2026-04-26 07:00:00",
+            "record_content": "常规病程记录，未说明检查原因。",
+        },),
+    )
+    client = _Client([_fact_response(("LX0609-010",), semantic_state="absent")])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-010",),
+        wrapper_rules=[_wrapper("LX0609-010")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-010",),
+    )
+
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_text_first_synthetic_positive_culture_missing_record_or_action_is_non_compliant(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=({
+            "labtest_subject": "血培养及药敏",
+            "report_time": "2026-04-26 12:00:00",
+            "result": "培养阳性，药敏结果已报告。",
+        },),
+        course_rows=({
+            "record_time": "2026-04-26 13:00:00",
+            "record_content": "常规病程记录，未记录培养结果或处理。",
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
+    )
+    response = _fact_response(("LX0609-014", "LX0609-015"), semantic_state="absent")
+    client = _Client([response])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-014", "LX0609-015"),
+        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-014", "LX0609-015"),
+    )
+
+    assert [item.qc_direction.value for item in result.decisions] == ["defect", "defect"]
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
