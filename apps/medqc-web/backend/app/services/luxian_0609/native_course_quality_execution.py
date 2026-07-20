@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 import json
@@ -97,6 +97,8 @@ _MAX_CONTEXT_CHARS = 18000
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
+_COPY_AUTO_NONCOMPLIANT_MIN = 0.95
+_COPY_STRONG_COVERAGE_MIN = 0.90
 # 017 仅允许排除这一组人工确认的通用模板壳。归一后仍有任何字符，
 # 都必须保留为病历特异内容，不能豁免复制判定。
 _COPY_TEMPLATE_SHELL_PHRASES = (
@@ -1475,6 +1477,15 @@ def _is_copy_template_shell(normalized_content: str) -> bool:
     return not remaining
 
 
+def _material_for_copy_coverage(normalized_content: str) -> str:
+    """从相似度中排除已确认的模板壳，避免模板重复掩盖实质变化。"""
+
+    remaining = normalized_content
+    for phrase in _COPY_TEMPLATE_SHELL_PHRASES:
+        remaining = remaining.replace(phrase, "")
+    return remaining
+
+
 @dataclass(frozen=True)
 class _CopyRuleOutcome:
     status: str
@@ -1489,6 +1500,10 @@ class _CopyRuleOutcome:
     evidence: str = ""
     suggestion: str = ""
     confidence: float | None = None
+    # 仅在同一次执行中传给裁剪 LLM；绝不能进入结果或安全 metadata。
+    semantic_pair: tuple[str, str] | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1534,7 +1549,7 @@ def _assess_copy(
         _COPY_SOURCES,
         limit_per_source=None if source_complete else _MAX_ROWS_PER_SOURCE,
     )
-    comparable: list[tuple[str, str, bool]] = []
+    comparable: list[tuple[str, str, bool, str]] = []
     seen_document_ids: set[str] = set()
     for source_key, row, content in rows:
         if _clean(row.get("document_title")) == "长期医嘱":
@@ -1548,7 +1563,7 @@ def _assess_copy(
         if document_id:
             seen_document_ids.add(document_id)
         comparable.append(
-            (source_key, normalized, _is_copy_template_shell(normalized))
+            (source_key, normalized, _is_copy_template_shell(normalized), content)
         )
     safe_metadata: dict[str, Any] = {
         "comparable_document_count": len(comparable),
@@ -1569,8 +1584,9 @@ def _assess_copy(
     longest_block = 0
     substantial_coverage = 0.0
     template_shell_only = False
-    for index, (left_source, left, left_template_shell) in enumerate(comparable):
-        for right_source, right, right_template_shell in comparable[index + 1 :]:
+    semantic_pair: tuple[str, str] | None = None
+    for index, (left_source, left, left_template_shell, left_content) in enumerate(comparable):
+        for right_source, right, right_template_shell, right_content in comparable[index + 1 :]:
             matcher = SequenceMatcher(None, left, right, autojunk=False)
             similarity = matcher.ratio()
             if similarity > maximum:
@@ -1579,8 +1595,23 @@ def _assess_copy(
                 template_shell_only = left_template_shell and right_template_shell
                 blocks = [block.size for block in matcher.get_matching_blocks() if block.size]
                 longest_block = max(blocks, default=0)
-                substantial_chars = sum(size for size in blocks if size >= 40)
-                substantial_coverage = substantial_chars / max(1, min(len(left), len(right)))
+                material_matcher = SequenceMatcher(
+                    None,
+                    _material_for_copy_coverage(left),
+                    _material_for_copy_coverage(right),
+                    autojunk=False,
+                )
+                material_chars = sum(
+                    block.size
+                    for block in material_matcher.get_matching_blocks()
+                    if block.size
+                )
+                material_min_length = min(
+                    len(_material_for_copy_coverage(left)),
+                    len(_material_for_copy_coverage(right)),
+                )
+                substantial_coverage = material_chars / max(1, material_min_length)
+                semantic_pair = (left_content, right_content)
     maximum = max(maximum, 0.0)
     safe_metadata.update(
         {
@@ -1598,19 +1629,29 @@ def _assess_copy(
             executor_type="program",
             safe_metadata=safe_metadata,
         )
+    if maximum < _COPY_SIMILARITY_THRESHOLD:
+        return _CopyRuleOutcome(
+            status="compliant",
+            reason_code="copy_similarity_within_threshold",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+        )
+    if (
+        maximum >= _COPY_AUTO_NONCOMPLIANT_MIN
+        and substantial_coverage >= _COPY_STRONG_COVERAGE_MIN
+    ):
+        return _CopyRuleOutcome(
+            status="non_compliant",
+            reason_code="copy_strong_similarity_confirmed",
+            executor_type="program",
+            safe_metadata=safe_metadata,
+        )
     return _CopyRuleOutcome(
-        status=(
-            "non_compliant"
-            if maximum > _COPY_SIMILARITY_THRESHOLD
-            else "compliant"
-        ),
-        reason_code=(
-            "copy_similarity_above_threshold"
-            if maximum > _COPY_SIMILARITY_THRESHOLD
-            else "copy_similarity_within_threshold"
-        ),
+        status="evaluation_unknown",
+        reason_code="copy_semantic_verification_required",
         executor_type="program",
         safe_metadata=safe_metadata,
+        semantic_pair=semantic_pair,
     )
 
 
@@ -1621,6 +1662,98 @@ def _copy_result(
 
     return _render_copy_outcome(
         _assess_copy(documents, source_complete=source_complete)
+    )
+
+
+def _copy_semantic_prompt(*, left: str, right: str) -> str:
+    """017 灰区只让模型比较两份候选病程，不附带时间、坐标或原始规则提示。"""
+
+    return f"""你是 LX0609-017 病程复制核对器。只比较两份当前就诊病程：
+- copy：两份记录实质内容相同，没有具体的症状、检查/结果、诊断、治疗或计划变化；
+- material_change：至少一项上述具体临床事实发生变化；
+- unknown：无法可靠判断，禁止猜测。
+
+[文书A]
+{left[:_MAX_ROW_CHARS]}
+
+[文书B]
+{right[:_MAX_ROW_CHARS]}
+
+只输出 JSON：{{"copy_state":"copy|material_change|unknown"}}"""
+
+
+def _parse_copy_semantic_state(response: Mapping[str, Any]) -> str | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>",
+        "",
+        _response_text(response),
+        flags=re.IGNORECASE,
+    ).strip()
+    match = re.search(r"\{[\s\S]*\}", cleaned)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(0))
+    except (TypeError, ValueError):
+        return None
+    state = payload.get("copy_state") if isinstance(payload, Mapping) else None
+    return state if state in {"copy", "material_change", "unknown"} else None
+
+
+async def _resolve_copy_semantic(
+    outcome: _CopyRuleOutcome,
+    llm_client: CourseQualityLLMClient | None,
+) -> _CopyRuleOutcome:
+    """将017灰区安全映射为一次受控 LLM 事实；任一失败均不得硬判复制。"""
+
+    if outcome.status != "evaluation_unknown":
+        return outcome
+    if outcome.semantic_pair is None:
+        return _CopyRuleOutcome(
+            status="data_gap",
+            reason_code="copy_semantic_input_unavailable",
+            executor_type="program",
+            safe_metadata=outcome.safe_metadata,
+        )
+    if llm_client is None:
+        return _CopyRuleOutcome(
+            status="data_gap",
+            reason_code="copy_semantic_llm_unavailable",
+            executor_type="program",
+            safe_metadata=outcome.safe_metadata,
+        )
+    try:
+        response = await llm_client.generate(
+            _copy_semantic_prompt(
+                left=outcome.semantic_pair[0], right=outcome.semantic_pair[1]
+            )
+        )
+    except Exception:
+        return _CopyRuleOutcome(
+            status="data_gap",
+            reason_code="copy_semantic_model_error",
+            executor_type="llm",
+            safe_metadata=outcome.safe_metadata,
+        )
+    prompt, completion, total, elapsed = _usage(response)
+    state = _parse_copy_semantic_state(response)
+    state_mapping = {
+        "copy": ("non_compliant", "copy_semantic_copy"),
+        "material_change": ("compliant", "copy_semantic_material_change"),
+        "unknown": ("data_gap", "copy_semantic_unknown"),
+    }
+    status, reason_code = state_mapping.get(
+        state or "", ("data_gap", "copy_semantic_invalid_output")
+    )
+    return _CopyRuleOutcome(
+        status=status,
+        reason_code=reason_code,
+        executor_type="llm",
+        safe_metadata=outcome.safe_metadata,
+        prompt_tokens=prompt,
+        completion_tokens=completion,
+        total_tokens=total,
+        api_time=elapsed,
     )
 
 
@@ -1651,7 +1784,7 @@ def _rule_017_decision(
             qc_direction=QcDirection.UNKNOWN,
             reason_code="snapshot_mismatch",
             fact_refs=(),
-            evaluator_version="rule017-copy-v1",
+            evaluator_version="rule017-copy-v2",
             confidence=None,
         )
     refs = tuple(item.snapshot_ref.removeprefix("sha256:") for item in observations)
@@ -1720,7 +1853,7 @@ def _rule_017_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
-        evaluator_version="rule017-copy-v1",
+        evaluator_version="rule017-copy-v2",
         confidence=outcome.confidence,
     )
 
@@ -2210,12 +2343,21 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
-            emit_copy(
-                _assess_copy(
-                    copy_documents,
-                    source_complete=copy_documents is not documents,
-                )
+            copy_outcome = _assess_copy(
+                copy_documents,
+                source_complete=copy_documents is not documents,
             )
+            if copy_outcome.status == "evaluation_unknown":
+                if copy_outcome.semantic_pair is not None and llm_client is not None:
+                    llm_call_count += 1
+                copy_outcome = await _resolve_copy_semantic(
+                    copy_outcome, llm_client
+                )
+                prompt_tokens += copy_outcome.prompt_tokens
+                completion_tokens += copy_outcome.completion_tokens
+                total_tokens += copy_outcome.total_tokens
+                api_time += copy_outcome.api_time
+            emit_copy(copy_outcome)
             continue
 
         controlled_fact = ""

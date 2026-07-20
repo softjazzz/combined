@@ -440,7 +440,7 @@ async def test_typed_017_preserves_source_query_state_without_model(
 
 
 @pytest.mark.asyncio
-async def test_typed_017_similarity_path_matches_raw_state_without_llm_and_keeps_privacy():
+async def test_typed_017_gray_path_matches_raw_state_and_keeps_privacy():
     common = "患者神志清楚生命体征平稳腹部柔软双肺呼吸音清继续观察病情变化"
     private_marker = "PRIVATE_GRAY_COPY_MARKER"
     left = f"{private_marker}{common}今日腹痛减轻复查指标下降停止静脉补液{common}"
@@ -475,8 +475,8 @@ async def test_typed_017_similarity_path_matches_raw_state_without_llm_and_keeps
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    raw_client = _UnexpectedLLMClient()
-    typed_client = _UnexpectedLLMClient()
+    raw_client = _Client([{"copy_state": "material_change"}])
+    typed_client = _Client([{"copy_state": "material_change"}])
     raw = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         wrapper_rules=[_wrapper("LX0609-017")],
@@ -511,9 +511,9 @@ async def test_typed_017_similarity_path_matches_raw_state_without_llm_and_keeps
 
     assert typed.results == ()
     assert reduced[0].final_state.value == raw.results[0]["status"]
-    assert raw.llm_call_count == typed.llm_call_count == 0
-    assert raw.total_tokens == typed.total_tokens == 0
-    assert raw_client.prompts == typed_client.prompts == []
+    assert raw.llm_call_count == typed.llm_call_count == 1
+    assert raw.total_tokens == typed.total_tokens == 45
+    assert len(raw_client.prompts) == len(typed_client.prompts) == 1
     assert private_marker not in repr(typed)
     assert "private-left" not in repr(typed)
 
@@ -2367,7 +2367,7 @@ async def test_017_similarity_threshold_is_programmatic_and_never_outputs_review
         source_complete=True,
     )
     assert similar["status"] == "non_compliant"
-    assert similar["metadata"]["reason_code"] == "copy_similarity_above_threshold"
+    assert similar["metadata"]["reason_code"] == "copy_strong_similarity_confirmed"
     assert "复核" not in repr(similar)
 
     different = course._copy_result(
@@ -2396,8 +2396,10 @@ async def test_017_similarity_threshold_is_programmatic_and_never_outputs_review
         source_complete=True,
     )
     assert exact_threshold["metadata"]["maximum_similarity"] == 0.7
-    assert exact_threshold["status"] == "compliant"
-    assert exact_threshold["metadata"]["reason_code"] == "copy_similarity_within_threshold"
+    assert exact_threshold["status"] == "uncertain"
+    assert exact_threshold["metadata"]["reason_code"] == (
+        "copy_semantic_verification_required"
+    )
 
 
 def test_017_template_shell_only_pair_is_compliant_above_similarity_threshold():
@@ -2441,11 +2443,11 @@ def test_017_specific_content_repeat_remains_non_compliant_above_threshold():
     )
 
     assert result["status"] == "non_compliant"
-    assert result["metadata"]["reason_code"] == "copy_similarity_above_threshold"
+    assert result["metadata"]["reason_code"] == "copy_strong_similarity_confirmed"
     assert result["metadata"]["template_shell_only"] is False
 
 
-def test_017_similarity_above_point_70_remains_non_compliant_for_unknown_text():
+def test_017_similarity_above_point_70_requires_semantic_verification():
     result = course._copy_result(
         {
             "daily_course_record": [
@@ -2457,7 +2459,70 @@ def test_017_similarity_above_point_70_remains_non_compliant_for_unknown_text():
     )
 
     assert result["metadata"]["maximum_similarity"] == 0.71
-    assert result["status"] == "non_compliant"
+    assert result["status"] == "uncertain"
+    assert result["metadata"]["reason_code"] == "copy_semantic_verification_required"
+
+
+@pytest.mark.asyncio
+async def test_017_long_template_with_material_change_needs_one_semantic_call(monkeypatch):
+    """长模板掩盖实质变化时，不能由相似度直接判复制。"""
+    template = "患者病情稳定生命体征平稳继续观察病情" * 12
+    left = f"{template}腹痛缓解，改口服药，准备出院。"
+    right = f"{template}突发高热，影像感染进展，恢复静脉抗感染。"
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
+        ] if kwargs["source_key"] == "senior_course_record" else [],
+    )
+    client = _Client([{"copy_state": "material_change"}])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
+        visit_id="V", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert left not in repr(result)
+    assert right not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("copy_state", "expected_status", "expected_reason"),
+    [
+        ("copy", "non_compliant", "copy_semantic_copy"),
+        ("unknown", "data_gap", "copy_semantic_unknown"),
+    ],
+)
+async def test_017_gray_semantic_enum_maps_to_controlled_state(
+    monkeypatch, copy_state, expected_status, expected_reason
+):
+    template = "患者病情稳定生命体征平稳继续观察病情" * 10
+    left = f"{template}今日腹痛减轻，停止补液改口服。"
+    right = f"{template}今日发热咳嗽，恢复静脉抗感染。"
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
+        ] if kwargs["source_key"] == "daily_course_record" else [],
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
+        visit_id="V", source_schema=None, llm_client=_Client([{"copy_state": copy_state}]),
+    )
+    assert [item["status"] for item in result.results] == [expected_status]
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.llm_call_count == 1
+    assert left not in repr(result)
+    assert right not in repr(result)
 
 
 def test_017_copy_input_deduplicates_cross_source_document_id_and_excludes_long_term_order():
@@ -2544,7 +2609,7 @@ async def test_017_low_similarity_is_compliant_without_llm_call(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_017_high_similarity_never_calls_model(monkeypatch):
+async def test_017_high_similarity_with_material_change_uses_one_model_call(monkeypatch):
     common_blocks = [
         "患者神志清楚生命体征平稳腹部柔软无明显压痛",
         "双肺呼吸音清心律齐双下肢无明显水肿",
@@ -2585,7 +2650,7 @@ async def test_017_high_similarity_never_calls_model(monkeypatch):
         if kwargs["source_key"] == "daily_course_record"
         else [],
     )
-    client = _UnexpectedLLMClient()
+    client = _Client([{"copy_state": "material_change"}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2598,18 +2663,18 @@ async def test_017_high_similarity_never_calls_model(monkeypatch):
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_above_threshold"
-    assert result.results[0]["metadata"]["executor_type"] == "program"
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.results[0]["metadata"]["executor_type"] == "llm"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
     assert left not in repr(result)
     assert right not in repr(result)
 
 
 @pytest.mark.asyncio
-async def test_017_long_template_block_above_threshold_is_programmatic_non_compliant(
+async def test_017_long_template_block_with_material_change_uses_one_model_call(
     monkeypatch,
 ):
     template = (
@@ -2638,7 +2703,7 @@ async def test_017_long_template_block_above_threshold_is_programmatic_non_compl
         if kwargs["source_key"] == "senior_course_record"
         else [],
     )
-    client = _UnexpectedLLMClient()
+    client = _Client([{"copy_state": "material_change"}])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2651,11 +2716,11 @@ async def test_017_long_template_block_above_threshold_is_programmatic_non_compl
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant"]
+    assert [item["status"] for item in result.results] == ["compliant"]
     assert 0.70 < result.results[0]["metadata"]["maximum_similarity"] < 0.95
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_above_threshold"
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -2691,7 +2756,7 @@ async def test_017_high_similarity_does_not_call_llm_for_document_roles(monkeypa
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_above_threshold"
+    assert result.results[0]["metadata"]["reason_code"] == "copy_strong_similarity_confirmed"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -2731,7 +2796,7 @@ async def test_017_strong_similarity_is_programmatic_and_never_calls_model(
     )
 
     assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_above_threshold"
+    assert result.results[0]["metadata"]["reason_code"] == "copy_strong_similarity_confirmed"
     assert result.results[0]["metadata"]["executor_type"] == "program"
     assert result.llm_call_count == 0
     assert client.prompts == []
@@ -2809,7 +2874,7 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
         _Client([RuntimeError("raw Bearer_secret 13800138000")]),
     ],
 )
-async def test_017_model_client_is_never_called_for_similarity_path(
+async def test_017_gray_semantic_failure_is_data_gap_and_safe(
     monkeypatch, client: _Client
 ):
     common = "患者神志清楚生命体征平稳腹部柔软双肺呼吸音清继续观察病情变化"
@@ -2840,10 +2905,12 @@ async def test_017_model_client_is_never_called_for_similarity_path(
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_similarity_above_threshold"
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] in {
+        "copy_semantic_invalid_output",
+        "copy_semantic_model_error",
+    }
+    assert result.llm_call_count == 1
     assert "Bearer_secret" not in repr(result)
     assert "13800138000" not in repr(result)
     assert left not in repr(result)
