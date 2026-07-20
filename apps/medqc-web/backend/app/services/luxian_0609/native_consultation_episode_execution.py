@@ -96,7 +96,7 @@ class _ExecutionAssessment:
 class _CandidateDocument:
     ref: str
     source_key: str
-    observed_date: date
+    observed_time: "_ObservedTime"
     text: str
 
 
@@ -105,6 +105,16 @@ class _CandidateProjection:
     candidates: tuple[_CandidateDocument, ...]
     source_incomplete: bool
     source_technical: bool
+
+
+@dataclass(frozen=True)
+class _ObservedTime:
+    value: datetime
+    precise: bool
+
+    @property
+    def day(self) -> date:
+        return self.value.date()
 
 
 class _SourceGap(Exception):
@@ -221,27 +231,36 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
     return tuple(documents)
 
 
-def _parse_observed_date(value: Any) -> date | None:
+def _parse_observed_time(value: Any) -> _ObservedTime | None:
     normalized = _clean(value)
     if not normalized:
         return None
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
-        "%Y-%m-%d",
         "%Y/%m/%d %H:%M:%S",
-        "%Y/%m/%d",
     ):
         try:
-            return datetime.strptime(normalized, fmt).date()
+            return _ObservedTime(datetime.strptime(normalized, fmt), True)
         except ValueError:
             continue
-    return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return _ObservedTime(datetime.strptime(normalized, fmt), False)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=None)
+    return _ObservedTime(parsed, "T" in normalized or " " in normalized)
 
 
-def _row_time(row: Mapping[str, Any]) -> date | None:
+def _row_time(row: Mapping[str, Any]) -> _ObservedTime | None:
     for key in ("record_time", "prescribed_datetime", "report_time", "report_datetime", "exam_time", "exam_datetime"):
-        parsed = _parse_observed_date(row.get(key))
+        parsed = _parse_observed_time(row.get(key))
         if parsed is not None:
             return parsed
     return None
@@ -290,15 +309,15 @@ def _candidate_documents(
             source_incomplete = True
             continue
         for index, row in enumerate(rows, start=1):
-            observed_date = _row_time(row)
+            observed_time = _row_time(row)
             text = _candidate_text(row)
-            if observed_date is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
+            if observed_time is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
                 source_incomplete = True
                 continue
             candidates.append(_CandidateDocument(
                 ref=f"{source_key}-{index}",
                 source_key=source_key,
-                observed_date=observed_date,
+                observed_time=observed_time,
                 text=text,
             ))
     return _CandidateProjection(
@@ -394,7 +413,7 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
     return tuple(episodes)
 
 
-def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mapping[str, str]]) -> tuple[tuple[_Episode, date, str], ...]:
+def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mapping[str, str]]) -> tuple[tuple[_Episode, _ObservedTime, str], ...]:
     by_ref = {str(item["ref"]): item for item in documents}
     completed: list[tuple[_Episode, date, str]] = []
     for item in episodes:
@@ -403,13 +422,17 @@ def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mappin
         members = [by_ref.get(ref) for ref in item.opinion_refs]
         if any(member is None for member in members):
             raise _SemanticInvalid()
-        dates = [_parse_observed_date(member.get("time")) for member in members if member is not None]
-        if not dates or any(value is None for value in dates):
+        observed_times = [_parse_observed_time(member.get("time")) for member in members if member is not None]
+        if not observed_times or any(value is None for value in observed_times):
             raise _SourceGap()
         opinion_text = _clean("；".join(str(member.get("text") or "") for member in members if member is not None))
         if not opinion_text or len(opinion_text) > _MAX_EPISODE_OPINION_CHARS:
             raise _SourceGap()
-        completed.append((item, max(value for value in dates if value is not None), opinion_text))
+        completed.append((
+            item,
+            max((value for value in observed_times if value is not None), key=lambda value: value.value),
+            opinion_text,
+        ))
     if len(completed) > _MAX_EPISODES:
         raise _SourceGap()
     return tuple(completed)
@@ -417,26 +440,35 @@ def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mappin
 
 def _execution_prompt(
     *,
-    completed: Sequence[tuple[_Episode, date, str]],
+    completed: Sequence[tuple[_Episode, _ObservedTime, str]],
     candidates: Sequence[_CandidateDocument],
-) -> tuple[str, Mapping[str, frozenset[str]]]:
+) -> tuple[str, Mapping[str, frozenset[str]], frozenset[str]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
-    for item, opinion_date, opinion_text in completed:
-        related = [
-            {
-                "ref": candidate.ref,
-                "source": candidate.source_key,
-                "date": candidate.observed_date.isoformat(),
-                "text": candidate.text,
-            }
-            for candidate in candidates
-            if candidate.observed_date >= opinion_date
-        ]
+    temporal_incomplete: set[str] = set()
+    for item, opinion_time, opinion_text in completed:
+        related: list[dict[str, object]] = []
+        for candidate in candidates:
+            if candidate.observed_time.day > opinion_time.day:
+                include = True
+            elif candidate.observed_time.day < opinion_time.day:
+                include = False
+            elif candidate.observed_time.precise and opinion_time.precise:
+                include = candidate.observed_time.value > opinion_time.value
+            else:
+                include = False
+                temporal_incomplete.add(item.episode_ref)
+            if include:
+                related.append({
+                    "ref": candidate.ref,
+                    "source": candidate.source_key,
+                    "date": candidate.observed_time.value.isoformat(),
+                    "text": candidate.text,
+                })
         allowed_refs[item.episode_ref] = frozenset(str(candidate["ref"]) for candidate in related)
         entries.append({
             "episode_ref": item.episode_ref,
-            "opinion_date": opinion_date.isoformat(),
+            "opinion_date": opinion_time.value.isoformat(),
             "opinion_text": opinion_text,
             "candidate_documents": related,
         })
@@ -448,6 +480,7 @@ def _execution_prompt(
         "同一执行文书可同时落实多个episode，禁止要求唯一归属。"
         "linked_specific只在候选明确落实同一条意见的具体措施，或直接点名该会诊意见且包含明确措施时使用。"
         "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
+        "申请、拟请或请会诊动作本身不是执行。"
         "仅治疗同一症状、部位或一般治疗但措施不同，必须为absent，不能关联。"
         "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
         "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
@@ -456,13 +489,13 @@ def _execution_prompt(
         "严格输出JSON：{executions:[{episode_ref,execution_state,execution_refs,confidence}]}。输入："
         + payload
     )
-    return prompt, allowed_refs
+    return prompt, allowed_refs, frozenset(temporal_incomplete)
 
 
 def _parse_executions(
     payload: Mapping[str, Any],
     *,
-    completed: Sequence[tuple[_Episode, date, str]],
+    completed: Sequence[tuple[_Episode, _ObservedTime, str]],
     allowed_refs: Mapping[str, frozenset[str]],
 ) -> tuple[_ExecutionAssessment, ...]:
     raw = payload.get("executions")
@@ -519,6 +552,7 @@ def _execution_outcome(
     assessments: Sequence[_ExecutionAssessment] | None,
     source_incomplete: bool = False,
     source_technical: bool = False,
+    temporal_incomplete_episodes: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -534,11 +568,19 @@ def _execution_outcome(
             return "technical_error", "source_query_error"
         return "data_gap", "linkage_unresolved"
     states = tuple(item.execution_state for item in assessments)
+    absent_refs = {
+        item.episode_ref for item in assessments if item.execution_state == "absent"
+    }
+    unresolved_absent = absent_refs.intersection(temporal_incomplete_episodes)
     if rule_id == "LX0609-020":
-        if "absent" in states:
+        if absent_refs:
             if source_technical:
                 return "technical_error", "source_query_error"
             if source_incomplete:
+                return "data_gap", "linkage_unresolved"
+            if absent_refs.difference(unresolved_absent):
+                return "non_compliant", "requirement_violated"
+            if unresolved_absent:
                 return "data_gap", "linkage_unresolved"
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
@@ -549,6 +591,8 @@ def _execution_outcome(
     if source_technical:
         return "technical_error", "source_query_error"
     if source_incomplete:
+        return "data_gap", "linkage_unresolved"
+    if unresolved_absent:
         return "data_gap", "linkage_unresolved"
     return "not_applicable", "trigger_absent_complete"
 
@@ -681,6 +725,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_incomplete = False
     execution_source_technical = False
+    execution_temporal_incomplete: frozenset[str] = frozenset()
     stage_two_rule_ids = tuple(
         rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
     )
@@ -724,32 +769,38 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             for item, _, _ in completed
                         )
                 else:
-                    second_prompt, allowed_refs = _execution_prompt(
+                    second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
                         completed=completed,
                         candidates=projection.candidates,
                     )
-                    calls += 1
-                    try:
-                        started = time.perf_counter()
-                        response = await llm_client.generate(second_prompt)
-                        if not isinstance(response, Mapping):
-                            raise _SemanticInvalid()
-                        next_prompt, next_completion, next_total, response_time = _usage(response)
-                        prompt_tokens += next_prompt
-                        completion_tokens += next_completion
-                        total_tokens += next_total
-                        api_time += response_time or (time.perf_counter() - started)
-                        execution_assessments = _parse_executions(
-                            _payload(response), completed=completed, allowed_refs=allowed_refs,
+                    if not any(allowed_refs.values()):
+                        execution_assessments = tuple(
+                            _ExecutionAssessment(item.episode_ref, "absent", (), "high")
+                            for item, _, _ in completed
                         )
-                    except _SemanticInvalid:
-                        status = "technical_error" if execution_source_technical else "data_gap"
-                        reason = "source_query_error" if execution_source_technical else "linkage_unresolved"
-                        for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = (status, reason)
-                    except Exception:
-                        for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = ("technical_error", "model_transport_error")
+                    else:
+                        calls += 1
+                        try:
+                            started = time.perf_counter()
+                            response = await llm_client.generate(second_prompt)
+                            if not isinstance(response, Mapping):
+                                raise _SemanticInvalid()
+                            next_prompt, next_completion, next_total, response_time = _usage(response)
+                            prompt_tokens += next_prompt
+                            completion_tokens += next_completion
+                            total_tokens += next_total
+                            api_time += response_time or (time.perf_counter() - started)
+                            execution_assessments = _parse_executions(
+                                _payload(response), completed=completed, allowed_refs=allowed_refs,
+                            )
+                        except _SemanticInvalid:
+                            status = "technical_error" if execution_source_technical else "data_gap"
+                            reason = "source_query_error" if execution_source_technical else "linkage_unresolved"
+                            for rule_id in stage_two_rule_ids:
+                                statuses[rule_id] = (status, reason)
+                        except Exception:
+                            for rule_id in stage_two_rule_ids:
+                                statuses[rule_id] = ("technical_error", "model_transport_error")
             else:
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = _execution_outcome(rule_id, episodes=episodes, assessments=None)
@@ -761,6 +812,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     assessments=execution_assessments,
                     source_incomplete=execution_source_incomplete,
                     source_technical=execution_source_technical,
+                    temporal_incomplete_episodes=execution_temporal_incomplete,
                 )
     results = []
     for rule_id in selected:

@@ -37,8 +37,15 @@ class _SequentialClient:
         }
 
 
-def _rows(*contents: str):
-    return [{"document_title": "会诊记录", "record_time": f"2026-07-20 0{index}:00:00", "record_content": content} for index, content in enumerate(contents, 1)]
+def _rows(*contents: str, day: int = 20, hour_start: int = 1):
+    return [
+        {
+            "document_title": "会诊记录",
+            "record_time": f"2026-07-{day:02d} {hour_start + index - 1:02d}:00:00",
+            "record_content": content,
+        }
+        for index, content in enumerate(contents, 1)
+    ]
 
 
 def _payload(*, episodes, non_target=(), unresolved=()):
@@ -259,7 +266,7 @@ async def test_output_does_not_leak_text_time_or_model_response(monkeypatch):
 async def test_shared_specific_execution_can_cover_two_clear_episodes_without_unique_claim(monkeypatch):
     source_rows = {
         "consultation_record": _rows("申请与意见一", "申请与意见二"),
-        "daily_course_record": _rows("已按意见处理"),
+        "daily_course_record": _rows("已按意见处理", hour_start=3),
         "senior_course_record": [],
         "inpat_drug_order": [],
         "exam_item_report": [],
@@ -305,7 +312,7 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
 async def test_020_023_execution_state_mapping(monkeypatch, execution_state, expected):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
-        "daily_course_record": _rows("后续病程"),
+        "daily_course_record": _rows("后续病程", hour_start=2),
         "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
     }
@@ -326,7 +333,7 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
 async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch):
     source_rows = {
         "consultation_record": _rows("意见：使用康复排痰设备"),
-        "daily_course_record": _rows("仅给予祛痰药治疗"),
+        "daily_course_record": _rows("仅给予祛痰药治疗", hour_start=2),
         "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
     }
@@ -343,23 +350,57 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_second_stage_rejects_forged_or_early_execution_ref(monkeypatch):
+async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
-        "daily_course_record": [{"document_title": "病程", "record_time": "2026-07-19 01:00:00", "record_content": "早于意见"}],
+        "daily_course_record": _rows("可比候选", hour_start=2),
         "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
     }
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     client = _SequentialClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
-        _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high"}),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-999"], "confidence": "high"}),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert {item["status"] for item in result.results} == {"data_gap"}
     assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stage(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("申请与明确会诊意见", hour_start=2),
+        "daily_course_record": _rows("早于意见", hour_start=1),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_same_day_without_precise_time_is_data_gap_without_second_call(monkeypatch):
+    source_rows = {
+        "consultation_record": [{"document_title": "会诊", "record_time": "2026-07-20", "record_content": "申请与明确会诊意见"}],
+        "daily_course_record": [{"document_title": "病程", "record_time": "2026-07-20", "record_content": "疑似后续记录"}],
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -380,7 +421,7 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
     secret = "CONSULTATION_TYPED_SECRET_20260721"
     source_rows = {
         "consultation_record": _rows(secret),
-        "daily_course_record": _rows("已落实会诊意见"),
+        "daily_course_record": _rows("已落实会诊意见", hour_start=2),
         "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
     }
@@ -450,7 +491,7 @@ async def test_stage_two_source_error_is_technical_without_second_call(monkeypat
 def _mixed_candidate_sources():
     return {
         "consultation_record": _rows("申请与明确会诊意见"),
-        "daily_course_record": _rows("已落实会诊意见"),
+        "daily_course_record": _rows("已落实会诊意见", hour_start=2),
         "senior_course_record": _rows(*[f"上级查房{index}" for index in range(13)]),
         "inpat_drug_order": [{"generic_name": "无时间医嘱"}],
         "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
