@@ -2085,14 +2085,10 @@ async def execute_luxian_0609_native_course_quality_rules(
             completion_tokens += completion
             total_tokens += total
             api_time += elapsed
-            semantic_state = _parse_rule_009_semantic_state(response)
             decisions.append(
                 _rule_009_semantic_decision(
-                    base_decision=severity_decision,
-                    semantic_state=semantic_state,
-                    error_reason=(
-                        "model_invalid_output" if semantic_state is None else ""
-                    ),
+                    base_decision=base_decision,
+                    semantic_state=_parse_rule_009_semantic_state(response),
                 )
             )
             continue
