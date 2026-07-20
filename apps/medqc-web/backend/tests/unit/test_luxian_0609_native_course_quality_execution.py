@@ -16,6 +16,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
 from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SourceEvidenceQueryError,
@@ -32,6 +33,8 @@ def _severity_session(
     senior_rows: list[dict] | None = None,
     course_failure: Exception | None = None,
     course_truncated: bool = False,
+    discharge_failure: Exception | None = None,
+    discharge_truncated: bool = False,
     evaluation_as_of_date: str | None = "2026-01-03",
 ):
     def read(**kwargs):
@@ -44,6 +47,19 @@ def _severity_session(
                 rows=rows or [],
                 truncated=truncated,
                 limit_rows=50,
+            )
+        if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY:
+            if discharge_failure is not None:
+                raise discharge_failure
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=(
+                    [{"discharge_datetime": "2026-01-04 00:00:00"}]
+                    if discharge_truncated
+                    else []
+                ),
+                truncated=discharge_truncated,
+                limit_rows=1,
             )
         if source_key in {"daily_course_record", "senior_course_record"}:
             if course_failure is not None:
@@ -1023,6 +1039,87 @@ async def test_course_008_checks_anchor_internal_and_tail_natural_day_gaps(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("status_state", "expected_state", "expected_reason"),
+    [
+        ("effective", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
+        ("excluded", CustomerFinalState.NOT_APPLICABLE, "trigger_absent_complete"),
+        ("unresolved", CustomerFinalState.DATA_GAP, "source_unavailable"),
+    ],
+)
+async def test_course_008_respects_effective_cancelled_and_unknown_order_statuses(
+    status_state: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious",
+                "status_state": status_state,
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "s" * 64,
+            }
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("discharge_truncated", [False, True])
+async def test_course_008_uses_frozen_as_of_when_discharge_source_unavailable(
+    discharge_truncated: bool,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "h" * 64,
+            }
+        ],
+        evaluation_as_of_date="2026-01-03",
+        discharge_failure=(None if discharge_truncated else SourceEvidenceUnavailable()),
+        discharge_truncated=discharge_truncated,
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_discharge_query_error_is_technical_error_even_with_as_of() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "serious",
+                "status_state": "effective",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "e" * 64,
+            }
+        ],
+        evaluation_as_of_date="2026-01-03",
+        discharge_failure=SourceEvidenceQueryError(),
+    )
+
+    result, reduced = await _run_typed_severity(session)
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "source_query_error"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("horizon", "record_times", "expected_state", "expected_reason"),
     [
         (
@@ -1081,7 +1178,7 @@ async def test_course_009_checks_every_day_through_horizon_then_keeps_semantic_u
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_uses_one_semantic_call_and_can_comply() -> None:
+async def test_course_009_daily_complete_without_llm_client_stays_data_gap() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1094,6 +1191,143 @@ async def test_course_009_daily_complete_uses_one_semantic_call_and_can_comply()
             _row("病情稳定，无新发变化。", "2026-01-01 08:00:00"),
             _row("病情变化已记录并及时处理。", "2026-01-02 08:00:00"),
             _row("病情平稳，继续观察。", "2026-01-03 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-009",),
+        decision_rule_ids=("LX0609-009",),
+        wrapper_rules=[_wrapper("LX0609-009")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-009",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("semantic_state", "expected_state"),
+    [
+        ("satisfied", CustomerFinalState.COMPLIANT),
+        ("defect", CustomerFinalState.NON_COMPLIANT),
+        ("unknown", CustomerFinalState.DATA_GAP),
+    ],
+)
+async def test_course_009_daily_complete_uses_one_cropped_semantic_call(
+    semantic_state: str,
+    expected_state: CustomerFinalState,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "g" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("PRIVATE_009_BODY 病情稳定，无新发变化。", "2026-01-01 08:00:00"),
+            _row("病情变化已记录并及时处理。", "2026-01-02 08:00:00"),
+            _row("病情平稳，继续观察。", "2026-01-03 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+    client = _Client([{"semantic_state": semantic_state}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is expected_state
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
+    assert "first_course_record" not in client.prompts[0]
+    assert "rescue_record" not in client.prompts[0]
+    assert "PRIVATE_009_BODY" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_course_009_daily_complete_model_failure_is_data_gap_not_na() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "h" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日病情稳定。", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([RuntimeError("MODEL_ERROR_MUST_NOT_LEAK")])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert result.llm_call_count == 1
+    assert "MODEL_ERROR_MUST_NOT_LEAK" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_course_009_daily_complete_invalid_json_is_data_gap() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "i" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日病情稳定。", "2026-01-02 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-02",
+    )
+    result, reduced = await _run_typed_009(session, _Client(["not-json"]))
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_course_009_semantic_prompt_is_limited_to_daily_and_senior_records() -> None:
+    forbidden = {
+        "first_course_record": "FIRST_MUST_NOT_LEAK",
+        "rescue_record": "RESCUE_MUST_NOT_LEAK",
+        "exam_attention_report": "EXAM_MUST_NOT_LEAK",
+        "lab_attention_report": "LAB_MUST_NOT_LEAK",
+    }
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 23:59:59",
+                "row_ref": "b" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("病情记录一。", "2026-01-01 08:00:00"),
+            _row("病情记录二。", "2026-01-02 08:00:00"),
+            _row("病情记录三。", "2026-01-03 08:00:00"),
         ],
         evaluation_as_of_date="2026-01-03",
     )
@@ -1122,80 +1356,8 @@ async def test_course_009_daily_complete_uses_one_semantic_call_and_can_comply()
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("model_output", "expected_state", "expected_reason"),
-    [
-        (
-            {"semantic_state": "defect"},
-            CustomerFinalState.NON_COMPLIANT,
-            "requirement_violated",
-        ),
-        (
-            {"semantic_state": "unknown"},
-            CustomerFinalState.DATA_GAP,
-            "required_field_missing",
-        ),
-        (
-            {"semantic_state": "unsupported"},
-            CustomerFinalState.TECHNICAL_ERROR,
-            "model_invalid_output",
-        ),
-        (
-            RuntimeError("sensitive model failure"),
-            CustomerFinalState.TECHNICAL_ERROR,
-            "model_transport_error",
-        ),
-    ],
-)
-async def test_course_009_semantic_three_state_and_fail_closed(
-    model_output: object,
-    expected_state: CustomerFinalState,
-    expected_reason: str,
-) -> None:
-    session = _severity_session(
-        rows=[
-            {
-                "severity": "critical",
-                "prescribed_datetime": "2026-01-01 23:59:59",
-                "row_ref": "b" * 64,
-            }
-        ],
-        daily_rows=[
-            _row("病情记录一。", "2026-01-01 08:00:00"),
-            _row("病情记录二。", "2026-01-02 08:00:00"),
-            _row("病情记录三。", "2026-01-03 08:00:00"),
-        ],
-        evaluation_as_of_date="2026-01-03",
-    )
-    client = _Client([model_output])
-
-    result = await course.execute_luxian_0609_native_course_quality_rules(
-        rule_ids=("LX0609-009",),
-        decision_rule_ids=("LX0609-009",),
-        wrapper_rules=[_wrapper("LX0609-009")],
-        evidence_payload=None,
-        institute_id="I",
-        patient_id="P",
-        visit_id="V",
-        source_schema=None,
-        llm_client=client,
-        evidence_snapshot=session.snapshot,
-        evidence_materials=session.materials,
-    )
-    reduced = bind_and_reduce_luxian_0609_rule_decisions(
-        decisions=result.decisions,
-        expected_rule_ids=("LX0609-009",),
-        snapshot=session.snapshot,
-    )
-
-    assert reduced[0].final_state is expected_state
-    assert reduced[0].reason_code == expected_reason
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert "sensitive model failure" not in repr(result)
+    assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in client.prompts[0]
+    assert all(marker not in client.prompts[0] for marker in forbidden.values())
 
 
 @pytest.mark.asyncio
@@ -1280,15 +1442,8 @@ async def test_course_008_remains_python_only_with_client_available() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_semantic_prompt_uses_only_bounded_daily_and_senior_rows() -> None:
-    daily_rows = [_row("OUTSIDE_WINDOW_MUST_NOT_LEAK", "2025-12-31 23:59:59")] + [
-        _row(f"DAILY_ALLOWED_{index} " + "甲" * 500, "2026-01-01 08:00:00")
-        for index in range(8)
-    ]
-    senior_rows = [
-        _row(f"SENIOR_ALLOWED_{index}", "2026-01-01 10:00:00")
-        for index in range(8)
-    ]
+async def test_course_009_time_only_phase_does_not_project_text_to_llm() -> None:
+    daily_rows = [_row("OUTSIDE_WINDOW_MUST_NOT_LEAK", "2025-12-31 23:59:59")]
     session = _severity_session(
         rows=[
             {
@@ -1298,10 +1453,9 @@ async def test_course_009_semantic_prompt_uses_only_bounded_daily_and_senior_row
             }
         ],
         daily_rows=daily_rows,
-        senior_rows=senior_rows,
         evaluation_as_of_date="2026-01-01",
     )
-    client = _Client([{"semantic_state": "satisfied"}])
+    client = _UnexpectedLLMClient()
     forbidden = {
         "first_course_record": "FIRST_MUST_NOT_LEAK",
         "rescue_record": "RESCUE_MUST_NOT_LEAK",
@@ -1325,24 +1479,9 @@ async def test_course_009_semantic_prompt_uses_only_bounded_daily_and_senior_row
         evidence_materials=session.materials,
     )
 
-    prompt = client.prompts[0]
-    assert "DAILY_ALLOWED_0" in prompt
-    assert "SENIOR_ALLOWED_0" in prompt
-    assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in prompt
-    assert all(marker not in prompt for marker in forbidden.values())
-    assert "SHOULD_NOT_LEAK" not in prompt
-    (
-        semantic_context,
-        context_truncated,
-        context_complete,
-    ) = course._rule_009_semantic_context(
-        snapshot=session.snapshot,
-        materials=session.materials,
-    )
-    assert len(semantic_context) <= 18000
-    assert context_truncated is False
-    assert context_complete is True
-    assert "DAILY_ALLOWED_0" not in repr(result)
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in repr(result)
     assert all(marker not in repr(result) for marker in forbidden.values())
 
 
@@ -1416,7 +1555,7 @@ async def test_course_009_semantic_projection_overflow_is_data_gap_without_model
     result, reduced = await _run_typed_009(session, client)
 
     assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "source_truncated"
+    assert reduced[0].reason_code == "required_field_missing"
     assert result.llm_call_count == 0
     assert client.prompts == []
 

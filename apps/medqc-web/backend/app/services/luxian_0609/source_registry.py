@@ -210,7 +210,11 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("evaluation_context.horizon", access_mode=_BOUNDED),
     _entry("inpat_registration", access_mode=_BOUNDED),
     _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED),
-    _entry("inpat_nondrug_order.severity_order", access_mode=_BOUNDED),
+    _entry(
+        "inpat_nondrug_order.severity_order",
+        access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_nondrug_order.severity_order-v2",
+    ),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),

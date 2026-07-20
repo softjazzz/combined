@@ -878,7 +878,36 @@ def _rule_008_009_decision(
             confidence=None,
         )
     target = "serious" if rule_id == "LX0609-008" else "critical"
-    relevant_orders = tuple(row for row in order_rows if row.get("severity") == target)
+    target_rows = tuple(row for row in order_rows if row.get("severity") == target)
+    if any(
+        row.get("status_state") == "unresolved"
+        for row in target_rows
+    ):
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="source_unavailable",
+            refs=refs,
+            confidence=None,
+        )
+    if any(
+        row.get("status_state") not in {None, "effective", "excluded", "unresolved"}
+        for row in target_rows
+    ):
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="snapshot_mismatch",
+            refs=refs,
+            confidence=None,
+        )
+    relevant_orders = tuple(
+        row
+        for row in target_rows
+        if row.get("status_state") in {None, "effective"}
+    )
     if not relevant_orders:
         return decision(
             applicability=ApplicabilityState.NOT_APPLICABLE,
@@ -899,22 +928,6 @@ def _rule_008_009_decision(
             evidence_state=EvidenceState.TECHNICAL_ERROR,
             qc_direction=QcDirection.UNKNOWN,
             reason_code="source_query_error",
-            refs=refs,
-            confidence=None,
-        )
-    if (
-        discharge_observation.query_state.value == "unavailable"
-        or discharge_observation.completeness.value == "truncated"
-    ):
-        return decision(
-            applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code=(
-                "source_truncated"
-                if discharge_observation.completeness.value == "truncated"
-                else "source_unavailable"
-            ),
             refs=refs,
             confidence=None,
         )
@@ -994,8 +1007,24 @@ def _rule_008_009_decision(
             confidence=None,
         )
 
+    if (
+        discharge_observation.query_state.value == "unavailable"
+        or discharge_observation.completeness.value == "truncated"
+    ) and horizon_date is None:
+        return decision(
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=(
+                "source_truncated"
+                if discharge_observation.completeness.value == "truncated"
+                else "source_unavailable"
+            ),
+            refs=refs,
+            confidence=None,
+        )
+
     timed_record_dates: set[date] = set()
-    substantive_record_dates: set[date] = set()
     for source_key in _RULE_007_RECORD_SOURCES:
         observation = observations[source_key]
         assert observation is not None
@@ -1059,8 +1088,6 @@ def _rule_008_009_decision(
                 horizon_date is None or parsed_date <= horizon_date
             ):
                 timed_record_dates.add(parsed_date)
-                if _rule_009_substantive_text(row):
-                    substantive_record_dates.add(parsed_date)
 
     ordered_dates = sorted(timed_record_dates)
     if rule_id == "LX0609-008":
@@ -1113,15 +1140,6 @@ def _rule_008_009_decision(
             reason_code="requirement_violated",
             refs=refs,
             confidence=1.0,
-        )
-    if expected_dates.difference(substantive_record_dates):
-        return decision(
-            applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="required_field_missing",
-            refs=refs,
-            confidence=None,
         )
     if horizon_date is None:
         return decision(
@@ -2186,51 +2204,37 @@ async def execute_luxian_0609_native_course_quality_rules(
         if rule_id in {"LX0609-008", "LX0609-009"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
-            severity_decision = _rule_008_009_decision(
+            base_decision = _rule_008_009_decision(
                 rule_id=rule_id,
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
+            # 008 是纯日期规则。009 也先由 Python 判定每日频次；仅频次完整
+            # 且具有权威终点时，才允许一次受控语义调用补“病情变化是否及时记录”。
             if (
                 rule_id != "LX0609-009"
-                or severity_decision.reason_code != "required_field_missing"
+                or base_decision.reason_code != "required_field_missing"
             ):
-                decisions.append(severity_decision)
+                decisions.append(base_decision)
                 continue
-            (
-                semantic_context,
-                semantic_context_truncated,
-                semantic_context_complete,
-            ) = _rule_009_semantic_context(
+            context, overflow, ready = _rule_009_semantic_context(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
-            if semantic_context_truncated:
+            if overflow or not ready or llm_client is None:
                 decisions.append(
-                    _rule_009_semantic_decision(
-                        base_decision=severity_decision,
-                        data_gap_reason="source_truncated",
-                    )
+                    _rule_009_semantic_decision(base_decision=base_decision)
                 )
-                continue
-            if (
-                not semantic_context_complete
-                or not semantic_context
-                or llm_client is None
-            ):
-                decisions.append(severity_decision)
                 continue
             llm_call_count += 1
             try:
                 response = await llm_client.generate(
-                    _rule_009_semantic_prompt(context=semantic_context)
+                    _rule_009_semantic_prompt(context=context)
                 )
             except Exception:
+                # 语义调用失败不是“无病危医嘱”；频次事实仍在，但语义无法确认。
                 decisions.append(
-                    _rule_009_semantic_decision(
-                        base_decision=severity_decision,
-                        error_reason="model_transport_error",
-                    )
+                    _rule_009_semantic_decision(base_decision=base_decision)
                 )
                 continue
             prompt, completion, total, elapsed = _usage(response)
