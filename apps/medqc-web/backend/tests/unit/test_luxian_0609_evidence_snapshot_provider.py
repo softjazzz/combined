@@ -674,6 +674,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
             "diagnosis",
             "exam_master",
+            "inpat_drug_order",
             "inpat_registration",
             "labtest_master",
             "pathology_exam_master",

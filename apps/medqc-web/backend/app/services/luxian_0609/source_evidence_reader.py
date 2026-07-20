@@ -78,6 +78,8 @@ _NATIVE_SOURCE_FIELDS = {
         "surgery_code",
         "surgery_name",
         "surgical_level",
+        "surgial_incision_level",
+        "surgical_incision_level",
         "surgery_begin_datetime",
         "surgery_end_datetime",
     ),
@@ -223,6 +225,26 @@ _NATIVE_SOURCE_FIELDS = {
         "surgery_process",
         "record_content",
     ),
+    "surgery_inform_consent": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+        "patient_sign",
+        "surgeon_sign",
+        "planned_operation_name",
+        "planned_operation_code",
+    ),
+    "consent_form": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+        "patient_sign",
+        "surgeon_sign",
+        "planned_operation_name",
+        "planned_operation_code",
+    ),
 }
 
 _SNAPSHOT_SOURCE_FIELDS = {
@@ -249,11 +271,14 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "inpat_drug_order",
         "discharge_record",
         "surgery_record",
+        "surgery_inform_consent",
+        "consent_form",
     )
 }
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY] = ("present",)
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY] = (
     "severity",
+    "status_state",
     "prescribed_datetime",
     "row_ref",
 )

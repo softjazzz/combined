@@ -110,6 +110,37 @@ def _performed() -> dict:
     return _fact("current_visit_surgery_confirmed", state="performed")
 
 
+def _surgery_text_fact(**overrides: object):
+    values: dict[str, object] = {
+        "event_ref": "EV1",
+        "evidence_refs": ("S01-01",),
+        "surgery_occurrence": "performed",
+        "malignant_relation": "qualifying",
+        "lymph_node_documentation": "documented",
+        "implant_use": "actual_permanent_implant",
+        "implant_name": "present",
+        "implant_type": "present",
+        "implant_specification": "present",
+        "implant_material": "present",
+        "implant_quantity": "present",
+        "implant_barcode": "present",
+        "incision_class": "unknown",
+        "antimicrobial_intent": "unknown",
+        "start_time_ref": None,
+        "start_time_role": "unknown",
+        "end_time_ref": None,
+        "end_time_role": "unknown",
+        "interval_scope": "unknown",
+        "special_extension_reason": "unknown",
+        "consent_role": "unknown",
+        "consent_linkage": "unknown",
+        "patient_signature": "unknown",
+        "surgeon_signature": "unknown",
+    }
+    values.update(overrides)
+    return surgery.SurgeryEventFact(**values)
+
+
 def _snapshot_for_surgery(mode: str, *, selected_rule_id: str = "LX0609-024"):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -382,9 +413,7 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         assert {item.reason_code for item in result.decisions} == {expected_reason}
     elif source_mode == "available":
         assert {item.reason_code for item in result.decisions} == {
-            "applicability_source_gap",
             "required_field_missing",
-            "source_readiness_unproven",
         }
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -936,6 +965,47 @@ async def test_025_silence_and_incomplete_source_are_data_gap_but_explicit_no_im
         == explicit_negative.llm_call_count
         == 0
     )
+
+
+@pytest.mark.parametrize(
+    "implant_use",
+    ("generic_material_only", "planned_only", "removed_only", "unknown"),
+)
+def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) -> None:
+    """泛耗材、拟植入、取出旧物和沉默均不能被写成“未植入”。"""
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(_surgery_text_fact(implant_use=implant_use),),
+        projection=surgery.SurgeryTextProjection(
+            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+        ),
+    )
+
+    assert outcome.status == "data_gap"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    (
+        ("implant_barcode", "missing", "non_compliant"),
+        ("implant_barcode", "unknown", "data_gap"),
+        ("implant_barcode", "present", "compliant"),
+    ),
+)
+def test_025_actual_implant_field_contract_is_python_owned(
+    field: str,
+    value: str,
+    expected: str,
+) -> None:
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(_surgery_text_fact(**{field: value}),),
+        projection=surgery.SurgeryTextProjection(
+            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+        ),
+    )
+
+    assert outcome.status == expected
 
 
 @pytest.mark.asyncio

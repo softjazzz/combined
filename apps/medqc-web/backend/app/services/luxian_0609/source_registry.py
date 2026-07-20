@@ -162,6 +162,7 @@ _REGISTRY_ENTRIES = (
         "consent_form",
         "consent_form",
         "surgery_inform_consent",
+        access_mode=_BOUNDED,
         projection_aliases=(
             "anesthesia_consent",
             "anesthesia_consent_form",
@@ -314,7 +315,15 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-027": ("diagnosis",),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
-    "LX0609-028": ("surgery_record", "mr_surgery"),
+    "LX0609-024": (
+        "surgery_record", "mr_surgery", "pathology_exam_master",
+        "pathology_exam_report", "diagnosis",
+    ),
+    "LX0609-025": ("surgery_record", "mr_surgery"),
+    "LX0609-028": (
+        "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+    ),
+    "LX0609-033": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
     "LX0609-039": ("surgery_record", "mr_surgery", "rescue_record"),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。

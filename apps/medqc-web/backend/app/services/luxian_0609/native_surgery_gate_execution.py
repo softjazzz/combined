@@ -30,6 +30,13 @@ from .source_evidence_reader import (
     read_luxian_0609_native_source_rows,
     read_luxian_0609_runtime_source_rows,
 )
+from .surgery_text_fact_contract import (
+    SurgeryEventFact,
+    SurgeryTextProjection,
+    build_surgery_text_fact_prompt,
+    build_surgery_text_projection,
+    parse_surgery_text_fact_response,
+)
 
 
 SURGERY_GATE_RULE_IDS = (
@@ -51,6 +58,32 @@ _MAX_CONTEXT_CHARS = 12000
 _TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
 _TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v1"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_GATE_RULE_IDS)
+_TEXT_FACT_RULE_IDS = frozenset(
+    {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033"}
+)
+_TYPED_TEXT_SOURCES = {
+    "LX0609-024": (
+        "surgery_record", "mr_surgery", "pathology_exam_master",
+        "pathology_exam_report", "diagnosis",
+    ),
+    "LX0609-025": ("surgery_record", "mr_surgery"),
+    "LX0609-028": (
+        "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
+    ),
+    # 033 只需要“已实施手术锚点 + 本次手术同意书”；mr_surgery 既不提供
+    # 同意书角色也不提供签署事实，纳入只会挤占 2 份文书的安全上下文预算。
+    "LX0609-033": ("surgery_record", "surgery_inform_consent"),
+}
+_TEXT_FACT_BATCH_LIMITS = {
+    # 024/025 的判断只需要极小的当前手术材料，必须独立调用，避免其它
+    # 手术规则把无关正文带入模型上下文。
+    "LX0609-024": (2, 2000, 250, None),
+    "LX0609-025": (3, 1500, 200, None),
+    # 028/033 不共享批次：每条规则至多一次模型调用，且上下文只能是
+    # 当前规则所需的最小材料，避免把整份手术包或无关文书送入模型。
+    "LX0609-028": (6, 2000, 250, 6),
+    "LX0609-033": (2, 1200, 160, 2),
+}
 _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
@@ -88,6 +121,13 @@ class NativeSurgeryGateExecutionResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+
+
+@dataclass(frozen=True)
+class _SurgeryTextOutcome:
+    rule_id: str
+    status: str
+    reason_code: str
 
 
 def _clean(value: Any) -> str:
@@ -583,6 +623,218 @@ def _typed_conservative_surgery_gate_decision(
     )
 
 
+def _typed_source_rows(
+    *,
+    source_key: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[str, tuple[Mapping[str, Any], ...]]:
+    observations = tuple(
+        item for item in snapshot.observations if item.source_key == source_key
+    )
+    if len(observations) != 1:
+        return "missing", ()
+    observation = observations[0]
+    if observation.query_state.value == "error":
+        return "error", ()
+    if observation.query_state.value == "unavailable":
+        return "unavailable", ()
+    if observation.completeness.value == "truncated":
+        return "truncated", ()
+    try:
+        rows = tuple(materials.rows(source_key))
+    except EvidenceMaterialTruncated:
+        return "truncated", ()
+    except EvidenceMaterialUnavailable:
+        return "missing", ()
+    return ("empty" if not rows else "available"), rows
+
+
+def _surgery_text_outcome(
+    *,
+    rule_id: str,
+    facts: Sequence[SurgeryEventFact],
+    projection: SurgeryTextProjection,
+) -> _SurgeryTextOutcome:
+    """LLM 只抽取事实；规则状态、边界和多事件优先级由 Python 合成。"""
+
+    event_states: list[str] = []
+    for fact in facts:
+        if rule_id == "LX0609-024":
+            if fact.surgery_occurrence == "planned":
+                event_states.append("not_applicable")
+            elif fact.surgery_occurrence != "performed":
+                event_states.append("data_gap")
+            elif fact.malignant_relation == "explicit_nonqualifying":
+                event_states.append("not_applicable")
+            elif fact.malignant_relation == "unknown":
+                event_states.append("data_gap")
+            elif fact.lymph_node_documentation == "documented":
+                event_states.append("compliant")
+            elif fact.lymph_node_documentation == "not_documented":
+                event_states.append("non_compliant")
+            else:
+                event_states.append("data_gap")
+        elif rule_id == "LX0609-025":
+            # 只有文书明确“本次未植入”才可判不适用。泛耗材、拟植入、
+            # 取出旧物与沉默均不能被偷换成“未植入”。
+            if fact.implant_use == "explicit_no_implant":
+                event_states.append("not_applicable")
+            elif fact.implant_use != "actual_permanent_implant":
+                event_states.append("data_gap")
+            else:
+                field_states = (
+                    fact.implant_name, fact.implant_type, fact.implant_specification,
+                    fact.implant_material, fact.implant_quantity, fact.implant_barcode,
+                )
+                if "missing" in field_states:
+                    event_states.append("non_compliant")
+                elif "unknown" in field_states:
+                    event_states.append("data_gap")
+                else:
+                    event_states.append("compliant")
+        elif rule_id == "LX0609-028":
+            if fact.surgery_occurrence == "planned":
+                event_states.append("not_applicable")
+            elif fact.surgery_occurrence != "performed":
+                event_states.append("data_gap")
+            elif fact.incision_class == "other":
+                event_states.append("not_applicable")
+            elif fact.incision_class == "unknown":
+                event_states.append("data_gap")
+            elif fact.antimicrobial_intent in {"therapeutic", "explicit_none"}:
+                event_states.append("not_applicable")
+            elif fact.antimicrobial_intent not in {"prophylactic", "both"}:
+                event_states.append("data_gap")
+            elif (
+                fact.start_time_role != "actual_administration"
+                or fact.end_time_role != "actual_stop"
+                or not fact.start_time_ref
+                or not fact.end_time_ref
+            ):
+                event_states.append("data_gap")
+            else:
+                start = projection.time_candidates.get(fact.start_time_ref)
+                end = projection.time_candidates.get(fact.end_time_ref)
+                actual_text_sources = {
+                    "surgery_record", "inpat_drug_order", "daily_course_record"
+                }
+                candidates_are_attested = (
+                    start is not None
+                    and end is not None
+                    and fact.start_time_ref != fact.end_time_ref
+                    and start.document_ref in fact.evidence_refs
+                    and end.document_ref in fact.evidence_refs
+                    and start.source_key in actual_text_sources
+                    and end.source_key in actual_text_sources
+                    and start.field_role == "text_datetime_candidate"
+                    and end.field_role == "text_datetime_candidate"
+                    and start.precision in {"minute", "second"}
+                    and end.precision in {"minute", "second"}
+                    and fact.interval_scope == "prophylactic_segment"
+                )
+                if (
+                    not candidates_are_attested
+                    or start is None
+                    or end is None
+                    or end.value < start.value
+                ):
+                    event_states.append("data_gap")
+                else:
+                    duration = end.value - start.value
+                    if duration <= timedelta(hours=24):
+                        event_states.append("compliant")
+                    elif duration <= timedelta(hours=48):
+                        if fact.special_extension_reason == "documented":
+                            event_states.append("compliant")
+                        elif fact.special_extension_reason == "unknown":
+                            event_states.append("data_gap")
+                        else:
+                            event_states.append("non_compliant_extension_missing")
+                    else:
+                        event_states.append("non_compliant_over_48h")
+        elif rule_id == "LX0609-033":
+            if (
+                fact.consent_role != "surgery_informed_consent"
+                or fact.consent_linkage != "current_surgery"
+            ):
+                event_states.append("data_gap")
+            elif "missing" in {fact.patient_signature, fact.surgeon_signature}:
+                event_states.append("non_compliant")
+            elif "unknown" in {fact.patient_signature, fact.surgeon_signature}:
+                event_states.append("data_gap")
+            else:
+                event_states.append("compliant")
+        else:
+            raise ValueError("unsupported surgery text outcome rule")
+
+    if not event_states:
+        return _SurgeryTextOutcome(rule_id, "data_gap", "surgery_fact_scope_missing")
+    if "non_compliant_over_48h" in event_states:
+        return _SurgeryTextOutcome(rule_id, "non_compliant", "prophylaxis_over_48h")
+    if "non_compliant_extension_missing" in event_states:
+        return _SurgeryTextOutcome(rule_id, "non_compliant", "extension_reason_missing")
+    for state, reason in (
+        ("non_compliant", "surgery_text_fact_defect"),
+        ("data_gap", "surgery_text_fact_unknown"),
+        ("compliant", "surgery_text_fact_satisfied"),
+        ("not_applicable", "surgery_text_fact_absent"),
+    ):
+        if state in event_states:
+            return _SurgeryTextOutcome(rule_id, state, reason)
+    raise ValueError("unsupported surgery text outcome")
+
+
+def _decision_from_surgery_outcome(
+    *,
+    outcome: _SurgeryTextOutcome,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
+    mapping = {
+        "compliant": (
+            ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED, "requirement_satisfied",
+        ),
+        "non_compliant": (
+            ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT, "requirement_violated",
+        ),
+        "not_applicable": (
+            ApplicabilityState.NOT_APPLICABLE, EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN, "trigger_absent_complete",
+        ),
+        "data_gap": (
+            ApplicabilityState.UNKNOWN, EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN, "required_field_missing",
+        ),
+        "technical_error": (
+            ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            "model_invalid_output"
+            if outcome.reason_code == "surgery_llm_invalid_output"
+            else "model_transport_error",
+        ),
+    }
+    applicability, evidence_state, qc_direction, reason_code = mapping[outcome.status]
+    source_keys = _TYPED_TEXT_SOURCES[outcome.rule_id]
+    refs = tuple(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in snapshot.observations
+        if item.source_key in source_keys
+    )
+    return RuleDecision(
+        rule_id=outcome.rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=qc_direction,
+        reason_code=reason_code,
+        fact_refs=refs,
+        evaluator_version="surgery-text-fact-ruledecision-v1",
+        confidence=None,
+    )
+
+
 def _resolve_performed_state(
     *,
     facts: Sequence[Mapping[str, Any]],
@@ -783,20 +1035,228 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
     ):
         raise ValueError("typed surgery gate requires one evidence session")
-    decisions = tuple(
-        _typed_003_decision(
-            snapshot=evidence_snapshot,
-            materials=evidence_materials,
-        )
-        if rule_id == "LX0609-003"
-        else _typed_conservative_surgery_gate_decision(
+    decisions: list[RuleDecision] = []
+    llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    typed_text_rule_ids: list[str] = []
+    for rule_id in selected:
+        if rule_id not in typed_requested:
+            continue
+        if rule_id == "LX0609-003":
+            decisions.append(
+                _typed_003_decision(
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+            )
+            continue
+        provisional = _typed_conservative_surgery_gate_decision(
             rule_id=rule_id,
             snapshot=evidence_snapshot,
             materials=evidence_materials,
         )
-        for rule_id in selected
-        if rule_id in typed_requested
-    )
+        performed_state = _snapshot_performed_surgery_state(evidence_snapshot)
+        surgery_record_available = any(
+            item.source_key == "surgery_record"
+            and item.query_state.value == "available"
+            and item.completeness.value != "truncated"
+            for item in evidence_snapshot.observations
+        )
+        if (
+            rule_id in _TEXT_FACT_RULE_IDS
+            and (
+                performed_state == "present"
+                # 024 需要判断“本次实施手术”与恶性原发治疗的语义关联，不能
+                # 误用 029/030 的严格 +08 文本时间合同。受控 surgery_record
+                # 可用且未截断时，允许一次裁剪事实抽取；无材料仍保守收口。
+                or (rule_id == "LX0609-024" and surgery_record_available)
+                or (
+                    rule_id == "LX0609-028"
+                    and performed_state == "unknown"
+                    and surgery_record_available
+                )
+            )
+        ):
+            typed_text_rule_ids.append(rule_id)
+        else:
+            decisions.append(provisional)
+
+    if typed_text_rule_ids:
+        source_keys = tuple(dict.fromkeys(
+            source_key
+            for rule_id in typed_text_rule_ids
+            for source_key in _TYPED_TEXT_SOURCES[rule_id]
+        ))
+        rows_by_source: dict[str, tuple[Mapping[str, Any], ...]] = {}
+        source_states: dict[str, str] = {}
+        for source_key in source_keys:
+            state, rows = _typed_source_rows(
+                source_key=source_key,
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
+            )
+            source_states[source_key] = state
+            rows_by_source[source_key] = rows
+
+        active_rule_ids: list[str] = []
+        partial_source_rule_ids: set[str] = set()
+        pending_outcomes: dict[str, _SurgeryTextOutcome] = {}
+        for rule_id in typed_text_rule_ids:
+            states_by_source = {
+                key: source_states[key] for key in _TYPED_TEXT_SOURCES[rule_id]
+            }
+            states = set(states_by_source.values())
+            if "error" in states:
+                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                    rule_id, "technical_error", "source_query_error"
+                )
+            elif rule_id == "LX0609-033" and (
+                states_by_source.get("surgery_inform_consent") != "available"
+                or next(
+                    (
+                        item.completeness.value
+                        for item in evidence_snapshot.observations
+                        if item.source_key == "surgery_inform_consent"
+                    ),
+                    "unproven",
+                )
+                != "complete"
+            ):
+                # 同意书表的 EMPTY、未同步、截断或完整性未证明都不能被解释为
+                # “缺知情同意书”。此分支既不调用 LLM，也不产生确定缺陷。
+                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                    rule_id, "data_gap", "surgery_consent_source_unproven"
+                )
+            elif (
+                rule_id == "LX0609-028"
+                and states_by_source.get("inpat_drug_order")
+                in {"unavailable", "truncated", "missing"}
+                and not any(
+                    state in {"unavailable", "truncated", "missing"}
+                    for source_key, state in states_by_source.items()
+                    if source_key != "inpat_drug_order"
+                )
+            ):
+                partial_source_rule_ids.add(rule_id)
+                active_rule_ids.append(rule_id)
+            elif states.intersection({"unavailable", "truncated", "missing"}):
+                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                    rule_id, "data_gap", "surgery_projection_unavailable"
+                )
+            else:
+                active_rule_ids.append(rule_id)
+
+        if active_rule_ids:
+            bounded_rule_ids = tuple(
+                rule_id for rule_id in active_rule_ids
+                if rule_id in _TEXT_FACT_BATCH_LIMITS
+            )
+            shared_rule_ids = tuple(
+                rule_id for rule_id in active_rule_ids
+                if rule_id not in _TEXT_FACT_BATCH_LIMITS
+            )
+            batches = [(rule_id,) for rule_id in bounded_rule_ids]
+            if shared_rule_ids:
+                batches.append(shared_rule_ids)
+            for batch_rule_ids in batches:
+                active_sources = tuple(dict.fromkeys(
+                    source_key
+                    for rule_id in batch_rule_ids
+                    for source_key in _TYPED_TEXT_SOURCES[rule_id]
+                ))
+                limits = _TEXT_FACT_BATCH_LIMITS.get(batch_rule_ids[0])
+                max_rows, max_context, max_completion, max_documents = (
+                    limits if len(batch_rule_ids) == 1 and limits is not None
+                    else (50, 32000, None, None)
+                )
+                try:
+                    projection = build_surgery_text_projection(
+                        rows_by_source={key: rows_by_source[key] for key in active_sources},
+                        max_rows_per_source=max_rows,
+                        max_context_chars=max_context,
+                        max_documents=max_documents,
+                    )
+                except ValueError:
+                    projection = None
+                if projection is None or not projection.context:
+                    for rule_id in batch_rule_ids:
+                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                            rule_id, "data_gap", "surgery_projection_unavailable"
+                        )
+                    continue
+                if llm_client is None:
+                    for rule_id in batch_rule_ids:
+                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                            rule_id, "technical_error", "surgery_llm_failure"
+                        )
+                    continue
+                llm_call_count += 1
+                try:
+                    response = await llm_client.generate(
+                        build_surgery_text_fact_prompt(
+                            selected_rule_ids=batch_rule_ids,
+                            projection=projection,
+                            max_completion_tokens=max_completion,
+                        )
+                    )
+                except Exception:
+                    response = None
+                if response is None:
+                    for rule_id in batch_rule_ids:
+                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                            rule_id, "technical_error", "surgery_llm_failure"
+                        )
+                    continue
+                prompt, completion, total, elapsed = _usage(response)
+                prompt_tokens += prompt
+                completion_tokens += completion
+                total_tokens += total
+                api_time += elapsed
+                try:
+                    text_facts = (
+                        None
+                        if max_completion is not None and completion > max_completion
+                        else parse_surgery_text_fact_response(
+                            response=response,
+                            projection=projection,
+                            selected_rule_ids=batch_rule_ids,
+                        )
+                    )
+                except ValueError:
+                    text_facts = None
+                for rule_id in batch_rule_ids:
+                    outcome = (
+                        _SurgeryTextOutcome(
+                            rule_id, "technical_error", "surgery_llm_invalid_output"
+                        )
+                        if text_facts is None
+                        else _surgery_text_outcome(
+                            rule_id=rule_id,
+                            facts=text_facts,
+                            projection=projection,
+                        )
+                    )
+                    if (
+                        rule_id in partial_source_rule_ids
+                        and (
+                            outcome.status in {"compliant", "not_applicable"}
+                            or (
+                                outcome.status == "non_compliant"
+                                and outcome.reason_code != "prophylaxis_over_48h"
+                            )
+                        )
+                    ):
+                        outcome = _SurgeryTextOutcome(
+                            rule_id, "data_gap", "surgery_projection_partial"
+                        )
+                    pending_outcomes[rule_id] = outcome
+        decisions.extend(
+            _decision_from_surgery_outcome(
+                outcome=pending_outcomes[rule_id],
+                snapshot=evidence_snapshot,
+            )
+            for rule_id in typed_text_rule_ids
+        )
     legacy_selected = tuple(
         rule_id for rule_id in selected if rule_id not in typed_requested
     )
@@ -804,7 +1264,12 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         return NativeSurgeryGateExecutionResult(
             results=(),
             planned_rule_ids=selected,
-            decisions=decisions,
+            decisions=tuple(sorted(decisions, key=lambda item: selected.index(item.rule_id))),
+            llm_call_count=llm_call_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
         )
 
     documents = _documents(evidence_payload)
@@ -837,9 +1302,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         if isinstance(item, Mapping)
     }
     results: list[dict[str, Any]] = []
-    llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
-    api_time = 0.0
-
     for rule_id in legacy_selected:
         terminal = _terminal_status(
             rule_id,
@@ -912,7 +1374,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     return NativeSurgeryGateExecutionResult(
         results=tuple(results),
         planned_rule_ids=selected,
-        decisions=decisions,
+        decisions=tuple(sorted(decisions, key=lambda item: selected.index(item.rule_id))),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
