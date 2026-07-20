@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import inspect
+import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -264,12 +266,43 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     )
     captured: dict[str, object] = {"executor_calls": 0, "llm_calls": 0}
 
-    class _NoCallClient:
+    class _ControlledFactClient:
         model = "controlled-test-model"
 
-        async def generate(self, _prompt):
+        async def generate(self, prompt):
             captured["llm_calls"] = int(captured["llm_calls"]) + 1
-            raise AssertionError("强确定性事实不得调用模型")
+            course_refs_match = re.search(r"COURSE_DOC=(\[[^\]]*\])", prompt)
+            assert course_refs_match is not None
+            course_refs = json.loads(course_refs_match.group(1))
+            assert len(course_refs) == 2
+            pre_exam_ref, post_report_ref = course_refs
+            facts = []
+            for rule_id in selected:
+                facts.append(
+                    {
+                        "rule_id": rule_id,
+                        "applicability": "applicable",
+                        "semantic_state": "present",
+                        "positive_state": (
+                            "positive"
+                            if rule_id in {"LX0609-012", "LX0609-015"}
+                            else "not_relevant"
+                        ),
+                        "course_doc_refs": (
+                            [pre_exam_ref]
+                            if rule_id == "LX0609-010"
+                            else [post_report_ref]
+                        ),
+                    }
+                )
+            return {
+                "choices": [{"message": {"content": json.dumps({
+                    "schema_version": "lx0609-exam-lab-text-facts-v3",
+                    "facts": facts,
+                }, ensure_ascii=False)}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+                "_api_time": 0.1,
+            }
 
     real_build_session = evidence_snapshot_provider.build_luxian_0609_evidence_read_session
 
@@ -346,7 +379,7 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     monkeypatch.setattr(
         luxian_0609_preproduction,
         "_build_llm_client",
-        _NoCallClient,
+        _ControlledFactClient,
     )
     monkeypatch.setattr(
         execution,
@@ -378,7 +411,8 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
     assert tuple(item["rule_id"] for item in payload["results"]) == selected
     assert {item["status"] for item in payload["results"]} == {"compliant"}
     assert payload["metrics"]["customer_rule_count"] == 5
-    assert payload["metrics"]["llm_call_count"] == 0
+    assert payload["metrics"]["legacy_projection_count"] == 0
+    assert payload["metrics"]["llm_call_count"] == 1
     rendered = repr(payload) + caplog.text
     for private_marker in (
         "institute-safe-coordinate",
@@ -394,7 +428,7 @@ def test_preproduction_api_exam_lab_typed_entry_isolated_to_selected_rules(
         assert private_marker not in rendered
     assert captured == {
         "executor_calls": 1,
-        "llm_calls": 0,
+        "llm_calls": 1,
         "rule_ids": selected,
         "decision_rule_ids": selected,
         "has_snapshot": True,
