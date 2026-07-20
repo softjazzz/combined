@@ -1,12 +1,13 @@
-"""LX0609-021/022 会诊 episode 第一阶段原生执行器。
+"""LX0609-020 至 023 的两阶段会诊 episode 原生执行器。
 
-本模块只聚合本次住院会诊文书并判断申请目的、会诊意见的清晰度；
-020/023 的执行关联属于第二阶段，刻意不在这里推断。
+第一阶段只聚合本次住院的真实会诊 episode；第二阶段仅对高置信、
+意见明确的 episode 批量判断后续执行关联，禁止行级唯一归属推断。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 import json
 import time
 from typing import Any, Mapping, Protocol, Sequence
@@ -27,15 +28,33 @@ from .source_evidence_reader import (
 )
 
 
-CONSULTATION_EPISODE_RULE_IDS = ("LX0609-021", "LX0609-022")
+CONSULTATION_EPISODE_RULE_IDS = (
+    "LX0609-020",
+    "LX0609-021",
+    "LX0609-022",
+    "LX0609-023",
+)
 EXECUTOR_KEY = "consultation_quality"
 _SOURCE_KEY = "consultation_record"
 _SOURCE_LIMIT = 48
 _MAX_DOCUMENT_CHARS = 1600
 _MAX_PROMPT_CHARS = 48000
+_MAX_EPISODES = 12
+_MAX_EPISODE_OPINION_CHARS = 1200
+_MAX_CANDIDATES_PER_SOURCE = 12
+_MAX_CANDIDATE_CHARS = 1000
+_EXECUTION_SOURCE_KEYS = (
+    "daily_course_record",
+    "senior_course_record",
+    "inpat_drug_order",
+    "exam_item_report",
+    "labtest_item_report",
+    "surgery_record",
+)
 _STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _CONFIDENCE = frozenset({"high", "medium", "low"})
-_EVALUATOR_VERSION = "consultation-episode-v1"
+_EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unknown"})
+_EVALUATOR_VERSION = "consultation-episode-v2"
 
 
 class ConsultationEpisodeLLMClient(Protocol):
@@ -58,9 +77,27 @@ class NativeConsultationEpisodeExecutionResult:
 class _Episode:
     episode_ref: str
     member_refs: tuple[str, ...]
+    application_refs: tuple[str, ...]
+    opinion_refs: tuple[str, ...]
     application_state: str
     opinion_state: str
     confidence: str
+
+
+@dataclass(frozen=True)
+class _ExecutionAssessment:
+    episode_ref: str
+    execution_state: str
+    execution_refs: tuple[str, ...]
+    confidence: str
+
+
+@dataclass(frozen=True)
+class _CandidateDocument:
+    ref: str
+    source_key: str
+    observed_date: date
+    text: str
 
 
 class _SourceGap(Exception):
@@ -114,6 +151,7 @@ def _payload(response: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _read_rows(
     *,
+    source_key: str = _SOURCE_KEY,
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -129,7 +167,7 @@ def _read_rows(
             ):
                 raise _SourceTechnical()
             observation = next(
-                (item for item in evidence_snapshot.observations if item.source_key == _SOURCE_KEY),
+                (item for item in evidence_snapshot.observations if item.source_key == source_key),
                 None,
             )
             if observation is None or observation.query_state.value == "unavailable":
@@ -138,10 +176,10 @@ def _read_rows(
                 raise _SourceTechnical()
             if observation.completeness is SourceCompleteness.TRUNCATED:
                 raise _SourceGap()
-            rows = [dict(row) for row in evidence_materials.bounded_rows(_SOURCE_KEY)]
+            rows = [dict(row) for row in evidence_materials.bounded_rows(source_key)]
         else:
             rows = read_luxian_0609_native_source_rows(
-                source_key=_SOURCE_KEY,
+                source_key=source_key,
                 institute_id=institute_id,
                 patient_id=patient_id,
                 visit_id=visit_id,
@@ -155,7 +193,7 @@ def _read_rows(
         raise
     except Exception:
         raise _SourceTechnical()
-    if len(rows) >= _SOURCE_LIMIT:
+    if source_key == _SOURCE_KEY and len(rows) >= _SOURCE_LIMIT:
         raise _SourceGap()
     return [dict(row) for row in rows]
 
@@ -176,6 +214,78 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
     return tuple(documents)
 
 
+def _parse_observed_date(value: Any) -> date | None:
+    normalized = _clean(value)
+    if not normalized:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d",
+    ):
+        try:
+            return datetime.strptime(normalized, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _row_time(row: Mapping[str, Any]) -> date | None:
+    for key in ("record_time", "prescribed_datetime", "report_time", "report_datetime", "exam_time", "exam_datetime"):
+        parsed = _parse_observed_date(row.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _candidate_text(row: Mapping[str, Any]) -> str:
+    fields = (
+        "document_title", "record_content", "generic_name", "brand_name", "drug_type",
+        "exam_name", "exam_item_name", "item_name", "exam_result", "exam_impression",
+        "exam_conclusion", "impression", "conclusion", "lab_item_name", "result",
+        "abnormal_indicator", "surgery_name", "surgery_process",
+    )
+    return _clean("；".join(_clean(row.get(key)) for key in fields if _clean(row.get(key))))
+
+
+def _candidate_documents(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+) -> tuple[_CandidateDocument, ...]:
+    candidates: list[_CandidateDocument] = []
+    for source_key in _EXECUTION_SOURCE_KEYS:
+        rows = _read_rows(
+            source_key=source_key,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+            evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot,
+        )
+        if len(rows) > _MAX_CANDIDATES_PER_SOURCE:
+            raise _SourceGap()
+        for index, row in enumerate(rows, start=1):
+            observed_date = _row_time(row)
+            text = _candidate_text(row)
+            if observed_date is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
+                raise _SourceGap()
+            candidates.append(_CandidateDocument(
+                ref=f"{source_key}-{index}",
+                source_key=source_key,
+                observed_date=observed_date,
+                text=text,
+            ))
+    return tuple(candidates)
+
+
 def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
     payload = json.dumps({"consultation_documents": list(documents)}, ensure_ascii=False)
     if len(payload) > _MAX_PROMPT_CHARS:
@@ -189,7 +299,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
-        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_state,opinion_state,confidence}],"
+        "每个episode还必须给出application_refs和opinion_refs，二者只能引用本episode.member_refs；"
+        "申请或意见为clear时对应refs不得为空。"
+        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence}],"
         "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
     )
 
@@ -208,6 +320,8 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
             raise _SemanticInvalid()
         episode_ref = _clean(raw.get("episode_ref"))
         member_refs = raw.get("member_refs")
+        application_refs = raw.get("application_refs")
+        opinion_refs = raw.get("opinion_refs")
         application = _clean(raw.get("application_state")).lower()
         opinion = _clean(raw.get("opinion_state")).lower()
         confidence = _clean(raw.get("confidence")).lower()
@@ -216,6 +330,14 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
             or not member_refs
             or not all(isinstance(ref, str) and ref in expected for ref in member_refs)
             or len(member_refs) != len(set(member_refs))
+            or not isinstance(application_refs, list)
+            or not isinstance(opinion_refs, list)
+            or not all(isinstance(ref, str) and ref in member_refs for ref in application_refs)
+            or not all(isinstance(ref, str) and ref in member_refs for ref in opinion_refs)
+            or len(application_refs) != len(set(application_refs))
+            or len(opinion_refs) != len(set(opinion_refs))
+            or (application == "clear" and not application_refs)
+            or (opinion == "clear" and not opinion_refs)
             or episode_ref not in member_refs
             or application not in _STATES
             or opinion not in _STATES
@@ -223,7 +345,15 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
         ):
             raise _SemanticInvalid()
         assigned.extend(member_refs)
-        episodes.append(_Episode(episode_ref, tuple(member_refs), application, opinion, confidence))
+        episodes.append(_Episode(
+            episode_ref,
+            tuple(member_refs),
+            tuple(application_refs),
+            tuple(opinion_refs),
+            application,
+            opinion,
+            confidence,
+        ))
     for group in (non_target, unresolved):
         if not all(isinstance(ref, str) and ref in expected for ref in group):
             raise _SemanticInvalid()
@@ -233,6 +363,105 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
     if unresolved:
         raise _SourceGap()
     return tuple(episodes)
+
+
+def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mapping[str, str]]) -> tuple[tuple[_Episode, date, str], ...]:
+    by_ref = {str(item["ref"]): item for item in documents}
+    completed: list[tuple[_Episode, date, str]] = []
+    for item in episodes:
+        if item.opinion_state != "clear" or item.confidence != "high":
+            continue
+        members = [by_ref.get(ref) for ref in item.opinion_refs]
+        if any(member is None for member in members):
+            raise _SemanticInvalid()
+        dates = [_parse_observed_date(member.get("time")) for member in members if member is not None]
+        if not dates or any(value is None for value in dates):
+            raise _SourceGap()
+        opinion_text = _clean("；".join(str(member.get("text") or "") for member in members if member is not None))
+        if not opinion_text or len(opinion_text) > _MAX_EPISODE_OPINION_CHARS:
+            raise _SourceGap()
+        completed.append((item, max(value for value in dates if value is not None), opinion_text))
+    if len(completed) > _MAX_EPISODES:
+        raise _SourceGap()
+    return tuple(completed)
+
+
+def _execution_prompt(
+    *,
+    completed: Sequence[tuple[_Episode, date, str]],
+    candidates: Sequence[_CandidateDocument],
+) -> tuple[str, Mapping[str, frozenset[str]]]:
+    entries: list[dict[str, object]] = []
+    allowed_refs: dict[str, frozenset[str]] = {}
+    for item, opinion_date, opinion_text in completed:
+        related = [
+            {
+                "ref": candidate.ref,
+                "source": candidate.source_key,
+                "date": candidate.observed_date.isoformat(),
+                "text": candidate.text,
+            }
+            for candidate in candidates
+            if candidate.observed_date >= opinion_date
+        ]
+        allowed_refs[item.episode_ref] = frozenset(str(candidate["ref"]) for candidate in related)
+        entries.append({
+            "episode_ref": item.episode_ref,
+            "opinion_date": opinion_date.isoformat(),
+            "opinion_text": opinion_text,
+            "candidate_documents": related,
+        })
+    payload = json.dumps({"episodes": entries}, ensure_ascii=False)
+    if len(payload) > _MAX_PROMPT_CHARS:
+        raise _SourceGap()
+    prompt = (
+        "你只判断每个已完成会诊意见与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
+        "同一执行文书可同时落实多个episode，禁止要求唯一归属。"
+        "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
+        "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
+        "execution_refs只能引用该episode输入candidate_documents中的ref；absent或unknown必须返回空数组。"
+        "严格输出JSON：{executions:[{episode_ref,execution_state,execution_refs,confidence}]}。输入："
+        + payload
+    )
+    return prompt, allowed_refs
+
+
+def _parse_executions(
+    payload: Mapping[str, Any],
+    *,
+    completed: Sequence[tuple[_Episode, date, str]],
+    allowed_refs: Mapping[str, frozenset[str]],
+) -> tuple[_ExecutionAssessment, ...]:
+    raw = payload.get("executions")
+    expected_refs = {item.episode_ref for item, _, _ in completed}
+    if not isinstance(raw, list) or len(raw) != len(expected_refs):
+        raise _SemanticInvalid()
+    parsed: list[_ExecutionAssessment] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, Mapping):
+            raise _SemanticInvalid()
+        episode_ref = _clean(item.get("episode_ref"))
+        state = _clean(item.get("execution_state")).lower()
+        confidence = _clean(item.get("confidence")).lower()
+        refs = item.get("execution_refs")
+        if (
+            episode_ref not in expected_refs
+            or episode_ref in seen
+            or state not in _EXECUTION_STATES
+            or confidence not in _CONFIDENCE
+            or not isinstance(refs, list)
+            or len(refs) != len(set(refs))
+            or not all(isinstance(ref, str) and ref in allowed_refs[episode_ref] for ref in refs)
+            or (state in {"linked_specific", "linked_vague"} and not refs)
+            or (state in {"absent", "unknown"} and refs)
+        ):
+            raise _SemanticInvalid()
+        seen.add(episode_ref)
+        parsed.append(_ExecutionAssessment(episode_ref, state, tuple(refs), confidence))
+    if seen != expected_refs:
+        raise _SemanticInvalid()
+    return tuple(parsed)
 
 
 def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
@@ -248,6 +477,35 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     if all(state == "clear" for state in applicable):
         return "compliant", "requirement_satisfied"
     return "data_gap", "linkage_unresolved"
+
+
+def _execution_outcome(
+    rule_id: str,
+    *,
+    episodes: Sequence[_Episode],
+    assessments: Sequence[_ExecutionAssessment] | None,
+) -> tuple[str, str]:
+    uncertain = any(
+        item.confidence != "high" or item.opinion_state == "unknown"
+        for item in episodes
+    )
+    completed = tuple(item for item in episodes if item.opinion_state == "clear" and item.confidence == "high")
+    if uncertain:
+        return "data_gap", "linkage_unresolved"
+    if not completed:
+        return "not_applicable", "trigger_absent_complete"
+    if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
+        return "data_gap", "linkage_unresolved"
+    states = tuple(item.execution_state for item in assessments)
+    if rule_id == "LX0609-020":
+        if "absent" in states:
+            return "non_compliant", "requirement_violated"
+        return "compliant", "requirement_satisfied"
+    if "linked_vague" in states:
+        return "non_compliant", "requirement_violated"
+    if "linked_specific" in states:
+        return "compliant", "requirement_satisfied"
+    return "not_applicable", "trigger_absent_complete"
 
 
 def _result(*, rule_id: str, status: str, reason_code: str, prompt_tokens: int, completion_tokens: int, total_tokens: int) -> dict[str, Any]:
@@ -370,12 +628,83 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except Exception:
         return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", calls=calls, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    statuses: dict[str, tuple[str, str]] = {
+        rule_id: _outcome(rule_id, episodes)
+        for rule_id in selected
+        if rule_id in {"LX0609-021", "LX0609-022"}
+    }
+    execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
+    stage_two_rule_ids = tuple(
+        rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
+    )
+    if stage_two_rule_ids:
+        try:
+            completed = _completed_episodes(episodes, documents)
+        except _SourceGap:
+            completed = ()
+            for rule_id in stage_two_rule_ids:
+                statuses[rule_id] = ("data_gap", "linkage_unresolved")
+        except _SemanticInvalid:
+            completed = ()
+            for rule_id in stage_two_rule_ids:
+                statuses[rule_id] = ("data_gap", "linkage_unresolved")
+        if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
+            preliminary = _execution_outcome("LX0609-020", episodes=episodes, assessments=None)
+            if preliminary[0] == "not_applicable":
+                for rule_id in stage_two_rule_ids:
+                    statuses[rule_id] = ("not_applicable", "trigger_absent_complete")
+            elif completed:
+                try:
+                    candidates = _candidate_documents(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        source_schema=source_schema,
+                        evidence_materials=evidence_materials,
+                        evidence_snapshot=evidence_snapshot,
+                    )
+                    second_prompt, allowed_refs = _execution_prompt(completed=completed, candidates=candidates)
+                except _SourceGap:
+                    for rule_id in stage_two_rule_ids:
+                        statuses[rule_id] = ("data_gap", "linkage_unresolved")
+                except _SourceTechnical:
+                    for rule_id in stage_two_rule_ids:
+                        statuses[rule_id] = ("technical_error", "source_query_error")
+                else:
+                    calls += 1
+                    try:
+                        started = time.perf_counter()
+                        response = await llm_client.generate(second_prompt)
+                        if not isinstance(response, Mapping):
+                            raise _SemanticInvalid()
+                        next_prompt, next_completion, next_total, response_time = _usage(response)
+                        prompt_tokens += next_prompt
+                        completion_tokens += next_completion
+                        total_tokens += next_total
+                        api_time += response_time or (time.perf_counter() - started)
+                        execution_assessments = _parse_executions(
+                            _payload(response), completed=completed, allowed_refs=allowed_refs,
+                        )
+                    except _SemanticInvalid:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = ("data_gap", "linkage_unresolved")
+                    except Exception:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = ("technical_error", "model_transport_error")
+            else:
+                for rule_id in stage_two_rule_ids:
+                    statuses[rule_id] = _execution_outcome(rule_id, episodes=episodes, assessments=None)
+        if execution_assessments is not None:
+            for rule_id in stage_two_rule_ids:
+                statuses[rule_id] = _execution_outcome(
+                    rule_id, episodes=episodes, assessments=execution_assessments,
+                )
     results = []
     for rule_id in selected:
-        status, reason = _outcome(rule_id, episodes)
+        status, reason = statuses.get(rule_id, ("data_gap", "linkage_unresolved"))
         results.append(_result(rule_id=rule_id, status=status, reason_code=reason, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens))
     decisions = tuple(
-        _decision(rule_id=rule_id, status=_outcome(rule_id, episodes)[0], snapshot=evidence_snapshot)
+        _decision(rule_id=rule_id, status=statuses[rule_id][0], snapshot=evidence_snapshot)
         for rule_id in selected
         if rule_id in typed and evidence_snapshot is not None
     )

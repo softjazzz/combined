@@ -292,7 +292,6 @@ def build_luxian_0609_package_plan(
                 item.executor_key == CONSULTATION_EPISODE_EXECUTOR_KEY
                 and native_consultation_enabled
                 and item.rule_id in CONSULTATION_EPISODE_RULE_IDS
-                and item.rule_id != "LX0609-020"
             )
             or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
             or (

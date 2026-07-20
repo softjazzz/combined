@@ -1444,7 +1444,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
-async def test_public_entry_keeps_020_023_compatibility_and_47_native_rules(monkeypatch):
+async def test_public_entry_runs_020_023_natively_with_other_native_rules(monkeypatch):
     selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
     captured: dict[str, object] = {}
 
@@ -1490,9 +1490,7 @@ async def test_public_entry_keeps_020_023_compatibility_and_47_native_rules(monk
     service = SichuanQCService()
 
     def _legacy_lookup(rule_id):
-        if rule_id in {"LX-017", "CL-250", "CL-248", "CL-071"}:
-            return {"rule_id": rule_id, "rule_name": rule_id}
-        raise AssertionError(f"除020/023兼容映射外不应加载旧规则: {rule_id}")
+        raise AssertionError(f"原生会诊旁路不得加载旧执行规则: {rule_id}")
 
     monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
 
@@ -1509,7 +1507,7 @@ async def test_public_entry_keeps_020_023_compatibility_and_47_native_rules(monk
     )
 
     assert captured == {
-        "prepared_rule_ids": ["LX-017", "CL-250", "CL-248", "CL-071"],
+        "prepared_rule_ids": [],
         "selected_customer_rule_ids": tuple(selected),
     }
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
@@ -2014,7 +2012,16 @@ async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_r
 
 
 @pytest.mark.asyncio
-async def test_native_consultation_public_entry_keeps_020_023_legacy_and_runs_021_022_natively(monkeypatch):
+@pytest.mark.parametrize(
+    ("enabled", "expected_dispatch", "expected_calls", "expected_tokens"),
+    [
+        (True, [], [("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")], 140),
+        (False, [["LX-017", "CL-250", "SC-068", "LX-015", "SC-069", "CL-248", "CL-071"]], [], 0),
+    ],
+)
+async def test_native_consultation_public_entry_flag_controls_native_batch_and_legacy_fallback(
+    monkeypatch, enabled, expected_dispatch, expected_calls, expected_tokens,
+):
     wrappers = [
         _wrapper(
             "LX0609-020",
@@ -2048,7 +2055,7 @@ async def test_native_consultation_public_entry_keeps_020_023_legacy_and_runs_02
         LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED=False,
         LUXIAN_0609_NATIVE_EXECUTION_ENABLED=True,
         LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED=True,
-        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=True,
+        LUXIAN_0609_NATIVE_CONSULTATION_ENABLED=enabled,
         LUXIAN_0609_NATIVE_MDT_040_ENABLED=False,
     )
     dispatched: list[list[str]] = []
@@ -2131,20 +2138,16 @@ async def test_native_consultation_public_entry_keeps_020_023_legacy_and_runs_02
         use_execution_cache=False,
     )
 
-    assert dispatched == [["LX-017", "CL-250", "CL-248", "CL-071"]]
-    assert consultation_calls == [("LX0609-021", "LX0609-022")]
+    assert dispatched == expected_dispatch
+    assert consultation_calls == expected_calls
     assert [item["rule_id"] for item in result["evaluation_results"]] == [
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
         "LX0609-023",
     ]
-    assert result["token_usage"] == {
-        "total_tokens": 140,
-        "prompt_tokens": 120,
-        "completion_tokens": 20,
-    }
-    assert result["executor_breakdown"]["llm"] == 1
+    assert result["token_usage"]["total_tokens"] == expected_tokens
+    assert result["executor_breakdown"].get("llm", 0) == (1 if enabled else 0)
 
 
 @pytest.mark.asyncio
