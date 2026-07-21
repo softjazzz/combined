@@ -1478,7 +1478,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
-async def test_public_entry_keeps_020_compatibility_and_runs_021_023_natively(monkeypatch):
+async def test_public_entry_keeps_020_023_compatibility_and_runs_021_022_natively(monkeypatch):
     selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
     captured: dict[str, object] = {}
 
@@ -1528,7 +1528,7 @@ async def test_public_entry_keeps_020_compatibility_and_runs_021_023_natively(mo
     def _legacy_lookup(rule_id):
         normalized = str(rule_id)
         legacy_lookups.append(normalized)
-        if normalized not in {"LX-017", "CL-250", "CL-181", "SC-081"}:
+        if normalized not in {"LX-017", "CL-250", "CL-248", "CL-071", "CL-181", "SC-081"}:
             raise AssertionError(f"全量公共入口加载了未预期的兼容执行规则: {normalized}")
         return {"rule_id": normalized, "rule_name": normalized}
 
@@ -1547,10 +1547,10 @@ async def test_public_entry_keeps_020_compatibility_and_runs_021_023_natively(mo
     )
 
     assert captured == {
-        "prepared_rule_ids": ["LX-017", "CL-250", "CL-181", "SC-081"],
+        "prepared_rule_ids": ["LX-017", "CL-250", "CL-248", "CL-071", "CL-181", "SC-081"],
         "selected_customer_rule_ids": tuple(selected),
     }
-    assert legacy_lookups == ["LX-017", "CL-250", "CL-181", "SC-081"]
+    assert legacy_lookups == ["LX-017", "CL-250", "CL-248", "CL-071", "CL-181", "SC-081"]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
 
 
@@ -2111,10 +2111,10 @@ async def test_native_029_triple_flags_bypass_legacy_raw_rules_at_service_entry(
     [
         (
             True,
-            [["LX-017", "CL-250"]],
-            [("LX0609-021", "LX0609-022", "LX0609-023")],
+            [["LX-017", "CL-250", "CL-248", "CL-071"]],
+            [("LX0609-021", "LX0609-022")],
             140,
-            ["LX-017", "CL-250"],
+            ["LX-017", "CL-250", "CL-248", "CL-071"],
         ),
         (
             False,
