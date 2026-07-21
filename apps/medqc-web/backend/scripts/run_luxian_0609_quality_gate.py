@@ -171,9 +171,9 @@ def run_gate_subprocess(
         )
 
     output = f"{getattr(completed, 'stdout', '')}\n{getattr(completed, 'stderr', '')}"
-    passed_tests = _pytest_count(r"(\d+)\s+passed", output)
-    failed_tests = _pytest_count(r"(\d+)\s+failed", output) + _pytest_count(
-        r"(\d+)\s+errors?", output
+    passed_tests = _pytest_count(r"(\d+)[ \t]+passed", output)
+    failed_tests = _pytest_count(r"(\d+)[ \t]+failed", output) + _pytest_count(
+        r"(\d+)[ \t]+errors?", output
     )
     return GateExecution(
         return_code=int(getattr(completed, "returncode", EXIT_ENVIRONMENT_UNAVAILABLE)),

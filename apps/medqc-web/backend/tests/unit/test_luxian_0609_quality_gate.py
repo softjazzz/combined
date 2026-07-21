@@ -149,6 +149,22 @@ def test_subprocess_gate_extracts_only_safe_pytest_counts() -> None:
 
 
 @pytest.mark.unit
+def test_subprocess_gate_does_not_join_test_name_suffix_with_next_line_summary() -> None:
+    class Completed:
+        returncode = 1
+        stdout = "tests/unit/test_luxian_0609_023\nFAILED\n2 passed, 1 failed in 0.21s"
+        stderr = ""
+
+    result = run_gate_subprocess(
+        GateSpec(name="contract", args=("-m", "pytest", "example.py")),
+        process_runner=lambda _command, **_kwargs: Completed(),
+    )
+
+    assert result.passed_tests == 2
+    assert result.failed_tests == 1
+
+
+@pytest.mark.unit
 def test_pr_no_model_rule_contract_gate_includes_evidence_snapshot_contract() -> None:
     rule_contract_gate = next(gate for gate in _PR_NO_MODEL_GATES if gate.name == "rule_contract")
     assert "tests/unit/test_luxian_0609_evidence_snapshot.py" in rule_contract_gate.args
