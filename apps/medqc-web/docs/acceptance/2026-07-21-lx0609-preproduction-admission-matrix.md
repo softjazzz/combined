@@ -101,3 +101,6 @@ case 标签、摘要哈希、结果状态和受控原因码；**900 条均为 ca
 
 这份清单是接入决策基线。规则从 Shadow 进入“可接入”必须新增对应的
 accepted Golden、真实抽样、性能/隐私和 rollback 证据，不得只改文档状态。
+
+Golden 的候选绑定、人工签核和小批接入步骤见
+[Golden 签核最小流程](2026-07-21-lx0609-golden-signoff-protocol.md)。
