@@ -70,6 +70,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
+        "LX0609-023",
         "LX0609-040",
         "LX0609-041",
         "LX0609-042",
@@ -100,7 +101,9 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-038",
         "LX0609-039",
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 1
+    # 023 仍保留会诊执行器归属；是否派发由包计划的第一阶段白名单决定，
+    # 不能通过把它降为 compatibility 来破坏规则契约。
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 0
 
 
 @pytest.mark.unit

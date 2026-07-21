@@ -62,7 +62,9 @@ EXECUTOR_SURGERY_MDT = "surgery_mdt"
 _CONSULTATION_FAMILY_RULE_IDS = frozenset(
     {
         "LX0609-020",
-        *PACKAGE_NATIVE_CONSULTATION_RULE_IDS,
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
     }
 )
 
