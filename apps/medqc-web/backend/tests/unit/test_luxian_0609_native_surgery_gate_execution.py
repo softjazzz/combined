@@ -106,6 +106,76 @@ class _Client:
         }
 
 
+class _JointSurgeryFactClient:
+    """按当前提示词范围返回最小合法事实，用于锁定合批调用次数。"""
+
+    def __init__(self, *, consent_evidence: bool = True) -> None:
+        self.prompts: list[str] = []
+        self.consent_evidence = consent_evidence
+
+    async def generate(self, prompt: str) -> dict:
+        self.prompts.append(prompt)
+        selected = tuple(
+            rule_id
+            for rule_id in ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
+            if rule_id in prompt
+        )
+        assert selected
+        evidence_refs = ["S01-01"]
+        if "LX0609-033" in selected and self.consent_evidence:
+            # 单条033与联合范围都必须明确锚定手术知情同意书。
+            evidence_refs = (
+                ["S08-01"]
+                if selected == ("LX0609-033",)
+                else ["S01-01", "S08-01"]
+            )
+        event: dict[str, object] = {"event_ref": "EV1", "evidence_refs": evidence_refs}
+        if "LX0609-024" in selected:
+            event.update(
+                surgery_occurrence="performed",
+                malignant_relation="qualifying",
+                lymph_node_documentation="documented",
+            )
+        if "LX0609-025" in selected:
+            event.update(
+                surgery_occurrence="performed",
+                implant_use="actual_permanent_implant",
+                implant_name="present",
+                implant_type="present",
+                implant_specification="present",
+                implant_material="present",
+                implant_quantity="present",
+                implant_barcode="present",
+            )
+        if "LX0609-028" in selected:
+            event.update(
+                surgery_occurrence="performed",
+                incision_class="unknown",
+                antimicrobial_intent="unknown",
+                start_time_ref=None,
+                start_time_role="unknown",
+                end_time_ref=None,
+                end_time_role="unknown",
+                interval_scope="unknown",
+                special_extension_reason="unknown",
+            )
+        if "LX0609-033" in selected:
+            event.update(
+                consent_role="surgery_informed_consent",
+                consent_linkage="current_surgery",
+                patient_signature="present",
+                surgeon_signature="present",
+            )
+        return {
+            "choices": [{"message": {"content": json.dumps({
+                "schema_version": "lx0609-surgery-text-facts-v1",
+                "events": [event],
+            }, ensure_ascii=False)}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
+            "_api_time": 0.2,
+        }
+
+
 def _performed() -> dict:
     return _fact("current_visit_surgery_confirmed", state="performed")
 
@@ -422,6 +492,212 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         }
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_024_025_028_033_share_one_joint_fact_call() -> None:
+    """四条均需语义事实时，统一旁路只能发起一次联合提取。"""
+
+    selected = ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            "surgery_record": ({
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+                "surgery_name": "SAFE_SURGERY_MARKER",
+            },),
+            "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
+            "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
+            "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "inpat_drug_order": ({"generic_name": "SAFE_DRUG_MARKER"},),
+            "daily_course_record": ({
+                "record_time": "2026-01-01 12:00:00+08",
+                "record_content": "SAFE_COURSE_MARKER",
+            },),
+            "surgery_inform_consent": ({
+                "record_content": "SAFE_CONSENT_MARKER",
+                "patient_sign": "已签名",
+                "surgeon_sign": "已签名",
+            },),
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    client = _JointSurgeryFactClient()
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.results == ()
+    assert [item.rule_id for item in result.decisions] == list(selected)
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    prompt = client.prompts[0]
+    assert all(rule_id in prompt for rule_id in selected)
+    assert "033 只阅读给定的本次手术知情同意书正文" in prompt
+    assert "SAFE_SURGERY_MARKER" in prompt
+    assert "SAFE_CONSENT_MARKER" in prompt
+    assert "SHOULD_NOT_LEAK" not in prompt
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == [
+        "compliant", "compliant", "data_gap", "compliant",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_joint_033_rejects_surgery_only_evidence_ref() -> None:
+    """联合上下文中，033 不能只靠手术记录伪造同意书事实。"""
+
+    selected = ("LX0609-024", "LX0609-033")
+
+    def reader(**kwargs):
+        rows_by_source = {
+            "surgery_record": ({
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+                "surgery_name": "SAFE_SURGERY_MARKER",
+            },),
+            "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
+            "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
+            "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+            "surgery_inform_consent": ({"record_content": "SAFE_CONSENT_MARKER"},),
+        }
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows_by_source.get(kwargs["source_key"], ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_JointSurgeryFactClient(consent_evidence=False),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert result.llm_call_count == 1
+    assert {item.rule_id for item in result.decisions} == set(selected)
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+    assert {item.final_state.value for item in reduced} == {"technical_error"}
+    assert {item.reason_code for item in result.decisions} == {"model_invalid_output"}
+
+
+@pytest.mark.asyncio
+async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
+    """024 专属病理来源超限时，025 仍可使用其小型联合材料完成判断。"""
+
+    selected = ("LX0609-024", "LX0609-025")
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows_by_source = {
+            "surgery_record": ({
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+                "surgery_name": "SAFE_SURGERY_MARKER",
+            },),
+            "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
+            "pathology_exam_master": tuple(
+                {"specimen_name": f"SAFE_PATHOLOGY_{index}"}
+                for index in range(7)
+            ),
+            "pathology_exam_report": ({"diagnosis": "SAFE_PATHOLOGY_REPORT_MARKER"},),
+            "diagnosis": ({"diagnosis_name": "SAFE_DIAGNOSIS_MARKER"},),
+        }
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    client = _JointSurgeryFactClient()
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    by_rule = {item.rule_id: item for item in result.decisions}
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+    states = {item.rule_id: item.final_state.value for item in reduced}
+    assert states["LX0609-024"] == "data_gap"
+    assert by_rule["LX0609-024"].reason_code == "required_field_missing"
+    assert states["LX0609-025"] == "compliant"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "LX0609-025" in client.prompts[0]
+    assert "LX0609-024" not in client.prompts[0]
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import re
@@ -33,6 +33,9 @@ class SurgeryTextProjection:
     context: str
     time_candidates: Mapping[str, SurgeryTimeCandidate]
     document_refs: frozenset[str]
+    # 联合规则提取时，033 必须能验证其事实至少引用手术知情同意书；
+    # 只保存安全文书引用到来源类型的映射，不携带正文或三坐标。
+    document_source_keys: Mapping[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (
@@ -212,6 +215,7 @@ def build_surgery_text_projection(
     )
     parts: list[str] = []
     refs: set[str] = set()
+    source_keys_by_ref: dict[str, str] = {}
     times: dict[str, SurgeryTimeCandidate] = {}
     time_index = 0
     for source_position, source_key in enumerate(source_order, start=1):
@@ -230,6 +234,7 @@ def build_surgery_text_projection(
                 raise ValueError("surgery document projection truncated")
             doc_ref = f"S{source_position:02d}-{row_index:02d}"
             refs.add(doc_ref)
+            source_keys_by_ref[doc_ref] = source_key
             raw_times: list[tuple[Any, str]] = [
                 (row.get(field), field)
                 for field in (
@@ -267,7 +272,12 @@ def build_surgery_text_projection(
     context = "\n".join(parts)
     if len(context) > max_context_chars:
         raise ValueError("surgery text projection truncated")
-    return SurgeryTextProjection(context, dict(times), frozenset(refs))
+    return SurgeryTextProjection(
+        context,
+        dict(times),
+        frozenset(refs),
+        source_keys_by_ref,
+    )
 
 
 def build_surgery_text_fact_prompt(
@@ -335,7 +345,7 @@ def build_surgery_text_fact_prompt(
     if actual_028_example:
         response_example = actual_028_example
     consent_033_instruction = ""
-    if selected == ("LX0609-033",):
+    if "LX0609-033" in selected:
         consent_033_instruction = (
             "033 只阅读给定的本次手术知情同意书正文；已实施手术锚点已由程序确认，"
             "不得从正文重新推断手术是否发生。只输出 consent_role、consent_linkage、"
@@ -408,6 +418,18 @@ def parse_surgery_text_fact_response(
         normalized_evidence = tuple(dict.fromkeys(str(item).strip() for item in evidence))
         if not normalized_evidence or any(item not in projection.document_refs for item in normalized_evidence):
             raise ValueError("surgery event evidence ref mismatch")
+        # 联合提示词可能同时携带手术、病理、用药等材料；033 仍必须至少
+        # 锚定一份手术知情同意书，不能把其它同意书或治疗文书当作手术同意书。
+        if (
+            "LX0609-033" in selected
+            and projection.document_source_keys
+            and not any(
+                projection.document_source_keys.get(item)
+                == "surgery_inform_consent"
+                for item in normalized_evidence
+            )
+        ):
+            raise ValueError("surgery consent evidence ref mismatch")
         values: dict[str, str] = {}
         for key, allowed in _ENUMS.items():
             value = str(raw.get(key) or "unknown").strip()

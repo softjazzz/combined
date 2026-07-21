@@ -206,11 +206,11 @@ def _unproven_empty_consent_session():
 @pytest.mark.asyncio
 async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_states() -> None:
     session = _session()
-    response = {"schema_version": SCHEMA_VERSION, "events": [_event()]}
-    client = _Client(
-        response,
-        consent_payload={"schema_version": SCHEMA_VERSION, "events": [_consent_event()]},
-    )
+    response = {
+        "schema_version": SCHEMA_VERSION,
+        "events": [_event(evidence_refs=["S01-01", "S08-01"])],
+    }
+    client = _Client(response)
 
     result = await execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=RULE_IDS,
@@ -234,19 +234,16 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
     assert [item.final_state.value for item in reduced] == [
         "compliant", "non_compliant", "not_applicable", "compliant"
     ]
-    # 024/025/028/033 均为独立最小上下文；028 与 033 不得共享一条调用。
-    assert result.llm_call_count == 4
-    assert result.total_tokens == 400
-    assert len(client.prompts) == 4
-    assert all("正文标记-A" in prompt for prompt in client.prompts[:3])
-    assert "正文标记-A" not in client.prompts[3]
-    assert "本次手术知情同意正文" in client.prompts[3]
-    assert "patient_signature" in client.prompts[3]
-    assert "current_surgery|other_or_unclear|unknown" in client.prompts[3]
-    assert "输出不得超过250个token" in client.prompts[0]
-    assert "输出不得超过200个token" in client.prompts[1]
-    assert "输出不得超过250个token" in client.prompts[2]
-    assert "输出不得超过160个token" in client.prompts[3]
+    # typed 旁路合并为一次联合事实提取；033 仍须引用同意书安全文书标识。
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 100
+    assert len(client.prompts) == 1
+    assert "正文标记-A" in client.prompts[0]
+    assert "本次手术知情同意正文" in client.prompts[0]
+    assert "033 只阅读给定的本次手术知情同意书正文" in client.prompts[0]
+    assert "patient_signature" in client.prompts[0]
+    assert "current_surgery|other_or_unclear|unknown" in client.prompts[0]
+    assert "输出不得超过512个token" in client.prompts[0]
     assert "正文标记-A" not in repr(result)
     assert "2026-01-01" not in repr(result)
 
@@ -662,7 +659,7 @@ async def test_invalid_surgery_fact_response_is_bounded_calls_technical_error() 
         snapshot=session.snapshot,
     )
     assert [item.final_state.value for item in reduced] == ["technical_error"] * 4
-    assert result.llm_call_count == 4
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.parametrize(

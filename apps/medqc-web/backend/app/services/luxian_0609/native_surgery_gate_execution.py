@@ -80,16 +80,14 @@ _TYPED_TEXT_PROJECTION_SOURCES = {
     **_TYPED_TEXT_SOURCES,
     "LX0609-033": ("surgery_inform_consent",),
 }
-_TEXT_FACT_BATCH_LIMITS = {
-    # 024/025 的判断只需要极小的当前手术材料，必须独立调用，避免其它
-    # 手术规则把无关正文带入模型上下文。
-    "LX0609-024": (2, 2000, 250, None),
-    "LX0609-025": (3, 1500, 200, None),
-    # 028/033 不共享批次：每条规则至多一次模型调用，且上下文只能是
-    # 当前规则所需的最小材料，避免把整份手术包或无关文书送入模型。
-    "LX0609-028": (6, 2000, 250, 6),
-    "LX0609-033": (2, 1200, 160, 2),
-}
+# typed RuleDecision 旁路将同一就诊仍需语义判断的高风险手术规则合并为
+# 一次事实抽取。任何上限触发都 fail-closed 为 data_gap，禁止静默截断后
+# 继续调用模型。
+_JOINT_TEXT_FACT_MAX_ROWS_PER_SOURCE = 6
+_JOINT_TEXT_FACT_MAX_TOTAL_ROWS = 24
+_JOINT_TEXT_FACT_MAX_DOCUMENTS = 24
+_JOINT_TEXT_FACT_MAX_CONTEXT_CHARS = 12000
+_JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS = 512
 _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
@@ -1173,109 +1171,115 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 active_rule_ids.append(rule_id)
 
         if active_rule_ids:
-            bounded_rule_ids = tuple(
-                rule_id for rule_id in active_rule_ids
-                if rule_id in _TEXT_FACT_BATCH_LIMITS
-            )
-            shared_rule_ids = tuple(
-                rule_id for rule_id in active_rule_ids
-                if rule_id not in _TEXT_FACT_BATCH_LIMITS
-            )
-            batches = [(rule_id,) for rule_id in bounded_rule_ids]
-            if shared_rule_ids:
-                batches.append(shared_rule_ids)
-            for batch_rule_ids in batches:
+            # 先按规则各自来源检查行上限；相关来源过多只能让该规则资料不足，
+            # 不能为了合批静默裁剪。
+            model_rule_ids: list[str] = []
+            for rule_id in active_rule_ids:
+                source_keys = _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
+                if any(
+                    len(rows_by_source[source_key])
+                    > _JOINT_TEXT_FACT_MAX_ROWS_PER_SOURCE
+                    for source_key in source_keys
+                ):
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "data_gap", "surgery_projection_truncated"
+                    )
+                else:
+                    model_rule_ids.append(rule_id)
+
+            if model_rule_ids:
                 active_sources = tuple(dict.fromkeys(
                     source_key
-                    for rule_id in batch_rule_ids
+                    for rule_id in model_rule_ids
                     for source_key in _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
                 ))
-                limits = _TEXT_FACT_BATCH_LIMITS.get(batch_rule_ids[0])
-                max_rows, max_context, max_completion, max_documents = (
-                    limits if len(batch_rule_ids) == 1 and limits is not None
-                    else (50, 32000, None, None)
-                )
-                try:
-                    projection = build_surgery_text_projection(
-                        rows_by_source={key: rows_by_source[key] for key in active_sources},
-                        max_rows_per_source=max_rows,
-                        max_context_chars=max_context,
-                        max_documents=max_documents,
-                    )
-                except ValueError:
-                    projection = None
-                if projection is None or not projection.context:
-                    for rule_id in batch_rule_ids:
+                total_rows = sum(len(rows_by_source[source_key]) for source_key in active_sources)
+                if total_rows > _JOINT_TEXT_FACT_MAX_TOTAL_ROWS:
+                    for rule_id in model_rule_ids:
                         pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                            rule_id, "data_gap", "surgery_projection_unavailable"
+                            rule_id, "data_gap", "surgery_projection_truncated"
                         )
-                    continue
-                if llm_client is None:
-                    for rule_id in batch_rule_ids:
-                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                            rule_id, "technical_error", "surgery_llm_failure"
+                else:
+                    try:
+                        projection = build_surgery_text_projection(
+                            rows_by_source={key: rows_by_source[key] for key in active_sources},
+                            max_rows_per_source=_JOINT_TEXT_FACT_MAX_ROWS_PER_SOURCE,
+                            max_context_chars=_JOINT_TEXT_FACT_MAX_CONTEXT_CHARS,
+                            max_documents=_JOINT_TEXT_FACT_MAX_DOCUMENTS,
                         )
-                    continue
-                llm_call_count += 1
-                try:
-                    response = await llm_client.generate(
-                        build_surgery_text_fact_prompt(
-                            selected_rule_ids=batch_rule_ids,
-                            projection=projection,
-                            max_completion_tokens=max_completion,
-                        )
-                    )
-                except Exception:
-                    response = None
-                if response is None:
-                    for rule_id in batch_rule_ids:
-                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                            rule_id, "technical_error", "surgery_llm_failure"
-                        )
-                    continue
-                prompt, completion, total, elapsed = _usage(response)
-                prompt_tokens += prompt
-                completion_tokens += completion
-                total_tokens += total
-                api_time += elapsed
-                try:
-                    text_facts = (
-                        None
-                        if max_completion is not None and completion > max_completion
-                        else parse_surgery_text_fact_response(
-                            response=response,
-                            projection=projection,
-                            selected_rule_ids=batch_rule_ids,
-                        )
-                    )
-                except ValueError:
-                    text_facts = None
-                for rule_id in batch_rule_ids:
-                    outcome = (
-                        _SurgeryTextOutcome(
-                            rule_id, "technical_error", "surgery_llm_invalid_output"
-                        )
-                        if text_facts is None
-                        else _surgery_text_outcome(
-                            rule_id=rule_id,
-                            facts=text_facts,
-                            projection=projection,
-                        )
-                    )
-                    if (
-                        rule_id in partial_source_rule_ids
-                        and (
-                            outcome.status in {"compliant", "not_applicable"}
-                            or (
-                                outcome.status == "non_compliant"
-                                and outcome.reason_code != "prophylaxis_over_48h"
+                    except ValueError:
+                        projection = None
+                    if projection is None or not projection.context:
+                        for rule_id in model_rule_ids:
+                            pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                                rule_id, "data_gap", "surgery_projection_unavailable"
                             )
-                        )
-                    ):
-                        outcome = _SurgeryTextOutcome(
-                            rule_id, "data_gap", "surgery_projection_partial"
-                        )
-                    pending_outcomes[rule_id] = outcome
+                    elif llm_client is None:
+                        for rule_id in model_rule_ids:
+                            pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                                rule_id, "technical_error", "surgery_llm_failure"
+                            )
+                    else:
+                        llm_call_count += 1
+                        try:
+                            response = await llm_client.generate(
+                                build_surgery_text_fact_prompt(
+                                    selected_rule_ids=tuple(model_rule_ids),
+                                    projection=projection,
+                                    max_completion_tokens=_JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS,
+                                )
+                            )
+                        except Exception:
+                            response = None
+                        if response is None:
+                            for rule_id in model_rule_ids:
+                                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                                    rule_id, "technical_error", "surgery_llm_failure"
+                                )
+                        else:
+                            prompt, completion, total, elapsed = _usage(response)
+                            prompt_tokens += prompt
+                            completion_tokens += completion
+                            total_tokens += total
+                            api_time += elapsed
+                            try:
+                                text_facts = (
+                                    None
+                                    if completion > _JOINT_TEXT_FACT_MAX_COMPLETION_TOKENS
+                                    else parse_surgery_text_fact_response(
+                                        response=response,
+                                        projection=projection,
+                                        selected_rule_ids=tuple(model_rule_ids),
+                                    )
+                                )
+                            except ValueError:
+                                text_facts = None
+                            for rule_id in model_rule_ids:
+                                outcome = (
+                                    _SurgeryTextOutcome(
+                                        rule_id, "technical_error", "surgery_llm_invalid_output"
+                                    )
+                                    if text_facts is None
+                                    else _surgery_text_outcome(
+                                        rule_id=rule_id,
+                                        facts=text_facts,
+                                        projection=projection,
+                                    )
+                                )
+                                if (
+                                    rule_id in partial_source_rule_ids
+                                    and (
+                                        outcome.status in {"compliant", "not_applicable"}
+                                        or (
+                                            outcome.status == "non_compliant"
+                                            and outcome.reason_code != "prophylaxis_over_48h"
+                                        )
+                                    )
+                                ):
+                                    outcome = _SurgeryTextOutcome(
+                                        rule_id, "data_gap", "surgery_projection_partial"
+                                    )
+                                pending_outcomes[rule_id] = outcome
         decisions.extend(
             _decision_from_surgery_outcome(
                 outcome=pending_outcomes[rule_id],
