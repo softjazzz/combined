@@ -1633,7 +1633,6 @@ def _assess_copy(
     documents: Mapping[str, Any],
     *,
     source_complete: bool = False,
-    support_documents: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
 ) -> _CopyRuleOutcome:
     """只按相邻、不同日期且带 record_time 的病程对做 017 初筛。"""
 
@@ -1755,56 +1754,18 @@ def _assess_copy(
             "template_shell_only": template_shell_only,
         }
     )
-    if maximum < _COPY_SIMILARITY_THRESHOLD:
+    if maximum <= _COPY_SIMILARITY_THRESHOLD:
         return _CopyRuleOutcome(
             status="compliant",
             reason_code="copy_similarity_within_threshold",
             executor_type="program",
             safe_metadata=safe_metadata,
         )
-    if maximum > _COPY_SIMILARITY_THRESHOLD and template_shell_only:
-        return _CopyRuleOutcome(
-            status="compliant",
-            reason_code="copy_template_shell_only",
-            executor_type="program",
-            safe_metadata=safe_metadata,
-        )
-    if (
-        maximum >= _COPY_AUTO_NONCOMPLIANT_MIN
-        and substantial_coverage >= _COPY_STRONG_COVERAGE_MIN
-    ):
-        return _CopyRuleOutcome(
-            status="non_compliant",
-            reason_code="copy_strong_similarity_confirmed",
-            executor_type="program",
-            safe_metadata=safe_metadata,
-        )
-    assert best_pair is not None
-    event_rows = _copy_event_rows(
-        support_documents or {},
-        left_time=best_pair[0][0],
-        right_time=best_pair[1][0],
-    )
     return _CopyRuleOutcome(
-        status="evaluation_unknown",
-        reason_code="copy_semantic_verification_required",
+        status="non_compliant",
+        reason_code="copy_similarity_threshold_exceeded",
         executor_type="program",
         safe_metadata=safe_metadata,
-        semantic_input=_CopySemanticInput(
-            left=best_pair[0][4],
-            right=best_pair[1][4],
-            event_rows=event_rows,
-            support_source_keys=tuple(
-                source_key
-                for source_key in _COPY_SUPPORT_SOURCES
-                if source_key in (support_documents or {})
-            ),
-        ),
-        support_source_keys=tuple(
-            source_key
-            for source_key in _COPY_SUPPORT_SOURCES
-            if source_key in (support_documents or {})
-        ),
     )
 
 
@@ -2004,7 +1965,7 @@ def _rule_017_decision(
             qc_direction=QcDirection.UNKNOWN,
             reason_code="snapshot_mismatch",
             fact_refs=(),
-            evaluator_version="rule017-copy-update-v1",
+            evaluator_version="rule017-copy-similarity-v2",
             confidence=None,
         )
     refs = tuple(item.snapshot_ref.removeprefix("sha256:") for item in observations)
@@ -2073,7 +2034,7 @@ def _rule_017_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=refs,
-        evaluator_version="rule017-copy-update-v1",
+        evaluator_version="rule017-copy-similarity-v2",
         confidence=outcome.confidence,
     )
 
@@ -2313,8 +2274,6 @@ async def execute_luxian_0609_native_course_quality_rules(
 
     copy_documents = documents
     copy_source_failure = ""
-    copy_support_documents: dict[str, list[dict[str, Any]]] = {}
-    copy_support_failure = ""
     coordinates = (institute_id, patient_id, visit_id)
     if "LX0609-017" in selected and "LX0609-017" not in projection_gap_rule_ids:
         if not all(str(value or "").strip() for value in coordinates):
@@ -2342,18 +2301,6 @@ async def execute_luxian_0609_native_course_quality_rules(
                     complete_documents[source_key] = source_rows
                 if not copy_source_failure:
                     copy_documents = complete_documents
-                if evidence_materials is not None:
-                    for source_key in _COPY_SUPPORT_SOURCES:
-                        try:
-                            copy_support_documents[source_key] = [
-                                dict(row) for row in evidence_materials.rows(source_key)
-                            ]
-                        except EvidenceMaterialTruncated:
-                            copy_support_failure = "copy_event_source_truncated"
-                            break
-                        except EvidenceMaterialUnavailable:
-                            copy_support_failure = "copy_event_source_unavailable"
-                            break
             except EvidenceMaterialTruncated:
                 copy_source_failure = "course_comparison_source_truncated"
             except Exception:
@@ -2580,28 +2527,7 @@ async def execute_luxian_0609_native_course_quality_rules(
             copy_outcome = _assess_copy(
                 copy_documents,
                 source_complete=copy_documents is not documents,
-                support_documents=copy_support_documents,
             )
-            if copy_outcome.status == "evaluation_unknown":
-                if copy_support_failure:
-                    emit_copy(
-                        _CopyRuleOutcome(
-                            status="data_gap",
-                            reason_code=copy_support_failure,
-                            executor_type="program",
-                            safe_metadata=copy_outcome.safe_metadata,
-                        )
-                    )
-                    continue
-                if copy_outcome.semantic_input is not None and llm_client is not None:
-                    llm_call_count += 1
-                copy_outcome = await _resolve_copy_semantic(
-                    copy_outcome, llm_client
-                )
-                prompt_tokens += copy_outcome.prompt_tokens
-                completion_tokens += copy_outcome.completion_tokens
-                total_tokens += copy_outcome.total_tokens
-                api_time += copy_outcome.api_time
             emit_copy(copy_outcome)
             continue
 
