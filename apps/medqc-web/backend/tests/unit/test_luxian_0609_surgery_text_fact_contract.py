@@ -8,11 +8,24 @@ import pytest
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609.evidence_material import (
+    Luxian0609EvidenceMaterialStore,
+    build_material_snapshot_ref,
+)
+from app.services.luxian_0609.evidence_snapshot import (
+    Luxian0609EvidenceSnapshot,
+    SourceCompleteness,
+    SourceObservation,
+)
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
-from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryError
+from app.services.luxian_0609.source_evidence_reader import (
+    SourceEvidenceQueryError,
+    SourceEvidenceUnavailable,
+)
+from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.native_surgery_gate_execution import (
     _surgery_text_outcome,
     execute_luxian_0609_native_surgery_gate_rules,
@@ -63,14 +76,20 @@ def _event(**overrides: object) -> dict[str, object]:
 
 
 class _Client:
-    def __init__(self, payload: object) -> None:
+    def __init__(self, payload: object, *, consent_payload: object | None = None) -> None:
         self.payload = payload
+        self.consent_payload = consent_payload
         self.prompts: list[str] = []
 
     async def generate(self, prompt: str) -> dict[str, object]:
         self.prompts.append(prompt)
+        payload = (
+            self.consent_payload
+            if self.consent_payload is not None and "本次规则：LX0609-033" in prompt
+            else self.payload
+        )
         return {
-            "choices": [{"message": {"content": json.dumps(self.payload, ensure_ascii=False)}}],
+            "choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 90, "completion_tokens": 10, "total_tokens": 100},
             "_api_time": 0.1,
         }
@@ -84,6 +103,7 @@ def _session(
     actual_stop_text: str = "2026-01-02 08:00",
     consent_rows: tuple[dict[str, object], ...] | None = None,
     consent_source_error: bool = False,
+    consent_source_unavailable: bool = False,
 ):
     rows = {
         "surgery_record": ({
@@ -116,6 +136,8 @@ def _session(
             raise SourceEvidenceQueryError("RAW_DRUG_QUERY_MARKER")
         if consent_source_error and source_key == "surgery_inform_consent":
             raise SourceEvidenceQueryError("RAW_CONSENT_QUERY_MARKER")
+        if consent_source_unavailable and source_key == "surgery_inform_consent":
+            raise SourceEvidenceUnavailable()
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows.get(source_key, ()),
@@ -134,11 +156,61 @@ def _session(
     )
 
 
+def _consent_event(**overrides: object) -> dict[str, object]:
+    return _event(evidence_refs=["S08-01"], **overrides)
+
+
+def _unproven_empty_consent_session():
+    """构造“查询为空但同步完整性未证明”的安全快照，不附带正文材料。"""
+    session = _session()
+    observations = tuple(
+        SourceObservation.create(
+            source_key=item.source_key,
+            query_state=QueryStatus.EMPTY,
+            completeness=SourceCompleteness.UNPROVEN,
+            record_count=0,
+            query_version=item.query_version,
+            snapshot_ref=build_material_snapshot_ref(
+                source_key=item.source_key,
+                query_version=item.query_version,
+                query_state=QueryStatus.EMPTY,
+                completeness=SourceCompleteness.UNPROVEN,
+                document_refs=(),
+            ),
+        )
+        if item.source_key == "surgery_inform_consent"
+        else item
+        for item in session.snapshot.observations
+    )
+    snapshot = Luxian0609EvidenceSnapshot.create(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        snapshot_schema_version=session.snapshot.snapshot_schema_version,
+        source_registry_version=session.snapshot.source_registry_version,
+        observations=observations,
+        facts=session.snapshot.facts,
+        document_refs=session.snapshot.document_refs,
+        created_at=session.snapshot.created_at,
+    )
+    materials = Luxian0609EvidenceMaterialStore.create(
+        snapshot=snapshot,
+        sources={
+            "surgery_record": session.materials.source("surgery_record"),
+            "mr_surgery": session.materials.source("mr_surgery"),
+        },
+    )
+    return snapshot, materials
+
+
 @pytest.mark.asyncio
 async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_states() -> None:
     session = _session()
     response = {"schema_version": SCHEMA_VERSION, "events": [_event()]}
-    client = _Client(response)
+    client = _Client(
+        response,
+        consent_payload={"schema_version": SCHEMA_VERSION, "events": [_consent_event()]},
+    )
 
     result = await execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=RULE_IDS,
@@ -166,7 +238,11 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
     assert result.llm_call_count == 4
     assert result.total_tokens == 400
     assert len(client.prompts) == 4
-    assert all("正文标记-A" in prompt for prompt in client.prompts)
+    assert all("正文标记-A" in prompt for prompt in client.prompts[:3])
+    assert "正文标记-A" not in client.prompts[3]
+    assert "本次手术知情同意正文" in client.prompts[3]
+    assert "patient_signature" in client.prompts[3]
+    assert "current_surgery|other_or_unclear|unknown" in client.prompts[3]
     assert "输出不得超过250个token" in client.prompts[0]
     assert "输出不得超过200个token" in client.prompts[1]
     assert "输出不得超过250个token" in client.prompts[2]
@@ -176,8 +252,8 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
 
 
 @pytest.mark.asyncio
-async def test_033_empty_consent_source_is_data_gap_without_llm_call() -> None:
-    """同意书来源没有行时，不能让模型从其他手术文书猜测“缺同意书”。"""
+async def test_033_empty_complete_consent_source_is_non_compliant_without_llm_call() -> None:
+    """受控同意书来源完整且没有行，才是可确定的缺失。"""
     session = _session(consent_rows=())
     client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
 
@@ -191,6 +267,80 @@ async def test_033_empty_consent_source_is_data_gap_without_llm_call() -> None:
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=("LX0609-033",),
         snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_033_empty_shell_rows_are_non_compliant_without_llm_or_body_leak() -> None:
+    """空壳行不是同意书正文，不能以标题或签名字段冒充可验签文书。"""
+    session = _session(consent_rows=({
+        "record_content": "  ",
+        "patient_sign": "患者签名占位",
+        "surgeon_sign": "医师签名占位",
+    },))
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "患者签名占位" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_033_unavailable_consent_source_is_data_gap_without_llm_call() -> None:
+    """没有可读同意书来源时不能把未同步误判成缺失。"""
+    session = _session(consent_source_unavailable=True)
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_033_empty_unproven_consent_source_is_data_gap_without_llm_call() -> None:
+    """同步完整性未证明时，空查询不能偷换为“缺知情同意书”。"""
+    snapshot, materials = _unproven_empty_consent_session()
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
+
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client,
+        evidence_snapshot=snapshot, evidence_materials=materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions, expected_rule_ids=("LX0609-033",),
+        snapshot=snapshot,
     )
 
     assert [item.final_state.value for item in reduced] == ["data_gap"]
@@ -230,7 +380,7 @@ async def test_033_substantive_consent_missing_required_signature_is_non_complia
     session = _session()
     client = _Client({
         "schema_version": SCHEMA_VERSION,
-        "events": [_event(**{signature_field: "missing"})],
+        "events": [_consent_event(**{signature_field: "missing"})],
     })
 
     result = await execute_luxian_0609_native_surgery_gate_rules(

@@ -74,6 +74,12 @@ _TYPED_TEXT_SOURCES = {
     # 同意书角色也不提供签署事实，纳入只会挤占 2 份文书的安全上下文预算。
     "LX0609-033": ("surgery_record", "surgery_inform_consent"),
 }
+# 033 的已实施手术锚点由同一 snapshot 的严格事实确认，不必把手术记录
+# 正文再次送给模型。模型只读取本次就诊的少量手术知情同意书正文。
+_TYPED_TEXT_PROJECTION_SOURCES = {
+    **_TYPED_TEXT_SOURCES,
+    "LX0609-033": ("surgery_inform_consent",),
+}
 _TEXT_FACT_BATCH_LIMITS = {
     # 024/025 的判断只需要极小的当前手术材料，必须独立调用，避免其它
     # 手术规则把无关正文带入模型上下文。
@@ -1110,23 +1116,43 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
                     rule_id, "technical_error", "source_query_error"
                 )
-            elif rule_id == "LX0609-033" and (
-                states_by_source.get("surgery_inform_consent") != "available"
-                or next(
+            elif rule_id == "LX0609-033":
+                consent_state = states_by_source.get("surgery_inform_consent")
+                consent_rows = rows_by_source["surgery_inform_consent"]
+                consent_observation = next(
                     (
-                        item.completeness.value
+                        item
                         for item in evidence_snapshot.observations
                         if item.source_key == "surgery_inform_consent"
                     ),
-                    "unproven",
+                    None,
                 )
-                != "complete"
-            ):
-                # 同意书表的 EMPTY、未同步、截断或完整性未证明都不能被解释为
-                # “缺知情同意书”。此分支既不调用 LLM，也不产生确定缺陷。
-                pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                    rule_id, "data_gap", "surgery_consent_source_unproven"
-                )
+                # 033 的来源查询已经由同一 Evidence Session 的 limit+1 快照绑定。
+                # 有正文时，不能因为另一份同步完整性说明缺失而跳过该文书；
+                # 空结果才在该受控、完整查询下表示“无同意书”。
+                if (
+                    consent_state == "empty"
+                    and consent_observation is not None
+                    and consent_observation.completeness.value == "complete"
+                ):
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "non_compliant", "surgery_consent_document_missing"
+                    )
+                elif consent_state != "available":
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "data_gap", "surgery_consent_source_unproven"
+                    )
+                elif not any(
+                    _clean(row.get("record_content") or row.get("content"))
+                    for row in consent_rows
+                ):
+                    # 空壳行不是可供模型判断的同意书正文；完整来源中只有空壳时，
+                    # 直接按缺少有效同意书处理，既不扩大上下文也不浪费一次模型调用。
+                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                        rule_id, "non_compliant", "surgery_consent_body_missing"
+                    )
+                else:
+                    active_rule_ids.append(rule_id)
             elif (
                 rule_id == "LX0609-028"
                 and states_by_source.get("inpat_drug_order")
@@ -1162,7 +1188,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 active_sources = tuple(dict.fromkeys(
                     source_key
                     for rule_id in batch_rule_ids
-                    for source_key in _TYPED_TEXT_SOURCES[rule_id]
+                    for source_key in _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
                 ))
                 limits = _TEXT_FACT_BATCH_LIMITS.get(batch_rule_ids[0])
                 max_rows, max_context, max_completion, max_documents = (

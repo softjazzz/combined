@@ -408,12 +408,17 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         expected_rule_ids=selected,
         snapshot=session.snapshot,
     )
-    assert [item.final_state.value for item in reduced] == [expected_state] * 5
+    expected_states = [expected_state] * 5
+    if source_mode == "available":
+        # 033 的同意书查询完整且为空，已是可确定的“无有效同意书”；
+        # 其余门控规则仍缺各自的必要字段，保持数据不足。
+        expected_states[-1] = "non_compliant"
+    assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
         assert {item.reason_code for item in result.decisions} == {expected_reason}
     elif source_mode == "available":
         assert {item.reason_code for item in result.decisions} == {
-            "required_field_missing",
+            "required_field_missing", "requirement_violated",
         }
     assert result.total_tokens == 0
     assert client.prompts == []
