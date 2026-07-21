@@ -16,6 +16,39 @@ from scripts.run_luxian_0609_preproduction_benchmark20 import (
 )
 
 
+_SEMANTIC_RULE_IDS = frozenset(
+    {
+        "LX0609-009",
+        "LX0609-010",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-013",
+        "LX0609-014",
+        "LX0609-015",
+        "LX0609-016",
+        "LX0609-017",
+        "LX0609-018",
+        "LX0609-019",
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-023",
+        "LX0609-024",
+        "LX0609-025",
+        "LX0609-027",
+        "LX0609-028",
+        "LX0609-033",
+        "LX0609-040",
+        "LX0609-044",
+        "LX0609-045",
+        "LX0609-046",
+    }
+)
+_DETERMINISTIC_RULE_IDS = frozenset(
+    f"LX0609-{index:03d}" for index in range(1, 50)
+) - _SEMANTIC_RULE_IDS
+
+
 def _case_map() -> dict:
     return {
         "selector_version": "fixed20-v1",
@@ -92,6 +125,43 @@ def _emit_attestations(
     )
 
 
+def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
+    """锁定49点契约分类，避免017灰区被误记为Python决定。"""
+
+    rows = candidate["rows"]
+    assert len(rows) == 20 * 49
+    decision_kinds = [row["decision_kind"] for row in rows]
+    assert decision_kinds.count("deterministic") == 500
+    assert decision_kinds.count("semantic") == 480
+    assert (
+        decision_kinds.count("deterministic") + decision_kinds.count("semantic")
+        == len(rows)
+    )
+
+    for case_index in range(1, 21):
+        case_label = f"case-{case_index:02d}"
+        semantic_rule_ids = {
+            row["rule_id"]
+            for row in rows
+            if row["case_label"] == case_label
+            and row["decision_kind"] == "semantic"
+        }
+        deterministic_rule_ids = {
+            row["rule_id"]
+            for row in rows
+            if row["case_label"] == case_label
+            and row["decision_kind"] == "deterministic"
+        }
+        assert semantic_rule_ids == _SEMANTIC_RULE_IDS
+        assert deterministic_rule_ids == _DETERMINISTIC_RULE_IDS
+
+    assert all(
+        row["decision_kind"] == "semantic"
+        for row in rows
+        if row["rule_id"] == "LX0609-017"
+    )
+
+
 @pytest.mark.asyncio
 async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_batch():
     loader_calls: list[tuple[str, str, str, str]] = []
@@ -141,7 +211,14 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
     assert batch["summary"]["judgment_count"] == 980
     assert batch["summary"]["status_counts"] == {"compliant": 980}
     assert batch["summary"]["llm_call_count"] == 20
+    assert batch["summary"]["input_tokens"] == 200
+    assert batch["summary"]["completion_tokens"] == 40
     assert batch["summary"]["total_tokens"] == 240
+    assert (
+        batch["summary"]["input_tokens"]
+        + batch["summary"]["completion_tokens"]
+        == batch["summary"]["total_tokens"]
+    )
     assert batch["summary"]["technical_error_count"] == 0
     assert batch["summary"]["latency_ms"]["p50"] == 10.5
     assert batch["summary"]["latency_ms"]["p95"] == 19.05
@@ -159,9 +236,7 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         generated_at="2026-07-17T00:00:00Z",
     )
     assert candidate["candidate_count"] == 980
-    decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
-    assert decision_kinds.count("deterministic") == 580
-    assert decision_kinds.count("semantic") == 400
+    _assert_candidate_decision_kind_contract(candidate)
     attestation_hashes = [
         evidence_hash
         for case in batch["cases"]
@@ -377,9 +452,7 @@ async def test_benchmark20_ignores_untrusted_customer_executor_type():
         candidate_version="benchmark-authority-test-v1",
         generated_at="2026-07-17T00:00:00Z",
     )
-    decision_kinds = [row["decision_kind"] for row in candidate["rows"]]
-    assert decision_kinds.count("deterministic") == 580
-    assert decision_kinds.count("semantic") == 400
+    _assert_candidate_decision_kind_contract(candidate)
 
 
 @pytest.mark.asyncio
