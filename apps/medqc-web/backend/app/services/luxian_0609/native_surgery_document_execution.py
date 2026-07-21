@@ -13,7 +13,11 @@ from .decision_model import (
     QcDirection,
     RuleDecision,
 )
-from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
@@ -26,6 +30,7 @@ from .source_registry import (
 
 
 SURGERY_DOCUMENT_RULE_IDS = (
+    "LX0609-029",
     "LX0609-034",
     "LX0609-035",
     "LX0609-036",
@@ -37,6 +42,7 @@ EXECUTOR_KEY = "surgery_document"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v1"
 _TYPED_RULE_SOURCE_KEYS = {
+    "LX0609-029": ("presurg_summary", "surgery_record", "mr_surgery"),
     "LX0609-034": ("anesthesia_record", "consent_form"),
     "LX0609-035": ("anesthesia_record", "consent_form"),
     "LX0609-036": (
@@ -100,6 +106,7 @@ _PLACEHOLDER_PATTERN = re.compile(
 _ANESTHESIA_CONSENT_PATTERN = re.compile(
     r"麻醉[\s\S]{0,40}(?:同意|告知|签名)|(?:同意|告知)[\s\S]{0,40}麻醉"
 )
+_PRESURG_PLACEHOLDER_VALUES = frozenset({"[]", "{}", "null", "none"})
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("麻醉或术前文书满足该项要求。", ""),
@@ -640,6 +647,112 @@ def _typed_terminal_outcome(
     )
 
 
+def _clean_presurg_body(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    candidate = value.strip()
+    if not candidate or candidate.casefold() in _PRESURG_PLACEHOLDER_VALUES:
+        return ""
+    return candidate
+
+
+async def _typed_029_outcome(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+) -> tuple[_SurgeryDocumentOutcome, int, int, int, int, float]:
+    """029：严格已实施手术事实触发后，只按术前小结正文存在性判定。"""
+
+    # 029 的当前口径是纯存在性规则：严格手术 FactV2 触发后，只看术前
+    # 小结正文是否为非空、非占位值。模型、标题、时间和长度均不得参与判定。
+    source_states: list[str] = []
+    blockers: list[_SurgeryDocumentOutcome] = []
+    for source_key in ("surgery_record", "mr_surgery"):
+        blocker = _typed_source_gate(
+            rule_id="LX0609-029", source_key=source_key, snapshot=snapshot
+        )
+        if blocker is not None:
+            blockers.append(blocker)
+        state, _ = _typed_fact_state(
+            snapshot,
+            fact_types=_SURGERY_FACT_TYPES,
+            source_key=source_key,
+        )
+        source_states.append(state)
+    # 任一批准来源已经给出当前就诊已实施手术的 FactV2 时，不能让另一
+    # 来源的不可用/异常覆盖这项肯定事实；后续只判术前小结正文。
+    if "present" not in source_states:
+        technical = next(
+            (item for item in blockers if item.status == "technical_error"), None
+        )
+        if technical is not None:
+            return technical, 0, 0, 0, 0, 0.0
+        if blockers:
+            return (
+                _SurgeryDocumentOutcome(
+                    "LX0609-029", "data_gap", "performed_surgery_source_unavailable", "program"
+                ),
+                0, 0, 0, 0, 0.0,
+            )
+        source_is_explicitly_absent = all(
+            _typed_observation_state(snapshot, source_key) == "empty"
+            for source_key in ("surgery_record", "mr_surgery")
+        )
+        if source_is_explicitly_absent:
+            return (
+                _SurgeryDocumentOutcome(
+                    "LX0609-029", "not_applicable", "performed_surgery_absent", "program"
+                ),
+                0, 0, 0, 0, 0.0,
+            )
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "performed_surgery_fact_unavailable", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    target_gate = _typed_source_gate(
+        rule_id="LX0609-029", source_key="presurg_summary", snapshot=snapshot
+    )
+    if target_gate is not None:
+        return target_gate, 0, 0, 0, 0, 0.0
+    if _typed_observation_state(snapshot, "presurg_summary") == "empty":
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "non_compliant", "preop_summary_missing", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    try:
+        summary_rows = materials.rows("presurg_summary")
+    except EvidenceMaterialTruncated:
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "preop_summary_source_truncated", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    except EvidenceMaterialUnavailable:
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "preop_summary_source_unavailable", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    if any(_clean_presurg_body(row.get("record_content")) for row in summary_rows):
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "compliant", "preop_summary_present", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    return (
+        _SurgeryDocumentOutcome(
+            "LX0609-029", "non_compliant", "preop_summary_blank", "program"
+        ),
+        0, 0, 0, 0, 0.0,
+    )
+
 def _context(
     documents: Mapping[str, Any], source_groups: Sequence[Sequence[str]]
 ) -> str:
@@ -846,11 +959,15 @@ async def execute_luxian_0609_native_surgery_document_rules(
     """按客户目录顺序执行；强事实不足时零模型并保守降级。"""
 
     requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
-    selected = tuple(
-        rule_id for rule_id in SURGERY_DOCUMENT_RULE_IDS if rule_id in requested
-    )
     typed_requested = frozenset(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
+    )
+    # 029 没有 typed evidence session 时必须留给旧兼容链，避免同一规则重复执行。
+    selected = tuple(
+        rule_id
+        for rule_id in SURGERY_DOCUMENT_RULE_IDS
+        if rule_id in requested
+        and (rule_id != "LX0609-029" or rule_id in typed_requested)
     )
     if (
         not typed_requested.issubset(_TYPED_DECISION_RULE_IDS)
@@ -887,10 +1004,29 @@ async def execute_luxian_0609_native_surgery_document_rules(
     for rule_id in selected:
         if rule_id in typed_requested:
             assert evidence_snapshot is not None
-            outcome = _typed_terminal_outcome(
-                rule_id=rule_id,
-                snapshot=evidence_snapshot,
-            )
+            if rule_id == "LX0609-029":
+                assert evidence_materials is not None
+                (
+                    outcome,
+                    calls,
+                    prompt,
+                    completion,
+                    total,
+                    elapsed,
+                ) = await _typed_029_outcome(
+                    snapshot=evidence_snapshot,
+                    materials=evidence_materials,
+                )
+                llm_call_count += calls
+                prompt_tokens += prompt
+                completion_tokens += completion
+                total_tokens += total
+                api_time += elapsed
+            else:
+                outcome = _typed_terminal_outcome(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                )
             decisions.append(
                 _typed_decision_from_outcome(
                     outcome=outcome,

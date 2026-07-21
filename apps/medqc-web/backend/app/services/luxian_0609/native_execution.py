@@ -17,7 +17,8 @@ from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
-NATIVE_RULE_IDS = ("LX0609-029", "LX0609-030", "LX0609-032")
+# 029 已迁入 surgery_document 异步执行器；这里仅保留纯存在性判定。
+NATIVE_RULE_IDS = ("LX0609-030", "LX0609-032")
 NATIVE_LEGACY_RULE_IDS_BY_RULE_ID = MappingProxyType(
     {
         "LX0609-029": ("CL-181", "SC-081"),

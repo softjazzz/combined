@@ -323,10 +323,10 @@
     },
     {
       "rule_id": "LX0609-029",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "surgery_anesthesia",
-      "executor_key": "surgery_presence",
-      "execution_mode": "native_sync",
+      "executor_key": "surgery_document",
+      "execution_mode": "native_async",
       "decision_authority": "program_only",
       "max_llm_calls_per_rule": 0,
       "source_contract_state": "typed_shadow_v1",

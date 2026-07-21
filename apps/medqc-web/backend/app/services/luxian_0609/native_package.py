@@ -263,6 +263,7 @@ def build_luxian_0609_package_plan(
     native_course_quality_enabled: bool = False,
     native_surgery_gate_enabled: bool = False,
     native_surgery_document_enabled: bool = False,
+    native_surgery_document_029_enabled: bool = False,
 ) -> Luxian0609PackagePlan:
     """按目录顺序将客户选择分为原生同步、原生异步和兼容执行。"""
 
@@ -309,6 +310,10 @@ def build_luxian_0609_package_plan(
             or (
                 item.executor_key == SURGERY_DOCUMENT_EXECUTOR_KEY
                 and native_surgery_document_enabled
+                and (
+                    item.rule_id != "LX0609-029"
+                    or native_surgery_document_029_enabled
+                )
             )
             or (
                 item.executor_key not in {
@@ -398,6 +403,16 @@ def build_luxian_0609_package_plan_from_settings(
         ),
         native_surgery_document_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED", False)
+        ),
+        native_surgery_document_029_enabled=(
+            bool(getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False))
+            and bool(
+                getattr(
+                    settings,
+                    "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED",
+                    False,
+                )
+            )
         ),
     )
 

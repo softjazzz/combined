@@ -263,6 +263,7 @@ async def prepare_luxian_0609_execution(
             or (
                 rule_id
                 in {
+                    "LX0609-029",
                     "LX0609-034",
                     "LX0609-035",
                     "LX0609-036",
@@ -359,7 +360,7 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id in {"LX0609-029", "LX0609-030", "LX0609-032"}
+                rule_id in {"LX0609-030", "LX0609-032"}
                 and bool(
                     getattr(
                         settings,

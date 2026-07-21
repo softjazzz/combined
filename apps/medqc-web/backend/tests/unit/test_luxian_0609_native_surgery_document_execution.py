@@ -90,6 +90,206 @@ class _Client:
         }
 
 
+def _typed_029_session(
+    *,
+    summary_rows: tuple[dict, ...] = (),
+    surgery_mode: str = "exact",
+    mr_surgery_mode: str = "empty",
+    summary_mode: str = "available",
+):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "surgery_record":
+            if surgery_mode == "error":
+                raise SourceEvidenceQueryError()
+            if surgery_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            if surgery_mode == "exact":
+                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif surgery_mode == "nonexact":
+                rows = ({"surgery_begin_time": "2026-01-01 08:00"},)
+            else:
+                rows = ()
+        elif source_key == "mr_surgery":
+            if mr_surgery_mode == "error":
+                raise SourceEvidenceQueryError()
+            if mr_surgery_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            rows = ()
+        elif source_key == "presurg_summary":
+            if summary_mode == "error":
+                raise SourceEvidenceQueryError()
+            if summary_mode == "unavailable":
+                raise SourceEvidenceUnavailable()
+            rows = summary_rows if summary_mode == "available" else ()
+        else:
+            rows = ()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-029",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-07-21T06:00:00+08:00",
+        row_reader=reader,
+    )
+
+
+@pytest.mark.asyncio
+async def test_typed_029_nonempty_summary_is_compliant_without_llm():
+    secret = "RAW_029_SUMMARY_Bearer_secret_13800138000"
+    session = _typed_029_session(
+        summary_rows=(
+            {
+                "document_title": "不参与029判定",
+                "record_time": "not-used-by-029",
+                "record_content": secret,
+            },
+        )
+    )
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+
+    assert result.results == ()
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+    assert reduced[0].final_state == "compliant"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+    assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mr_surgery_mode", ("unavailable", "error"))
+async def test_typed_029_confirmed_surgery_record_overrides_other_source_blocker(
+    mr_surgery_mode: str,
+):
+    session = _typed_029_session(
+        summary_rows=({"record_content": "本次手术术前评估及准备情况已记录。"},),
+        mr_surgery_mode=mr_surgery_mode,
+    )
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state == "compliant"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_llm():
+    session = _typed_029_session(
+        summary_rows=(
+            {
+                "document_title": "不参与029判定",
+                "record_time": "not-used-by-029",
+                "record_content": "   ",
+            },
+            {
+                "document_title": "不参与029判定",
+                "record_time": "not-used-by-029",
+                "record_content": "  []  ",
+            },
+        )
+    )
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+    assert reduced[0].final_state == "non_compliant"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+        ("surgery_mode", "summary_mode", "expected_state"),
+        (
+            ("empty", "available", "not_applicable"),
+            ("nonexact", "available", "data_gap"),
+            ("unavailable", "available", "data_gap"),
+        ("error", "available", "technical_error"),
+        ("exact", "unavailable", "data_gap"),
+        ("exact", "error", "technical_error"),
+    ),
+)
+async def test_typed_029_source_states_are_fail_closed_without_llm(
+    surgery_mode: str,
+    summary_mode: str,
+    expected_state: str,
+):
+    session = _typed_029_session(
+        surgery_mode=surgery_mode,
+        summary_mode=summary_mode,
+    )
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state == expected_state
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
 def _strong_facts(*, anesthesia_method: str = "全身麻醉") -> list[dict]:
     return [
         _fact(
@@ -162,12 +362,17 @@ def _typed_session(
 @pytest.mark.asyncio
 async def test_strong_facts_run_each_selected_rule_once_in_customer_order():
     unrelated_marker = "UNRELATED_DAILY_COURSE_MUST_NOT_ENTER_PROMPT"
+    legacy_document_rule_ids = tuple(
+        rule_id
+        for rule_id in surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+        if rule_id != "LX0609-029"
+    )
     client = _Client([{"is_compliant": index % 2 == 0} for index in range(6)])
 
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
-        rule_ids=tuple(reversed(surgery_doc.SURGERY_DOCUMENT_RULE_IDS)),
+        rule_ids=tuple(reversed(legacy_document_rule_ids)),
         wrapper_rules=[
-            _wrapper(rule_id) for rule_id in surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+            _wrapper(rule_id) for rule_id in legacy_document_rule_ids
         ],
         evidence_payload=_payload(
             facts=_strong_facts(),
@@ -176,9 +381,9 @@ async def test_strong_facts_run_each_selected_rule_once_in_customer_order():
         llm_client=client,
     )
 
-    assert result.planned_rule_ids == surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+    assert result.planned_rule_ids == legacy_document_rule_ids
     assert [item["rule_id"] for item in result.results] == list(
-        surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+        legacy_document_rule_ids
     )
     assert [item["status"] for item in result.results] == [
         "compliant",
@@ -388,7 +593,7 @@ async def test_llm_failure_and_invalid_json_are_sanitized_data_gap():
 
 
 @pytest.mark.asyncio
-async def test_typed_all_six_are_ordered_fail_closed_and_never_read_legacy_payload():
+async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_read_legacy_payload():
     session = _typed_session()
     secret = "RAW_BODY_Bearer_secret_13800138000"
     client = _Client([])
@@ -410,7 +615,8 @@ async def test_typed_all_six_are_ordered_fail_closed_and_never_read_legacy_paylo
     assert [item.rule_id for item in result.decisions] == list(
         surgery_doc.SURGERY_DOCUMENT_RULE_IDS
     )
-    # 034-038当前来源契约不可用；039有手术强事实但术者参与关联仍未获批准。
+    # 029在当前快照中触发且术前小结为空，034-038来源契约不可用；
+    # 039有手术强事实但术者参与关联仍未获批准。
     assert [
         bind_and_reduce_luxian_0609_rule_decisions(
             expected_rule_ids=(decision.rule_id,),
@@ -418,7 +624,7 @@ async def test_typed_all_six_are_ordered_fail_closed_and_never_read_legacy_paylo
             decisions=(decision,),
         )[0].final_state
         for decision in result.decisions
-    ] == ["data_gap"] * 6
+    ] == ["non_compliant", *("data_gap",) * 6]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert secret not in repr(result)

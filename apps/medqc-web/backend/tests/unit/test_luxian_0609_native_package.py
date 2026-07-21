@@ -54,7 +54,6 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-004",
         "LX0609-005",
         "LX0609-006",
-        "LX0609-029",
         "LX0609-030",
         "LX0609-032",
     }
@@ -92,6 +91,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-024",
         "LX0609-025",
         "LX0609-028",
+        "LX0609-029",
         "LX0609-031",
         "LX0609-033",
         "LX0609-034",
@@ -259,11 +259,40 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         native_course_quality_enabled=True,
         native_surgery_gate_enabled=True,
         native_surgery_document_enabled=True,
+        native_surgery_document_029_enabled=True,
     )
 
     assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 48
     assert plan.compatibility_rule_ids == ("LX0609-020",)
     assert plan.compatibility_execution_rule_ids == ("LX-017", "CL-250")
+
+
+@pytest.mark.unit
+def test_029_surgery_document_requires_its_explicit_unified_opt_in():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+    common = {
+        "inventory": inventory,
+        "selected_rule_ids": ["LX0609-029"],
+        "native_sync_enabled": True,
+        "native_async_enabled": False,
+        "native_surgery_document_enabled": True,
+    }
+
+    compatibility = build_luxian_0609_package_plan(**common)
+    enabled = build_luxian_0609_package_plan(
+        **common,
+        native_surgery_document_029_enabled=True,
+    )
+
+    assert compatibility.compatibility_rule_ids == ("LX0609-029",)
+    assert compatibility.compatibility_execution_rule_ids == ("CL-181", "SC-081")
+    assert enabled.native_async_rule_ids == ("LX0609-029",)
+    assert enabled.native_executor_batches == (
+        ("surgery_document", ("LX0609-029",)),
+    )
 
 
 @pytest.mark.unit
@@ -278,17 +307,19 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
         native_sync_enabled=True,
         native_async_enabled=False,
         native_basic_timeliness_enabled=True,
+        native_surgery_document_enabled=True,
+        native_surgery_document_029_enabled=True,
     )
 
     assert plan.selected_rule_ids == ("LX0609-001", "LX0609-029", "LX0609-040")
-    assert plan.native_sync_rule_ids == ("LX0609-001", "LX0609-029")
-    assert plan.native_async_rule_ids == ()
+    assert plan.native_sync_rule_ids == ("LX0609-001",)
+    assert plan.native_async_rule_ids == ("LX0609-029",)
     assert plan.compatibility_rule_ids == ("LX0609-040",)
     assert plan.compatibility_execution_rule_ids == ("SC-083", "CL-108")
     assert plan.bypassed_execution_rule_ids == ("SC-002", "CL-181", "SC-081")
     assert plan.native_executor_batches == (
         ("basic_timeliness", ("LX0609-001",)),
-        ("surgery_presence", ("LX0609-029",)),
+        ("surgery_document", ("LX0609-029",)),
     )
 
     with pytest.raises(ValueError, match="invalid LX0609 customer rule id"):
