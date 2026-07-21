@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 
@@ -144,6 +145,28 @@ def test_episode_prompt_distinguishes_generic_request_from_concrete_purpose():
     assert "请某科协助诊治" in prompt
     assert "无病情问题、诊疗疑问、异常或具体任务" in prompt
     assert "请康复科评估术后活动障碍/制定康复计划" in prompt
+
+
+def test_execution_prompt_requires_candidate_ref_for_linked_states():
+    completed = ((
+        episode._Episode("consultation_record-1", (), (), (), "clear", "clear", "high"),
+        episode._ObservedTime(datetime(2026, 7, 20, 8, 0, 0), True),
+        "安全会诊意见",
+    ),)
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 21, 8, 0, 0), True),
+            "安全后续文书",
+        ),
+    )
+
+    prompt, _, _ = episode._execution_prompt(completed=completed, candidates=candidates)
+
+    assert "linked_specific或linked_vague必须至少返回一个execution_refs" in prompt
+    assert "没有可验证的candidate_documents ref时必须返回unknown" in prompt
+    assert "不得引用会诊申请或会诊意见的ref" in prompt
 
 
 @pytest.mark.asyncio

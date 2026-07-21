@@ -546,7 +546,9 @@ def _execution_prompt(
         "仅治疗同一症状、部位或一般治疗但措施不同，必须为absent，不能关联。"
         "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
         "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
-        "execution_refs只能引用该episode输入candidate_documents中的ref；absent或unknown必须返回空数组。"
+        "execution_refs只能引用该episode输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
+        "linked_specific或linked_vague必须至少返回一个execution_refs；没有可验证的candidate_documents ref时必须返回unknown。"
+        "absent或unknown必须返回空数组。"
         "每个输入episode_ref恰好输出一项，禁止重复。"
         "严格输出JSON：{executions:[{episode_ref,execution_state,execution_refs,confidence}]}。输入："
         + payload
