@@ -53,6 +53,14 @@ _RULE_007_RECORD_SOURCES = (
     "daily_course_record",
     "senior_course_record",
 )
+_RULE_009_EXTERNAL_EVENT_SOURCES = (
+    "exam_item_report",
+    "labtest_master",
+    "labtest_item_report",
+    "inpat_drug_order",
+    "surgery_record",
+    "mr_surgery",
+)
 _ROUND_SOURCES = (
     "daily_course_record",
     "senior_course_record",
@@ -103,6 +111,7 @@ _ABSENT_FACT_STATES = frozenset(
 _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
+_MAX_RULE_009_EXTERNAL_EVENT_ROWS = 8
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
@@ -829,6 +838,11 @@ def _rule_008_009_decision(
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
         *_RULE_007_RECORD_SOURCES,
+        *(
+            _RULE_009_EXTERNAL_EVENT_SOURCES
+            if rule_id == "LX0609-009"
+            else ()
+        ),
     )
     observations = {
         source_key: observation_by_source.get(source_key)
@@ -1191,6 +1205,57 @@ def _rule_008_009_decision(
     )
 
 
+def _rule_009_external_event_date(
+    source_key: str,
+    row: Mapping[str, Any],
+) -> date | None:
+    """只取来源各自的临床事件日期，拒绝同步/修改时间。"""
+
+    fields_by_source = {
+        "exam_item_report": ("report_time",),
+        "labtest_master": ("report_datetime",),
+        "labtest_item_report": ("report_time",),
+        "inpat_drug_order": ("prescribed_datetime",),
+        "surgery_record": (
+            "surgery_begin_time",
+            "surgery_end_time",
+            "record_time",
+        ),
+        "mr_surgery": ("surgery_begin_datetime", "surgery_end_datetime"),
+    }
+    for field_name in fields_by_source.get(source_key, ()):
+        if (parsed := _authoritative_natural_date(row.get(field_name))) is not None:
+            return parsed
+    return None
+
+
+def _rule_009_external_event_text(
+    source_key: str,
+    row: Mapping[str, Any],
+) -> str:
+    """为009语义分支取最小事件描述，不能投递整行或坐标。"""
+
+    fields_by_source = {
+        "exam_item_report": (
+            "exam_impression",
+            "exam_conclusion",
+            "impression",
+            "conclusion",
+            "exam_result",
+            "record_content",
+        ),
+        "labtest_master": ("record_content", "labtest_subject"),
+        "labtest_item_report": ("result", "record_content", "item_name"),
+        "inpat_drug_order": ("generic_name", "brand_name", "drug_type"),
+        "surgery_record": ("surgery_process", "surgery_name", "record_content"),
+        "mr_surgery": ("surgery_name", "surgery_code"),
+    }
+    for field_name in fields_by_source.get(source_key, ()):
+        if (value := _clean(row.get(field_name))):
+            return value
+    return ""
+
+
 def _rule_009_semantic_context(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
@@ -1252,6 +1317,39 @@ def _rule_009_semantic_context(
                 f"[{source_key}] 记录日={record_date.isoformat()}；"
                 f"内容={content}"
             )
+    external_events: list[tuple[date, str, str]] = []
+    observation_by_source = {item.source_key: item for item in snapshot.observations}
+    for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
+        observation = observation_by_source.get(source_key)
+        if (
+            observation is None
+            or observation.query_state.value not in {"available", "empty"}
+            or observation.completeness.value == "truncated"
+        ):
+            return "", False, False
+        try:
+            source_rows = materials.rows(source_key)
+        except Exception:
+            return "", False, False
+        for row in source_rows:
+            content = _rule_009_external_event_text(source_key, row)
+            if not content:
+                continue
+            event_date = _rule_009_external_event_date(source_key, row)
+            if event_date is None:
+                return "", False, False
+            if anchor_date <= event_date <= horizon_date:
+                external_events.append((event_date, source_key, content))
+    external_events.sort(key=lambda item: (item[0], item[1], item[2]))
+    if len(external_events) > _MAX_RULE_009_EXTERNAL_EVENT_ROWS:
+        return "", True, False
+    for event_date, source_key, content in external_events:
+        if len(content) > _MAX_ROW_CHARS:
+            return "", True, False
+        parts.append(
+            f"[外部事件/{source_key}] 事件日={event_date.isoformat()}；"
+            f"内容={content}"
+        )
     expected_dates = {
         anchor_date + timedelta(days=offset)
         for offset in range((horizon_date - anchor_date).days + 1)
@@ -1266,6 +1364,41 @@ def _rule_009_semantic_context(
     )
 
 
+def _rule_009_external_source_terminal_decision(
+    *,
+    base_decision: RuleDecision,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision | None:
+    """009 的外部语义来源失败不能伪装成资料不足。"""
+
+    observations = {item.source_key: item for item in snapshot.observations}
+    for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
+        observation = observations.get(source_key)
+        if observation is None or observation.query_state.value not in {
+            "available", "empty", "unavailable", "error"
+        }:
+            return _rule_009_semantic_decision(
+                base_decision=base_decision,
+                error_reason="snapshot_mismatch",
+            )
+        if observation.query_state.value == "error":
+            return _rule_009_semantic_decision(
+                base_decision=base_decision,
+                error_reason="source_query_error",
+            )
+        if observation.query_state.value == "unavailable":
+            return _rule_009_semantic_decision(
+                base_decision=base_decision,
+                data_gap_reason="source_unavailable",
+            )
+        if observation.completeness.value == "truncated":
+            return _rule_009_semantic_decision(
+                base_decision=base_decision,
+                data_gap_reason="source_truncated",
+            )
+    return None
+
+
 def _rule_009_semantic_prompt(*, context: str) -> str:
     return f"""你是 LX0609-009 病危病程语义核对器。
 
@@ -1275,7 +1408,7 @@ Python 已确认：从病危医嘱开立自然日至权威评价终点，每个�
 - defect：记录明确显示发生病情变化，但对应记录或处置明显不及时；
 - unknown：材料不足以可靠判断，禁止猜测。
 
-只能使用以下当前就诊、评价区间内的裁剪记录：
+只能使用以下当前就诊、评价区间内的裁剪病程和最小外部事件：
 {context}
 
 只输出 JSON：{{"semantic_state":"satisfied|defect|unknown"}}"""
@@ -1351,7 +1484,8 @@ def _rule_009_semantic_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=base_decision.fact_refs,
-        evaluator_version="course-severity-semantic-v1",
+        # v2 将同次就诊、同一快照的外部临床事件纳入 009 语义核对。
+        evaluator_version="course-severity-semantic-v2",
         confidence=confidence,
     )
 
@@ -2373,6 +2507,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                 or base_decision.reason_code != "required_field_missing"
             ):
                 decisions.append(base_decision)
+                continue
+            terminal_decision = _rule_009_external_source_terminal_decision(
+                base_decision=base_decision,
+                snapshot=evidence_snapshot,
+            )
+            if terminal_decision is not None:
+                decisions.append(terminal_decision)
                 continue
             context, overflow, ready = _rule_009_semantic_context(
                 snapshot=evidence_snapshot,

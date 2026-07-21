@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v11"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v12"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -259,6 +259,14 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order.severity_order",
         "daily_course_record",
         "senior_course_record",
+        # 病危逐日频次由病程表计算；语义分支还必须核对同一就诊、同一
+        # Snapshot 内已发生的检查、检验、医嘱和手术事件，不能只读病程。
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "inpat_drug_order",
+        "surgery_record",
+        "mr_surgery",
     ),
     # 017 仅在灰区语义核对时读取同一快照中的当前就诊事件；
     # 不加入术后病程或治疗过程来源，避免把非相邻病程内容混入复制判定。

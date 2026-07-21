@@ -32,6 +32,9 @@ def _severity_session(
     truncated: bool = False,
     daily_rows: list[dict] | None = None,
     senior_rows: list[dict] | None = None,
+    external_rows: dict[str, list[dict]] | None = None,
+    external_failures: dict[str, Exception] | None = None,
+    external_truncated: frozenset[str] = frozenset(),
     course_failure: Exception | None = None,
     course_truncated: bool = False,
     discharge_failure: Exception | None = None,
@@ -72,6 +75,24 @@ def _severity_session(
                 source_key=source_key,
                 rows=course_rows or [],
                 truncated=course_truncated and bool(course_rows),
+                limit_rows=50,
+            )
+        if source_key in (external_rows or {}):
+            if source_key in (external_failures or {}):
+                raise (external_failures or {})[source_key]
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=(external_rows or {})[source_key],
+                truncated=source_key in external_truncated,
+                limit_rows=50,
+            )
+        if source_key in (external_failures or {}):
+            raise (external_failures or {})[source_key]
+        if source_key in external_truncated:
+            return SnapshotSourceRows.create(
+                source_key=source_key,
+                rows=[{}],
+                truncated=True,
                 limit_rows=50,
             )
         return SnapshotSourceRows.create(
@@ -1263,6 +1284,49 @@ async def test_course_009_daily_complete_uses_one_cropped_semantic_call(
 
 
 @pytest.mark.asyncio
+async def test_course_009_semantic_call_binds_same_snapshot_external_event() -> None:
+    """009 不能只看病程：同次检查变化必须进入一次裁剪语义事实。"""
+
+    external_marker = "EXTERNAL_EVENT_ONLY_FOR_009"
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "j" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日继续观察。", "2026-01-02 08:00:00"),
+        ],
+        external_rows={
+            "exam_item_report": [
+                {
+                    "report_time": "2026-01-02 10:00:00",
+                    "exam_impression": external_marker,
+                }
+            ]
+        },
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"semantic_state": "defect"}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert result.llm_call_count == 1
+    assert external_marker in client.prompts[0]
+    event_observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "exam_item_report"
+    )
+    assert event_observation.snapshot_ref.removeprefix("sha256:") in result.decisions[0].fact_refs
+    assert external_marker not in repr(result)
+
+
+@pytest.mark.asyncio
 async def test_course_009_daily_complete_model_failure_is_data_gap_not_na() -> None:
     session = _severity_session(
         rows=[
@@ -1312,7 +1376,7 @@ async def test_course_009_daily_complete_invalid_json_is_data_gap() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_semantic_prompt_is_limited_to_daily_and_senior_records() -> None:
+async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None:
     forbidden = {
         "first_course_record": "FIRST_MUST_NOT_LEAK",
         "rescue_record": "RESCUE_MUST_NOT_LEAK",
@@ -1361,6 +1425,101 @@ async def test_course_009_semantic_prompt_is_limited_to_daily_and_senior_records
     assert len(client.prompts) == 1
     assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in client.prompts[0]
     assert all(marker not in client.prompts[0] for marker in forbidden.values())
+
+
+@pytest.mark.asyncio
+async def test_course_009_external_event_without_authoritative_date_is_data_gap() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "k" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日继续观察。", "2026-01-02 08:00:00"),
+        ],
+        external_rows={
+            "exam_item_report": [{"exam_impression": "外部事件缺权威时间"}]
+        },
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _UnexpectedLLMClient()
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_course_009_external_query_error_is_technical_error_without_model() -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "l" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日继续观察。", "2026-01-02 08:00:00"),
+        ],
+        external_failures={"exam_item_report": SourceEvidenceQueryError()},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _UnexpectedLLMClient()
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "source_query_error"
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("external_failures", "external_truncated", "expected_reason"),
+    [
+        ({"exam_item_report": SourceEvidenceUnavailable()}, frozenset(), "source_unavailable"),
+        ({}, frozenset({"exam_item_report"}), "source_truncated"),
+    ],
+)
+async def test_course_009_external_unavailable_or_truncated_is_data_gap_without_model(
+    external_failures: dict[str, Exception],
+    external_truncated: frozenset[str],
+    expected_reason: str,
+) -> None:
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-01-01 08:00:00",
+                "row_ref": "m" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("第一日病情稳定。", "2026-01-01 08:00:00"),
+            _row("第二日继续观察。", "2026-01-02 08:00:00"),
+        ],
+        external_failures=external_failures,
+        external_truncated=external_truncated,
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _UnexpectedLLMClient()
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio

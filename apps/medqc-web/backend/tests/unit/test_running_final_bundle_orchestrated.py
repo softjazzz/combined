@@ -186,6 +186,27 @@ async def test_runtime_should_forward_effect_priority_options():
     assert called["refine_confidence_threshold"] == 0.75
     assert called["max_refine_candidates"] == 2
     assert called["use_execution_cache"] is False
+    assert called["evaluation_as_of_date"] is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_forwards_explicit_frozen_evaluation_as_of_date():
+    called = {}
+
+    class _Service:
+        async def evaluate_running_final_bundle_input(self, **kwargs):
+            called.update(kwargs)
+            return {"evaluation_results": [], "bundle_metadata": {}}
+
+    await evaluate_running_final_bundle(
+        qc_service=_Service(),  # type: ignore[arg-type]
+        bundle_input={"scene": "running", "visit_id": "V001"},
+        rule_ids=["LX0609-008"],
+        rule_set_key="luxian_0609",
+        evaluation_as_of_date="2026-07-21",
+    )
+
+    assert called["evaluation_as_of_date"] == "2026-07-21"
 
 
 @pytest.mark.asyncio
