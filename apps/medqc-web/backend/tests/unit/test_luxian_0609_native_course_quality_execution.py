@@ -995,8 +995,15 @@ async def test_course_008_009_typed_natural_day_truth_table_is_python_only(
 @pytest.mark.parametrize(
     ("horizon", "record_times", "expected_state", "expected_reason"),
     [
+        ("2026-01-01", [], CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
         ("2026-01-03", [], CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
         ("2026-01-04", [], CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        (
+            "2026-01-05",
+            ["2026-01-01 08:00:00", "2026-01-04 08:00:00"],
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
         (
             "2026-01-05",
             ["2026-01-01 08:00:00", "2026-01-03 08:00:00"],
@@ -1051,6 +1058,8 @@ async def test_course_008_checks_anchor_internal_and_tail_natural_day_gaps(
         assert horizon_fact.fact_id in result.decisions[0].fact_refs
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+    assert "2026-01" not in repr(result.decisions)
+    assert "查房记录" not in repr(result.decisions)
 
 
 @pytest.mark.asyncio
