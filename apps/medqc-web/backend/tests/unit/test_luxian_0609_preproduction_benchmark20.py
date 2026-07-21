@@ -96,6 +96,17 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
     }
 
 
+def _selected_safe_response(
+    rule_ids: tuple[str, ...], *, wall_time_ms: float = 10.0
+) -> dict:
+    response = _safe_response(wall_time_ms=wall_time_ms)
+    response["results"] = [
+        item for item in response["results"] if item["rule_id"] in rule_ids
+    ]
+    response["metrics"]["rule_decision_count"] = len(rule_ids)
+    return response
+
+
 def _emit_attestations(
     kwargs: dict,
     *,
@@ -121,6 +132,28 @@ def _emit_attestations(
                 ),
             }
             for index in range(1, 50)
+        ]
+    )
+
+
+def _emit_selected_attestations(
+    kwargs: dict,
+    *,
+    salt: str,
+) -> None:
+    sink = kwargs["evidence_attestation_sink"]
+    rule_ids = tuple(kwargs["selected_customer_rule_ids"])
+    sink(
+        [
+            {
+                "rule_id": rule_id,
+                "evidence_hash": hashlib.sha256(
+                    f"{salt}:{rule_id}".encode()
+                ).hexdigest(),
+                "observed_state": "compliant",
+                "reason_code": "verified",
+            }
+            for rule_id in rule_ids
         ]
     )
 
@@ -262,6 +295,93 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         "prompt_tokens",
     ):
         assert private_marker not in rendered
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_selected_rules_run_only_canonical_subset_and_build_safe_40_row_candidate():
+    runner_calls: list[tuple[str, ...]] = []
+
+    async def fake_runner(**kwargs):
+        selected_rule_ids = tuple(kwargs["selected_customer_rule_ids"])
+        runner_calls.append(selected_rule_ids)
+        _emit_selected_attestations(kwargs, salt=str(len(runner_calls)))
+        return _selected_safe_response(
+            selected_rule_ids,
+            wall_time_ms=float(len(runner_calls)),
+        )
+
+    batch = await build_benchmark_batch(
+        case_map=_case_map(),
+        evaluation_as_of_date="2026-07-17",
+        bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+        runner=fake_runner,
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        selected_rule_ids=("LX0609-030", "LX0609-029"),
+    )
+
+    assert runner_calls == [("LX0609-029", "LX0609-030")] * 20
+    assert batch["rule_scope"] == {
+        "mode": "selected_subset",
+        "selected_rule_ids": ["LX0609-029", "LX0609-030"],
+    }
+    assert batch["summary"]["judgment_count"] == 40
+    assert batch["summary"]["selected_rule_count"] == 2
+    assert all(
+        tuple(case["evidence_attestations"])
+        == ("LX0609-029", "LX0609-030")
+        and [item["rule_id"] for item in case["response"]["results"]]
+        == ["LX0609-029", "LX0609-030"]
+        for case in batch["cases"]
+    )
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="benchmark-subset-test-v1",
+        generated_at="2026-07-17T00:00:00Z",
+    )
+    assert candidate["candidate_count"] == 40
+    assert {row["rule_id"] for row in candidate["rows"]} == {
+        "LX0609-029",
+        "LX0609-030",
+    }
+    assert all("private" not in repr(row).lower() for row in candidate["rows"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "selected_rule_ids",
+    [
+        (),
+        ("LX0609-029", "LX0609-029"),
+        ("LX0609-000",),
+        ("LX0609-050",),
+        ("lx0609-029",),
+        ("LX0609-029 ",),
+    ],
+)
+async def test_benchmark20_rejects_invalid_selected_rule_scope_before_reading(
+    selected_rule_ids,
+):
+    reads = 0
+
+    def fake_loader(**_):
+        nonlocal reads
+        reads += 1
+        return {}
+
+    with pytest.raises(BenchmarkContractError) as captured:
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-17",
+            bundle_loader=fake_loader,
+            runner=lambda **_: None,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+            selected_rule_ids=selected_rule_ids,
+        )
+
+    assert reads == 0
+    assert "LX0609" not in str(captured.value)
 
 
 @pytest.mark.asyncio
@@ -521,9 +641,62 @@ def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(
     assert exit_code == 0
     assert captured_args["evaluation_as_of_date"] == "2026-07-17"
     assert captured_args["fail_on_technical_error"] is True
+    assert captured_args["selected_rule_ids"] is None
     assert json.loads(output_path.read_text(encoding="utf-8")) == safe_batch
     stdout = capsys.readouterr().out
     assert "private-institute" not in stdout
+
+
+def test_benchmark20_cli_passes_explicit_rule_subset_and_marks_output_scope(
+    monkeypatch, tmp_path, capsys
+):
+    case_map_path = tmp_path / "case-map.json"
+    output_path = tmp_path / "benchmark.json"
+    case_map_path.write_text(json.dumps(_case_map()), encoding="utf-8")
+    safe_batch = {
+        "schema_version": "lx0609-golden-api-batch-v1",
+        "selector_digest": "a" * 64,
+        "rule_set_digest": "b" * 64,
+        "rule_scope": {
+            "mode": "selected_subset",
+            "selected_rule_ids": ["LX0609-029", "LX0609-030"],
+        },
+        "summary": {
+            "case_count": 20,
+            "judgment_count": 40,
+            "technical_error_count": 0,
+        },
+    }
+    captured_args = {}
+
+    async def fake_build(**kwargs):
+        captured_args.update(kwargs)
+        return safe_batch
+
+    monkeypatch.setattr(benchmark20, "build_benchmark_batch", fake_build)
+    monkeypatch.setattr(benchmark20, "_build_llm_client", lambda: object())
+    monkeypatch.setattr(benchmark20, "get_settings", lambda: SimpleNamespace())
+
+    exit_code = benchmark20.main(
+        [
+            "--case-map",
+            str(case_map_path),
+            "--evaluation-as-of-date",
+            "2026-07-17",
+            "--output",
+            str(output_path),
+            "--rule-id",
+            "LX0609-030",
+            "--rule-id",
+            "LX0609-029",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured_args["selected_rule_ids"] == ("LX0609-030", "LX0609-029")
+    stdout = json.loads(capsys.readouterr().out)
+    assert stdout["rule_scope"] == safe_batch["rule_scope"]
+    assert stdout["judgment_count"] == 40
 
 
 def test_benchmark20_source_has_no_task_workspace_or_database_write_path():

@@ -86,6 +86,49 @@ def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
     return rule_ids, executor_types
 
 
+def _select_rule_attestations(
+    selected_rule_ids: Sequence[str] | None,
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """校验显式子集并按目录规范顺序返回。
+
+    ``None`` 是唯一的全49规则语义；空集或非规范规则均在读取病例前
+    fail-closed。这样小范围 Golden 候选不会伪装成全量复跑。
+    """
+
+    catalog_rule_ids, catalog_executor_types = _rule_attestations()
+    if selected_rule_ids is None:
+        return catalog_rule_ids, catalog_executor_types
+    if isinstance(selected_rule_ids, (str, bytes)) or not isinstance(
+        selected_rule_ids, Sequence
+    ):
+        raise BenchmarkContractError("invalid selected rule scope")
+
+    requested_rule_ids = tuple(selected_rule_ids)
+    if not requested_rule_ids:
+        raise BenchmarkContractError("invalid selected rule scope")
+    selected_set: set[str] = set()
+    for rule_id in requested_rule_ids:
+        if (
+            not isinstance(rule_id, str)
+            or rule_id not in catalog_executor_types
+            or rule_id in selected_set
+        ):
+            raise BenchmarkContractError("invalid selected rule scope")
+        selected_set.add(rule_id)
+    canonical_rule_ids = tuple(
+        rule_id for rule_id in catalog_rule_ids if rule_id in selected_set
+    )
+    if len(canonical_rule_ids) != len(requested_rule_ids):
+        raise BenchmarkContractError("invalid selected rule scope")
+    return (
+        canonical_rule_ids,
+        {
+            rule_id: catalog_executor_types[rule_id]
+            for rule_id in canonical_rule_ids
+        },
+    )
+
+
 def _validate_evaluation_date(value: str) -> str:
     normalized = str(value or "").strip()
     try:
@@ -200,7 +243,9 @@ def _validate_response(
         if isinstance(item, Mapping)
     )
     if actual_rule_ids != expected_rule_ids or len(results) != len(expected_rule_ids):
-        raise BenchmarkContractError("preproduction response must contain ordered 49 rules")
+        raise BenchmarkContractError(
+            "preproduction response must contain selected ordered rules"
+        )
     return results, metrics
 
 
@@ -257,12 +302,14 @@ async def build_benchmark_batch(
     llm_client: Any,
     base_settings: Any,
     fail_on_technical_error: bool = True,
+    selected_rule_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """顺序执行固定20例并返回可进入Golden候选构建器的安全批次。"""
 
     selector_version, cases = _validate_case_map(case_map)
     as_of_date = _validate_evaluation_date(evaluation_as_of_date)
-    selected_rule_ids, executor_types = _rule_attestations()
+    selected_rule_ids, executor_types = _select_rule_attestations(selected_rule_ids)
+    is_selected_subset = len(selected_rule_ids) != 49
     rule_set_digest = canonical_digest(
         [
             {
@@ -406,7 +453,7 @@ async def build_benchmark_batch(
             "selector": safe_selector,
         }
     )
-    if len(all_evidence_hashes) != 20 * len(selected_rule_ids):
+    if len(all_evidence_hashes) != len(cases) * len(selected_rule_ids):
         raise BenchmarkContractError("incomplete benchmark evidence attestations")
     summary = {
         "case_count": len(output_cases),
@@ -427,7 +474,9 @@ async def build_benchmark_batch(
         "selector_digest": selector_digest,
         "rule_set_digest": rule_set_digest,
     }
-    batch = {
+    if is_selected_subset:
+        summary["selected_rule_count"] = len(selected_rule_ids)
+    batch: dict[str, Any] = {
         "schema_version": API_BATCH_SCHEMA_VERSION,
         "selector_version": selector_version,
         "selector_digest": selector_digest,
@@ -436,6 +485,12 @@ async def build_benchmark_batch(
         "cases": output_cases,
         "summary": summary,
     }
+    if is_selected_subset:
+        # 子集必须在输出中显式标明，禁止作为49点全量基准引用。
+        batch["rule_scope"] = {
+            "mode": "selected_subset",
+            "selected_rule_ids": list(selected_rule_ids),
+        }
 
     # 复用Golden候选构建器的完整递归隐私、响应形状和980行唯一性校验。
     build_candidate_ledger(
@@ -486,6 +541,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="允许输出含technical_error的诊断批次；默认任何technical_error均失败",
     )
+    parser.add_argument(
+        "--rule-id",
+        action="append",
+        default=None,
+        help="可重复：仅运行指定规范LX0609规则；未指定时严格运行全49条",
+    )
     return parser.parse_args(argv)
 
 
@@ -499,26 +560,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 llm_client=_build_llm_client(),
                 base_settings=get_settings(),
                 fail_on_technical_error=not args.allow_technical_error,
+                selected_rule_ids=(
+                    tuple(args.rule_id) if args.rule_id is not None else None
+                ),
             )
         )
         _write_output(args.output, batch)
     except Exception:
         print("LX0609 benchmark20 failed safely", file=sys.stderr)
         return 1
-    print(
-        json.dumps(
-            {
-                "schema_version": API_BATCH_SCHEMA_VERSION,
-                "case_count": batch["summary"]["case_count"],
-                "judgment_count": batch["summary"]["judgment_count"],
-                "technical_error_count": batch["summary"]["technical_error_count"],
-                "selector_digest": batch["selector_digest"],
-                "rule_set_digest": batch["rule_set_digest"],
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-    )
+    output_summary = {
+        "schema_version": API_BATCH_SCHEMA_VERSION,
+        "case_count": batch["summary"]["case_count"],
+        "judgment_count": batch["summary"]["judgment_count"],
+        "technical_error_count": batch["summary"]["technical_error_count"],
+        "selector_digest": batch["selector_digest"],
+        "rule_set_digest": batch["rule_set_digest"],
+    }
+    if "rule_scope" in batch:
+        output_summary["rule_scope"] = batch["rule_scope"]
+    print(json.dumps(output_summary, ensure_ascii=False, separators=(",", ":")))
     return 0
 
 
