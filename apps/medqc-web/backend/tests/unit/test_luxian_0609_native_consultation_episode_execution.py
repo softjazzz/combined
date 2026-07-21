@@ -227,6 +227,27 @@ async def test_zero_input_does_not_call_model_and_source_error_is_technical(monk
 
 
 @pytest.mark.asyncio
+async def test_typed_decision_preserves_terminal_source_reason_code(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: (_ for _ in ()).throw(episode._SourceGap()),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=_snapshot(),
+        decision_rule_ids=("LX0609-021",),
+    )
+    assert result.results == ()
+    assert [item.reason_code for item in result.decisions] == ["source_unavailable"]
+
+
+@pytest.mark.asyncio
 async def test_parse_failure_is_data_gap_and_model_failure_is_technical(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     parsed = await episode.execute_luxian_0609_native_consultation_episode_rules(

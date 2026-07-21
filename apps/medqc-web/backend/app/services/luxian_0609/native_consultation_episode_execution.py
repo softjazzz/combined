@@ -621,23 +621,26 @@ def _result(*, rule_id: str, status: str, reason_code: str, prompt_tokens: int, 
     return result
 
 
-def _decision(*, rule_id: str, status: str, snapshot: Luxian0609EvidenceSnapshot) -> RuleDecision:
+def _decision(
+    *, rule_id: str, status: str, reason_code: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> RuleDecision:
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
         if observation.source_key == _SOURCE_KEY
     )
     if status == "compliant":
-        dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED, "requirement_satisfied")
+        dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED)
     elif status == "non_compliant":
-        dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.DEFECT, "requirement_violated")
+        dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.DEFECT)
     elif status == "not_applicable":
-        dimensions = (ApplicabilityState.NOT_APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.UNKNOWN, "trigger_absent_complete")
+        dimensions = (ApplicabilityState.NOT_APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.UNKNOWN)
     elif status == "data_gap":
-        dimensions = (ApplicabilityState.UNKNOWN, EvidenceState.DATA_GAP, QcDirection.UNKNOWN, "linkage_unresolved")
+        dimensions = (ApplicabilityState.UNKNOWN, EvidenceState.DATA_GAP, QcDirection.UNKNOWN)
     else:
-        dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN, "model_transport_error")
-    applicability, evidence_state, direction, reason_code = dimensions
+        dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN)
+    applicability, evidence_state, direction = dimensions
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -658,7 +661,12 @@ def _finish(
     decision_rule_ids: frozenset[str] = frozenset(),
 ) -> NativeConsultationEpisodeExecutionResult:
     decisions = tuple(
-        _decision(rule_id=rule_id, status=status, snapshot=evidence_snapshot)
+        _decision(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason_code,
+            snapshot=evidence_snapshot,
+        )
         for rule_id in selected
         if rule_id in decision_rule_ids and evidence_snapshot is not None
     )
@@ -826,7 +834,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         status, reason = statuses.get(rule_id, ("data_gap", "linkage_unresolved"))
         results.append(_result(rule_id=rule_id, status=status, reason_code=reason, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens))
     decisions = tuple(
-        _decision(rule_id=rule_id, status=statuses[rule_id][0], snapshot=evidence_snapshot)
+        _decision(
+            rule_id=rule_id,
+            status=statuses[rule_id][0],
+            reason_code=statuses[rule_id][1],
+            snapshot=evidence_snapshot,
+        )
         for rule_id in selected
         if rule_id in typed and evidence_snapshot is not None
     )
