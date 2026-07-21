@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
@@ -137,6 +139,13 @@ def test_episode_prompt_treats_one_sentence_reason_and_recommendation_as_clear()
     assert "同一输入ref不得被拆入多个episode" in prompt
 
 
+def test_episode_prompt_distinguishes_generic_request_from_concrete_purpose():
+    prompt = episode._prompt(({"ref": "consultation_record-1", "time": "", "text": "安全文书"},))
+    assert "请某科协助诊治" in prompt
+    assert "无病情问题、诊疗疑问、异常或具体任务" in prompt
+    assert "请康复科评估术后活动障碍/制定康复计划" in prompt
+
+
 @pytest.mark.asyncio
 async def test_opinion_only_document_is_application_absent_and_021_not_applicable(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("明确专科处理意见"))
@@ -266,6 +275,42 @@ async def test_parse_failure_is_data_gap_and_model_failure_is_technical(monkeypa
     )
     assert broken.results[0]["status"] == "technical_error"
     assert "MODEL_SECRET" not in repr(broken)
+
+
+@pytest.mark.asyncio
+async def test_fenced_single_json_keeps_phase_one_states(monkeypatch):
+    """模型常见的说明+单个 JSON fence 不能把有效语义降为 data_gap。"""
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
+    payload = json.dumps(_payload(episodes=[_episode(
+        "consultation_record-1", ["consultation_record-1"], application="vague", opinion="clear",
+    )]), ensure_ascii=False)
+    wrapped = f"以下为结构化结果：\n```json\n{payload}\n```\n请按 JSON 处理。"
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=_Client(wrapped),
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        lambda: json.dumps(_payload(episodes=[])) + "\n" + json.dumps(_payload(episodes=[])),
+        lambda: "模型未返回结构化结果。",
+        lambda: "<think>内部推理</think>\n" + json.dumps(_payload(episodes=[])),
+        lambda: "```json\n" + json.dumps(_payload(episodes=[_episode("forged", ["consultation_record-1"])])) + "\n```",
+    ],
+)
+async def test_wrapped_or_multiple_or_forged_json_stays_fail_closed(monkeypatch, raw):
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        llm_client=_Client(raw()),
+    )
+    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio

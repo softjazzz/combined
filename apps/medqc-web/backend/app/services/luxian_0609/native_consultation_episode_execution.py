@@ -163,13 +163,65 @@ def _payload(response: Mapping[str, Any]) -> Mapping[str, Any]:
         return raw
     if not isinstance(raw, str):
         raise _SemanticInvalid()
+
+    def _decode_object(value: str) -> Mapping[str, Any]:
+        try:
+            parsed = json.loads(value.strip())
+        except (TypeError, ValueError) as exc:
+            raise _SemanticInvalid() from exc
+        if not isinstance(parsed, Mapping):
+            raise _SemanticInvalid()
+        return parsed
+
+    normalized = raw.strip()
     try:
-        parsed = json.loads(raw.strip())
-    except (TypeError, ValueError) as exc:
-        raise _SemanticInvalid() from exc
-    if not isinstance(parsed, Mapping):
+        return _decode_object(normalized)
+    except _SemanticInvalid:
+        pass
+
+    # 只容忍模型常见的单一 Markdown JSON fence，或前后只有短说明的
+    # 唯一 JSON 对象；不扫描或拼接任意正文，以避免把 <think>、多个候选
+    # 对象或截断输出误当成可用事实。
+    if "<think" in normalized.lower():
         raise _SemanticInvalid()
-    return parsed
+    fence_count = normalized.count("```")
+    if fence_count == 0:
+        object_start = normalized.find("{")
+        if object_start < 1:
+            raise _SemanticInvalid()
+        prefix = normalized[:object_start].strip()
+        if len(prefix) > 120 or any(token in prefix for token in ("{", "}", "[", "]")):
+            raise _SemanticInvalid()
+        try:
+            parsed, object_end = json.JSONDecoder().raw_decode(normalized[object_start:])
+        except (TypeError, ValueError) as exc:
+            raise _SemanticInvalid() from exc
+        suffix = normalized[object_start + object_end:].strip()
+        if (
+            not isinstance(parsed, Mapping)
+            or len(suffix) > 120
+            or any(token in suffix for token in ("{", "}", "[", "]"))
+        ):
+            raise _SemanticInvalid()
+        return parsed
+    if fence_count != 2:
+        raise _SemanticInvalid()
+    first_fence = normalized.find("```")
+    second_fence = normalized.rfind("```")
+    prefix = normalized[:first_fence].strip()
+    fenced = normalized[first_fence + 3:second_fence].strip()
+    suffix = normalized[second_fence + 3:].strip()
+    if (
+        len(prefix) > 120
+        or len(suffix) > 120
+        or any(token in prefix or token in suffix for token in ("{", "}", "[", "]"))
+    ):
+        raise _SemanticInvalid()
+    if fenced.lower().startswith("json"):
+        language, separator, fenced = fenced.partition("\n")
+        if language.strip().lower() != "json" or not separator:
+            raise _SemanticInvalid()
+    return _decode_object(fenced)
 
 
 def _read_rows(
@@ -347,6 +399,10 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "明确写出会诊原因、临床问题或请求专科建议，即使只有一句，也属于application_state=clear；"
         "明确给出处理或诊疗建议，即使只有一句，也属于opinion_state=clear；"
         "只有纯“请会诊”或“遵会诊意见”且没有具体内容时才为vague。"
+        "仅“请会诊/请某科协助诊治/请协助处理”，无病情问题、诊疗疑问、异常或具体任务时，"
+        "application_state必须为vague；科室名称本身不构成会诊目的。"
+        "“请康复科评估术后活动障碍/制定康复计划”等写明具体临床问题或任务时为clear；"
+        "其它已经说明具体临床问题或任务的申请不得因表述简短而判为vague。"
         "文书只含明确会诊意见、没有申请目的或请求时，application_state必须为absent且application_refs为空；"
         "只含明确申请目的、没有会诊意见时，opinion_state必须为absent且opinion_refs为空。"
         "missing只用于角色明确存在但内容空或模板，vague只用于角色存在但内容泛化。"
