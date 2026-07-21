@@ -15,6 +15,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.evidence_material import build_material_document_refs
 from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
@@ -475,8 +476,16 @@ async def test_typed_017_gray_path_matches_raw_state_and_keeps_privacy():
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    raw_client = _Client([{"copy_state": "material_change"}])
-    typed_client = _Client([{"copy_state": "material_change"}])
+    raw_client = _Client([{
+        "copy_state": "reasonable_continuation",
+        "update_adequacy": "updated",
+        "event_refs": [],
+    }])
+    typed_client = _Client([{
+        "copy_state": "reasonable_continuation",
+        "update_adequacy": "updated",
+        "event_refs": [],
+    }])
     raw = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         wrapper_rules=[_wrapper("LX0609-017")],
@@ -2477,14 +2486,18 @@ async def test_017_long_template_with_material_change_needs_one_semantic_call(mo
             {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
         ] if kwargs["source_key"] == "senior_course_record" else [],
     )
-    client = _Client([{"copy_state": "material_change"}])
+    client = _Client([{
+        "copy_state": "reasonable_continuation",
+        "update_adequacy": "updated",
+        "event_refs": [],
+    }])
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
         evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
         visit_id="V", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.results[0]["metadata"]["reason_code"] == "copy_clinical_update_adequate"
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     assert left not in repr(result)
@@ -2493,14 +2506,14 @@ async def test_017_long_template_with_material_change_needs_one_semantic_call(mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("copy_state", "expected_status", "expected_reason"),
+    ("copy_state", "update_adequacy", "expected_status", "expected_reason"),
     [
-        ("copy", "non_compliant", "copy_semantic_copy"),
-        ("unknown", "data_gap", "copy_semantic_unknown"),
+        ("reasonable_continuation", "reasonable_continuation", "compliant", "copy_clinical_update_adequate"),
+        ("unknown", "unknown", "data_gap", "copy_semantic_unknown"),
     ],
 )
 async def test_017_gray_semantic_enum_maps_to_controlled_state(
-    monkeypatch, copy_state, expected_status, expected_reason
+    monkeypatch, copy_state, update_adequacy, expected_status, expected_reason
 ):
     template = "患者病情稳定生命体征平稳继续观察病情" * 10
     left = f"{template}今日腹痛减轻，停止补液改口服。"
@@ -2516,7 +2529,11 @@ async def test_017_gray_semantic_enum_maps_to_controlled_state(
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",), wrapper_rules=[_wrapper("LX0609-017")],
         evidence_payload=_payload(documents={}), institute_id="I", patient_id="P",
-        visit_id="V", source_schema=None, llm_client=_Client([{"copy_state": copy_state}]),
+        visit_id="V", source_schema=None, llm_client=_Client([{
+            "copy_state": copy_state,
+            "update_adequacy": update_adequacy,
+            "event_refs": [],
+        }]),
     )
     assert [item["status"] for item in result.results] == [expected_status]
     assert result.results[0]["metadata"]["reason_code"] == expected_reason
@@ -2650,7 +2667,11 @@ async def test_017_high_similarity_with_material_change_uses_one_model_call(monk
         if kwargs["source_key"] == "daily_course_record"
         else [],
     )
-    client = _Client([{"copy_state": "material_change"}])
+    client = _Client([{
+        "copy_state": "reasonable_continuation",
+        "update_adequacy": "updated",
+        "event_refs": [],
+    }])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2664,7 +2685,7 @@ async def test_017_high_similarity_with_material_change_uses_one_model_call(monk
     )
 
     assert [item["status"] for item in result.results] == ["compliant"]
-    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.results[0]["metadata"]["reason_code"] == "copy_clinical_update_adequate"
     assert result.results[0]["metadata"]["executor_type"] == "llm"
     assert result.llm_call_count == 1
     assert result.total_tokens == 45
@@ -2703,7 +2724,11 @@ async def test_017_long_template_block_with_material_change_uses_one_model_call(
         if kwargs["source_key"] == "senior_course_record"
         else [],
     )
-    client = _Client([{"copy_state": "material_change"}])
+    client = _Client([{
+        "copy_state": "reasonable_continuation",
+        "update_adequacy": "updated",
+        "event_refs": [],
+    }])
 
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
@@ -2718,7 +2743,7 @@ async def test_017_long_template_block_with_material_change_uses_one_model_call(
 
     assert [item["status"] for item in result.results] == ["compliant"]
     assert 0.70 < result.results[0]["metadata"]["maximum_similarity"] < 0.95
-    assert result.results[0]["metadata"]["reason_code"] == "copy_semantic_material_change"
+    assert result.results[0]["metadata"]["reason_code"] == "copy_clinical_update_adequate"
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
@@ -3101,6 +3126,183 @@ async def test_017_does_not_treat_duplicate_database_rows_as_two_course_records(
     )
     assert result.results[0]["metadata"]["comparable_document_count"] == 1
     assert "safe-document-ref" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_017_fast5_gray_reasonable_continuation_is_compliant_with_one_llm(
+    monkeypatch,
+):
+    """Fast5：灰区且合理延续只能由一次受控语义事实放行为合规。"""
+    template = "患者一般情况可生命体征平稳继续当前治疗观察病情变化" * 8
+    left = f"{template}今日腹痛较前减轻，继续观察。"
+    right = (
+        f"{template}今日腹痛较前减轻，继续观察并复查，同时记录饮食睡眠、"
+        "排便排尿及后续门诊随访安排，未出现新的诊疗风险。"
+    )
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(left), "document_id": "safe-left"},
+            {**_row(right, "2026-06-02 09:00:00"), "document_id": "safe-right"},
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([{
+            "copy_state": "reasonable_continuation",
+            "update_adequacy": "reasonable_continuation",
+            "event_refs": [],
+        }]),
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 1
+    assert result.results[0]["metadata"]["update_adequacy"] == (
+        "reasonable_continuation"
+    )
+
+
+@pytest.mark.asyncio
+async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypatch):
+    """Fast5：任一可比病程缺权威时间，不能把相似度硬判为缺陷。"""
+    copied = "患者神志清楚生命体征平稳继续当前治疗并观察病情变化。"
+    monkeypatch.setattr(
+        course,
+        "read_luxian_0609_native_source_rows",
+        lambda **kwargs: [
+            {**_row(copied, ""), "document_id": "safe-left"},
+            {**_row(copied, "2026-06-02 09:00:00"), "document_id": "safe-right"},
+        ]
+        if kwargs["source_key"] == "daily_course_record"
+        else [],
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=_payload(documents={}),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "copy_authoritative_time_missing"
+    )
+
+
+@pytest.mark.asyncio
+async def test_017_fast5_new_interval_event_missing_from_course_is_non_compliant():
+    """Fast5：同一快照内的新检查事实未被高相似病程更新，才可判缺陷。"""
+    template = "患者一般情况可生命体征平稳继续观察病情变化" * 8
+    left = {**_row(f"{template}继续当前治疗。"), "document_id": "safe-left"}
+    right = {
+        **_row(
+            (
+                f"{template}继续当前治疗并观察，饮食睡眠一般，未见特殊不适，"
+                "已交代家属监测体温、出入量及症状变化，拟明日结合化验结果调整方案。"
+            ),
+            "2026-06-02 09:00:00",
+        ),
+        "document_id": "safe-right",
+    }
+    event = {
+        "record_content": "复查影像提示感染范围较前扩大，建议调整抗感染治疗。",
+        "report_time": "2026-06-01 15:00:00",
+        "document_id": "safe-exam",
+    }
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [left, right]
+            if source_key == "daily_course_record"
+            else [event]
+            if source_key == "exam_item_report"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-21T12:00:00+08:00",
+        row_reader=reader,
+    )
+    event_ref = build_material_document_refs("exam_item_report", (event,))[0]
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([{
+            "copy_state": "true_copy",
+            "update_adequacy": "missing",
+            "event_refs": [event_ref],
+        }]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert result.llm_call_count == 1
+    assert event["record_content"] not in repr(result)
+    assert event["report_time"] not in repr(result)
+
+
+def test_017_copy_event_ledger_ignores_update_and_last_modified_times():
+    """同步更新时间不代表新的检查/检验/医嘱/手术临床事实。"""
+    events = course._copy_event_rows(
+        {
+            "exam_item_report": [
+                {
+                    "record_content": "检查结论在同步时被更新，但无报告时间。",
+                    "update_time": "2026-06-01 15:00:00",
+                    "last_modified_datetime": "2026-06-01 15:01:00",
+                }
+            ],
+            "labtest_master": [
+                {
+                    "record_content": "检验记录仅有修改时间。",
+                    "last_modified_datetime": "2026-06-01 15:02:00",
+                }
+            ],
+        },
+        left_time=datetime(2026, 6, 1, 9, 0, 0),
+        right_time=datetime(2026, 6, 2, 9, 0, 0),
+    )
+
+    assert events == ()
 
 
 @pytest.mark.asyncio

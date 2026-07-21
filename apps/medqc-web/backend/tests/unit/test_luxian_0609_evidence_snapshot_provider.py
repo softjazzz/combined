@@ -291,6 +291,41 @@ def test_non_007_does_not_query_unstable_order_fact() -> None:
     assert CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY not in calls
 
 
+def test_017_reads_only_its_whitelisted_copy_support_sources() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(source_key, [])
+
+    _build(selected_rule_ids=("LX0609-017",), row_reader=reader)
+
+    assert {
+        "daily_course_record",
+        "senior_course_record",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "inpat_drug_order",
+        "surgery_record",
+        "mr_surgery",
+    }.issubset(set(calls))
+    assert "postsurg_firstcourse_record" not in calls
+    assert "treatment_course" not in calls
+
+    calls.clear()
+    _build(selected_rule_ids=("LX0609-007",), row_reader=reader)
+    assert not set(calls).intersection({
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "inpat_drug_order",
+        "surgery_record",
+        "mr_surgery",
+    })
+
+
 @pytest.mark.parametrize(
     ("mode", "expected_state", "expected_assertion", "expected_performed"),
     [

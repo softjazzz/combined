@@ -260,6 +260,16 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "senior_course_record",
     ),
+    # 017 仅在灰区语义核对时读取同一快照中的当前就诊事件；
+    # 不加入术后病程或治疗过程来源，避免把非相邻病程内容混入复制判定。
+    "LX0609-017": (
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "inpat_drug_order",
+        "surgery_record",
+        "mr_surgery",
+    ),
     "LX0609-010": (
         "exam_master",
         "exam_item_report",

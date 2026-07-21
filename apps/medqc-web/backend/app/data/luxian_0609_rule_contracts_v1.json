@@ -191,7 +191,7 @@
     },
     {
       "rule_id": "LX0609-017",
-      "contract_version": "v3",
+      "contract_version": "v4",
       "family_key": "course_quality",
       "executor_key": "course_quality",
       "execution_mode": "native_async",
