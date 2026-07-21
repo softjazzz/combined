@@ -12,12 +12,14 @@ from typing import Any, Mapping, Sequence
 try:
     from scripts.build_luxian_0609_golden_ledger import (
         LEDGER_SCHEMA_VERSION,
+        _validate_candidate,
         build_candidate_ledger,
         canonical_digest,
     )
 except ModuleNotFoundError:  # 直接执行 scripts/*.py 时使用同目录导入。
     from build_luxian_0609_golden_ledger import (  # type: ignore[no-redef]
         LEDGER_SCHEMA_VERSION,
+        _validate_candidate,
         build_candidate_ledger,
         canonical_digest,
     )
@@ -94,6 +96,18 @@ DEFAULT_RUNS = tuple(
     / f"accepted20-run-{index}.json"
     for index in range(1, 4)
 )
+
+
+def _default_candidate_path(ledger_path: Path) -> Path:
+    """根据 accepted 账本推导同目录候选账本，不猜测其他目录。"""
+
+    if ledger_path.name.startswith("accepted"):
+        return ledger_path.with_name(
+            f"candidate{ledger_path.name[len('accepted') :]}"
+        )
+    return ledger_path.with_name(
+        f"{ledger_path.stem}-candidate{ledger_path.suffix}"
+    )
 
 
 def _blocked(failure_kind: str) -> tuple[dict[str, Any], int]:
@@ -266,9 +280,26 @@ def _evidence_matches(
     )
 
 
+def _candidate_row_matches(
+    candidate_row: Mapping[str, Any] | None,
+    actual_row: Mapping[str, Any] | None,
+) -> bool:
+    if candidate_row is None or actual_row is None:
+        return False
+    return (
+        str(candidate_row.get("observed_state") or "")
+        == str(actual_row.get("observed_state") or "")
+        and str(candidate_row.get("observed_reason_code") or "")
+        == str(actual_row.get("observed_reason_code") or "")
+        and list(candidate_row.get("evidence_ref_hashes") or [])
+        == list(actual_row.get("evidence_ref_hashes") or [])
+    )
+
+
 def run_luxian_0609_golden_gate(
     *,
     ledger: Mapping[str, Any] | None,
+    candidate: Mapping[str, Any] | None,
     run_batches: Sequence[Mapping[str, Any]],
     semantic_ppv_min: float = 0.95,
     semantic_recall_min: float = 0.90,
@@ -279,12 +310,35 @@ def run_luxian_0609_golden_gate(
 ) -> tuple[dict[str, Any], int]:
     if not ledger:
         return _blocked("missing_accepted_ledger")
+    if not candidate:
+        return _blocked("missing_candidate_ledger")
     if not run_batches:
         return _blocked("missing_golden_runs")
     try:
         entries = _validate_ledger(ledger)
     except (TypeError, ValueError):
         return _configuration_failure("invalid_accepted_ledger_or_run")
+    try:
+        candidate_digest = _validate_candidate(candidate)
+    except (TypeError, ValueError):
+        return _configuration_failure("invalid_candidate_ledger_or_run")
+    if (
+        candidate_digest
+        != str(ledger.get("accepted_from_candidate_digest") or "")
+        or str(candidate.get("selector_digest") or "")
+        != str(ledger.get("selector_digest") or "")
+        or str(candidate.get("rule_set_digest") or "")
+        != str(ledger.get("rule_set_digest") or "")
+    ):
+        return _configuration_failure("invalid_candidate_ledger_or_run")
+    candidate_rows_list = candidate.get("rows")
+    if not isinstance(candidate_rows_list, list):
+        return _configuration_failure("invalid_candidate_ledger_or_run")
+    candidate_rows = {
+        (str(row.get("case_label") or ""), str(row.get("rule_id") or "")): row
+        for row in candidate_rows_list
+        if isinstance(row, Mapping)
+    }
     if expected_sample_count is not None or expected_rule_count is not None:
         if (
             not isinstance(expected_sample_count, int)
@@ -344,6 +398,13 @@ def run_luxian_0609_golden_gate(
         (str(entry.get("case_label") or ""), str(entry.get("rule_id") or ""))
         for entry in entries
     }
+    if (
+        set(candidate_rows) != accepted_pairs
+        or int(candidate.get("sample_count") or 0)
+        != int(ledger.get("sample_count") or 0)
+        or int(candidate.get("candidate_count") or 0) != len(entries)
+    ):
+        return _configuration_failure("invalid_candidate_ledger_or_run")
     if any(
         set(rows) != accepted_pairs
         or int(candidate.get("sample_count") or 0)
@@ -353,6 +414,14 @@ def run_luxian_0609_golden_gate(
     ):
         return _configuration_failure("invalid_accepted_ledger_or_run")
     actual_runs = [rows for _candidate, rows in actual_candidates_and_rows]
+    # 候选账本只绑定人工复核所依据的第一份基准运行。后续重复运行
+    # 必须继续交由 semantic 的稳定性/PPV 门和 deterministic 精确门判定，
+    # 不能把真实模型波动伪装成候选账本配置错误。
+    if not all(
+        _candidate_row_matches(candidate_rows.get(pair), actual_runs[0].get(pair))
+        for pair in accepted_pairs
+    ):
+        return _configuration_failure("invalid_candidate_ledger_or_run")
 
     deterministic_entries = [
         entry for entry in entries if entry.get("decision_kind") == "deterministic"
@@ -583,6 +652,12 @@ def run_luxian_0609_golden_gate(
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LX0609 accepted Golden 质量门")
     parser.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
+    parser.add_argument(
+        "--candidate",
+        type=Path,
+        default=None,
+        help="候选账本；省略时按 accepted 账本同目录推导 candidate 文件名",
+    )
     parser.add_argument("--run", dest="runs", action="append", type=Path)
     parser.add_argument("--semantic-ppv-min", type=float, default=0.95)
     parser.add_argument("--semantic-recall-min", type=float, default=0.90)
@@ -606,13 +681,18 @@ def _read_json(path: Path) -> Mapping[str, Any] | None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     ledger = _read_json(args.ledger)
+    candidate_path = args.candidate or _default_candidate_path(args.ledger)
+    candidate = _read_json(candidate_path)
     run_paths = tuple(args.runs) if args.runs else DEFAULT_RUNS
     runs = [_read_json(path) for path in run_paths]
-    if ledger is not None and any(run is None for run in runs):
+    if ledger is not None and candidate is None:
+        summary, exit_code = _blocked("missing_candidate_ledger")
+    elif ledger is not None and any(run is None for run in runs):
         summary, exit_code = _blocked("missing_golden_runs")
     else:
         summary, exit_code = run_luxian_0609_golden_gate(
             ledger=ledger,
+            candidate=candidate,
             run_batches=[run for run in runs if run is not None],
             semantic_ppv_min=args.semantic_ppv_min,
             semantic_recall_min=args.semantic_recall_min,

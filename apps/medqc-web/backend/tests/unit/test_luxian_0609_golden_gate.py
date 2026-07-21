@@ -30,6 +30,7 @@ spec.loader.exec_module(golden_gate)
 def test_missing_accepted_ledger_is_explicitly_blocked() -> None:
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=None,
+        candidate=None,
         run_batches=[],
     )
 
@@ -81,12 +82,18 @@ def _api_batch(*, state: str = "non_compliant") -> dict[str, object]:
     }
 
 
-def _ledger(*, decision_kind: str = "deterministic") -> dict[str, object]:
-    candidate = build_candidate_ledger(
-        _api_batch(),
+def _candidate(
+    batch: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return build_candidate_ledger(
+        batch or _api_batch(),
         candidate_version="candidate20-v1",
         generated_at="2026-07-17T10:00:00Z",
     )
+
+
+def _ledger(*, decision_kind: str = "deterministic") -> dict[str, object]:
+    candidate = _candidate()
     row = candidate["rows"][0]
     review = {
         "candidate_digest": candidate["candidate_digest"],
@@ -148,6 +155,7 @@ def _promoted_ledger_for_batch(
 def test_deterministic_gate_requires_exact_state_reason_and_evidence_hash() -> None:
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_ledger(),
+        candidate=_candidate(),
         run_batches=[_api_batch()],
     )
 
@@ -161,6 +169,86 @@ def test_deterministic_gate_requires_exact_state_reason_and_evidence_hash() -> N
         "exact_rate": 1.0,
     }
     assert summary["semantic"] == {"accepted_count": 0, "status": "not_applicable"}
+
+
+def test_accepted_ledger_requires_an_explicit_candidate_ledger() -> None:
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=_ledger(),
+        candidate=None,
+        run_batches=[_api_batch()],
+    )
+
+    assert exit_code == 3
+    assert summary["status"] == "blocked"
+    assert summary["failures"] == [
+        {
+            "gate": "accepted_ledger",
+            "failure_kind": "missing_candidate_ledger",
+        }
+    ]
+
+
+def test_gate_requires_candidate_digest_and_rows_to_bind_accepted_ledger_and_runs() -> None:
+    batch = _api_batch()
+    candidate = _candidate(batch)
+    ledger = _ledger()
+
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch, batch, batch],
+    )
+
+    assert exit_code == 0
+    assert summary["passed"] is True
+
+    digest_tampered = copy.deepcopy(ledger)
+    digest_tampered["accepted_from_candidate_digest"] = "f" * 64
+    digest_material = {
+        key: value
+        for key, value in digest_tampered.items()
+        if key != "ledger_digest"
+    }
+    digest_tampered["ledger_digest"] = golden_gate.canonical_digest(
+        digest_material
+    )
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=digest_tampered,
+        candidate=candidate,
+        run_batches=[batch, batch, batch],
+    )
+    assert exit_code == 2
+    assert summary["status"] == "configuration_error"
+    assert summary["failures"] == [
+        {
+            "gate": "accepted_ledger",
+            "failure_kind": "invalid_candidate_ledger_or_run",
+        }
+    ]
+
+    candidate_tampered = copy.deepcopy(candidate)
+    candidate_tampered["rows"][0]["observed_reason_code"] = "other_safe_reason"
+    candidate_material = {
+        key: value
+        for key, value in candidate_tampered.items()
+        if key != "candidate_digest"
+    }
+    candidate_tampered["candidate_digest"] = golden_gate.canonical_digest(
+        candidate_material
+    )
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate_tampered,
+        run_batches=[batch, batch, batch],
+    )
+    assert exit_code == 2
+    assert summary["status"] == "configuration_error"
+    assert summary["failures"] == [
+        {
+            "gate": "accepted_ledger",
+            "failure_kind": "invalid_candidate_ledger_or_run",
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -179,6 +267,7 @@ def test_gate_rejects_run_identity_that_differs_from_accepted_ledger(
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_ledger(),
+        candidate=_candidate(),
         run_batches=[run],
     )
 
@@ -254,6 +343,7 @@ def test_semantic_gate_requires_three_stable_runs_and_meets_ppv_recall() -> None
     batch = _semantic_batch()
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_semantic_ledger(),
+        candidate=_candidate(batch),
         run_batches=[batch, batch, batch],
     )
 
@@ -279,6 +369,7 @@ def test_semantic_gate_requires_three_stable_runs_and_meets_ppv_recall() -> None
 def test_semantic_gate_blocks_when_accepted_sample_lacks_negative() -> None:
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_ledger(decision_kind="semantic"),
+        candidate=_candidate(),
         run_batches=[_api_batch(), _api_batch(), _api_batch()],
     )
 
@@ -294,17 +385,19 @@ def test_semantic_gate_blocks_when_accepted_sample_lacks_negative() -> None:
     ]
 
 
-def test_semantic_gate_fails_when_same_input_state_is_unstable() -> None:
+def test_semantic_gate_fails_when_baseline_matches_candidate_but_third_run_is_unstable() -> None:
     stable = _semantic_batch()
     unstable = copy.deepcopy(stable)
     unstable["cases"][0]["response"]["results"][0]["status"] = "compliant"
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_semantic_ledger(),
+        candidate=_candidate(stable),
         run_batches=[stable, stable, unstable],
     )
 
     assert exit_code == 1
+    assert summary["status"] == "failed"
     assert summary["semantic"]["stable_count"] == 1
     assert {item["failure_kind"] for item in summary["failures"]} == {
         "unstable_state"
@@ -314,6 +407,7 @@ def test_semantic_gate_fails_when_same_input_state_is_unstable() -> None:
 def test_release_gate_blocks_an_incomplete_accepted_matrix() -> None:
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_ledger(),
+        candidate=_candidate(),
         run_batches=[_api_batch()],
         expected_sample_count=20,
         expected_rule_count=49,
@@ -365,6 +459,7 @@ def test_release_gate_requires_exact_canonical_rule_set_not_only_rule_count() ->
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=ledger,
+        candidate=candidate,
         run_batches=[batch],
         expected_sample_count=1,
         expected_rule_count=49,
@@ -391,6 +486,7 @@ def test_each_run_requires_the_same_case_rule_matrix_as_the_ledger() -> None:
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=_promoted_ledger_for_batch(accepted),
+        candidate=_candidate(accepted),
         run_batches=[mismatched_run],
         expected_sample_count=1,
         expected_rule_count=49,
@@ -498,6 +594,7 @@ def test_gate_revalidates_every_accepted_ledger_field(
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=ledger,
+        candidate=_candidate(),
         run_batches=[_api_batch()],
     )
 
@@ -554,6 +651,7 @@ def test_semantic_sample_threshold_is_enforced_per_rule_not_only_in_aggregate() 
 
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
         ledger=ledger,
+        candidate=candidate,
         run_batches=[batch, batch, batch],
     )
 
