@@ -70,7 +70,6 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
-        "LX0609-023",
         "LX0609-040",
         "LX0609-041",
         "LX0609-042",
@@ -101,7 +100,7 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-038",
         "LX0609-039",
     }
-    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 0
+    assert sum(mode == EXECUTION_MODE_COMPATIBILITY for mode in modes.values()) == 1
 
 
 @pytest.mark.unit
@@ -262,9 +261,14 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 48
-    assert plan.compatibility_rule_ids == ("LX0609-020",)
-    assert plan.compatibility_execution_rule_ids == ("LX-017", "CL-250")
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 47
+    assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
+    assert plan.compatibility_execution_rule_ids == (
+        "LX-017",
+        "CL-250",
+        "CL-248",
+        "CL-071",
+    )
 
 
 @pytest.mark.unit
@@ -332,7 +336,7 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
 
 
 @pytest.mark.unit
-def test_consultation_native_flag_keeps_020_compatibility_and_native_scopes_021_023():
+def test_consultation_native_flag_keeps_020_023_compatibility_and_native_scopes_021_022():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -354,17 +358,22 @@ def test_consultation_native_flag_keeps_020_compatibility_and_native_scopes_021_
     assert plan.native_async_rule_ids == (
         "LX0609-021",
         "LX0609-022",
-        "LX0609-023",
     )
-    assert plan.compatibility_rule_ids == ("LX0609-020",)
+    assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
     assert plan.native_executor_batches == (
         (
             "consultation_quality",
-            ("LX0609-021", "LX0609-022", "LX0609-023"),
+            ("LX0609-021", "LX0609-022"),
         ),
     )
-    assert plan.compatibility_execution_rule_ids == ("LX-017", "CL-250")
+    assert plan.compatibility_execution_rule_ids == (
+        "LX-017",
+        "CL-250",
+        "CL-248",
+        "CL-071",
+    )
     assert "CL-250" not in plan.bypassed_execution_rule_ids
+    assert "CL-248" not in plan.bypassed_execution_rule_ids
 
 
 @pytest.mark.unit
