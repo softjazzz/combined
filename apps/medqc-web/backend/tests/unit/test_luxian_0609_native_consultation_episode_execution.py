@@ -425,6 +425,77 @@ async def test_same_day_without_precise_time_is_data_gap_without_second_call(mon
 
 
 @pytest.mark.asyncio
+async def test_same_day_imprecise_candidate_forces_data_gap_even_with_later_specific_link(monkeypatch):
+    """同日先后无法判定时，不能让次日关联掩盖这一时间证据缺口。"""
+    source_rows = {
+        "consultation_record": _rows("申请与明确会诊意见", hour_start=1),
+        "daily_course_record": [
+            {
+                "document_title": "病程",
+                "record_time": "2026-07-20",
+                "record_content": "同日候选，先后关系无法确认。",
+            },
+            {
+                "document_title": "病程",
+                "record_time": "2026-07-21 08:00:00",
+                "record_content": "次日明确落实会诊意见。",
+            },
+        ],
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-2"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_source_error_outranks_same_day_imprecise_candidate_without_second_call(monkeypatch):
+    def _read(*, source_key, **_):
+        if source_key == "consultation_record":
+            return _rows("申请与明确会诊意见", hour_start=1)
+        if source_key == "daily_course_record":
+            return [{
+                "document_title": "病程",
+                "record_time": "2026-07-20",
+                "record_content": "同日候选，先后关系无法确认。",
+            }]
+        if source_key == "senior_course_record":
+            raise SourceEvidenceQueryError("safe")
+        return []
+
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", _read)
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["technical_error", "technical_error"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
 async def test_no_completed_opinion_skips_second_call(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("只有申请"))
     client = _SequentialClient(_payload(episodes=[_episode(

@@ -569,6 +569,12 @@ def _execution_outcome(
         return "data_gap", "linkage_unresolved"
     if not completed:
         return "not_applicable", "trigger_absent_complete"
+    if source_technical:
+        return "technical_error", "source_query_error"
+    # 同日候选与会诊意见任一侧缺少精确时间时，不能依赖其它候选的
+    # 语义关联掩盖先后关系不明；020/023 必须整体 fail-closed。
+    if temporal_incomplete_episodes:
+        return "data_gap", "linkage_unresolved"
     if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
         if source_technical:
             return "technical_error", "source_query_error"
