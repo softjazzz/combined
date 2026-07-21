@@ -34,6 +34,13 @@ CONSULTATION_EPISODE_RULE_IDS = (
     "LX0609-022",
     "LX0609-023",
 )
+# 020 的 episode/关联提取仍保留为独立研究能力，但尚未达到包级原生派发
+# 的验收门槛；客户包只允许 021 至 023 进入原生会诊批次。
+PACKAGE_NATIVE_CONSULTATION_RULE_IDS = (
+    "LX0609-021",
+    "LX0609-022",
+    "LX0609-023",
+)
 EXECUTOR_KEY = "consultation_quality"
 _SOURCE_KEY = "consultation_record"
 _SOURCE_LIMIT = 48

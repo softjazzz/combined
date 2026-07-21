@@ -16,8 +16,8 @@ from .native_basic_timeliness import (
 )
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
 from .native_consultation_episode_execution import (
-    CONSULTATION_EPISODE_RULE_IDS,
     EXECUTOR_KEY as CONSULTATION_EPISODE_EXECUTOR_KEY,
+    PACKAGE_NATIVE_CONSULTATION_RULE_IDS,
 )
 from .native_exam_lab_execution import (
     EXAM_LAB_RULE_IDS,
@@ -59,11 +59,11 @@ _VALID_EXECUTION_MODES = frozenset(
 EXECUTOR_COMPATIBILITY = "compatibility"
 EXECUTOR_SURGERY_PRESENCE = "surgery_presence"
 EXECUTOR_SURGERY_MDT = "surgery_mdt"
-_CONSULTATION_FAMILY_RULE_IDS = (
-    "LX0609-020",
-    "LX0609-021",
-    "LX0609-022",
-    "LX0609-023",
+_CONSULTATION_FAMILY_RULE_IDS = frozenset(
+    {
+        "LX0609-020",
+        *PACKAGE_NATIVE_CONSULTATION_RULE_IDS,
+    }
 )
 
 
@@ -291,7 +291,7 @@ def build_luxian_0609_package_plan(
             or (
                 item.executor_key == CONSULTATION_EPISODE_EXECUTOR_KEY
                 and native_consultation_enabled
-                and item.rule_id in CONSULTATION_EPISODE_RULE_IDS
+                and item.rule_id in PACKAGE_NATIVE_CONSULTATION_RULE_IDS
             )
             or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
             or (
