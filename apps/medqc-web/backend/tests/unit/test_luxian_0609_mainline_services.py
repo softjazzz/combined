@@ -1444,7 +1444,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
 
 
 @pytest.mark.asyncio
-async def test_public_entry_runs_020_023_natively_with_other_native_rules(monkeypatch):
+async def test_public_entry_keeps_020_compatibility_and_runs_021_023_natively(monkeypatch):
     selected = [f"LX0609-{index:03d}" for index in range(1, 50)]
     captured: dict[str, object] = {}
 
@@ -1489,8 +1489,14 @@ async def test_public_entry_runs_020_023_natively_with_other_native_rules(monkey
     monkeypatch.setattr("app.services.sample_programmatic_evidence.engine", None)
     service = SichuanQCService()
 
+    legacy_lookups: list[str] = []
+
     def _legacy_lookup(rule_id):
-        raise AssertionError(f"原生会诊旁路不得加载旧执行规则: {rule_id}")
+        normalized = str(rule_id)
+        legacy_lookups.append(normalized)
+        if normalized not in {"LX-017", "CL-250"}:
+            raise AssertionError(f"020兼容路径不得加载无关旧执行规则: {normalized}")
+        return {"rule_id": normalized, "rule_name": normalized}
 
     monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
 
@@ -1507,9 +1513,10 @@ async def test_public_entry_runs_020_023_natively_with_other_native_rules(monkey
     )
 
     assert captured == {
-        "prepared_rule_ids": [],
+        "prepared_rule_ids": ["LX-017", "CL-250"],
         "selected_customer_rule_ids": tuple(selected),
     }
+    assert legacy_lookups == ["LX-017", "CL-250"]
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
 
 
@@ -2013,14 +2020,33 @@ async def test_native_029_030_032_enabled_service_must_not_dispatch_legacy_raw_r
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("enabled", "expected_dispatch", "expected_calls", "expected_tokens"),
+    (
+        "enabled",
+        "expected_dispatch",
+        "expected_calls",
+        "expected_tokens",
+        "expected_legacy_lookups",
+    ),
     [
-        (True, [], [("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")], 140),
-        (False, [["LX-017", "CL-250", "SC-068", "LX-015", "SC-069", "CL-248", "CL-071"]], [], 0),
+        (
+            True,
+            [["LX-017", "CL-250"]],
+            [("LX0609-021", "LX0609-022", "LX0609-023")],
+            140,
+            ["LX-017", "CL-250"],
+        ),
+        (
+            False,
+            [["LX-017", "CL-250", "SC-068", "LX-015", "SC-069", "CL-248", "CL-071"]],
+            [],
+            0,
+            ["LX-017", "CL-250", "SC-068", "LX-015", "SC-069", "CL-248", "CL-071"],
+        ),
     ],
 )
 async def test_native_consultation_public_entry_flag_controls_native_batch_and_legacy_fallback(
     monkeypatch, enabled, expected_dispatch, expected_calls, expected_tokens,
+    expected_legacy_lookups,
 ):
     wrappers = [
         _wrapper(
@@ -2060,6 +2086,7 @@ async def test_native_consultation_public_entry_flag_controls_native_batch_and_l
     )
     dispatched: list[list[str]] = []
     consultation_calls: list[tuple[str, ...]] = []
+    legacy_lookups: list[str] = []
 
     async def _dispatch(**kwargs):
         dispatched_ids = [str(rule.get("rule_id")) for rule in kwargs["rules"]]
@@ -2117,11 +2144,15 @@ async def test_native_consultation_public_entry_flag_controls_native_batch_and_l
         _consultation,
     )
     service = SichuanQCService()
-    monkeypatch.setattr(
-        service,
-        "get_rule_by_id",
-        lambda rule_id: {"rule_id": rule_id, "rule_name": rule_id},
-    )
+
+    def _legacy_lookup(rule_id):
+        normalized = str(rule_id)
+        legacy_lookups.append(normalized)
+        if normalized not in set(expected_legacy_lookups):
+            raise AssertionError(f"会诊兼容路径不得加载无关旧执行规则: {normalized}")
+        return {"rule_id": normalized, "rule_name": normalized}
+
+    monkeypatch.setattr(service, "get_rule_by_id", _legacy_lookup)
     monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _dispatch)
 
     result = await service.evaluate_running_final_bundle_input(
@@ -2140,6 +2171,7 @@ async def test_native_consultation_public_entry_flag_controls_native_batch_and_l
 
     assert dispatched == expected_dispatch
     assert consultation_calls == expected_calls
+    assert legacy_lookups == expected_legacy_lookups
     assert [item["rule_id"] for item in result["evaluation_results"]] == [
         "LX0609-020",
         "LX0609-021",
