@@ -144,6 +144,8 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-012",
             "LX0609-014",
             "LX0609-015",
+            "LX0609-020",
+            "LX0609-023",
         }.intersection(selected_rule_ids)
     )
     explicit_as_of_date = (

@@ -350,8 +350,20 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-039": ("surgery_record", "mr_surgery", "rescue_record"),
     # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
     # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
-    "LX0609-020": ("senior_course_record",),
-    "LX0609-023": ("senior_course_record",),
+    "LX0609-020": (
+        "inpat_registration",
+        "inpat_registration.discharge_horizon",
+        "senior_course_record",
+    ),
+    "LX0609-023": (
+        "inpat_registration",
+        "inpat_registration.discharge_horizon",
+        "senior_course_record",
+        "inpat_drug_order",
+        "exam_item_report",
+        "labtest_item_report",
+        "surgery_record",
+    ),
     # 040 的 MDT 结论允许使用同次就诊会诊记录，必须将该来源绑定进决策 refs。
     "LX0609-040": ("consultation_record",),
     # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定

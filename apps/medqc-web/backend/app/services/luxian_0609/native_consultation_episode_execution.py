@@ -57,6 +57,9 @@ _EXECUTION_SOURCE_KEYS = (
     "labtest_item_report",
     "surgery_record",
 )
+_STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
+_STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
+_STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 _STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _CONFIDENCE = frozenset({"high", "medium", "low"})
 _EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unknown"})
@@ -111,6 +114,15 @@ class _CandidateProjection:
     candidates: tuple[_CandidateDocument, ...]
     source_incomplete: bool
     source_technical: bool
+
+
+@dataclass(frozen=True)
+class _StayWindow:
+    admission_day: date
+    horizon_day: date
+
+    def contains(self, observed_time: "_ObservedTime") -> bool:
+        return self.admission_day <= observed_time.day <= self.horizon_day
 
 
 @dataclass(frozen=True)
@@ -324,6 +336,55 @@ def _row_time(row: Mapping[str, Any]) -> _ObservedTime | None:
     return None
 
 
+def _resolve_execution_stay_window(
+    *,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+) -> _StayWindow:
+    """只从同一 Snapshot 的权威住院边界读取第二阶段窗口。"""
+
+    if (
+        evidence_materials is None
+        or type(evidence_snapshot) is not Luxian0609EvidenceSnapshot
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise _SourceGap()
+
+    observations = {
+        item.source_key: item for item in evidence_snapshot.observations
+    }
+    discharge_observation = observations.get(_STAY_DISCHARGE_SOURCE_KEY)
+    if (
+        discharge_observation is not None
+        and discharge_observation.query_state.value == "error"
+    ):
+        raise _SourceTechnical()
+
+    def _rows(source_key: str) -> tuple[Mapping[str, object], ...]:
+        observation = observations.get(source_key)
+        if observation is None or observation.query_state.value == "unavailable":
+            raise _SourceGap()
+        if observation.query_state.value == "error":
+            raise _SourceTechnical()
+        if observation.completeness is not SourceCompleteness.COMPLETE:
+            raise _SourceGap()
+        try:
+            rows = evidence_materials.bounded_rows(source_key)
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            raise _SourceGap() from None
+        if len(rows) != 1:
+            raise _SourceGap()
+        return rows
+
+    admission_rows = _rows(_STAY_ADMISSION_SOURCE_KEY)
+    horizon_rows = _rows(_STAY_HORIZON_SOURCE_KEY)
+    admission = _parse_observed_time(admission_rows[0].get("admission_datetime"))
+    horizon = _parse_observed_time(horizon_rows[0].get("horizon_date"))
+    if admission is None or horizon is None or admission.day > horizon.day:
+        raise _SourceGap()
+    return _StayWindow(admission.day, horizon.day)
+
+
 def _candidate_text(row: Mapping[str, Any]) -> str:
     fields = (
         "document_title", "record_content", "generic_name", "brand_name", "drug_type",
@@ -342,6 +403,7 @@ def _candidate_documents(
     source_schema: str | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+    stay_window: _StayWindow,
 ) -> _CandidateProjection:
     candidates: list[_CandidateDocument] = []
     source_incomplete = False
@@ -369,7 +431,12 @@ def _candidate_documents(
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row)
             text = _candidate_text(row)
-            if observed_time is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
+            if (
+                observed_time is None
+                or not text
+                or len(text) > _MAX_CANDIDATE_CHARS
+                or not stay_window.contains(observed_time)
+            ):
                 source_incomplete = True
                 continue
             candidates.append(_CandidateDocument(
@@ -475,7 +542,12 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
     return tuple(episodes)
 
 
-def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mapping[str, str]]) -> tuple[tuple[_Episode, _ObservedTime, str], ...]:
+def _completed_episodes(
+    episodes: Sequence[_Episode],
+    documents: Sequence[Mapping[str, str]],
+    *,
+    stay_window: _StayWindow | None,
+) -> tuple[tuple[_Episode, _ObservedTime, str], ...]:
     by_ref = {str(item["ref"]): item for item in documents}
     completed: list[tuple[_Episode, date, str]] = []
     for item in episodes:
@@ -486,6 +558,12 @@ def _completed_episodes(episodes: Sequence[_Episode], documents: Sequence[Mappin
             raise _SemanticInvalid()
         observed_times = [_parse_observed_time(member.get("time")) for member in members if member is not None]
         if not observed_times or any(value is None for value in observed_times):
+            raise _SourceGap()
+        if stay_window is None or any(
+            not stay_window.contains(value)
+            for value in observed_times
+            if value is not None
+        ):
             raise _SourceGap()
         opinion_text = _clean("；".join(str(member.get("text") or "") for member in members if member is not None))
         if not opinion_text or len(opinion_text) > _MAX_EPISODE_OPINION_CHARS:
@@ -688,10 +766,17 @@ def _decision(
     *, rule_id: str, status: str, reason_code: str,
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
+    source_keys = {_SOURCE_KEY}
+    if rule_id in {"LX0609-020", "LX0609-023"}:
+        source_keys.update({
+            _STAY_ADMISSION_SOURCE_KEY,
+            _STAY_DISCHARGE_SOURCE_KEY,
+            _STAY_HORIZON_SOURCE_KEY,
+        })
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
         for observation in snapshot.observations
-        if observation.source_key == _SOURCE_KEY
+        if observation.source_key in source_keys
     )
     if status == "compliant":
         dimensions = (ApplicabilityState.APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.SATISFIED)
@@ -764,6 +849,29 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         return NativeConsultationEpisodeExecutionResult((), ())
     if not all(isinstance(value, str) and value.strip() for value in (institute_id, patient_id, visit_id)):
         return _finish(selected=selected, status="technical_error", reason_code="source_query_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    stage_two_rule_ids = tuple(
+        rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
+    )
+    execution_stay_window: _StayWindow | None = None
+    stage_two_boundary_status: tuple[str, str] | None = None
+    if stage_two_rule_ids:
+        try:
+            execution_stay_window = _resolve_execution_stay_window(
+                evidence_materials=evidence_materials,
+                evidence_snapshot=evidence_snapshot,
+            )
+        except _SourceTechnical:
+            stage_two_boundary_status = ("technical_error", "source_query_error")
+        except _SourceGap:
+            stage_two_boundary_status = ("data_gap", "linkage_unresolved")
+        if stage_two_boundary_status is not None and len(stage_two_rule_ids) == len(selected):
+            return _finish(
+                selected=selected,
+                status=stage_two_boundary_status[0],
+                reason_code=stage_two_boundary_status[1],
+                evidence_snapshot=evidence_snapshot,
+                decision_rule_ids=typed,
+            )
     try:
         documents = _documents(_read_rows(
             institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
@@ -804,20 +912,26 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_source_incomplete = False
     execution_source_technical = False
     execution_temporal_incomplete: frozenset[str] = frozenset()
-    stage_two_rule_ids = tuple(
-        rule_id for rule_id in selected if rule_id in {"LX0609-020", "LX0609-023"}
-    )
     if stage_two_rule_ids:
-        try:
-            completed = _completed_episodes(episodes, documents)
-        except _SourceGap:
-            completed = ()
+        if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
-                statuses[rule_id] = ("data_gap", "linkage_unresolved")
-        except _SemanticInvalid:
+                statuses[rule_id] = stage_two_boundary_status
             completed = ()
-            for rule_id in stage_two_rule_ids:
-                statuses[rule_id] = ("data_gap", "linkage_unresolved")
+        else:
+            try:
+                completed = _completed_episodes(
+                    episodes,
+                    documents,
+                    stay_window=execution_stay_window,
+                )
+            except _SourceGap:
+                completed = ()
+                for rule_id in stage_two_rule_ids:
+                    statuses[rule_id] = ("data_gap", "linkage_unresolved")
+            except _SemanticInvalid:
+                completed = ()
+                for rule_id in stage_two_rule_ids:
+                    statuses[rule_id] = ("data_gap", "linkage_unresolved")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome("LX0609-020", episodes=episodes, assessments=None)
             if preliminary[0] == "not_applicable":
@@ -831,6 +945,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_schema=source_schema,
                     evidence_materials=evidence_materials,
                     evidence_snapshot=evidence_snapshot,
+                    stay_window=execution_stay_window,
                 )
                 execution_source_incomplete = projection.source_incomplete
                 execution_source_technical = projection.source_technical

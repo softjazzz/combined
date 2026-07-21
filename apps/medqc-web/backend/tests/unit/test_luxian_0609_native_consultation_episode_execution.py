@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -12,7 +12,14 @@ from app.services.luxian_0609.evidence_snapshot import (
     SourceCompleteness,
     SourceObservation,
 )
-from app.services.luxian_0609.source_evidence_reader import SourceEvidenceQueryError
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+    SourceEvidenceQueryError,
+)
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
@@ -79,6 +86,35 @@ def _execution(*items):
     return {"executions": list(items)}
 
 
+def _window_session(*, rows_by_source, horizon_error=False):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and horizon_error:
+            raise SourceEvidenceQueryError("safe")
+        rows = rows_by_source.get(source_key, ())
+        if source_key == "inpat_registration" and not rows:
+            rows = ({"admission_datetime": "2026-07-01 08:00:00"},)
+        if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and not rows:
+            rows = ({"discharge_datetime": "2026-07-03 08:00:00"},)
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    return build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-22T00:00:00+08:00",
+        evaluation_as_of_date="2026-07-05",
+        row_reader=reader,
+    )
+
+
 def _snapshot():
     return Luxian0609EvidenceSnapshot.create(
         institute_id="safe-inst",
@@ -99,6 +135,22 @@ def _snapshot():
         facts=(),
         document_refs=(),
         created_at="2026-07-21T00:00:00+00:00",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _stage_two_semantic_tests_use_a_valid_stay_window(monkeypatch, request):
+    """既有第二阶段语义测试不重复覆盖住院窗口读取。"""
+
+    if (
+        request.node.name.startswith("test_020_023_window_")
+        or request.node.name == "test_020_023_without_authoritative_stay_window_is_data_gap_without_llm"
+    ):
+        return
+    monkeypatch.setattr(
+        episode,
+        "_resolve_execution_stay_window",
+        lambda **_: episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
     )
 
 
@@ -574,6 +626,99 @@ async def test_no_completed_opinion_skips_second_call(monkeypatch):
     )
     assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
     assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("申请与明确会诊意见"),
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_020_023_window_filters_post_discharge_candidate_without_second_call():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("出院后同步的候选文书", day=4)),
+    })
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window_refs():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert result.results == ()
+    assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "satisfied"]
+    assert all(len(item.fact_refs) >= 3 for item in result.decisions)
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_020_023_window_query_error_is_technical_without_llm():
+    session = _window_session(
+        rows_by_source={"consultation_record": tuple(_rows("申请与明确会诊意见", day=2))},
+        horizon_error=True,
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["technical_error", "technical_error"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio

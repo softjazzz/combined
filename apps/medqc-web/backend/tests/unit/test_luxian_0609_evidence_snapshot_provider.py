@@ -200,6 +200,38 @@ def test_008_009_invalid_nonempty_discharge_datetime_fails_closed() -> None:
         )
 
 
+def test_020_023_freeze_admission_and_authoritative_horizon_in_one_session() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "inpat_registration":
+            return _rows(source_key, [{"admission_datetime": "2026-07-01 08:00:00"}])
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(source_key, [{"discharge_datetime": "2026-07-03 08:00:00"}], limit_rows=1)
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_as_of_date="2026-07-05",
+        row_reader=reader,
+    )
+
+    assert calls.count("inpat_registration") == 1
+    assert calls.count(HORIZON_SOURCE_KEY) == 1
+    assert session.materials.rows("inpat_registration") == (
+        {"admission_datetime": "2026-07-01 08:00:00"},
+    )
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["basis"] == "discharge_date"
+    assert any(fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts)
+
+
 def _build(*, selected_rule_ids=("LX0609-030",), row_reader, **overrides):
     values = {
         "selected_rule_ids": selected_rule_ids,
@@ -608,6 +640,8 @@ def test_consultation_decision_support_retains_private_material_once_without_saf
     assert calls == [
         "consultation_record",
         "daily_course_record",
+        "inpat_registration",
+        "inpat_registration.discharge_horizon",
         "senior_course_record",
     ]
     assert len(calls) == len(set(calls))
@@ -615,10 +649,13 @@ def test_consultation_decision_support_retains_private_material_once_without_saf
         "record_content"
     ] == "private-consultation_record"
     assert session.materials.safe_summary() == {
-        "source_count": 3,
+        "source_count": 6,
         "sources": (
             "consultation_record",
             "daily_course_record",
+            "evaluation_context.horizon",
+            "inpat_registration",
+            "inpat_registration.discharge_horizon",
             "senior_course_record",
         ),
     }
