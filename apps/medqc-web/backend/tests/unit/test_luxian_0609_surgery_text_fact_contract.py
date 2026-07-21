@@ -17,6 +17,7 @@ from app.services.luxian_0609.evidence_snapshot import (
     SourceCompleteness,
     SourceObservation,
 )
+from app.services.luxian_0609.fact_schema import FACT_SCHEMA_VERSION, FactV2
 from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
@@ -203,6 +204,66 @@ def _unproven_empty_consent_session():
     return snapshot, materials
 
 
+def _complete_empty_consent_session():
+    """构造已由同一快照显式证明完整性的空同意书来源。"""
+    session = _session(consent_rows=())
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "surgery_inform_consent"
+    )
+    readiness_fact = FactV2.create(
+        visit_ref=session.snapshot.visit_ref,
+        family="surgery_anesthesia",
+        fact_type="current_visit_surgery_consent_source_readiness",
+        normalized_value={"complete": True},
+        trigger_scope="current_visit",
+        current_visit_relevance="relevant",
+        assertion="affirmed",
+        assertion_context="other",
+        event_status="performed",
+        source_key="surgery_inform_consent",
+        source_document_id="",
+        source_document_type="surgery_inform_consent",
+        record_time=None,
+        submit_time=None,
+        update_time=None,
+        quote="",
+        redaction_terms=(),
+        confidence=1.0,
+        extractor="readiness_fixture",
+        extractor_version="readiness-fixture-v1",
+        fact_schema_version=FACT_SCHEMA_VERSION,
+        source_snapshot_hash=observation.snapshot_ref.removeprefix("sha256:"),
+        created_at=session.snapshot.created_at,
+        extensions={},
+        known_upstream_fact_ids=(),
+    )
+    snapshot = Luxian0609EvidenceSnapshot.create(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        snapshot_schema_version=session.snapshot.snapshot_schema_version,
+        source_registry_version=session.snapshot.source_registry_version,
+        observations=session.snapshot.observations,
+        facts=(*session.snapshot.facts, readiness_fact),
+        document_refs=session.snapshot.document_refs,
+        created_at=session.snapshot.created_at,
+    )
+    materials = Luxian0609EvidenceMaterialStore.create(
+        snapshot=snapshot,
+        sources={
+            source_key: session.materials.source(source_key)
+            for source_key in (
+                "surgery_record",
+                "mr_surgery",
+                "surgery_inform_consent",
+            )
+        },
+    )
+    return snapshot, materials
+
+
 @pytest.mark.asyncio
 async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_states() -> None:
     session = _session()
@@ -251,7 +312,7 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
 @pytest.mark.asyncio
 async def test_033_empty_complete_consent_source_is_non_compliant_without_llm_call() -> None:
     """受控同意书来源完整且没有行，才是可确定的缺失。"""
-    session = _session(consent_rows=())
+    snapshot, materials = _complete_empty_consent_session()
     client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
 
     result = await execute_luxian_0609_native_surgery_gate_rules(
@@ -259,11 +320,11 @@ async def test_033_empty_complete_consent_source_is_non_compliant_without_llm_ca
         decision_rule_ids=("LX0609-033",),
         wrapper_rules=[], evidence_payload={}, institute_id="I", patient_id="P", visit_id="V",
         source_schema=None, llm_client=client,
-        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        evidence_snapshot=snapshot, evidence_materials=materials,
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions, expected_rule_ids=("LX0609-033",),
-        snapshot=session.snapshot,
+        snapshot=snapshot,
     )
 
     assert [item.final_state.value for item in reduced] == ["non_compliant"]

@@ -905,6 +905,30 @@ def _snapshot_performed_surgery_state(
     return "unknown"
 
 
+def _snapshot_surgery_consent_readiness(
+    snapshot: Luxian0609EvidenceSnapshot,
+) -> str:
+    """只接受同一快照显式证明的033来源完整性，缺失证明一律保守。"""
+
+    facts = tuple(
+        item
+        for item in snapshot.facts
+        if item.source_key == "surgery_inform_consent"
+        and item.fact_type == "current_visit_surgery_consent_source_readiness"
+    )
+    if len(facts) != 1:
+        return "unproven"
+    fact = facts[0]
+    value = fact.normalized_value
+    if (
+        isinstance(value, Mapping)
+        and value.get("complete") is True
+        and fact.assertion.value == "affirmed"
+    ):
+        return "complete"
+    return "unproven"
+
+
 def _snapshot_source_failed(
     snapshot: Luxian0609EvidenceSnapshot,
     source_key: str,
@@ -1133,9 +1157,14 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     and consent_observation is not None
                     and consent_observation.completeness.value == "complete"
                 ):
-                    pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                        rule_id, "non_compliant", "surgery_consent_document_missing"
-                    )
+                    if _snapshot_surgery_consent_readiness(evidence_snapshot) != "complete":
+                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                            rule_id, "data_gap", "surgery_consent_source_unproven"
+                        )
+                    else:
+                        pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                            rule_id, "non_compliant", "surgery_consent_document_missing"
+                        )
                 elif consent_state != "available":
                     pending_outcomes[rule_id] = _SurgeryTextOutcome(
                         rule_id, "data_gap", "surgery_consent_source_unproven"

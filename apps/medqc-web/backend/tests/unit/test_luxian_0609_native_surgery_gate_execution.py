@@ -10,6 +10,11 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
+from app.services.luxian_0609.evidence_material import (
+    Luxian0609EvidenceMaterialStore,
+)
+from app.services.luxian_0609.evidence_snapshot import Luxian0609EvidenceSnapshot
+from app.services.luxian_0609.fact_schema import FACT_SCHEMA_VERSION, FactV2
 from app.services.luxian_0609.source_evidence_reader import (
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
@@ -178,6 +183,66 @@ class _JointSurgeryFactClient:
 
 def _performed() -> dict:
     return _fact("current_visit_surgery_confirmed", state="performed")
+
+
+def _with_consent_readiness_fact(session, *, complete: bool):
+    """仅测试用：把来源完整性证明作为独立安全事实绑定进同一快照。"""
+
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "surgery_inform_consent"
+    )
+    readiness_fact = FactV2.create(
+        visit_ref=session.snapshot.visit_ref,
+        family="surgery_anesthesia",
+        fact_type="current_visit_surgery_consent_source_readiness",
+        normalized_value={"complete": complete},
+        trigger_scope="current_visit",
+        current_visit_relevance="relevant",
+        assertion="affirmed" if complete else "negated",
+        assertion_context="other",
+        event_status="performed" if complete else "unknown",
+        source_key="surgery_inform_consent",
+        source_document_id="",
+        source_document_type="surgery_inform_consent",
+        record_time=None,
+        submit_time=None,
+        update_time=None,
+        quote="",
+        redaction_terms=(),
+        confidence=1.0,
+        extractor="readiness_fixture",
+        extractor_version="readiness-fixture-v1",
+        fact_schema_version=FACT_SCHEMA_VERSION,
+        source_snapshot_hash=observation.snapshot_ref.removeprefix("sha256:"),
+        created_at=CREATED_AT,
+        extensions={},
+        known_upstream_fact_ids=(),
+    )
+    snapshot = Luxian0609EvidenceSnapshot.create(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        snapshot_schema_version=session.snapshot.snapshot_schema_version,
+        source_registry_version=session.snapshot.source_registry_version,
+        observations=session.snapshot.observations,
+        facts=(*session.snapshot.facts, readiness_fact),
+        document_refs=session.snapshot.document_refs,
+        created_at=session.snapshot.created_at,
+    )
+    materials = Luxian0609EvidenceMaterialStore.create(
+        snapshot=snapshot,
+        sources={
+            source_key: session.materials.source(source_key)
+            for source_key in (
+                "surgery_record",
+                "mr_surgery",
+                "surgery_inform_consent",
+            )
+        },
+    )
+    return snapshot, materials
 
 
 def _surgery_text_fact(**overrides: object):
@@ -479,18 +544,102 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         snapshot=session.snapshot,
     )
     expected_states = [expected_state] * 5
-    if source_mode == "available":
-        # 033 的同意书查询完整且为空，已是可确定的“无有效同意书”；
-        # 其余门控规则仍缺各自的必要字段，保持数据不足。
-        expected_states[-1] = "non_compliant"
+    # 空同意书查询本身不能证明该来源已完整同步；没有独立完整性事实时，
+    # 033 与其它缺字段规则一样保守为数据不足。
     assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
         assert {item.reason_code for item in result.decisions} == {expected_reason}
     elif source_mode == "available":
         assert {item.reason_code for item in result.decisions} == {
-            "required_field_missing", "requirement_violated",
+            "required_field_missing",
         }
     assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+def _empty_033_consent_session(*, readiness_complete: bool):
+    def reader(**kwargs):
+        rows = (
+            ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            if kwargs["source_key"] == "surgery_record"
+            else ()
+        )
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-033",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    return _with_consent_readiness_fact(session, complete=readiness_complete)
+
+
+@pytest.mark.asyncio
+async def test_033_unproven_readiness_with_empty_source_is_data_gap_without_model():
+    """查询为空不等于同步完整；未证明来源完整性不得判缺同意书。"""
+
+    snapshot, materials = _empty_033_consent_session(readiness_complete=False)
+    client = _Client([])
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[_wrapper("LX0609-033")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-033",),
+        snapshot=snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_033_complete_readiness_with_empty_source_is_non_compliant_without_model():
+    """只有来源完整性被明确证明时，空同意书来源才可判缺失。"""
+
+    snapshot, materials = _empty_033_consent_session(readiness_complete=True)
+    client = _Client([])
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-033",),
+        decision_rule_ids=("LX0609-033",),
+        wrapper_rules=[_wrapper("LX0609-033")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-033",),
+        snapshot=snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
 
