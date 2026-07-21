@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 import json
@@ -19,7 +19,6 @@ from .evidence_material import (
     EvidenceMaterialTruncated,
     EvidenceMaterialUnavailable,
     Luxian0609EvidenceMaterialStore,
-    build_material_document_refs,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
@@ -71,14 +70,6 @@ _COPY_SOURCES = (
     "daily_course_record",
     "senior_course_record",
 )
-_COPY_SUPPORT_SOURCES = (
-    "exam_item_report",
-    "labtest_master",
-    "labtest_item_report",
-    "inpat_drug_order",
-    "surgery_record",
-    "mr_surgery",
-)
 _TIMELINE_SOURCES = (
     *_COURSE_SOURCES,
     "exam_attention_report",
@@ -115,8 +106,6 @@ _MAX_RULE_009_EXTERNAL_EVENT_ROWS = 8
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
-_COPY_AUTO_NONCOMPLIANT_MIN = 0.95
-_COPY_STRONG_COVERAGE_MIN = 0.90
 # 017 仅允许排除这一组人工确认的通用模板壳。归一后仍有任何字符，
 # 都必须保留为病历特异内容，不能豁免复制判定。
 _COPY_TEMPLATE_SHELL_PHRASES = (
@@ -1643,19 +1632,6 @@ class _CopyRuleOutcome:
     evidence: str = ""
     suggestion: str = ""
     confidence: float | None = None
-    support_source_keys: tuple[str, ...] = ()
-    # 仅在同一次执行中传给裁剪 LLM；绝不能进入结果或安全 metadata。
-    semantic_input: "_CopySemanticInput | None" = field(
-        default=None, repr=False, compare=False
-    )
-
-
-@dataclass(frozen=True, repr=False)
-class _CopySemanticInput:
-    left: str
-    right: str
-    event_rows: tuple[tuple[str, str, str], ...]
-    support_source_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1693,74 +1669,8 @@ def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
     return item
 
 
-def _copy_support_event_time(
-    source_key: str, row: Mapping[str, Any]
-) -> datetime | None:
-    """017 只认可各来源的临床事件时间，不把同步/修改时间伪装成新事实。"""
-
-    fields_by_source = {
-        "exam_item_report": ("report_time",),
-        "labtest_master": ("report_time",),
-        "labtest_item_report": ("report_time",),
-        "inpat_drug_order": ("prescribed_datetime",),
-        "surgery_record": (
-            "surgery_begin_time",
-            "surgery_end_time",
-            "record_time",
-        ),
-        "mr_surgery": ("surgery_begin_datetime", "surgery_end_datetime"),
-    }
-    for key in fields_by_source.get(source_key, ()):
-        value = row.get(key)
-        parsed = _authoritative_course_time(value)
-        if parsed is not None:
-            return parsed
-        # surgery_record 的 ETL 原值允许严格的 +08 整值格式；其他来源不得
-        # 用字符串猜时间，更不能回退到 update_time/last_modified_datetime。
-        if (
-            source_key == "surgery_record"
-            and key in {"surgery_begin_time", "surgery_end_time"}
-            and isinstance(value, str)
-        ):
-            try:
-                return datetime.strptime(value.strip(), "%Y-%m-%d %H:%M:%S+08")
-            except ValueError:
-                continue
-    return None
-
-
-def _copy_event_rows(
-    support_documents: Mapping[str, Sequence[Mapping[str, Any]]],
-    *,
-    left_time: datetime,
-    right_time: datetime,
-) -> tuple[tuple[str, str, str], ...]:
-    """返回相邻病程区间内的最小事件上下文：hash ref、来源类型、裁剪正文。"""
-
-    events: list[tuple[str, str, str]] = []
-    for source_key in _COPY_SUPPORT_SOURCES:
-        rows = tuple(support_documents.get(source_key, ()))
-        refs = build_material_document_refs(source_key, rows)
-        for row, event_ref in zip(rows, refs):
-            event_time = _copy_support_event_time(source_key, row)
-            content = _row_text(row)
-            if (
-                event_time is None
-                or not content
-                or event_time <= left_time
-                or event_time > right_time
-            ):
-                continue
-            events.append((event_ref, source_key, content[:_MAX_ROW_CHARS]))
-    return tuple(events)
-
-
 def _copy_similarity_band(value: float) -> str:
-    if value < _COPY_SIMILARITY_THRESHOLD:
-        return "low"
-    if value >= _COPY_AUTO_NONCOMPLIANT_MIN:
-        return "strong"
-    return "gray"
+    return "threshold_exceeded" if value > _COPY_SIMILARITY_THRESHOLD else "within_threshold"
 
 
 def _assess_copy(
@@ -1792,10 +1702,6 @@ def _assess_copy(
                 safe_metadata={
                     "comparable_document_count": len(comparable),
                     "similarity_band": "unknown",
-                    "update_adequacy": "unknown",
-                    "event_types": [],
-                    "event_refs": [],
-                    "event_ref_count": 0,
                 },
             )
         document_id = _clean(row.get("document_id"))
@@ -1820,10 +1726,6 @@ def _assess_copy(
         "similarity_band": "unknown",
         "best_match_source_types": [],
         "template_shell_only": False,
-        "update_adequacy": "unknown",
-        "event_types": [],
-        "event_refs": [],
-        "event_ref_count": 0,
     }
     if len(comparable) < 2:
         return _CopyRuleOutcome(
@@ -1841,7 +1743,7 @@ def _assess_copy(
     ]
     if not pairs:
         return _CopyRuleOutcome(
-            status="data_gap",
+            status="not_applicable",
             reason_code="copy_adjacent_day_pair_unavailable",
             executor_type="program",
             safe_metadata=safe_metadata,
@@ -1913,164 +1815,6 @@ def _copy_result(
     )
 
 
-def _copy_semantic_prompt(*, semantic_input: _CopySemanticInput) -> str:
-    """017 仅比较相邻病程及该区间内经白名单绑定的事件。"""
-
-    events = "\n".join(
-        f"[事件 ref={event_ref} type={source_key}] {content}"
-        for event_ref, source_key, content in semantic_input.event_rows
-    ) or "[无已绑定的区间事件]"
-    return f"""你是 LX0609-017 病程动态更新核对器。只根据两份相邻病程和给出的区间事件判断，禁止猜测。
-- true_copy：当前病程实质复制且没有体现已给出的新事件；
-- reasonable_continuation：病情稳定下的合理延续；
-- unknown：无法可靠判断。
-- updated：当前病程已体现新增临床事实；
-- missing：已给出的新事件没有在当前病程体现；
-- reasonable_continuation：没有需要补写的新变化；
-- unknown：无法可靠判断。
-
-[前一份病程]
-{semantic_input.left[:_MAX_ROW_CHARS]}
-
-[当前病程]
-{semantic_input.right[:_MAX_ROW_CHARS]}
-
-[区间事件]
-{events}
-
-只输出 JSON：{{"copy_state":"true_copy|reasonable_continuation|unknown","update_adequacy":"updated|reasonable_continuation|missing|unknown","event_refs":["仅可填写给出的 ref"]}}"""
-
-
-def _parse_copy_semantic_fact(
-    response: Mapping[str, Any], *, allowed_event_refs: frozenset[str]
-) -> tuple[str, str, tuple[str, ...]] | None:
-    cleaned = re.sub(
-        r"<think>[\s\S]*?</think>",
-        "",
-        _response_text(response),
-        flags=re.IGNORECASE,
-    ).strip()
-    match = re.search(r"\{[\s\S]*\}", cleaned)
-    if not match:
-        return None
-    try:
-        payload = json.loads(match.group(0))
-    except (TypeError, ValueError):
-        return None
-    if not isinstance(payload, Mapping):
-        return None
-    copy_state = payload.get("copy_state")
-    update_adequacy = payload.get("update_adequacy")
-    event_refs = payload.get("event_refs")
-    if (
-        copy_state not in {"true_copy", "reasonable_continuation", "unknown"}
-        or update_adequacy not in {
-            "updated",
-            "reasonable_continuation",
-            "missing",
-            "unknown",
-        }
-        or not isinstance(event_refs, list)
-        or not all(isinstance(item, str) for item in event_refs)
-    ):
-        return None
-    normalized_refs = tuple(event_refs)
-    if len(normalized_refs) != len(set(normalized_refs)) or not set(normalized_refs).issubset(allowed_event_refs):
-        return None
-    return copy_state, update_adequacy, normalized_refs
-
-
-async def _resolve_copy_semantic(
-    outcome: _CopyRuleOutcome,
-    llm_client: CourseQualityLLMClient | None,
-) -> _CopyRuleOutcome:
-    """将017灰区安全映射为一次受控 LLM 事实；任一失败均不得硬判复制。"""
-
-    if outcome.status != "evaluation_unknown":
-        return outcome
-    if outcome.semantic_input is None:
-        return _CopyRuleOutcome(
-            status="data_gap",
-            reason_code="copy_semantic_input_unavailable",
-            executor_type="program",
-            safe_metadata=outcome.safe_metadata,
-            support_source_keys=(),
-        )
-    if llm_client is None:
-        return _CopyRuleOutcome(
-            status="data_gap",
-            reason_code="copy_semantic_llm_unavailable",
-            executor_type="program",
-            safe_metadata=outcome.safe_metadata,
-            support_source_keys=(),
-        )
-    try:
-        response = await llm_client.generate(
-            _copy_semantic_prompt(semantic_input=outcome.semantic_input)
-        )
-    except Exception:
-        return _CopyRuleOutcome(
-            status="data_gap",
-            reason_code="copy_semantic_model_error",
-            executor_type="llm",
-            safe_metadata=outcome.safe_metadata,
-            support_source_keys=(),
-        )
-    prompt, completion, total, elapsed = _usage(response)
-    parsed = _parse_copy_semantic_fact(
-        response,
-        allowed_event_refs=frozenset(
-            event_ref for event_ref, _, _ in outcome.semantic_input.event_rows
-        ),
-    )
-    if parsed is None:
-        status, reason_code = "data_gap", "copy_semantic_invalid_output"
-        safe_metadata = dict(outcome.safe_metadata)
-        used_support_source_keys: tuple[str, ...] = ()
-    else:
-        copy_state, update_adequacy, event_refs = parsed
-        safe_metadata = dict(outcome.safe_metadata)
-        safe_metadata.update(
-            {
-                "update_adequacy": update_adequacy,
-                "event_refs": list(event_refs),
-                "event_ref_count": len(event_refs),
-                "event_types": sorted(
-                    {
-                        source_key
-                        for event_ref, source_key, _ in outcome.semantic_input.event_rows
-                        if event_ref in set(event_refs)
-                    }
-                ),
-            }
-        )
-        if copy_state == "reasonable_continuation" and update_adequacy in {
-            "updated",
-            "reasonable_continuation",
-        }:
-            status, reason_code = "compliant", "copy_clinical_update_adequate"
-        elif (
-            copy_state == "true_copy"
-            and update_adequacy == "missing"
-            and event_refs
-        ):
-            status, reason_code = "non_compliant", "copy_clinical_update_missing"
-        else:
-            status, reason_code = "data_gap", "copy_semantic_unknown"
-        used_support_source_keys = tuple(safe_metadata["event_types"])
-    return _CopyRuleOutcome(
-        status=status,
-        reason_code=reason_code,
-        executor_type="llm",
-        safe_metadata=safe_metadata,
-        support_source_keys=used_support_source_keys,
-        prompt_tokens=prompt,
-        completion_tokens=completion,
-        total_tokens=total,
-        api_time=elapsed,
-    )
-
-
 def _rule_017_decision(
     *,
     outcome: _CopyRuleOutcome,
@@ -2086,9 +1830,10 @@ def _rule_017_decision(
     ):
         raise ValueError("typed 017 evidence session mismatch")
     required_copy_sources = {"daily_course_record", "senior_course_record"}
-    source_keys = required_copy_sources | set(outcome.support_source_keys)
     observations = tuple(
-        item for item in snapshot.observations if item.source_key in source_keys
+        item
+        for item in snapshot.observations
+        if item.source_key in required_copy_sources
     )
     if not required_copy_sources.issubset({item.source_key for item in observations}):
         return RuleDecision(
