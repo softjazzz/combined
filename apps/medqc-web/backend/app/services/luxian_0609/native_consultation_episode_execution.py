@@ -61,6 +61,8 @@ _EXECUTION_SOURCE_KEYS = (
     "labtest_item_report",
     "surgery_record",
 )
+# 仅供安全台账按建议类型描述候选来源覆盖；不得用于否决 LLM 的 absent
+# 语义判断或回退状态。
 _ACTION_TYPE_SOURCE_KEYS = {
     "medication": frozenset((
         "inpat_drug_order", "daily_course_record", "senior_course_record",
@@ -79,11 +81,6 @@ _ACTION_TYPE_SOURCE_KEYS = {
     )),
     "other": frozenset(_EXECUTION_SOURCE_KEYS),
 }
-# absence-closure-v1: 现有读取契约没有任何 action_type 的“未执行”完整
-# 否定闭包。仅有候选行完整不等于检查主表、申请/执行状态或其它权威来源
-# 都已被覆盖；上游补齐并经单独验收前，模型 absent 必须保守为未知。
-_ABSENCE_CLOSURE_POLICY_VERSION = "consultation-absence-closure-v1"
-_ABSENCE_CLOSURE_ACTION_TYPES: frozenset[str] = frozenset()
 _STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
 _STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
 _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
@@ -906,32 +903,6 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     return "evaluation_unknown", "semantic_output_unknown"
 
 
-def _incomplete_absent_recommendations(
-    *,
-    completed_recommendations: Sequence[_CompletedRecommendation],
-    assessments: Sequence[_ExecutionAssessment],
-    source_complete_keys: frozenset[str],
-) -> frozenset[str]:
-    """仅对模型明确 absent 的建议检查其 action_type 所需来源是否可否定。"""
-
-    action_type_by_ref = {
-        item.recommendation.recommendation_ref: item.recommendation.action_type
-        for item in completed_recommendations
-    }
-    incomplete: set[str] = set()
-    for assessment in assessments:
-        if assessment.execution_state != "absent":
-            continue
-        action_type = action_type_by_ref.get(assessment.recommendation_ref)
-        if action_type not in _ABSENCE_CLOSURE_ACTION_TYPES:
-            incomplete.add(assessment.recommendation_ref)
-            continue
-        required_sources = _ACTION_TYPE_SOURCE_KEYS.get(str(action_type or ""))
-        if required_sources is None or not required_sources.issubset(source_complete_keys):
-            incomplete.add(assessment.recommendation_ref)
-    return frozenset(incomplete)
-
-
 def _execution_outcome(
     rule_id: str,
     *,
@@ -940,7 +911,6 @@ def _execution_outcome(
     assessments: Sequence[_ExecutionAssessment] | None,
     source_technical: bool = False,
     temporal_incomplete_recommendations: frozenset[str] = frozenset(),
-    incomplete_absent_recommendations: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -971,15 +941,10 @@ def _execution_outcome(
         if item.execution_state == "absent"
     }
     unresolved_absent = absent_refs.intersection(temporal_incomplete_recommendations)
-    coverage_incomplete_absent = absent_refs.intersection(
-        incomplete_absent_recommendations
-    )
     if rule_id == "LX0609-020":
         if absent_refs:
             if source_technical:
                 return "technical_error", "source_query_error"
-            if coverage_incomplete_absent:
-                return "evaluation_unknown", "candidate_scope_incomplete"
             if absent_refs.difference(unresolved_absent):
                 return "non_compliant", "requirement_violated"
             if unresolved_absent:
@@ -987,8 +952,6 @@ def _execution_outcome(
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
     if absent_refs:
-        if coverage_incomplete_absent:
-            return "evaluation_unknown", "candidate_scope_incomplete"
         return "not_applicable", "trigger_absent_complete"
     if "linked_vague" in states:
         return "non_compliant", "requirement_violated"
@@ -1170,7 +1133,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
-    execution_source_complete_keys: frozenset[str] = frozenset()
     execution_source_technical = False
     execution_temporal_incomplete: frozenset[str] = frozenset()
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
@@ -1214,28 +1176,21 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     evidence_snapshot=evidence_snapshot,
                     stay_window=execution_stay_window,
                 )
-                execution_source_complete_keys = projection.source_complete_keys
                 execution_source_technical = projection.source_technical
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
                 elif not projection.candidates:
-                    execution_assessments = tuple(
-                        _ExecutionAssessment(
-                            item.recommendation.recommendation_ref,
-                            "absent",
-                            (),
-                            "high",
-                            (),
-                        )
-                        for item in completed_recommendations
-                    )
-                else:
-                    second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
-                        completed=completed_recommendations,
-                        candidates=projection.candidates,
-                    )
-                    if not any(allowed_refs.values()):
+                    # 候选因截断、超限、无权威时间或正文预算而无法投给模型时，
+                    # 不是模型的 absent 结论，必须单列为资料不足。反之，已成功
+                    # 查询且本次住院窗口内确无后续候选时，才可作为未观察到执行。
+                    if projection.source_incomplete_keys:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = (
+                                "evaluation_unknown",
+                                "candidate_scope_incomplete",
+                            )
+                    else:
                         execution_assessments = tuple(
                             _ExecutionAssessment(
                                 item.recommendation.recommendation_ref,
@@ -1246,6 +1201,29 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             )
                             for item in completed_recommendations
                         )
+                else:
+                    second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
+                        completed=completed_recommendations,
+                        candidates=projection.candidates,
+                    )
+                    if not any(allowed_refs.values()):
+                        if execution_temporal_incomplete:
+                            for rule_id in stage_two_rule_ids:
+                                statuses[rule_id] = (
+                                    "evaluation_unknown",
+                                    "linkage_unresolved",
+                                )
+                        else:
+                            execution_assessments = tuple(
+                                _ExecutionAssessment(
+                                    item.recommendation.recommendation_ref,
+                                    "absent",
+                                    (),
+                                    "high",
+                                    (),
+                                )
+                                for item in completed_recommendations
+                            )
                     else:
                         calls += 1
                         try:
@@ -1281,11 +1259,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         assessments=None,
                     )
         if execution_assessments is not None:
-            incomplete_absent_recommendations = _incomplete_absent_recommendations(
-                completed_recommendations=completed_recommendations,
-                assessments=execution_assessments,
-                source_complete_keys=execution_source_complete_keys,
-            )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
@@ -1294,7 +1267,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     assessments=execution_assessments,
                     source_technical=execution_source_technical,
                     temporal_incomplete_recommendations=execution_temporal_incomplete,
-                    incomplete_absent_recommendations=incomplete_absent_recommendations,
                 )
     results = []
     for rule_id in selected:
