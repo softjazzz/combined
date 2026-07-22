@@ -671,6 +671,40 @@ async def test_one_execution_document_can_explicitly_cover_two_recommendations(m
 
 
 @pytest.mark.asyncio
+async def test_same_category_generic_execution_is_vague_for_each_rehabilitation_detail(monkeypatch):
+    """同一治疗类别的多个细项可由明确的类别性执行泛化覆盖，不得跨类别外推。"""
+    source_rows = {
+        "consultation_record": _rows("意见：开展关节活动训练及肌力训练。", action_suffix=False),
+        "daily_course_record": _rows("今日已开展康复治疗。", hour_start=2, action_suffix=False),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[
+                {"recommendation_ref": "consultation_record-1#r1", "action_type": "other", "action_text": "开展关节活动训练"},
+                {"recommendation_ref": "consultation_record-1#r2", "action_type": "other", "action_text": "开展肌力训练"},
+            ],
+        )]),
+        _execution(
+            {"recommendation_ref": "consultation_record-1#r1", "execution_state": "linked_vague", "execution_refs": ["daily_course_record-1"], "confidence": "high", "match_terms": ["开展康复治疗"]},
+            {"recommendation_ref": "consultation_record-1#r2", "execution_state": "linked_vague", "execution_refs": ["daily_course_record-1"], "confidence": "high", "match_terms": ["开展康复治疗"]},
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "non_compliant"]
+    assert "同一治疗类别的多个细项" in client.prompts[1]
+
+
+@pytest.mark.asyncio
 async def test_clear_opinion_without_actionable_recommendation_skips_second_stage(monkeypatch):
     monkeypatch.setattr(
         episode,
