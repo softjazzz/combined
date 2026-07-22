@@ -339,7 +339,21 @@ def test_package_plan_accepts_only_customer_ids_and_keeps_legacy_ids_internal():
 
 
 @pytest.mark.unit
-def test_consultation_native_flag_keeps_020_023_compatibility_and_native_scopes_021_022():
+@pytest.mark.parametrize(
+    ("native_consultation_enabled", "execution_link_enabled", "expected_native", "expected_compatibility"),
+    (
+        (False, False, (), ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")),
+        (False, True, (), ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023")),
+        (True, False, ("LX0609-021", "LX0609-022"), ("LX0609-020", "LX0609-023")),
+        (True, True, ("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"), ()),
+    ),
+)
+def test_consultation_two_stage_package_dispatch(
+    native_consultation_enabled,
+    execution_link_enabled,
+    expected_native,
+    expected_compatibility,
+):
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -355,28 +369,19 @@ def test_consultation_native_flag_keeps_020_023_compatibility_and_native_scopes_
         ],
         native_sync_enabled=True,
         native_async_enabled=False,
-        native_consultation_enabled=True,
+        native_consultation_enabled=native_consultation_enabled,
+        native_consultation_execution_link_enabled=execution_link_enabled,
     )
 
-    assert plan.native_async_rule_ids == (
-        "LX0609-021",
-        "LX0609-022",
-    )
-    assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
-    assert plan.native_executor_batches == (
-        (
-            "consultation_quality",
-            ("LX0609-021", "LX0609-022"),
-        ),
-    )
-    assert plan.compatibility_execution_rule_ids == (
-        "LX-017",
-        "CL-250",
-        "CL-248",
-        "CL-071",
-    )
-    assert "CL-250" not in plan.bypassed_execution_rule_ids
-    assert "CL-248" not in plan.bypassed_execution_rule_ids
+    assert plan.native_async_rule_ids == expected_native
+    assert plan.compatibility_rule_ids == expected_compatibility
+    if expected_native:
+        assert plan.native_executor_batches == (("consultation_quality", expected_native),)
+    else:
+        assert plan.native_executor_batches == ()
+    if not execution_link_enabled:
+        assert "CL-250" not in plan.bypassed_execution_rule_ids
+        assert "CL-248" not in plan.bypassed_execution_rule_ids
 
 
 @pytest.mark.unit

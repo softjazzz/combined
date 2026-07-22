@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 import json
+import re
 import time
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -64,6 +65,16 @@ _STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _CONFIDENCE = frozenset({"high", "medium", "low"})
 _EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unknown"})
 _EVALUATOR_VERSION = "consultation-episode-v2"
+_SIGNATURE_LABEL = (
+    r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
+    r"记录(?:医师|医生)?|上级医师|医师|医生)?(?:电子)?签(?:名|字))"
+)
+_SIGNATURE_VALUE = r"(?:已(?:签|签名|签字)|[A-Za-z]{1,4}|[\u4e00-\u9fff·]{1,4}|\*{1,4})?"
+_PURE_SIGNATURE_TEMPLATE = re.compile(
+    rf"^[\s，,;；、|/\\\\()（）\[\]【】]*"
+    rf"(?:{_SIGNATURE_LABEL}\s*[:：]?\s*{_SIGNATURE_VALUE}"
+    rf"\s*[\s，,;；、|/\\\\()（）\[\]【】]*)+$"
+)
 
 
 class ConsultationEpisodeLLMClient(Protocol):
@@ -147,8 +158,19 @@ class _SemanticInvalid(Exception):
     pass
 
 
+class _SemanticUnresolved(Exception):
+    pass
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
+
+
+def _is_pure_signature_template(record_content: Any) -> bool:
+    """仅排除空正文或纯签名占位，不按标题、科室或普通短文本猜测。"""
+
+    body = _clean(record_content)
+    return not body or bool(_PURE_SIGNATURE_TEMPLATE.fullmatch(body))
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -288,8 +310,11 @@ def _read_rows(
 def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
     documents: list[dict[str, str]] = []
     for index, row in enumerate(rows, start=1):
+        body = _clean(row.get("record_content"))
+        if _is_pure_signature_template(body):
+            continue
         text = _clean("；".join(
-            value for value in (_clean(row.get("document_title")), _clean(row.get("record_content"))) if value
+            value for value in (_clean(row.get("document_title")), body) if value
         ))
         if len(text) > _MAX_DOCUMENT_CHARS:
             raise _SourceGap()
@@ -472,6 +497,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "其它已经说明具体临床问题或任务的申请不得因表述简短而判为vague。"
         "文书只含明确会诊意见、没有申请目的或请求时，application_state必须为absent且application_refs为空；"
         "只含明确申请目的、没有会诊意见时，opinion_state必须为absent且opinion_refs为空。"
+        "不得把意见文书的ref借作申请ref，也不得把申请文书的ref借作意见ref，只为避免absent状态；"
+        "同一ref仅当该同一文书同时包含明确申请目的和明确会诊意见时，才可同时出现在application_refs和opinion_refs，"
+        "且两个state都必须为clear；无法区分角色时返回unknown，不得猜测。"
         "missing只用于角色明确存在但内容空或模板，vague只用于角色存在但内容泛化。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
         "同一输入ref不得被拆入多个episode。"
@@ -513,6 +541,8 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
             or not all(isinstance(ref, str) and ref in member_refs for ref in opinion_refs)
             or len(application_refs) != len(set(application_refs))
             or len(opinion_refs) != len(set(opinion_refs))
+            or (application == "absent" and application_refs)
+            or (opinion == "absent" and opinion_refs)
             or (application == "clear" and not application_refs)
             or (opinion == "clear" and not opinion_refs)
             or episode_ref not in member_refs
@@ -538,7 +568,7 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
     if len(assigned) != len(expected_refs) or len(set(assigned)) != len(expected_refs) or set(assigned) != expected:
         raise _SemanticInvalid()
     if unresolved:
-        raise _SourceGap()
+        raise _SemanticUnresolved()
     return tuple(episodes)
 
 
@@ -678,13 +708,13 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     if any(state in {"vague", "missing"} for state in states):
         return "non_compliant", "requirement_violated"
     if any(episode.confidence != "high" for episode in episodes) or "unknown" in states:
-        return "data_gap", "linkage_unresolved"
+        return "evaluation_unknown", "semantic_low_confidence"
     applicable = tuple(state for state in states if state != "absent")
     if not applicable:
         return "not_applicable", "trigger_absent_complete"
     if all(state == "clear" for state in applicable):
         return "compliant", "requirement_satisfied"
-    return "data_gap", "linkage_unresolved"
+    return "evaluation_unknown", "semantic_output_unknown"
 
 
 def _execution_outcome(
@@ -786,6 +816,8 @@ def _decision(
         dimensions = (ApplicabilityState.NOT_APPLICABLE, EvidenceState.SUFFICIENT, QcDirection.UNKNOWN)
     elif status == "data_gap":
         dimensions = (ApplicabilityState.UNKNOWN, EvidenceState.DATA_GAP, QcDirection.UNKNOWN)
+    elif status == "evaluation_unknown":
+        dimensions = (ApplicabilityState.UNKNOWN, EvidenceState.CONFLICT, QcDirection.UNKNOWN)
     else:
         dimensions = (ApplicabilityState.ERROR, EvidenceState.TECHNICAL_ERROR, QcDirection.UNKNOWN)
     applicability, evidence_state, direction = dimensions
@@ -899,8 +931,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         episodes = _parse(_payload(response), tuple(item["ref"] for item in documents))
     except _SourceGap:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    except _SemanticUnresolved:
+        return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticInvalid:
-        return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+        return _finish(selected=selected, status="evaluation_unknown", reason_code="semantic_output_unknown", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except Exception:
         return _finish(selected=selected, status="technical_error", reason_code="model_transport_error", calls=calls, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     statuses: dict[str, tuple[str, str]] = {

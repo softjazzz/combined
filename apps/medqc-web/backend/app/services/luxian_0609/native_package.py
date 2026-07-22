@@ -16,6 +16,7 @@ from .native_basic_timeliness import (
 )
 from .native_execution import NATIVE_RULE_IDS as NATIVE_SYNC_RULE_IDS
 from .native_consultation_episode_execution import (
+    CONSULTATION_EPISODE_RULE_IDS,
     EXECUTOR_KEY as CONSULTATION_EPISODE_EXECUTOR_KEY,
     PACKAGE_NATIVE_CONSULTATION_RULE_IDS,
 )
@@ -259,6 +260,7 @@ def build_luxian_0609_package_plan(
     native_async_enabled: bool,
     native_basic_timeliness_enabled: bool = False,
     native_consultation_enabled: bool = False,
+    native_consultation_execution_link_enabled: bool = False,
     native_exam_lab_enabled: bool = False,
     native_transfusion_enabled: bool = False,
     native_tumor_pathology_enabled: bool = False,
@@ -294,7 +296,11 @@ def build_luxian_0609_package_plan(
             or (
                 item.executor_key == CONSULTATION_EPISODE_EXECUTOR_KEY
                 and native_consultation_enabled
-                and item.rule_id in PACKAGE_NATIVE_CONSULTATION_RULE_IDS
+                and item.rule_id in (
+                    CONSULTATION_EPISODE_RULE_IDS
+                    if native_consultation_execution_link_enabled
+                    else PACKAGE_NATIVE_CONSULTATION_RULE_IDS
+                )
             )
             or (item.executor_key == TRANSFUSION_EXECUTOR_KEY and native_transfusion_enabled)
             or (
@@ -387,6 +393,13 @@ def build_luxian_0609_package_plan_from_settings(
         ),
         native_consultation_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", False)
+        ),
+        native_consultation_execution_link_enabled=bool(
+            getattr(
+                settings,
+                "LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED",
+                False,
+            )
         ),
         native_exam_lab_enabled=bool(
             getattr(settings, "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED", False)

@@ -74,6 +74,16 @@ def build_full_rule_decision_settings(
     ):
         overrides["LUXIAN_0609_NATIVE_CONSULTATION_ENABLED"] = False
         overrides["LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED"] = False
+        overrides["LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED"] = False
+    else:
+        # 第二阶段必须由基础 Settings 显式开启；全规则 overlay 不得越权启用。
+        overrides["LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED"] = bool(
+            getattr(
+                base_settings,
+                "LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED",
+                False,
+            )
+        )
     if preproduction:
         overrides.update(PREPRODUCTION_ONLY_OVERRIDES)
     return ReadOnlySettingsOverlay(base_settings, overrides)

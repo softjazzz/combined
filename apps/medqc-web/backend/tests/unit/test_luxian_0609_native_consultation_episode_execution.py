@@ -168,6 +168,62 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pure_signature_template_is_excluded_before_episode_prompt(monkeypatch):
+    template = "会诊医师签名：张三"
+    substantive = "申请会诊并提出明确诊疗问题；会诊意见：建议调整治疗方案"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows(template, substantive),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-2", ["consultation_record-2"],
+    )]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert template not in client.prompts[0]
+    assert substantive in client.prompts[0]
+    assert "consultation_record-2" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_only_pure_signature_templates_are_not_applicable_without_llm(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("患者签名：李四", "会诊医师电子签名：王五"),
+    )
+    client = _Client(_payload(episodes=[]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_signature_with_substantive_opinion_remains_in_episode_prompt(monkeypatch):
+    substantive = "会诊医师签名：张三；意见：建议完善相关检查后调整治疗方案"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows(substantive),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1", ["consultation_record-1"], application="absent",
+    )]))
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-022",), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert result.results[0]["status"] == "compliant"
+    assert substantive in client.prompts[0]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_split_application_and_opinion_keep_distinct_role_refs(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请会诊目的", "明确专科意见"))
     client = _Client(_payload(episodes=[_episode(
@@ -234,6 +290,67 @@ async def test_opinion_only_document_is_application_absent_and_021_not_applicabl
 
 
 @pytest.mark.asyncio
+async def test_opinion_only_episode_with_absent_application_cannot_carry_an_application_ref(monkeypatch):
+    """意见-only 合同要求 absent 申请状态不得携带意见文书引用。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("明确专科处理意见"),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        application="absent",
+        application_refs=["consultation_record-1"],
+        opinion_refs=["consultation_record-1"],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_single_document_with_clear_application_and_opinion_can_share_its_role_ref(monkeypatch):
+    """合法单行“申请+意见”仍允许同一稳定引用承担两种角色。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("明确申请目的；明确专科处理意见"),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=_Client(_payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+        )])),
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+
+
+def test_episode_prompt_requires_opinion_only_document_to_leave_application_absent_without_borrowing_ref():
+    prompt = episode._prompt(({"ref": "consultation_record-1", "time": "", "text": "安全文书"},))
+
+    assert "不得把意见文书的ref借作申请ref" in prompt
+    assert "同一ref仅当该同一文书同时包含明确申请目的和明确会诊意见时" in prompt
+
+
+@pytest.mark.asyncio
 async def test_duplicate_sync_and_non_target_do_not_create_extra_episode(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("申请", "同步申请", "非会诊文书"))
     client = _Client(_payload(
@@ -254,7 +371,7 @@ async def test_duplicate_sync_and_non_target_do_not_create_extra_episode(monkeyp
         ("clear", "clear", ("compliant", "compliant")),
         ("vague", "clear", ("non_compliant", "compliant")),
         ("absent", "absent", ("not_applicable", "not_applicable")),
-        ("unknown", "clear", ("data_gap", "compliant")),
+        ("unknown", "clear", ("uncertain", "compliant")),
     ],
 )
 async def test_021_022_state_table(monkeypatch, application, opinion, expected):
@@ -268,13 +385,13 @@ async def test_021_022_state_table(monkeypatch, application, opinion, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("confidence", ("medium", "low"))
-async def test_medium_or_low_confidence_is_data_gap(monkeypatch, confidence):
+async def test_medium_or_low_confidence_is_evaluation_unknown(monkeypatch, confidence):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     client = _Client(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"], confidence=confidence)]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
 
 
 @pytest.mark.asyncio
@@ -286,12 +403,34 @@ async def test_medium_or_low_confidence_is_data_gap(monkeypatch, confidence):
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"], confidence="low")]),
     ],
 )
-async def test_invalid_or_low_confidence_episode_fails_closed(monkeypatch, payload):
+async def test_invalid_or_low_confidence_episode_is_evaluation_unknown(monkeypatch, payload):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("一", "二"))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=_Client(payload),
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
+
+
+@pytest.mark.asyncio
+async def test_unresolved_episode_is_evaluation_unknown_without_second_stage(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("会诊文书"),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=_Client(_payload(
+            episodes=[],
+            unresolved=["consultation_record-1"],
+        )),
+    )
+    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -332,13 +471,37 @@ async def test_typed_decision_preserves_terminal_source_reason_code(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_parse_failure_is_data_gap_and_model_failure_is_technical(monkeypatch):
+async def test_typed_low_confidence_episode_is_conflict_not_source_gap(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("会诊文书"),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=_Client(_payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"], confidence="low",
+        )])),
+        evidence_snapshot=_snapshot(),
+        decision_rule_ids=("LX0609-021",),
+    )
+    assert result.results == ()
+    assert result.decisions[0].evidence_state is episode.EvidenceState.CONFLICT
+    assert result.decisions[0].reason_code == "semantic_low_confidence"
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_is_evaluation_unknown_and_model_failure_is_technical(monkeypatch):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     parsed = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021",), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client("not-json"),
     )
-    assert parsed.results[0]["status"] == "data_gap"
+    assert parsed.results[0]["status"] == "uncertain"
 
     class _BrokenClient:
         async def generate(self, _prompt):
@@ -384,7 +547,7 @@ async def test_wrapped_or_multiple_or_forged_json_stays_fail_closed(monkeypatch,
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
         llm_client=_Client(raw()),
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
     assert result.llm_call_count == 1
 
 
