@@ -31,7 +31,7 @@ class _Client:
 
     async def generate(self, prompt: str):
         self.prompts.append(prompt)
-        return {"content": _materialize_recommendation_spans(self.payload, prompt), "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
+        return {"content": _materialize_recommendation_quotes(self.payload, prompt), "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
 
 
 class _SequentialClient:
@@ -42,7 +42,7 @@ class _SequentialClient:
     async def generate(self, prompt: str):
         self.prompts.append(prompt)
         return {
-            "content": _materialize_recommendation_spans(self.payloads.pop(0), prompt),
+            "content": _materialize_recommendation_quotes(self.payloads.pop(0), prompt),
             "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
         }
 
@@ -64,19 +64,14 @@ def _payload(*, episodes, non_target=(), unresolved=()):
     return {"episodes": list(episodes), "non_target_refs": list(non_target), "unresolved_refs": list(unresolved)}
 
 
-def _materialize_recommendation_spans(payload, prompt):
-    """测试桩只把明确的自动占位替换成提示词中的精确原文区间。"""
+def _materialize_recommendation_quotes(payload, prompt):
+    """测试桩只补齐单一意见文书引用，不替模型计算字符下标。"""
 
     value = json.loads(json.dumps(payload, ensure_ascii=False))
     if not isinstance(value, dict) or not isinstance(value.get("episodes"), list):
         return value
     try:
         source = json.loads(prompt.rsplit("输入：", 1)[1])
-        texts = {
-            item["ref"]: item["text"]
-            for item in source.get("consultation_documents", [])
-            if isinstance(item, dict)
-        }
     except (IndexError, TypeError, ValueError):
         return value
     for item in value["episodes"]:
@@ -91,16 +86,6 @@ def _materialize_recommendation_spans(payload, prompt):
             if recommendation.get("opinion_ref") == "__AUTO__":
                 recommendation["opinion_ref"] = opinion_refs[0]
             opinion_ref = recommendation.get("opinion_ref")
-            action_text = recommendation.get("action_text")
-            if (
-                recommendation.get("span_start") == "__AUTO__"
-                and isinstance(opinion_ref, str)
-                and isinstance(action_text, str)
-                and action_text in texts.get(opinion_ref, "")
-            ):
-                start = texts[opinion_ref].index(action_text)
-                recommendation["span_start"] = start
-                recommendation["span_end"] = start + len(action_text)
     return value
 
 
@@ -119,10 +104,9 @@ def _episode(
             [{
                 "recommendation_ref": f"{ref}#r1",
                 "action_type": "test",
-                "action_text": "复查血常规",
+                "source_quote": "复查血常规",
+                "normalized_action": "复查血常规检查",
                 "opinion_ref": "__AUTO__",
-                "span_start": "__AUTO__",
-                "span_end": "__AUTO__",
             }]
             if opinion == "clear" and confidence == "high"
             else []
@@ -130,9 +114,10 @@ def _episode(
     normalized_recommendations = []
     for recommendation in recommendations:
         value = dict(recommendation)
+        if "action_text" in value:
+            value.setdefault("source_quote", value.pop("action_text"))
+        value.setdefault("normalized_action", value.get("source_quote", "复查血常规"))
         value.setdefault("opinion_ref", "__AUTO__")
-        value.setdefault("span_start", "__AUTO__")
-        value.setdefault("span_end", "__AUTO__")
         normalized_recommendations.append(value)
     return {
         "episode_ref": ref,
@@ -152,10 +137,12 @@ def _execution(*items):
         value = dict(item)
         if "episode_ref" in value:
             value["recommendation_ref"] = f"{value.pop('episode_ref')}#r1"
-        if value.get("execution_state") == "linked_specific" and "match_terms" not in value:
-            value["match_terms"] = ["复查血常规"]
+        if "match_terms" in value:
+            value.setdefault("execution_quotes", value.pop("match_terms"))
+        if value.get("execution_state") in {"linked_specific", "linked_vague"}:
+            value.setdefault("execution_quotes", ["复查血常规"])
         else:
-            value.setdefault("match_terms", [])
+            value.setdefault("execution_quotes", [])
         normalized.append(value)
     return {"executions": normalized}
 
@@ -339,8 +326,9 @@ def test_episode_prompt_excludes_mdt_and_requires_grounded_recommendations():
 
     assert "术前多学科讨论、术前风险评估、麻醉评估、MDT讨论" in prompt
     assert "recommendation_ref固定为episode_ref#r1" in prompt
-    assert "span_start/span_end" in prompt
-    assert "不得改写、拼接多个文书" in prompt
+    assert "source_quote" in prompt
+    assert "normalized_action" in prompt
+    assert "span_start/span_end" not in prompt
 
 
 def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
@@ -356,18 +344,16 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "完善心脏彩超",
+                "source_quote": "完善心脏彩超",
+                "normalized_action": "建议进行心脏超声检查",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 13,
-                "span_end": 19,
             },
             {
                 "recommendation_ref": "consultation_record-1#r2",
                 "action_type": "medication",
-                "action_text": "调整降压药",
+                "source_quote": "调整降压药",
+                "normalized_action": "调整降压治疗",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 20,
-                "span_end": 25,
             },
         ],
     )])
@@ -387,10 +373,9 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "完善心脏彩超",
+                "source_quote": "安排心脏彩超",
+                "normalized_action": "安排心脏彩超",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 3,
-                "span_end": 99,
             },
             ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
         ),
@@ -398,32 +383,29 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "完善心脏彩超",
+                "source_quote": "建议行手术",
+                "normalized_action": "建议手术",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 4,
-                "span_end": 10,
             },
-            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
+            ({"ref": "consultation_record-1", "time": "", "text": "意见：不建议行手术。"},),
         ),
         (
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "安排心脏彩超",
+                "source_quote": "阿司匹林10mg",
+                "normalized_action": "阿司匹林治疗",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 3,
-                "span_end": 9,
             },
-            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
+            ({"ref": "consultation_record-1", "time": "", "text": "意见：阿司匹林5mg。"},),
         ),
         (
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "完善心脏彩超",
+                "source_quote": "完善心脏彩超",
+                "normalized_action": "完善心脏超声检查",
                 "opinion_ref": "consultation_record-2",
-                "span_start": 3,
-                "span_end": 9,
             },
             (
                 {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
@@ -434,10 +416,9 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
             {
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
-                "action_text": "完善心脏彩超并调整降压药",
+                "source_quote": "完善心脏彩超并调整降压药",
+                "normalized_action": "心脏检查与降压药调整",
                 "opinion_ref": "consultation_record-1",
-                "span_start": 3,
-                "span_end": 15,
             },
             (
                 {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
@@ -445,9 +426,9 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
             ),
         ),
     ],
-    ids=("out_of_bounds", "misaligned_span", "semantic_rewrite", "non_opinion_ref", "cross_document_join"),
+    ids=("source_quote_not_found", "negation_deleted", "dose_changed", "non_opinion_ref", "cross_document_join"),
 )
-def test_episode_recommendation_requires_exact_single_opinion_span(recommendation, documents):
+def test_episode_recommendation_requires_grounded_single_opinion_quote(recommendation, documents):
     payload = _payload(episodes=[_episode(
         "consultation_record-1",
         [item["ref"] for item in documents],
@@ -457,6 +438,29 @@ def test_episode_recommendation_requires_exact_single_opinion_span(recommendatio
 
     with pytest.raises(episode._SemanticInvalid):
         episode._parse(payload, documents)
+
+
+def test_episode_recommendation_allows_format_normalized_quote_but_not_semantic_rewrite():
+    documents = ({
+        "ref": "consultation_record-1",
+        "time": "",
+        "text": "意见：建议　完善\n心脏彩超。",
+    },)
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-1#r1",
+            "opinion_ref": "consultation_record-1",
+            "source_quote": "建议 完善心脏彩超",
+            "normalized_action": "进行心脏超声检查",
+            "action_type": "test",
+        }],
+    )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert parsed[0].recommendations[0].normalized_action == "进行心脏超声检查"
 
 
 def test_episode_recommendation_cannot_be_invented_or_reordered():
@@ -551,11 +555,12 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
     assert "recommendation_ref" in client.prompts[1]
-    assert "action_text" in client.prompts[1]
+    assert "source_quote" in client.prompts[1]
+    assert "normalized_action" in client.prompts[1]
 
 
 @pytest.mark.asyncio
-async def test_generic_or_unrelated_text_cannot_be_linked_specific(monkeypatch):
+async def test_execution_prompt_forbids_planned_symptom_only_and_unrelated_treatment(monkeypatch):
     source_rows = {
         "consultation_record": _rows("意见：调整降压药。", action_suffix=False),
         "daily_course_record": _rows("患者病情稳定，继续治疗。", hour_start=2, action_suffix=False),
@@ -570,10 +575,9 @@ async def test_generic_or_unrelated_text_cannot_be_linked_specific(monkeypatch):
         )]),
         _execution({
             "recommendation_ref": "consultation_record-1#r1",
-            "execution_state": "linked_specific",
-            "execution_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "execution_refs": [],
             "confidence": "high",
-            "match_terms": ["治疗"],
         }),
     )
 
@@ -582,7 +586,45 @@ async def test_generic_or_unrelated_text_cannot_be_linked_specific(monkeypatch):
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_semantic_neuroblock_recommendation_can_link_to_different_specific_execution_phrase(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("意见：若疼痛持续，建议行神经阻滞治疗。", action_suffix=False),
+        "daily_course_record": _rows("今日在超声引导下完成胸椎旁神经阻滞，患者耐受可。", hour_start=2, action_suffix=False),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "opinion_ref": "consultation_record-1",
+                "source_quote": "建议行神经阻滞治疗",
+                "normalized_action": "神经阻滞治疗",
+                "action_type": "procedure",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "execution_quotes": ["完成胸椎旁神经阻滞"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
 
 
 @pytest.mark.asyncio
@@ -641,7 +683,9 @@ def test_execution_prompt_requires_candidate_ref_for_linked_states():
     completed = (
         episode._CompletedRecommendation(
             "consultation_record-1",
-            episode._Recommendation("consultation_record-1#r1", "test", "复查血常规"),
+            episode._Recommendation(
+                "consultation_record-1#r1", "test", "复查血常规", "复查血常规检查", "consultation_record-1",
+            ),
             episode._ObservedTime(datetime(2026, 7, 20, 8, 0, 0), True),
         ),
     )
@@ -659,6 +703,7 @@ def test_execution_prompt_requires_candidate_ref_for_linked_states():
     assert "linked_specific或linked_vague必须至少返回一个execution_refs" in prompt
     assert "没有可验证的candidate_documents ref时必须返回unknown" in prompt
     assert "不得引用会诊申请或会诊意见的ref" in prompt
+    assert "execution_quotes" in prompt
 
 
 @pytest.mark.asyncio
@@ -1034,7 +1079,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
-    assert "措施不同，必须为absent" in client.prompts[1]
+    assert "无关治疗或同部位一般治疗都不是已经执行" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -1331,20 +1376,20 @@ async def test_020_023_window_query_error_is_technical_without_llm():
 @pytest.mark.asyncio
 async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch):
     secret = "CONSULTATION_TYPED_SECRET_20260721"
-    source_rows = {
-        "consultation_record": _rows(secret),
-        "daily_course_record": _rows("已落实会诊意见", hour_start=2),
-        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
-        "labtest_item_report": [], "surgery_record": [],
-    }
-    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    session = _window_session(rows_by_source={
+        "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
+        "consultation_record": tuple(_rows(secret, day=2)),
+        "daily_course_record": tuple(_rows("已落实会诊意见", day=3, hour_start=2)),
+    })
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
-        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None,
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V", source_schema=None,
         llm_client=_SequentialClient(
             _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
             _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high"}),
         ),
-        evidence_snapshot=_snapshot(), decision_rule_ids=("LX0609-020", "LX0609-023"),
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
     )
     assert result.results == ()
     assert [(item.rule_id, item.qc_direction.value) for item in result.decisions] == [

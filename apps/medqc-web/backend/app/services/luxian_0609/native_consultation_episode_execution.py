@@ -11,6 +11,7 @@ from datetime import date, datetime
 import json
 import re
 import time
+import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
 from .decision_model import ApplicabilityState, EvidenceState, QcDirection, RuleDecision
@@ -112,10 +113,9 @@ class _Episode:
 class _Recommendation:
     recommendation_ref: str
     action_type: str
-    action_text: str
-    opinion_ref: str = ""
-    span_start: int = -1
-    span_end: int = -1
+    source_quote: str
+    normalized_action: str
+    opinion_ref: str
 
 
 @dataclass(frozen=True)
@@ -124,7 +124,7 @@ class _ExecutionAssessment:
     execution_state: str
     execution_refs: tuple[str, ...]
     confidence: str
-    match_terms: tuple[str, ...]
+    execution_quotes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -190,14 +190,34 @@ class _SemanticUnresolved(Exception):
     pass
 
 
-_GENERIC_MATCH_TERMS = frozenset({
-    "治疗", "处理", "观察", "监测", "方案", "病情", "患者",
-    "继续", "执行", "会诊", "意见",
-})
+_NEGATION_PREFIX = re.compile(r"(?:不|无|未|否认|禁止|避免)$")
+_DOSE_OR_NUMERIC = re.compile(r"\d+(?:\.\d+)?")
+_DOSE_VALUE = re.compile(r"\d+(?:\.\d+)?(?:mg|g|ml|μg|ug|片|次|日|h|小时|%)", re.IGNORECASE)
 
 
-def _normalized_text(value: str) -> str:
-    return re.sub(r"\s+", "", value).lower()
+def _evidence_text(value: str) -> str:
+    """只做格式归一，不做同义替换或医学解释。"""
+
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", value)).strip()
+
+
+def _quote_is_grounded(*, quote: str, source: str) -> bool:
+    """确认摘录可由单一原文支持，拒绝截去否定或紧邻剂量/数值。"""
+
+    normalized_quote = _evidence_text(quote)
+    normalized_source = _evidence_text(source)
+    if not normalized_quote or not normalized_source:
+        return False
+    offset = normalized_source.find(normalized_quote)
+    while offset >= 0:
+        prefix = normalized_source[max(0, offset - 3):offset]
+        suffix = normalized_source[offset + len(normalized_quote):offset + len(normalized_quote) + 12]
+        quote_has_number = bool(_DOSE_OR_NUMERIC.search(normalized_quote))
+        adjacent_dose = bool(_DOSE_VALUE.search(prefix + suffix))
+        if not _NEGATION_PREFIX.search(prefix) and (quote_has_number or not adjacent_dose):
+            return True
+        offset = normalized_source.find(normalized_quote, offset + 1)
+    return False
 
 
 def _clean(value: Any) -> str:
@@ -568,12 +588,12 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other。每项还必须返回opinion_ref、span_start、span_end："
-        "opinion_ref只能是本episode的opinion_refs之一；span_start/span_end是该opinion_ref对应输入text清洗后文本的"
-        "0-based半开区间。action_text必须逐字等于该单一文书text[span_start:span_end]，不得改写、拼接多个文书、"
-        "增删空白或用语义近似替代，最长240字。"
+        "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
+        "opinion_ref只能是本episode的opinion_refs之一；source_quote是来自该单一意见文书的连续原文摘录，"
+        "不得改写、拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
+        "允许将source_quote作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
-        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,span_start,span_end,action_type,action_text}]}],"
+        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type}]}],"
         "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
     )
 
@@ -629,35 +649,29 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
                 raise _SemanticInvalid()
             recommendation_ref = _clean(raw_recommendation.get("recommendation_ref"))
             opinion_ref = _clean(raw_recommendation.get("opinion_ref"))
-            span_start = raw_recommendation.get("span_start")
-            span_end = raw_recommendation.get("span_end")
             action_type = _clean(raw_recommendation.get("action_type")).lower()
-            action_text = raw_recommendation.get("action_text")
+            source_quote = raw_recommendation.get("source_quote")
+            normalized_action = raw_recommendation.get("normalized_action")
             opinion_text = document_text.get(opinion_ref, "")
             if (
                 recommendation_ref != f"{episode_ref}#r{number}"
                 or opinion_ref not in opinion_refs
-                or isinstance(span_start, bool)
-                or isinstance(span_end, bool)
-                or not isinstance(span_start, int)
-                or not isinstance(span_end, int)
                 or action_type not in _RECOMMENDATION_TYPES
-                or not isinstance(action_text, str)
-                or not action_text
-                or len(action_text) > _MAX_RECOMMENDATION_CHARS
-                or span_start < 0
-                or span_end <= span_start
-                or span_end > len(opinion_text)
-                or opinion_text[span_start:span_end] != action_text
+                or not isinstance(source_quote, str)
+                or not isinstance(normalized_action, str)
+                or not source_quote.strip()
+                or not normalized_action.strip()
+                or len(source_quote) > _MAX_RECOMMENDATION_CHARS
+                or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
+                or not _quote_is_grounded(quote=source_quote, source=opinion_text)
             ):
                 raise _SemanticInvalid()
             recommendations.append(_Recommendation(
                 recommendation_ref,
                 action_type,
-                action_text,
+                source_quote,
+                normalized_action,
                 opinion_ref,
-                span_start,
-                span_end,
             ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
@@ -756,7 +770,8 @@ def _execution_prompt(
         entries.append({
             "recommendation_ref": item.recommendation.recommendation_ref,
             "action_type": item.recommendation.action_type,
-            "action_text": item.recommendation.action_text,
+            "source_quote": item.recommendation.source_quote,
+            "normalized_action": item.recommendation.normalized_action,
             "opinion_date": item.opinion_time.value.isoformat(),
             "candidate_documents": related,
         })
@@ -768,18 +783,16 @@ def _execution_prompt(
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
         "linked_specific只在候选明确落实同一条建议的具体措施，或直接点名该会诊建议且包含明确措施时使用。"
         "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
-        "申请、拟请或请会诊动作本身不是执行。"
-        "仅治疗同一症状、部位或一般治疗但措施不同，必须为absent，不能关联。"
+        "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
         "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
         "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
         "execution_refs只能引用该建议输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
         "linked_specific或linked_vague必须至少返回一个execution_refs；没有可验证的candidate_documents ref时必须返回unknown。"
-        "absent或unknown必须返回空数组。"
-        "linked_specific必须同时返回match_terms：每项是会诊建议action_text与所选执行文书都逐字出现的具体行动词，"
-        "不得使用治疗/处理/观察/监测/方案/病情/患者/继续/执行/会诊/意见等泛词。"
-        "其它state的match_terms必须为空数组。"
+        "每个linked_specific或linked_vague都必须返回execution_quotes：每项是所引执行候选中的连续原文摘录，"
+        "用于证明该候选真的支持你的关联；不得改写、拼接或引用未选候选。"
+        "absent或unknown必须返回空数组execution_refs和execution_quotes。"
         "每个输入recommendation_ref恰好输出一项，禁止重复。"
-        "严格输出JSON：{executions:[{recommendation_ref,execution_state,execution_refs,confidence,match_terms}]}。输入："
+        "严格输出JSON：{executions:[{recommendation_ref,execution_state,execution_refs,execution_quotes,confidence}]}。输入："
         + payload
     )
     return prompt, allowed_refs, frozenset(temporal_incomplete)
@@ -794,10 +807,6 @@ def _parse_executions(
 ) -> tuple[_ExecutionAssessment, ...]:
     raw = payload.get("executions")
     expected_refs = {item.recommendation.recommendation_ref for item in completed}
-    recommendation_by_ref = {
-        item.recommendation.recommendation_ref: item.recommendation
-        for item in completed
-    }
     candidate_by_ref = {item.ref: item for item in candidates}
     if not isinstance(raw, list) or len(raw) != len(expected_refs):
         raise _SemanticInvalid()
@@ -810,43 +819,36 @@ def _parse_executions(
         state = _clean(item.get("execution_state")).lower()
         confidence = _clean(item.get("confidence")).lower()
         refs = item.get("execution_refs")
-        raw_terms = item.get("match_terms")
+        raw_quotes = item.get("execution_quotes")
         if (
             recommendation_ref not in expected_refs
             or recommendation_ref in seen
             or state not in _EXECUTION_STATES
             or confidence not in _CONFIDENCE
             or not isinstance(refs, list)
-            or not isinstance(raw_terms, list)
+            or not isinstance(raw_quotes, list)
             or len(refs) != len(set(refs))
             or not all(isinstance(ref, str) and ref in allowed_refs[recommendation_ref] for ref in refs)
             or (state in {"linked_specific", "linked_vague"} and not refs)
             or (state in {"absent", "unknown"} and refs)
         ):
             raise _SemanticInvalid()
-        terms = tuple(_clean(term) for term in raw_terms)
-        if any(not term or len(term) > 32 for term in terms) or len(terms) != len(set(terms)):
+        quotes = tuple(_clean(quote) for quote in raw_quotes)
+        if any(not quote or len(quote) > _MAX_RECOMMENDATION_CHARS for quote in quotes) or len(quotes) != len(set(quotes)):
             raise _SemanticInvalid()
-        if state == "linked_specific":
-            action_text = _normalized_text(recommendation_by_ref[recommendation_ref].action_text)
-            selected_text = "；".join(
-                candidate_by_ref[ref].text for ref in refs if ref in candidate_by_ref
-            )
-            normalized_selected = _normalized_text(selected_text)
-            if (
-                not terms
-                or any(
-                    _normalized_text(term) in _GENERIC_MATCH_TERMS
-                    or _normalized_text(term) not in action_text
-                    or _normalized_text(term) not in normalized_selected
-                    for term in terms
-                )
+        selected_documents = tuple(
+            candidate_by_ref[ref] for ref in refs if ref in candidate_by_ref
+        )
+        if state in {"linked_specific", "linked_vague"}:
+            if not quotes or any(
+                not any(_quote_is_grounded(quote=quote, source=candidate.text) for candidate in selected_documents)
+                for quote in quotes
             ):
                 raise _SemanticInvalid()
-        elif terms:
+        elif quotes:
             raise _SemanticInvalid()
         seen.add(recommendation_ref)
-        parsed.append(_ExecutionAssessment(recommendation_ref, state, tuple(refs), confidence, terms))
+        parsed.append(_ExecutionAssessment(recommendation_ref, state, tuple(refs), confidence, quotes))
     if seen != expected_refs:
         raise _SemanticInvalid()
     return tuple(parsed)
