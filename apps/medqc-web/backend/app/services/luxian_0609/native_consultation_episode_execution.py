@@ -48,6 +48,8 @@ _MAX_DOCUMENT_CHARS = 1600
 _MAX_PROMPT_CHARS = 48000
 _MAX_EPISODES = 12
 _MAX_EPISODE_OPINION_CHARS = 1200
+_MAX_RECOMMENDATIONS = 24
+_MAX_RECOMMENDATION_CHARS = 240
 _MAX_CANDIDATES_PER_SOURCE = 12
 _MAX_CANDIDATE_CHARS = 1000
 _EXECUTION_SOURCE_KEYS = (
@@ -64,6 +66,7 @@ _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 _STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _CONFIDENCE = frozenset({"high", "medium", "low"})
 _EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unknown"})
+_RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
@@ -102,6 +105,14 @@ class _Episode:
     application_state: str
     opinion_state: str
     confidence: str
+    recommendations: tuple["_Recommendation", ...]
+
+
+@dataclass(frozen=True)
+class _Recommendation:
+    recommendation_ref: str
+    action_type: str
+    action_text: str
 
 
 @dataclass(frozen=True)
@@ -507,9 +518,11 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
     return (
-        "你只识别本次住院会诊文书中的真实会诊episode，不做任何质控结论。"
+        "你只识别本次住院的普通专科会诊，并从明确会诊意见中抽取建议清单；不做任何质控结论。"
         "可把申请、会诊意见、重复同步或分行文书合并为同一episode；非目标文书放入non_target_refs，"
         "无法可靠归属的文书放入unresolved_refs。不得把每一行默认视为一次会诊。"
+        "术前多学科讨论、术前风险评估、麻醉评估、MDT讨论、普通病程、计划会诊、既往会诊提及和空模板都不是020-023的普通会诊，"
+        "必须放入non_target_refs，绝不能拆成多个会诊episode。"
         "application_state和opinion_state只能是clear/vague/missing/absent/unknown："
         "clear为有明确目的或具体意见，vague为只有泛化措辞，missing为角色存在但内容空缺，"
         "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
@@ -529,20 +542,27 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
         "同一输入ref不得被拆入多个episode。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
-        "每个episode还必须给出application_refs和opinion_refs，二者只能引用本episode.member_refs；"
+        "每个episode还必须给出application_refs、opinion_refs和recommendations，三者只能引用本episode.member_refs；"
         "申请或意见为clear时对应refs不得为空。"
-        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence}],"
+        "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
+        "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
+        "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
+        "medication/test/procedure/transfer/monitoring/other；action_text必须是意见原文的短原句，最长240字。"
+        "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
+        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,action_type,action_text}]}],"
         "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
     )
 
 
-def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[_Episode, ...]:
+def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -> tuple[_Episode, ...]:
     raw_episodes = payload.get("episodes")
     non_target = payload.get("non_target_refs")
     unresolved = payload.get("unresolved_refs")
     if not isinstance(raw_episodes, list) or not isinstance(non_target, list) or not isinstance(unresolved, list):
         raise _SemanticInvalid()
+    expected_refs = tuple(str(item["ref"]) for item in documents)
     expected = set(expected_refs)
+    document_text = {str(item["ref"]): _clean(item.get("text")) for item in documents}
     assigned: list[str] = []
     episodes: list[_Episode] = []
     for raw in raw_episodes:
@@ -555,6 +575,7 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
         application = _clean(raw.get("application_state")).lower()
         opinion = _clean(raw.get("opinion_state")).lower()
         confidence = _clean(raw.get("confidence")).lower()
+        raw_recommendations = raw.get("recommendations")
         if (
             not isinstance(member_refs, list)
             or not member_refs
@@ -574,7 +595,28 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
             or application not in _STATES
             or opinion not in _STATES
             or confidence not in _CONFIDENCE
+            or not isinstance(raw_recommendations, list)
+            or len(raw_recommendations) > _MAX_RECOMMENDATIONS
         ):
+            raise _SemanticInvalid()
+        opinion_text = _clean("；".join(document_text.get(ref, "") for ref in opinion_refs))
+        recommendations: list[_Recommendation] = []
+        for number, raw_recommendation in enumerate(raw_recommendations, 1):
+            if not isinstance(raw_recommendation, Mapping):
+                raise _SemanticInvalid()
+            recommendation_ref = _clean(raw_recommendation.get("recommendation_ref"))
+            action_type = _clean(raw_recommendation.get("action_type")).lower()
+            action_text = _clean(raw_recommendation.get("action_text"))
+            if (
+                recommendation_ref != f"{episode_ref}#r{number}"
+                or action_type not in _RECOMMENDATION_TYPES
+                or not action_text
+                or len(action_text) > _MAX_RECOMMENDATION_CHARS
+                or action_text not in opinion_text
+            ):
+                raise _SemanticInvalid()
+            recommendations.append(_Recommendation(recommendation_ref, action_type, action_text))
+        if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
         assigned.extend(member_refs)
         episodes.append(_Episode(
@@ -585,6 +627,7 @@ def _parse(payload: Mapping[str, Any], expected_refs: tuple[str, ...]) -> tuple[
             application,
             opinion,
             confidence,
+            tuple(recommendations),
         ))
     for group in (non_target, unresolved):
         if not all(isinstance(ref, str) and ref in expected for ref in group):
@@ -604,7 +647,7 @@ def _completed_episodes(
     stay_window: _StayWindow | None,
 ) -> tuple[tuple[_Episode, _ObservedTime, str], ...]:
     by_ref = {str(item["ref"]): item for item in documents}
-    completed: list[tuple[_Episode, date, str]] = []
+    completed: list[tuple[_Episode, _ObservedTime, str]] = []
     for item in episodes:
         if item.opinion_state != "clear" or item.confidence != "high":
             continue
@@ -958,7 +1001,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             raise _SemanticInvalid()
         prompt_tokens, completion_tokens, total_tokens, response_time = _usage(response)
         api_time = response_time or (time.perf_counter() - started)
-        episodes = _parse(_payload(response), tuple(item["ref"] for item in documents))
+        episodes = _parse(_payload(response), documents)
     except _SourceGap:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", calls=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens, api_time=api_time, evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     except _SemanticUnresolved:

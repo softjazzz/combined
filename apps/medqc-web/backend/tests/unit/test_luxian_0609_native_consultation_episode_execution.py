@@ -70,6 +70,7 @@ def _episode(
     confidence="high",
     application_refs=None,
     opinion_refs=None,
+    recommendations=(),
 ):
     return {
         "episode_ref": ref,
@@ -79,6 +80,7 @@ def _episode(
         "application_state": application,
         "opinion_state": opinion,
         "confidence": confidence,
+        "recommendations": list(recommendations),
     }
 
 
@@ -255,9 +257,86 @@ def test_episode_prompt_distinguishes_generic_request_from_concrete_purpose():
     assert "请康复科评估术后活动障碍/制定康复计划" in prompt
 
 
+def test_episode_prompt_excludes_mdt_and_requires_grounded_recommendations():
+    prompt = episode._prompt(({"ref": "consultation_record-1", "time": "", "text": "安全文书"},))
+
+    assert "术前多学科讨论、术前风险评估、麻醉评估、MDT讨论" in prompt
+    assert "recommendation_ref固定为episode_ref#r1" in prompt
+    assert "意见原文的短原句" in prompt
+
+
+def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
+    documents = ({
+        "ref": "consultation_record-1",
+        "time": "2026-07-20 08:00:00",
+        "text": "申请心内科会诊；意见：建议完善心脏彩超并调整降压药。",
+    },)
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "完善心脏彩超",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "action_type": "medication",
+                "action_text": "调整降压药",
+            },
+        ],
+    )])
+
+    parsed = episode._parse(payload, documents)
+
+    assert [(item.recommendation_ref, item.action_type) for item in parsed[0].recommendations] == [
+        ("consultation_record-1#r1", "test"),
+        ("consultation_record-1#r2", "medication"),
+    ]
+
+
+def test_episode_recommendation_cannot_be_invented_or_reordered():
+    documents = ({
+        "ref": "consultation_record-1",
+        "time": "2026-07-20 08:00:00",
+        "text": "申请心内科会诊；意见：建议完善心脏彩超。",
+    },)
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-1#r2",
+            "action_type": "medication",
+            "action_text": "调整降压药",
+        }],
+    )])
+
+    with pytest.raises(episode._SemanticInvalid):
+        episode._parse(payload, documents)
+
+
+@pytest.mark.asyncio
+async def test_preoperative_mdt_is_non_target_not_an_ordinary_consultation(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("术前多学科讨论：评估手术和麻醉风险。"),
+    )
+    client = _Client(_payload(episodes=[], non_target=["consultation_record-1"]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
 def test_execution_prompt_requires_candidate_ref_for_linked_states():
     completed = ((
-        episode._Episode("consultation_record-1", (), (), (), "clear", "clear", "high"),
+        episode._Episode("consultation_record-1", (), (), (), "clear", "clear", "high", ()),
         episode._ObservedTime(datetime(2026, 7, 20, 8, 0, 0), True),
         "安全会诊意见",
     ),)
