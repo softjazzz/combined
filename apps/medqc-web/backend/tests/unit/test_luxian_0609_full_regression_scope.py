@@ -354,8 +354,20 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         created_at="2026-01-03T00:00:00+08:00",
     )
 
+    async def generate(prompt: str):
+        if "LX0609-029" in prompt and "LX0609-032" not in prompt:
+            return {"usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5}}
+        if "LX0609-029" in prompt and "LX0609-032" in prompt:
+            return {"usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}}
+        return {"usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}}
+
     class Service:
+        adjudicator_client = SimpleNamespace(generate=generate)
+
         async def evaluate_running_final_bundle_input(self, **_kwargs):
+            await self.adjudicator_client.generate("LX0609-029")
+            await self.adjudicator_client.generate("LX0609-029 LX0609-032")
+            await self.adjudicator_client.generate("SAFE_SECRET_MARKER")
             luxian_execution.build_luxian_0609_evidence_read_session()
             luxian_execution.bind_and_reduce_luxian_0609_rule_decisions()
             return {
@@ -363,7 +375,7 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
                     {"rule_id": rule_id, "status": "compliant"}
                     for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
                 ],
-                "token_usage": {"total_tokens": 0},
+                "token_usage": {"prompt_tokens": 7, "completion_tokens": 10, "total_tokens": 18},
             }
 
     monkeypatch.setattr(
@@ -385,7 +397,7 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         ),
     )
 
-    result, audit = await evaluate_formal_source_audit_case(
+    result, audit, performance = await evaluate_formal_source_audit_case(
         service=Service(),
         bundle={"scene": "running"},
         rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
@@ -424,6 +436,33 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
     assert "a" * 64 not in serialized_audit
     assert "b" * 64 not in serialized_audit
     assert "unit-institute" not in serialized_audit
+    assert "SAFE_SECRET_MARKER" not in json.dumps(performance, ensure_ascii=False)
+    assert performance == {
+        "llm_call_count": 3,
+        "prompt_tokens": 7,
+        "completion_tokens": 10,
+        "total_tokens": 18,
+        "unattributed_tokens": 3,
+        "model_error_call_count": 0,
+        "usage_mismatch": True,
+        "token_analysis": [
+            {
+                "rule_id": rule_id,
+                "llm_call_count": 1 if rule_id == "LX0609-029" else 0,
+                "prompt_tokens": 2 if rule_id == "LX0609-029" else 0,
+                "completion_tokens": 3 if rule_id == "LX0609-029" else 0,
+                "total_tokens": 5 if rule_id == "LX0609-029" else 0,
+            }
+            for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+        ],
+        "shared_or_unattributed": {
+            "llm_call_count": 2,
+            "prompt_tokens": 4,
+            "completion_tokens": 6,
+            "total_tokens": 10,
+            "model_error_call_count": 0,
+        },
+    }
 
 
 @pytest.mark.asyncio
@@ -432,7 +471,12 @@ async def test_formal_source_audit_rejects_non_single_snapshot_capture(
 ) -> None:
     from app.services.luxian_0609 import execution as luxian_execution
 
+    async def generate(_prompt):
+        return {"usage": {"total_tokens": 0}}
+
     class Service:
+        adjudicator_client = SimpleNamespace(generate=generate)
+
         async def evaluate_running_final_bundle_input(self, **_kwargs):
             luxian_execution.build_luxian_0609_evidence_read_session()
             luxian_execution.build_luxian_0609_evidence_read_session()

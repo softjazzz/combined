@@ -27,6 +27,7 @@ _FIXED10_CASE_LABELS = tuple(f"case-{index:02d}" for index in range(1, 11))
 _COURSE_SEVERITY_RULE_IDS = ("LX0609-008", "LX0609-009")
 _SAFE_CODE = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
+_PROMPT_RULE_ID = re.compile(r"\bLX0609-\d{3}\b")
 _RULE_STATES = frozenset(
     {
         "compliant",
@@ -429,6 +430,86 @@ def _build_safe_formal_source_audit(
     return audit
 
 
+def _safe_token_count(value: Any) -> int:
+    return (
+        int(value)
+        if not isinstance(value, bool) and isinstance(value, int) and value >= 0
+        else 0
+    )
+
+
+def _safe_usage_counts(response: Any) -> dict[str, int]:
+    usage = response.get("usage") if isinstance(response, Mapping) else None
+    usage = usage if isinstance(usage, Mapping) else {}
+    return {
+        "prompt_tokens": _safe_token_count(usage.get("prompt_tokens")),
+        "completion_tokens": _safe_token_count(usage.get("completion_tokens")),
+        "total_tokens": _safe_token_count(usage.get("total_tokens")),
+    }
+
+
+def _build_safe_token_analysis(
+    *,
+    result: Mapping[str, Any],
+    calls: Sequence[tuple[tuple[str, ...], Mapping[str, int]]],
+    model_error_call_count: int,
+) -> dict[str, Any]:
+    """按唯一规则 ID 归因；多规则或未识别调用永远不猜测、不均摊。"""
+
+    per_rule = {
+        rule_id: {
+            "rule_id": rule_id,
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+    }
+    shared = {
+        "llm_call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "model_error_call_count": model_error_call_count,
+    }
+    for rule_ids, usage in calls:
+        target = (
+            per_rule[rule_ids[0]]
+            if len(rule_ids) == 1 and rule_ids[0] in per_rule
+            else shared
+        )
+        target["llm_call_count"] += 1
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            target[key] += _safe_token_count(usage.get(key))
+
+    token_usage = result.get("token_usage")
+    token_usage = token_usage if isinstance(token_usage, Mapping) else {}
+    official = {
+        key: _safe_token_count(token_usage.get(key))
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    }
+    wrapped_total = sum(
+        int(item["total_tokens"])
+        for item in (*per_rule.values(), shared)
+    )
+    official_total = official["total_tokens"]
+    usage_mismatch = wrapped_total != official_total
+    return {
+        "llm_call_count": len(calls) + model_error_call_count,
+        **official,
+        "unattributed_tokens": (
+            official_total - wrapped_total
+            if official_total >= wrapped_total
+            else "unknown"
+        ),
+        "model_error_call_count": model_error_call_count,
+        "usage_mismatch": usage_mismatch,
+        "token_analysis": list(per_rule.values()),
+        "shared_or_unattributed": shared,
+    }
+
+
 async def evaluate_formal_source_audit_case(
     *,
     service: Any,
@@ -436,7 +517,7 @@ async def evaluate_formal_source_audit_case(
     rule_ids: Sequence[str],
     timeout_seconds: float,
     evaluation_as_of_date: str | None = None,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     """在同一次正式 service 调用内捕获同源 snapshot 与归约结果。
 
     该函数不新增数据库或模型调用；它仅暂时包裹 execution 模块的请求内函数。
@@ -447,8 +528,11 @@ async def evaluate_formal_source_audit_case(
     original_snapshot_provider = luxian_execution.build_luxian_0609_evidence_snapshot
     original_session_provider = luxian_execution.build_luxian_0609_evidence_read_session
     original_decision_binder = luxian_execution.bind_and_reduce_luxian_0609_rule_decisions
+    original_generate = service.adjudicator_client.generate
     captured_snapshots: list[Any] = []
     captured_reductions: list[tuple[Any, ...]] = []
+    captured_model_calls: list[tuple[tuple[str, ...], Mapping[str, int]]] = []
+    model_error_call_count = 0
 
     def capture_snapshot_provider(**kwargs: Any) -> Any:
         snapshot = original_snapshot_provider(**kwargs)
@@ -465,12 +549,25 @@ async def evaluate_formal_source_audit_case(
         captured_reductions.append(tuple(reduced))
         return reduced
 
+    async def capture_generate(prompt: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal model_error_call_count
+        # 仅在调用栈内扫描；绝不保存或输出 prompt 原文、摘要或 marker。
+        rule_ids = tuple(sorted(set(_PROMPT_RULE_ID.findall(str(prompt)))))
+        try:
+            response = await original_generate(prompt, *args, **kwargs)
+        except Exception:
+            model_error_call_count += 1
+            raise
+        captured_model_calls.append((rule_ids, _safe_usage_counts(response)))
+        return response
+
     try:
         luxian_execution.build_luxian_0609_evidence_snapshot = capture_snapshot_provider
         luxian_execution.build_luxian_0609_evidence_read_session = capture_session_provider
         luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = (
             capture_decision_binder
         )
+        service.adjudicator_client.generate = capture_generate
         result = await evaluate_full_luxian_0609_case(
             service=service,
             bundle=bundle,
@@ -482,6 +579,7 @@ async def evaluate_formal_source_audit_case(
         luxian_execution.build_luxian_0609_evidence_snapshot = original_snapshot_provider
         luxian_execution.build_luxian_0609_evidence_read_session = original_session_provider
         luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = original_decision_binder
+        service.adjudicator_client.generate = original_generate
 
     if len(captured_snapshots) != 1 or captured_snapshots[0] is None:
         raise RuntimeError("同源证据审计快照捕获次数异常")
@@ -499,10 +597,18 @@ async def evaluate_formal_source_audit_case(
         )
     ):
         raise RuntimeError("同源证据审计客户返回包含内部对象")
-    return result, _build_safe_formal_source_audit(
-        result=result,
-        snapshot=captured_snapshots[0],
-        reduced_decisions=captured_reductions[0],
+    return (
+        result,
+        _build_safe_formal_source_audit(
+            result=result,
+            snapshot=captured_snapshots[0],
+            reduced_decisions=captured_reductions[0],
+        ),
+        _build_safe_token_analysis(
+            result=result,
+            calls=captured_model_calls,
+            model_error_call_count=model_error_call_count,
+        ),
     )
 
 
@@ -1086,12 +1192,14 @@ async def run(args: argparse.Namespace) -> int:
                     "elapsed_ms": int((time.perf_counter() - started) * 1000),
                 }
             elif args.formal_source_audit:
-                result, source_audit = await evaluate_formal_source_audit_case(
-                    service=service,
-                    bundle=bundle,
-                    rule_ids=rule_ids,
-                    timeout_seconds=float(args.timeout_seconds),
-                    evaluation_as_of_date=evaluation_as_of_date,
+                result, source_audit, source_audit_performance = (
+                    await evaluate_formal_source_audit_case(
+                        service=service,
+                        bundle=bundle,
+                        rule_ids=rule_ids,
+                        timeout_seconds=float(args.timeout_seconds),
+                        evaluation_as_of_date=evaluation_as_of_date,
+                    )
                 )
                 rows = _result_rows(result)
                 token_usage = result.get("token_usage")
@@ -1105,6 +1213,7 @@ async def run(args: argparse.Namespace) -> int:
                     ),
                     "rule_states": build_safe_rule_states(rows),
                     "source_audit": source_audit,
+                    "source_audit_performance": source_audit_performance,
                     "elapsed_ms": int((time.perf_counter() - started) * 1000),
                     "total_tokens": int(token_usage.get("total_tokens") or 0),
                 }
