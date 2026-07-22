@@ -10,6 +10,7 @@ from scripts.run_luxian_0609_fixed10_readonly import (
     EXPECTED_LUXIAN_0609_RULE_IDS,
     InMemoryLlmReplay,
     build_safe_rule_states,
+    evaluate_formal_source_audit_case,
     evaluate_full_luxian_0609_case,
     evaluate_snapshot_sidecar_ab_case,
     evaluate_unified_engine_ab_case,
@@ -65,6 +66,16 @@ def test_full_regression_accepts_explicit_assert_49_cli_contract() -> None:
     assert args.assert_49 is True
     assert args.snapshot_sidecar_ab is True
     assert args.evaluation_as_of_date == "2026-01-03"
+
+    audit_args = parse_args(
+        [
+            "--assert-49",
+            "--formal-source-audit",
+            "--evaluation-as-of-date",
+            "2026-01-03",
+        ]
+    )
+    assert audit_args.formal_source_audit is True
 
     unified_args = parse_args(
         [
@@ -306,6 +317,151 @@ def test_full_regression_safe_rows_only_keep_customer_rule_states() -> None:
         ]
     )
     assert safe_rows == [{"rule_id": "LX0609-001", "status": "compliant"}]
+
+
+@pytest.mark.asyncio
+async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
+    monkeypatch,
+) -> None:
+    """审计必须复用正式请求，不得再查库或把内部快照带回客户结果。"""
+
+    from app.services.luxian_0609 import execution as luxian_execution
+    from app.services.luxian_0609.evidence_snapshot import (
+        Luxian0609EvidenceSnapshot,
+        SourceCompleteness,
+        SourceObservation,
+    )
+    from app.services.luxian_0609.source_manifest import QueryStatus
+
+    snapshot = Luxian0609EvidenceSnapshot.create(
+        institute_id="unit-institute",
+        patient_id="unit-patient",
+        visit_id="unit-visit",
+        snapshot_schema_version="lx0609-evidence-snapshot-v1",
+        source_registry_version="lx0609-source-registry-v12",
+        observations=(
+            SourceObservation.create(
+                source_key="presurg_summary",
+                query_state=QueryStatus.UNAVAILABLE,
+                completeness=SourceCompleteness.UNPROVEN,
+                record_count=None,
+                query_version="snapshot-provider-presurg_summary-v1",
+                snapshot_ref="sha256:" + "a" * 64,
+            ),
+        ),
+        facts=(),
+        document_refs=(),
+        created_at="2026-01-03T00:00:00+08:00",
+    )
+
+    class Service:
+        async def evaluate_running_final_bundle_input(self, **_kwargs):
+            luxian_execution.build_luxian_0609_evidence_read_session()
+            luxian_execution.bind_and_reduce_luxian_0609_rule_decisions()
+            return {
+                "evaluation_results": [
+                    {"rule_id": rule_id, "status": "compliant"}
+                    for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+                ],
+                "token_usage": {"total_tokens": 0},
+            }
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: SimpleNamespace(snapshot=snapshot),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "bind_and_reduce_luxian_0609_rule_decisions",
+        lambda **_kwargs: tuple(
+            SimpleNamespace(
+                rule_id=rule_id,
+                final_state=SimpleNamespace(value="data_gap"),
+                reason_code="unit_test",
+                fact_refs=("a" * 64,),
+            )
+            for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+        ),
+    )
+
+    result, audit = await evaluate_formal_source_audit_case(
+        service=Service(),
+        bundle={"scene": "running"},
+        rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
+        timeout_seconds=1.0,
+        evaluation_as_of_date="2026-01-03",
+    )
+
+    assert len(result["evaluation_results"]) == 49
+    assert "evidence_snapshot" not in repr(result)
+    row_029 = audit[28]
+    assert {
+        key: row_029[key]
+        for key in (
+            "rule_id",
+            "status",
+            "execution_source",
+            "typed_final_state",
+            "typed_reason_code",
+            "typed_fact_ref_count",
+        )
+    } == {
+        "rule_id": "LX0609-029",
+        "status": "compliant",
+        "execution_source": "unknown",
+        "typed_final_state": "data_gap",
+        "typed_reason_code": "unit_test",
+        "typed_fact_ref_count": 1,
+    }
+    assert {
+        "source_key": "presurg_summary",
+        "query_state": "unavailable",
+        "completeness": "unproven",
+        "record_count_bucket": "unknown",
+    } in row_029["sources"]
+    serialized_audit = json.dumps(audit, ensure_ascii=False, sort_keys=True)
+    assert "a" * 64 not in serialized_audit
+    assert "b" * 64 not in serialized_audit
+    assert "unit-institute" not in serialized_audit
+
+
+@pytest.mark.asyncio
+async def test_formal_source_audit_rejects_non_single_snapshot_capture(
+    monkeypatch,
+) -> None:
+    from app.services.luxian_0609 import execution as luxian_execution
+
+    class Service:
+        async def evaluate_running_final_bundle_input(self, **_kwargs):
+            luxian_execution.build_luxian_0609_evidence_read_session()
+            luxian_execution.build_luxian_0609_evidence_read_session()
+            return {
+                "evaluation_results": [
+                    {"rule_id": rule_id, "status": "compliant"}
+                    for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
+                ]
+            }
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: SimpleNamespace(snapshot=SimpleNamespace(observations=())),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "bind_and_reduce_luxian_0609_rule_decisions",
+        lambda **_kwargs: (),
+    )
+
+    with pytest.raises(RuntimeError, match="同源证据审计快照捕获次数异常"):
+        await evaluate_formal_source_audit_case(
+            service=Service(),
+            bundle={"scene": "running"},
+            rule_ids=EXPECTED_LUXIAN_0609_RULE_IDS,
+            timeout_seconds=1.0,
+            evaluation_as_of_date="2026-01-03",
+        )
 
 
 def test_course_severity_matrix_rejects_raw_date_and_as_of_mismatch(

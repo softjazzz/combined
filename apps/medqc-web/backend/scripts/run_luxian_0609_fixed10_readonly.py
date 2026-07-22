@@ -37,6 +37,9 @@ _RULE_STATES = frozenset(
         "technical_error",
     }
 )
+_SAFE_EXECUTION_SOURCES = frozenset({"lx0609_native"})
+_SAFE_QUERY_STATES = frozenset({"available", "empty", "unavailable", "error"})
+_SAFE_COMPLETENESS = frozenset({"complete", "truncated", "unproven"})
 _JSON_FIELDS = (
     "structured_context",
     "document_hits",
@@ -299,6 +302,208 @@ async def evaluate_full_luxian_0609_case(
     )
     validate_full_luxian_0609_results(result)
     return result
+
+
+def _safe_record_count_bucket(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return "unknown"
+    if value == 0:
+        return "0"
+    if value == 1:
+        return "1"
+    return "2_plus"
+
+
+def _safe_code_or_unknown(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized if _SAFE_CODE.fullmatch(normalized) else "unknown"
+
+
+def _source_keys_for_rule_audit(rule_id: str) -> tuple[str, ...]:
+    """只解析注册表声明来源；不得从 bundle 或客户返回猜测来源。"""
+
+    from app.services.luxian_0609.source_registry import (
+        resolve_luxian_0609_controlled_fact_source_keys,
+        resolve_luxian_0609_decision_support_source_keys,
+        resolve_luxian_0609_rule_sources,
+    )
+
+    entries = resolve_luxian_0609_rule_sources((rule_id,))[rule_id]
+    return tuple(
+        sorted(
+            {
+                *(source_key for entry in entries for source_key in entry.source_keys),
+                *resolve_luxian_0609_controlled_fact_source_keys((rule_id,)),
+                *resolve_luxian_0609_decision_support_source_keys((rule_id,)),
+            }
+        )
+    )
+
+
+def _build_safe_formal_source_audit(
+    *,
+    result: Mapping[str, Any],
+    snapshot: Any,
+    reduced_decisions: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """生成可人工核对、但不含快照身份或原始病历的固定审计视图。"""
+
+    observations = {
+        str(getattr(item, "source_key", "") or "").strip(): item
+        for item in tuple(getattr(snapshot, "observations", ()) or ())
+        if _SAFE_CODE.fullmatch(str(getattr(item, "source_key", "") or "").strip())
+    }
+    decisions_by_rule = {
+        str(getattr(item, "rule_id", "") or "").strip(): item
+        for item in reduced_decisions
+        if str(getattr(item, "rule_id", "") or "").strip()
+    }
+    result_by_rule = {
+        str(item.get("rule_id") or item.get("rule_code") or "").strip(): item
+        for item in _result_rows(result)
+    }
+    audit: list[dict[str, Any]] = []
+    for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS:
+        result_row = result_by_rule.get(rule_id, {})
+        metadata = result_row.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        raw_execution_source = str(metadata.get("execution_source") or "").strip()
+        execution_source = (
+            raw_execution_source
+            if raw_execution_source in _SAFE_EXECUTION_SOURCES
+            else "unknown"
+        )
+        reduced = decisions_by_rule.get(rule_id)
+        raw_final_state = getattr(reduced, "final_state", "") if reduced else ""
+        raw_final_state = getattr(raw_final_state, "value", raw_final_state)
+        typed_final_state = (
+            str(raw_final_state)
+            if str(raw_final_state) in _RULE_STATES
+            else "unknown"
+        )
+        raw_reason_code = getattr(reduced, "reason_code", "") if reduced else ""
+        raw_refs = getattr(reduced, "fact_refs", ()) if reduced else ()
+        fact_ref_count = len(raw_refs) if isinstance(raw_refs, (tuple, list)) else 0
+        sources: list[dict[str, str]] = []
+        for source_key in _source_keys_for_rule_audit(rule_id):
+            observation = observations.get(source_key)
+            raw_query_state = getattr(observation, "query_state", "") if observation else ""
+            raw_query_state = getattr(raw_query_state, "value", raw_query_state)
+            raw_completeness = getattr(observation, "completeness", "") if observation else ""
+            raw_completeness = getattr(raw_completeness, "value", raw_completeness)
+            sources.append(
+                {
+                    "source_key": source_key,
+                    "query_state": (
+                        str(raw_query_state)
+                        if str(raw_query_state) in _SAFE_QUERY_STATES
+                        else "unknown"
+                    ),
+                    "completeness": (
+                        str(raw_completeness)
+                        if str(raw_completeness) in _SAFE_COMPLETENESS
+                        else "unknown"
+                    ),
+                    "record_count_bucket": _safe_record_count_bucket(
+                        getattr(observation, "record_count", None)
+                        if observation
+                        else None
+                    ),
+                }
+            )
+        audit.append(
+            {
+                "rule_id": rule_id,
+                "status": (
+                    str(result_row.get("status") or "unknown")
+                    if str(result_row.get("status") or "unknown") in _RULE_STATES
+                    else "unknown"
+                ),
+                "execution_source": execution_source,
+                "typed_final_state": typed_final_state,
+                "typed_reason_code": _safe_code_or_unknown(raw_reason_code),
+                "typed_fact_ref_count": fact_ref_count,
+                "sources": sources,
+            }
+        )
+    return audit
+
+
+async def evaluate_formal_source_audit_case(
+    *,
+    service: Any,
+    bundle: dict[str, Any],
+    rule_ids: Sequence[str],
+    timeout_seconds: float,
+    evaluation_as_of_date: str | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """在同一次正式 service 调用内捕获同源 snapshot 与归约结果。
+
+    该函数不新增数据库或模型调用；它仅暂时包裹 execution 模块的请求内函数。
+    """
+
+    from app.services.luxian_0609 import execution as luxian_execution
+
+    original_snapshot_provider = luxian_execution.build_luxian_0609_evidence_snapshot
+    original_session_provider = luxian_execution.build_luxian_0609_evidence_read_session
+    original_decision_binder = luxian_execution.bind_and_reduce_luxian_0609_rule_decisions
+    captured_snapshots: list[Any] = []
+    captured_reductions: list[tuple[Any, ...]] = []
+
+    def capture_snapshot_provider(**kwargs: Any) -> Any:
+        snapshot = original_snapshot_provider(**kwargs)
+        captured_snapshots.append(snapshot)
+        return snapshot
+
+    def capture_session_provider(**kwargs: Any) -> Any:
+        session = original_session_provider(**kwargs)
+        captured_snapshots.append(getattr(session, "snapshot", None))
+        return session
+
+    def capture_decision_binder(**kwargs: Any) -> tuple[Any, ...]:
+        reduced = original_decision_binder(**kwargs)
+        captured_reductions.append(tuple(reduced))
+        return reduced
+
+    try:
+        luxian_execution.build_luxian_0609_evidence_snapshot = capture_snapshot_provider
+        luxian_execution.build_luxian_0609_evidence_read_session = capture_session_provider
+        luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = (
+            capture_decision_binder
+        )
+        result = await evaluate_full_luxian_0609_case(
+            service=service,
+            bundle=bundle,
+            rule_ids=rule_ids,
+            timeout_seconds=timeout_seconds,
+            evaluation_as_of_date=evaluation_as_of_date,
+        )
+    finally:
+        luxian_execution.build_luxian_0609_evidence_snapshot = original_snapshot_provider
+        luxian_execution.build_luxian_0609_evidence_read_session = original_session_provider
+        luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = original_decision_binder
+
+    if len(captured_snapshots) != 1 or captured_snapshots[0] is None:
+        raise RuntimeError("同源证据审计快照捕获次数异常")
+    if len(captured_reductions) != 1:
+        raise RuntimeError("同源证据审计归约捕获次数异常")
+    result_repr = repr(result)
+    if any(
+        marker in result_repr
+        for marker in (
+            "evidence_snapshot",
+            "snapshot_hash",
+            "fact_refs",
+            "decision_fingerprint",
+            "visit_ref",
+        )
+    ):
+        raise RuntimeError("同源证据审计客户返回包含内部对象")
+    return result, _build_safe_formal_source_audit(
+        result=result,
+        snapshot=captured_snapshots[0],
+        reduced_decisions=captured_reductions[0],
+    )
 
 
 async def evaluate_snapshot_sidecar_ab_case(
@@ -880,6 +1085,29 @@ async def run(args: argparse.Namespace) -> int:
                     **comparison,
                     "elapsed_ms": int((time.perf_counter() - started) * 1000),
                 }
+            elif args.formal_source_audit:
+                result, source_audit = await evaluate_formal_source_audit_case(
+                    service=service,
+                    bundle=bundle,
+                    rule_ids=rule_ids,
+                    timeout_seconds=float(args.timeout_seconds),
+                    evaluation_as_of_date=evaluation_as_of_date,
+                )
+                rows = _result_rows(result)
+                token_usage = result.get("token_usage")
+                if not isinstance(token_usage, Mapping):
+                    token_usage = {}
+                summary = {
+                    "case_label": case["case_label"],
+                    "result_count": len(rows),
+                    "status_counts": dict(
+                        Counter(str(item.get("status") or "unknown") for item in rows)
+                    ),
+                    "rule_states": build_safe_rule_states(rows),
+                    "source_audit": source_audit,
+                    "elapsed_ms": int((time.perf_counter() - started) * 1000),
+                    "total_tokens": int(token_usage.get("total_tokens") or 0),
+                }
             else:
                 result = await evaluate_full_luxian_0609_case(
                     service=service,
@@ -939,6 +1167,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--unified-engine-ab",
         action="store_true",
         help="捕获一次真实模型响应并内存重放，比较旧链与统一执行信封",
+    )
+    ab_group.add_argument(
+        "--formal-source-audit",
+        action="store_true",
+        help="同一次正式主链调用内输出脱敏的规则来源状态审计",
     )
     parser.add_argument(
         "--course-severity-expected-matrix",
