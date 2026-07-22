@@ -49,15 +49,24 @@ def test_luxian_preproduction_api_defaults_off_and_parses_boolean_env(monkeypatc
     assert Settings(_env_file=None).LUXIAN_0609_PREPRODUCTION_API_ENABLED is False
 
 
-def test_luxian_mainline_rule_decision_defaults_off_and_can_be_enabled(
+def test_luxian_mainline_rule_decision_defaults_on_and_explicit_false_rolls_back(
     monkeypatch,
 ):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is False
+    default_settings = Settings(_env_file=None)
+    assert default_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
+    assert resolve_mainline_rule_decision_settings(default_settings) is not default_settings
+
+    monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "false")
+    rollback_settings = Settings(_env_file=None)
+    assert rollback_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is False
+    assert resolve_mainline_rule_decision_settings(rollback_settings) is rollback_settings
 
     monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "true")
-    assert Settings(_env_file=None).LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
+    enabled_settings = Settings(_env_file=None)
+    assert enabled_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
+    assert resolve_mainline_rule_decision_settings(enabled_settings) is not enabled_settings
 
 
 def _clear_env(monkeypatch):
