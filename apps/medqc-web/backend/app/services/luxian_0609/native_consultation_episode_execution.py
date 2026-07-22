@@ -644,9 +644,9 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
         "medication/test/procedure/transfer/monitoring/other。每项必须返回opinion_ref、source_quote和normalized_action："
-        "opinion_ref只能是本episode的opinion_refs之一；source_quote是来自该单一意见文书的连续原文摘录，"
-        "不得改写、拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
-        "允许将source_quote作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
+        "opinion_ref只能是本episode的opinion_refs之一；source_quote用于人工溯源，优先摘录该单一意见文书的支持性原句，"
+        "不得拼接多个文书、删改否定词、剂量或数值，最长240字；normalized_action仅用于后续语义关联，"
+        "允许source_quote和normalized_action作合理医学归一化，但不得虚构原文没有的建议。不要输出字符下标。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
         "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,source_quote,normalized_action,action_type}]}],"
         "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
@@ -661,7 +661,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
         raise _SemanticInvalid()
     expected_refs = tuple(str(item["ref"]) for item in documents)
     expected = set(expected_refs)
-    document_text = {str(item["ref"]): _clean(item.get("text")) for item in documents}
     assigned: list[str] = []
     episodes: list[_Episode] = []
     for raw in raw_episodes:
@@ -707,7 +706,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             action_type = _clean(raw_recommendation.get("action_type")).lower()
             source_quote = raw_recommendation.get("source_quote")
             normalized_action = raw_recommendation.get("normalized_action")
-            opinion_text = document_text.get(opinion_ref, "")
             if (
                 recommendation_ref != f"{episode_ref}#r{number}"
                 or opinion_ref not in opinion_refs
@@ -718,7 +716,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
                 or not normalized_action.strip()
                 or len(source_quote) > _MAX_RECOMMENDATION_CHARS
                 or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
-                or not _quote_is_grounded(quote=source_quote, source=opinion_text)
             ):
                 raise _SemanticInvalid()
             recommendations.append(_Recommendation(

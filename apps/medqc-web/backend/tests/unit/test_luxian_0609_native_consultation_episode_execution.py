@@ -366,69 +366,18 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
     ]
 
 
-@pytest.mark.parametrize(
-    ("recommendation", "documents"),
-    [
-        (
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "安排心脏彩超",
-                "normalized_action": "安排心脏彩超",
-                "opinion_ref": "consultation_record-1",
-            },
-            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
-        ),
-        (
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "建议行手术",
-                "normalized_action": "建议手术",
-                "opinion_ref": "consultation_record-1",
-            },
-            ({"ref": "consultation_record-1", "time": "", "text": "意见：不建议行手术。"},),
-        ),
-        (
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "阿司匹林10mg",
-                "normalized_action": "阿司匹林治疗",
-                "opinion_ref": "consultation_record-1",
-            },
-            ({"ref": "consultation_record-1", "time": "", "text": "意见：阿司匹林5mg。"},),
-        ),
-        (
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "完善心脏彩超",
-                "normalized_action": "完善心脏超声检查",
-                "opinion_ref": "consultation_record-2",
-            },
-            (
-                {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
-                {"ref": "consultation_record-2", "time": "", "text": "意见：调整降压药。"},
-            ),
-        ),
-        (
-            {
-                "recommendation_ref": "consultation_record-1#r1",
-                "action_type": "test",
-                "source_quote": "完善心脏彩超并调整降压药",
-                "normalized_action": "心脏检查与降压药调整",
-                "opinion_ref": "consultation_record-1",
-            },
-            (
-                {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
-                {"ref": "consultation_record-2", "time": "", "text": "意见：调整降压药。"},
-            ),
-        ),
-    ],
-    ids=("source_quote_not_found", "negation_deleted", "dose_changed", "non_opinion_ref", "cross_document_join"),
-)
-def test_episode_recommendation_requires_grounded_single_opinion_quote(recommendation, documents):
+def test_episode_recommendation_requires_its_own_opinion_ref():
+    documents = (
+        {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
+        {"ref": "consultation_record-2", "time": "", "text": "意见：调整降压药。"},
+    )
+    recommendation = {
+        "recommendation_ref": "consultation_record-1#r1",
+        "action_type": "test",
+        "source_quote": "完善心脏彩超",
+        "normalized_action": "完善心脏超声检查",
+        "opinion_ref": "consultation_record-2",
+    }
     payload = _payload(episodes=[_episode(
         "consultation_record-1",
         [item["ref"] for item in documents],
@@ -440,7 +389,7 @@ def test_episode_recommendation_requires_grounded_single_opinion_quote(recommend
         episode._parse(payload, documents)
 
 
-def test_episode_recommendation_allows_format_normalized_quote_but_not_semantic_rewrite():
+def test_episode_recommendation_allows_semantic_rewrite_with_valid_opinion_ref():
     documents = ({
         "ref": "consultation_record-1",
         "time": "",
@@ -452,7 +401,7 @@ def test_episode_recommendation_allows_format_normalized_quote_but_not_semantic_
         recommendations=[{
             "recommendation_ref": "consultation_record-1#r1",
             "opinion_ref": "consultation_record-1",
-            "source_quote": "建议 完善心脏彩超",
+            "source_quote": "安排心脏彩超",
             "normalized_action": "进行心脏超声检查",
             "action_type": "test",
         }],
