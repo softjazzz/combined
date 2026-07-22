@@ -96,6 +96,46 @@ async def test_batch_compact_should_return_pack_metrics_and_metadata():
 
 
 @pytest.mark.asyncio
+async def test_batch_compact_uses_fixed_family_size_without_online_probe():
+    orchestrator = QCRuleOrchestrator()
+    rules = _build_rules(6)
+    medical_record = {"id": "V001-fixed", "content": "病历正文", "document_type": "病程记录"}
+    seen_modes: List[str] = []
+
+    async def _single_llm(rule: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+        raise AssertionError("固定分包成功时不应调用单规则路径")
+
+    async def _batch_llm(batch_rules: List[Dict[str, Any]], record: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        seen_modes.append(str(options.get("mode") or ""))
+        return {
+            "results": [
+                {"rule_id": rule["rule_id"], "status": "compliant", "is_compliant": True}
+                for rule in batch_rules
+            ],
+            "tokens_used": 10,
+            "prompt_tokens": 8,
+            "completion_tokens": 2,
+            "api_time": 0.01,
+            "parse_error": False,
+            "missing_rule_ids": [],
+            "low_confidence_rule_ids": [],
+        }
+
+    result = await orchestrator.evaluate_rules(
+        rules=rules,
+        medical_record=medical_record,
+        llm_evaluate=_single_llm,
+        llm_batch_evaluate=_batch_llm,
+        prompt_strategy="batch_compact_v1",
+    )
+
+    assert "probe" not in seen_modes
+    assert result["pack_metrics"]["probe_calls"] == 0
+    assert result["pack_metrics"]["selected_pack_size_by_bucket"] == {"course::primary": 5}
+    assert result["total_tokens"] == 20
+
+
+@pytest.mark.asyncio
 async def test_batch_compact_counts_probe_and_pack_once_not_per_rule_metadata():
     """包级 token 只能按一次真实请求累计，不能被包内规则重复放大。"""
 
@@ -144,6 +184,7 @@ async def test_batch_compact_counts_probe_and_pack_once_not_per_rule_metadata():
         llm_evaluate=_single_llm,
         llm_batch_evaluate=_batch_llm,
         prompt_strategy="batch_compact_v1",
+        enable_pack_probe=True,
         batch_pack_candidates=(2,),
         batch_pack_max_size=2,
     )
@@ -191,6 +232,7 @@ async def test_batch_compact_should_fallback_to_single_when_parse_failed():
         llm_evaluate=_single_llm,
         llm_batch_evaluate=_batch_llm,
         prompt_strategy="batch_compact_v1",
+        enable_pack_probe=True,
     )
 
     assert len(result["results"]) == 4
@@ -320,6 +362,7 @@ async def test_batch_compact_should_probe_pack_size_per_bucket():
         llm_evaluate=_single_llm,
         llm_batch_evaluate=_batch_llm,
         prompt_strategy="batch_compact_v1",
+        enable_pack_probe=True,
     )
 
     assert len(result["results"]) == 12
@@ -502,6 +545,7 @@ async def test_effect_priority_should_use_family_specific_pack_candidates():
         prompt_strategy="batch_compact_v1",
         bucket_strategy="domain_family",
         quality_profile="effect_priority_v1",
+        enable_pack_probe=True,
         refine_confidence_threshold=0.75,
     )
 

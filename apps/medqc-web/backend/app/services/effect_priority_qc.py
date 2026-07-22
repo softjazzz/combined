@@ -32,6 +32,17 @@ EFFECT_FAMILY_PACK_CANDIDATES: dict[str, tuple[int, ...]] = {
     "general": (5, 8),
 }
 
+# 线上保守固定值。候选集保留给离线基准探测，避免每份病历现场试包。
+EFFECT_FAMILY_FIXED_PACK_SIZES: dict[str, int] = {
+    "presence_required": 10,
+    "timeliness": 3,
+    "signature_authority": 3,
+    "content_completeness": 5,
+    "consistency_cross_doc": 3,
+    "procedure_order_linkage": 3,
+    "general": 5,
+}
+
 EFFECT_FAMILY_CHECK_LIMITS: dict[str, int] = {
     "presence_required": 360,
     "timeliness": 900,
@@ -97,6 +108,21 @@ def family_pack_candidates(
     if not is_effect_priority_profile(quality_profile):
         return tuple(int(item) for item in default_candidates)
     return EFFECT_FAMILY_PACK_CANDIDATES.get(normalize_rule_family(rule_family), EFFECT_FAMILY_PACK_CANDIDATES["general"])
+
+
+def family_fixed_pack_size(
+    rule_family: Any,
+    *,
+    available_count: int,
+    max_pack_size: int,
+) -> int:
+    """返回线上固定安全包大小；不得在单病例请求中发起探测调用。"""
+
+    configured = EFFECT_FAMILY_FIXED_PACK_SIZES.get(
+        normalize_rule_family(rule_family),
+        EFFECT_FAMILY_FIXED_PACK_SIZES["general"],
+    )
+    return max(1, min(int(configured), max(1, int(available_count)), max(1, int(max_pack_size))))
 
 
 def family_check_limit(rule_family: Any, *, quality_profile: str) -> int:

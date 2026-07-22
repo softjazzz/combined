@@ -15,6 +15,7 @@ from .qc_execution_cache import (
 )
 from .effect_priority_qc import (
     DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    family_fixed_pack_size,
     family_pack_candidates,
     normalize_quality_profile,
 )
@@ -238,6 +239,7 @@ class QCRuleOrchestrator:
         prompt_strategy: str = "single_rule_v1",
         batch_pack_candidates: Optional[Sequence[int]] = None,
         batch_pack_max_size: int = 15,
+        enable_pack_probe: bool = False,
         evidence_source: str = "medical_text",
         llm_concurrency: int = 6,
         model_version: str = "",
@@ -297,6 +299,7 @@ class QCRuleOrchestrator:
             "low_confidence_items": 0,
             "context_tokens_estimate": 0,
             "probe_calls": 0,
+            "pack_selection_strategy": "fixed_by_rule_family",
             "selected_pack_size": 1,
             "selected_pack_size_by_bucket": {},
         }
@@ -756,10 +759,20 @@ class QCRuleOrchestrator:
                 if not bucket_entries:
                     continue
 
-                selected_pack_size = await _probe_best_pack_size(
-                    bucket_entries,
-                    bucket_key=bucket_key,
+                selected_pack_size = (
+                    await _probe_best_pack_size(
+                        bucket_entries,
+                        bucket_key=bucket_key,
+                    )
+                    if enable_pack_probe
+                    else family_fixed_pack_size(
+                        bucket_key[2] or "general",
+                        available_count=len(bucket_entries),
+                        max_pack_size=batch_pack_max_size,
+                    )
                 )
+                if enable_pack_probe:
+                    pack_metrics["pack_selection_strategy"] = "offline_probe"
                 max_selected_pack_size = max(max_selected_pack_size, int(selected_pack_size))
                 bucket_metric_key = _bucket_metric_key(bucket_key)
                 selected_by_bucket[bucket_metric_key] = int(selected_pack_size)
