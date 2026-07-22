@@ -61,6 +61,24 @@ _EXECUTION_SOURCE_KEYS = (
     "labtest_item_report",
     "surgery_record",
 )
+_ACTION_TYPE_SOURCE_KEYS = {
+    "medication": frozenset((
+        "inpat_drug_order", "daily_course_record", "senior_course_record",
+    )),
+    "test": frozenset((
+        "exam_item_report", "labtest_item_report", "daily_course_record", "senior_course_record",
+    )),
+    "procedure": frozenset((
+        "surgery_record", "daily_course_record", "senior_course_record",
+    )),
+    "transfer": frozenset((
+        "inpat_drug_order", "daily_course_record", "senior_course_record",
+    )),
+    "monitoring": frozenset((
+        "daily_course_record", "senior_course_record",
+    )),
+    "other": frozenset(_EXECUTION_SOURCE_KEYS),
+}
 _STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
 _STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
 _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
@@ -145,8 +163,15 @@ class _CandidateDocument:
 @dataclass(frozen=True)
 class _CandidateProjection:
     candidates: tuple[_CandidateDocument, ...]
-    source_incomplete: bool
+    source_complete_keys: frozenset[str]
+    source_incomplete_keys: frozenset[str]
     source_technical: bool
+
+    @property
+    def source_incomplete(self) -> bool:
+        """兼容只读诊断；业务判定必须改用建议相关来源集合。"""
+
+        return bool(self.source_incomplete_keys)
 
 
 @dataclass(frozen=True)
@@ -506,7 +531,8 @@ def _candidate_documents(
     stay_window: _StayWindow,
 ) -> _CandidateProjection:
     candidates: list[_CandidateDocument] = []
-    source_incomplete = False
+    source_complete_keys: set[str] = set()
+    source_incomplete_keys: set[str] = set()
     source_technical = False
     for source_key in _EXECUTION_SOURCE_KEYS:
         try:
@@ -520,14 +546,15 @@ def _candidate_documents(
                 evidence_snapshot=evidence_snapshot,
             )
         except _SourceGap:
-            source_incomplete = True
+            source_incomplete_keys.add(source_key)
             continue
         except _SourceTechnical:
             source_technical = True
             continue
         if len(rows) > _MAX_CANDIDATES_PER_SOURCE:
-            source_incomplete = True
+            source_incomplete_keys.add(source_key)
             continue
+        source_is_complete = True
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row)
             text = _candidate_text(row)
@@ -539,7 +566,7 @@ def _candidate_documents(
             # 但它仍意味着“未观察到执行”不是完整否定；调用模型后若模型仅给
             # absent，020/023 必须保守为 candidate_scope_incomplete。
             if observed_time is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
-                source_incomplete = True
+                source_is_complete = False
                 continue
             candidates.append(_CandidateDocument(
                 ref=f"{source_key}-{index}",
@@ -547,9 +574,14 @@ def _candidate_documents(
                 observed_time=observed_time,
                 text=text,
             ))
+        if source_is_complete:
+            source_complete_keys.add(source_key)
+        else:
+            source_incomplete_keys.add(source_key)
     return _CandidateProjection(
         candidates=tuple(candidates),
-        source_incomplete=source_incomplete,
+        source_complete_keys=frozenset(source_complete_keys),
+        source_incomplete_keys=frozenset(source_incomplete_keys),
         source_technical=source_technical,
     )
 
@@ -869,15 +901,38 @@ def _outcome(rule_id: str, episodes: Sequence[_Episode]) -> tuple[str, str]:
     return "evaluation_unknown", "semantic_output_unknown"
 
 
+def _incomplete_absent_recommendations(
+    *,
+    completed_recommendations: Sequence[_CompletedRecommendation],
+    assessments: Sequence[_ExecutionAssessment],
+    source_complete_keys: frozenset[str],
+) -> frozenset[str]:
+    """仅对模型明确 absent 的建议检查其 action_type 所需来源是否可否定。"""
+
+    action_type_by_ref = {
+        item.recommendation.recommendation_ref: item.recommendation.action_type
+        for item in completed_recommendations
+    }
+    incomplete: set[str] = set()
+    for assessment in assessments:
+        if assessment.execution_state != "absent":
+            continue
+        action_type = action_type_by_ref.get(assessment.recommendation_ref)
+        required_sources = _ACTION_TYPE_SOURCE_KEYS.get(str(action_type or ""))
+        if required_sources is None or not required_sources.issubset(source_complete_keys):
+            incomplete.add(assessment.recommendation_ref)
+    return frozenset(incomplete)
+
+
 def _execution_outcome(
     rule_id: str,
     *,
     episodes: Sequence[_Episode],
     completed_recommendations: Sequence[_CompletedRecommendation],
     assessments: Sequence[_ExecutionAssessment] | None,
-    source_incomplete: bool = False,
     source_technical: bool = False,
     temporal_incomplete_recommendations: frozenset[str] = frozenset(),
+    incomplete_absent_recommendations: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -908,11 +963,14 @@ def _execution_outcome(
         if item.execution_state == "absent"
     }
     unresolved_absent = absent_refs.intersection(temporal_incomplete_recommendations)
+    coverage_incomplete_absent = absent_refs.intersection(
+        incomplete_absent_recommendations
+    )
     if rule_id == "LX0609-020":
         if absent_refs:
             if source_technical:
                 return "technical_error", "source_query_error"
-            if source_incomplete:
+            if coverage_incomplete_absent:
                 return "evaluation_unknown", "candidate_scope_incomplete"
             if absent_refs.difference(unresolved_absent):
                 return "non_compliant", "requirement_violated"
@@ -921,7 +979,7 @@ def _execution_outcome(
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
     if absent_refs:
-        if source_incomplete:
+        if coverage_incomplete_absent:
             return "evaluation_unknown", "candidate_scope_incomplete"
         return "not_applicable", "trigger_absent_complete"
     if "linked_vague" in states:
@@ -930,8 +988,6 @@ def _execution_outcome(
         return "compliant", "requirement_satisfied"
     if source_technical:
         return "technical_error", "source_query_error"
-    if source_incomplete:
-        return "data_gap", "linkage_unresolved"
     if unresolved_absent:
         return "data_gap", "linkage_unresolved"
     return "not_applicable", "trigger_absent_complete"
@@ -1106,7 +1162,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
-    execution_source_incomplete = False
+    execution_source_complete_keys: frozenset[str] = frozenset()
     execution_source_technical = False
     execution_temporal_incomplete: frozenset[str] = frozenset()
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
@@ -1150,7 +1206,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     evidence_snapshot=evidence_snapshot,
                     stay_window=execution_stay_window,
                 )
-                execution_source_incomplete = projection.source_incomplete
+                execution_source_complete_keys = projection.source_complete_keys
                 execution_source_technical = projection.source_technical
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
@@ -1217,15 +1273,20 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         assessments=None,
                     )
         if execution_assessments is not None:
+            incomplete_absent_recommendations = _incomplete_absent_recommendations(
+                completed_recommendations=completed_recommendations,
+                assessments=execution_assessments,
+                source_complete_keys=execution_source_complete_keys,
+            )
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
                     episodes=episodes,
                     completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,
-                    source_incomplete=execution_source_incomplete,
                     source_technical=execution_source_technical,
                     temporal_incomplete_recommendations=execution_temporal_incomplete,
+                    incomplete_absent_recommendations=incomplete_absent_recommendations,
                 )
     results = []
     for rule_id in selected:

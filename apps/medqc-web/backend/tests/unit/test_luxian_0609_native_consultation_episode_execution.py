@@ -1524,7 +1524,7 @@ async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_untimed_order_makes_absent_execution_evaluation_unknown(monkeypatch):
+async def test_untimed_unrelated_order_does_not_block_absent_test_recommendation(monkeypatch):
     untimed_order = "无时间医嘱不得进入执行候选"
     source_rows = _mixed_candidate_sources()
     source_rows["senior_course_record"] = []
@@ -1537,9 +1537,108 @@ async def test_untimed_order_makes_absent_execution_evaluation_unknown(monkeypat
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
     assert untimed_order not in client.prompts[1]
+
+
+def _action_recommendation(*, action_type: str):
+    return [{
+        "recommendation_ref": "consultation_record-1#r1",
+        "action_type": action_type,
+        "source_quote": "复查血常规",
+        "normalized_action": "复查血常规检查",
+        "opinion_ref": "__AUTO__",
+    }]
+
+
+def _incomplete_drug_source_rows():
+    return {
+        "consultation_record": _rows("申请与明确会诊意见"),
+        "daily_course_record": _rows("会诊后病程记录", hour_start=2),
+        "senior_course_record": [],
+        "inpat_drug_order": [{"generic_name": "无时间医嘱"}],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_source(monkeypatch):
+    """检查建议只要求检查/病程来源完整；无时间医嘱不得一票否决。"""
+    source_rows = _incomplete_drug_source_rows()
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type="test"),
+        )]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+
+
+@pytest.mark.asyncio
+async def test_medication_recommendation_absent_keeps_unknown_when_drug_source_incomplete(monkeypatch):
+    source_rows = _incomplete_drug_source_rows()
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type="medication"),
+        )]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert {item["status"] for item in result.results} == {"uncertain"}
+
+
+@pytest.mark.asyncio
+async def test_specific_execution_stays_compliant_when_unrelated_source_is_incomplete(monkeypatch):
+    source_rows = _incomplete_drug_source_rows()
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type="test"),
+        )]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high"}),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+
+
+@pytest.mark.asyncio
+async def test_other_recommendation_absent_stays_conservative_when_any_source_is_incomplete(monkeypatch):
+    source_rows = _incomplete_drug_source_rows()
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type="other"),
+        )]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert {item["status"] for item in result.results} == {"uncertain"}
 
 
 @pytest.mark.asyncio
