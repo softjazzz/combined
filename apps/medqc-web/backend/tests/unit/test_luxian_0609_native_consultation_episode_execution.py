@@ -498,7 +498,7 @@ async def test_preoperative_mdt_is_non_target_not_an_ordinary_consultation(monke
     )
 
     assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -521,6 +521,68 @@ async def test_mdt_non_target_does_not_enter_recommendation_execution_stage(monk
     )
 
     assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_explicit_anesthesia_assessment_is_non_target_before_any_llm(monkeypatch):
+    """无痛检查前的疼痛/麻醉评估不是 020--023 的普通会诊。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("拟行无痛纤支镜检查，故请疼痛科会诊评估麻醉方案。", action_suffix=False),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-1#r1",
+            "action_type": "monitoring",
+            "source_quote": "建议评估并调整镇痛治疗",
+            "normalized_action": "评估并调整镇痛治疗",
+            "opinion_ref": "consultation_record-1",
+        }],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "not_applicable", "not_applicable", "not_applicable", "not_applicable",
+    ]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert "无痛纤支镜" not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_ordinary_pain_consultation_is_not_excluded_by_specialty_name(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("因持续疼痛申请疼痛科会诊；意见：建议评估并调整镇痛治疗。", action_suffix=False),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-1#r1",
+            "action_type": "monitoring",
+            "source_quote": "建议评估并调整镇痛治疗",
+            "normalized_action": "评估并调整镇痛治疗",
+            "opinion_ref": "consultation_record-1",
+        }],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 1
 
 

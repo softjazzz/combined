@@ -99,6 +99,18 @@ _PURE_SIGNATURE_TEMPLATE = re.compile(
     rf"(?:{_SIGNATURE_LABEL}\s*[:：]?\s*{_SIGNATURE_VALUE}"
     rf"\s*[\s，,;；、|/\\\\()（）\[\]【】]*)+$"
 )
+# 020--023 只覆盖普通专科会诊。以下是文书自身明确标注的非目标事件，
+# 不能因模型将其误识别为“会诊意见”而进入规则链。不得按“疼痛科”或
+# “麻醉科”科室名称泛排除：普通疼痛会诊仍可能是本规则的目标对象。
+_EXPLICIT_NON_TARGET_CONSULTATION_PATTERNS = (
+    re.compile(r"(?:术前)?(?:麻醉|麻醉科)(?:评估|风险评估)"),
+    re.compile(r"术前(?:多学科|MDT|风险)评估"),
+    re.compile(r"(?:术前)?(?:多学科讨论|MDT讨论)"),
+    re.compile(
+        r"(?:拟行|拟做).{0,32}无痛(?:纤支镜|支气管镜|胃镜|肠镜|检查|手术)"
+        r".{0,120}(?:疼痛科|麻醉科)(?:会诊|评估)"
+    ),
+)
 
 
 class ConsultationEpisodeLLMClient(Protocol):
@@ -256,6 +268,15 @@ def _is_pure_signature_template(record_content: Any) -> bool:
 
     body = _clean(record_content)
     return not body or bool(_PURE_SIGNATURE_TEMPLATE.fullmatch(body))
+
+
+def _documents_are_explicit_non_target(documents: Sequence[Mapping[str, str]]) -> bool:
+    """只在全部文书均有明确非目标语义时短路，混合文书仍交给第一阶段 LLM。"""
+
+    return bool(documents) and all(
+        any(pattern.search(_evidence_text(item.get("text", ""))) for pattern in _EXPLICIT_NON_TARGET_CONSULTATION_PATTERNS)
+        for item in documents
+    )
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -1076,6 +1097,26 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     )
     execution_stay_window: _StayWindow | None = None
     stage_two_boundary_status: tuple[str, str] | None = None
+    try:
+        documents = _documents(_read_rows(
+            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
+            source_schema=source_schema, evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot,
+        ))
+    except _SourceGap:
+        return _finish(selected=selected, status="data_gap", reason_code="source_unavailable", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    except _SourceTechnical:
+        return _finish(selected=selected, status="technical_error", reason_code="source_query_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    if not documents:
+        return _finish(selected=selected, status="not_applicable", reason_code="trigger_absent_complete", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
+    if _documents_are_explicit_non_target(documents):
+        return _finish(
+            selected=selected,
+            status="not_applicable",
+            reason_code="non_target_document",
+            evidence_snapshot=evidence_snapshot,
+            decision_rule_ids=typed,
+        )
     if stage_two_rule_ids:
         try:
             execution_stay_window = _resolve_execution_stay_window(
@@ -1094,18 +1135,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 evidence_snapshot=evidence_snapshot,
                 decision_rule_ids=typed,
             )
-    try:
-        documents = _documents(_read_rows(
-            institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
-            source_schema=source_schema, evidence_materials=evidence_materials,
-            evidence_snapshot=evidence_snapshot,
-        ))
-    except _SourceGap:
-        return _finish(selected=selected, status="data_gap", reason_code="source_unavailable", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
-    except _SourceTechnical:
-        return _finish(selected=selected, status="technical_error", reason_code="source_query_error", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
-    if not documents:
-        return _finish(selected=selected, status="not_applicable", reason_code="trigger_absent_complete", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     if llm_client is None:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     calls = 1
