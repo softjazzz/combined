@@ -129,7 +129,9 @@ class Settings(BaseSettings):
     # 001/002/004/005/006 使用基础时限族原生确定性执行；关闭后回退旧映射链。
     LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED: bool = True
     # 会诊原生入口总开关：默认启用第一阶段021/022；关闭时020-023全回退兼容映射链。
-    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = True
+    # 多专科会诊意见可能被同步在同一文书中；episode 分段完成真实验收前保持
+    # compatibility 路径，避免把多个实际会诊压缩为单一对象。
+    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = False
     # 第二阶段“会诊意见—后续执行”关联开关；关闭时仅 021/022 使用原生 episode。
     LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED: bool = False
     # 检查检验族原生入口；关闭时回滚到旧映射执行链。

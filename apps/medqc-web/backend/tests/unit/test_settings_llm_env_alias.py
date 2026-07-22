@@ -314,10 +314,10 @@ def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypa
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED is False
 
 
-def test_luxian_native_consultation_defaults_on_and_parses_boolean_env(monkeypatch):
+def test_luxian_native_consultation_defaults_off_and_parses_boolean_env(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
+    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
