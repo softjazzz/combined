@@ -1690,6 +1690,51 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("action_type", "source_key", "candidate_row"),
+    (
+        ("test", "exam_master", {"exam_name": "会诊后完成目标检查", "report_time": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
+        ("test", "labtest_master", {"labtest_subject": "会诊后完成目标检验", "report_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
+        ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
+    ),
+)
+async def test_execution_linker_accepts_complete_master_and_nondrug_order_sources(
+    monkeypatch, action_type, source_key, candidate_row,
+):
+    """会诊后真实执行可来自主表或非药物医嘱，不能只投病程/明细表。"""
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("申请与明确会诊意见")
+    source_rows[source_key] = [candidate_row]
+    session = _window_session(rows_by_source=source_rows)
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows.get(source_key, []),
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type=action_type),
+        )]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": [f"{source_key}-1"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_materials=session.materials, evidence_snapshot=session.snapshot,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert f"{source_key}-1" in client.prompts[1]
+
+
+@pytest.mark.asyncio
 async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypatch):
     outside_text = "出院后记录不得作为本次会诊执行候选"
     source_rows = {

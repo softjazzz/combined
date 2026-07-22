@@ -348,19 +348,31 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-033": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
     "LX0609-039": ("surgery_record", "mr_surgery", "rescue_record"),
-    # 020/023 的“复会诊是否执行”会使用上级医师病程作为受控执行证据。
-    # 将其纳入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
+    # 020/023 的“复会诊是否执行”可由病程、医嘱、检查检验或手术记录体现。
+    # 全部候选必须进入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": (
         "inpat_registration",
         "inpat_registration.discharge_horizon",
+        "daily_course_record",
         "senior_course_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "exam_master",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "surgery_record",
     ),
     "LX0609-023": (
         "inpat_registration",
         "inpat_registration.discharge_horizon",
+        "daily_course_record",
         "senior_course_record",
         "inpat_drug_order",
+        "inpat_nondrug_order",
+        "exam_master",
         "exam_item_report",
+        "labtest_master",
         "labtest_item_report",
         "surgery_record",
     ),

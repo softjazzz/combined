@@ -637,27 +637,28 @@ def test_consultation_decision_support_retains_private_material_once_without_saf
         row_reader=reader,
     )
 
-    assert calls == [
+    expected_sources = {
         "consultation_record",
         "daily_course_record",
+        "senior_course_record",
         "inpat_registration",
         "inpat_registration.discharge_horizon",
-        "senior_course_record",
-    ]
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "exam_master",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "surgery_record",
+    }
+    assert calls == sorted(expected_sources)
     assert len(calls) == len(set(calls))
     assert session.materials.rows("consultation_record")[0][
         "record_content"
     ] == "private-consultation_record"
     assert session.materials.safe_summary() == {
-        "source_count": 6,
-        "sources": (
-            "consultation_record",
-            "daily_course_record",
-            "evaluation_context.horizon",
-            "inpat_registration",
-            "inpat_registration.discharge_horizon",
-            "senior_course_record",
-        ),
+        "source_count": len(expected_sources) + 1,
+        "sources": tuple(sorted({*expected_sources, "evaluation_context.horizon"})),
     }
     safe_repr = repr((session, session.snapshot.to_safe_dict()))
     assert "private-consultation_record" not in safe_repr
@@ -747,10 +748,12 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             "diagnosis",
             "exam_master",
             "inpat_drug_order",
+            "inpat_nondrug_order",
             "inpat_registration",
             "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
+            "surgery_record",
         }
     )
     assert len(calls) == len(set(calls))

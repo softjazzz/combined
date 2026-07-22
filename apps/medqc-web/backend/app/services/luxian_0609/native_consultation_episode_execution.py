@@ -61,20 +61,27 @@ _EXECUTION_SOURCE_KEYS = (
     "labtest_item_report",
     "surgery_record",
 )
+_SNAPSHOT_EXECUTION_SOURCE_KEYS = (
+    *_EXECUTION_SOURCE_KEYS,
+    "inpat_nondrug_order",
+    "exam_master",
+    "labtest_master",
+)
 # 仅供安全台账按建议类型描述候选来源覆盖；不得用于否决 LLM 的 absent
 # 语义判断或回退状态。
 _ACTION_TYPE_SOURCE_KEYS = {
     "medication": frozenset((
-        "inpat_drug_order", "daily_course_record", "senior_course_record",
+        "inpat_drug_order", "inpat_nondrug_order", "daily_course_record", "senior_course_record",
     )),
     "test": frozenset((
-        "exam_item_report", "labtest_item_report", "daily_course_record", "senior_course_record",
+        "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
+        "daily_course_record", "senior_course_record",
     )),
     "procedure": frozenset((
         "surgery_record", "daily_course_record", "senior_course_record",
     )),
     "transfer": frozenset((
-        "inpat_drug_order", "daily_course_record", "senior_course_record",
+        "inpat_nondrug_order", "inpat_drug_order", "daily_course_record", "senior_course_record",
     )),
     "monitoring": frozenset((
         "daily_course_record", "senior_course_record",
@@ -460,7 +467,10 @@ def _parse_observed_time(value: Any) -> _ObservedTime | None:
 
 
 def _row_time(row: Mapping[str, Any]) -> _ObservedTime | None:
-    for key in ("record_time", "prescribed_datetime", "report_time", "report_datetime", "exam_time", "exam_datetime"):
+    for key in (
+        "record_time", "prescribed_datetime", "report_time", "report_datetime",
+        "exam_time", "exam_datetime", "request_datetime", "request_surgery_datetime",
+    ):
         parsed = _parse_observed_time(row.get(key))
         if parsed is not None:
             return parsed
@@ -536,6 +546,7 @@ def _resolve_execution_stay_window(
 def _candidate_text(row: Mapping[str, Any]) -> str:
     fields = (
         "document_title", "record_content", "generic_name", "brand_name", "drug_type",
+        "order_name", "exam_reason", "labtest_subject",
         "exam_name", "exam_item_name", "item_name", "exam_result", "exam_impression",
         "exam_conclusion", "impression", "conclusion", "lab_item_name", "result",
         "abnormal_indicator", "surgery_name", "surgery_process",
@@ -557,7 +568,12 @@ def _candidate_documents(
     source_complete_keys: set[str] = set()
     source_incomplete_keys: set[str] = set()
     source_technical = False
-    for source_key in _EXECUTION_SOURCE_KEYS:
+    source_keys = (
+        _SNAPSHOT_EXECUTION_SOURCE_KEYS
+        if evidence_materials is not None and evidence_snapshot is not None
+        else _EXECUTION_SOURCE_KEYS
+    )
+    for source_key in source_keys:
         try:
             rows = _read_rows(
                 source_key=source_key,
@@ -998,7 +1014,7 @@ def _decision(
             _STAY_ADMISSION_SOURCE_KEY,
             _STAY_DISCHARGE_SOURCE_KEY,
             _STAY_HORIZON_SOURCE_KEY,
-            *_EXECUTION_SOURCE_KEYS,
+            *_SNAPSHOT_EXECUTION_SOURCE_KEYS,
         })
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")

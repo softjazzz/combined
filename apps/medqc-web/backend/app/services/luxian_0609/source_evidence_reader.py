@@ -206,6 +206,14 @@ _NATIVE_SOURCE_FIELDS = {
         "order_status",
         "record_content",
     ),
+    "inpat_nondrug_order": (
+        "order_id",
+        "order_name",
+        "order_status",
+        "order_type",
+        "prescribed_datetime",
+        "record_content",
+    ),
     "discharge_record": (
         "document_id",
         "document_title",
@@ -295,8 +303,11 @@ _SNAPSHOT_SOURCE_FIELDS[EVALUATION_HORIZON_SOURCE_KEY] = (
 )
 _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
     "order_id",
-    "update_time",
+    "order_name",
     "order_status",
+    "order_type",
+    "prescribed_datetime",
+    "record_content",
 )
 _SNAPSHOT_SOURCE_FIELDS["surgery_application"] = (
     "order_id",
