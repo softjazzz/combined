@@ -113,6 +113,9 @@ class _Recommendation:
     recommendation_ref: str
     action_type: str
     action_text: str
+    opinion_ref: str = ""
+    span_start: int = -1
+    span_end: int = -1
 
 
 @dataclass(frozen=True)
@@ -565,9 +568,12 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "recommendations仅用于普通会诊中意见明确且高置信的可执行建议；每项必须是意见原文中的具体行动，"
         "不得把诊断、风险描述、既往史、泛化的\"继续治疗\"或\"遵会诊意见\"当作建议。"
         "recommendation_ref固定为episode_ref#r1、episode_ref#r2依次编号；action_type只能是"
-        "medication/test/procedure/transfer/monitoring/other；action_text必须是意见原文的短原句，最长240字。"
+        "medication/test/procedure/transfer/monitoring/other。每项还必须返回opinion_ref、span_start、span_end："
+        "opinion_ref只能是本episode的opinion_refs之一；span_start/span_end是该opinion_ref对应输入text清洗后文本的"
+        "0-based半开区间。action_text必须逐字等于该单一文书text[span_start:span_end]，不得改写、拼接多个文书、"
+        "增删空白或用语义近似替代，最长240字。"
         "意见不明确、无可执行建议或非普通会诊时recommendations必须为空数组。"
-        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,action_type,action_text}]}],"
+        "严格输出JSON对象：{episodes:[{episode_ref,member_refs,application_refs,opinion_refs,application_state,opinion_state,confidence,recommendations:[{recommendation_ref,opinion_ref,span_start,span_end,action_type,action_text}]}],"
         "non_target_refs:[],unresolved_refs:[]}。输入：" + payload
     )
 
@@ -617,23 +623,42 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             or len(raw_recommendations) > _MAX_RECOMMENDATIONS
         ):
             raise _SemanticInvalid()
-        opinion_text = _clean("；".join(document_text.get(ref, "") for ref in opinion_refs))
         recommendations: list[_Recommendation] = []
         for number, raw_recommendation in enumerate(raw_recommendations, 1):
             if not isinstance(raw_recommendation, Mapping):
                 raise _SemanticInvalid()
             recommendation_ref = _clean(raw_recommendation.get("recommendation_ref"))
+            opinion_ref = _clean(raw_recommendation.get("opinion_ref"))
+            span_start = raw_recommendation.get("span_start")
+            span_end = raw_recommendation.get("span_end")
             action_type = _clean(raw_recommendation.get("action_type")).lower()
-            action_text = _clean(raw_recommendation.get("action_text"))
+            action_text = raw_recommendation.get("action_text")
+            opinion_text = document_text.get(opinion_ref, "")
             if (
                 recommendation_ref != f"{episode_ref}#r{number}"
+                or opinion_ref not in opinion_refs
+                or isinstance(span_start, bool)
+                or isinstance(span_end, bool)
+                or not isinstance(span_start, int)
+                or not isinstance(span_end, int)
                 or action_type not in _RECOMMENDATION_TYPES
+                or not isinstance(action_text, str)
                 or not action_text
                 or len(action_text) > _MAX_RECOMMENDATION_CHARS
-                or action_text not in opinion_text
+                or span_start < 0
+                or span_end <= span_start
+                or span_end > len(opinion_text)
+                or opinion_text[span_start:span_end] != action_text
             ):
                 raise _SemanticInvalid()
-            recommendations.append(_Recommendation(recommendation_ref, action_type, action_text))
+            recommendations.append(_Recommendation(
+                recommendation_ref,
+                action_type,
+                action_text,
+                opinion_ref,
+                span_start,
+                span_end,
+            ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
         assigned.extend(member_refs)

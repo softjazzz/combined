@@ -31,7 +31,7 @@ class _Client:
 
     async def generate(self, prompt: str):
         self.prompts.append(prompt)
-        return {"content": self.payload, "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
+        return {"content": _materialize_recommendation_spans(self.payload, prompt), "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}}
 
 
 class _SequentialClient:
@@ -42,7 +42,7 @@ class _SequentialClient:
     async def generate(self, prompt: str):
         self.prompts.append(prompt)
         return {
-            "content": self.payloads.pop(0),
+            "content": _materialize_recommendation_spans(self.payloads.pop(0), prompt),
             "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
         }
 
@@ -64,6 +64,46 @@ def _payload(*, episodes, non_target=(), unresolved=()):
     return {"episodes": list(episodes), "non_target_refs": list(non_target), "unresolved_refs": list(unresolved)}
 
 
+def _materialize_recommendation_spans(payload, prompt):
+    """测试桩只把明确的自动占位替换成提示词中的精确原文区间。"""
+
+    value = json.loads(json.dumps(payload, ensure_ascii=False))
+    if not isinstance(value, dict) or not isinstance(value.get("episodes"), list):
+        return value
+    try:
+        source = json.loads(prompt.rsplit("输入：", 1)[1])
+        texts = {
+            item["ref"]: item["text"]
+            for item in source.get("consultation_documents", [])
+            if isinstance(item, dict)
+        }
+    except (IndexError, TypeError, ValueError):
+        return value
+    for item in value["episodes"]:
+        if not isinstance(item, dict):
+            continue
+        opinion_refs = item.get("opinion_refs")
+        if not isinstance(opinion_refs, list) or not opinion_refs:
+            continue
+        for recommendation in item.get("recommendations", []):
+            if not isinstance(recommendation, dict):
+                continue
+            if recommendation.get("opinion_ref") == "__AUTO__":
+                recommendation["opinion_ref"] = opinion_refs[0]
+            opinion_ref = recommendation.get("opinion_ref")
+            action_text = recommendation.get("action_text")
+            if (
+                recommendation.get("span_start") == "__AUTO__"
+                and isinstance(opinion_ref, str)
+                and isinstance(action_text, str)
+                and action_text in texts.get(opinion_ref, "")
+            ):
+                start = texts[opinion_ref].index(action_text)
+                recommendation["span_start"] = start
+                recommendation["span_end"] = start + len(action_text)
+    return value
+
+
 def _episode(
     ref: str,
     members: list[str],
@@ -80,10 +120,20 @@ def _episode(
                 "recommendation_ref": f"{ref}#r1",
                 "action_type": "test",
                 "action_text": "复查血常规",
+                "opinion_ref": "__AUTO__",
+                "span_start": "__AUTO__",
+                "span_end": "__AUTO__",
             }]
             if opinion == "clear" and confidence == "high"
             else []
         )
+    normalized_recommendations = []
+    for recommendation in recommendations:
+        value = dict(recommendation)
+        value.setdefault("opinion_ref", "__AUTO__")
+        value.setdefault("span_start", "__AUTO__")
+        value.setdefault("span_end", "__AUTO__")
+        normalized_recommendations.append(value)
     return {
         "episode_ref": ref,
         "member_refs": members,
@@ -92,7 +142,7 @@ def _episode(
         "application_state": application,
         "opinion_state": opinion,
         "confidence": confidence,
-        "recommendations": list(recommendations),
+        "recommendations": normalized_recommendations,
     }
 
 
@@ -289,7 +339,8 @@ def test_episode_prompt_excludes_mdt_and_requires_grounded_recommendations():
 
     assert "术前多学科讨论、术前风险评估、麻醉评估、MDT讨论" in prompt
     assert "recommendation_ref固定为episode_ref#r1" in prompt
-    assert "意见原文的短原句" in prompt
+    assert "span_start/span_end" in prompt
+    assert "不得改写、拼接多个文书" in prompt
 
 
 def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
@@ -306,11 +357,17 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
                 "recommendation_ref": "consultation_record-1#r1",
                 "action_type": "test",
                 "action_text": "完善心脏彩超",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 13,
+                "span_end": 19,
             },
             {
                 "recommendation_ref": "consultation_record-1#r2",
                 "action_type": "medication",
                 "action_text": "调整降压药",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 20,
+                "span_end": 25,
             },
         ],
     )])
@@ -321,6 +378,85 @@ def test_episode_recommendations_must_be_ordered_and_grounded_in_opinion_text():
         ("consultation_record-1#r1", "test"),
         ("consultation_record-1#r2", "medication"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("recommendation", "documents"),
+    [
+        (
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "完善心脏彩超",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 3,
+                "span_end": 99,
+            },
+            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
+        ),
+        (
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "完善心脏彩超",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 4,
+                "span_end": 10,
+            },
+            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
+        ),
+        (
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "安排心脏彩超",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 3,
+                "span_end": 9,
+            },
+            ({"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},),
+        ),
+        (
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "完善心脏彩超",
+                "opinion_ref": "consultation_record-2",
+                "span_start": 3,
+                "span_end": 9,
+            },
+            (
+                {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
+                {"ref": "consultation_record-2", "time": "", "text": "意见：调整降压药。"},
+            ),
+        ),
+        (
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "test",
+                "action_text": "完善心脏彩超并调整降压药",
+                "opinion_ref": "consultation_record-1",
+                "span_start": 3,
+                "span_end": 15,
+            },
+            (
+                {"ref": "consultation_record-1", "time": "", "text": "意见：完善心脏彩超。"},
+                {"ref": "consultation_record-2", "time": "", "text": "意见：调整降压药。"},
+            ),
+        ),
+    ],
+    ids=("out_of_bounds", "misaligned_span", "semantic_rewrite", "non_opinion_ref", "cross_document_join"),
+)
+def test_episode_recommendation_requires_exact_single_opinion_span(recommendation, documents):
+    payload = _payload(episodes=[_episode(
+        "consultation_record-1",
+        [item["ref"] for item in documents],
+        opinion_refs=["consultation_record-1"],
+        recommendations=[recommendation],
+    )])
+
+    with pytest.raises(episode._SemanticInvalid):
+        episode._parse(payload, documents)
 
 
 def test_episode_recommendation_cannot_be_invented_or_reordered():
@@ -768,7 +904,7 @@ async def test_fenced_single_json_keeps_phase_one_states(monkeypatch):
     """模型常见的说明+单个 JSON fence 不能把有效语义降为 data_gap。"""
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
     payload = json.dumps(_payload(episodes=[_episode(
-        "consultation_record-1", ["consultation_record-1"], application="vague", opinion="clear",
+        "consultation_record-1", ["consultation_record-1"], application="vague", opinion="clear", recommendations=[],
     )]), ensure_ascii=False)
     wrapped = f"以下为结构化结果：\n```json\n{payload}\n```\n请按 JSON 处理。"
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
