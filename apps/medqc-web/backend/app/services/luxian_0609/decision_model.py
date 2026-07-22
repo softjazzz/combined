@@ -114,6 +114,7 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "evidence_conflict",
             "semantic_low_confidence",
             "semantic_output_unknown",
+            "candidate_scope_incomplete",
             "applicability_conflict",
         }
     ),

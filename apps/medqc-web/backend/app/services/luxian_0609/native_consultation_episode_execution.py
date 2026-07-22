@@ -129,11 +129,17 @@ class _CandidateProjection:
 
 @dataclass(frozen=True)
 class _StayWindow:
-    admission_day: date
+    admission_day: date | None
     horizon_day: date
 
     def contains(self, observed_time: "_ObservedTime") -> bool:
-        return self.admission_day <= observed_time.day <= self.horizon_day
+        return (
+            observed_time.day <= self.horizon_day
+            and (
+                self.admission_day is None
+                or self.admission_day <= observed_time.day
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -401,13 +407,30 @@ def _resolve_execution_stay_window(
             raise _SourceGap()
         return rows
 
-    admission_rows = _rows(_STAY_ADMISSION_SOURCE_KEY)
     horizon_rows = _rows(_STAY_HORIZON_SOURCE_KEY)
-    admission = _parse_observed_time(admission_rows[0].get("admission_datetime"))
     horizon = _parse_observed_time(horizon_rows[0].get("horizon_date"))
-    if admission is None or horizon is None or admission.day > horizon.day:
+    if horizon is None:
         raise _SourceGap()
-    return _StayWindow(admission.day, horizon.day)
+
+    # 所有候选已由同一住院三坐标限定，且后续还会逐条校验必须晚于会诊意见。
+    # 因此入院登记未同步时不能把整个执行关联降为 data_gap；它只是不再提供
+    # 可用的下界。评估终点仍必须来自同一 Snapshot 的权威 horizon。
+    admission: _ObservedTime | None = None
+    admission_observation = observations.get(_STAY_ADMISSION_SOURCE_KEY)
+    if (
+        admission_observation is not None
+        and admission_observation.query_state.value == "available"
+        and admission_observation.completeness is SourceCompleteness.COMPLETE
+    ):
+        try:
+            admission_rows = evidence_materials.bounded_rows(_STAY_ADMISSION_SOURCE_KEY)
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            admission_rows = ()
+        if len(admission_rows) == 1:
+            admission = _parse_observed_time(admission_rows[0].get("admission_datetime"))
+    if admission is not None and admission.day > horizon.day:
+        raise _SourceGap()
+    return _StayWindow(admission.day if admission is not None else None, horizon.day)
 
 
 def _candidate_text(row: Mapping[str, Any]) -> str:
@@ -456,12 +479,14 @@ def _candidate_documents(
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row)
             text = _candidate_text(row)
-            if (
-                observed_time is None
-                or not text
-                or len(text) > _MAX_CANDIDATE_CHARS
-                or not stay_window.contains(observed_time)
-            ):
+            # 住院窗口外的行不属于本次就诊，既不能作为执行证据，也不能
+            # 反过来宣称本次候选范围不完整。
+            if observed_time is not None and not stay_window.contains(observed_time):
+                continue
+            # 单行没有自身可核验的时间或语义内容时，不能让它进入时序关联。
+            # 但它仍意味着“未观察到执行”不是完整否定；调用模型后若模型仅给
+            # absent，020/023 必须保守为 candidate_scope_incomplete。
+            if observed_time is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
                 source_incomplete = True
                 continue
             candidates.append(_CandidateDocument(
@@ -732,7 +757,7 @@ def _execution_outcome(
     )
     completed = tuple(item for item in episodes if item.opinion_state == "clear" and item.confidence == "high")
     if uncertain:
-        return "data_gap", "linkage_unresolved"
+        return "evaluation_unknown", "semantic_low_confidence"
     if not completed:
         return "not_applicable", "trigger_absent_complete"
     if source_technical:
@@ -740,11 +765,11 @@ def _execution_outcome(
     # 同日候选与会诊意见任一侧缺少精确时间时，不能依赖其它候选的
     # 语义关联掩盖先后关系不明；020/023 必须整体 fail-closed。
     if temporal_incomplete_episodes:
-        return "data_gap", "linkage_unresolved"
+        return "evaluation_unknown", "semantic_output_unknown"
     if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
         if source_technical:
             return "technical_error", "source_query_error"
-        return "data_gap", "linkage_unresolved"
+        return "evaluation_unknown", "semantic_low_confidence"
     states = tuple(item.execution_state for item in assessments)
     absent_refs = {
         item.episode_ref for item in assessments if item.execution_state == "absent"
@@ -755,13 +780,17 @@ def _execution_outcome(
             if source_technical:
                 return "technical_error", "source_query_error"
             if source_incomplete:
-                return "data_gap", "linkage_unresolved"
+                return "evaluation_unknown", "candidate_scope_incomplete"
             if absent_refs.difference(unresolved_absent):
                 return "non_compliant", "requirement_violated"
             if unresolved_absent:
                 return "data_gap", "linkage_unresolved"
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
+    if absent_refs:
+        if source_incomplete:
+            return "evaluation_unknown", "candidate_scope_incomplete"
+        return "not_applicable", "trigger_absent_complete"
     if "linked_vague" in states:
         return "non_compliant", "requirement_violated"
     if "linked_specific" in states:
@@ -802,6 +831,7 @@ def _decision(
             _STAY_ADMISSION_SOURCE_KEY,
             _STAY_DISCHARGE_SOURCE_KEY,
             _STAY_HORIZON_SOURCE_KEY,
+            *_EXECUTION_SOURCE_KEYS,
         })
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
@@ -965,7 +995,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             except _SemanticInvalid:
                 completed = ()
                 for rule_id in stage_two_rule_ids:
-                    statuses[rule_id] = ("data_gap", "linkage_unresolved")
+                    statuses[rule_id] = ("evaluation_unknown", "semantic_output_unknown")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
             preliminary = _execution_outcome("LX0609-020", episodes=episodes, assessments=None)
             if preliminary[0] == "not_applicable":
@@ -983,18 +1013,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 )
                 execution_source_incomplete = projection.source_incomplete
                 execution_source_technical = projection.source_technical
-                if not projection.candidates:
-                    if execution_source_technical:
-                        for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = ("technical_error", "source_query_error")
-                    elif execution_source_incomplete:
-                        for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = ("data_gap", "linkage_unresolved")
-                    else:
-                        execution_assessments = tuple(
-                            _ExecutionAssessment(item.episode_ref, "absent", (), "high")
-                            for item, _, _ in completed
-                        )
+                if execution_source_technical:
+                    for rule_id in stage_two_rule_ids:
+                        statuses[rule_id] = ("technical_error", "source_query_error")
+                elif not projection.candidates:
+                    execution_assessments = tuple(
+                        _ExecutionAssessment(item.episode_ref, "absent", (), "high")
+                        for item, _, _ in completed
+                    )
                 else:
                     second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
                         completed=completed,
@@ -1021,8 +1047,8 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 _payload(response), completed=completed, allowed_refs=allowed_refs,
                             )
                         except _SemanticInvalid:
-                            status = "technical_error" if execution_source_technical else "data_gap"
-                            reason = "source_query_error" if execution_source_technical else "linkage_unresolved"
+                            status = "technical_error" if execution_source_technical else "evaluation_unknown"
+                            reason = "source_query_error" if execution_source_technical else "semantic_output_unknown"
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = (status, reason)
                         except Exception:

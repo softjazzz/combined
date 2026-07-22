@@ -86,13 +86,13 @@ def _execution(*items):
     return {"executions": list(items)}
 
 
-def _window_session(*, rows_by_source, horizon_error=False):
+def _window_session(*, rows_by_source, horizon_error=False, missing_admission=False):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and horizon_error:
             raise SourceEvidenceQueryError("safe")
         rows = rows_by_source.get(source_key, ())
-        if source_key == "inpat_registration" and not rows:
+        if source_key == "inpat_registration" and not rows and not missing_admission:
             rows = ({"admission_datetime": "2026-07-01 08:00:00"},)
         if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and not rows:
             rows = ({"discharge_datetime": "2026-07-03 08:00:00"},)
@@ -610,7 +610,7 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         ("linked_specific", ("compliant", "compliant")),
         ("linked_vague", ("compliant", "non_compliant")),
         ("absent", ("non_compliant", "not_applicable")),
-        ("unknown", ("data_gap", "data_gap")),
+        ("unknown", ("uncertain", "uncertain")),
     ],
 )
 async def test_020_023_execution_state_mapping(monkeypatch, execution_state, expected):
@@ -654,6 +654,31 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_023_is_not_applicable_when_any_completed_opinion_has_no_execution(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("第一份会诊意见", "第二份会诊意见"),
+        "daily_course_record": _rows("仅笼统遵第二份会诊意见", hour_start=3),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"]),
+            _episode("consultation_record-2", ["consultation_record-2"]),
+        ]),
+        _execution(
+            {"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"},
+            {"episode_ref": "consultation_record-2", "execution_state": "linked_vague", "execution_refs": ["daily_course_record-1"], "confidence": "high"},
+        ),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+
+
+@pytest.mark.asyncio
 async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
@@ -669,7 +694,7 @@ async def test_second_stage_rejects_forged_execution_ref(monkeypatch):
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
     assert result.llm_call_count == 2
 
 
@@ -691,7 +716,7 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
 
 
 @pytest.mark.asyncio
-async def test_same_day_without_precise_time_is_data_gap_without_second_call(monkeypatch):
+async def test_same_day_without_precise_time_is_evaluation_unknown_without_second_call(monkeypatch):
     source_rows = {
         "consultation_record": [{"document_title": "会诊", "record_time": "2026-07-20", "record_content": "申请与明确会诊意见"}],
         "daily_course_record": [{"document_title": "病程", "record_time": "2026-07-20", "record_content": "疑似后续记录"}],
@@ -703,12 +728,12 @@ async def test_same_day_without_precise_time_is_data_gap_without_second_call(mon
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
     assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_same_day_imprecise_candidate_forces_data_gap_even_with_later_specific_link(monkeypatch):
+async def test_same_day_imprecise_candidate_forces_evaluation_unknown_even_with_later_specific_link(monkeypatch):
     """同日先后无法判定时，不能让次日关联掩盖这一时间证据缺口。"""
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见", hour_start=1),
@@ -743,7 +768,7 @@ async def test_same_day_imprecise_candidate_forces_data_gap_even_with_later_spec
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
 
@@ -817,7 +842,7 @@ async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm
 
 
 @pytest.mark.asyncio
-async def test_020_023_window_filters_post_discharge_candidate_without_second_call():
+async def test_020_023_window_filters_post_discharge_candidate_as_complete_absence():
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
         "daily_course_record": tuple(_rows("出院后同步的候选文书", day=4)),
@@ -831,7 +856,7 @@ async def test_020_023_window_filters_post_discharge_candidate_without_second_ca
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
@@ -861,6 +886,41 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     assert result.results == ()
     assert [item.qc_direction.value for item in result.decisions] == ["satisfied", "satisfied"]
     assert all(len(item.fact_refs) >= 3 for item in result.decisions)
+    daily_ref = next(
+        item.snapshot_ref.removeprefix("sha256:")
+        for item in session.snapshot.observations
+        if item.source_key == "daily_course_record"
+    )
+    assert all(daily_ref in item.fact_refs for item in result.decisions)
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_020_023_window_allows_later_specific_execution_when_admission_registry_is_empty():
+    """同一就诊坐标 + 权威horizon足以约束会诊后的候选，不能因登记表未同步阻断。"""
+    session = _window_session(
+        missing_admission=True,
+        rows_by_source={
+            "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+            "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+        },
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="I", patient_id="P", visit_id="V",
+        source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
 
 
@@ -920,7 +980,7 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
         [{"document_title": "病程", "record_time": "2026-07-20 01:00:00", "record_content": "x" * 1001}],
     ],
 )
-async def test_stage_two_candidate_limit_or_content_budget_is_data_gap_without_second_call(monkeypatch, daily_rows):
+async def test_stage_two_candidate_limit_or_content_budget_is_evaluation_unknown_without_second_call(monkeypatch, daily_rows):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
         "daily_course_record": daily_rows,
@@ -932,9 +992,47 @@ async def test_stage_two_candidate_limit_or_content_budget_is_data_gap_without_s
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert {item["status"] for item in result.results} == {"uncertain"}
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_typed_candidate_scope_incomplete_returns_safe_conflict_decision():
+    secret = "CONSULTATION_CANDIDATE_SCOPE_SECRET_20260722"
+    session = _window_session(rows_by_source={
+        "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
+        "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "daily_course_record": tuple(_rows(*[
+            f"{secret}_{index}" for index in range(13)
+        ], hour_start=2)),
+    })
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+    assert result.results == ()
+    assert [item.evidence_state for item in result.decisions] == [
+        episode.EvidenceState.CONFLICT,
+        episode.EvidenceState.CONFLICT,
+    ]
+    assert [item.reason_code for item in result.decisions] == [
+        "candidate_scope_incomplete",
+        "candidate_scope_incomplete",
+    ]
+    assert result.llm_call_count == 1
+    assert secret not in repr(result)
 
 
 @pytest.mark.asyncio
@@ -967,26 +1065,79 @@ def _mixed_candidate_sources():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("execution_state", "expected"),
-    [
-        ("linked_specific", ("compliant", "compliant")),
-        ("absent", ("data_gap", "data_gap")),
-    ],
-)
-async def test_positive_execution_survives_unrelated_incomplete_sources_but_absence_does_not(monkeypatch, execution_state, expected):
-    source_rows = _mixed_candidate_sources()
+async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypatch):
+    untimed_order = "无时间医嘱不得进入执行候选"
+    timely_execution = "会诊后已明确调整治疗方案"
+    source_rows = {
+        "consultation_record": _rows("申请与明确会诊意见"),
+        "daily_course_record": _rows(timely_execution, hour_start=2),
+        "senior_course_record": [],
+        "inpat_drug_order": [{"generic_name": untimed_order}],
+        "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
+    }
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
-    refs = ["daily_course_record-1"] if execution_state == "linked_specific" else []
     client = _SequentialClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
-        _execution({"episode_ref": "consultation_record-1", "execution_state": execution_state, "execution_refs": refs, "confidence": "high"}),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "confidence": "high",
+        }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert tuple(item["status"] for item in result.results) == expected
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
+    assert timely_execution in client.prompts[1]
+    assert untimed_order not in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_untimed_order_makes_absent_execution_evaluation_unknown(monkeypatch):
+    untimed_order = "无时间医嘱不得进入执行候选"
+    source_rows = _mixed_candidate_sources()
+    source_rows["senior_course_record"] = []
+    source_rows["inpat_drug_order"] = [{"generic_name": untimed_order}]
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert result.llm_call_count == 2
+    assert untimed_order not in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypatch):
+    outside_text = "出院后记录不得作为本次会诊执行候选"
+    source_rows = {
+        "consultation_record": _rows("申请与明确会诊意见"),
+        "daily_course_record": _rows("会诊后但未落实具体措施", hour_start=2),
+        "senior_course_record": [{
+            "document_title": "上级查房",
+            "record_time": "2026-08-01 09:00:00",
+            "record_content": outside_text,
+        }],
+        "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert result.llm_call_count == 2
+    assert outside_text not in client.prompts[1]
 
 
 @pytest.mark.asyncio

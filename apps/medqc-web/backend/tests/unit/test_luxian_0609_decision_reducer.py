@@ -395,6 +395,19 @@ def test_reason_code_must_match_the_structured_terminal_semantics():
         )
 
 
+def test_candidate_scope_incomplete_is_allowed_for_conflict_decision():
+    decision = _decision(
+        applicability=ApplicabilityState.UNKNOWN,
+        evidence_state=EvidenceState.CONFLICT,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="candidate_scope_incomplete",
+    )
+    assert (
+        reduce_luxian_0609_rule_decision(decision).final_state
+        is CustomerFinalState.EVALUATION_UNKNOWN
+    )
+
+
 def test_reduced_decision_cannot_be_constructed_outside_the_reducer():
     with pytest.raises(TypeError, match="reducer-owned"):
         ReducedRuleDecision(
