@@ -528,7 +528,12 @@ async def evaluate_formal_source_audit_case(
     original_snapshot_provider = luxian_execution.build_luxian_0609_evidence_snapshot
     original_session_provider = luxian_execution.build_luxian_0609_evidence_read_session
     original_decision_binder = luxian_execution.bind_and_reduce_luxian_0609_rule_decisions
-    original_generate = service.adjudicator_client.generate
+    primary_client = getattr(service, "client", service.adjudicator_client)
+    adjudicator_client = service.adjudicator_client
+    original_primary_generate = primary_client.generate
+    original_adjudicator_generate = adjudicator_client.generate
+    rule_engine = getattr(service, "rule_engine", None)
+    original_rule_engine_generate = getattr(rule_engine, "_llm_generate", None)
     captured_snapshots: list[Any] = []
     captured_reductions: list[tuple[Any, ...]] = []
     captured_model_calls: list[tuple[tuple[str, ...], Mapping[str, int]]] = []
@@ -549,7 +554,12 @@ async def evaluate_formal_source_audit_case(
         captured_reductions.append(tuple(reduced))
         return reduced
 
-    async def capture_generate(prompt: Any, *args: Any, **kwargs: Any) -> Any:
+    async def capture_generate(
+        original_generate: Any,
+        prompt: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
         nonlocal model_error_call_count
         # 仅在调用栈内扫描；绝不保存或输出 prompt 原文、摘要或 marker。
         rule_ids = tuple(sorted(set(_PROMPT_RULE_ID.findall(str(prompt)))))
@@ -567,7 +577,17 @@ async def evaluate_formal_source_audit_case(
         luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = (
             capture_decision_binder
         )
-        service.adjudicator_client.generate = capture_generate
+        primary_client.generate = lambda prompt, *args, **kwargs: capture_generate(
+            original_primary_generate, prompt, *args, **kwargs
+        )
+        if rule_engine is not None and callable(original_rule_engine_generate):
+            rule_engine._llm_generate = lambda prompt, *args, **kwargs: capture_generate(
+                original_rule_engine_generate, prompt, *args, **kwargs
+            )
+        if adjudicator_client is not primary_client:
+            adjudicator_client.generate = lambda prompt, *args, **kwargs: capture_generate(
+            original_adjudicator_generate, prompt, *args, **kwargs
+            )
         result = await evaluate_full_luxian_0609_case(
             service=service,
             bundle=bundle,
@@ -579,7 +599,11 @@ async def evaluate_formal_source_audit_case(
         luxian_execution.build_luxian_0609_evidence_snapshot = original_snapshot_provider
         luxian_execution.build_luxian_0609_evidence_read_session = original_session_provider
         luxian_execution.bind_and_reduce_luxian_0609_rule_decisions = original_decision_binder
-        service.adjudicator_client.generate = original_generate
+        primary_client.generate = original_primary_generate
+        if rule_engine is not None and callable(original_rule_engine_generate):
+            rule_engine._llm_generate = original_rule_engine_generate
+        if adjudicator_client is not primary_client:
+            adjudicator_client.generate = original_adjudicator_generate
 
     if len(captured_snapshots) != 1 or captured_snapshots[0] is None:
         raise RuntimeError("同源证据审计快照捕获次数异常")

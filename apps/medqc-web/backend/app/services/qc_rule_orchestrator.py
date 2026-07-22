@@ -452,11 +452,9 @@ class QCRuleOrchestrator:
             }
 
         def _merge_single_call_observation(metadata: dict[str, Any]) -> None:
-            nonlocal first_result_latency, first_result_source, total_prompt_tokens, total_completion_tokens
-            if str(metadata.get("pack_id") or "").strip():
+            nonlocal first_result_latency, first_result_source
+            if str(metadata.get("token_accounting_scope") or "single") == "pack":
                 return
-            total_prompt_tokens += int(metadata.get("prompt_tokens") or 0)
-            total_completion_tokens += int(metadata.get("completion_tokens") or 0)
             latency = float(metadata.get("first_result_latency") or 0.0)
             if latency > 0 and first_result_latency is None:
                 first_result_latency = latency
@@ -484,7 +482,7 @@ class QCRuleOrchestrator:
             bucket_key: tuple[str, str, str],
             force_pack_fallback: bool,
         ) -> tuple[bool, dict[str, Any]]:
-            nonlocal total_tokens, total_api_time, pack_size_sum, context_tokens_sum, total_prompt_tokens, total_completion_tokens, first_result_latency, first_result_source
+            nonlocal pack_size_sum, context_tokens_sum, first_result_latency, first_result_source
             response_summary = _summarize_pack_response(entries, response)
             if (
                 response_summary["parse_error"]
@@ -500,10 +498,6 @@ class QCRuleOrchestrator:
             response_first_result_latency = _safe_float(response.get("first_result_latency"))
             response_cot = dict(response.get("cot_observation") or {})
             context_tokens = _safe_int(response.get("context_tokens_estimate"))
-            total_tokens += tokens_used
-            total_prompt_tokens += prompt_tokens
-            total_completion_tokens += completion_tokens
-            total_api_time += api_time
             if response_first_result_latency > 0 and first_result_latency is None:
                 first_result_latency = response_first_result_latency
                 first_result_source = pack_id
@@ -547,6 +541,7 @@ class QCRuleOrchestrator:
                 metadata["batch_output_mode"] = str(batch_output_mode or "full")
                 metadata["pack_size"] = int(pack_size or len(entries))
                 metadata["pack_id"] = pack_id
+                metadata["token_accounting_scope"] = "pack"
                 metadata["pack_fallback"] = bool(force_pack_fallback)
                 metadata["context_tokens_estimate"] = context_tokens
                 metadata["bucket_strategy"] = bucket_strategy_normalized
@@ -564,7 +559,7 @@ class QCRuleOrchestrator:
             bucket_key: tuple[str, str, str] = ("generic", "primary", ""),
             force_pack_fallback: bool = False,
         ) -> None:
-            nonlocal pack_call_counter, total_tokens, total_api_time
+            nonlocal pack_call_counter, total_tokens, total_prompt_tokens, total_completion_tokens, total_api_time
             raise_if_cancelled(cancellation_check)
             if not entries:
                 return
@@ -607,6 +602,12 @@ class QCRuleOrchestrator:
                     "missing_rule_ids": [_rule_identity(item["rule"]) for item in entries],
                     "low_confidence_rule_ids": [],
                 }
+
+            # 一次批量请求只在这里入账；后续每条规则仅携带分摊展示值，不能再次累加。
+            total_tokens += _safe_int(response.get("tokens_used"))
+            total_prompt_tokens += _safe_int(response.get("prompt_tokens"))
+            total_completion_tokens += _safe_int(response.get("completion_tokens"))
+            total_api_time += _safe_float(response.get("api_time"))
 
             accepted, response_summary = await _accept_pack_results(
                 entries,
@@ -845,9 +846,12 @@ class QCRuleOrchestrator:
             result["metadata"] = metadata
 
             if not is_cache_hit:
-                total_tokens += int(metadata.get("tokens_used") or 0)
-                total_api_time += float(metadata.get("api_time") or 0.0)
-                _merge_single_call_observation(metadata)
+                if str(metadata.get("token_accounting_scope") or "single") != "pack":
+                    total_tokens += int(metadata.get("tokens_used") or 0)
+                    total_prompt_tokens += int(metadata.get("prompt_tokens") or 0)
+                    total_completion_tokens += int(metadata.get("completion_tokens") or 0)
+                    total_api_time += float(metadata.get("api_time") or 0.0)
+                    _merge_single_call_observation(metadata)
                 if execution_cache is not None and cache_key:
                     execution_cache.set(
                         cache_key,

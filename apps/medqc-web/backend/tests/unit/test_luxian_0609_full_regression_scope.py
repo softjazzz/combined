@@ -362,9 +362,12 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         return {"usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}}
 
     class Service:
+        client = SimpleNamespace(generate=generate)
         adjudicator_client = SimpleNamespace(generate=generate)
+        rule_engine = SimpleNamespace(_llm_generate=generate)
 
         async def evaluate_running_final_bundle_input(self, **_kwargs):
+            await self.rule_engine._llm_generate("LX0609-040")
             await self.adjudicator_client.generate("LX0609-029")
             await self.adjudicator_client.generate("LX0609-029 LX0609-032")
             await self.adjudicator_client.generate("SAFE_SECRET_MARKER")
@@ -375,7 +378,7 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
                     {"rule_id": rule_id, "status": "compliant"}
                     for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
                 ],
-                "token_usage": {"prompt_tokens": 7, "completion_tokens": 10, "total_tokens": 18},
+                "token_usage": {"prompt_tokens": 7, "completion_tokens": 11, "total_tokens": 21},
             }
 
     monkeypatch.setattr(
@@ -438,20 +441,20 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
     assert "unit-institute" not in serialized_audit
     assert "SAFE_SECRET_MARKER" not in json.dumps(performance, ensure_ascii=False)
     assert performance == {
-        "llm_call_count": 3,
+        "llm_call_count": 4,
         "prompt_tokens": 7,
-        "completion_tokens": 10,
-        "total_tokens": 18,
+        "completion_tokens": 11,
+        "total_tokens": 21,
         "unattributed_tokens": 3,
         "model_error_call_count": 0,
         "usage_mismatch": True,
         "token_analysis": [
             {
                 "rule_id": rule_id,
-                "llm_call_count": 1 if rule_id == "LX0609-029" else 0,
-                "prompt_tokens": 2 if rule_id == "LX0609-029" else 0,
-                "completion_tokens": 3 if rule_id == "LX0609-029" else 0,
-                "total_tokens": 5 if rule_id == "LX0609-029" else 0,
+                "llm_call_count": 1 if rule_id in {"LX0609-029", "LX0609-040"} else 0,
+                "prompt_tokens": 2 if rule_id == "LX0609-029" else (1 if rule_id == "LX0609-040" else 0),
+                "completion_tokens": 3 if rule_id == "LX0609-029" else (2 if rule_id == "LX0609-040" else 0),
+                "total_tokens": 5 if rule_id == "LX0609-029" else (3 if rule_id == "LX0609-040" else 0),
             }
             for rule_id in EXPECTED_LUXIAN_0609_RULE_IDS
         ],
