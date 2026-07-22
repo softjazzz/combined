@@ -47,12 +47,14 @@ class _SequentialClient:
         }
 
 
-def _rows(*contents: str, day: int = 20, hour_start: int = 1):
+def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {
             "document_title": "会诊记录",
             "record_time": f"2026-07-{day:02d} {hour_start + index - 1:02d}:00:00",
-            "record_content": content,
+            # 既有第二阶段夹具共享一个受控、可逐字验证的建议/执行动作；
+            # 各测试只覆盖状态、时序或来源边界时，不应因建议层新增而失焦。
+            "record_content": f"{content}；复查血常规" if action_suffix else content,
         }
         for index, content in enumerate(contents, 1)
     ]
@@ -70,8 +72,18 @@ def _episode(
     confidence="high",
     application_refs=None,
     opinion_refs=None,
-    recommendations=(),
+    recommendations=None,
 ):
+    if recommendations is None:
+        recommendations = (
+            [{
+                "recommendation_ref": f"{ref}#r1",
+                "action_type": "test",
+                "action_text": "复查血常规",
+            }]
+            if opinion == "clear" and confidence == "high"
+            else []
+        )
     return {
         "episode_ref": ref,
         "member_refs": members,
@@ -85,7 +97,17 @@ def _episode(
 
 
 def _execution(*items):
-    return {"executions": list(items)}
+    normalized = []
+    for item in items:
+        value = dict(item)
+        if "episode_ref" in value:
+            value["recommendation_ref"] = f"{value.pop('episode_ref')}#r1"
+        if value.get("execution_state") == "linked_specific" and "match_terms" not in value:
+            value["match_terms"] = ["复查血常规"]
+        else:
+            value.setdefault("match_terms", [])
+        normalized.append(value)
+    return {"executions": normalized}
 
 
 def _window_session(*, rows_by_source, horizon_error=False, missing_admission=False):
@@ -176,10 +198,15 @@ async def test_pure_signature_template_is_excluded_before_episode_prompt(monkeyp
     monkeypatch.setattr(
         episode,
         "read_luxian_0609_native_source_rows",
-        lambda **_: _rows(template, substantive),
+        lambda **_: _rows(template, substantive, action_suffix=False),
     )
     client = _Client(_payload(episodes=[_episode(
         "consultation_record-2", ["consultation_record-2"],
+        recommendations=[{
+            "recommendation_ref": "consultation_record-2#r1",
+            "action_type": "other",
+            "action_text": "建议调整治疗方案",
+        }],
     )]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-021", "LX0609-022"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
@@ -195,7 +222,7 @@ async def test_only_pure_signature_templates_are_not_applicable_without_llm(monk
     monkeypatch.setattr(
         episode,
         "read_luxian_0609_native_source_rows",
-        lambda **_: _rows("患者签名：李四", "会诊医师电子签名：王五"),
+        lambda **_: _rows("患者签名：李四", "会诊医师电子签名：王五", action_suffix=False),
     )
     client = _Client(_payload(episodes=[]))
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
@@ -334,18 +361,160 @@ async def test_preoperative_mdt_is_non_target_not_an_ordinary_consultation(monke
     assert result.llm_call_count == 1
 
 
+@pytest.mark.asyncio
+async def test_mdt_non_target_does_not_enter_recommendation_execution_stage(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: {
+            "consultation_record": _rows("术前多学科讨论：评估手术和麻醉风险。", action_suffix=False),
+            "daily_course_record": _rows("术后常规记录", hour_start=2, action_suffix=False),
+            "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+            "labtest_item_report": [], "surgery_record": [],
+        }[source_key],
+    )
+    client = _SequentialClient(_payload(episodes=[], non_target=["consultation_record-1"]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compliant(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("意见：完善心脏彩超；调整降压药。", action_suffix=False),
+        "daily_course_record": _rows("已完成心脏彩超检查。", hour_start=2, action_suffix=False),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[
+                {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "action_text": "完善心脏彩超"},
+                {"recommendation_ref": "consultation_record-1#r2", "action_type": "medication", "action_text": "调整降压药"},
+            ],
+        )]),
+        _execution(
+            {"recommendation_ref": "consultation_record-1#r1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high", "match_terms": ["心脏彩超"]},
+            {"recommendation_ref": "consultation_record-1#r2", "execution_state": "absent", "execution_refs": [], "confidence": "high", "match_terms": []},
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert result.llm_call_count == 2
+    assert "recommendation_ref" in client.prompts[1]
+    assert "action_text" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_generic_or_unrelated_text_cannot_be_linked_specific(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("意见：调整降压药。", action_suffix=False),
+        "daily_course_record": _rows("患者病情稳定，继续治疗。", hour_start=2, action_suffix=False),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[{"recommendation_ref": "consultation_record-1#r1", "action_type": "medication", "action_text": "调整降压药"}],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "confidence": "high",
+            "match_terms": ["治疗"],
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert {item["status"] for item in result.results} == {"uncertain"}
+
+
+@pytest.mark.asyncio
+async def test_one_execution_document_can_explicitly_cover_two_recommendations(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("意见：完善心脏彩超；调整降压药。", action_suffix=False),
+        "daily_course_record": _rows("已完成心脏彩超并调整降压药。", hour_start=2, action_suffix=False),
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=[
+                {"recommendation_ref": "consultation_record-1#r1", "action_type": "test", "action_text": "完善心脏彩超"},
+                {"recommendation_ref": "consultation_record-1#r2", "action_type": "medication", "action_text": "调整降压药"},
+            ],
+        )]),
+        _execution(
+            {"recommendation_ref": "consultation_record-1#r1", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high", "match_terms": ["心脏彩超"]},
+            {"recommendation_ref": "consultation_record-1#r2", "execution_state": "linked_specific", "execution_refs": ["daily_course_record-1"], "confidence": "high", "match_terms": ["调整降压药"]},
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_clear_opinion_without_actionable_recommendation_skips_second_stage(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("意见：患者风险已告知。", action_suffix=False),
+    )
+    client = _SequentialClient(_payload(episodes=[_episode(
+        "consultation_record-1", ["consultation_record-1"], recommendations=[],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["not_applicable", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
 def test_execution_prompt_requires_candidate_ref_for_linked_states():
-    completed = ((
-        episode._Episode("consultation_record-1", (), (), (), "clear", "clear", "high", ()),
-        episode._ObservedTime(datetime(2026, 7, 20, 8, 0, 0), True),
-        "安全会诊意见",
-    ),)
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation("consultation_record-1#r1", "test", "复查血常规"),
+            episode._ObservedTime(datetime(2026, 7, 20, 8, 0, 0), True),
+        ),
+    )
     candidates = (
         episode._CandidateDocument(
             "daily_course_record-1",
             "daily_course_record",
             episode._ObservedTime(datetime(2026, 7, 21, 8, 0, 0), True),
-            "安全后续文书",
+            "安全后续文书；复查血常规",
         ),
     )
 

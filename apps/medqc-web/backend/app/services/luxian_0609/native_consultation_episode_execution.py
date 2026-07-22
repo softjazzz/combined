@@ -117,10 +117,18 @@ class _Recommendation:
 
 @dataclass(frozen=True)
 class _ExecutionAssessment:
-    episode_ref: str
+    recommendation_ref: str
     execution_state: str
     execution_refs: tuple[str, ...]
     confidence: str
+    match_terms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _CompletedRecommendation:
+    episode_ref: str
+    recommendation: _Recommendation
+    opinion_time: "_ObservedTime"
 
 
 @dataclass(frozen=True)
@@ -177,6 +185,16 @@ class _SemanticInvalid(Exception):
 
 class _SemanticUnresolved(Exception):
     pass
+
+
+_GENERIC_MATCH_TERMS = frozenset({
+    "治疗", "处理", "观察", "监测", "方案", "病情", "患者",
+    "继续", "执行", "会诊", "意见",
+})
+
+
+def _normalized_text(value: str) -> str:
+    return re.sub(r"\s+", "", value).lower()
 
 
 def _clean(value: Any) -> str:
@@ -640,16 +658,20 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
-def _completed_episodes(
+def _completed_recommendations(
     episodes: Sequence[_Episode],
     documents: Sequence[Mapping[str, str]],
     *,
     stay_window: _StayWindow | None,
-) -> tuple[tuple[_Episode, _ObservedTime, str], ...]:
+) -> tuple[_CompletedRecommendation, ...]:
     by_ref = {str(item["ref"]): item for item in documents}
-    completed: list[tuple[_Episode, _ObservedTime, str]] = []
+    completed: list[_CompletedRecommendation] = []
     for item in episodes:
-        if item.opinion_state != "clear" or item.confidence != "high":
+        if (
+            item.opinion_state != "clear"
+            or item.confidence != "high"
+            or not item.recommendations
+        ):
             continue
         members = [by_ref.get(ref) for ref in item.opinion_refs]
         if any(member is None for member in members):
@@ -663,39 +685,39 @@ def _completed_episodes(
             if value is not None
         ):
             raise _SourceGap()
-        opinion_text = _clean("；".join(str(member.get("text") or "") for member in members if member is not None))
-        if not opinion_text or len(opinion_text) > _MAX_EPISODE_OPINION_CHARS:
-            raise _SourceGap()
-        completed.append((
-            item,
-            max((value for value in observed_times if value is not None), key=lambda value: value.value),
-            opinion_text,
-        ))
-    if len(completed) > _MAX_EPISODES:
+        opinion_time = max(
+            (value for value in observed_times if value is not None),
+            key=lambda value: value.value,
+        )
+        completed.extend(
+            _CompletedRecommendation(item.episode_ref, recommendation, opinion_time)
+            for recommendation in item.recommendations
+        )
+    if len(completed) > _MAX_RECOMMENDATIONS:
         raise _SourceGap()
     return tuple(completed)
 
 
 def _execution_prompt(
     *,
-    completed: Sequence[tuple[_Episode, _ObservedTime, str]],
+    completed: Sequence[_CompletedRecommendation],
     candidates: Sequence[_CandidateDocument],
 ) -> tuple[str, Mapping[str, frozenset[str]], frozenset[str]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
     temporal_incomplete: set[str] = set()
-    for item, opinion_time, opinion_text in completed:
+    for item in completed:
         related: list[dict[str, object]] = []
         for candidate in candidates:
-            if candidate.observed_time.day > opinion_time.day:
+            if candidate.observed_time.day > item.opinion_time.day:
                 include = True
-            elif candidate.observed_time.day < opinion_time.day:
+            elif candidate.observed_time.day < item.opinion_time.day:
                 include = False
-            elif candidate.observed_time.precise and opinion_time.precise:
-                include = candidate.observed_time.value > opinion_time.value
+            elif candidate.observed_time.precise and item.opinion_time.precise:
+                include = candidate.observed_time.value > item.opinion_time.value
             else:
                 include = False
-                temporal_incomplete.add(item.episode_ref)
+                temporal_incomplete.add(item.recommendation.recommendation_ref)
             if include:
                 related.append({
                     "ref": candidate.ref,
@@ -703,30 +725,36 @@ def _execution_prompt(
                     "date": candidate.observed_time.value.isoformat(),
                     "text": candidate.text,
                 })
-        allowed_refs[item.episode_ref] = frozenset(str(candidate["ref"]) for candidate in related)
+        allowed_refs[item.recommendation.recommendation_ref] = frozenset(
+            str(candidate["ref"]) for candidate in related
+        )
         entries.append({
-            "episode_ref": item.episode_ref,
-            "opinion_date": opinion_time.value.isoformat(),
-            "opinion_text": opinion_text,
+            "recommendation_ref": item.recommendation.recommendation_ref,
+            "action_type": item.recommendation.action_type,
+            "action_text": item.recommendation.action_text,
+            "opinion_date": item.opinion_time.value.isoformat(),
             "candidate_documents": related,
         })
-    payload = json.dumps({"episodes": entries}, ensure_ascii=False)
+    payload = json.dumps({"recommendations": entries}, ensure_ascii=False)
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
     prompt = (
-        "你只判断每个已完成会诊意见与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
-        "同一执行文书可同时落实多个episode，禁止要求唯一归属。"
-        "linked_specific只在候选明确落实同一条意见的具体措施，或直接点名该会诊意见且包含明确措施时使用。"
+        "你只判断每条会诊建议与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
+        "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
+        "linked_specific只在候选明确落实同一条建议的具体措施，或直接点名该会诊建议且包含明确措施时使用。"
         "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
         "申请、拟请或请会诊动作本身不是执行。"
         "仅治疗同一症状、部位或一般治疗但措施不同，必须为absent，不能关联。"
         "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
         "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
-        "execution_refs只能引用该episode输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
+        "execution_refs只能引用该建议输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
         "linked_specific或linked_vague必须至少返回一个execution_refs；没有可验证的candidate_documents ref时必须返回unknown。"
         "absent或unknown必须返回空数组。"
-        "每个输入episode_ref恰好输出一项，禁止重复。"
-        "严格输出JSON：{executions:[{episode_ref,execution_state,execution_refs,confidence}]}。输入："
+        "linked_specific必须同时返回match_terms：每项是会诊建议action_text与所选执行文书都逐字出现的具体行动词，"
+        "不得使用治疗/处理/观察/监测/方案/病情/患者/继续/执行/会诊/意见等泛词。"
+        "其它state的match_terms必须为空数组。"
+        "每个输入recommendation_ref恰好输出一项，禁止重复。"
+        "严格输出JSON：{executions:[{recommendation_ref,execution_state,execution_refs,confidence,match_terms}]}。输入："
         + payload
     )
     return prompt, allowed_refs, frozenset(temporal_incomplete)
@@ -735,11 +763,17 @@ def _execution_prompt(
 def _parse_executions(
     payload: Mapping[str, Any],
     *,
-    completed: Sequence[tuple[_Episode, _ObservedTime, str]],
+    completed: Sequence[_CompletedRecommendation],
     allowed_refs: Mapping[str, frozenset[str]],
+    candidates: Sequence[_CandidateDocument],
 ) -> tuple[_ExecutionAssessment, ...]:
     raw = payload.get("executions")
-    expected_refs = {item.episode_ref for item, _, _ in completed}
+    expected_refs = {item.recommendation.recommendation_ref for item in completed}
+    recommendation_by_ref = {
+        item.recommendation.recommendation_ref: item.recommendation
+        for item in completed
+    }
+    candidate_by_ref = {item.ref: item for item in candidates}
     if not isinstance(raw, list) or len(raw) != len(expected_refs):
         raise _SemanticInvalid()
     parsed: list[_ExecutionAssessment] = []
@@ -747,24 +781,47 @@ def _parse_executions(
     for item in raw:
         if not isinstance(item, Mapping):
             raise _SemanticInvalid()
-        episode_ref = _clean(item.get("episode_ref"))
+        recommendation_ref = _clean(item.get("recommendation_ref"))
         state = _clean(item.get("execution_state")).lower()
         confidence = _clean(item.get("confidence")).lower()
         refs = item.get("execution_refs")
+        raw_terms = item.get("match_terms")
         if (
-            episode_ref not in expected_refs
-            or episode_ref in seen
+            recommendation_ref not in expected_refs
+            or recommendation_ref in seen
             or state not in _EXECUTION_STATES
             or confidence not in _CONFIDENCE
             or not isinstance(refs, list)
+            or not isinstance(raw_terms, list)
             or len(refs) != len(set(refs))
-            or not all(isinstance(ref, str) and ref in allowed_refs[episode_ref] for ref in refs)
+            or not all(isinstance(ref, str) and ref in allowed_refs[recommendation_ref] for ref in refs)
             or (state in {"linked_specific", "linked_vague"} and not refs)
             or (state in {"absent", "unknown"} and refs)
         ):
             raise _SemanticInvalid()
-        seen.add(episode_ref)
-        parsed.append(_ExecutionAssessment(episode_ref, state, tuple(refs), confidence))
+        terms = tuple(_clean(term) for term in raw_terms)
+        if any(not term or len(term) > 32 for term in terms) or len(terms) != len(set(terms)):
+            raise _SemanticInvalid()
+        if state == "linked_specific":
+            action_text = _normalized_text(recommendation_by_ref[recommendation_ref].action_text)
+            selected_text = "；".join(
+                candidate_by_ref[ref].text for ref in refs if ref in candidate_by_ref
+            )
+            normalized_selected = _normalized_text(selected_text)
+            if (
+                not terms
+                or any(
+                    _normalized_text(term) in _GENERIC_MATCH_TERMS
+                    or _normalized_text(term) not in action_text
+                    or _normalized_text(term) not in normalized_selected
+                    for term in terms
+                )
+            ):
+                raise _SemanticInvalid()
+        elif terms:
+            raise _SemanticInvalid()
+        seen.add(recommendation_ref)
+        parsed.append(_ExecutionAssessment(recommendation_ref, state, tuple(refs), confidence, terms))
     if seen != expected_refs:
         raise _SemanticInvalid()
     return tuple(parsed)
@@ -789,25 +846,29 @@ def _execution_outcome(
     rule_id: str,
     *,
     episodes: Sequence[_Episode],
+    completed_recommendations: Sequence[_CompletedRecommendation],
     assessments: Sequence[_ExecutionAssessment] | None,
     source_incomplete: bool = False,
     source_technical: bool = False,
-    temporal_incomplete_episodes: frozenset[str] = frozenset(),
+    temporal_incomplete_recommendations: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
         for item in episodes
     )
-    completed = tuple(item for item in episodes if item.opinion_state == "clear" and item.confidence == "high")
+    completed = tuple(
+        item for item in episodes
+        if item.opinion_state == "clear" and item.confidence == "high"
+    )
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
-    if not completed:
+    if not completed or not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
     if source_technical:
         return "technical_error", "source_query_error"
     # 同日候选与会诊意见任一侧缺少精确时间时，不能依赖其它候选的
     # 语义关联掩盖先后关系不明；020/023 必须整体 fail-closed。
-    if temporal_incomplete_episodes:
+    if temporal_incomplete_recommendations:
         return "evaluation_unknown", "semantic_output_unknown"
     if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
         if source_technical:
@@ -815,9 +876,11 @@ def _execution_outcome(
         return "evaluation_unknown", "semantic_low_confidence"
     states = tuple(item.execution_state for item in assessments)
     absent_refs = {
-        item.episode_ref for item in assessments if item.execution_state == "absent"
+        item.recommendation_ref
+        for item in assessments
+        if item.execution_state == "absent"
     }
-    unresolved_absent = absent_refs.intersection(temporal_incomplete_episodes)
+    unresolved_absent = absent_refs.intersection(temporal_incomplete_recommendations)
     if rule_id == "LX0609-020":
         if absent_refs:
             if source_technical:
@@ -1019,32 +1082,38 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_source_incomplete = False
     execution_source_technical = False
     execution_temporal_incomplete: frozenset[str] = frozenset()
+    completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = stage_two_boundary_status
-            completed = ()
+            completed_recommendations = ()
         else:
             try:
-                completed = _completed_episodes(
+                completed_recommendations = _completed_recommendations(
                     episodes,
                     documents,
                     stay_window=execution_stay_window,
                 )
             except _SourceGap:
-                completed = ()
+                completed_recommendations = ()
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("data_gap", "linkage_unresolved")
             except _SemanticInvalid:
-                completed = ()
+                completed_recommendations = ()
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("evaluation_unknown", "semantic_output_unknown")
         if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
-            preliminary = _execution_outcome("LX0609-020", episodes=episodes, assessments=None)
+            preliminary = _execution_outcome(
+                "LX0609-020",
+                episodes=episodes,
+                completed_recommendations=completed_recommendations,
+                assessments=None,
+            )
             if preliminary[0] == "not_applicable":
                 for rule_id in stage_two_rule_ids:
                     statuses[rule_id] = ("not_applicable", "trigger_absent_complete")
-            elif completed:
+            elif completed_recommendations:
                 projection = _candidate_documents(
                     institute_id=institute_id,
                     patient_id=patient_id,
@@ -1061,18 +1130,30 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         statuses[rule_id] = ("technical_error", "source_query_error")
                 elif not projection.candidates:
                     execution_assessments = tuple(
-                        _ExecutionAssessment(item.episode_ref, "absent", (), "high")
-                        for item, _, _ in completed
+                        _ExecutionAssessment(
+                            item.recommendation.recommendation_ref,
+                            "absent",
+                            (),
+                            "high",
+                            (),
+                        )
+                        for item in completed_recommendations
                     )
                 else:
                     second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
-                        completed=completed,
+                        completed=completed_recommendations,
                         candidates=projection.candidates,
                     )
                     if not any(allowed_refs.values()):
                         execution_assessments = tuple(
-                            _ExecutionAssessment(item.episode_ref, "absent", (), "high")
-                            for item, _, _ in completed
+                            _ExecutionAssessment(
+                                item.recommendation.recommendation_ref,
+                                "absent",
+                                (),
+                                "high",
+                                (),
+                            )
+                            for item in completed_recommendations
                         )
                     else:
                         calls += 1
@@ -1087,7 +1168,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             total_tokens += next_total
                             api_time += response_time or (time.perf_counter() - started)
                             execution_assessments = _parse_executions(
-                                _payload(response), completed=completed, allowed_refs=allowed_refs,
+                                _payload(response),
+                                completed=completed_recommendations,
+                                allowed_refs=allowed_refs,
+                                candidates=projection.candidates,
                             )
                         except _SemanticInvalid:
                             status = "technical_error" if execution_source_technical else "evaluation_unknown"
@@ -1099,16 +1183,22 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 statuses[rule_id] = ("technical_error", "model_transport_error")
             else:
                 for rule_id in stage_two_rule_ids:
-                    statuses[rule_id] = _execution_outcome(rule_id, episodes=episodes, assessments=None)
+                    statuses[rule_id] = _execution_outcome(
+                        rule_id,
+                        episodes=episodes,
+                        completed_recommendations=completed_recommendations,
+                        assessments=None,
+                    )
         if execution_assessments is not None:
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = _execution_outcome(
                     rule_id,
                     episodes=episodes,
+                    completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,
                     source_incomplete=execution_source_incomplete,
                     source_technical=execution_source_technical,
-                    temporal_incomplete_episodes=execution_temporal_incomplete,
+                    temporal_incomplete_recommendations=execution_temporal_incomplete,
                 )
     results = []
     for rule_id in selected:
