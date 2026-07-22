@@ -552,7 +552,7 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert "recommendation_ref" in client.prompts[1]
     assert "source_quote" in client.prompts[1]
@@ -586,7 +586,7 @@ async def test_execution_prompt_forbids_planned_symptom_only_and_unrelated_treat
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗" in client.prompts[1]
 
 
@@ -1038,7 +1038,7 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
     [
         ("linked_specific", ("compliant", "compliant")),
         ("linked_vague", ("compliant", "non_compliant")),
-        ("absent", ("non_compliant", "not_applicable")),
+        ("absent", ("uncertain", "uncertain")),
         ("unknown", ("uncertain", "uncertain")),
     ],
 )
@@ -1078,7 +1078,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert "无关治疗或同部位一般治疗都不是已经执行" in client.prompts[1]
 
 
@@ -1104,7 +1104,7 @@ async def test_023_is_not_applicable_when_any_completed_opinion_has_no_execution
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
 
 
 @pytest.mark.asyncio
@@ -1140,7 +1140,7 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 1
 
 
@@ -1285,7 +1285,7 @@ async def test_020_023_window_filters_post_discharge_candidate_as_complete_absen
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
 
@@ -1537,7 +1537,7 @@ async def test_untimed_unrelated_order_does_not_block_absent_test_recommendation
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert untimed_order not in client.prompts[1]
 
@@ -1581,7 +1581,7 @@ async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_sour
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
 
 
 @pytest.mark.asyncio
@@ -1642,6 +1642,30 @@ async def test_other_recommendation_absent_stays_conservative_when_any_source_is
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action_type", ("test", "procedure", "transfer"))
+async def test_absent_action_requires_explicit_absence_closure_policy(monkeypatch, action_type):
+    """来源行模拟完整不等于已具备该行动的可否定来源闭包。"""
+    source_rows = {source_key: [] for source_key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("申请与明确会诊意见")
+    source_rows["daily_course_record"] = _rows("会诊后病程记录", hour_start=2)
+    monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1", ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type=action_type),
+        )]),
+        _execution({"episode_ref": "consultation_record-1", "execution_state": "absent", "execution_refs": [], "confidence": "high"}),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert {item["metadata"]["reason_code"] for item in result.results} == {"candidate_scope_incomplete"}
+
+
+@pytest.mark.asyncio
 async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypatch):
     outside_text = "出院后记录不得作为本次会诊执行候选"
     source_rows = {
@@ -1663,7 +1687,7 @@ async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypa
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert outside_text not in client.prompts[1]
 
@@ -1677,7 +1701,7 @@ async def test_complete_empty_candidate_sources_use_absence_without_second_call(
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 1
 
 

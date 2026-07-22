@@ -79,6 +79,11 @@ _ACTION_TYPE_SOURCE_KEYS = {
     )),
     "other": frozenset(_EXECUTION_SOURCE_KEYS),
 }
+# absence-closure-v1: 现有读取契约没有任何 action_type 的“未执行”完整
+# 否定闭包。仅有候选行完整不等于检查主表、申请/执行状态或其它权威来源
+# 都已被覆盖；上游补齐并经单独验收前，模型 absent 必须保守为未知。
+_ABSENCE_CLOSURE_POLICY_VERSION = "consultation-absence-closure-v1"
+_ABSENCE_CLOSURE_ACTION_TYPES: frozenset[str] = frozenset()
 _STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
 _STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
 _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
@@ -918,6 +923,9 @@ def _incomplete_absent_recommendations(
         if assessment.execution_state != "absent":
             continue
         action_type = action_type_by_ref.get(assessment.recommendation_ref)
+        if action_type not in _ABSENCE_CLOSURE_ACTION_TYPES:
+            incomplete.add(assessment.recommendation_ref)
+            continue
         required_sources = _ACTION_TYPE_SOURCE_KEYS.get(str(action_type or ""))
         if required_sources is None or not required_sources.issubset(source_complete_keys):
             incomplete.add(assessment.recommendation_ref)
