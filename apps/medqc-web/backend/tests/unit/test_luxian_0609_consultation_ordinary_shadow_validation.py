@@ -86,3 +86,25 @@ def test_invalid_model_payload_yields_only_empty_enums_and_safe_reason():
     assert rows[0]["execution_states"] == []
     assert rows[0]["confidence"] == []
     assert marker not in json.dumps(rows, ensure_ascii=False)
+
+
+def test_non_target_document_reason_is_preserved_in_safe_ledger():
+    rows = shadow.build_safe_ledger_rows(
+        case_label="case-03",
+        selector_fingerprint="c" * 64,
+        results=(_result(
+            rule_id="LX0609-020",
+            final_state="not_applicable",
+            reason_code="non_target_document",
+        ),),
+        capture=shadow._SafeStageCapture(),
+        source_complete_keys=frozenset(),
+        source_incomplete_keys=frozenset(),
+        llm_call_count=0,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        latency_seconds=0.0,
+    )
+
+    assert rows[0]["reason_code"] == "non_target_document"

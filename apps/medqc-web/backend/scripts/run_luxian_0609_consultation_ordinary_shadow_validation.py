@@ -56,6 +56,7 @@ _SAFE_FINAL_STATES = frozenset((
 ))
 _SAFE_REASON_CODES = frozenset((
     "requirement_satisfied", "requirement_violated", "trigger_absent_complete",
+    "non_target_document",
     "candidate_scope_incomplete", "linkage_unresolved", "source_unavailable",
     "source_query_error", "semantic_low_confidence", "semantic_output_unknown",
     "model_transport_error",

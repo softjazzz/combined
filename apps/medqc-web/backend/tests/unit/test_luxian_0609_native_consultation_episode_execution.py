@@ -760,7 +760,7 @@ def test_execution_prompt_requires_candidate_ref_for_linked_states():
         ),
     )
 
-    prompt, _, _ = episode._execution_prompt(completed=completed, candidates=candidates)
+    prompt, _ = episode._execution_prompt(completed=completed, candidates=candidates)
 
     assert "linked_specific或linked_vague必须至少返回一个execution_refs" in prompt
     assert "没有可验证的candidate_documents ref时必须返回unknown" in prompt
@@ -1207,25 +1207,35 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
 
 
 @pytest.mark.asyncio
-async def test_same_day_without_precise_time_is_evaluation_unknown_without_second_call(monkeypatch):
+async def test_same_day_date_only_candidate_can_be_semantically_linked(monkeypatch):
     source_rows = {
-        "consultation_record": [{"document_title": "会诊", "record_time": "2026-07-20", "record_content": "申请与明确会诊意见"}],
-        "daily_course_record": [{"document_title": "病程", "record_time": "2026-07-20", "record_content": "疑似后续记录"}],
+        "consultation_record": [{"document_title": "会诊", "record_time": "2026-07-20", "record_content": "申请与明确会诊意见；复查血常规"}],
+        "daily_course_record": [{"document_title": "病程", "record_time": "2026-07-20", "record_content": "已完成复查血常规"}],
         "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
         "labtest_item_report": [], "surgery_record": [],
     }
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
-    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "execution_quotes": ["已完成复查血常规"],
+            "confidence": "high",
+        }),
+    )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"uncertain"}
-    assert result.llm_call_count == 1
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert "已完成复查血常规" in client.prompts[1]
 
 
 @pytest.mark.asyncio
-async def test_same_day_imprecise_candidate_forces_evaluation_unknown_even_with_later_specific_link(monkeypatch):
-    """同日先后无法判定时，不能让次日关联掩盖这一时间证据缺口。"""
+async def test_same_day_date_only_candidate_does_not_block_later_specific_link(monkeypatch):
+    """日期粒度的会诊关联不要求文书行级时分秒。"""
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见", hour_start=1),
         "daily_course_record": [
@@ -1250,6 +1260,7 @@ async def test_same_day_imprecise_candidate_forces_evaluation_unknown_even_with_
             "episode_ref": "consultation_record-1",
             "execution_state": "linked_specific",
             "execution_refs": ["daily_course_record-2"],
+            "execution_quotes": ["次日明确落实会诊意见"],
             "confidence": "high",
         }),
     )
@@ -1259,7 +1270,7 @@ async def test_same_day_imprecise_candidate_forces_evaluation_unknown_even_with_
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
 

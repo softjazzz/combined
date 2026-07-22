@@ -796,10 +796,9 @@ def _execution_prompt(
     *,
     completed: Sequence[_CompletedRecommendation],
     candidates: Sequence[_CandidateDocument],
-) -> tuple[str, Mapping[str, frozenset[str]], frozenset[str]]:
+) -> tuple[str, Mapping[str, frozenset[str]]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
-    temporal_incomplete: set[str] = set()
     for item in completed:
         related: list[dict[str, object]] = []
         for candidate in candidates:
@@ -810,8 +809,10 @@ def _execution_prompt(
             elif candidate.observed_time.precise and item.opinion_time.precise:
                 include = candidate.observed_time.value > item.opinion_time.value
             else:
-                include = False
-                temporal_incomplete.add(item.recommendation.recommendation_ref)
+                # 当前会诊规则按文书/医嘱/检查的自然日关联，不要求行级时分秒。
+                # 同日但任一侧仅有日期时，不能由 Python 臆断先后；保留给 LLM
+                # 仅做语义关联。唯有两侧均有精确时间且候选更早时才排除。
+                include = True
             if include:
                 related.append({
                     "ref": candidate.ref,
@@ -850,7 +851,7 @@ def _execution_prompt(
         "严格输出JSON：{executions:[{recommendation_ref,execution_state,execution_refs,execution_quotes,confidence}]}。输入："
         + payload
     )
-    return prompt, allowed_refs, frozenset(temporal_incomplete)
+    return prompt, allowed_refs
 
 
 def _parse_executions(
@@ -931,7 +932,6 @@ def _execution_outcome(
     completed_recommendations: Sequence[_CompletedRecommendation],
     assessments: Sequence[_ExecutionAssessment] | None,
     source_technical: bool = False,
-    temporal_incomplete_recommendations: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -947,10 +947,6 @@ def _execution_outcome(
         return "not_applicable", "trigger_absent_complete"
     if source_technical:
         return "technical_error", "source_query_error"
-    # 同日候选与会诊意见任一侧缺少精确时间时，不能依赖其它候选的
-    # 语义关联掩盖先后关系不明；020/023 必须整体 fail-closed。
-    if temporal_incomplete_recommendations:
-        return "evaluation_unknown", "semantic_output_unknown"
     if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
         if source_technical:
             return "technical_error", "source_query_error"
@@ -961,15 +957,10 @@ def _execution_outcome(
         for item in assessments
         if item.execution_state == "absent"
     }
-    unresolved_absent = absent_refs.intersection(temporal_incomplete_recommendations)
     if rule_id == "LX0609-020":
         if absent_refs:
             if source_technical:
                 return "technical_error", "source_query_error"
-            if absent_refs.difference(unresolved_absent):
-                return "non_compliant", "requirement_violated"
-            if unresolved_absent:
-                return "data_gap", "linkage_unresolved"
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
     if absent_refs:
@@ -980,8 +971,6 @@ def _execution_outcome(
         return "compliant", "requirement_satisfied"
     if source_technical:
         return "technical_error", "source_query_error"
-    if unresolved_absent:
-        return "data_gap", "linkage_unresolved"
     return "not_applicable", "trigger_absent_complete"
 
 
@@ -1163,7 +1152,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     }
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
-    execution_temporal_incomplete: frozenset[str] = frozenset()
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -1231,28 +1219,21 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             for item in completed_recommendations
                         )
                 else:
-                    second_prompt, allowed_refs, execution_temporal_incomplete = _execution_prompt(
+                    second_prompt, allowed_refs = _execution_prompt(
                         completed=completed_recommendations,
                         candidates=projection.candidates,
                     )
                     if not any(allowed_refs.values()):
-                        if execution_temporal_incomplete:
-                            for rule_id in stage_two_rule_ids:
-                                statuses[rule_id] = (
-                                    "evaluation_unknown",
-                                    "linkage_unresolved",
-                                )
-                        else:
-                            execution_assessments = tuple(
-                                _ExecutionAssessment(
-                                    item.recommendation.recommendation_ref,
-                                    "absent",
-                                    (),
-                                    "high",
-                                    (),
-                                )
-                                for item in completed_recommendations
+                        execution_assessments = tuple(
+                            _ExecutionAssessment(
+                                item.recommendation.recommendation_ref,
+                                "absent",
+                                (),
+                                "high",
+                                (),
                             )
+                            for item in completed_recommendations
+                        )
                     else:
                         calls += 1
                         try:
@@ -1295,7 +1276,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,
                     source_technical=execution_source_technical,
-                    temporal_incomplete_recommendations=execution_temporal_incomplete,
                 )
     results = []
     for rule_id in selected:
