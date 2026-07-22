@@ -98,7 +98,9 @@ async def test_batch_compact_should_return_pack_metrics_and_metadata():
 @pytest.mark.asyncio
 async def test_batch_compact_uses_fixed_family_size_without_online_probe():
     orchestrator = QCRuleOrchestrator()
-    rules = _build_rules(6)
+    rules = _build_rules(8)
+    for rule in rules[5:]:
+        rule["rule_family"] = "timeliness"
     medical_record = {"id": "V001-fixed", "content": "病历正文", "document_type": "病程记录"}
     seen_modes: List[str] = []
 
@@ -127,11 +129,15 @@ async def test_batch_compact_uses_fixed_family_size_without_online_probe():
         llm_evaluate=_single_llm,
         llm_batch_evaluate=_batch_llm,
         prompt_strategy="batch_compact_v1",
+        bucket_strategy="domain_family",
     )
 
     assert "probe" not in seen_modes
     assert result["pack_metrics"]["probe_calls"] == 0
-    assert result["pack_metrics"]["selected_pack_size_by_bucket"] == {"course::primary": 5}
+    assert result["pack_metrics"]["selected_pack_size_by_bucket"] == {
+        "course::primary::content_completeness": 5,
+        "course::primary::timeliness": 3,
+    }
     assert result["total_tokens"] == 20
 
 

@@ -280,6 +280,7 @@ async def evaluate_full_luxian_0609_case(
     rule_ids: Sequence[str],
     timeout_seconds: float,
     evaluation_as_of_date: str | None = None,
+    offline_pack_probe: bool = False,
 ) -> dict[str, Any]:
     if tuple(rule_ids) != EXPECTED_LUXIAN_0609_RULE_IDS:
         raise RuntimeError("全49点回归禁止使用空列表或非客户规则范围")
@@ -291,6 +292,7 @@ async def evaluate_full_luxian_0609_case(
         "batch_output_mode": "full",
         "enable_selective_refine": False,
         "use_execution_cache": False,
+        "enable_pack_probe": bool(offline_pack_probe),
         "rule_set_key": "luxian_0609_qc_v1",
     }
     if evaluation_as_of_date is not None:
@@ -313,6 +315,29 @@ def _safe_record_count_bucket(value: Any) -> str:
     if value == 1:
         return "1"
     return "2_plus"
+
+
+def build_safe_pack_metrics(result: Mapping[str, Any]) -> dict[str, Any]:
+    """仅输出离线分包基准所需聚合指标，不返回模型输入或病历内容。"""
+
+    raw_metrics = result.get("pack_metrics")
+    if not isinstance(raw_metrics, Mapping):
+        raw_metrics = {}
+    selected_by_bucket = raw_metrics.get("selected_pack_size_by_bucket")
+    if not isinstance(selected_by_bucket, Mapping):
+        selected_by_bucket = {}
+    return {
+        "selection_strategy": str(raw_metrics.get("pack_selection_strategy") or "unknown"),
+        "probe_calls": int(raw_metrics.get("probe_calls") or 0),
+        "total_packs": int(raw_metrics.get("total_packs") or 0),
+        "single_rule_retries": int(raw_metrics.get("single_rule_retries") or 0),
+        "pack_parse_retry_count": int(raw_metrics.get("pack_parse_retry_count") or 0),
+        "selected_pack_size_by_bucket": {
+            str(key): int(value)
+            for key, value in selected_by_bucket.items()
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        },
+    }
 
 
 def _safe_code_or_unknown(value: Any) -> str:
@@ -1248,6 +1273,7 @@ async def run(args: argparse.Namespace) -> int:
                     rule_ids=rule_ids,
                     timeout_seconds=float(args.timeout_seconds),
                     evaluation_as_of_date=evaluation_as_of_date,
+                    offline_pack_probe=bool(args.offline_pack_probe),
                 )
                 rows = _result_rows(result)
                 status_counts = dict(
@@ -1262,7 +1288,12 @@ async def run(args: argparse.Namespace) -> int:
                     "status_counts": status_counts,
                     "rule_states": build_safe_rule_states(rows),
                     "elapsed_ms": int((time.perf_counter() - started) * 1000),
-                    "total_tokens": int(token_usage.get("total_tokens") or 0),
+                    "token_usage": {
+                        "prompt_tokens": int(token_usage.get("prompt_tokens") or 0),
+                        "completion_tokens": int(token_usage.get("completion_tokens") or 0),
+                        "total_tokens": int(token_usage.get("total_tokens") or 0),
+                    },
+                    "pack_metrics": build_safe_pack_metrics(result),
                 }
         except Exception as exc:  # noqa: BLE001
             failed += 1
@@ -1280,6 +1311,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--case-map", default=str(DEFAULT_CASE_MAP))
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--timeout-seconds", type=float, default=60.0)
+    parser.add_argument(
+        "--offline-pack-probe",
+        action="store_true",
+        help="仅离线固定样本基准允许探测规则族包大小；线上默认固定分包",
+    )
     parser.add_argument(
         "--evaluation-as-of-date",
         required=True,

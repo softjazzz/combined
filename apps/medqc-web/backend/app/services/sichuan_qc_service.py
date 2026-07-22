@@ -1121,6 +1121,8 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        enable_pack_probe: bool = False,
+        force_rule_family_buckets: bool = False,
         rule_set_key: str = "",
         source_institute_id: str = "",
         source_patient_id: str = "",
@@ -1134,6 +1136,9 @@ class SichuanQCService:
         normalized_rule_set_key = str(rule_set_key or "").strip()
         is_luxian_0609 = normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        # LX0609 的线上固定包按规则族配置；领域混包会丢失该配置边界。
+        if is_luxian_0609 or force_rule_family_buckets:
+            bucket_strategy = "domain_family"
         batch_output_mode_normalized = normalize_batch_output_mode(
             batch_output_mode,
             quality_profile=quality_profile_normalized,
@@ -1175,6 +1180,7 @@ class SichuanQCService:
             prompt_strategy="batch_compact_v1",
             batch_pack_candidates=(3, 5, 8, 10, 12, 15),
             batch_pack_max_size=15,
+            enable_pack_probe=bool(enable_pack_probe),
             evidence_source=evidence_source,
             llm_concurrency=llm_concurrency,
             model_version=model_version,
@@ -2844,6 +2850,11 @@ class SichuanQCService:
         total_packs = sum(int(item.get("total_packs") or 0) for item in metrics_list)
         weighted_pack = sum(float(item.get("avg_pack_size") or 0.0) * int(item.get("total_packs") or 0) for item in metrics_list)
         selected_pack_size_by_bucket: Dict[str, Any] = {}
+        selection_strategies = {
+            str(item.get("pack_selection_strategy") or "").strip()
+            for item in metrics_list
+            if str(item.get("pack_selection_strategy") or "").strip()
+        }
         for item in metrics_list:
             selected_pack_size_by_bucket.update(dict(item.get("selected_pack_size_by_bucket") or {}))
         return {
@@ -2863,6 +2874,11 @@ class SichuanQCService:
             "low_confidence_items": sum(int(item.get("low_confidence_items") or 0) for item in metrics_list),
             "context_tokens_estimate": sum(int(item.get("context_tokens_estimate") or 0) for item in metrics_list),
             "probe_calls": sum(int(item.get("probe_calls") or 0) for item in metrics_list),
+            "pack_selection_strategy": (
+                next(iter(selection_strategies))
+                if len(selection_strategies) == 1
+                else "mixed" if selection_strategies else "unknown"
+            ),
             "selected_pack_size": max(int(item.get("selected_pack_size") or 0) for item in metrics_list),
             "selected_pack_size_by_bucket": selected_pack_size_by_bucket,
         }
@@ -4468,6 +4484,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        enable_pack_probe: bool = False,
         rule_set_key: str = "",
         evaluation_as_of_date: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
@@ -4614,6 +4631,8 @@ class SichuanQCService:
                 refine_confidence_threshold=refine_confidence_threshold,
                 max_refine_candidates=max_refine_candidates,
                 use_execution_cache=use_execution_cache,
+                enable_pack_probe=enable_pack_probe,
+                force_rule_family_buckets=normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY,
                 rule_set_key="" if luxian_context is not None else rule_set_key,
                 cancellation_check=cancellation_check,
             )
@@ -4683,6 +4702,8 @@ class SichuanQCService:
                     refine_confidence_threshold=refine_confidence_threshold,
                     max_refine_candidates=max_refine_candidates,
                     use_execution_cache=use_execution_cache,
+                    enable_pack_probe=enable_pack_probe,
+                    force_rule_family_buckets=normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY,
                     cancellation_check=cancellation_check,
                 )
                 result_items.extend(list(per_doc_orchestrated.get("results") or []))
