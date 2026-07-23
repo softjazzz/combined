@@ -70,6 +70,80 @@ def test_build_documents_tree_from_domain_bundles():
     assert by_key["surgery"]["count"] == 1
 
 
+def test_build_documents_should_deduplicate_pathology_document_shared_by_course_and_surgery():
+    pathology_report = {
+        "document_type": "pathology_exam_report",
+        "document_id": "pathology-report-1",
+        "document_title": "病理检查报告",
+        "display_time": "2026-03-02 10:00:00",
+        "content": "病理报告正文。",
+        "source_fields": [],
+    }
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_id": "course-1",
+                    "document_title": "日常病程记录",
+                    "content": "病程正文。",
+                    "source_fields": [],
+                },
+                pathology_report,
+            ]
+        },
+        "surgery": {"source_documents": [pathology_report]},
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    pathology_documents = [doc for doc in documents if doc["doc_type"] == "pathology_exam_report"]
+    assert len(pathology_documents) == 1
+    assert pathology_documents[0]["doc_key"] == "pathology_exam_report::pathology-report-1"
+
+
+def test_build_documents_should_keep_distinct_pathology_reports_with_distinct_stable_ids():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "pathology_exam_report",
+                    "document_id": "pathology-report-1",
+                    "document_title": "病理检查报告",
+                    "content": "报告甲。",
+                    "source_fields": [],
+                },
+                {
+                    "document_type": "pathology_exam_report",
+                    "document_id": "pathology-report-2",
+                    "document_title": "病理检查报告",
+                    "content": "报告乙。",
+                    "source_fields": [],
+                },
+            ]
+        },
+        "surgery": {
+            "source_documents": [
+                {
+                    "document_type": "pathology_exam_report",
+                    "document_id": "pathology-report-1",
+                    "document_title": "病理检查报告",
+                    "content": "报告甲。",
+                    "source_fields": [],
+                }
+            ]
+        },
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    pathology_documents = [doc for doc in documents if doc["doc_type"] == "pathology_exam_report"]
+    assert [doc["doc_key"] for doc in pathology_documents] == [
+        "pathology_exam_report::pathology-report-1",
+        "pathology_exam_report::pathology-report-2",
+    ]
+
+
 def test_build_documents_should_merge_only_named_admission_diagnoses():
     domain_bundles = {
         "admission": {

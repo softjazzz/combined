@@ -892,6 +892,11 @@ def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
         if document_id and diagnosis_id:
             return f"{document_id}::diagnosis::{diagnosis_id}"
         return diagnosis_id or document_id
+    if document_type in {"pathology_exam_master", "pathology_exam_report"}:
+        # 病理表的稳定行主键是 pathology_exam_id，不是通用 document_id。
+        # 两个领域包会复用同一病理行；缺少该回退时，展示层只能按包内序号生成
+        # 临时键，因而无法折叠跨领域重复投影。
+        return document_id or _normalize_text(payload.get("pathology_exam_id"))
     return document_id
 
 

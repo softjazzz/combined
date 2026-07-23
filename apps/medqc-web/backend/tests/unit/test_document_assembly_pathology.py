@@ -17,6 +17,7 @@ def test_pathology_exam_master_should_assemble_specimen_and_request_fields() -> 
     )
 
     assert document.document_title == "病理检查申请单"
+    assert document.document_id == "PEM1"
     assert document.assembly_status in {"assembled", "partial"}
     assert "结肠肿物标本" in document.assembled_text
     assert "结肠肿物切除术" in document.assembled_text
@@ -40,6 +41,7 @@ def test_pathology_exam_report_should_assemble_diagnosis_and_findings() -> None:
     )
 
     assert document.document_title == "病理检查报告"
+    assert document.document_id == "PER1"
     assert document.assembly_status in {"assembled", "partial"}
     assert "阑尾标本" in document.assembled_text
     assert "急性化脓性阑尾炎" in document.assembled_text
