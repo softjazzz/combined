@@ -10,7 +10,10 @@ vi.mock('@/services/apiService', () => ({
   },
 }))
 
-import { getEditableMedicalRecordDocuments } from '@/services/manual-case-sample-service'
+import {
+  getEditableMedicalRecordDocuments,
+  runManualSamplePool,
+} from '@/services/manual-case-sample-service'
 
 describe('editable medical-record document normalization', () => {
   beforeEach(() => {
@@ -60,5 +63,49 @@ describe('editable medical-record document normalization', () => {
 
     expect(result.success).toBe(true)
     expect(result.data?.documents[0]?.record_time).toBe('')
+  })
+
+  it('forwards the exact selected validation scope and preserves safe dedupe metadata', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'job-1',
+        sample_item_count: 1,
+        selected_record_count: 1,
+        record_count: 1,
+        rule_count: 2,
+        record_ids: ['visit-1'],
+        rule_ids: ['LX0609-001', 'LX0609-002'],
+        operation_ref: 'sample-op-safe',
+        execution_scope_hash: 'a'.repeat(64),
+        deduplicated: true,
+      },
+    })
+
+    const result = await runManualSamplePool('pool-1', {
+      record_ids: ['visit-1'],
+      selected_rule_ids: ['LX0609-001', 'LX0609-002'],
+      group_by_luxian_family: false,
+      validation_mode: 'customer',
+      rule_set_key: 'luxian_0609_qc_v1',
+    })
+
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/pool-1/run',
+      data: {
+        record_ids: ['visit-1'],
+        selected_rule_ids: ['LX0609-001', 'LX0609-002'],
+        group_by_luxian_family: false,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+      },
+      timeout: undefined,
+    })
+    expect(result.data).toMatchObject({
+      operation_ref: 'sample-op-safe',
+      execution_scope_hash: 'a'.repeat(64),
+      deduplicated: true,
+    })
   })
 })

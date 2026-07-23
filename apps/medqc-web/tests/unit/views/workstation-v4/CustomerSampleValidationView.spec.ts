@@ -692,6 +692,13 @@ function buildRuleSets() {
       },
       coverage_status:
         '正式上线闸门未通过：通过 3 项，失败 6 项，未验证 0 项；当前 6 条达到 formal_ready，其余规则仍需补证据、跨文书或跨表执行链路。',
+      artifact_freshness: {
+        status: 'stale',
+        current_git_head: 'head-current',
+        artifact_git_heads: ['head-old'],
+        artifact_hash_mismatches: ['release_gate'],
+        bound_artifact_count: 3,
+      },
       release_gate_summary: {
         release_ready: false,
         passed_checks: 3,
@@ -1420,8 +1427,10 @@ describe('CustomerSampleValidationView', () => {
                 duplicate_hits: 0,
                 clusters: [],
                 status_breakdown: [
-                  { key: 'not_applicable', count: 3 },
-                  { key: 'uncertain', count: 2 },
+                  { key: 'not_applicable', count: 2 },
+                  { key: 'compliant', count: 1 },
+                  { key: 'uncertain', count: 1 },
+                  { key: 'ai_suggested_non_compliant', count: 1 },
                   { key: 'data_gap', count: 1 },
                 ],
               },
@@ -1455,8 +1464,14 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('结果回写：6 / 6 条')
     expect(wrapper.text()).toContain('数据不足')
     expect(wrapper.text()).toContain('AI判断')
+    expect(wrapper.text()).toContain('AI建议复核')
     expect(wrapper.text()).toContain('不适用')
     expect(wrapper.text()).not.toContain('结果回写：0 / 6 条')
+    const historyItemText = wrapper.find('.customer-sample-task-history-item').text()
+    expect(historyItemText.indexOf('AI建议复核')).toBeLessThan(
+      historyItemText.indexOf('合规'),
+    )
+    expect(historyItemText.indexOf('合规')).toBeLessThan(historyItemText.indexOf('不适用'))
   })
 
   it('打开质控任务中心加载历史时不应提前显示空态', async () => {
@@ -1622,6 +1637,8 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('场景 运行中病历')
     expect(wrapper.text()).toContain('规则数 59 条')
     expect(wrapper.text()).toContain('内部覆盖详情')
+    expect(wrapper.text()).toContain('验收工件')
+    expect(wrapper.text()).toContain('需刷新')
     expect(wrapper.text()).toContain('基础时限5 条')
     expect(wrapper.text()).toContain('手术麻醉16 条')
     expect(wrapper.text()).toContain('全选7个质控族')
@@ -2363,7 +2380,7 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(message.warning).toHaveBeenCalledWith(
-      '当前选中的病历还未完成病历关联，暂时无法开始0609质控',
+      '已选 1 份病历，完整范围未提交：未关联病历 1 份。请处理后重试',
     )
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
@@ -2884,7 +2901,7 @@ describe('CustomerSampleValidationView', () => {
     )
   })
 
-  it('0426真实样本池选择 LX0609 质控点后仍可勾选已关联病历发起验证', async () => {
+  it('0426真实样本池已关联但未同步时明确阻断而不静默发起验证', async () => {
     listManualSamplePools.mockResolvedValueOnce({
       success: true,
       data: {
@@ -2942,20 +2959,12 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.warning).not.toHaveBeenCalledWith(
-      expect.stringContaining('还未完成匹配、同步或 bundle 准备'),
+    expect(message.warning).toHaveBeenCalledWith(
+      '已选 1 份病历，完整范围未提交：尚未同步 1 份。请处理后重试',
     )
-    expect(runManualSamplePool).toHaveBeenCalledWith(
-      'pool-0426',
-      {
-        record_ids: ['VISIT_0426_001'],
-        max_parallel_records: 2,
-        validation_mode: 'customer',
-        rule_set_key: 'luxian_0609_qc_v1',
-        selected_rule_ids: ['LX0609-013'],
-      },
-      { timeout: 90000 },
-    )
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+    expect(lx013.element).toHaveProperty('checked', true)
+    expect(recordCheckboxes[0].element).toHaveProperty('checked', true)
   })
 
   it('LX0609 质控点范围支持选择多组规则并按族并发提交', async () => {
@@ -3139,7 +3148,7 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
-  it('选中部分不可执行病历时仅提交可执行病历并提示跳过数量', async () => {
+  it('选中范围包含不可执行病历时整体阻断并保留完整选择', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
       data: {
@@ -3172,17 +3181,52 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.info).toHaveBeenCalledWith('已选 2 份病历，其中 1 份可执行，1 份将自动跳过')
-    expect(runManualSamplePool).toHaveBeenCalledWith(
-      'pool-1',
-      {
-        record_ids: ['V001'],
-        max_parallel_records: 2,
-        validation_mode: 'customer',
-        rule_set_key: 'luxian_0609_qc_v1',
-      },
-      { timeout: 90000 },
+    expect(message.warning).toHaveBeenCalledWith(
+      '已选 2 份病历，完整范围未提交：未关联病历 1 份。请处理后重试',
     )
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('1 份当前阻塞（不会缩小范围执行）')
+  })
+
+  it('匹配歧义与病历包未就绪时分别说明阻塞原因', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            id: 'V-ambiguous',
+            matched_visit_id: '',
+            match_status: 'ambiguous',
+            sync_status: 'missing',
+            bundle_status: 'pending',
+          }),
+          buildRecord({
+            id: 'V-bundle-pending',
+            matched_visit_id: 'V002',
+            match_status: 'matched',
+            sync_status: 'synced',
+            bundle_status: 'pending',
+          }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await recordCheckboxes[1].setValue(true)
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.warning).toHaveBeenCalledWith(
+      '已选 2 份病历，完整范围未提交：匹配有歧义 1 份，病历包未就绪 1 份。请处理后重试',
+    )
+    expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
   it('发起验证成功后应自动打开结果抽屉并显示成功提示', async () => {

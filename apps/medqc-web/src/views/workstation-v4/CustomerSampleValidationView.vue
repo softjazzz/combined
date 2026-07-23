@@ -192,6 +192,15 @@
                   <span class="customer-sample-coverage-chip border-sky-200 bg-sky-50 text-sky-700">
                     规则数 {{ selectedRuleSetRuleCountText }}
                   </span>
+                  <span
+                    v-if="
+                      selectedRuleSet?.artifact_freshness?.status &&
+                      selectedRuleSet.artifact_freshness.status !== 'fresh'
+                    "
+                    class="customer-sample-coverage-chip border-amber-200 bg-amber-50 text-amber-700"
+                  >
+                    验收工件需刷新
+                  </span>
                   <button
                     type="button"
                     class="customer-sample-internal-toggle"
@@ -988,8 +997,8 @@
         <strong>已选择 {{ selectedRecordStats.selectedCount }} 份病历</strong>
         <span>
           可质控 {{ selectedRecordStats.runnableCount }} 份
-          <template v-if="selectedRecordStats.skippedCount > 0">
-            ，{{ selectedRecordStats.skippedCount }} 份将自动跳过
+          <template v-if="selectedRecordStats.blockedCount > 0">
+            ，{{ selectedRecordStats.blockedCount }} 份当前阻塞（不会缩小范围执行）
           </template>
           · 当前范围：{{ selectedRunScopeSummary }}
         </span>
@@ -1644,7 +1653,7 @@
 
         <div class="customer-sample-luxian-aggregate-list">
           <article
-            v-for="item in luxianAggregateJobs"
+            v-for="item in luxianAggregateSortedJobs"
             :key="item.family.key"
             class="customer-sample-luxian-aggregate-item"
           >
@@ -2339,6 +2348,12 @@ const luxianAggregateSummary = computed(() => {
     running,
   }
 })
+const luxianAggregateSortedJobs = computed(() =>
+  [...luxianAggregateJobs.value].sort((left, right) => {
+    const priority = luxianAggregateItemPriority(right) - luxianAggregateItemPriority(left)
+    return priority || left.family.name.localeCompare(right.family.name, 'zh-CN')
+  }),
+)
 const batchResultFocusRecord = ref<{
   visitId: string
   recordId: string
@@ -2488,8 +2503,12 @@ const selectedRuleSetCoverageChips = computed(() => {
   const entries = Object.entries(summary)
   const gate = selectedRuleSet.value?.release_gate_summary
   const evaluation = selectedRuleSet.value?.evaluation_summary
+  const freshness = selectedRuleSet.value?.artifact_freshness
   const extraChips: Array<{ label: string; value: string | number; className: string }> = []
   if (selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY) {
+    if (freshness?.status && freshness.status !== 'fresh') {
+      extraChips.push({ label: '验收工件', value: '需刷新', className: 'border-amber-200 bg-amber-50 text-amber-700' })
+    }
     if (gate) {
       extraChips.push({
         label: gate.release_ready ? '发布闸门' : '闸门未过',
@@ -2874,17 +2893,21 @@ const currentScopeDescription = computed(() => {
 })
 
 const selectedRecordStats = computed(() => {
-  const selectedRecords = records.value.filter((record) =>
-    selectedRowKeys.value.includes(record.id),
-  )
+  const selectedRecords = records.value.filter((record) => selectedRowKeys.value.includes(record.id))
   const runnableRecords = selectedRecords.filter((record) => isRunnableRecord(record))
+  const blockerCounts = selectedRecords.reduce((counts, record) => {
+    if (record.match_status === 'ambiguous') counts.ambiguous += 1
+    else if (record.match_status !== 'matched' || !record.matched_visit_id) counts.unmatched += 1
+    else if (!isRecordSyncedForValidation(record)) counts.notSynced += 1
+    else if ((isLuxian0609Mode.value || selectedValidationMode.value === 'customer' || selectedValidationMode.value === 'sc') && record.bundle_status !== 'ready') counts.bundleNotReady += 1
+    return counts
+  }, { ambiguous: 0, unmatched: 0, notSynced: 0, bundleNotReady: 0 })
   return {
     selectedCount: selectedRecords.length,
     runnableCount: runnableRecords.length,
-    skippedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
-    runnableRecordIds: runnableRecords
-      .map((record) => String(record.matched_visit_id || '').trim())
-      .filter((recordId) => Boolean(recordId)),
+    blockedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
+    blockerCounts,
+    runnableRecordIds: runnableRecords.map((record) => String(record.matched_visit_id || '').trim()).filter(Boolean),
   }
 })
 
@@ -3406,21 +3429,12 @@ function isRecordSyncedForValidation(record: ManualSamplePoolRecord): boolean {
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
   if (isLuxian0609Mode.value) {
-    return record.match_status === 'matched' && !!record.matched_visit_id
+    return record.match_status === 'matched' && isRecordSyncedForValidation(record) && record.bundle_status === 'ready' && !!record.matched_visit_id
   }
   if (isSyncedOnlyValidationMode.value) {
-    return (
-      record.match_status === 'matched' &&
-      isRecordSyncedForValidation(record) &&
-      !!record.matched_visit_id
-    )
+    return record.match_status === 'matched' && isRecordSyncedForValidation(record) && !!record.matched_visit_id
   }
-  return (
-    record.match_status === 'matched' &&
-    isRecordSyncedForValidation(record) &&
-    record.bundle_status === 'ready' &&
-    !!record.matched_visit_id
-  )
+  return record.match_status === 'matched' && isRecordSyncedForValidation(record) && record.bundle_status === 'ready' && !!record.matched_visit_id
 }
 
 function runnableRequirementHint(): string {
@@ -3447,6 +3461,17 @@ function selectedRecordNotRunnableMessage(): string {
     return '当前选中的病历还未完成匹配或同步，暂时无法发起程序规则验证'
   }
   return '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证'
+}
+
+function selectedRecordBlockerMessage(): string {
+  const { selectedCount, blockerCounts } = selectedRecordStats.value
+  const reasons = [
+    blockerCounts.ambiguous > 0 ? `匹配有歧义 ${blockerCounts.ambiguous} 份` : '',
+    blockerCounts.unmatched > 0 ? `未关联病历 ${blockerCounts.unmatched} 份` : '',
+    blockerCounts.notSynced > 0 ? `尚未同步 ${blockerCounts.notSynced} 份` : '',
+    blockerCounts.bundleNotReady > 0 ? `病历包未就绪 ${blockerCounts.bundleNotReady} 份` : '',
+  ].filter(Boolean)
+  return `已选 ${selectedCount} 份病历，完整范围未提交：${reasons.join('，')}。请处理后重试`
 }
 
 function clearSelectedRecords() {
@@ -5197,20 +5222,18 @@ async function handleSyncPoolRecords() {
 async function handleRunPool() {
   if (runLoading.value) return
   if (!selectedPoolId.value) return
-  const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
-    selectedRecordStats.value
+  const { selectedCount, runnableCount, blockedCount, runnableRecordIds } = selectedRecordStats.value
   if (requiresSelectedRecords.value && selectedCount === 0) {
     message.warning('请先选择要质控的病历')
+    return
+  }
+  if (selectedCount > 0 && blockedCount > 0) {
+    message.warning(selectedRecordBlockerMessage())
     return
   }
   if (selectedCount > 0 && runnableCount === 0) {
     message.warning(selectedRecordNotRunnableMessage())
     return
-  }
-  if (selectedCount > 0 && skippedCount > 0) {
-    message.info(
-      `已选 ${selectedCount} 份病历，其中 ${runnableCount} 份可执行，${skippedCount} 份将自动跳过`,
-    )
   }
   const runKey = buildRunSubmissionKey(
     selectedPoolId.value,
@@ -5741,6 +5764,16 @@ async function openLuxianAggregateChildJob(item: LuxianAggregateJob) {
   await openBatchJob(jobId)
 }
 
+function luxianAggregateItemPriority(item: LuxianAggregateJob): number {
+  if (['failed', 'canceled'].includes(item.status)) return 6
+  const counts = item.detail ? taskHistoryDisplayCounts(item.detail) : {}
+  if (Number(counts.technical_error || 0) > 0 || Number(counts.non_compliant || 0) > 0) return 5
+  if (Number(counts.ai_suggested_non_compliant || 0) > 0 || Number(counts.uncertain || 0) > 0 || Number(counts.data_gap || 0) > 0) return 4
+  if (isBatchJobRunning(item.status)) return 3
+  if (Number(counts.compliant || 0) > 0 || Number(counts.ai_suggested_compliant || 0) > 0) return 2
+  return 1
+}
+
 function luxianAggregateResultSummary(item: LuxianAggregateJob): string {
   if (item.detail) return taskHistoryResultSummary(item.detail)
   if (item.status === 'queued') return '任务已创建，等待后台执行。'
@@ -5868,6 +5901,12 @@ function taskHistoryStatusChips(job: SichuanBatchJob) {
   const counts = taskHistoryDisplayCounts(job)
   const chips = [
     {
+      key: 'technical_error',
+      label: '技术异常',
+      value: counts.technical_error,
+      className: 'is-danger',
+    },
+    {
       key: 'non_compliant',
       label: '不合规',
       value: counts.non_compliant,
@@ -5875,7 +5914,7 @@ function taskHistoryStatusChips(job: SichuanBatchJob) {
     },
     {
       key: 'ai_suggested_non_compliant',
-      label: 'AI判断',
+      label: 'AI建议复核',
       value: counts.ai_suggested_non_compliant,
       className: 'is-review',
     },
@@ -5892,22 +5931,10 @@ function taskHistoryStatusChips(job: SichuanBatchJob) {
       className: 'is-review',
     },
     {
-      key: 'technical_error',
-      label: '技术异常',
-      value: counts.technical_error,
-      className: 'is-danger',
-    },
-    {
       key: 'not_executed',
       label: '未执行',
       value: counts.not_executed,
       className: 'is-neutral',
-    },
-    {
-      key: 'not_applicable',
-      label: '不适用',
-      value: counts.not_applicable,
-      className: 'is-muted',
     },
     {
       key: 'ai_suggested_compliant',
@@ -5920,6 +5947,12 @@ function taskHistoryStatusChips(job: SichuanBatchJob) {
       label: '合规',
       value: counts.compliant,
       className: 'is-ok',
+    },
+    {
+      key: 'not_applicable',
+      label: '不适用',
+      value: counts.not_applicable,
+      className: 'is-muted',
     },
   ].filter((chip) => chip.value > 0)
 
@@ -5968,7 +6001,7 @@ function taskHistoryOverviewText(job: SichuanBatchJob): string {
   if (issueCount > 0) {
     const parts = [
       counts.non_compliant > 0 ? `不合规 ${counts.non_compliant}` : '',
-      counts.ai_suggested_non_compliant > 0 ? `AI判断 ${counts.ai_suggested_non_compliant}` : '',
+      counts.ai_suggested_non_compliant > 0 ? `AI建议复核 ${counts.ai_suggested_non_compliant}` : '',
       counts.data_gap > 0 ? `数据不足 ${counts.data_gap}` : '',
       counts.uncertain > 0 ? `AI判断 ${counts.uncertain}` : '',
       counts.technical_error > 0 ? `技术异常 ${counts.technical_error}` : '',
@@ -6261,7 +6294,7 @@ function taskHistoryResultSummary(job: SichuanBatchJob): string {
   const displayCounts = taskHistoryDisplayCounts(job)
   const statusLabels: Record<string, string> = {
     non_compliant: '不合规',
-    ai_suggested_non_compliant: 'AI判断',
+    ai_suggested_non_compliant: 'AI建议复核',
     ai_suggested_compliant: 'AI未见问题',
     compliant: '合规',
     not_applicable: '不适用',

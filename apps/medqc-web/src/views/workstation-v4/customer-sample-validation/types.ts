@@ -97,8 +97,16 @@ export type ManualSampleValidationRuleSet = {
   display_group?: 'main' | 'advanced' | string
   coverage_summary?: Record<string, number>
   coverage_status?: string
+  artifact_freshness?: {
+    status?: string
+    current_git_head?: string
+    artifact_git_heads?: string[]
+    artifact_hash_mismatches?: string[]
+    bound_artifact_count?: number
+  }
   release_gate_summary?: {
     release_ready?: boolean
+    source_release_ready?: boolean
     passed_checks?: number
     failed_checks?: number
     unverified_checks?: number
@@ -262,6 +270,9 @@ export type ManualSamplePoolRunResult = {
   rule_set_key?: string
   rule_set_name?: string
   rule_set_version?: string
+  operation_ref?: string
+  execution_scope_hash?: string
+  deduplicated?: boolean
 }
 
 export type ManualTestRecordDocument = {
