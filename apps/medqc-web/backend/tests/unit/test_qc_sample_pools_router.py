@@ -7,6 +7,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app.routers import qc_sample_pools
 from app.services.qc_rule_sets import get_sichuan_rule_set
+from app.services import sample_validation_rule_sets
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
 
 
@@ -313,6 +314,95 @@ async def test_list_sample_validation_rule_set_catalog_should_expose_customer_an
     assert by_key["sc_content_full_v1"]["validation_mode"] == "formal_fast_screen_full"
     assert by_key["sc_content_full_v1"]["scope"] == "final"
     assert by_key["sc_content_full_v1"]["advanced"] is False
+
+
+def test_luxian_release_meta_must_fail_closed_when_artifacts_are_stale(monkeypatch):
+    stale_head = "1" * 40
+    current_head = "2" * 40
+
+    def _fake_read_json(path, default):
+        payloads = {
+            "luxian_0609_release_gate.json": {
+                "git_head": stale_head,
+                "release_ready": True,
+                "summary": {
+                    "passed_checks": 8,
+                    "failed_checks": 0,
+                    "unverified_checks": 0,
+                    "blocking_count": 0,
+                },
+            },
+            "luxian_0609_qc_eval.json": {
+                "git_head": stale_head,
+                "summary": {"rule_count": 49},
+            },
+            "luxian_0609_formal_launch_work_packages.json": {
+                "git_head": stale_head,
+                "summary": {"package_count": 49},
+            },
+            "luxian_0609_customer_sample_page_evidence.json": {
+                "git_head": stale_head,
+                "summary": {"page_verified": True},
+            },
+        }
+        return payloads.get(path.name, default)
+
+    monkeypatch.setattr(sample_validation_rule_sets, "_read_json", _fake_read_json)
+    monkeypatch.setattr(
+        sample_validation_rule_sets,
+        "_current_git_head",
+        lambda: current_head,
+    )
+
+    result = sample_validation_rule_sets._build_luxian_0609_release_meta()
+
+    assert result["artifact_freshness"]["status"] == "stale"
+    assert result["artifact_freshness"]["current_git_head"] == current_head
+    assert result["artifact_freshness"]["artifact_git_heads"] == [stale_head]
+    assert result["release_gate_summary"]["source_release_ready"] is True
+    assert result["release_gate_summary"]["release_ready"] is False
+    assert "验收工件已陈旧" in result["coverage_status"]
+
+
+def test_luxian_artifact_freshness_covers_all_fail_closed_states():
+    current_head = "a" * 40
+    fully_bound = {
+        name: {"git_head": current_head}
+        for name in ("release_gate", "evaluation", "work_packages", "page_evidence")
+    }
+
+    fresh = sample_validation_rule_sets._build_artifact_freshness(
+        artifacts=fully_bound,
+        current_git_head=current_head,
+    )
+    unbound = sample_validation_rule_sets._build_artifact_freshness(
+        artifacts={**fully_bound, "page_evidence": {}},
+        current_git_head=current_head,
+    )
+    unverifiable = sample_validation_rule_sets._build_artifact_freshness(
+        artifacts=fully_bound,
+        current_git_head="unknown",
+    )
+
+    assert fresh["status"] == "fresh"
+    assert unbound["status"] == "unbound"
+    assert unverifiable["status"] == "unverifiable"
+
+
+def test_luxian_artifact_freshness_rejects_short_git_head():
+    current_head = "b" * 40
+    artifacts = {
+        name: {"git_head": current_head[:7]}
+        for name in ("release_gate", "evaluation", "work_packages", "page_evidence")
+    }
+
+    result = sample_validation_rule_sets._build_artifact_freshness(
+        artifacts=artifacts,
+        current_git_head=current_head,
+    )
+
+    assert result["status"] == "unbound"
+    assert result["bound_artifact_count"] == 0
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +90,78 @@ def _read_json(path: Path, default: Any) -> Any:
         return default
 
 
+@lru_cache(maxsize=1)
+def _current_git_head() -> str:
+    try:
+        value = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
+            timeout=5,
+        ).strip().lower()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return value if re.fullmatch(r"[0-9a-f]{40}", value) else "unknown"
+
+
+def _artifact_git_head(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    candidates = (
+        payload.get("git_head"),
+        (payload.get("metadata") or {}).get("git_head")
+        if isinstance(payload.get("metadata"), dict)
+        else None,
+        (payload.get("runtime_manifest") or {}).get("git_head")
+        if isinstance(payload.get("runtime_manifest"), dict)
+        else None,
+    )
+    for candidate in candidates:
+        normalized = str(candidate or "").strip().lower()
+        if re.fullmatch(r"[0-9a-f]{40}", normalized):
+            return normalized
+    return ""
+
+
+def _git_heads_match(left: str, right: str) -> bool:
+    return bool(
+        re.fullmatch(r"[0-9a-f]{40}", left)
+        and re.fullmatch(r"[0-9a-f]{40}", right)
+        and left == right
+    )
+
+
+def _build_artifact_freshness(
+    *,
+    artifacts: dict[str, Any],
+    current_git_head: str,
+) -> dict[str, Any]:
+    bindings = {
+        name: artifact_head
+        for name, payload in artifacts.items()
+        if (artifact_head := _artifact_git_head(payload))
+    }
+    artifact_git_heads = sorted(set(bindings.values()))
+    if current_git_head == "unknown":
+        status = "unverifiable"
+    elif any(
+        not _git_heads_match(artifact_head, current_git_head)
+        for artifact_head in bindings.values()
+    ):
+        status = "stale"
+    elif len(bindings) != len(artifacts):
+        status = "unbound"
+    else:
+        status = "fresh"
+    return {
+        "status": status,
+        "current_git_head": current_git_head,
+        "artifact_git_heads": artifact_git_heads,
+        "bound_artifact_count": len(bindings),
+        "required_artifact_count": len(artifacts),
+    }
+
+
 def _build_luxian_0609_release_meta() -> dict[str, Any]:
     gate = _read_json(LUXIAN_0609_RELEASE_GATE_PATH, {})
     evaluation = _read_json(LUXIAN_0609_EVAL_PATH, {})
@@ -121,21 +196,44 @@ def _build_luxian_0609_release_meta() -> dict[str, Any]:
         "跨表联查待接入": int(implementation_status.get("needs_data_linkage") or LUXIAN_0609_COVERAGE_SUMMARY["跨表联查待接入"]),
         "待实现规则": int(implementation_status.get("needs_rule_implementation") or LUXIAN_0609_COVERAGE_SUMMARY["待实现规则"]),
     }
-    release_ready = bool(gate.get("release_ready")) if isinstance(gate, dict) else False
+    source_release_ready = (
+        bool(gate.get("release_ready")) if isinstance(gate, dict) else False
+    )
+    artifact_freshness = _build_artifact_freshness(
+        artifacts={
+            "release_gate": gate,
+            "evaluation": evaluation,
+            "work_packages": work_packages,
+            "page_evidence": page_evidence,
+        },
+        current_git_head=_current_git_head(),
+    )
+    release_ready = (
+        source_release_ready and artifact_freshness["status"] == "fresh"
+    )
     passed = int(gate_summary.get("passed_checks") or 0)
     failed = int(gate_summary.get("failed_checks") or 0)
     unverified = int(gate_summary.get("unverified_checks") or 0)
-    coverage_status = (
+    gate_status = (
         "正式上线闸门已通过。"
         if release_ready
         else f"正式上线闸门未通过：通过 {passed} 项，失败 {failed} 项，未验证 {unverified} 项；"
         f"当前 {coverage_summary['已达正式口径']} 条达到 formal_ready，其余规则仍需补证据、跨文书或跨表执行链路。"
     )
+    freshness_prefix = {
+        "fresh": "",
+        "stale": "验收工件已陈旧：工件版本与当前运行版本不一致，历史结论仅供参考。 ",
+        "unbound": "验收工件未绑定当前运行版本：历史结论仅供参考。 ",
+        "unverifiable": "当前运行版本无法核验：验收工件结论仅供参考。 ",
+    }[artifact_freshness["status"]]
+    coverage_status = f"{freshness_prefix}{gate_status}"
     return {
         "coverage_summary": coverage_summary,
         "coverage_status": coverage_status,
+        "artifact_freshness": artifact_freshness,
         "release_gate_summary": {
             "release_ready": release_ready,
+            "source_release_ready": source_release_ready,
             "passed_checks": passed,
             "failed_checks": failed,
             "unverified_checks": unverified,
