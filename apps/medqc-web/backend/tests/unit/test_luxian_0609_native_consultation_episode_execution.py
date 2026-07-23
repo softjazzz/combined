@@ -20,6 +20,7 @@ from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     SourceEvidenceQueryError,
 )
+from app.services.luxian_0609 import source_evidence_reader
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
@@ -173,6 +174,29 @@ def _window_session(*, rows_by_source, horizon_error=False, missing_admission=Fa
         created_at="2026-07-22T00:00:00+08:00",
         evaluation_as_of_date="2026-07-05",
         row_reader=reader,
+    )
+
+
+@pytest.mark.parametrize("source_key", ("inpat_drug_order", "inpat_nondrug_order"))
+def test_order_candidate_prefers_business_start_time_and_snapshot_keeps_it(source_key):
+    """会诊执行关联必须按医嘱业务时间，而不是通用文书记录时间排序。"""
+
+    row = {
+        "record_time": "2026-07-20 18:00:00",
+        "start_time": "2026-07-20 10:00:00",
+        "order_time": "2026-07-20 09:00:00",
+        "prescribed_datetime": "2026-07-20 08:00:00",
+    }
+
+    observed = episode._row_time(row, source_key=source_key)
+
+    assert observed is not None
+    assert observed.value == datetime(2026, 7, 20, 10, 0, 0)
+    assert {"start_time", "order_time", "prescribed_datetime"}.issubset(
+        source_evidence_reader._NATIVE_SOURCE_FIELDS[source_key]
+    )
+    assert {"start_time", "order_time", "prescribed_datetime"}.issubset(
+        source_evidence_reader._SNAPSHOT_SOURCE_FIELDS[source_key]
     )
 
 
@@ -1727,6 +1751,17 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
 @pytest.mark.parametrize(
     ("action_type", "source_key", "candidate_row"),
     (
+        (
+            "medication",
+            "inpat_drug_order",
+            {
+                "generic_name": "会诊后调整目标用药",
+                "start_time": "2026-07-20 02:00:00",
+                # 验证业务开始时间优先于同步/归档记录时间。
+                "record_time": "2026-07-20 18:00:00",
+                "record_content": "复查血常规",
+            },
+        ),
         ("test", "exam_master", {"exam_name": "会诊后完成目标检查", "report_time": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
         ("test", "labtest_master", {"labtest_subject": "会诊后完成目标检验", "report_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
         ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),

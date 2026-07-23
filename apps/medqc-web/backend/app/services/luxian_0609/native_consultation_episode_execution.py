@@ -466,11 +466,29 @@ def _parse_observed_time(value: Any) -> _ObservedTime | None:
     return _ObservedTime(parsed, "T" in normalized or " " in normalized)
 
 
-def _row_time(row: Mapping[str, Any]) -> _ObservedTime | None:
-    for key in (
-        "record_time", "prescribed_datetime", "report_time", "report_datetime",
-        "exam_time", "exam_datetime", "request_datetime", "request_surgery_datetime",
-    ):
+def _row_time(
+    row: Mapping[str, Any], *, source_key: str | None = None
+) -> _ObservedTime | None:
+    # 医嘱的开始/下达时间是执行关联的业务时序；通用 record_time 可能只是
+    # 同步或归档时间，不能覆盖它。其余文书仍按自身记录/报告时间处理。
+    if source_key in {"inpat_drug_order", "inpat_nondrug_order"}:
+        time_keys = (
+            "start_time",
+            "order_time",
+            "prescribed_datetime",
+            "record_time",
+        )
+    else:
+        time_keys = (
+            "record_time",
+            "report_time",
+            "report_datetime",
+            "exam_time",
+            "exam_datetime",
+            "request_datetime",
+            "request_surgery_datetime",
+        )
+    for key in time_keys:
         parsed = _parse_observed_time(row.get(key))
         if parsed is not None:
             return parsed
@@ -595,7 +613,7 @@ def _candidate_documents(
             continue
         source_is_complete = True
         for index, row in enumerate(rows, start=1):
-            observed_time = _row_time(row)
+            observed_time = _row_time(row, source_key=source_key)
             text = _candidate_text(row)
             # 住院窗口外的行不属于本次就诊，既不能作为执行证据，也不能
             # 反过来宣称本次候选范围不完整。
