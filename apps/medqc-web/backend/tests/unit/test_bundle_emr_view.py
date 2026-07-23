@@ -144,6 +144,34 @@ def test_build_documents_should_keep_distinct_pathology_reports_with_distinct_st
     ]
 
 
+def test_build_documents_should_restore_order_display_time_from_persisted_source_fields():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "inpat_drug_order",
+                    "document_id": "order-1",
+                    "document_title": "长期医嘱",
+                    "content": "药品医嘱正文。",
+                    "source_fields": [
+                        {
+                            "source_field": "prescribed_datetime",
+                            "raw_value_preview": "2025-10-07 08:53:16",
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+    tree = build_documents_tree(documents)
+
+    assert documents[0]["sort_time"] == "2025-10-07 08:53:16"
+    order_node = next(node for group in tree for node in group["children"] if node["doc_type"] == "inpat_drug_order")
+    assert order_node["record_time"] == "2025-10-07 08:53:16"
+
+
 def test_build_documents_should_merge_only_named_admission_diagnoses():
     domain_bundles = {
         "admission": {

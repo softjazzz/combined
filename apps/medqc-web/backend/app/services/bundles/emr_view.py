@@ -272,6 +272,19 @@ def _build_doc_key(doc_type: str, document_id: str, index: int) -> str:
     return f"{doc_type}::{suffix}"
 
 
+def _source_field_preview(raw_doc: dict[str, Any], field_names: tuple[str, ...]) -> str:
+    wanted = set(field_names)
+    for field in raw_doc.get("source_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        if _safe_text(field.get("source_field")) not in wanted:
+            continue
+        value = _safe_text(field.get("raw_value_preview"))
+        if value:
+            return value
+    return ""
+
+
 def _normalize_source_document(
     *,
     raw_doc: dict[str, Any],
@@ -283,6 +296,13 @@ def _normalize_source_document(
     doc_title = _safe_text(raw_doc.get("document_title"))
     content = _safe_text(raw_doc.get("content"))
     sort_time = _safe_text(raw_doc.get("display_time") or raw_doc.get("record_time"))
+    if not sort_time and doc_type in _ORDER_DOC_TYPES:
+        # 已保存的旧领域包可能还没有 display_time；仅从已保存的受控字段摘要
+        # 回填医嘱开始/下达时间，避免浏览历史病历时误显示“未返回时间”。
+        sort_time = _source_field_preview(
+            raw_doc,
+            ("start_time", "order_time", "prescribed_datetime"),
+        )
     source_record_time = _safe_text(raw_doc.get("record_time"))
     record_time_note = ""
     if doc_type == "first_course_record" and not source_record_time and sort_time:
