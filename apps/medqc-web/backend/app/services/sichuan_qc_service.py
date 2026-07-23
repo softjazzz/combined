@@ -1520,6 +1520,9 @@ class SichuanQCService:
                 "evidence": item.get("evidence"),
                 "suggestion": item.get("suggestion"),
                 "confidence": item.get("confidence"),
+                # LX0609 原生 RuleDecision 已把原因码收敛为受控枚举；正式服务
+                # 投影必须保留该安全字段，不能只停留在内部聚合对象。
+                "reason_code": item.get("reason_code"),
                 "applicability": item.get("applicability"),
                 "evidence_verified": item.get("evidence_verified"),
                 "metadata": item.get("metadata"),

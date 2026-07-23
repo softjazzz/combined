@@ -5892,6 +5892,7 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
                 "rule_name": "入院记录24小时内完成",
                 "status": "compliant",
                 "is_compliant": True,
+                "reason_code": "requirement_satisfied",
                 "metadata": {},
             },
             {
@@ -5930,6 +5931,7 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
     assert result["evaluation_summary"]["compliance_denominator"] == 1
     assert result["evaluation_summary"]["compliance_rate"] == 100.0
     assert result["evaluation_summary"]["luxian_0609_summary"]["data_gap_count"] == 1
+    assert result["evaluation_results"][0]["reason_code"] == "requirement_satisfied"
 
 
 def test_trigger_gate_should_ignore_clear_negated_trigger_phrases():
