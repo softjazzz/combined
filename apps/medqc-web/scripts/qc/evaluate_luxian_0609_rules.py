@@ -2,15 +2,31 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
+    atomic_write_json,
+    atomic_write_text,
+    build_artifact_metadata,
+    file_sha256,
+    runtime_manifest_hash,
+    validate_runtime_manifest_current,
+)
+
 CATALOG_PATH = ROOT / "docs" / "0602" / "luxian_0609_formal_rule_catalog.json"
 GOLDEN_CASES_PATH = ROOT / "docs" / "0602" / "泸县0609质控点-golden-cases.json"
+RUNTIME_MANIFEST_PATH = ROOT / "docs" / "0602" / "luxian_0609_runtime_manifest.json"
 EVAL_JSON_PATH = ROOT / "docs" / "0602" / "luxian_0609_qc_eval.json"
 EVAL_CSV_PATH = ROOT / "docs" / "0602" / "luxian_0609_qc_eval.csv"
 EVAL_MD_PATH = ROOT / "docs" / "0602" / "泸县0609质控点评估报告.md"
@@ -101,6 +117,38 @@ def load_predictions(path: Path | None, catalog: list[dict[str, Any]]) -> dict[t
     return predictions
 
 
+def validate_prediction_binding(
+    *,
+    prediction_path: Path | None,
+    runtime_manifest: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if prediction_path is None:
+        return {}, {"status": "not_provided", "reason_codes": ["prediction_not_provided"]}
+    if not prediction_path.exists():
+        return {}, {"status": "invalid", "reason_codes": ["prediction_file_missing"]}
+    data = load_json(prediction_path)
+    if not isinstance(data, dict):
+        return {}, {"status": "invalid", "reason_codes": ["prediction_not_versioned"]}
+    expected_head = str(runtime_manifest.get("git_head") or "").strip().lower()
+    expected_hash = runtime_manifest_hash(runtime_manifest)
+    reasons: list[str] = []
+    if not str(data.get("schema_version") or "").startswith("lx0609-predictions-"):
+        reasons.append("prediction_schema_invalid")
+    if data.get("git_head") != expected_head:
+        reasons.append("prediction_git_head_mismatch")
+    if data.get("runtime_manifest_hash") != expected_hash:
+        reasons.append("prediction_runtime_manifest_hash_mismatch")
+    if data.get("evidence_scope") not in {"synthetic", "real", "mixed"}:
+        reasons.append("prediction_evidence_scope_invalid")
+    if reasons:
+        return {}, {"status": "invalid", "reason_codes": reasons}
+    return data, {
+        "status": "valid",
+        "reason_codes": [],
+        "evidence_scope": data["evidence_scope"],
+    }
+
+
 def iter_cases(golden: dict[str, Any]) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
     for rule in golden.get("rules") or []:
@@ -175,10 +223,33 @@ def ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4)
 
 
-def build_eval(*, prediction_path: Path | None = None) -> dict[str, Any]:
+def build_eval(
+    *,
+    prediction_path: Path | None = None,
+    runtime_manifest: dict[str, Any] | None = None,
+    evidence_scope: str | None = None,
+    current_git_head: str | None = None,
+) -> dict[str, Any]:
+    manifest = runtime_manifest or load_json(RUNTIME_MANIFEST_PATH)
+    validate_runtime_manifest_current(
+        manifest,
+        observed_git_head=current_git_head,
+    )
     catalog = load_json(CATALOG_PATH)
     golden = load_json(GOLDEN_CASES_PATH)
-    predictions = load_predictions(prediction_path, catalog)
+    prediction_payload, prediction_binding = validate_prediction_binding(
+        prediction_path=prediction_path,
+        runtime_manifest=manifest,
+    )
+    predictions = (
+        load_predictions(prediction_path, catalog)
+        if prediction_binding["status"] == "valid" and prediction_payload
+        else {}
+    )
+    bound_scope = prediction_binding.get("evidence_scope")
+    if bound_scope and evidence_scope and bound_scope != evidence_scope:
+        raise ValueError("evaluation evidence scope cannot override prediction scope")
+    resolved_evidence_scope = str(bound_scope or evidence_scope or "mixed")
     cases = iter_cases(golden)
     cases_by_rule: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for case in cases:
@@ -279,11 +350,29 @@ def build_eval(*, prediction_path: Path | None = None) -> dict[str, Any]:
 
     summary = Counter(item["launch_status"] for item in results)
     status_summary = Counter(str(item.get("implementation_status") or "") for item in results)
+    models = (
+        manifest.get("runtime", {}).get("models", {})
+        if isinstance(manifest.get("runtime"), dict)
+        else {}
+    )
     return {
+        **build_artifact_metadata(
+            runtime_manifest=manifest,
+            schema_version="lx0609-qc-eval-v2",
+            evidence_scope=resolved_evidence_scope,
+        ),
         "version": "2026-06-10",
         "rule_set_key": "luxian_0609_qc_v1",
-        "model": "qwen3.5-35b-a3b",
+        "model": str(models.get("primary") or ""),
         "prediction_source": str(prediction_path) if prediction_path else "",
+        "prediction_binding": prediction_binding,
+        "input_hashes": {
+            "catalog": file_sha256(CATALOG_PATH),
+            "golden_cases": file_sha256(GOLDEN_CASES_PATH),
+            "predictions": file_sha256(prediction_path)
+            if prediction_path is not None and prediction_path.exists()
+            else "",
+        },
         "summary": {
             "rule_count": len(results),
             "launch_status": dict(summary),
@@ -310,7 +399,6 @@ def build_eval(*, prediction_path: Path | None = None) -> dict[str, Any]:
 
 
 def write_eval(data: dict[str, Any]) -> None:
-    EVAL_JSON_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     fieldnames = [
         "qc_point_id",
         "source_index",
@@ -339,15 +427,20 @@ def write_eval(data: dict[str, Any]) -> None:
         "not_determinable_reasons",
         "not_ready_reasons",
     ]
-    with EVAL_CSV_PATH.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for item in data["results"]:
-            row = dict(item)
-            row["not_ready_reasons"] = "；".join(item.get("not_ready_reasons") or [])
-            row["not_determinable_reasons"] = "；".join(item.get("not_determinable_reasons") or [])
-            writer.writerow({key: row.get(key, "") for key in fieldnames})
+    handle = io.StringIO(newline="")
+    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+    writer.writeheader()
+    for item in data["results"]:
+        row = dict(item)
+        row["not_ready_reasons"] = "；".join(item.get("not_ready_reasons") or [])
+        row["not_determinable_reasons"] = "；".join(
+            item.get("not_determinable_reasons") or []
+        )
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+    atomic_write_text(EVAL_CSV_PATH, handle.getvalue())
     write_markdown(data)
+    # JSON 是页面与 release gate 的唯一权威输出，最后替换以避免派生文件跨代冒充完成。
+    atomic_write_json(EVAL_JSON_PATH, data)
 
 
 def format_percent(value: float | None) -> str:
@@ -405,7 +498,7 @@ def write_markdown(data: dict[str, Any]) -> None:
                 reasons=reasons.replace("|", "/"),
             )
         )
-    EVAL_MD_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(EVAL_MD_PATH, "\n".join(lines) + "\n")
 
 
 def main() -> int:
@@ -413,9 +506,17 @@ def main() -> int:
     parser.add_argument("--predictions", type=Path, default=None, help="optional prediction result JSON")
     parser.add_argument("--write", action="store_true", help="write eval json/csv/markdown")
     parser.add_argument("--fail-on-not-ready", action="store_true", help="return non-zero if any rule is not ready")
+    parser.add_argument(
+        "--evidence-scope",
+        choices=("synthetic", "real", "mixed"),
+        default=None,
+    )
     args = parser.parse_args()
 
-    data = build_eval(prediction_path=args.predictions)
+    data = build_eval(
+        prediction_path=args.predictions,
+        evidence_scope=args.evidence_scope,
+    )
     if args.write:
         write_eval(data)
     print(f"rule_count={data['summary']['rule_count']}")

@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
+    atomic_write_json,
+    atomic_write_text,
+    build_artifact_metadata,
+    file_sha256,
+    validate_runtime_manifest_current,
+)
+
 DOCS_DIR = ROOT / "docs" / "0602"
+RUNTIME_MANIFEST_PATH = DOCS_DIR / "luxian_0609_runtime_manifest.json"
 
 PAGE_PATH = ROOT / "src" / "views" / "workstation-v4" / "CustomerSampleValidationView.vue"
 PAGE_TEST_PATH = ROOT / "tests" / "unit" / "views" / "workstation-v4" / "CustomerSampleValidationView.spec.ts"
@@ -56,14 +72,75 @@ def capability(
     }
 
 
-def build_evidence() -> dict[str, Any]:
+def _source_state(paths: list[Path]) -> str:
+    relative_paths = [str(path.relative_to(ROOT)) for path in paths]
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain", "--", *relative_paths],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if result.returncode != 0:
+        return "unknown"
+    return "dirty" if result.stdout.strip() else "clean"
+
+
+def _input_hashes(paths: list[Path]) -> dict[str, str]:
+    return {
+        str(path.relative_to(ROOT)).replace("\\", "/"): file_sha256(path)
+        if path.exists()
+        else hashlib.sha256(b"").hexdigest()
+        for path in paths
+    }
+
+
+def build_evidence(
+    *,
+    runtime_manifest: dict[str, Any] | None = None,
+    evidence_scope: str = "mixed",
+    current_git_head: str | None = None,
+) -> dict[str, Any]:
+    manifest = runtime_manifest or json.loads(
+        RUNTIME_MANIFEST_PATH.read_text(encoding="utf-8")
+    )
+    validate_runtime_manifest_current(
+        manifest,
+        observed_git_head=current_git_head,
+    )
     page = read_text(PAGE_PATH)
     page_test = read_text(PAGE_TEST_PATH)
     service = read_text(SERVICE_PATH)
     router = read_text(ROUTER_PATH)
     batch_drawer = read_text(BATCH_DRAWER_PATH)
+    source_paths = [
+        PAGE_PATH,
+        PAGE_TEST_PATH,
+        SERVICE_PATH,
+        ROUTER_PATH,
+        BATCH_DRAWER_PATH,
+    ]
+    source_state = _source_state(source_paths)
 
     capabilities: list[dict[str, Any]] = []
+    capabilities.append(
+        capability(
+            key="source_version_binding",
+            title="页面证据源码绑定",
+            status="pass" if source_state == "clean" else "fail",
+            evidence=["页面证据输入文件与当前 Git HEAD 一致。"]
+            if source_state == "clean"
+            else [],
+            missing=[]
+            if source_state == "clean"
+            else ["页面证据输入包含未提交改动或无法核验，不能归属于当前 Git HEAD。"],
+            recommendation="提交相关源码并重新生成页面闭环证据。",
+        )
+    )
 
     rule_set_selection_ready = has_all(
         page,
@@ -299,9 +376,16 @@ def build_evidence() -> dict[str, Any]:
     ]
 
     return {
+        **build_artifact_metadata(
+            runtime_manifest=manifest,
+            schema_version="lx0609-page-evidence-v2",
+            evidence_scope=evidence_scope,
+        ),
         "version": "2026-06-10",
         "page": "/workstation-v4/customer-sample-validation",
         "rule_set_key": "luxian_0609_qc_v1",
+        "source_state": source_state,
+        "input_hashes": _input_hashes(source_paths),
         "summary": {
             "capability_count": len(capabilities),
             "status_counts": status_counts,
@@ -365,12 +449,18 @@ def build_markdown(evidence: dict[str, Any]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build Luxian 0609 customer sample page closure evidence.")
     parser.add_argument("--write", action="store_true", help="Write JSON and Markdown evidence files.")
+    parser.add_argument(
+        "--evidence-scope",
+        choices=("synthetic", "real", "mixed"),
+        default="mixed",
+    )
     args = parser.parse_args()
 
-    evidence = build_evidence()
+    evidence = build_evidence(evidence_scope=args.evidence_scope)
     if args.write:
-        OUTPUT_JSON_PATH.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
-        OUTPUT_MD_PATH.write_text(build_markdown(evidence), encoding="utf-8")
+        atomic_write_text(OUTPUT_MD_PATH, build_markdown(evidence))
+        # JSON 是页面与 release gate 的唯一权威输出，最后替换。
+        atomic_write_json(OUTPUT_JSON_PATH, evidence)
     print(json.dumps(evidence["summary"], ensure_ascii=False, indent=2))
     return 0 if evidence["summary"]["page_verified"] else 1
 

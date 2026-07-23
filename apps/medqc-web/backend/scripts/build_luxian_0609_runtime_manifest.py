@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -30,6 +33,7 @@ from app.services.qc_rule_sets import get_sichuan_rule_set  # noqa: E402
 SCHEMA_VERSION = "lx0609-runtime-manifest-v1"
 RULE_SET_KEY = "luxian_0609_qc_v1"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_SCOPES = frozenset({"synthetic", "real", "mixed"})
 
 _SAFE_FLAG_FIELDS: tuple[tuple[str, str], ...] = (
     ("trigger_gate", "LUXIAN_0609_TRIGGER_GATE_ENABLED"),
@@ -218,16 +222,114 @@ def build_runtime_manifest(
     }
 
 
-def _git_head() -> str:
+def runtime_manifest_hash(runtime_manifest: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        dict(runtime_manifest),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def current_git_head(project_root: Path = PROJECT_ROOT) -> str:
     try:
-        return subprocess.check_output(
+        value = subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_ROOT,
+            cwd=project_root,
             text=True,
             timeout=5,
-        ).strip()
+        ).strip().lower()
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+    return (
+        value
+        if len(value) == 40 and all(char in "0123456789abcdef" for char in value)
+        else "unknown"
+    )
+
+
+def validate_runtime_manifest_current(
+    runtime_manifest: Mapping[str, Any],
+    *,
+    observed_git_head: str | None = None,
+) -> str:
+    manifest_head = str(runtime_manifest.get("git_head") or "").strip().lower()
+    current_head = (
+        str(observed_git_head).strip().lower()
+        if observed_git_head is not None
+        else current_git_head()
+    )
+    if runtime_manifest.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("invalid LX0609 runtime manifest schema")
+    if current_head == "unknown" or manifest_head != current_head:
+        raise ValueError("LX0609 runtime manifest does not match current git head")
+    return current_head
+
+
+def build_artifact_metadata(
+    *,
+    runtime_manifest: Mapping[str, Any],
+    schema_version: str,
+    evidence_scope: str,
+    generated_at: str | None = None,
+) -> dict[str, str]:
+    git_head = str(runtime_manifest.get("git_head") or "").strip().lower()
+    if runtime_manifest.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("invalid LX0609 runtime manifest schema")
+    if len(git_head) != 40 or any(char not in "0123456789abcdef" for char in git_head):
+        raise ValueError("runtime manifest requires a full git head")
+    if evidence_scope not in EVIDENCE_SCOPES:
+        raise ValueError("invalid LX0609 evidence scope")
+    normalized_schema = str(schema_version or "").strip()
+    if not normalized_schema:
+        raise ValueError("artifact schema version is required")
+    return {
+        "schema_version": normalized_schema,
+        "generated_at": generated_at
+        or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "git_head": git_head,
+        "runtime_manifest_hash": runtime_manifest_hash(runtime_manifest),
+        "evidence_scope": evidence_scope,
+    }
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as file:
+            temporary_path = Path(file.name)
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    atomic_write_text(
+        path,
+        json.dumps(dict(payload), ensure_ascii=False, indent=2) + "\n",
+    )
+
+
+def _git_head() -> str:
+    return current_git_head()
 
 
 def main() -> int:
@@ -241,9 +343,7 @@ def main() -> int:
     )
     content = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        with args.output.open("w", encoding="utf-8", newline="\n") as file:
-            file.write(content)
+        atomic_write_text(args.output, content)
     else:
         print(content, end="")
     return 0
