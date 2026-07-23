@@ -334,7 +334,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-026": ("diagnosis",),
     # 018 仅接受 diagnosis_type=主要诊断 的结构化首页诊断作为对照事实。
     "LX0609-018": ("diagnosis",),
-    "LX0609-027": ("diagnosis",),
+    # 027 需要同一快照内的恶性诊断与出院记录，不能只绑定触发诊断。
+    "LX0609-027": ("diagnosis", "discharge_record"),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，
     # 禁止从病程关键词推断当前手术。
     "LX0609-024": (

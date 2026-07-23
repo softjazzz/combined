@@ -232,6 +232,45 @@ def test_020_023_freeze_admission_and_authoritative_horizon_in_one_session() -> 
     assert any(fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts)
 
 
+def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "diagnosis":
+            return _rows(source_key, [{"diagnosis_code": "C00.0"}])
+        if source_key == "discharge_record":
+            return _rows(source_key, [{"document_id": "synthetic-discharge"}])
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-027",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls == ["diagnosis", "discharge_record"]
+    assert session.materials.has_source("diagnosis")
+    assert session.materials.has_source("discharge_record")
+    assert tuple(item.source_key for item in session.snapshot.observations) == (
+        "diagnosis",
+        "discharge_record",
+    )
+    assert "synthetic-discharge" not in repr(session.snapshot.to_safe_dict())
+
+
+def test_027_legacy_executor_prefetches_discharge_record() -> None:
+    assert resolve_legacy_executor_material_source_keys(
+        ("tumor_pathology",),
+        selected_rule_ids=("LX0609-027",),
+    ) == ("diagnosis", "discharge_record")
+
+
 def _build(*, selected_rule_ids=("LX0609-030",), row_reader, **overrides):
     values = {
         "selected_rule_ids": selected_rule_ids,

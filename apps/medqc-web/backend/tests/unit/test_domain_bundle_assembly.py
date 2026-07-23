@@ -322,6 +322,41 @@ def test_assemble_final_record_bundle_should_fallback_to_admission_record_time(m
     assert bundle["structured_context"]["admission_datetime"] == "2026-01-24 20:42:25"
 
 
+def test_running_bundle_projects_discharge_record_without_expanding_medical_text(monkeypatch):
+    def _fake_select_records(**kwargs):
+        table = kwargs["table"]
+        if table == "admission_record":
+            return [{"document_id": "admission-1", "record_content": "入院主文书"}]
+        if table == "discharge_record":
+            return [{"document_id": "discharge-1", "record_content": "出院补充文书"}]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_build_scene_attention_artifacts", lambda **kwargs: ({}, []))
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda schema, table: ())
+    monkeypatch.setattr(
+        assembly_module,
+        "_fetch_patient_profile",
+        lambda **kwargs: {"patient_name": "", "mobile": "", "id_card": ""},
+    )
+
+    bundle = assembly_module.assemble_running_record_bundle(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    assert bundle["document_hits"]["discharge_record"] is True
+    assert "discharge_record" in bundle["source_doc_priority"]
+    assert "出院补充文书" not in bundle["medical_text"]
+    assert any(
+        item["document_type"] == "discharge_record"
+        for item in bundle["source_documents"]
+    )
+
+
 def test_assemble_frontpage_bundle_should_share_admission_resolution_with_frontpage_coding(monkeypatch):
     def _fake_select_records(**kwargs):
         table = kwargs["table"]

@@ -2838,9 +2838,16 @@ def run_sync(
                         run_warnings.append(f"{table_name}: visit_index 写入失败")
                         logger.warning("visit_index 更新失败（不阻断主同步）: %s", visit_index_exc)
                     try:
-                        if resolved_scene in {"running", "final", "frontpage", "coding"}:
+                        refresh_scenes = [
+                            resolved_scene
+                        ] if resolved_scene in {"running", "final", "frontpage", "coding"} else []
+                        # 出院记录是 running bundle 的补充投影。同步该来源后必须
+                        # 重建同批 running bundle，不能等待下一次入院记录同步。
+                        if table_name == "discharge_record" and "running" not in refresh_scenes:
+                            refresh_scenes.append("running")
+                        for refresh_scene in refresh_scenes:
                             refresh_scene_bundles_for_rows(
-                                scene=resolved_scene,
+                                scene=refresh_scene,
                                 rows=rows,
                                 policy_version=str(policy_version or "").strip(),
                             )

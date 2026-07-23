@@ -91,6 +91,9 @@ _RUNNING_DOC_PRIORITY: tuple[str, ...] = (
     "crisis_value_record",
     "docpat_commu_record",
 )
+# 已出院病例仍可能通过 running bundle 进入 LX0609 主链。出院记录在此只作
+# 补充投影：进入文书清单和 supporting documents，但绝不拼入 running 的 medical_text。
+_RUNNING_SUPPLEMENTARY_DOC_PRIORITY: tuple[str, ...] = ("discharge_record",)
 _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "discharge_record",
     "discharge_record_diagnosis",
@@ -1596,8 +1599,20 @@ def _assemble_scene_bundle(
         raise ValueError(f"Unsupported scene for bundle assembly: {scene}")
 
     priority = _SCENE_DOC_PRIORITY[scene]
+    fetch_priority = tuple(
+        dict.fromkeys(
+            (
+                *priority,
+                *(
+                    _RUNNING_SUPPLEMENTARY_DOC_PRIORITY
+                    if scene == "running"
+                    else ()
+                ),
+            )
+        )
+    )
     docs: dict[str, list[dict[str, Any]]] = {}
-    for table_name in priority:
+    for table_name in fetch_priority:
         docs[table_name] = _select_records(
             schema=source_schema,
             table=table_name,
@@ -1644,11 +1659,40 @@ def _assemble_scene_bundle(
         context_rows=context_rows,
     )
     department = str(structured_context.get("department") or "").strip()
-    priority_with_attention = tuple(dict.fromkeys([*priority, *[name for name in _SCENE_ATTENTION_PRIORITY if docs.get(name)]]))
-    document_hits = _build_document_hits(docs, priority_with_attention)
-    source_table_coverage = _build_source_table_coverage(docs, priority_with_attention)
-    assembly_coverage = _build_assembly_coverage(docs, priority_with_attention)
-    medical_text = _build_medical_text(docs, priority_with_attention, source_schema)
+    supplementary_projection = tuple(
+        table_name
+        for table_name in _RUNNING_SUPPLEMENTARY_DOC_PRIORITY
+        if scene == "running" and docs.get(table_name)
+    )
+    source_priority = tuple(
+        dict.fromkeys(
+            [
+                *priority,
+                *supplementary_projection,
+                *[
+                    name
+                    for name in _SCENE_ATTENTION_PRIORITY
+                    if docs.get(name)
+                ],
+            ]
+        )
+    )
+    prompt_priority = tuple(
+        dict.fromkeys(
+            [
+                *priority,
+                *[
+                    name
+                    for name in _SCENE_ATTENTION_PRIORITY
+                    if docs.get(name)
+                ],
+            ]
+        )
+    )
+    document_hits = _build_document_hits(docs, source_priority)
+    source_table_coverage = _build_source_table_coverage(docs, source_priority)
+    assembly_coverage = _build_assembly_coverage(docs, source_priority)
+    medical_text = _build_medical_text(docs, prompt_priority, source_schema)
 
     data_quality_flags: list[str] = []
     for table_name, hit in document_hits.items():
@@ -1681,7 +1725,7 @@ def _assemble_scene_bundle(
         mobile=patient_profile["mobile"],
         id_card=patient_profile["id_card"],
     )
-    bundle["source_doc_priority"] = list(priority_with_attention)
+    bundle["source_doc_priority"] = list(source_priority)
     bundle["compat_strategy"] = "dual-read-single-write"
     bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
     bundle["source_documents"] = source_documents

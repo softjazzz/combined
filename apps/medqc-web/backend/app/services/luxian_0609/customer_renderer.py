@@ -32,6 +32,7 @@ CUSTOMER_RESULT_KEYS = frozenset(
         "evidence",
         "suggestion",
         "confidence",
+        "reason_code",
         "evidence_items",
     }
 )
@@ -171,6 +172,8 @@ def render_luxian_0609_customer_result(
         "evidence": evidence,
         "suggestion": suggestion,
         "confidence": decision.confidence,
+        # 仅返回 reducer 已验证的受控枚举码；不返回快照、文书、坐标或模型原文。
+        "reason_code": _safe_code(decision.reason_code),
         "evidence_items": [],
     }
     _emit_safe_trace(

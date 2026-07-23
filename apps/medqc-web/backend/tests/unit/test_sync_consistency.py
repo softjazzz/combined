@@ -243,7 +243,12 @@ def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
     monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
     monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
-    monkeypatch.setattr(etl_sync, "refresh_scene_bundles_for_rows", lambda **_kwargs: None)
+    refresh_calls: list[dict] = []
+    monkeypatch.setattr(
+        etl_sync,
+        "refresh_scene_bundles_for_rows",
+        lambda **kwargs: refresh_calls.append(kwargs),
+    )
 
     result = etl_sync.run_sync(
         sync_date="2026-05-25",
@@ -272,6 +277,7 @@ def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
     assert final_progress["remaining"] == 4
     assert final_progress["missing_mr"] == 4
     assert final_progress["detail_only"] == 4
+    assert [call["scene"] for call in refresh_calls] == ["running"]
 
 
 def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):

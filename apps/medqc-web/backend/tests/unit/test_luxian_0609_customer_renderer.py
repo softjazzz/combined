@@ -102,6 +102,7 @@ def test_renderer_maps_only_reducer_state_to_customer_status(
 
     assert result["status"] == result["result_status"] == customer_status
     assert result["is_compliant"] is is_compliant
+    assert result["reason_code"] == _reduced(final_state).reason_code
     assert set(result) == CUSTOMER_RESULT_KEYS
     assert result["evidence_items"] == []
     assert "metadata" not in result
@@ -212,12 +213,12 @@ def test_safe_trace_is_separate_and_sink_failure_cannot_change_customer_result()
     assert {
         "snapshot_hash",
         "decision_fingerprint",
-        "reason_code",
         "fact_refs",
         "evaluator_version",
         "executor_key",
         "final_state",
     }.isdisjoint(result)
+    assert result["reason_code"] == decision.reason_code
 
     def explode(_payload):
         raise RuntimeError("trace sink failure Bearer secret 13800138000")
