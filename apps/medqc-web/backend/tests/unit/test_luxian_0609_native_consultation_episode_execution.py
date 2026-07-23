@@ -1665,7 +1665,7 @@ async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_sour
 
 
 @pytest.mark.asyncio
-async def test_medication_recommendation_absent_keeps_unknown_when_drug_source_incomplete(monkeypatch):
+async def test_medication_recommendation_absent_is_data_gap_when_drug_source_incomplete(monkeypatch):
     source_rows = _incomplete_drug_source_rows()
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     client = _SequentialClient(
@@ -1680,7 +1680,43 @@ async def test_medication_recommendation_absent_keeps_unknown_when_drug_source_i
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+
+
+def test_order_candidates_over_course_limit_remain_available_as_compact_positive_evidence():
+    """高频医嘱不能因超过病程文书上限被整源丢弃。"""
+
+    source_rows = {
+        "inpat_drug_order": tuple(
+            {
+                "generic_name": f"医嘱药品{index}",
+                "start_time": f"2026-07-20 {index % 24:02d}:00:00",
+                "record_content": "不应进入会诊执行候选正文",
+            }
+            for index in range(13)
+        )
+    }
+    session = _window_session(rows_by_source=source_rows)
+
+    projection = episode._candidate_documents(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        stay_window=episode._resolve_execution_stay_window(
+            evidence_materials=session.materials,
+            evidence_snapshot=session.snapshot,
+        ),
+    )
+
+    candidates = [
+        item for item in projection.candidates if item.source_key == "inpat_drug_order"
+    ]
+    assert len(candidates) == 13
+    assert "inpat_drug_order" not in projection.source_incomplete_keys
+    assert all("不应进入会诊执行候选正文" not in item.text for item in candidates)
 
 
 @pytest.mark.asyncio
@@ -1703,7 +1739,7 @@ async def test_specific_execution_stays_compliant_when_unrelated_source_is_incom
 
 
 @pytest.mark.asyncio
-async def test_other_recommendation_absent_uses_high_confidence_llm_judgment(monkeypatch):
+async def test_other_recommendation_absent_is_data_gap_when_needed_source_is_incomplete(monkeypatch):
     source_rows = _incomplete_drug_source_rows()
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
     client = _SequentialClient(
@@ -1718,7 +1754,7 @@ async def test_other_recommendation_absent_uses_high_confidence_llm_judgment(mon
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
 
 
 @pytest.mark.asyncio
@@ -1749,7 +1785,7 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("action_type", "source_key", "candidate_row"),
+    ("action_type", "source_key", "candidate_row", "execution_quote"),
     (
         (
             "medication",
@@ -1761,14 +1797,15 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
                 "record_time": "2026-07-20 18:00:00",
                 "record_content": "复查血常规",
             },
+            "会诊后调整目标用药",
         ),
-        ("test", "exam_master", {"exam_name": "会诊后完成目标检查", "report_time": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
-        ("test", "labtest_master", {"labtest_subject": "会诊后完成目标检验", "report_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
-        ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}),
+        ("test", "exam_master", {"exam_name": "会诊后完成目标检查", "report_time": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "复查血常规"),
+        ("test", "labtest_master", {"labtest_subject": "会诊后完成目标检验", "report_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "复查血常规"),
+        ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后转入目标病区"),
     ),
 )
 async def test_execution_linker_accepts_complete_master_and_nondrug_order_sources(
-    monkeypatch, action_type, source_key, candidate_row,
+    monkeypatch, action_type, source_key, candidate_row, execution_quote,
 ):
     """会诊后真实执行可来自主表或非药物医嘱，不能只投病程/明细表。"""
     source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
@@ -1789,6 +1826,7 @@ async def test_execution_linker_accepts_complete_master_and_nondrug_order_source
             "episode_ref": "consultation_record-1",
             "execution_state": "linked_specific",
             "execution_refs": [f"{source_key}-1"],
+            "execution_quotes": [execution_quote],
             "confidence": "high",
         }),
     )

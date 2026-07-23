@@ -53,6 +53,13 @@ _MAX_RECOMMENDATIONS = 24
 _MAX_RECOMMENDATION_CHARS = 240
 _MAX_CANDIDATES_PER_SOURCE = 12
 _MAX_CANDIDATE_CHARS = 1000
+_ORDER_EXECUTION_SOURCE_KEYS = frozenset(
+    {"inpat_drug_order", "inpat_nondrug_order"}
+)
+# 医嘱是高频结构化事件。保留紧凑候选可供模型确认正向落实；来源超过
+# 此上限时仍标记不完整，因此模型的 absent 绝不会生成确定性缺陷。
+_MAX_ORDER_CANDIDATES_PER_SOURCE = 100
+_MAX_ORDER_CANDIDATE_CHARS = 180
 _EXECUTION_SOURCE_KEYS = (
     "daily_course_record",
     "senior_course_record",
@@ -380,6 +387,7 @@ def _read_rows(
     source_schema: str | None,
     evidence_materials: Luxian0609EvidenceMaterialStore | None,
     evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+    allow_truncated: bool = False,
 ) -> list[dict[str, Any]]:
     try:
         if evidence_materials is not None:
@@ -396,7 +404,10 @@ def _read_rows(
                 raise _SourceGap()
             if observation.query_state.value == "error":
                 raise _SourceTechnical()
-            if observation.completeness is SourceCompleteness.TRUNCATED:
+            if (
+                observation.completeness is SourceCompleteness.TRUNCATED
+                and not allow_truncated
+            ):
                 raise _SourceGap()
             rows = [dict(row) for row in evidence_materials.bounded_rows(source_key)]
         else:
@@ -561,14 +572,26 @@ def _resolve_execution_stay_window(
     return _StayWindow(admission.day if admission is not None else None, horizon.day)
 
 
-def _candidate_text(row: Mapping[str, Any]) -> str:
-    fields = (
-        "document_title", "record_content", "generic_name", "brand_name", "drug_type",
-        "order_name", "exam_reason", "labtest_subject",
-        "exam_name", "exam_item_name", "item_name", "exam_result", "exam_impression",
-        "exam_conclusion", "impression", "conclusion", "lab_item_name", "result",
-        "abnormal_indicator", "surgery_name", "surgery_process",
-    )
+def _candidate_text(*, row: Mapping[str, Any], source_key: str) -> str:
+    if source_key in _ORDER_EXECUTION_SOURCE_KEYS:
+        # 医嘱关联只需要可辨识的结构化动作；不把冗长医嘱正文带入模型上下文。
+        fields = (
+            "generic_name",
+            "brand_name",
+            "drug_type",
+            "drug_apply_method",
+            "drug_frequency",
+            "order_name",
+            "order_type",
+        )
+    else:
+        fields = (
+            "document_title", "record_content", "generic_name", "brand_name", "drug_type",
+            "order_name", "exam_reason", "labtest_subject",
+            "exam_name", "exam_item_name", "item_name", "exam_result", "exam_impression",
+            "exam_conclusion", "impression", "conclusion", "lab_item_name", "result",
+            "abnormal_indicator", "surgery_name", "surgery_process",
+        )
     return _clean("；".join(_clean(row.get(key)) for key in fields if _clean(row.get(key))))
 
 
@@ -592,6 +615,7 @@ def _candidate_documents(
         else _EXECUTION_SOURCE_KEYS
     )
     for source_key in source_keys:
+        is_order_source = source_key in _ORDER_EXECUTION_SOURCE_KEYS
         try:
             rows = _read_rows(
                 source_key=source_key,
@@ -601,6 +625,7 @@ def _candidate_documents(
                 source_schema=source_schema,
                 evidence_materials=evidence_materials,
                 evidence_snapshot=evidence_snapshot,
+                allow_truncated=is_order_source,
             )
         except _SourceGap:
             source_incomplete_keys.add(source_key)
@@ -608,13 +633,31 @@ def _candidate_documents(
         except _SourceTechnical:
             source_technical = True
             continue
-        if len(rows) > _MAX_CANDIDATES_PER_SOURCE:
-            source_incomplete_keys.add(source_key)
-            continue
         source_is_complete = True
+        if evidence_snapshot is not None:
+            observation = next(
+                (
+                    item
+                    for item in evidence_snapshot.observations
+                    if item.source_key == source_key
+                ),
+                None,
+            )
+            if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
+                source_is_complete = False
+        source_limit = (
+            _MAX_ORDER_CANDIDATES_PER_SOURCE
+            if is_order_source
+            else _MAX_CANDIDATES_PER_SOURCE
+        )
+        if len(rows) > source_limit:
+            source_incomplete_keys.add(source_key)
+            if not is_order_source:
+                continue
+            rows = rows[:source_limit]
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row, source_key=source_key)
-            text = _candidate_text(row)
+            text = _candidate_text(row=row, source_key=source_key)
             # 住院窗口外的行不属于本次就诊，既不能作为执行证据，也不能
             # 反过来宣称本次候选范围不完整。
             if observed_time is not None and not stay_window.contains(observed_time):
@@ -622,7 +665,12 @@ def _candidate_documents(
             # 单行没有自身可核验的时间或语义内容时，不能让它进入时序关联。
             # 但它仍意味着“未观察到执行”不是完整否定；调用模型后若模型仅给
             # absent，020/023 必须保守为 candidate_scope_incomplete。
-            if observed_time is None or not text or len(text) > _MAX_CANDIDATE_CHARS:
+            text_limit = (
+                _MAX_ORDER_CANDIDATE_CHARS
+                if is_order_source
+                else _MAX_CANDIDATE_CHARS
+            )
+            if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
             candidates.append(_CandidateDocument(
@@ -832,7 +880,13 @@ def _execution_prompt(
     allowed_refs: dict[str, frozenset[str]] = {}
     for item in completed:
         related: list[dict[str, object]] = []
+        eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
+            item.recommendation.action_type,
+            frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
+        )
         for candidate in candidates:
+            if candidate.source_key not in eligible_sources:
+                continue
             if candidate.observed_time.day > item.opinion_time.day:
                 include = True
             elif candidate.observed_time.day < item.opinion_time.day:
@@ -966,6 +1020,7 @@ def _execution_outcome(
     completed_recommendations: Sequence[_CompletedRecommendation],
     assessments: Sequence[_ExecutionAssessment] | None,
     source_technical: bool = False,
+    source_incomplete_keys: frozenset[str] = frozenset(),
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -991,6 +1046,17 @@ def _execution_outcome(
         for item in assessments
         if item.execution_state == "absent"
     }
+    if absent_refs and any(
+        item.recommendation.recommendation_ref in absent_refs
+        and bool(
+            _ACTION_TYPE_SOURCE_KEYS.get(
+                item.recommendation.action_type,
+                frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
+            ).intersection(source_incomplete_keys)
+        )
+        for item in completed_recommendations
+    ):
+        return "data_gap", "candidate_scope_incomplete"
     if rule_id == "LX0609-020":
         if absent_refs:
             if source_technical:
@@ -1186,6 +1252,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     }
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
+    execution_source_incomplete_keys: frozenset[str] = frozenset()
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -1228,6 +1295,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     stay_window=execution_stay_window,
                 )
                 execution_source_technical = projection.source_technical
+                execution_source_incomplete_keys = projection.source_incomplete_keys
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
@@ -1310,6 +1378,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,
                     source_technical=execution_source_technical,
+                    source_incomplete_keys=execution_source_incomplete_keys,
                 )
     results = []
     for rule_id in selected:
