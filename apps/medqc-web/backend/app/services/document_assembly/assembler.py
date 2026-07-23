@@ -873,7 +873,10 @@ def _resolve_title(document_type: str, row: dict[str, Any], assembled_text: str)
     return _DOC_TYPE_LABELS.get(document_type, document_type), flags
 
 
-def _resolve_display_times(row: dict[str, Any]) -> tuple[str | None, str | None, str | None, str | None]:
+def _resolve_display_times(
+    document_type: str,
+    row: dict[str, Any],
+) -> tuple[str | None, str | None, str | None, str | None]:
     record_time = _normalize_text(
         row.get("record_time") or row.get("record_datetime") or row.get("round_datetime")
     ) or None
@@ -881,7 +884,21 @@ def _resolve_display_times(row: dict[str, Any]) -> tuple[str | None, str | None,
     last_modified_time = _normalize_text(
         row.get("last_modified_datetime") or row.get("last_modified_time")
     ) or None
-    display_time = record_time or submit_time or last_modified_time or _normalize_text(row.get("update_time")) or None
+    order_display_time = ""
+    if document_type in {"inpat_drug_order", "inpat_nondrug_order"}:
+        # 医嘱没有通用 record_time 时，展示层仍应呈现来源提供的业务时间。
+        # 开始时间优先；只有未提供时才回退到开立/下达时间，避免把两者混为同一事实字段。
+        order_display_time = _normalize_text(
+            row.get("start_time") or row.get("order_time") or row.get("prescribed_datetime")
+        )
+    display_time = (
+        record_time
+        or order_display_time
+        or submit_time
+        or last_modified_time
+        or _normalize_text(row.get("update_time"))
+        or None
+    )
     return record_time, submit_time, last_modified_time, display_time
 
 
@@ -1041,7 +1058,7 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
     title, title_flags = _resolve_title(document_type, payload, assembled_text)
     flags.extend(title_flags)
 
-    record_time, submit_time, last_modified_time, display_time = _resolve_display_times(payload)
+    record_time, submit_time, last_modified_time, display_time = _resolve_display_times(document_type, payload)
     if not display_time:
         flags.append("missing_display_time")
 
