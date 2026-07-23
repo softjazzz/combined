@@ -2,8 +2,10 @@ from app.services import custom_qc_sample_pool_service as sample_pool_module
 from app.database.models.cdm import FirstCourseRecord, TransferInRecord, TransferOutRecord
 from app.services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
+    build_sample_validation_execution_scope_hash,
     classify_manual_issue_text,
     load_manual_case_rows_from_excel,
+    summarize_sample_validation_run_readiness,
 )
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
 from datetime import datetime
@@ -37,6 +39,120 @@ class _FakeSession:
 
     def close(self):
         return None
+
+
+def test_sample_validation_execution_scope_hash_is_stable_and_non_echoing():
+    first = build_sample_validation_execution_scope_hash(
+        created_by="operator-raw",
+        pool_id="pool-sensitive",
+        validation_mode="customer",
+        rule_set_key="luxian_0609_qc_v1",
+        selected_rule_ids=["LX0609-021", "LX0609-020"],
+        record_ids=["visit-secret-2", "visit-secret-1"],
+        sample_item_ids=["item-secret-2", "item-secret-1"],
+        group_by_luxian_family=True,
+        hmac_key="test-only-key",
+    )
+    reordered = build_sample_validation_execution_scope_hash(
+        created_by="operator-raw",
+        pool_id="pool-sensitive",
+        validation_mode="customer",
+        rule_set_key="luxian_0609_qc_v1",
+        selected_rule_ids=["LX0609-020", "LX0609-021"],
+        record_ids=["visit-secret-1", "visit-secret-2"],
+        sample_item_ids=["item-secret-1", "item-secret-2"],
+        group_by_luxian_family=True,
+        hmac_key="test-only-key",
+    )
+
+    assert first == reordered
+    assert first != build_sample_validation_execution_scope_hash(
+        created_by="operator-raw",
+        pool_id="pool-sensitive",
+        validation_mode="customer",
+        rule_set_key="luxian_0609_qc_v1",
+        selected_rule_ids=["LX0609-020", "LX0609-021"],
+        record_ids=["visit-secret-1", "visit-secret-2"],
+        sample_item_ids=["item-secret-1", "item-secret-2"],
+        group_by_luxian_family=True,
+        hmac_key="different-test-key",
+    )
+    assert len(first) == 64
+    assert "operator" not in first
+    assert "pool-sensitive" not in first
+    assert "visit-secret" not in first
+    assert "item-secret" not in first
+
+
+@pytest.mark.parametrize(
+    ("patch", "expected_reason"),
+    [
+        ({"match_status": "unmatched"}, "unmatched"),
+        ({"match_status": "ambiguous"}, "ambiguous"),
+        ({"sync_status": "pending"}, "not_synced"),
+        ({"bundle_status": "building"}, "bundle_not_ready"),
+    ],
+)
+def test_sample_validation_readiness_rejects_any_blocked_selected_item(patch, expected_reason):
+    ready_row = {
+        "id": "item-ready",
+        "matched_visit_id": "visit-ready",
+        "match_status": "matched",
+        "sync_status": "synced",
+        "bundle_status": "ready",
+    }
+    blocked_row = {
+        "id": "item-blocked",
+        "matched_visit_id": "visit-blocked",
+        "match_status": "matched",
+        "sync_status": "synced",
+        "bundle_status": "ready",
+        **patch,
+    }
+
+    result = summarize_sample_validation_run_readiness(
+        rows=[ready_row, blocked_row],
+        validation_mode="customer",
+        item_ids=["item-ready", "item-blocked"],
+        record_ids=[],
+    )
+
+    assert result["ready"] is False
+    assert result["reason_code"] == expected_reason
+    assert result["selected_item_count"] == 2
+    assert result["blocker_counts"][expected_reason] == 1
+    assert "visit-ready" not in repr(result)
+    assert "visit-blocked" not in repr(result)
+
+
+def test_sample_validation_readiness_rejects_item_record_intersection_shrink():
+    rows = [
+        {
+            "id": "item-1",
+            "matched_visit_id": "visit-1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+        },
+        {
+            "id": "item-2",
+            "matched_visit_id": "visit-2",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+        },
+    ]
+
+    result = summarize_sample_validation_run_readiness(
+        rows=rows,
+        validation_mode="customer",
+        item_ids=["item-1"],
+        record_ids=["visit-1", "visit-2"],
+    )
+
+    assert result["ready"] is False
+    assert result["reason_code"] == "selection_mismatch"
+    assert result["blocker_counts"]["selection_mismatch"] == 1
 
 
 class _FakeRefreshSession:
@@ -1173,12 +1289,23 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
         "admission_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}],
         "daily_course_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001", "document_id": "D1"}],
     }
+    remote_read_calls = []
+    local_write_calls = []
+
+    def _fetch_remote_rows(**kwargs):
+        remote_read_calls.append(dict(kwargs))
+        return list(rows_by_table.get(kwargs["source_table"], []))
+
+    def _upsert_local_rows(**kwargs):
+        local_write_calls.append(dict(kwargs))
+        return len(kwargs["records"])
+
     monkeypatch.setattr(
         sample_pool_module,
         "fetch_remote_rows_by_visit_keys",
-        lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])),
+        _fetch_remote_rows,
     )
-    monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(sample_pool_module, "upsert_to_local", _upsert_local_rows)
 
     ingest_calls = []
     refresh_calls = []
@@ -1224,6 +1351,10 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     }
     assert result["record_progress"]["completed"] == 1
     assert result["record_progress"]["total"] == 1
+    assert len(remote_read_calls) == 3
+    assert all(call["remote_url"] == "postgresql://demo" for call in remote_read_calls)
+    assert len(local_write_calls) == 3
+    assert all("remote_url" not in call for call in local_write_calls)
 
 
 def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):

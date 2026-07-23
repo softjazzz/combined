@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
@@ -17,6 +17,7 @@ from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_
 from ..routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
+    build_sample_validation_execution_scope_hash,
     load_manual_case_rows_from_excel,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -35,6 +36,7 @@ from ..services.luxian_0609 import (
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
+    LUXIAN_0609_QC_RULE_SET_KEY,
     get_sample_programmatic_rule_set,
     list_sample_validation_rule_sets,
     resolve_sample_validation_rule_set_by_key,
@@ -62,6 +64,8 @@ _LUXIAN_0609_REPORT_FILES = {
     "csv": ("luxian_0609_qc_eval.csv", "text/csv; charset=utf-8"),
     "json": ("luxian_0609_qc_eval.json", "application/json; charset=utf-8"),
 }
+_SAMPLE_VALIDATION_DEDUP_WINDOW = timedelta(minutes=2)
+_SAMPLE_VALIDATION_DEDUP_STATUSES = {"queued", "running"}
 
 
 def _service() -> CustomQCSamplePoolService:
@@ -78,6 +82,55 @@ def _current_user_id(current_user: Dict[str, Any]) -> str:
         .strip()
         or "anonymous"
     )
+
+
+def _sample_validation_operation_ref() -> str:
+    return f"sample-op-{uuid.uuid4().hex[:24]}"
+
+
+def _as_utc_naive_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _find_recent_sample_validation_job(
+    *,
+    workspace: Any,
+    created_by: str,
+    execution_scope_hash: str,
+    now: Optional[datetime] = None,
+) -> Optional[Dict[str, Any]]:
+    try:
+        page = workspace.list_batch_jobs(
+            created_by=created_by,
+            include_children=False,
+            page=1,
+            page_size=100,
+        )
+    except (AttributeError, TypeError):
+        return None
+    cutoff = (now or datetime.utcnow()) - _SAMPLE_VALIDATION_DEDUP_WINDOW
+    for job in list(getattr(page, "items", None) or []):
+        if str(job.get("status") or "").strip().lower() not in _SAMPLE_VALIDATION_DEDUP_STATUSES:
+            continue
+        created_at = _as_utc_naive_datetime(job.get("created_at"))
+        if created_at is None or created_at < cutoff:
+            continue
+        filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+        if str(filters.get("execution_scope_hash") or "").strip() == execution_scope_hash:
+            return job
+    return None
 
 
 def _resolve_sample_validation_execution_strategy(*, validation_mode: str, rule_ids: list[str]) -> str:
@@ -585,6 +638,9 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc、programmatic 或 formal_fast_screen_full")
     is_formal_fast_screen_full = validation_mode == FORMAL_FAST_SCREEN_FULL_MODE
     requested_selected_rule_ids = _normalize_rule_id_list(payload.selected_rule_ids)
+    explicit_fields = set(getattr(payload, "model_fields_set", set()) or set())
+    if "selected_rule_ids" in explicit_fields and not requested_selected_rule_ids:
+        raise HTTPException(status_code=422, detail="所选质控点不能为空")
     if requested_selected_rule_ids and validation_mode != "customer":
         raise HTTPException(status_code=422, detail="selected_rule_ids 仅支持客户专项规则验证模式")
     requested_record_ids = [
@@ -592,13 +648,45 @@ async def run_sample_pool_intrinsic_validation(
         for record_id in list(payload.record_ids or [])
         if str(record_id or "").strip()
     ]
+    if "record_ids" in explicit_fields and payload.record_ids and not requested_record_ids:
+        raise HTTPException(status_code=422, detail="所选病历不能为空")
+    requested_sample_item_ids = [
+        str(item_id or "").strip()
+        for item_id in list(payload.sample_item_ids or [])
+        if str(item_id or "").strip()
+    ]
+    if "sample_item_ids" in explicit_fields and payload.sample_item_ids and not requested_sample_item_ids:
+        raise HTTPException(status_code=422, detail="所选样本不能为空")
     if is_formal_fast_screen_full and not requested_record_ids:
         raise HTTPException(status_code=422, detail="正式84条质控请先选择病历")
+
+    readiness = service.inspect_run_selection(
+        pool_id=pool_id,
+        validation_mode=validation_mode,
+        item_ids=requested_sample_item_ids,
+        record_ids=requested_record_ids,
+    )
+    if not bool(readiness.get("ready")):
+        readiness_messages = {
+            "missing_item": "所选样本不存在或不属于当前样本池",
+            "missing_record": "所选病历未匹配到当前样本池",
+            "selection_mismatch": "所选样本与病历范围不一致",
+            "ambiguous": "所选样本的病历匹配存在歧义",
+            "unmatched": "所选样本包含未匹配病历",
+            "not_synced": "所选样本尚未同步到本地",
+            "bundle_not_ready": "所选样本的病历包尚未就绪",
+            "empty_selection": "当前样本池没有可执行样本",
+        }
+        reason_code = str(readiness.get("reason_code") or "empty_selection")
+        raise HTTPException(
+            status_code=422,
+            detail=readiness_messages.get(reason_code, "所选样本当前不可执行"),
+        )
 
     runnable_items = service.get_runnable_items(
         pool_id=pool_id,
         validation_mode=validation_mode,
-        item_ids=payload.sample_item_ids,
+        item_ids=requested_sample_item_ids,
         record_ids=requested_record_ids,
     )
     if not runnable_items:
@@ -675,7 +763,7 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_version = formal_rule_set.version
 
     if requested_selected_rule_ids:
-        if rule_set_key != "luxian_0609_qc_v1":
+        if rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY:
             raise HTTPException(status_code=422, detail="selected_rule_ids 当前仅支持泸县0609质控点验证")
         allowed_rule_ids = {str(rule_id or "").strip().upper() for rule_id in list(rule_ids or [])}
         execution_rule_ids, invalid_rule_ids, gate_only_customer_rule_ids = _resolve_luxian_0609_execution_scope(
@@ -698,7 +786,7 @@ async def run_sample_pool_intrinsic_validation(
         len(requested_selected_rule_ids)
         if requested_selected_rule_ids
         else _luxian_0609_customer_rule_count()
-        if rule_set_key == "luxian_0609_qc_v1"
+        if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
         else len(rule_ids)
     )
     execution_strategy = (
@@ -788,7 +876,7 @@ async def run_sample_pool_intrinsic_validation(
         job_filters["record_rule_map"] = record_rule_map
 
     luxian_family_scopes: list[dict[str, Any]] = []
-    if payload.group_by_luxian_family and rule_set_key == "luxian_0609_qc_v1":
+    if payload.group_by_luxian_family and rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
         luxian_scope_rule_ids = requested_selected_rule_ids
         if not luxian_scope_rule_ids:
             luxian_scope_rule_ids = _normalize_rule_id_list(
@@ -799,8 +887,84 @@ async def run_sample_pool_intrinsic_validation(
             )
         luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
 
+    selected_sample_item_ids = [
+        str(item.get("id") or "").strip()
+        for item in runnable_items
+        if str(item.get("id") or "").strip()
+    ]
+    if rule_set_key in {CUSTOMER_LUXIAN_RULE_SET_KEY, LUXIAN_0609_QC_RULE_SET_KEY}:
+        identity_rule_ids = requested_selected_rule_ids or _normalize_rule_id_list(
+            [
+                str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
+                for wrapper in load_luxian_0609_rules()
+            ]
+        )
+    else:
+        identity_rule_ids = list(rule_ids)
+    created_by = _current_user_id(current_user)
+    execution_scope_hash = build_sample_validation_execution_scope_hash(
+        created_by=created_by,
+        pool_id=pool_id,
+        validation_mode=validation_mode,
+        rule_set_key=rule_set_key,
+        selected_rule_ids=identity_rule_ids,
+        record_ids=record_ids,
+        sample_item_ids=selected_sample_item_ids,
+        group_by_luxian_family=bool(payload.group_by_luxian_family),
+        effective_scope=effective_scope,
+        execution_options={
+            "model_code": payload.model_code,
+            "temperature": payload.temperature,
+            "top_p": payload.top_p,
+            "max_tokens": payload.max_tokens,
+            "max_parallel_records": payload.max_parallel_records,
+            "rule_set_version": rule_set_version,
+        },
+    )
+    duplicate_job = _find_recent_sample_validation_job(
+        workspace=workspace,
+        created_by=created_by,
+        execution_scope_hash=execution_scope_hash,
+    )
+    if duplicate_job is not None:
+        duplicate_filters = duplicate_job.get("filters") if isinstance(duplicate_job.get("filters"), dict) else {}
+        return success_response(
+            data={
+                "pool_id": pool_id,
+                "job_id": str(duplicate_job.get("id") or "").strip(),
+                "job_kind": str(duplicate_job.get("job_kind") or "leaf").strip() or "leaf",
+                "child_job_ids": list(duplicate_job.get("child_job_ids") or []),
+                "family_scopes": luxian_family_scopes,
+                "sample_item_count": len(runnable_items),
+                "selected_record_count": len(requested_record_ids),
+                "record_count": record_count,
+                "rule_count": len(rule_ids),
+                "customer_rule_count": customer_rule_count,
+                "execution_rule_count": len(rule_ids),
+                "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
+                "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
+                "selected_rule_ids": requested_selected_rule_ids,
+                "scoped_customer_rule_ids": requested_selected_rule_ids,
+                "record_rule_map": record_rule_map,
+                "record_ids": record_ids,
+                "rule_ids": rule_ids,
+                "validation_mode": validation_mode,
+                "rule_set_key": rule_set_key,
+                "rule_set_name": rule_set_name,
+                "rule_set_version": rule_set_version,
+                "operation_ref": str(duplicate_filters.get("operation_ref") or "").strip(),
+                "execution_scope_hash": execution_scope_hash,
+                "deduplicated": True,
+            },
+            message="相同样本与规则范围的近期任务已存在，已复用原任务",
+            trace_id=get_trace_id(request),
+        )
+
+    operation_ref = _sample_validation_operation_ref()
+    job_filters["operation_ref"] = operation_ref
+    job_filters["execution_scope_hash"] = execution_scope_hash
+
     if len(luxian_family_scopes) > 1:
-        created_by = _current_user_id(current_user)
         parent_filters = {
             **job_filters,
             "group_by_luxian_family": True,
@@ -946,6 +1110,9 @@ async def run_sample_pool_intrinsic_validation(
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
                 "rule_set_version": rule_set_version,
+                "operation_ref": operation_ref,
+                "execution_scope_hash": execution_scope_hash,
+                "deduplicated": False,
             },
             message="泸县0609总任务已创建，规则族子任务已并发入队",
             trace_id=get_trace_id(request),
@@ -990,6 +1157,9 @@ async def run_sample_pool_intrinsic_validation(
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
+            "operation_ref": operation_ref,
+            "execution_scope_hash": execution_scope_hash,
+            "deduplicated": False,
         },
         message="正式质控任务已创建" if is_formal_fast_screen_full else "客户样本验证任务已创建",
         trace_id=get_trace_id(request),

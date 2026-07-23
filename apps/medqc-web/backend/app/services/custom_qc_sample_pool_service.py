@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import math
 import re
@@ -21,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import MedicalRecordFrontpage
+from ..core.settings import get_settings
 from .bundles.assembly import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
 from .etl_sync import (
     expand_table_groups,
@@ -36,6 +39,141 @@ CUSTOMER_TEST_POOL_ID = "customer-created-test-records-v1"
 CUSTOMER_TEST_POOL_NAME = "客户自建测试病历"
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+
+
+def build_sample_validation_execution_scope_hash(
+    *,
+    created_by: str,
+    pool_id: str,
+    validation_mode: str,
+    rule_set_key: str,
+    selected_rule_ids: Sequence[str],
+    record_ids: Sequence[str],
+    sample_item_ids: Sequence[str],
+    group_by_luxian_family: bool,
+    effective_scope: str = "",
+    execution_options: Optional[Dict[str, Any]] = None,
+    hmac_key: Optional[str] = None,
+) -> str:
+    """生成不可逆的任务执行范围身份，不在审计字段中回显用户或病历坐标。"""
+
+    def _normalized_values(values: Sequence[str]) -> List[str]:
+        return sorted(
+            {
+                str(value or "").strip().upper()
+                for value in list(values or [])
+                if str(value or "").strip()
+            }
+        )
+
+    payload = {
+        "schema": "sample-validation-execution-scope-v1",
+        "created_by": _safe_text(created_by),
+        "pool_id": _safe_text(pool_id),
+        "validation_mode": _safe_text(validation_mode).lower(),
+        "rule_set_key": _safe_text(rule_set_key),
+        "selected_rule_ids": _normalized_values(selected_rule_ids),
+        "record_ids": _normalized_values(record_ids),
+        "sample_item_ids": _normalized_values(sample_item_ids),
+        "group_by_luxian_family": bool(group_by_luxian_family),
+        "effective_scope": _safe_text(effective_scope).lower(),
+        "execution_options": _sanitize_json_value(execution_options or {}),
+    }
+    material = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    secret = _safe_text(hmac_key) or _safe_text(get_settings().JWT_SECRET)
+    if not secret:
+        raise RuntimeError("样本验证执行范围签名密钥未配置")
+    return hmac.new(secret.encode("utf-8"), material.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def summarize_sample_validation_run_readiness(
+    *,
+    rows: Sequence[Dict[str, Any]],
+    validation_mode: str,
+    item_ids: Sequence[str],
+    record_ids: Sequence[str],
+) -> Dict[str, Any]:
+    """以安全计数检查选中范围；任一坏项都阻断，禁止静默缩小任务。"""
+
+    normalized_item_ids = {
+        _safe_text(item_id)
+        for item_id in list(item_ids or [])
+        if _safe_text(item_id)
+    }
+    normalized_record_ids = {
+        _safe_text(record_id)
+        for record_id in list(record_ids or [])
+        if _safe_text(record_id)
+    }
+    all_rows = [dict(row) for row in list(rows or []) if isinstance(row, dict)]
+    known_item_ids = {_safe_text(row.get("id")) for row in all_rows if _safe_text(row.get("id"))}
+    known_record_ids = {
+        _safe_text(row.get("matched_visit_id"))
+        for row in all_rows
+        if _safe_text(row.get("matched_visit_id"))
+    }
+    selected_rows = [
+        row
+        for row in all_rows
+        if (not normalized_item_ids or _safe_text(row.get("id")) in normalized_item_ids)
+        and (not normalized_record_ids or _safe_text(row.get("matched_visit_id")) in normalized_record_ids)
+    ]
+    blocker_counts = {
+        "missing_item": len(normalized_item_ids - known_item_ids),
+        "missing_record": len(normalized_record_ids - known_record_ids),
+        "selection_mismatch": 0,
+        "unmatched": 0,
+        "ambiguous": 0,
+        "not_synced": 0,
+        "bundle_not_ready": 0,
+    }
+    if normalized_item_ids and normalized_record_ids:
+        selected_item_ids = {_safe_text(row.get("id")) for row in selected_rows}
+        selected_record_ids = {
+            _safe_text(row.get("matched_visit_id"))
+            for row in selected_rows
+            if _safe_text(row.get("matched_visit_id"))
+        }
+        blocker_counts["selection_mismatch"] = len(
+            normalized_item_ids - selected_item_ids
+        ) + len(normalized_record_ids - selected_record_ids)
+
+    normalized_mode = _safe_text(validation_mode).lower() or "customer"
+    for row in selected_rows:
+        match_status = _safe_text(row.get("match_status")).lower()
+        if match_status == "ambiguous":
+            blocker_counts["ambiguous"] += 1
+            continue
+        if match_status != "matched":
+            blocker_counts["unmatched"] += 1
+            continue
+        if normalized_mode in {"customer", "sc"}:
+            sync_status = _safe_text(row.get("sync_status")).lower()
+            if sync_status not in {"synced", "synthetic_seeded"}:
+                blocker_counts["not_synced"] += 1
+                continue
+            if _safe_text(row.get("bundle_status")).lower() != "ready":
+                blocker_counts["bundle_not_ready"] += 1
+
+    reason_order = (
+        "missing_item",
+        "missing_record",
+        "selection_mismatch",
+        "ambiguous",
+        "unmatched",
+        "not_synced",
+        "bundle_not_ready",
+    )
+    reason_code = next(
+        (reason for reason in reason_order if int(blocker_counts.get(reason) or 0) > 0),
+        "ready" if selected_rows else "empty_selection",
+    )
+    return {
+        "ready": reason_code == "ready",
+        "reason_code": reason_code,
+        "selected_item_count": len(selected_rows),
+        "blocker_counts": blocker_counts,
+    }
 
 
 def _now_utc() -> datetime:
@@ -4107,6 +4245,32 @@ class CustomQCSamplePoolService:
                 items = self._apply_dynamic_candidate_rule_ids(items=items)
                 return _apply_sample_sc_rule_whitelist(items)
             return self._apply_dynamic_candidate_rule_ids(items=items)
+        finally:
+            session.close()
+
+    def inspect_run_selection(
+        self,
+        *,
+        pool_id: str,
+        validation_mode: str,
+        item_ids: Optional[Sequence[str]] = None,
+        record_ids: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        session = _session()
+        try:
+            rows = (
+                session.execute(
+                    select(self._item_table).where(self._item_table.c.pool_id == pool_id)
+                )
+                .mappings()
+                .all()
+            )
+            return summarize_sample_validation_run_readiness(
+                rows=[dict(row) for row in rows],
+                validation_mode=validation_mode,
+                item_ids=list(item_ids or []),
+                record_ids=list(record_ids or []),
+            )
         finally:
             session.close()
 
