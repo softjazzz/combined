@@ -487,6 +487,24 @@ def _resolve_document_type(scope: str, record_scope: Optional[str]) -> str:
     return "出院记录" if str(record_scope or "").strip().lower() == "final" else "病程记录"
 
 
+def _resolve_luxian_target_document_type(rule: Dict[str, Any]) -> str:
+    """返回 LX0609 规则目录声明的目标文书域，不能被运行场景覆盖。"""
+    if not isinstance(rule, dict):
+        return ""
+    explicit = str(rule.get("target_document_type") or rule.get("document_type") or "").strip()
+    if explicit:
+        return explicit
+    labels = rule.get("applicable_document_labels") or rule.get("applicable_documents") or []
+    if not isinstance(labels, (list, tuple)):
+        return ""
+    resolved: list[str] = []
+    for item in labels:
+        label = str(item or "").strip()
+        if label and label not in resolved:
+            resolved.append(label)
+    return "、".join(resolved)
+
+
 def _build_cluster_key(item: Dict[str, Any]) -> str:
     status = str(item.get("status") or "").strip().lower()
     if status == "non_compliant":
@@ -3041,6 +3059,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     rule_name = str(state["rule_name"])
                     rule_code = str(state["rule_code"])
                     rule_job_id = str(state["rule_job_id"])
+                    luxian_target_document_type = (
+                        _resolve_luxian_target_document_type(rule)
+                        if use_luxian_customer_results
+                        else ""
+                    )
                     eval_item = eval_map.get(normalized_rule_id) or {}
                     if not eval_item:
                         is_gate_only_missing = (
@@ -3246,13 +3269,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "pack_retry_reason": str(metadata.get("pack_retry_reason") or ""),
                         "technical_error_internal": bool(metadata.get("technical_error_internal") is True),
                         "document_type": str(
-                            eval_item.get("_document_type")
+                            luxian_target_document_type
+                            or eval_item.get("_document_type")
                             or eval_item.get("document_type")
                             or metadata.get("document_type")
                             or document_type
                         ),
                         "target_document_type": str(
-                            eval_item.get("target_document_type")
+                            luxian_target_document_type
+                            or eval_item.get("target_document_type")
                             or metadata.get("target_document_type")
                             or eval_item.get("_document_type")
                             or eval_item.get("document_type")

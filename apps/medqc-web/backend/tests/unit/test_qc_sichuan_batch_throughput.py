@@ -34,6 +34,23 @@ def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
     return SimpleNamespace(**values)
 
 
+def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallback():
+    assert qc_sichuan._resolve_luxian_target_document_type(
+        {
+            "rule_id": "LX0609-018",
+            "applicable_documents": ["admission_record"],
+            "applicable_document_labels": ["入院记录"],
+        }
+    ) == "入院记录"
+
+    assert qc_sichuan._resolve_luxian_target_document_type(
+        {
+            "rule_id": "LX0609-010",
+            "applicable_document_labels": ["检查检验报告", "日常病程记录"],
+        }
+    ) == "检查检验报告、日常病程记录"
+
+
 class _WorkspaceStub:
     def __init__(self) -> None:
         self.job: Dict[str, Any] = {
