@@ -31,6 +31,10 @@ from scripts.build_luxian_0609_golden_ledger import (
     build_candidate_ledger,
     canonical_digest,
 )
+from scripts.build_luxian_0609_runtime_manifest import (
+    runtime_manifest_hash,
+    validate_runtime_manifest_current,
+)
 
 
 CASE_MAP_SCHEMA_VERSION = "lx0609-preproduction-benchmark20-case-map-v1"
@@ -140,6 +144,39 @@ def _validate_evaluation_date(value: str) -> str:
     return normalized
 
 
+def _runtime_identity(
+    runtime_manifest: Mapping[str, Any],
+    *,
+    observed_git_head: str | None = None,
+) -> dict[str, str]:
+    """校验 Task1 清单并投影 Golden 所需的不可变运行身份。"""
+
+    try:
+        git_head = validate_runtime_manifest_current(
+            runtime_manifest,
+            observed_git_head=observed_git_head,
+        )
+    except (TypeError, ValueError) as exc:
+        raise BenchmarkContractError("stale or invalid runtime manifest") from exc
+    rule_set = runtime_manifest.get("rule_set")
+    if not isinstance(rule_set, Mapping):
+        raise BenchmarkContractError("stale or invalid runtime manifest")
+    policy_version = str(rule_set.get("version") or "").strip()
+    rule_ids = tuple(str(item or "").strip() for item in rule_set.get("rule_ids") or ())
+    expected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    if (
+        not _SAFE_CODE_RE.fullmatch(policy_version)
+        or rule_ids != expected
+        or int(rule_set.get("rule_count") or 0) != len(expected)
+    ):
+        raise BenchmarkContractError("stale or invalid runtime manifest")
+    return {
+        "git_head": git_head,
+        "policy_version": policy_version,
+        "runtime_manifest_hash": runtime_manifest_hash(runtime_manifest),
+    }
+
+
 def _validate_case_map(value: Mapping[str, Any]) -> tuple[str, tuple[dict[str, str], ...]]:
     if not isinstance(value, Mapping):
         raise BenchmarkContractError("invalid case map")
@@ -246,6 +283,31 @@ def _validate_response(
         raise BenchmarkContractError(
             "preproduction response must contain selected ordered rules"
         )
+    metric_names = (
+        "llm_call_count",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "technical_error_count",
+        "rule_decision_count",
+        "typed_shadow_adapter_count",
+        "legacy_projection_count",
+    )
+    if any(
+        type(metrics.get(name)) is not int or int(metrics.get(name) or 0) < 0
+        for name in metric_names
+    ):
+        raise BenchmarkContractError("invalid preproduction token metrics")
+    prompt_tokens = int(metrics.get("prompt_tokens") or 0)
+    completion_tokens = int(metrics.get("completion_tokens") or 0)
+    total_tokens = int(metrics.get("total_tokens") or 0)
+    llm_call_count = int(metrics.get("llm_call_count") or 0)
+    if (
+        total_tokens != prompt_tokens + completion_tokens
+        or (llm_call_count == 0 and total_tokens != 0)
+        or (llm_call_count > 0 and total_tokens == 0)
+    ):
+        raise BenchmarkContractError("invalid preproduction token metrics")
     return results, metrics
 
 
@@ -255,6 +317,7 @@ def _golden_response(
     results: Sequence[Mapping[str, Any]],
     executor_types: Mapping[str, str],
     evidence_attestations: Mapping[str, Mapping[str, str]],
+    runtime_bound: bool = False,
 ) -> dict[str, Any]:
     """投影Golden所需最小响应，排除runner性能字段和客户长文本。"""
 
@@ -274,8 +337,7 @@ def _golden_response(
             raise BenchmarkContractError("missing rule evidence attestation")
         if str(result.get("status") or "").strip().lower() != observed_state:
             raise BenchmarkContractError("attested result state mismatch")
-        projected_results.append(
-            {
+        projected_result = {
                 "rule_id": rule_id,
                 "status": observed_state,
                 "metadata": {
@@ -286,7 +348,50 @@ def _golden_response(
                     {"evidence_attestation": evidence_attestation}
                 ],
             }
+        if runtime_bound:
+            result_metadata = result.get("metadata")
+            if not isinstance(result_metadata, Mapping):
+                raise BenchmarkContractError("missing rule token attribution")
+            token_names = ("prompt_tokens", "completion_tokens", "total_tokens")
+            if any(
+                type(result_metadata.get(name)) is not int
+                or int(result_metadata.get(name) or 0) < 0
+                for name in token_names
+            ):
+                raise BenchmarkContractError("missing rule token attribution")
+            prompt_tokens = int(result_metadata["prompt_tokens"])
+            completion_tokens = int(result_metadata["completion_tokens"])
+            total_tokens = int(result_metadata["total_tokens"])
+            if total_tokens != prompt_tokens + completion_tokens:
+                raise BenchmarkContractError("invalid rule token attribution")
+            projected_result["metadata"].update(
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
+            projected_result["evidence_source_types"] = ["evidence_snapshot"]
+        projected_results.append(projected_result)
+    if runtime_bound:
+        metrics = response.get("metrics")
+        if not isinstance(metrics, Mapping):
+            raise BenchmarkContractError("missing rule token attribution")
+        attributed_prompt = sum(
+            int(item["metadata"]["prompt_tokens"]) for item in projected_results
         )
+        attributed_completion = sum(
+            int(item["metadata"]["completion_tokens"]) for item in projected_results
+        )
+        attributed_total = sum(
+            int(item["metadata"]["total_tokens"]) for item in projected_results
+        )
+        if (
+            attributed_prompt != int(metrics.get("prompt_tokens") or 0)
+            or attributed_completion != int(metrics.get("completion_tokens") or 0)
+            or attributed_total != int(metrics.get("total_tokens") or 0)
+        ):
+            raise BenchmarkContractError("incomplete rule token attribution")
     return {
         "schema_version": str(response.get("schema_version") or ""),
         "results": projected_results,
@@ -301,13 +406,19 @@ async def build_benchmark_batch(
     runner: Runner = run_luxian_0609_preproduction,
     llm_client: Any,
     base_settings: Any,
+    runtime_manifest: Mapping[str, Any],
     fail_on_technical_error: bool = True,
     selected_rule_ids: Sequence[str] | None = None,
+    observed_git_head: str | None = None,
 ) -> dict[str, Any]:
     """顺序执行固定20例并返回可进入Golden候选构建器的安全批次。"""
 
     selector_version, cases = _validate_case_map(case_map)
     as_of_date = _validate_evaluation_date(evaluation_as_of_date)
+    runtime_identity = _runtime_identity(
+        runtime_manifest,
+        observed_git_head=observed_git_head,
+    )
     selected_rule_ids, executor_types = _select_rule_attestations(selected_rule_ids)
     is_selected_subset = len(selected_rule_ids) != 49
     rule_set_digest = canonical_digest(
@@ -420,6 +531,7 @@ async def build_benchmark_batch(
                     results=results,
                     executor_types=executor_types,
                     evidence_attestations=evidence_attestations,
+                    runtime_bound=True,
                 ),
             }
         )
@@ -485,6 +597,8 @@ async def build_benchmark_batch(
         "cases": output_cases,
         "summary": summary,
     }
+    batch.update(runtime_identity)
+    batch["sample_type"] = "real"
     if is_selected_subset:
         # 子集必须在输出中显式标明，禁止作为49点全量基准引用。
         batch["rule_scope"] = {
@@ -521,6 +635,16 @@ def _read_case_map(path: Path) -> Mapping[str, Any]:
     return value
 
 
+def _read_runtime_manifest(path: Path) -> Mapping[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        raise BenchmarkContractError("runtime manifest is unavailable or invalid") from None
+    if not isinstance(value, Mapping):
+        raise BenchmarkContractError("runtime manifest is unavailable or invalid")
+    return value
+
+
 def _write_output(path: Path, batch: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -536,6 +660,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--case-map", type=Path, required=True)
     parser.add_argument("--evaluation-as-of-date", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--runtime-manifest", type=Path, required=True)
     parser.add_argument(
         "--allow-technical-error",
         action="store_true",
@@ -563,6 +688,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 selected_rule_ids=(
                     tuple(args.rule_id) if args.rule_id is not None else None
                 ),
+                runtime_manifest=_read_runtime_manifest(args.runtime_manifest),
             )
         )
         _write_output(args.output, batch)

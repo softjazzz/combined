@@ -16,37 +16,13 @@ from scripts.run_luxian_0609_preproduction_benchmark20 import (
 )
 
 
+_RULE_IDS, _EXECUTOR_TYPES = benchmark20._rule_attestations()
 _SEMANTIC_RULE_IDS = frozenset(
-    {
-        "LX0609-009",
-        "LX0609-010",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-013",
-        "LX0609-014",
-        "LX0609-015",
-        "LX0609-016",
-        "LX0609-017",
-        "LX0609-018",
-        "LX0609-019",
-        "LX0609-020",
-        "LX0609-021",
-        "LX0609-022",
-        "LX0609-023",
-        "LX0609-024",
-        "LX0609-025",
-        "LX0609-027",
-        "LX0609-028",
-        "LX0609-033",
-        "LX0609-040",
-        "LX0609-044",
-        "LX0609-045",
-        "LX0609-046",
-    }
+    rule_id for rule_id in _RULE_IDS if _EXECUTOR_TYPES[rule_id] == "llm"
 )
 _DETERMINISTIC_RULE_IDS = frozenset(
-    f"LX0609-{index:03d}" for index in range(1, 50)
-) - _SEMANTIC_RULE_IDS
+    rule_id for rule_id in _RULE_IDS if _EXECUTOR_TYPES[rule_id] == "program"
+)
 
 
 def _case_map() -> dict:
@@ -65,6 +41,33 @@ def _case_map() -> dict:
     }
 
 
+def _runtime_manifest(*, git_head: str = "a" * 40) -> dict:
+    return {
+        "schema_version": "lx0609-runtime-manifest-v1",
+        "generated_at": "2026-07-24T00:00:00Z",
+        "git_head": git_head,
+        "customer_rule_count": 49,
+        "flags": {},
+        "rule_set": {
+            "key": "luxian_0609_qc_v1",
+            "version": "2026-06-09",
+            "rule_count": 49,
+            "rule_ids": [f"LX0609-{index:03d}" for index in range(1, 50)],
+        },
+        "runtime": {},
+        "rules": [],
+    }
+
+
+_build_benchmark_batch_impl = build_benchmark_batch
+
+
+async def build_benchmark_batch(**kwargs):
+    kwargs.setdefault("runtime_manifest", _runtime_manifest())
+    kwargs.setdefault("observed_git_head", "a" * 40)
+    return await _build_benchmark_batch_impl(**kwargs)
+
+
 def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
     results = [
         {
@@ -72,7 +75,9 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
             "status": "compliant",
             "metadata": {
                 "reason_code": "verified",
-                "prompt_tokens": 99,
+                "prompt_tokens": 10 if index == 9 else 0,
+                "completion_tokens": 2 if index == 9 else 0,
+                "total_tokens": 12 if index == 9 else 0,
             },
             "evidence_items": [],
             "findings": "PRIVATE-BODY-MARKER",
@@ -104,6 +109,15 @@ def _selected_safe_response(
         item for item in response["results"] if item["rule_id"] in rule_ids
     ]
     response["metrics"]["rule_decision_count"] = len(rule_ids)
+    if "LX0609-009" not in rule_ids:
+        response["metrics"].update(
+            {
+                "llm_call_count": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+        )
     return response
 
 
@@ -162,10 +176,14 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
     """锁定49点契约分类，避免017灰区被误记为Python决定。"""
 
     rows = candidate["rows"]
+    assert len(_DETERMINISTIC_RULE_IDS) == 26
+    assert len(_SEMANTIC_RULE_IDS) == 23
     assert len(rows) == 20 * 49
     decision_kinds = [row["decision_kind"] for row in rows]
-    assert decision_kinds.count("deterministic") == 500
-    assert decision_kinds.count("semantic") == 480
+    assert decision_kinds.count("deterministic") == (
+        len(_DETERMINISTIC_RULE_IDS) * 20
+    )
+    assert decision_kinds.count("semantic") == len(_SEMANTIC_RULE_IDS) * 20
     assert (
         decision_kinds.count("deterministic") + decision_kinds.count("semantic")
         == len(rows)
@@ -189,7 +207,7 @@ def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
         assert deterministic_rule_ids == _DETERMINISTIC_RULE_IDS
 
     assert all(
-        row["decision_kind"] == "semantic"
+        row["decision_kind"] == "deterministic"
         for row in rows
         if row["rule_id"] == "LX0609-017"
     )
@@ -292,9 +310,98 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         "patient_id",
         "visit_id",
         "PRIVATE-BODY-MARKER",
-        "prompt_tokens",
     ):
-        assert private_marker not in rendered
+        if private_marker in rendered:
+            raise AssertionError(f"unsafe benchmark marker: {private_marker}")
+    assert all(
+        set(result["metadata"])
+        == {
+            "reason_code",
+            "executor_type",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+        }
+        for case in batch["cases"]
+        for result in case["response"]["results"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_binds_current_runtime_manifest_and_rejects_stale_head():
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_attestations(kwargs, salt=f"runtime-{next(call_numbers)}")
+        return _safe_response()
+
+    manifest = _runtime_manifest()
+    batch = await build_benchmark_batch(
+        case_map=_case_map(),
+        evaluation_as_of_date="2026-07-24",
+        bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+        runner=fake_runner,
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        runtime_manifest=manifest,
+        observed_git_head="a" * 40,
+    )
+
+    assert batch["git_head"] == "a" * 40
+    assert batch["policy_version"] == "2026-06-09"
+    assert len(batch["runtime_manifest_hash"]) == 64
+    assert batch["sample_type"] == "real"
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="runtime-bound-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    assert candidate["schema_version"] == "lx0609-golden-candidate-v2"
+    assert {row["sample_type"] for row in candidate["rows"]} == {"real"}
+
+    with pytest.raises(BenchmarkContractError, match="runtime manifest"):
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-24",
+            bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+            runner=fake_runner,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+            runtime_manifest=manifest,
+            observed_git_head="b" * 40,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_kind", ("missing", "incomplete"))
+async def test_benchmark20_fails_closed_for_rule_token_attribution(
+    failure_kind: str,
+):
+    async def fake_runner(**kwargs):
+        _emit_attestations(kwargs, salt=f"token-{failure_kind}")
+        response = _safe_response()
+        semantic_metadata = response["results"][8]["metadata"]
+        if failure_kind == "missing":
+            semantic_metadata.pop("completion_tokens")
+        else:
+            semantic_metadata.update(
+                {
+                    "prompt_tokens": 9,
+                    "completion_tokens": 2,
+                    "total_tokens": 11,
+                }
+            )
+        return response
+
+    with pytest.raises(BenchmarkContractError, match="rule token attribution"):
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-24",
+            bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+            runner=fake_runner,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+        )
 
 
 @pytest.mark.asyncio
@@ -605,8 +712,12 @@ def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(
     monkeypatch, tmp_path, capsys
 ):
     case_map_path = tmp_path / "case-map.json"
+    runtime_manifest_path = tmp_path / "runtime-manifest.json"
     output_path = tmp_path / "benchmark.json"
     case_map_path.write_text(json.dumps(_case_map()), encoding="utf-8")
+    runtime_manifest_path.write_text(
+        json.dumps(_runtime_manifest()), encoding="utf-8"
+    )
     safe_batch = {
         "schema_version": "lx0609-golden-api-batch-v1",
         "selector_digest": "a" * 64,
@@ -635,6 +746,8 @@ def test_benchmark20_cli_requires_explicit_inputs_and_writes_only_safe_batch(
             "2026-07-17",
             "--output",
             str(output_path),
+            "--runtime-manifest",
+            str(runtime_manifest_path),
         ]
     )
 
@@ -651,8 +764,12 @@ def test_benchmark20_cli_passes_explicit_rule_subset_and_marks_output_scope(
     monkeypatch, tmp_path, capsys
 ):
     case_map_path = tmp_path / "case-map.json"
+    runtime_manifest_path = tmp_path / "runtime-manifest.json"
     output_path = tmp_path / "benchmark.json"
     case_map_path.write_text(json.dumps(_case_map()), encoding="utf-8")
+    runtime_manifest_path.write_text(
+        json.dumps(_runtime_manifest()), encoding="utf-8"
+    )
     safe_batch = {
         "schema_version": "lx0609-golden-api-batch-v1",
         "selector_digest": "a" * 64,
@@ -685,6 +802,8 @@ def test_benchmark20_cli_passes_explicit_rule_subset_and_marks_output_scope(
             "2026-07-17",
             "--output",
             str(output_path),
+            "--runtime-manifest",
+            str(runtime_manifest_path),
             "--rule-id",
             "LX0609-030",
             "--rule-id",

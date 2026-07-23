@@ -14,6 +14,8 @@ from typing import Any, Mapping, Sequence
 
 CANDIDATE_SCHEMA_VERSION = "lx0609-golden-candidate-v1"
 LEDGER_SCHEMA_VERSION = "lx0609-golden-ledger-v1"
+CANDIDATE_SCHEMA_VERSION_V2 = "lx0609-golden-candidate-v2"
+LEDGER_SCHEMA_VERSION_V2 = "lx0609-golden-ledger-v2"
 API_BATCH_SCHEMA_VERSION = "lx0609-golden-api-batch-v1"
 
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
@@ -22,6 +24,7 @@ _RULE_ID_RE = re.compile(r"^LX0609-[0-9]{3}$")
 _SAFE_CODE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$")
 _REVIEWER_CODE_RE = re.compile(r"^[A-Z0-9][A-Z0-9_.-]{2,63}$")
 _UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+_GIT_HEAD_RE = re.compile(r"^[a-f0-9]{40}$")
 _PHONE_RE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _ID_CARD_RE = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
 _CREDENTIAL_RE = re.compile(
@@ -58,6 +61,12 @@ _FORBIDDEN_KEY_PARTS = (
     "jobid",
     "bundle",
 )
+_SAFE_METRIC_KEYS = {
+    "prompttokens",
+    "completiontokens",
+    "totaltokens",
+    "llmcallcount",
+}
 _OBSERVED_STATES = {
     "compliant",
     "non_compliant",
@@ -72,6 +81,7 @@ _EXECUTOR_DECISION_KINDS = {
     "program": "deterministic",
     "llm": "semantic",
 }
+_SAMPLE_TYPES = {"real", "synthetic"}
 
 
 def _normalized_key(value: Any) -> str:
@@ -92,7 +102,10 @@ def _assert_safe_api_dto(value: Any) -> None:
     if isinstance(value, Mapping):
         for key, child in value.items():
             normalized = _normalized_key(key)
-            if any(part in normalized for part in _FORBIDDEN_KEY_PARTS):
+            if (
+                normalized not in _SAFE_METRIC_KEYS
+                and any(part in normalized for part in _FORBIDDEN_KEY_PARTS)
+            ):
                 raise ValueError("unsafe API DTO")
             _assert_safe_api_dto(child)
         return
@@ -166,6 +179,31 @@ def build_candidate_ledger(
     if not isinstance(cases, list) or not cases:
         raise ValueError("API batch requires cases")
 
+    runtime_fields_present = {
+        key
+        for key in ("git_head", "policy_version", "runtime_manifest_hash", "sample_type")
+        if key in api_batch
+    }
+    is_v2 = bool(runtime_fields_present)
+    if is_v2 and runtime_fields_present != {
+        "git_head",
+        "policy_version",
+        "runtime_manifest_hash",
+        "sample_type",
+    }:
+        raise ValueError("incomplete runtime identity")
+    git_head = str(api_batch.get("git_head") or "").strip().lower()
+    policy_version = str(api_batch.get("policy_version") or "").strip()
+    manifest_hash = str(api_batch.get("runtime_manifest_hash") or "").strip().lower()
+    batch_sample_type = str(api_batch.get("sample_type") or "").strip().lower()
+    if is_v2 and (
+        not _GIT_HEAD_RE.fullmatch(git_head)
+        or not _SAFE_CODE_RE.fullmatch(policy_version)
+        or not _SHA256_RE.fullmatch(manifest_hash)
+        or batch_sample_type not in _SAMPLE_TYPES
+    ):
+        raise ValueError("invalid runtime identity")
+
     rows: list[dict[str, Any]] = []
     seen_cases: set[str] = set()
     seen_pairs: set[tuple[str, str]] = set()
@@ -176,6 +214,15 @@ def build_candidate_ledger(
         if not _CASE_LABEL_RE.fullmatch(case_label) or case_label in seen_cases:
             raise ValueError("invalid case_label")
         seen_cases.add(case_label)
+        safe_case_ref = str(case.get("coordinate_hash") or "").strip().lower()
+        sample_type = str(
+            case.get("sample_type") or batch_sample_type
+        ).strip().lower()
+        if is_v2 and (
+            not _SHA256_RE.fullmatch(safe_case_ref)
+            or sample_type not in _SAMPLE_TYPES
+        ):
+            raise ValueError("invalid safe case identity")
         response = case.get("response")
         if not isinstance(response, Mapping):
             raise ValueError("invalid API response")
@@ -214,6 +261,38 @@ def build_candidate_ledger(
                 raise ValueError("invalid observed reason")
             if executor_type and decision_kind not in _DECISION_KINDS:
                 raise ValueError("invalid decision kind")
+            evidence_source_types = result.get("evidence_source_types")
+            if is_v2 and (
+                not isinstance(evidence_source_types, list)
+                or not evidence_source_types
+                or len(evidence_source_types) != len(set(evidence_source_types))
+                or any(
+                    not isinstance(item, str)
+                    or not _SAFE_CODE_RE.fullmatch(item)
+                    for item in evidence_source_types
+                )
+            ):
+                raise ValueError("invalid evidence source types")
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+            if is_v2:
+                token_fields = (
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "total_tokens",
+                )
+                if not isinstance(metadata, Mapping) or any(
+                    type(metadata.get(field)) is not int
+                    or int(metadata.get(field)) < 0
+                    for field in token_fields
+                ):
+                    raise ValueError("invalid rule token metrics")
+                prompt_tokens = int(metadata["prompt_tokens"])
+                completion_tokens = int(metadata["completion_tokens"])
+                total_tokens = int(metadata["total_tokens"])
+                if total_tokens != prompt_tokens + completion_tokens:
+                    raise ValueError("invalid rule token metrics")
             row = {
                 "case_label": case_label,
                 "selector_digest": selector_digest,
@@ -223,6 +302,21 @@ def build_candidate_ledger(
                 "evidence_ref_hashes": [_evidence_hash(result)],
                 "review_status": "candidate",
             }
+            if is_v2:
+                row.update(
+                    {
+                        "safe_case_ref": safe_case_ref,
+                        "sample_type": sample_type,
+                        "evidence_source_types": list(evidence_source_types),
+                        "manual_review_status": "candidate",
+                        "policy_version": policy_version,
+                        "git_head": git_head,
+                        "runtime_manifest_hash": manifest_hash,
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": total_tokens,
+                    }
+                )
             # v1 历史候选没有 executor_type；保留其 promotion 兼容性。
             # 新准生产安全 DTO 会显式携带该字段，review-template 只接受新候选。
             if decision_kind:
@@ -230,7 +324,9 @@ def build_candidate_ledger(
             rows.append(row)
 
     candidate: dict[str, Any] = {
-        "schema_version": CANDIDATE_SCHEMA_VERSION,
+        "schema_version": (
+            CANDIDATE_SCHEMA_VERSION_V2 if is_v2 else CANDIDATE_SCHEMA_VERSION
+        ),
         "candidate_version": normalized_version,
         "selector_version": selector_version,
         "selector_digest": selector_digest,
@@ -240,6 +336,14 @@ def build_candidate_ledger(
         "generated_at": normalized_generated_at,
         "rows": rows,
     }
+    if is_v2:
+        candidate.update(
+            {
+                "policy_version": policy_version,
+                "git_head": git_head,
+                "runtime_manifest_hash": manifest_hash,
+            }
+        )
     candidate["candidate_digest"] = canonical_digest(candidate)
     return candidate
 
@@ -268,11 +372,36 @@ _CANDIDATE_ROW_REQUIRED_FIELDS = {
     "evidence_ref_hashes",
     "review_status",
 }
+_CANDIDATE_V2_ROW_FIELDS = {
+    "safe_case_ref",
+    "sample_type",
+    "evidence_source_types",
+    "manual_review_status",
+    "policy_version",
+    "git_head",
+    "runtime_manifest_hash",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+}
 
 
 def _validate_candidate(candidate: Mapping[str, Any]) -> str:
     _assert_safe_api_dto(candidate)
-    if str(candidate.get("schema_version") or "") != CANDIDATE_SCHEMA_VERSION:
+    schema_version = str(candidate.get("schema_version") or "")
+    is_v2 = schema_version == CANDIDATE_SCHEMA_VERSION_V2
+    if schema_version not in {
+        CANDIDATE_SCHEMA_VERSION,
+        CANDIDATE_SCHEMA_VERSION_V2,
+    }:
+        raise ValueError("invalid candidate ledger")
+    if is_v2 and (
+        not _GIT_HEAD_RE.fullmatch(str(candidate.get("git_head") or ""))
+        or not _SAFE_CODE_RE.fullmatch(str(candidate.get("policy_version") or ""))
+        or not _SHA256_RE.fullmatch(
+            str(candidate.get("runtime_manifest_hash") or "")
+        )
+    ):
         raise ValueError("invalid candidate ledger")
     claimed = _require_digest(
         candidate.get("candidate_digest"), field="candidate_digest"
@@ -293,15 +422,25 @@ def _validate_candidate(candidate: Mapping[str, Any]) -> str:
     seen_pairs: set[tuple[str, str]] = set()
     seen_cases: set[str] = set()
     for row in rows:
-        if not isinstance(row, Mapping) or set(row) not in (
-            _CANDIDATE_ROW_REQUIRED_FIELDS,
-            _CANDIDATE_ROW_REQUIRED_FIELDS | {"decision_kind"},
-        ):
+        expected_row_fields = _CANDIDATE_ROW_REQUIRED_FIELDS | {"decision_kind"}
+        valid_field_sets = (
+            {frozenset(expected_row_fields | _CANDIDATE_V2_ROW_FIELDS)}
+            if is_v2
+            else {
+                frozenset(_CANDIDATE_ROW_REQUIRED_FIELDS),
+                frozenset(expected_row_fields),
+            }
+        )
+        if not isinstance(row, Mapping) or frozenset(row) not in valid_field_sets:
             raise ValueError("invalid candidate ledger")
         case_label = str(row.get("case_label") or "").strip()
         rule_id = str(row.get("rule_id") or "").strip().upper()
         pair = (case_label, rule_id)
         reason_code = str(row.get("observed_reason_code") or "").strip()
+        evidence_source_types = row.get("evidence_source_types")
+        prompt_tokens = row.get("prompt_tokens")
+        completion_tokens = row.get("completion_tokens")
+        total_tokens = row.get("total_tokens")
         if (
             not _CASE_LABEL_RE.fullmatch(case_label)
             or not _RULE_ID_RE.fullmatch(rule_id)
@@ -316,6 +455,37 @@ def _validate_candidate(candidate: Mapping[str, Any]) -> str:
             not in _OBSERVED_STATES
             or (reason_code and not _SAFE_CODE_RE.fullmatch(reason_code))
             or str(row.get("review_status") or "").strip().lower() != "candidate"
+            or (
+                is_v2
+                and (
+                    not _SHA256_RE.fullmatch(str(row.get("safe_case_ref") or ""))
+                    or str(row.get("sample_type") or "") not in _SAMPLE_TYPES
+                    or not isinstance(evidence_source_types, list)
+                    or not evidence_source_types
+                    or len(evidence_source_types) != len(set(evidence_source_types))
+                    or any(
+                        not isinstance(item, str)
+                        or not _SAFE_CODE_RE.fullmatch(item)
+                        for item in evidence_source_types
+                    )
+                    or str(row.get("manual_review_status") or "") != "candidate"
+                    or str(row.get("policy_version") or "")
+                    != str(candidate.get("policy_version") or "")
+                    or str(row.get("git_head") or "")
+                    != str(candidate.get("git_head") or "")
+                    or str(row.get("runtime_manifest_hash") or "")
+                    != str(candidate.get("runtime_manifest_hash") or "")
+                    or any(
+                        type(item) is not int or item < 0
+                        for item in (
+                            prompt_tokens,
+                            completion_tokens,
+                            total_tokens,
+                        )
+                    )
+                    or total_tokens != prompt_tokens + completion_tokens
+                )
+            )
         ):
             raise ValueError("invalid candidate ledger")
         _review_hashes(row.get("evidence_ref_hashes"))
@@ -411,6 +581,10 @@ def promote_candidate_ledger(
     """仅把逐行、显式且完整的人工签收提升为 accepted ledger。"""
 
     candidate_digest = _validate_candidate(candidate)
+    candidate_is_v2 = (
+        str(candidate.get("schema_version") or "")
+        == CANDIDATE_SCHEMA_VERSION_V2
+    )
     normalized_version = str(ledger_version or "").strip()
     normalized_generated_at = str(generated_at or "").strip()
     if not _SAFE_CODE_RE.fullmatch(normalized_version):
@@ -481,8 +655,7 @@ def promote_candidate_ledger(
             or revision < 1
         ):
             raise ValueError("incomplete accepted review")
-        entries.append(
-            {
+        entry = {
                 "case_label": case_label,
                 "selector_digest": str(candidate.get("selector_digest") or ""),
                 "rule_id": rule_id,
@@ -494,10 +667,30 @@ def promote_candidate_ledger(
                 "accepted_at": accepted_at,
                 "review_revision": revision,
             }
-        )
+        if candidate_is_v2:
+            entry.update(
+                {
+                    "safe_case_ref": str(candidate_row.get("safe_case_ref") or ""),
+                    "sample_type": str(candidate_row.get("sample_type") or ""),
+                    "evidence_source_types": list(
+                        candidate_row.get("evidence_source_types") or []
+                    ),
+                    "manual_review_status": "accepted",
+                    "policy_version": str(
+                        candidate_row.get("policy_version") or ""
+                    ),
+                    "git_head": str(candidate_row.get("git_head") or ""),
+                    "runtime_manifest_hash": str(
+                        candidate_row.get("runtime_manifest_hash") or ""
+                    ),
+                }
+            )
+        entries.append(entry)
 
     ledger: dict[str, Any] = {
-        "schema_version": LEDGER_SCHEMA_VERSION,
+        "schema_version": (
+            LEDGER_SCHEMA_VERSION_V2 if candidate_is_v2 else LEDGER_SCHEMA_VERSION
+        ),
         "ledger_version": normalized_version,
         "rule_set_digest": str(candidate.get("rule_set_digest") or ""),
         "selector_version": str(candidate.get("selector_version") or ""),
@@ -509,6 +702,16 @@ def promote_candidate_ledger(
         "generated_at": normalized_generated_at,
         "entries": entries,
     }
+    if candidate_is_v2:
+        ledger.update(
+            {
+                "policy_version": str(candidate.get("policy_version") or ""),
+                "git_head": str(candidate.get("git_head") or ""),
+                "runtime_manifest_hash": str(
+                    candidate.get("runtime_manifest_hash") or ""
+                ),
+            }
+        )
     ledger["ledger_digest"] = canonical_digest(ledger)
     return ledger
 

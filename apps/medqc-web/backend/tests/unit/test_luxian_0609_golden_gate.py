@@ -82,6 +82,31 @@ def _api_batch(*, state: str = "non_compliant") -> dict[str, object]:
     }
 
 
+def _runtime_manifest(*, git_head: str | None = None) -> dict[str, object]:
+    resolved_git_head = git_head or golden_gate.current_git_head()
+    return {
+        "schema_version": "lx0609-runtime-manifest-v1",
+        "generated_at": "2026-07-24T00:00:00Z",
+        "git_head": resolved_git_head,
+        "customer_rule_count": 49,
+        "flags": {},
+        "rule_set": {
+            "key": "luxian_0609_qc_v1",
+            "version": "2026-06-09",
+            "rule_count": 49,
+            "rule_ids": [f"LX0609-{index:03d}" for index in range(1, 50)],
+        },
+        "runtime": {},
+        "rules": [],
+    }
+
+
+def _run_v2_gate(**kwargs):
+    manifest = _runtime_manifest()
+    kwargs.setdefault("runtime_manifest", manifest)
+    return golden_gate.run_luxian_0609_golden_gate(**kwargs)
+
+
 def _candidate(
     batch: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -152,8 +177,285 @@ def _promoted_ledger_for_batch(
     )
 
 
-def test_deterministic_gate_requires_exact_state_reason_and_evidence_hash() -> None:
+def _v2_batch(
+    *,
+    state: str = "non_compliant",
+    total_tokens: int = 0,
+) -> dict[str, object]:
+    batch = _api_batch(state=state)
+    batch.update(
+        {
+            "git_head": golden_gate.current_git_head(),
+            "policy_version": "2026-06-09",
+            "runtime_manifest_hash": golden_gate.runtime_manifest_hash(
+                _runtime_manifest()
+            ),
+            "sample_type": "real",
+        }
+    )
+    case = batch["cases"][0]
+    case["coordinate_hash"] = "f" * 64
+    result = case["response"]["results"][0]
+    result["metadata"].update(
+        {
+            "executor_type": "program",
+            "prompt_tokens": total_tokens,
+            "completion_tokens": 0,
+            "total_tokens": total_tokens,
+        }
+    )
+    result["evidence_source_types"] = ["daily_course_record"]
+    return batch
+
+
+def _v2_candidate_and_ledger(
+    *,
+    total_tokens: int = 0,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+    batch = _v2_batch(total_tokens=total_tokens)
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    row = candidate["rows"][0]
+    review = {
+        "candidate_digest": candidate["candidate_digest"],
+        "case_label": row["case_label"],
+        "selector_digest": row["selector_digest"],
+        "rule_id": row["rule_id"],
+        "decision_kind": row["decision_kind"],
+        "expected_state": row["observed_state"],
+        "expected_reason_code": row["observed_reason_code"],
+        "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+        "reviewer_code": "REVIEWER-01",
+        "accepted_at": "2026-07-24T00:05:00Z",
+        "review_revision": "1",
+        "review_status": "accepted",
+    }
+    ledger = promote_candidate_ledger(
+        candidate,
+        [review],
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+    return batch, candidate, ledger
+
+
+def test_v2_gate_reports_separate_quality_buckets_and_real_denominator() -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+    summary, exit_code = _run_v2_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+    )
+
+    assert exit_code == 0
+    assert summary["quality"]["real_accuracy_denominator"] == 1
+    assert summary["quality"]["definite_agreement"] == 1.0
+    assert summary["quality"]["data_gap_count"] == 0
+    assert summary["quality"]["evaluation_unknown_ai_suggestion_count"] == 0
+    assert summary["quality"]["technical_error_rate"] == 0.0
+    assert summary["quality"]["per_rule_sample_counts"]["LX0609-001"] == {
+        "positive": 1,
+        "negative": 0,
+        "boundary": 0,
+        "real": 1,
+        "synthetic": 0,
+    }
+
+
+def test_v2_gate_rejects_runtime_identity_drift_and_program_model_usage() -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+    stale = copy.deepcopy(batch)
+    stale["git_head"] = "a" * 40
+    summary, exit_code = _run_v2_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[stale],
+    )
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"][0]["failure_kind"] == "runtime_identity_mismatch"
+
+    token_batch, token_candidate, token_ledger = _v2_candidate_and_ledger(
+        total_tokens=1
+    )
+    summary, exit_code = _run_v2_gate(
+        ledger=token_ledger,
+        candidate=token_candidate,
+        run_batches=[token_batch],
+    )
+    assert exit_code == golden_gate.EXIT_QUALITY_FAILURE
+    assert any(
+        item["failure_kind"] == "program_rule_used_model"
+        for item in summary["failures"]
+    )
+
+
+def test_v2_release_gate_requires_current_runtime_identity() -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+
     summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+    )
+    assert exit_code == golden_gate.EXIT_BLOCKED
+    assert summary["failures"][0]["failure_kind"] == "missing_current_runtime_manifest"
+
+    stale_batch = _v2_batch()
+    stale_batch["runtime_manifest_hash"] = "a" * 64
+    stale_candidate = build_candidate_ledger(
+        stale_batch,
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    stale_row = stale_candidate["rows"][0]
+    stale_ledger = promote_candidate_ledger(
+        stale_candidate,
+        [
+            {
+                "candidate_digest": stale_candidate["candidate_digest"],
+                "case_label": stale_row["case_label"],
+                "selector_digest": stale_row["selector_digest"],
+                "rule_id": stale_row["rule_id"],
+                "decision_kind": stale_row["decision_kind"],
+                "expected_state": stale_row["observed_state"],
+                "expected_reason_code": stale_row["observed_reason_code"],
+                "evidence_ref_hashes": ";".join(stale_row["evidence_ref_hashes"]),
+                "reviewer_code": "REVIEWER-01",
+                "accepted_at": "2026-07-24T00:05:00Z",
+                "review_revision": "1",
+                "review_status": "accepted",
+            }
+        ],
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+    summary, exit_code = _run_v2_gate(
+        ledger=stale_ledger,
+        candidate=stale_candidate,
+        run_batches=[stale_batch],
+    )
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert summary["failures"][0]["failure_kind"] == "stale_release_artifacts"
+
+
+def test_v2_accepted_classification_must_match_candidate() -> None:
+    batch, candidate, ledger = _v2_candidate_and_ledger()
+    tampered = copy.deepcopy(ledger)
+    tampered["entries"][0]["sample_type"] = "synthetic"
+    tampered["ledger_digest"] = golden_gate.canonical_digest(
+        {key: value for key, value in tampered.items() if key != "ledger_digest"}
+    )
+
+    summary, exit_code = _run_v2_gate(
+        ledger=tampered,
+        candidate=candidate,
+        run_batches=[batch],
+    )
+    assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
+    assert (
+        summary["failures"][0]["failure_kind"]
+        == "accepted_candidate_classification_mismatch"
+    )
+
+
+def test_v2_gate_excludes_synthetic_rows_from_real_accuracy_denominator() -> None:
+    batch = _v2_batch()
+    synthetic_case = copy.deepcopy(batch["cases"][0])
+    synthetic_case["case_label"] = "case-02"
+    synthetic_case["coordinate_hash"] = "9" * 64
+    synthetic_case["sample_type"] = "synthetic"
+    synthetic_case["response"]["results"][0]["evidence_items"][0][
+        "evidence_attestation"
+    ] = "8" * 64
+    batch["cases"].append(synthetic_case)
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    reviews = []
+    for row in candidate["rows"]:
+        reviews.append(
+            {
+                "candidate_digest": candidate["candidate_digest"],
+                "case_label": row["case_label"],
+                "selector_digest": row["selector_digest"],
+                "rule_id": row["rule_id"],
+                "decision_kind": row["decision_kind"],
+                "expected_state": row["observed_state"],
+                "expected_reason_code": row["observed_reason_code"],
+                "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+                "reviewer_code": "REVIEWER-01",
+                "accepted_at": "2026-07-24T00:05:00Z",
+                "review_revision": "1",
+                "review_status": "accepted",
+            }
+        )
+    ledger = promote_candidate_ledger(
+        candidate,
+        reviews,
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+
+    summary, exit_code = _run_v2_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch],
+    )
+
+    assert exit_code == 0
+    assert summary["quality"]["real_accuracy_denominator"] == 1
+    assert summary["quality"]["synthetic_count"] == 1
+    assert summary["quality"]["synthetic_exact_count"] == 1
+
+
+def test_v2_gate_reports_semantic_per_rule_token_budget_excess() -> None:
+    batch = _v2_batch(total_tokens=9000)
+    result = batch["cases"][0]["response"]["results"][0]
+    result["metadata"]["executor_type"] = "llm"
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    row = candidate["rows"][0]
+    review = {
+        "candidate_digest": candidate["candidate_digest"],
+        "case_label": row["case_label"],
+        "selector_digest": row["selector_digest"],
+        "rule_id": row["rule_id"],
+        "decision_kind": "semantic",
+        "expected_state": row["observed_state"],
+        "expected_reason_code": row["observed_reason_code"],
+        "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+        "reviewer_code": "REVIEWER-01",
+        "accepted_at": "2026-07-24T00:05:00Z",
+        "review_revision": "1",
+        "review_status": "accepted",
+    }
+    ledger = promote_candidate_ledger(
+        candidate,
+        [review],
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+    summary, _exit_code = _run_v2_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch, batch, batch],
+    )
+    assert any(
+        item["failure_kind"] == "semantic_rule_token_budget_exceeded"
+        for item in summary["failures"]
+    )
+
+
+def test_deterministic_gate_requires_exact_state_reason_and_evidence_hash() -> None:
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_ledger(),
         candidate=_candidate(),
         run_batches=[_api_batch()],
@@ -169,6 +471,17 @@ def test_deterministic_gate_requires_exact_state_reason_and_evidence_hash() -> N
         "exact_rate": 1.0,
     }
     assert summary["semantic"] == {"accepted_count": 0, "status": "not_applicable"}
+
+
+def test_v1_legacy_diagnostic_cannot_pass_formal_release_gate() -> None:
+    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+        ledger=_ledger(),
+        candidate=_candidate(),
+        run_batches=[_api_batch()],
+    )
+    assert exit_code == golden_gate.EXIT_BLOCKED
+    assert summary["passed"] is False
+    assert summary["failures"][0]["failure_kind"] == "legacy_v1_not_release_eligible"
 
 
 def test_accepted_ledger_requires_an_explicit_candidate_ledger() -> None:
@@ -193,7 +506,7 @@ def test_gate_requires_candidate_digest_and_rows_to_bind_accepted_ledger_and_run
     candidate = _candidate(batch)
     ledger = _ledger()
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=candidate,
         run_batches=[batch, batch, batch],
@@ -212,7 +525,7 @@ def test_gate_requires_candidate_digest_and_rows_to_bind_accepted_ledger_and_run
     digest_tampered["ledger_digest"] = golden_gate.canonical_digest(
         digest_material
     )
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=digest_tampered,
         candidate=candidate,
         run_batches=[batch, batch, batch],
@@ -236,7 +549,7 @@ def test_gate_requires_candidate_digest_and_rows_to_bind_accepted_ledger_and_run
     candidate_tampered["candidate_digest"] = golden_gate.canonical_digest(
         candidate_material
     )
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=candidate_tampered,
         run_batches=[batch, batch, batch],
@@ -265,7 +578,7 @@ def test_gate_rejects_run_identity_that_differs_from_accepted_ledger(
     run = _api_batch()
     run[field] = value
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_ledger(),
         candidate=_candidate(),
         run_batches=[run],
@@ -341,7 +654,7 @@ def _semantic_ledger() -> dict[str, object]:
 
 def test_semantic_gate_requires_three_stable_runs_and_meets_ppv_recall() -> None:
     batch = _semantic_batch()
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_semantic_ledger(),
         candidate=_candidate(batch),
         run_batches=[batch, batch, batch],
@@ -367,7 +680,7 @@ def test_semantic_gate_requires_three_stable_runs_and_meets_ppv_recall() -> None
 
 
 def test_semantic_gate_blocks_when_accepted_sample_lacks_negative() -> None:
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_ledger(decision_kind="semantic"),
         candidate=_candidate(),
         run_batches=[_api_batch(), _api_batch(), _api_batch()],
@@ -390,7 +703,7 @@ def test_semantic_gate_fails_when_baseline_matches_candidate_but_third_run_is_un
     unstable = copy.deepcopy(stable)
     unstable["cases"][0]["response"]["results"][0]["status"] = "compliant"
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_semantic_ledger(),
         candidate=_candidate(stable),
         run_batches=[stable, stable, unstable],
@@ -405,7 +718,7 @@ def test_semantic_gate_fails_when_baseline_matches_candidate_but_third_run_is_un
 
 
 def test_release_gate_blocks_an_incomplete_accepted_matrix() -> None:
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_ledger(),
         candidate=_candidate(),
         run_batches=[_api_batch()],
@@ -457,7 +770,7 @@ def test_release_gate_requires_exact_canonical_rule_set_not_only_rule_count() ->
         generated_at="2026-07-17T10:31:00Z",
     )
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=candidate,
         run_batches=[batch],
@@ -484,7 +797,7 @@ def test_each_run_requires_the_same_case_rule_matrix_as_the_ledger() -> None:
         "LX0609-050"
     )
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=_promoted_ledger_for_batch(accepted),
         candidate=_candidate(accepted),
         run_batches=[mismatched_run],
@@ -592,7 +905,7 @@ def test_gate_revalidates_every_accepted_ledger_field(
     elif mutation == "ledger_digest_whitespace":
         ledger["ledger_digest"] = f" {ledger['ledger_digest']} "
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=_candidate(),
         run_batches=[_api_batch()],
@@ -649,7 +962,7 @@ def test_semantic_sample_threshold_is_enforced_per_rule_not_only_in_aggregate() 
         generated_at="2026-07-17T10:31:00Z",
     )
 
-    summary, exit_code = golden_gate.run_luxian_0609_golden_gate(
+    summary, exit_code = golden_gate._run_luxian_0609_golden_gate_diagnostic(
         ledger=ledger,
         candidate=candidate,
         run_batches=[batch, batch, batch],

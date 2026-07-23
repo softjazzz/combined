@@ -5,6 +5,7 @@ import csv
 import json
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 
@@ -57,6 +58,136 @@ def _safe_api_batch(*, status: str = "non_compliant") -> dict[str, object]:
             }
         ],
     }
+
+
+def _v2_api_batch(
+    *,
+    status: str = "non_compliant",
+    sample_type: str = "real",
+) -> dict[str, object]:
+    batch = _safe_api_batch(status=status)
+    batch.update(
+        {
+            "git_head": "d" * 40,
+            "policy_version": "2026-06-09",
+            "runtime_manifest_hash": "e" * 64,
+            "sample_type": sample_type,
+        }
+    )
+    case = batch["cases"][0]
+    case["coordinate_hash"] = "f" * 64
+    result = case["response"]["results"][0]
+    result["evidence_source_types"] = ["daily_course_record"]
+    result["metadata"].update(
+        {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+    )
+    return batch
+
+
+def test_v2_candidate_and_accepted_ledger_bind_safe_runtime_identity() -> None:
+    candidate = ledger_builder.build_candidate_ledger(
+        _v2_api_batch(),
+        candidate_version="candidate20-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    row = candidate["rows"][0]
+    assert candidate["schema_version"] == "lx0609-golden-candidate-v2"
+    assert row["safe_case_ref"] == "f" * 64
+    assert row["sample_type"] == "real"
+    assert row["evidence_source_types"] == ["daily_course_record"]
+    assert row["manual_review_status"] == "candidate"
+    assert row["policy_version"] == "2026-06-09"
+    assert row["git_head"] == "d" * 40
+    assert row["runtime_manifest_hash"] == "e" * 64
+
+    review = ledger_builder.build_review_template_rows(candidate)[0]
+    review.update(
+        {
+            "expected_state": "non_compliant",
+            "expected_reason_code": "deadline_exceeded",
+            "reviewer_code": "REVIEWER-01",
+            "accepted_at": "2026-07-24T00:05:00Z",
+            "review_revision": "1",
+            "review_status": "accepted",
+        }
+    )
+    ledger = ledger_builder.promote_candidate_ledger(
+        candidate,
+        [review],
+        ledger_version="accepted20-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+    accepted = ledger["entries"][0]
+    assert ledger["schema_version"] == "lx0609-golden-ledger-v2"
+    assert accepted["manual_review_status"] == "accepted"
+    assert accepted["sample_type"] == "real"
+    assert accepted["safe_case_ref"] == "f" * 64
+
+    schema_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "acceptance"
+        / "lx0609-golden"
+        / "lx0609-golden-ledger-v2.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    jsonschema.validate(ledger, schema)
+    unsafe = json.loads(json.dumps(ledger))
+    unsafe["entries"][0]["patient_name"] = "PRIVATE-MARKER"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(unsafe, schema)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("patient_name", "record_content", "missing_runtime", "bad_manifest"),
+)
+def test_v2_candidate_fails_closed_for_phi_or_incomplete_identity(
+    mutation: str,
+) -> None:
+    batch = _v2_api_batch()
+    if mutation == "missing_runtime":
+        batch.pop("runtime_manifest_hash")
+    elif mutation == "bad_manifest":
+        batch["runtime_manifest_hash"] = "invalid"
+    else:
+        batch["cases"][0][mutation] = "PRIVATE-MARKER"
+    with pytest.raises(ValueError):
+        ledger_builder.build_candidate_ledger(
+            batch,
+            candidate_version="candidate20-v2",
+            generated_at="2026-07-24T00:00:00Z",
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "boolean", "negative", "arithmetic_mismatch"),
+)
+def test_v2_candidate_fails_closed_for_incomplete_rule_token_usage(
+    mutation: str,
+) -> None:
+    batch = _v2_api_batch()
+    metadata = batch["cases"][0]["response"]["results"][0]["metadata"]
+    if mutation == "missing":
+        metadata.pop("total_tokens")
+    elif mutation == "boolean":
+        metadata["prompt_tokens"] = False
+    elif mutation == "negative":
+        metadata["completion_tokens"] = -1
+    else:
+        metadata["total_tokens"] = 1
+
+    with pytest.raises(ValueError, match="rule token metrics"):
+        ledger_builder.build_candidate_ledger(
+            batch,
+            candidate_version="candidate20-v2",
+            generated_at="2026-07-24T00:00:00Z",
+        )
 
 
 def test_safe_api_dto_builds_candidate_without_promoting_observed_state() -> None:
