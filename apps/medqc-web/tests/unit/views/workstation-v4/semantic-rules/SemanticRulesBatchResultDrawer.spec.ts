@@ -1039,6 +1039,211 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(cards[0]?.classes()).toContain('issue-conclusion-card--warning')
   })
 
+  it('LX0609 客户结果只展示安全病历引用并按规范状态分桶', async () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    const unsafeRecordId = 'RAW-RECORD-LEAK-0609'
+    const unsafeVisitId = 'RAW-VISIT-LEAK-0609'
+    const unsafePatientName = '原始患者姓名泄漏'
+    const unsafeDepartment = '原始科室泄漏'
+    const safeRecordRef = 'case-7d36f8a1'
+    props.batchJobDetail.rule_results = [
+      {
+        id: 'rule-job-lx-safe',
+        rule_code: 'LX0609',
+        rule_name: '泸县0609质控点验证',
+        status: 'completed',
+        items: [
+          Object.assign(
+            {
+              rule_job_id: 'rule-job-lx-safe',
+              rule_id: 'LX0609-021',
+              rule_code: 'LX0609-021',
+              rule_name: '会诊申请目的完整性',
+              record_id: unsafeRecordId,
+              visit_id: unsafeVisitId,
+              patient_name: unsafePatientName,
+              department: unsafeDepartment,
+              status: 'non_compliant',
+              result_status: 'non_compliant',
+              is_compliant: false,
+              findings: '会诊申请目的缺失。',
+            },
+            {
+              record_ref: safeRecordRef,
+              canonical_status: 'ai_suggested_non_compliant',
+              reason_code: 'consultation_application_needs_review',
+            },
+          ),
+          Object.assign(
+            {
+              rule_job_id: 'rule-job-lx-safe',
+              rule_id: 'LX0609-029',
+              rule_code: 'LX0609-029',
+              rule_name: '术前小结完整性',
+              record_id: unsafeRecordId,
+              visit_id: unsafeVisitId,
+              patient_name: unsafePatientName,
+              department: unsafeDepartment,
+              status: 'non_compliant',
+              result_status: 'non_compliant',
+              is_compliant: false,
+              findings: '术前小结来源未同步。',
+            },
+            {
+              record_ref: safeRecordRef,
+              canonical_status: 'data_gap',
+              reason_code: 'source_unavailable',
+            },
+          ),
+          Object.assign(
+            {
+              rule_job_id: 'rule-job-lx-safe',
+              rule_id: 'LX0609-033',
+              rule_code: 'LX0609-033',
+              rule_name: '手术知情同意书完整性',
+              record_id: unsafeRecordId,
+              visit_id: unsafeVisitId,
+              patient_name: unsafePatientName,
+              department: unsafeDepartment,
+              status: 'non_compliant',
+              result_status: 'non_compliant',
+              is_compliant: false,
+              findings: '来源读取异常。',
+            },
+            {
+              record_ref: safeRecordRef,
+              canonical_status: 'technical_error',
+              reason_code: 'source_query_failed',
+            },
+          ),
+        ],
+      },
+    ]
+    props.batchJobDetail.items = [
+      Object.assign(
+        {
+          rule_job_id: 'rule-job-lx-safe',
+          rule_id: 'LX0609-021',
+          rule_code: 'LX0609-021',
+          rule_name: '会诊申请目的完整性',
+          status: 'ai_suggested_non_compliant',
+          is_compliant: false,
+          conclusion: '会诊申请目的需质控员确认。',
+          findings: 'RAW-INTERNAL-FINDINGS-021',
+          evidence: [
+            {
+              source_type: 'consultation_record',
+              source_ref: 'doc-3fa891',
+            },
+          ],
+        },
+        {
+          record_ref: safeRecordRef,
+          reason_code: 'consultation_application_needs_review',
+        },
+      ),
+      Object.assign(
+        {
+          rule_job_id: 'rule-job-lx-safe',
+          rule_id: 'LX0609-029',
+          rule_code: 'LX0609-029',
+          rule_name: '术前小结完整性',
+          status: 'data_gap',
+          is_compliant: false,
+          conclusion: '术前小结来源尚未同步。',
+          evidence: [
+            {
+              source_type: 'presurg_summary',
+              source_ref: 'doc-7a102b',
+            },
+          ],
+        },
+        {
+          record_ref: safeRecordRef,
+          reason_code: 'source_unavailable',
+        },
+      ),
+      Object.assign(
+        {
+          rule_job_id: 'rule-job-lx-safe',
+          rule_id: 'LX0609-033',
+          rule_code: 'LX0609-033',
+          rule_name: '手术知情同意书完整性',
+          status: 'technical_error',
+          is_compliant: false,
+          conclusion: '手术知情同意书来源读取异常。',
+          evidence: [
+            {
+              source_type: 'surgery_inform_consent',
+              source_ref: 'doc-88bc20',
+            },
+          ],
+        },
+        {
+          record_ref: safeRecordRef,
+          reason_code: 'source_query_failed',
+        },
+      ),
+    ]
+    Object.assign(props.batchJobDetail.summary!, {
+      review_report: {
+        review_status: 'completed',
+        summary: { total_findings: 1, p0: 0, p1: 1, p2: 0 },
+        findings: [
+          Object.assign(
+            {
+              id: 'review-safe-1',
+              rule_id: 'LX0609-021',
+              record_id: unsafeRecordId,
+              patient_name: unsafePatientName,
+              department: unsafeDepartment,
+              severity: 'P1',
+              customer_message: '建议复核会诊申请目的。',
+            },
+            {
+              record_ref: safeRecordRef,
+              reason_code: 'consultation_application_needs_review',
+            },
+          ),
+        ],
+      },
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: {
+        ...props,
+        focusRecordId: unsafeRecordId,
+        focusVisitId: unsafeVisitId,
+        focusRecordLabel: unsafePatientName,
+      },
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain(safeRecordRef)
+    expect(wrapper.text()).not.toContain(unsafeRecordId)
+    expect(wrapper.text()).not.toContain(unsafeVisitId)
+    expect(wrapper.text()).not.toContain(unsafePatientName)
+    expect(wrapper.text()).not.toContain(unsafeDepartment)
+    const navItems = wrapper.findAll('.issue-review-nav-item')
+    expect(navItems).toHaveLength(3)
+    expect(navItems.some((item) => item.text().includes('AI判断'))).toBe(true)
+    expect(navItems.some((item) => item.text().includes('数据不足'))).toBe(true)
+    expect(navItems.some((item) => item.text().includes('技术异常'))).toBe(true)
+    expect(wrapper.text()).not.toContain('确定问题')
+    const lx021Nav = navItems.find((item) => item.text().includes('LX0609-021'))
+    expect(lx021Nav).toBeTruthy()
+    await lx021Nav!.trigger('click')
+    expect(wrapper.text()).toContain('会诊申请目的需质控员确认。')
+    expect(wrapper.text()).toContain('判定依据：会诊申请目的需复核')
+    expect(wrapper.text()).toContain('会诊记录 · doc-3fa891')
+    expect(wrapper.text()).not.toContain('未返回结论')
+    expect(wrapper.text()).not.toContain('RAW-INTERNAL-FINDINGS-021')
+  })
+
   it('复制病历结果应展示左右对比证据', () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]

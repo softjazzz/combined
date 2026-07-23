@@ -104,6 +104,9 @@ export interface Luxian0609ReviewFinding {
   id?: string
   rule_id?: string
   rule_name?: string
+  record_ref?: string
+  reason_code?: string
+  canonical_status?: string
   record_id?: string
   patient_name?: string
   department?: string
@@ -294,22 +297,31 @@ export interface SichuanBatchResultAggregation {
   status_breakdown?: SichuanBatchAggregationBreakdownItem[]
 }
 
+export interface SichuanBatchSafeEvidenceRef {
+  source_type: string
+  source_ref: string
+}
+
 export interface SichuanBatchIssueItem {
   rule_id?: string
   rule_job_id?: string
   rule_code?: string
   rule_name?: string
-  record_id: string
+  record_ref?: string
+  reason_code?: string
+  canonical_status?: string
+  record_id?: string
   institute_id?: string
   patient_id?: string
   visit_id?: string
   patient_name?: string
   department?: string
   status: string
-  is_compliant: boolean
+  is_compliant: boolean | null
   issues?: Array<{ description: string; evidence?: string }>
+  conclusion?: string
   findings?: string
-  evidence?: string
+  evidence?: string | SichuanBatchSafeEvidenceRef[]
   suggestion?: string
   rewrite_example?: string
   confidence?: number

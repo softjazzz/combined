@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -27,6 +29,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from ..core.settings import get_settings
 from .document_domain_alignment import (
     align_document_domain_fields,
     normalize_document_label,
@@ -51,6 +54,45 @@ DEFECT_LEVEL_TO_SEVERITY = {
     "一般缺陷": "major",
     "提示性缺陷": "minor",
 }
+
+_CUSTOMER_RESULT_SCHEMA = "customer-qc-result-v1"
+_REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+_SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+_STATUS_ALIASES = {
+    "confirmed_defect": "non_compliant",
+    "data_quality_gap": "data_gap",
+    "technical_error_internal": "technical_error",
+    "rejected_by_system": "technical_error",
+    "evaluation_unknown": "uncertain",
+    "failed": "technical_error",
+}
+_CUSTOMER_STATUSES = {
+    "compliant",
+    "non_compliant",
+    "ai_suggested_compliant",
+    "ai_suggested_non_compliant",
+    "data_gap",
+    "not_applicable",
+    "not_executed",
+    "technical_error",
+    "uncertain",
+}
+_GENERIC_CUSTOMER_TEXT = {
+    "compliant": ("未发现该质控点对应的明确问题。", "无需处理。"),
+    "non_compliant": ("发现该质控点对应的明确问题。", "请按质控要求补充或修正。"),
+    "ai_suggested_compliant": ("AI判断暂未发现明确问题。", "建议结合病历资料确认。"),
+    "ai_suggested_non_compliant": ("AI建议结合病历资料进一步确认。", "请确认后再决定是否整改。"),
+    "data_gap": ("当前受控数据不足以形成确定结论。", "请补充或同步所需数据后重新评估。"),
+    "not_applicable": ("当前病历不适用该质控点。", "无需处理。"),
+    "not_executed": ("该质控点未完成执行。", "请确认执行条件后重新评估。"),
+    "technical_error": ("本次质控未能形成有效结论。", "请稍后重试或联系管理员。"),
+    "uncertain": ("现有证据无法形成确定结论。", "建议结合病历资料进一步确认。"),
+}
+_CUSTOMER_TEXT_FORBIDDEN = re.compile(
+    r"(LLM|prompt|raw_response|medical_text|record_content|documents|bundle|embedding|"
+    r"\braw\b|\bevidence\b)",
+    re.IGNORECASE,
+)
 
 
 def _now_utc() -> datetime:
@@ -80,6 +122,628 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
         return parsed
     except Exception:
         return default
+
+
+def customer_safe_projection_key() -> str:
+    """返回仅用于客户结果不可逆引用的服务端密钥。"""
+
+    secret = _safe_text(get_settings().JWT_SECRET)
+    if not secret:
+        raise RuntimeError("客户结果安全引用密钥未配置")
+    return secret
+
+
+def _keyed_ref(prefix: str, value: Any, *, hmac_key: str) -> str:
+    secret = _safe_text(hmac_key)
+    if not secret:
+        raise ValueError("hmac_key is required")
+    material = _safe_text(value) or "missing"
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{prefix}:{material}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{prefix}_{digest[:24]}"
+
+
+def _canonical_customer_status(item: Dict[str, Any]) -> str:
+    for key in ("result_status", "status", "display_status"):
+        raw = _safe_text(item.get(key)).lower()
+        if not raw:
+            continue
+        normalized = _STATUS_ALIASES.get(raw, raw)
+        if normalized in _CUSTOMER_STATUSES:
+            return normalized
+    if item.get("is_compliant") is True:
+        return "compliant"
+    if item.get("is_compliant") is False:
+        return "non_compliant"
+    return "uncertain"
+
+
+def _canonical_reason_code(item: Dict[str, Any]) -> str:
+    candidates = [item.get("reason_code")]
+    for key in ("decision", "metadata", "audit"):
+        nested = item.get(key)
+        if isinstance(nested, dict):
+            candidates.append(nested.get("reason_code"))
+    for candidate in candidates:
+        value = _safe_text(candidate)
+        if value and len(value) <= 64 and _REASON_CODE_PATTERN.fullmatch(value):
+            return value
+    return "reason_unavailable"
+
+
+def _explicit_customer_text(item: Dict[str, Any], keys: Sequence[str], fallback: str) -> str:
+    private_values = {
+        _safe_text(item.get(key))
+        for key in (
+            "record_id",
+            "visit_id",
+            "patient_id",
+            "institute_id",
+            "mr_no",
+            "patient_name",
+            "name",
+            "phone",
+            "id_card",
+            "certificate_no",
+        )
+        if _safe_text(item.get(key))
+    }
+    for key in keys:
+        value = _safe_text(item.get(key))
+        if not value or _CUSTOMER_TEXT_FORBIDDEN.search(value):
+            continue
+        if any(private_value in value for private_value in private_values):
+            continue
+        return _truncate_export_text(value, 360)
+    return fallback
+
+
+def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str, str]]:
+    candidates: List[Any] = []
+    for key in ("customer_evidence", "evidence_items", "evidence_refs", "evidence"):
+        value = item.get(key)
+        if isinstance(value, list):
+            candidates.extend(value)
+    rows: List[Dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        source_type = _safe_text(
+            candidate.get("source_type")
+            or candidate.get("source_table")
+            or candidate.get("document_type")
+        ).lower()
+        if not _SAFE_SOURCE_TYPE_PATTERN.fullmatch(source_type):
+            source_type = "document"
+        source_material = (
+            candidate.get("source_ref")
+            or candidate.get("document_ref")
+            or candidate.get("fact_ref")
+            or candidate.get("source_document_id")
+        )
+        if not _safe_text(source_material):
+            continue
+        source_ref = _safe_text(source_material)
+        if not re.fullmatch(r"src_[0-9a-f]{24}", source_ref):
+            source_ref = _keyed_ref("src", source_material, hmac_key=hmac_key)
+        identity = (source_type, source_ref)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        rows.append({"source_type": source_type, "source_ref": source_ref})
+        if len(rows) >= 8:
+            break
+    return rows
+
+
+def project_customer_safe_result_item(
+    item: Dict[str, Any],
+    *,
+    hmac_key: str,
+) -> Dict[str, Any]:
+    """把任意内部结果投影为唯一、可审计且不含病历原文/身份的客户 DTO。"""
+
+    raw = dict(item or {})
+    status = _canonical_customer_status(raw)
+    record_material = "|".join(
+        _safe_text(raw.get(key))
+        for key in ("institute_id", "patient_id", "visit_id", "record_id", "mr_no")
+    )
+    existing_record_ref = _safe_text(raw.get("record_ref"))
+    record_ref = (
+        existing_record_ref
+        if re.fullmatch(r"rec_[0-9a-f]{24}", existing_record_ref)
+        else _keyed_ref("rec", record_material, hmac_key=hmac_key)
+    )
+    generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
+    is_safe_dto = _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
+    rule_id = _safe_text(
+        raw.get("customer_rule_id")
+        or raw.get("qc_point_id")
+        or raw.get("rule_id")
+        or raw.get("rule_code")
+    ).upper()
+    # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
+    # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
+    conclusion = _explicit_customer_text(
+        raw,
+        (
+            "conclusion",
+            "customer_conclusion",
+            "customer_message",
+            "customer_summary",
+        )
+        if is_safe_dto
+        else (),
+        generic_conclusion,
+    )
+    suggestion = _explicit_customer_text(
+        raw,
+        (
+            "suggestion",
+            "customer_suggestion",
+            "customer_recommendation",
+            "customer_action",
+        )
+        if is_safe_dto
+        else (),
+        generic_suggestion,
+    )
+    rule_name = _explicit_customer_text(
+        raw,
+        ("customer_rule_name", "rule_name"),
+        rule_id,
+    )
+    return {
+        "schema_version": _CUSTOMER_RESULT_SCHEMA,
+        "record_ref": record_ref,
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "qc_point_id": rule_id,
+        "rule_name": rule_name,
+        "status": status,
+        "result_status": status,
+        "display_status": status,
+        "is_compliant": True if status == "compliant" else False if status == "non_compliant" else None,
+        "is_confirmed_issue": status == "non_compliant",
+        "reason_code": _canonical_reason_code(raw),
+        "conclusion": conclusion,
+        "findings": conclusion,
+        "customer_conclusion": conclusion,
+        "suggestion": suggestion,
+        "customer_suggestion": suggestion,
+        "evidence": _safe_evidence_rows(raw, hmac_key=hmac_key),
+    }
+
+
+def iter_unique_customer_result_source_items(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+) -> List[Dict[str, Any]]:
+    """按统一优先级返回供 API、复核和导出共用的去重原始行集。"""
+
+    children = [
+        child
+        for child in list(job.get("child_jobs") or job.get("children") or [])
+        if isinstance(child, dict)
+    ]
+    sources = children or [job]
+    raw_items: List[Dict[str, Any]] = []
+    for source in sources:
+        raw_items.extend(item for item in list(source.get("items") or []) if isinstance(item, dict))
+    if not raw_items:
+        summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+        for rule_result in list(summary.get("rule_results") or job.get("rule_results") or []):
+            if isinstance(rule_result, dict):
+                raw_items.extend(
+                    item for item in list(rule_result.get("items") or []) if isinstance(item, dict)
+                )
+    unique_items: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in raw_items:
+        projected = project_customer_safe_result_item(item, hmac_key=hmac_key)
+        identity = (
+            _safe_text(projected.get("record_ref")),
+            _safe_text(projected.get("rule_id")),
+            _safe_text(projected.get("status")),
+            _safe_text(projected.get("reason_code")),
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique_items.append(item)
+    return unique_items
+
+
+def flatten_customer_safe_result_items(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+) -> List[Dict[str, Any]]:
+    """按内部结果原顺序生成供 API、复核和全部导出共用的唯一行集。"""
+
+    return [
+        project_customer_safe_result_item(item, hmac_key=hmac_key)
+        for item in iter_unique_customer_result_source_items(job, hmac_key=hmac_key)
+    ]
+
+
+def _safe_operational_progress(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    allowed = {
+        "step_key",
+        "step_label",
+        "progress_percent",
+        "processed_records",
+        "total_records",
+        "processed_rule_count",
+        "rule_count",
+        "completed",
+        "total",
+        "remaining",
+    }
+    return {
+        key: value.get(key)
+        for key in allowed
+        if isinstance(value.get(key), (str, int, float, bool)) and value.get(key) is not None
+    }
+
+
+def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]]:
+    if not isinstance(value, dict):
+        return None
+    findings: List[Dict[str, Any]] = []
+    for raw_finding in list(value.get("findings") or []):
+        if not isinstance(raw_finding, dict):
+            continue
+        projected = project_customer_safe_result_item(
+            {
+                **raw_finding,
+                "result_status": raw_finding.get("original_status")
+                or raw_finding.get("canonical_status")
+                or raw_finding.get("status"),
+                "reason_code": raw_finding.get("original_reason_code")
+                or raw_finding.get("reason_code"),
+            },
+            hmac_key=hmac_key,
+        )
+        existing_ref = _safe_text(raw_finding.get("record_ref"))
+        if re.fullmatch(r"rec_[0-9a-f]{24}", existing_ref):
+            projected["record_ref"] = existing_ref
+        severity = _safe_text(raw_finding.get("severity")).upper()
+        risk_type = _safe_text(raw_finding.get("risk_type")).lower()
+        suggested = _canonical_customer_status(
+            {"status": raw_finding.get("suggested_status")}
+        )
+        findings.append(
+            {
+                "finding_ref": _keyed_ref(
+                    "finding",
+                    raw_finding.get("finding_key")
+                    or f"{projected['record_ref']}:{projected['rule_id']}:{risk_type}",
+                    hmac_key=hmac_key,
+                ),
+                "record_ref": projected["record_ref"],
+                "rule_id": projected["rule_id"],
+                "rule_name": projected["rule_name"],
+                "canonical_status": projected["status"],
+                "reason_code": projected["reason_code"],
+                "suggested_status": suggested,
+                "severity": severity if severity in {"P0", "P1", "P2"} else "P2",
+                "risk_type": (
+                    risk_type
+                    if _REASON_CODE_PATTERN.fullmatch(risk_type)
+                    else "review_finding"
+                ),
+                "customer_message": _GENERIC_CUSTOMER_TEXT[suggested][0],
+                "requires_human_review": bool(
+                    raw_finding.get("requires_human_review", True)
+                ),
+            }
+        )
+    summary = {"total_findings": len(findings), "p0": 0, "p1": 0, "p2": 0}
+    for finding in findings:
+        summary[finding["severity"].lower()] += 1
+    return {
+        "review_status": _safe_text(value.get("review_status"), "completed"),
+        "reviewed_at": _safe_text(value.get("reviewed_at")),
+        "scope": _safe_text(value.get("scope")),
+        "summary": summary,
+        "findings": findings,
+        "llm_review_status": _safe_text(value.get("llm_review_status"), "skipped"),
+    }
+
+
+def project_customer_safe_batch_job(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+) -> Dict[str, Any]:
+    """生成 API/复核共用的客户任务 DTO，不回传原始 filters/summary 技术对象。"""
+
+    items = flatten_customer_safe_result_items(job, hmac_key=hmac_key)
+    status_counts: Dict[str, int] = {}
+    for item in items:
+        status = _safe_text(item.get("status"), "uncertain")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    issue_refs = {
+        _safe_text(item.get("record_ref"))
+        for item in items
+        if item.get("is_confirmed_issue") is True
+    }
+    raw_summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    progress = _safe_operational_progress(
+        raw_summary.get("progress") or job.get("progress")
+    )
+    review_report = _safe_review_report(
+        raw_summary.get("review_report"),
+        hmac_key=hmac_key,
+    )
+    safe_summary: Dict[str, Any] = {
+        "total_records": _to_int(raw_summary.get("total_records"), _to_int(job.get("total_records"))),
+        "success_count": _to_int(raw_summary.get("success_count"), _to_int(job.get("success_count"))),
+        "failed_count": _to_int(raw_summary.get("failed_count"), _to_int(job.get("failed_count"))),
+        "compliant_records": len(
+            {
+                _safe_text(item.get("record_ref"))
+                for item in items
+                if item.get("status") == "compliant"
+            }
+        ),
+        "result_count": len(items),
+        "issue_records": len(issue_refs),
+        "status_counts": status_counts,
+        "status_breakdown": status_counts,
+        "display_status_counts": status_counts,
+        "uncertain_records": len(
+            {
+                _safe_text(item.get("record_ref"))
+                for item in items
+                if item.get("status")
+                in {"ai_suggested_non_compliant", "ai_suggested_compliant", "uncertain"}
+            }
+        ),
+        "progress": progress,
+        "progress_percent": progress.get("progress_percent", 0),
+        "rule_count": _to_int(raw_summary.get("rule_count"), _to_int(job.get("rule_count"))),
+        "customer_rule_count": _to_int(
+            raw_summary.get("customer_rule_count")
+            or filters.get("customer_rule_count")
+            or job.get("customer_rule_count")
+        ),
+        "execution_rule_count": _to_int(
+            raw_summary.get("execution_rule_count")
+            or filters.get("execution_rule_count")
+            or job.get("execution_rule_count")
+        ),
+        "processed_rule_count": _to_int(raw_summary.get("processed_rule_count")),
+        "retryable_rule_count": _to_int(raw_summary.get("retryable_rule_count")),
+        "total_tokens": _to_int(raw_summary.get("total_tokens"), _to_int(job.get("total_tokens"))),
+        "total_processing_time": _to_float(
+            raw_summary.get("total_processing_time"),
+            _to_float(job.get("total_processing_time")),
+        ),
+        "wall_clock_time": _to_float(
+            raw_summary.get("wall_clock_time"),
+            _to_float(job.get("wall_clock_time")),
+        ),
+        "history_issue_summaries": [
+            {
+                "rule_id": _safe_text(item.get("rule_id")),
+                "status": _safe_text(item.get("status")),
+                "text": _safe_text(item.get("conclusion")),
+            }
+            for item in items
+            if item.get("status") == "non_compliant"
+        ][:6],
+    }
+    raw_profile = (
+        raw_summary.get("performance_profile")
+        if isinstance(raw_summary.get("performance_profile"), dict)
+        else {}
+    )
+    numeric_profile_keys = (
+        "tokens_total",
+        "prompt_tokens",
+        "completion_tokens",
+        "unattributed_tokens",
+        "wall_clock_time_seconds",
+        "total_processing_time_seconds",
+        "llm_call_count",
+        "program_call_count",
+        "actual_llm_pack_call_count",
+        "retry_count",
+        "latency_p50_ms",
+        "latency_p95_ms",
+        "processing_p50_ms",
+        "processing_p95_ms",
+    )
+    safe_performance_profile = {
+        key: _to_float(raw_profile.get(key))
+        if key.endswith(("_seconds", "_ms"))
+        else _to_int(raw_profile.get(key))
+        for key in numeric_profile_keys
+        if raw_profile.get(key) is not None
+    }
+    if isinstance(raw_profile.get("token_breakdown_complete"), bool):
+        safe_performance_profile["token_breakdown_complete"] = raw_profile[
+            "token_breakdown_complete"
+        ]
+    safe_summary["performance_profile"] = safe_performance_profile
+    safe_summary["total_tokens"] = _to_int(
+        safe_performance_profile.get("tokens_total"),
+        safe_summary["total_tokens"],
+    )
+    safe_summary["prompt_tokens"] = _to_int(
+        safe_performance_profile.get("prompt_tokens"),
+        _to_int(raw_summary.get("prompt_tokens")),
+    )
+    safe_summary["completion_tokens"] = _to_int(
+        safe_performance_profile.get("completion_tokens"),
+        _to_int(raw_summary.get("completion_tokens")),
+    )
+    safe_summary["unattributed_tokens"] = _to_int(
+        safe_performance_profile.get("unattributed_tokens"),
+        _to_int(raw_summary.get("unattributed_tokens")),
+    )
+    safe_summary["llm_call_count"] = _to_int(
+        safe_performance_profile.get("llm_call_count"),
+        _to_int(raw_summary.get("llm_call_count")),
+    )
+    safe_summary["retry_count"] = _to_int(
+        safe_performance_profile.get("retry_count"),
+        _to_int(raw_summary.get("retry_count")),
+    )
+    if review_report:
+        safe_summary["review_report"] = review_report
+    safe_rule_results: List[Dict[str, Any]] = []
+    for raw_rule in list(job.get("rule_results") or []):
+        if not isinstance(raw_rule, dict):
+            continue
+        raw_rule_items = [
+            project_customer_safe_result_item(item, hmac_key=hmac_key)
+            for item in list(raw_rule.get("items") or [])
+            if isinstance(item, dict)
+        ]
+        safe_rule_results.append(
+            {
+                "id": _safe_text(raw_rule.get("id")),
+                "job_id": _safe_text(raw_rule.get("job_id")),
+                "rule_code": _safe_text(raw_rule.get("rule_code")).upper(),
+                "rule_name": _safe_text(raw_rule.get("rule_name")),
+                "status": _safe_text(raw_rule.get("status")).lower(),
+                "progress": _safe_operational_progress(raw_rule.get("progress")),
+                "items": raw_rule_items,
+                "total_records": _to_int(raw_rule.get("total_records")),
+                "success_count": _to_int(raw_rule.get("success_count")),
+                "failed_count": _to_int(raw_rule.get("failed_count")),
+                "issue_records": len(
+                    {
+                        _safe_text(item.get("record_ref"))
+                        for item in raw_rule_items
+                        if item.get("is_confirmed_issue") is True
+                    }
+                ),
+            }
+        )
+    safe_children = [
+        project_customer_safe_batch_job(child, hmac_key=hmac_key)
+        for child in list(job.get("child_jobs") or job.get("children") or [])
+        if isinstance(child, dict)
+    ]
+    failed_records = [
+        {
+            "record_ref": project_customer_safe_result_item(
+                {
+                    **item,
+                    "status": "technical_error",
+                    "reason_code": "record_execution_failed",
+                },
+                hmac_key=hmac_key,
+            )["record_ref"],
+            "status": "technical_error",
+            "reason_code": "record_execution_failed",
+        }
+        for item in list(job.get("failed_records") or [])
+        if isinstance(item, dict)
+    ]
+    execution_scope_hash = _safe_text(filters.get("execution_scope_hash")).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", execution_scope_hash):
+        execution_scope_hash = ""
+    return {
+        "schema_version": "customer-qc-job-v1",
+        "id": _safe_text(job.get("id")),
+        "job_id": _safe_text(job.get("id")),
+        "operation_ref": _keyed_ref("op", job.get("id"), hmac_key=hmac_key),
+        "execution_scope_hash": execution_scope_hash,
+        "deduplicated": bool(filters.get("deduplicated") or job.get("idempotency_reused")),
+        "status": _safe_text(job.get("status")).lower(),
+        "draft_id": _safe_text(job.get("draft_id")),
+        "job_kind": _safe_text(job.get("job_kind")),
+        "parent_job_id": _safe_text(job.get("parent_job_id")),
+        "child_job_ids": [
+            _safe_text(value)
+            for value in list(job.get("child_job_ids") or [])
+            if _safe_text(value)
+        ],
+        "rule_code": _safe_text(job.get("rule_code")).upper(),
+        "rule_name": _safe_text(job.get("rule_name")),
+        "scene": _safe_text(job.get("scene")),
+        "scope": _safe_text(job.get("scope")),
+        "execution_mode": _safe_text(job.get("execution_mode"), "batch"),
+        "progress": progress,
+        "created_at": _safe_text(job.get("created_at")),
+        "started_at": _safe_text(job.get("started_at")),
+        "finished_at": _safe_text(job.get("finished_at")),
+        "updated_at": _safe_text(job.get("updated_at")),
+        "total_records": safe_summary["total_records"],
+        "success_count": safe_summary["success_count"],
+        "failed_count": safe_summary["failed_count"],
+        "issue_records": safe_summary["issue_records"],
+        "compliant_records": safe_summary["compliant_records"],
+        "rule_count": safe_summary["rule_count"],
+        "customer_rule_count": safe_summary["customer_rule_count"],
+        "execution_rule_count": safe_summary["execution_rule_count"],
+        "total_tokens": safe_summary["total_tokens"],
+        "prompt_tokens": safe_summary["prompt_tokens"],
+        "completion_tokens": safe_summary["completion_tokens"],
+        "unattributed_tokens": safe_summary["unattributed_tokens"],
+        "llm_call_count": safe_summary["llm_call_count"],
+        "retry_count": safe_summary["retry_count"],
+        "total_processing_time": safe_summary["total_processing_time"],
+        "wall_clock_time": safe_summary["wall_clock_time"],
+        "rule_set_key": _safe_text(
+            filters.get("rule_set_key")
+            or filters.get("rule_set_id")
+            or job.get("rule_set_key")
+            or job.get("rule_set_id")
+            or raw_summary.get("rule_set_key")
+            or raw_summary.get("rule_set_id")
+        ),
+        "rule_set_name": _safe_text(
+            filters.get("rule_set_name") or raw_summary.get("rule_set_name")
+        ),
+        "rule_set_version": _safe_text(
+            filters.get("rule_set_version") or raw_summary.get("rule_set_version")
+        ),
+        "draft_ids": [
+            _safe_text(value)
+            for value in list(
+                filters.get("selected_rule_ids")
+                or filters.get("rule_ids")
+                or job.get("draft_ids")
+                or []
+            )
+            if _safe_text(value)
+        ],
+        "summary": safe_summary,
+        "items": items,
+        "failed_records": failed_records,
+        "rule_results": safe_rule_results,
+        "child_jobs": safe_children,
+        "children": safe_children,
+    }
+
+
+def _is_luxian_0609_export_job(job: Dict[str, Any]) -> bool:
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    return "luxian_0609_qc_v1" in {
+        _safe_text(filters.get("rule_set_key")),
+        _safe_text(filters.get("rule_set_id")),
+        _safe_text(summary.get("rule_set_key")),
+        _safe_text(summary.get("rule_set_id")),
+        _safe_text(job.get("rule_set_key")),
+        _safe_text(job.get("rule_set_id")),
+        _safe_text(job.get("rule_code")),
+    }
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -802,6 +1466,157 @@ def _format_rule_code_list(values: Any, limit: int = 8) -> str:
     if len(cleaned) > limit:
         preview += f" +{len(cleaned) - limit}"
     return preview
+
+
+_CUSTOMER_EXPORT_HEADERS = [
+    "病历引用",
+    "质控点编码",
+    "质控点名称",
+    "判定结果",
+    "原因码",
+    "质控结论",
+    "处理建议",
+    "证据引用",
+]
+
+
+def _customer_export_rows(
+    job: Dict[str, Any],
+    *,
+    hmac_key: str,
+) -> tuple[List[Dict[str, Any]], List[List[str]], Dict[str, Any]]:
+    items = flatten_customer_safe_result_items(job, hmac_key=hmac_key)
+    rows: List[List[str]] = []
+    for item in items:
+        evidence_text = "；".join(
+            f"{_safe_text(evidence.get('source_type'))}:{_safe_text(evidence.get('source_ref'))}"
+            for evidence in list(item.get("evidence") or [])
+            if isinstance(evidence, dict)
+        )
+        rows.append(
+            [
+                _safe_text(item.get("record_ref")),
+                _safe_text(item.get("rule_id")),
+                _safe_text(item.get("rule_name")),
+                _map_item_status_label(item.get("status"), item.get("status") == "compliant"),
+                _safe_text(item.get("reason_code")),
+                _safe_text(item.get("conclusion")),
+                _safe_text(item.get("suggestion")),
+                evidence_text,
+            ]
+        )
+    issue_refs = {
+        _safe_text(item.get("record_ref"))
+        for item in items
+        if item.get("is_confirmed_issue") is True
+    }
+    status_counts: Dict[str, int] = {}
+    for item in items:
+        status = _safe_text(item.get("status"), "uncertain")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return items, rows, {
+        "operation_ref": _keyed_ref("op", job.get("id"), hmac_key=hmac_key),
+        "result_count": len(items),
+        "issue_records": len(issue_refs),
+        "status_counts": status_counts,
+    }
+
+
+def _export_customer_safe_workbook(job: Dict[str, Any], *, hmac_key: str) -> BytesIO:
+    from openpyxl import Workbook
+
+    items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
+    output = BytesIO()
+    workbook = Workbook()
+    ws_summary = workbook.active
+    ws_summary.title = "管理摘要"
+    ws_summary.append(["报告项", "内容"])
+    ws_summary.append(["任务引用", summary["operation_ref"]])
+    ws_summary.append(["结果总数", summary["result_count"]])
+    ws_summary.append(["确定问题病历数", summary["issue_records"]])
+    for status, count in summary["status_counts"].items():
+        ws_summary.append([f"状态-{status}", count])
+
+    ws_issues = workbook.create_sheet("问题明细")
+    ws_issues.append(_CUSTOMER_EXPORT_HEADERS)
+    for item, row in zip(items, rows):
+        if item.get("is_confirmed_issue") is True:
+            ws_issues.append(row)
+
+    ws_all = workbook.create_sheet("全部明细")
+    ws_all.append(_CUSTOMER_EXPORT_HEADERS)
+    for row in rows:
+        ws_all.append(row)
+    ws_issues.freeze_panes = "A2"
+    ws_all.freeze_panes = "A2"
+    workbook.save(output)
+    output.seek(0)
+    return output
+
+
+def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO:
+    import csv
+
+    _items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["管理摘要"])
+    writer.writerow(["任务引用", summary["operation_ref"]])
+    writer.writerow(["结果总数", summary["result_count"]])
+    writer.writerow(["确定问题病历数", summary["issue_records"]])
+    writer.writerow([])
+    writer.writerow(["全部明细"])
+    writer.writerow(_CUSTOMER_EXPORT_HEADERS)
+    writer.writerows(rows)
+    output.seek(0)
+    return output
+
+
+def _export_customer_safe_html(job: Dict[str, Any], *, hmac_key: str) -> str:
+    _items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
+    body_rows = "".join(
+        "<tr data-result-row>"
+        + "".join(f"<td>{html.escape(value, quote=True)}</td>" for value in row)
+        + "</tr>"
+        for row in rows
+    )
+    headers = "".join(f"<th>{html.escape(header)}</th>" for header in _CUSTOMER_EXPORT_HEADERS)
+    document = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>质控结果</title>
+  <style>
+    body {{ margin: 0; padding: 24px; background: #f6f8fb; color: #1f2937; font-family: "Microsoft YaHei", sans-serif; }}
+    main {{ max-width: 1180px; margin: 0 auto; }}
+    section {{ margin-bottom: 18px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; padding: 18px; }}
+    .metrics {{ display: flex; gap: 24px; flex-wrap: wrap; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{ border-bottom: 1px solid #e5e7eb; padding: 9px; text-align: left; vertical-align: top; }}
+    th {{ color: #4b5563; background: #f8fafc; }}
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>质控结果</h1>
+    <div class="metrics">
+      <span>任务引用：{html.escape(summary["operation_ref"])}</span>
+      <span>结果总数：{summary["result_count"]}</span>
+      <span>确定问题病历数：{summary["issue_records"]}</span>
+    </div>
+  </section>
+  <section>
+    <table>
+      <thead><tr>{headers}</tr></thead>
+      <tbody>{body_rows}</tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>"""
+    return "\ufeff" + document
 
 
 @dataclass
@@ -2420,6 +3235,14 @@ class CustomQCWorkspaceService:
             session.close()
 
     def export_batch_job_workbook(self, *, job: Dict[str, Any]) -> BytesIO:
+        if _is_luxian_0609_export_job(job):
+            return _export_customer_safe_workbook(
+                job,
+                hmac_key=customer_safe_projection_key(),
+            )
+        return self._export_batch_job_workbook_legacy(job=job)
+
+    def _export_batch_job_workbook_legacy(self, *, job: Dict[str, Any]) -> BytesIO:
         from openpyxl import Workbook
 
         output = BytesIO()
@@ -2617,6 +3440,14 @@ class CustomQCWorkspaceService:
         return output
 
     def export_batch_job_csv(self, *, job: Dict[str, Any]) -> StringIO:
+        if _is_luxian_0609_export_job(job):
+            return _export_customer_safe_csv(
+                job,
+                hmac_key=customer_safe_projection_key(),
+            )
+        return self._export_batch_job_csv_legacy(job=job)
+
+    def _export_batch_job_csv_legacy(self, *, job: Dict[str, Any]) -> StringIO:
         import csv
 
         output = StringIO()
@@ -2686,6 +3517,14 @@ class CustomQCWorkspaceService:
         return output
 
     def export_batch_job_html(self, *, job: Dict[str, Any]) -> str:
+        if _is_luxian_0609_export_job(job):
+            return _export_customer_safe_html(
+                job,
+                hmac_key=customer_safe_projection_key(),
+            )
+        return self._export_batch_job_html_legacy(job=job)
+
+    def _export_batch_job_html_legacy(self, *, job: Dict[str, Any]) -> str:
         summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
         filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
         child_jobs = job.get("child_jobs") or job.get("children") or []

@@ -42,7 +42,11 @@ from ..services.sc_rule_launch_tier import (
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
-from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    customer_safe_projection_key,
+    project_customer_safe_batch_job,
+)
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
 from ..services.luxian_0609.rule_decision_settings import (
@@ -396,6 +400,35 @@ def _compact_workspace_summary(summary: Dict[str, Any], rule_results: List[Dict[
 def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
+    rule_set_candidates = {
+        str(filters.get("rule_set_key") or "").strip(),
+        str(filters.get("rule_set_id") or "").strip(),
+        str(summary.get("rule_set_key") or "").strip(),
+        str(summary.get("rule_set_id") or "").strip(),
+        str(job.get("rule_set_key") or "").strip(),
+        str(job.get("rule_set_id") or "").strip(),
+        str(job.get("rule_code") or "").strip(),
+    }
+    if LUXIAN_0609_RULE_SET_KEY in rule_set_candidates:
+        safe_job = project_customer_safe_batch_job(
+            job,
+            hmac_key=customer_safe_projection_key(),
+        )
+        if compact:
+            safe_job = dict(safe_job)
+            safe_job["items"] = []
+            safe_job["failed_records"] = []
+            safe_job["rule_results"] = []
+            safe_job["children"] = []
+            safe_job["child_jobs"] = []
+            safe_summary = dict(safe_job.get("summary") or {})
+            safe_review = safe_summary.get("review_report")
+            if isinstance(safe_review, dict):
+                safe_review = dict(safe_review)
+                safe_review.pop("findings", None)
+                safe_summary["review_report"] = safe_review
+            safe_job["summary"] = safe_summary
+        return safe_job
     selected_rule_ids = list(filters.get("selected_rule_ids") or [])
     rule_ids = list(filters.get("rule_ids") or [])
     response_job = dict(job)

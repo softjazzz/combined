@@ -4,6 +4,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from .custom_qc_workspace_service import (
+    customer_safe_projection_key,
+    iter_unique_customer_result_source_items,
+    project_customer_safe_result_item,
+)
 
 SCOPE_LUXIAN_0609 = "luxian_0609_qc_v1"
 
@@ -56,10 +61,10 @@ def review_luxian_0609_batch_job(
             llm_results = llm_verifier(payloads)
             _merge_llm_results(findings, llm_results)
             llm_status = "completed"
-        except Exception as exc:  # pragma: no cover - defensive boundary
+        except Exception:  # pragma: no cover - defensive boundary
             llm_status = "failed"
             for finding in findings:
-                finding.setdefault("llm_error", str(exc))
+                finding.setdefault("llm_error_code", "review_provider_failed")
 
     return _build_report(findings, llm_status=llm_status)
 
@@ -73,6 +78,8 @@ def _is_luxian_0609_job(job: dict[str, Any]) -> bool:
         filters.get("rule_set_key"),
         summary.get("rule_set_id"),
         summary.get("rule_set_key"),
+        job.get("rule_set_id"),
+        job.get("rule_set_key"),
         job.get("rule_code"),
         job.get("rule_name"),
     ]
@@ -87,21 +94,10 @@ def _run_rule_verifier(job: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _iter_result_items(job: dict[str, Any]) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    for raw in job.get("items") or []:
-        if isinstance(raw, dict):
-            items.append(raw)
-    for child in job.get("child_jobs") or job.get("children") or []:
-        if isinstance(child, dict):
-            items.extend(_iter_result_items(child))
-    summary = job.get("summary") if isinstance(job.get("summary"), dict) else {}
-    for result in summary.get("rule_results") or []:
-        if not isinstance(result, dict):
-            continue
-        for raw in result.get("items") or []:
-            if isinstance(raw, dict):
-                items.append(raw)
-    return items
+    return iter_unique_customer_result_source_items(
+        job,
+        hmac_key=customer_safe_projection_key(),
+    )
 
 
 def _review_item(item: dict[str, Any]) -> list[dict[str, Any]]:
@@ -219,7 +215,13 @@ def _rule_id(item: dict[str, Any]) -> str:
 
 
 def _status(item: dict[str, Any]) -> str:
-    return str(item.get("result_status") or item.get("display_status") or item.get("status") or "").strip().lower()
+    return str(
+        project_customer_safe_result_item(
+            item,
+            hmac_key=customer_safe_projection_key(),
+        ).get("status")
+        or "uncertain"
+    )
 
 
 def _combined_text(item: dict[str, Any]) -> str:
@@ -339,16 +341,33 @@ def _finding(
     reason: str,
     customer_message: str,
 ) -> dict[str, Any]:
+    projected = project_customer_safe_result_item(
+        item,
+        hmac_key=customer_safe_projection_key(),
+    )
     rule_id = _rule_id(item)
-    record_id = str(item.get("record_id") or item.get("visit_id") or item.get("mr_no") or "").strip()
+    finding_key_material = (
+        f"{projected['record_ref']}:{rule_id}:{risk_type}"
+    )
+    finding_key = project_customer_safe_result_item(
+        {
+            "record_id": finding_key_material,
+            "rule_id": rule_id,
+            "status": suggested_status,
+            "reason_code": risk_type,
+        },
+        hmac_key=customer_safe_projection_key(),
+    )["record_ref"]
     return {
-        "finding_key": f"{record_id}:{rule_id}:{risk_type}",
+        "finding_key": finding_key,
+        "finding_ref": finding_key,
         "rule_id": rule_id,
-        "rule_name": str(item.get("rule_name") or "").strip(),
-        "record_id": record_id,
-        "patient_name": str(item.get("patient_name") or "").strip(),
-        "department": str(item.get("department") or "").strip(),
-        "original_status": _status(item),
+        "rule_name": projected["rule_name"],
+        "record_ref": projected["record_ref"],
+        "canonical_status": projected["status"],
+        "reason_code": projected["reason_code"],
+        "original_status": projected["status"],
+        "original_reason_code": projected["reason_code"],
         "suggested_status": suggested_status,
         "severity": severity,
         "risk_type": risk_type,
@@ -357,7 +376,7 @@ def _finding(
         "requires_human_review": True,
         "auto_applied": False,
         "reviewer": "rule_verifier",
-        "evidence_summary": _truncate(_combined_text(item), 420),
+        "evidence": projected["evidence"],
     }
 
 
@@ -366,16 +385,15 @@ def _build_llm_payload(finding: dict[str, Any]) -> dict[str, Any]:
         "finding_key",
         "rule_id",
         "rule_name",
-        "record_id",
-        "patient_name",
-        "department",
+        "record_ref",
         "original_status",
+        "original_reason_code",
         "suggested_status",
         "severity",
         "risk_type",
         "reason",
         "customer_message",
-        "evidence_summary",
+        "evidence",
     }
     return {key: finding.get(key) for key in allowed_keys if key in finding}
 
@@ -389,9 +407,13 @@ def _merge_llm_results(findings: list[dict[str, Any]], llm_results: list[dict[st
         if not finding:
             continue
         finding["llm_review"] = {
-            "risk_level": str(result.get("risk_level") or finding.get("severity") or ""),
-            "reason": str(result.get("reason") or ""),
-            "customer_message": str(result.get("customer_message") or ""),
+            "risk_level": (
+                str(result.get("risk_level") or finding.get("severity") or "").upper()
+                if str(result.get("risk_level") or finding.get("severity") or "").upper()
+                in {"P0", "P1", "P2"}
+                else str(finding.get("severity") or "")
+            ),
+            "customer_message": "建议结合病历资料进一步确认。",
             "requires_human_review": bool(result.get("requires_human_review", True)),
         }
 
