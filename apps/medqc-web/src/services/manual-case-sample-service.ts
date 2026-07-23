@@ -181,6 +181,21 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         ['document_type', 'doc_type', 'type', 'source_table', 'table_name'],
         title,
       )
+      const rawRecordTime = readStringField(row, [
+        'record_time',
+        'record_datetime',
+        'report_datetime',
+        'order_datetime',
+        'start_time',
+        'start_datetime',
+        'begin_time',
+        'begin_datetime',
+        'order_start_time',
+      ])
+      const orderDisplayTime =
+        documentType === 'inpat_drug_order' || documentType === 'inpat_nondrug_order'
+          ? readStringField(row, ['sort_time', 'display_time', 'prescribed_datetime'])
+          : ''
       return {
         key: readStringField(
           row,
@@ -191,17 +206,7 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         source_table: readStringField(row, ['source_table', 'table_name']),
         document_type: documentType,
         title,
-        record_time: readStringField(row, [
-          'record_time',
-          'record_datetime',
-          'report_datetime',
-          'order_datetime',
-          'start_time',
-          'start_datetime',
-          'begin_time',
-          'begin_datetime',
-          'order_start_time',
-        ]),
+        record_time: rawRecordTime || orderDisplayTime,
         submit_time: readStringField(row, ['submit_time', 'submit_datetime']),
         order_start_time: readStringField(row, [
           'order_start_time',
@@ -210,6 +215,8 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
           'begin_time',
           'begin_datetime',
           'order_datetime',
+          'prescribed_datetime',
+          'sort_time',
           'record_time',
           'record_datetime',
         ]),
