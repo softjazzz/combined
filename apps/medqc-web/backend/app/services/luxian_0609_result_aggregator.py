@@ -108,6 +108,28 @@ def _timeline_from_audit(audit_context: dict[str, Any] | None) -> dict[str, Any]
     return {}
 
 
+def _has_explicit_source_coverage(
+    audit_context: dict[str, Any] | None,
+    source_key: str,
+) -> bool:
+    """仅接受快照或 bundle 明确声明的来源覆盖，缺失不能当作空来源。"""
+
+    snapshot = dict(audit_context or {}).get("evidence_snapshot")
+    observations = getattr(snapshot, "observations", ())
+    for observation in observations if isinstance(observations, (tuple, list)) else ():
+        if str(getattr(observation, "source_key", "") or "") != source_key:
+            continue
+        query_state = str(getattr(getattr(observation, "query_state", None), "value", "") or "")
+        completeness = str(getattr(getattr(observation, "completeness", None), "value", "") or "")
+        return query_state in {"available", "empty"} and completeness == "complete"
+
+    coverage = _timeline_from_audit(audit_context).get("source_table_coverage")
+    return bool(
+        isinstance(coverage, dict)
+        and isinstance(coverage.get(source_key), dict)
+    )
+
+
 def _doc_text(item: dict[str, Any]) -> str:
     return "\n".join(
         str(item.get(key) or "").strip()
@@ -1135,6 +1157,24 @@ def _guard_customer_display_result(
     audit_text = _audit_context_text(audit_context)
     factual_text = f"{audit_text}\n{combined_text}"
     needs_guard_statuses = {"non_compliant", "ai_suggested_non_compliant", "data_gap", "uncertain"}
+
+    if wrapper_id in {"LX0609-029", "LX0609-032"} and status in {
+        "non_compliant",
+        "ai_suggested_non_compliant",
+    }:
+        required_source = (
+            "presurg_summary"
+            if wrapper_id == "LX0609-029"
+            else "surgery_safecheck_record"
+        )
+        if not _has_explicit_source_coverage(audit_context, required_source):
+            return _data_gap_guarded_result(
+                selected,
+                findings="当前结论提示目标手术文书缺失，但正式来源覆盖未能证明该文书表已完成查询，不能直接判定为业务缺陷。",
+                evidence="目标文书来源覆盖不足，无法区分‘确实不存在’与‘来源未同步或未投影’。",
+                suggestion="请确认目标文书来源已接入并完成当前住院查询；补齐来源覆盖后重新质控。",
+                guard="surgery_document_target_source_unproven",
+            )
 
     if wrapper_id == "LX0609-028" and status in {"non_compliant", "data_gap", "uncertain"}:
         has_incision, incision_markers = _has_lx0609_028_class_i_ii_incision_context(factual_text)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -112,6 +113,9 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
             "visit_id": "RAW_VISIT_COORD_029",
             "patient_id": "RAW_PATIENT_COORD_029",
             "evidence_payload": {"medical_text": "RAW_BODY_029"},
+            "programmatic_timeline": {
+                "source_table_coverage": {"presurg_summary": {"row_count": 0, "hit": False}}
+            },
         },
     )[0]
     metadata = result["metadata"]
@@ -128,6 +132,93 @@ def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostic
         "cl-181", "sc-081", "mapped execution", "raw_text", "raw_response",
         "raw_visit_coord_029", "raw_patient_coord_029", "raw_body_029", "prompt_version",
     ))
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "target_source"),
+    (
+        ("LX0609-029", "presurg_summary"),
+        ("LX0609-032", "surgery_safecheck_record"),
+    ),
+)
+def test_surgery_document_missing_source_coverage_cannot_emit_defect(
+    rule_id, target_source
+):
+    aggregate = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results
+    result = aggregate(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "目标文书缺失",
+                "evidence": "",
+                "suggestion": "",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        format_evidence=False,
+        audit_context={"programmatic_timeline": {"source_table_coverage": {}}},
+    )[0]
+    assert result["status"] == "data_gap"
+    assert result["metadata"]["customer_display_guard"] == "surgery_document_target_source_unproven"
+
+    covered = aggregate(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "目标文书缺失",
+                "evidence": "",
+                "suggestion": "",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        format_evidence=False,
+        audit_context={
+            "programmatic_timeline": {
+                "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
+            }
+        },
+    )[0]
+    assert covered["status"] == "non_compliant"
+
+    source_unproven = aggregate(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[
+            {
+                "rule_id": rule_id,
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": "目标文书缺失",
+                "evidence": "",
+                "suggestion": "",
+                "metadata": {"execution_source": "legacy"},
+            }
+        ],
+        format_evidence=False,
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                observations=(
+                    SimpleNamespace(
+                        source_key=target_source,
+                        query_state=SimpleNamespace(value="unavailable"),
+                        completeness=SimpleNamespace(value="unproven"),
+                    ),
+                )
+            ),
+            "programmatic_timeline": {
+                "source_table_coverage": {target_source: {"row_count": 0, "hit": False}}
+            },
+        },
+    )[0]
+    assert source_unproven["status"] == "data_gap"
 
 
 def test_reduced_decision_has_priority_and_bypasses_legacy_result_pipeline(monkeypatch):

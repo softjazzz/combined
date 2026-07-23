@@ -2434,12 +2434,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
                 return _safe_bool(item.get("can_show_as_defect")) or str(item.get("display_status") or "") == "confirmed_defect"
-            return str(item.get("status") or "") in {"non_compliant", "ai_suggested_non_compliant"}
+            # AI 建议态只进入待复核，不得混入客户确认缺陷统计。
+            return str(item.get("status") or "") == "non_compliant"
 
         def _item_needs_review(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
                 return False
-            return str(item.get("status") or "") == "uncertain"
+            return str(item.get("status") or "") in {
+                "uncertain",
+                "ai_suggested_non_compliant",
+            }
 
         def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
             if str(item.get("status") or "") == "data_gap":

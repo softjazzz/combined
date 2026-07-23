@@ -1775,15 +1775,22 @@ async def test_public_entry_snapshot_sidecar_is_once_internal_and_output_compati
     )
 
     assert disabled_result == enabled_result == failed_sidecar_result
-    assert context_refs[0] == ()
+    # 029/032 需要来源状态防护，即使 sidecar 关闭也会建立仅内部使用的安全快照。
+    assert tuple(rule_id for rule_id, _ in context_refs[0]) == tuple(selected)
+    assert {snapshot_hash for _, snapshot_hash in context_refs[0]} == {
+        snapshot.snapshot_hash
+    }
     assert tuple(rule_id for rule_id, _ in context_refs[1]) == tuple(selected)
     assert {snapshot_hash for _, snapshot_hash in context_refs[1]} == {
         snapshot.snapshot_hash
     }
     assert context_refs[2] == ()
-    assert context_snapshots == [None, snapshot, None]
-    assert len(provider_calls) == 1
-    assert tuple(provider_calls[0]["selected_rule_ids"]) == tuple(selected)
+    assert context_snapshots == [snapshot, snapshot, None]
+    assert len(provider_calls) == 2
+    assert all(
+        tuple(call["selected_rule_ids"]) == tuple(selected)
+        for call in provider_calls
+    )
     assert snapshot.snapshot_hash not in repr(enabled_result)
     assert "evidence_snapshot" not in repr(enabled_result)
     assert "Bearer_secret" not in repr(failed_sidecar_result)

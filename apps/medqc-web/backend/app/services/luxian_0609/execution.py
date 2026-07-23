@@ -191,6 +191,9 @@ async def prepare_luxian_0609_execution(
     unified_engine_enabled = bool(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
+    surgery_document_source_guard_required = bool(
+        {"LX0609-029", "LX0609-032"}.intersection(package_plan.selected_rule_ids)
+    )
     typed_decision_rule_ids = tuple(
         rule_id
         for rule_id in package_plan.selected_rule_ids
@@ -389,6 +392,7 @@ async def prepare_luxian_0609_execution(
                 False,
             )
             or unified_engine_enabled
+            or surgery_document_source_guard_required
         )
         and all(
             isinstance(value, str) and value.strip()
@@ -917,6 +921,8 @@ def aggregate_luxian_0609_orchestrated_results(
             "visit_id": str(visit_id or ""),
             "model_name": str(model_name or ""),
             "evidence_payload": evidence_payload,
+            # 仅供当前聚合调用核验来源状态；聚合输出会剥离内部审计对象。
+            "evidence_snapshot": context.evidence_snapshot,
         },
         reduced_decisions=context.reduced_decisions,
         decision_trace_sink=decision_trace_sink,
