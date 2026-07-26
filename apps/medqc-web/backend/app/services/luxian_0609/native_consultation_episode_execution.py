@@ -72,6 +72,15 @@ _EXECUTION_SOURCE_KEYS = (
     "surgery_record",
 )
 _SNAPSHOT_EXECUTION_SOURCE_KEYS = _EXECUTION_SOURCE_KEYS
+_CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
+    "daily_course_record",
+    "senior_course_record",
+))
+_STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS = frozenset(
+    source_key
+    for source_key in _EXECUTION_SOURCE_KEYS
+    if source_key not in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+)
 # 仅供安全台账按建议类型描述候选来源覆盖；不得用于否决 LLM 的 absent
 # 语义判断或回退状态。
 _ACTION_TYPE_SOURCE_KEYS = {
@@ -180,6 +189,7 @@ class _ExecutionAssessment:
     execution_refs: tuple[str, ...]
     confidence: str
     execution_quotes: tuple[str, ...]
+    context_only_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -956,7 +966,9 @@ def _execution_prompt(
     prompt = (
         "你只判断每条会诊建议与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
-        "linked_specific只在候选明确落实同一条建议的具体措施，或直接点名该会诊建议且包含明确措施时使用。"
+        "linked_specific只在结构化候选明确落实同一条建议的具体措施，或直接点名该会诊建议且包含明确措施时使用。"
+        "daily_course_record和senior_course_record只作为病程上下文，不能单独证明执行，不能放入execution_refs；"
+        "只有病程写“遵会诊意见执行”“已按建议处理”或具体动作、但无对应医嘱/检查/检验/手术/操作结构化记录时，必须输出absent。"
         "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
         "同一治疗类别的多个细项建议（例如同属康复训练的关节活动、肌力训练），"
         "若候选明确记载该治疗类别已经实施、但未逐项写明细项，可对每个细项输出linked_vague且confidence=high；"
@@ -1018,6 +1030,29 @@ def _parse_executions(
             candidate_by_ref[ref] for ref in refs if ref in candidate_by_ref
         )
         if state in {"linked_specific", "linked_vague"}:
+            context_only_refs = tuple(
+                ref
+                for ref in refs
+                if candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+            )
+            structured_refs = tuple(
+                ref
+                for ref in refs
+                if candidate_by_ref[ref].source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
+            )
+            if context_only_refs and not structured_refs:
+                seen.add(recommendation_ref)
+                parsed.append(_ExecutionAssessment(
+                    recommendation_ref,
+                    "absent",
+                    (),
+                    confidence,
+                    (),
+                    context_only_refs,
+                ))
+                continue
+            if context_only_refs:
+                raise _SemanticInvalid()
             if not quotes or any(
                 not any(_quote_is_grounded(quote=quote, source=candidate.text) for candidate in selected_documents)
                 for quote in quotes
@@ -1055,6 +1090,7 @@ def _execution_outcome(
     assessments: Sequence[_ExecutionAssessment] | None,
     source_technical: bool = False,
     source_incomplete_keys: frozenset[str] = frozenset(),
+    context_only_candidate_present: bool = False,
 ) -> tuple[str, str]:
     uncertain = any(
         item.confidence != "high" or item.opinion_state == "unknown"
@@ -1098,6 +1134,8 @@ def _execution_outcome(
             return "non_compliant", "requirement_violated"
         return "compliant", "requirement_satisfied"
     if absent_refs:
+        if context_only_candidate_present or any(item.context_only_refs for item in assessments):
+            return "non_compliant", "requirement_violated"
         return "not_applicable", "trigger_absent_complete"
     if "linked_vague" in states:
         return "non_compliant", "requirement_violated"
@@ -1287,6 +1325,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
+    context_only_candidate_present = False
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -1330,6 +1369,10 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 )
                 execution_source_technical = projection.source_technical
                 execution_source_incomplete_keys = projection.source_incomplete_keys
+                context_only_candidate_present = any(
+                    item.source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                    for item in projection.candidates
+                )
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
@@ -1351,6 +1394,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 (),
                                 "high",
                                 (),
+                                tuple(
+                                    candidate.ref
+                                    for candidate in projection.candidates
+                                    if candidate.source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+                                ),
                             )
                             for item in completed_recommendations
                         )
@@ -1413,6 +1461,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     assessments=execution_assessments,
                     source_technical=execution_source_technical,
                     source_incomplete_keys=execution_source_incomplete_keys,
+                    context_only_candidate_present=context_only_candidate_present,
                 )
     results = []
     for rule_id in selected:
