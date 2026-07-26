@@ -120,6 +120,7 @@ _NATIVE_SOURCE_FIELDS = {
         "exam_name",
         "exam_item_name",
         "item_name",
+        "request_time",
         "exam_time",
         "exam_datetime",
         "report_time",
@@ -205,6 +206,7 @@ _NATIVE_SOURCE_FIELDS = {
         "start_time",
         "order_time",
         "prescribed_datetime",
+        "update_time",
         "order_status",
         "record_content",
     ),
@@ -216,6 +218,7 @@ _NATIVE_SOURCE_FIELDS = {
         "start_time",
         "order_time",
         "prescribed_datetime",
+        "update_time",
         "record_content",
     ),
     "discharge_record": (
@@ -313,6 +316,7 @@ _SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"] = (
     "start_time",
     "order_time",
     "prescribed_datetime",
+    "update_time",
     "record_content",
 )
 _SNAPSHOT_SOURCE_FIELDS["surgery_application"] = (

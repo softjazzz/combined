@@ -58,7 +58,7 @@ _ORDER_EXECUTION_SOURCE_KEYS = frozenset(
 )
 # 医嘱是高频结构化事件。保留紧凑候选可供模型确认正向落实；来源超过
 # 此上限时仍标记不完整，因此模型的 absent 绝不会生成确定性缺陷。
-_MAX_ORDER_CANDIDATES_PER_SOURCE = 100
+_MAX_ORDER_CANDIDATES_PER_SOURCE = 24
 _MAX_ORDER_CANDIDATE_CHARS = 180
 _EXECUTION_SOURCE_KEYS = (
     "daily_course_record",
@@ -492,6 +492,7 @@ def _parse_observed_time(value: Any) -> _ObservedTime | None:
     normalized = _clean(value)
     if not normalized:
         return None
+    normalized = re.sub(r"([+-]\d{2})$", r"\1:00", normalized)
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
@@ -525,11 +526,13 @@ def _row_time(
             "start_time",
             "order_time",
             "prescribed_datetime",
+            "update_time",
             "record_time",
         )
     else:
         time_keys = (
             "record_time",
+            "request_time",
             "report_time",
             "report_datetime",
             "exam_time",

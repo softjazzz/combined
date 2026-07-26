@@ -200,6 +200,21 @@ def test_order_candidate_prefers_business_start_time_and_snapshot_keeps_it(sourc
     )
 
 
+def test_candidate_time_accepts_short_timezone_suffix_and_order_update_fallback():
+    """本地 CDM 常见 '+08' 文本时间和医嘱 update_time 不能被误判为无时间。"""
+
+    assert episode._parse_observed_time("2025-07-02 09:45:15+08").value == datetime(
+        2025, 7, 2, 9, 45, 15
+    )
+    assert episode._row_time(
+        {"update_time": datetime(2025, 7, 2, 10, 3, 52)},
+        source_key="inpat_drug_order",
+    ).value == datetime(2025, 7, 2, 10, 3, 52)
+    assert "update_time" in source_evidence_reader._NATIVE_SOURCE_FIELDS["inpat_drug_order"]
+    assert "update_time" in source_evidence_reader._SNAPSHOT_SOURCE_FIELDS["inpat_nondrug_order"]
+    assert "request_time" in source_evidence_reader._NATIVE_SOURCE_FIELDS["exam_master"]
+
+
 def _snapshot():
     return Luxian0609EvidenceSnapshot.create(
         institute_id="safe-inst",
