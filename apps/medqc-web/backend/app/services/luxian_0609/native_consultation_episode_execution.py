@@ -64,16 +64,14 @@ _EXECUTION_SOURCE_KEYS = (
     "daily_course_record",
     "senior_course_record",
     "inpat_drug_order",
+    "inpat_nondrug_order",
+    "exam_master",
     "exam_item_report",
+    "labtest_master",
     "labtest_item_report",
     "surgery_record",
 )
-_SNAPSHOT_EXECUTION_SOURCE_KEYS = (
-    *_EXECUTION_SOURCE_KEYS,
-    "inpat_nondrug_order",
-    "exam_master",
-    "labtest_master",
-)
+_SNAPSHOT_EXECUTION_SOURCE_KEYS = _EXECUTION_SOURCE_KEYS
 # 仅供安全台账按建议类型描述候选来源覆盖；不得用于否决 LLM 的 absent
 # 语义判断或回退状态。
 _ACTION_TYPE_SOURCE_KEYS = {
@@ -124,6 +122,17 @@ _EXPLICIT_NON_TARGET_CONSULTATION_PATTERNS = (
         r"(?:拟行|拟做).{0,32}无痛(?:纤支镜|支气管镜|胃镜|肠镜|检查|手术)"
         r".{0,120}(?:疼痛科|麻醉科)(?:会诊|评估)"
     ),
+)
+_SPECIFIC_APPLICATION_PURPOSE_PATTERN = re.compile(
+    r"(?:"
+    r"因|由于|出现|伴有|诊断|治疗|处理|评估|制定|调整|完善|明确|控制|监测|"
+    r"术后|活动障碍|功能障碍|疼痛|发热|感染|出血|贫血|水肿|胸痛|腹痛|"
+    r"呼吸|血压|血糖|心律|肝功|肾功|肺炎|骨折|梗死|休克|风险|异常"
+    r")"
+)
+_GENERIC_APPLICATION_PURPOSE_PATTERN = re.compile(
+    r"^(?:申请)?请?[\u4e00-\u9fff]{0,8}科?"
+    r"(?:会诊|协诊|协助诊治|协助处理|指导治疗|进一步诊治)$"
 )
 
 
@@ -293,6 +302,23 @@ def _documents_are_explicit_non_target(documents: Sequence[Mapping[str, str]]) -
     )
 
 
+def _has_specific_application_purpose(
+    *,
+    application_refs: Sequence[str],
+    documents_by_ref: Mapping[str, Mapping[str, str]],
+) -> bool:
+    """稳定 021 边界：具体临床问题/任务不能因模型措辞抖动被判 vague。"""
+
+    texts = [
+        _clean((documents_by_ref.get(ref) or {}).get("text"))
+        for ref in application_refs
+    ]
+    text = _evidence_text("；".join(item for item in texts if item))
+    if not text or _GENERIC_APPLICATION_PURPOSE_PATTERN.fullmatch(text):
+        return False
+    return bool(_SPECIFIC_APPLICATION_PURPOSE_PATTERN.search(text))
+
+
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     usage = response.get("usage")
     usage = usage if isinstance(usage, Mapping) else {}
@@ -422,6 +448,8 @@ def _read_rows(
         raise _SourceGap()
     except SourceEvidenceQueryError:
         raise _SourceTechnical()
+    except KeyError:
+        rows = []
     except (_SourceGap, _SourceTechnical):
         raise
     except Exception:
@@ -743,6 +771,7 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
         raise _SemanticInvalid()
     expected_refs = tuple(str(item["ref"]) for item in documents)
     expected = set(expected_refs)
+    documents_by_ref = {str(item["ref"]): item for item in documents}
     assigned: list[str] = []
     episodes: list[_Episode] = []
     for raw in raw_episodes:
@@ -809,6 +838,11 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             ))
         if raw_recommendations and (opinion != "clear" or confidence != "high"):
             raise _SemanticInvalid()
+        if application in {"vague", "missing", "unknown"} and _has_specific_application_purpose(
+            application_refs=application_refs,
+            documents_by_ref=documents_by_ref,
+        ):
+            application = "clear"
         assigned.extend(member_refs)
         episodes.append(_Episode(
             episode_ref,

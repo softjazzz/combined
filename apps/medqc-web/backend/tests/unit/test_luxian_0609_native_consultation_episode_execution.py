@@ -882,6 +882,65 @@ async def test_021_022_state_table(monkeypatch, application, opinion, expected):
 
 
 @pytest.mark.asyncio
+async def test_specific_application_purpose_stabilizes_llm_vague_to_clear(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows(
+            "请康复科评估术后活动障碍并制定康复计划；会诊意见：复查血常规",
+            action_suffix=False,
+        ),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        application="vague",
+        opinion="clear",
+        application_refs=["consultation_record-1"],
+        opinion_refs=["consultation_record-1"],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+
+
+@pytest.mark.asyncio
+async def test_generic_application_vague_remains_non_compliant(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("请心内科协助诊治；会诊意见：复查血常规", action_suffix=False),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        application="vague",
+        opinion="clear",
+        application_refs=["consultation_record-1"],
+        opinion_refs=["consultation_record-1"],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("confidence", ("medium", "low"))
 async def test_medium_or_low_confidence_is_evaluation_unknown(monkeypatch, confidence):
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda **_: _rows("会诊文书"))
@@ -1839,6 +1898,50 @@ async def test_execution_linker_accepts_complete_master_and_nondrug_order_source
     assert [item["status"] for item in result.results] == ["compliant", "compliant"]
     assert result.llm_call_count == 2
     assert f"{source_key}-1" in client.prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_direct_reader_accepts_nondrug_order_execution_source_without_snapshot(monkeypatch):
+    source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
+    source_rows["consultation_record"] = _rows("申请与明确会诊意见")
+    source_rows["inpat_nondrug_order"] = [{
+        "order_name": "会诊后转入康复治疗",
+        "prescribed_datetime": "2026-07-20 02:00:00",
+        "record_content": "不应作为正文候选",
+    }]
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=_action_recommendation(action_type="transfer"),
+        )]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["inpat_nondrug_order-1"],
+            "execution_quotes": ["会诊后转入康复治疗"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert "inpat_nondrug_order-1" in client.prompts[1]
+    assert "不应作为正文候选" not in client.prompts[1]
 
 
 @pytest.mark.asyncio
