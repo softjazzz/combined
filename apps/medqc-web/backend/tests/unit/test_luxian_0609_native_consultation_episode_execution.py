@@ -1604,6 +1604,45 @@ async def test_typed_candidate_scope_incomplete_returns_safe_conflict_decision()
 
 
 @pytest.mark.asyncio
+async def test_stage_two_prompt_scope_gap_returns_unknown_without_crash(monkeypatch):
+    """候选上下文预算不足时，020/023 必须资料不确定，不能抛异常中断。"""
+
+    session = _window_session(rows_by_source={
+        "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
+        "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "surgery_record": tuple(_rows("已完成具体处置", hour_start=2)),
+    })
+    monkeypatch.setattr(
+        episode,
+        "_execution_prompt",
+        lambda **_: (_ for _ in ()).throw(episode._SourceGap()),
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert {item["status"] for item in result.results} == {"uncertain"}
+    assert [
+        item["metadata"]["reason_code"]
+        for item in result.results
+    ] == ["candidate_scope_incomplete", "candidate_scope_incomplete"]
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
 async def test_stage_two_source_error_is_technical_without_second_call(monkeypatch):
     def _read(*, source_key, **_):
         if source_key == "daily_course_record":

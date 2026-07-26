@@ -1403,21 +1403,31 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             for item in completed_recommendations
                         )
                 else:
-                    second_prompt, allowed_refs = _execution_prompt(
-                        completed=completed_recommendations,
-                        candidates=projection.candidates,
-                    )
-                    if not any(allowed_refs.values()):
-                        execution_assessments = tuple(
-                            _ExecutionAssessment(
-                                item.recommendation.recommendation_ref,
-                                "absent",
-                                (),
-                                "high",
-                                (),
-                            )
-                            for item in completed_recommendations
+                    try:
+                        second_prompt, allowed_refs = _execution_prompt(
+                            completed=completed_recommendations,
+                            candidates=projection.candidates,
                         )
+                    except _SourceGap:
+                        for rule_id in stage_two_rule_ids:
+                            statuses[rule_id] = (
+                                "evaluation_unknown",
+                                "candidate_scope_incomplete",
+                            )
+                        second_prompt = ""
+                        allowed_refs = {}
+                    if not any(allowed_refs.values()):
+                        if not any(rule_id in statuses for rule_id in stage_two_rule_ids):
+                            execution_assessments = tuple(
+                                _ExecutionAssessment(
+                                    item.recommendation.recommendation_ref,
+                                    "absent",
+                                    (),
+                                    "high",
+                                    (),
+                                )
+                                for item in completed_recommendations
+                            )
                     else:
                         calls += 1
                         try:
