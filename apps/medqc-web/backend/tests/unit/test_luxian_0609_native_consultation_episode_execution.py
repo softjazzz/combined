@@ -1578,6 +1578,10 @@ async def test_stage_two_candidate_limit_or_content_budget_is_evaluation_unknown
     assert {item["status"] for item in result.results} == {"uncertain"}
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
+    diagnostics = result.results[0]["metadata"]["consultation_link_diagnostics"]
+    assert diagnostics[0]["link_state"] in {"no_candidate", "ambiguous"}
+    assert diagnostics[0]["unknown_reason"] == "source_truncated"
+    assert "daily_course_record" in diagnostics[0]["source_incomplete_types"]
 
 
 @pytest.mark.asyncio
@@ -1655,6 +1659,68 @@ async def test_stage_two_prompt_scope_gap_returns_unknown_without_crash(monkeypa
     ] == ["candidate_scope_incomplete", "candidate_scope_incomplete"]
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_link_diagnostics_classifies_candidate_available_but_unlinked():
+    session = _window_session(rows_by_source={
+        "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
+        CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-22 00:00:00"},),
+        "consultation_record": tuple(_rows("申请与明确会诊意见")),
+        "inpat_drug_order": (
+            {
+                "generic_name": "受控药物候选",
+                "update_time": "2026-07-20 03:00:00",
+                "order_status": "新开",
+            },
+        ),
+    })
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode(
+                "consultation_record-1",
+                ["consultation_record-1"],
+                recommendations=[{
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "action_type": "medication",
+                    "source_quote": "调整药物治疗",
+                    "normalized_action": "调整药物治疗",
+                    "opinion_ref": "__AUTO__",
+                }],
+            )
+        ]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_state": "absent",
+            "execution_refs": [],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    diagnostics = result.results[0]["metadata"]["consultation_link_diagnostics"]
+    assert diagnostics == (
+        {
+            "recommendation_ref": "consultation_record-1#r1",
+            "action_type": "medication",
+            "candidate_count": 1,
+            "candidate_source_types": ("inpat_drug_order",),
+            "link_state": "candidate_exists_unlinked",
+            "unknown_reason": "candidate_available_but_unlinked",
+            "source_incomplete_types": (),
+        },
+    )
+    assert "受控药物候选" not in repr(result)
 
 
 @pytest.mark.asyncio

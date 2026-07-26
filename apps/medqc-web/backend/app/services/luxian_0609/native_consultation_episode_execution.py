@@ -1149,7 +1149,111 @@ def _execution_outcome(
     return "not_applicable", "trigger_absent_complete"
 
 
-def _result(*, rule_id: str, status: str, reason_code: str, prompt_tokens: int, completion_tokens: int, total_tokens: int) -> dict[str, Any]:
+def _diagnostic_unknown_reason(
+    *,
+    assessment: _ExecutionAssessment | None,
+    relevant_candidate_count: int,
+    relevant_incomplete_keys: frozenset[str],
+    source_technical: bool,
+) -> str:
+    if source_technical:
+        return "source_query_error"
+    if relevant_incomplete_keys:
+        return "source_truncated"
+    if assessment is None:
+        return "candidate_missing" if relevant_candidate_count == 0 else "candidate_available_but_unlinked"
+    if assessment.confidence != "high" or assessment.execution_state == "unknown":
+        return "model_low_confidence"
+    if assessment.execution_state == "absent":
+        return "candidate_missing" if relevant_candidate_count == 0 else "candidate_available_but_unlinked"
+    if assessment.execution_state == "linked_vague":
+        return "generic_execution_only"
+    return "linked"
+
+
+def _diagnostic_link_state(
+    *,
+    assessment: _ExecutionAssessment | None,
+    relevant_candidate_count: int,
+    source_technical: bool,
+) -> str:
+    if source_technical:
+        return "source_error"
+    if assessment is None:
+        return "no_candidate" if relevant_candidate_count == 0 else "ambiguous"
+    if assessment.execution_state == "linked_specific":
+        return "linked_specific"
+    if assessment.execution_state == "linked_vague":
+        return "linked_vague"
+    if assessment.execution_state == "absent":
+        return "no_candidate" if relevant_candidate_count == 0 else "candidate_exists_unlinked"
+    return "ambiguous"
+
+
+def _link_diagnostics(
+    *,
+    completed_recommendations: Sequence[_CompletedRecommendation],
+    projection: _CandidateProjection | None,
+    assessments: Sequence[_ExecutionAssessment] | None,
+    source_technical: bool,
+) -> tuple[dict[str, Any], ...]:
+    """输出安全诊断链，只解释 020/023 unknown 根因，不改变客户结论。"""
+
+    candidates = tuple(projection.candidates) if projection is not None else ()
+    incomplete_keys = projection.source_incomplete_keys if projection is not None else frozenset()
+    assessments_by_ref = {
+        item.recommendation_ref: item for item in assessments or ()
+    }
+    diagnostics: list[dict[str, Any]] = []
+    for item in completed_recommendations:
+        recommendation = item.recommendation
+        relevant_source_keys = _ACTION_TYPE_SOURCE_KEYS.get(
+            recommendation.action_type,
+            frozenset(_EXECUTION_SOURCE_KEYS),
+        )
+        relevant_candidates = tuple(
+            candidate
+            for candidate in candidates
+            if candidate.source_key in relevant_source_keys
+        )
+        candidate_source_types = tuple(sorted({
+            candidate.source_key for candidate in relevant_candidates
+        }))
+        relevant_incomplete_keys = frozenset(relevant_source_keys.intersection(incomplete_keys))
+        assessment = assessments_by_ref.get(recommendation.recommendation_ref)
+        link_state = _diagnostic_link_state(
+            assessment=assessment,
+            relevant_candidate_count=len(relevant_candidates),
+            source_technical=source_technical,
+        )
+        unknown_reason = _diagnostic_unknown_reason(
+            assessment=assessment,
+            relevant_candidate_count=len(relevant_candidates),
+            relevant_incomplete_keys=relevant_incomplete_keys,
+            source_technical=source_technical,
+        )
+        diagnostics.append({
+            "recommendation_ref": recommendation.recommendation_ref,
+            "action_type": recommendation.action_type,
+            "candidate_count": len(relevant_candidates),
+            "candidate_source_types": candidate_source_types,
+            "link_state": link_state,
+            "unknown_reason": unknown_reason,
+            "source_incomplete_types": tuple(sorted(relevant_incomplete_keys)),
+        })
+    return tuple(diagnostics)
+
+
+def _result(
+    *,
+    rule_id: str,
+    status: str,
+    reason_code: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    link_diagnostics: Sequence[Mapping[str, Any]] = (),
+) -> dict[str, Any]:
     result = build_luxian_0609_native_result(
         rule_id=rule_id,
         final_state=status,
@@ -1163,6 +1267,8 @@ def _result(*, rule_id: str, status: str, reason_code: str, prompt_tokens: int, 
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
     })
+    if rule_id in {"LX0609-020", "LX0609-023"} and link_diagnostics:
+        result["metadata"]["consultation_link_diagnostics"] = tuple(link_diagnostics)
     return result
 
 
@@ -1329,6 +1435,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
     context_only_candidate_present = False
+    execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
         if stage_two_boundary_status is not None:
@@ -1370,6 +1477,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     evidence_snapshot=evidence_snapshot,
                     stay_window=execution_stay_window,
                 )
+                execution_candidate_projection = projection
                 execution_source_technical = projection.source_technical
                 execution_source_incomplete_keys = projection.source_incomplete_keys
                 context_only_candidate_present = any(
@@ -1476,10 +1584,24 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     source_incomplete_keys=execution_source_incomplete_keys,
                     context_only_candidate_present=context_only_candidate_present,
                 )
+    link_diagnostics = _link_diagnostics(
+        completed_recommendations=completed_recommendations,
+        projection=execution_candidate_projection,
+        assessments=execution_assessments,
+        source_technical=execution_source_technical,
+    )
     results = []
     for rule_id in selected:
         status, reason = statuses.get(rule_id, ("data_gap", "linkage_unresolved"))
-        results.append(_result(rule_id=rule_id, status=status, reason_code=reason, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=total_tokens))
+        results.append(_result(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            link_diagnostics=link_diagnostics,
+        ))
     decisions = tuple(
         _decision(
             rule_id=rule_id,
