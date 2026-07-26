@@ -215,6 +215,37 @@ def test_candidate_time_accepts_short_timezone_suffix_and_order_update_fallback(
     assert "request_time" in source_evidence_reader._NATIVE_SOURCE_FIELDS["exam_master"]
 
 
+def test_high_frequency_order_candidates_are_bounded_without_scope_gap():
+    session = _window_session(rows_by_source={
+        "inpat_nondrug_order": tuple(
+            {
+                "order_name": f"会诊后具体医嘱{index}",
+                "prescribed_datetime": f"2026-07-20 {index % 24:02d}:00:00",
+            }
+            for index in range(30)
+        ),
+    })
+
+    projection = episode._candidate_documents(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        stay_window=episode._resolve_execution_stay_window(
+            evidence_materials=session.materials,
+            evidence_snapshot=session.snapshot,
+        ),
+    )
+
+    assert sum(
+        1 for item in projection.candidates
+        if item.source_key == "inpat_nondrug_order"
+    ) == episode._MAX_ORDER_CANDIDATES_PER_SOURCE
+    assert "inpat_nondrug_order" not in projection.source_incomplete_keys
+
+
 def _snapshot():
     return Luxian0609EvidenceSnapshot.create(
         institute_id="safe-inst",
@@ -1580,8 +1611,8 @@ async def test_stage_two_candidate_limit_or_content_budget_is_evaluation_unknown
     assert len(client.prompts) == 1
     diagnostics = result.results[0]["metadata"]["consultation_link_diagnostics"]
     assert diagnostics[0]["link_state"] in {"no_candidate", "ambiguous"}
-    assert diagnostics[0]["unknown_reason"] == "source_truncated"
-    assert "daily_course_record" in diagnostics[0]["source_incomplete_types"]
+    assert diagnostics[0]["unknown_reason"] == "candidate_missing"
+    assert "daily_course_record" not in diagnostics[0]["source_incomplete_types"]
 
 
 @pytest.mark.asyncio
@@ -1630,7 +1661,9 @@ async def test_stage_two_prompt_scope_gap_returns_unknown_without_crash(monkeypa
         "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY: ({"discharge_datetime": "2026-07-21 00:00:00"},),
         "consultation_record": tuple(_rows("申请与明确会诊意见")),
-        "surgery_record": tuple(_rows("已完成具体处置", hour_start=2)),
+        "inpat_nondrug_order": (
+            {"order_name": "会诊后具体处置医嘱", "prescribed_datetime": "2026-07-20 02:00:00"},
+        ),
     })
     monkeypatch.setattr(
         episode,
@@ -1978,15 +2011,15 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
             },
             "会诊后调整目标用药",
         ),
-        ("test", "exam_master", {"exam_name": "会诊后完成目标检查", "report_time": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "复查血常规"),
-        ("test", "labtest_master", {"labtest_subject": "会诊后完成目标检验", "report_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "复查血常规"),
+        ("test", "inpat_nondrug_order", {"order_name": "会诊后复查血常规", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后复查血常规"),
+        ("procedure", "inpat_nondrug_order", {"order_name": "会诊后完成目标操作", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后完成目标操作"),
         ("transfer", "inpat_nondrug_order", {"order_name": "会诊后转入目标病区", "prescribed_datetime": "2026-07-20 02:00:00", "record_content": "复查血常规"}, "会诊后转入目标病区"),
     ),
 )
 async def test_execution_linker_accepts_complete_master_and_nondrug_order_sources(
     monkeypatch, action_type, source_key, candidate_row, execution_quote,
 ):
-    """会诊后真实执行可来自主表或非药物医嘱，不能只投病程/明细表。"""
+    """会诊后检查、操作、转科等真实执行优先由非药物医嘱承载。"""
     source_rows = {key: [] for key in episode._EXECUTION_SOURCE_KEYS}
     source_rows["consultation_record"] = _rows("申请与明确会诊意见")
     source_rows[source_key] = [candidate_row]

@@ -65,11 +65,6 @@ _EXECUTION_SOURCE_KEYS = (
     "senior_course_record",
     "inpat_drug_order",
     "inpat_nondrug_order",
-    "exam_master",
-    "exam_item_report",
-    "labtest_master",
-    "labtest_item_report",
-    "surgery_record",
 )
 _SNAPSHOT_EXECUTION_SOURCE_KEYS = _EXECUTION_SOURCE_KEYS
 _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
@@ -88,19 +83,28 @@ _ACTION_TYPE_SOURCE_KEYS = {
         "inpat_drug_order", "inpat_nondrug_order", "daily_course_record", "senior_course_record",
     )),
     "test": frozenset((
-        "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
-        "daily_course_record", "senior_course_record",
+        "inpat_nondrug_order", "daily_course_record", "senior_course_record",
     )),
     "procedure": frozenset((
-        "surgery_record", "daily_course_record", "senior_course_record",
+        "inpat_nondrug_order", "daily_course_record", "senior_course_record",
     )),
     "transfer": frozenset((
         "inpat_nondrug_order", "inpat_drug_order", "daily_course_record", "senior_course_record",
     )),
     "monitoring": frozenset((
-        "daily_course_record", "senior_course_record",
+        "inpat_nondrug_order", "daily_course_record", "senior_course_record",
     )),
     "other": frozenset(_EXECUTION_SOURCE_KEYS),
+}
+# 020/023 业务口径按“会诊后有具体医嘱”为主证据。病程/查房只给 LLM
+# 作上下文，不能因这些上下文截断而把结构化医嘱判断降为资料不足。
+_ACTION_TYPE_REQUIRED_SOURCE_KEYS = {
+    "medication": frozenset(("inpat_drug_order", "inpat_nondrug_order")),
+    "test": frozenset(("inpat_nondrug_order",)),
+    "procedure": frozenset(("inpat_nondrug_order",)),
+    "transfer": frozenset(("inpat_nondrug_order", "inpat_drug_order")),
+    "monitoring": frozenset(("inpat_nondrug_order",)),
+    "other": frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
 }
 _STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
 _STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
@@ -692,9 +696,13 @@ def _candidate_documents(
             else _MAX_CANDIDATES_PER_SOURCE
         )
         if len(rows) > source_limit:
-            source_incomplete_keys.add(source_key)
             if not is_order_source:
+                source_incomplete_keys.add(source_key)
                 continue
+            # 医嘱是 020/023 的主执行证据，真实病例中常为高频清单。
+            # 这里采用会诊后时间排序的固定上限候选集，避免“医嘱很多”
+            # 本身把所有建议都拖成资料不足；行级缺时间/缺内容仍会在
+            # 下方标记为来源不完整。
             rows = rows[:source_limit]
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row, source_key=source_key)
@@ -1122,9 +1130,9 @@ def _execution_outcome(
     if absent_refs and any(
         item.recommendation.recommendation_ref in absent_refs
         and bool(
-            _ACTION_TYPE_SOURCE_KEYS.get(
+            _ACTION_TYPE_REQUIRED_SOURCE_KEYS.get(
                 item.recommendation.action_type,
-                frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
+                frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
             ).intersection(source_incomplete_keys)
         )
         for item in completed_recommendations
@@ -1211,6 +1219,10 @@ def _link_diagnostics(
             recommendation.action_type,
             frozenset(_EXECUTION_SOURCE_KEYS),
         )
+        required_source_keys = _ACTION_TYPE_REQUIRED_SOURCE_KEYS.get(
+            recommendation.action_type,
+            frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
+        )
         relevant_candidates = tuple(
             candidate
             for candidate in candidates
@@ -1219,7 +1231,7 @@ def _link_diagnostics(
         candidate_source_types = tuple(sorted({
             candidate.source_key for candidate in relevant_candidates
         }))
-        relevant_incomplete_keys = frozenset(relevant_source_keys.intersection(incomplete_keys))
+        relevant_incomplete_keys = frozenset(required_source_keys.intersection(incomplete_keys))
         assessment = assessments_by_ref.get(recommendation.recommendation_ref)
         link_state = _diagnostic_link_state(
             assessment=assessment,
