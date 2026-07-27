@@ -88,12 +88,12 @@ function Test-ViteDevClient([int]$port, [int]$timeoutSec = 3) {
 
     $contentType = ""
     if ($resp.Headers -and $resp.Headers["Content-Type"]) {
-      $contentType = String($resp.Headers["Content-Type"])
+      $contentType = [string]$resp.Headers["Content-Type"]
     }
 
     $body = ""
     if ($null -ne $resp.Content) {
-      $body = String($resp.Content)
+      $body = [string]$resp.Content
     }
 
     if ($contentType -match "text/html") {

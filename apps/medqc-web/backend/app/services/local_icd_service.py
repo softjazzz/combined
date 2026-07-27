@@ -16,11 +16,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.settings import get_settings
-from .icd_semantic_retrieval_service import get_icd_semantic_retrieval_service
-
 logger = logging.getLogger(__name__)
 
 _LOCAL_ICD_CACHE: Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]] = None
+
+
+def get_icd_semantic_retrieval_service() -> Any:
+    """仅在语义兜底实际执行时加载可选的向量检索依赖。"""
+    from .icd_semantic_retrieval_service import get_icd_semantic_retrieval_service as factory
+
+    return factory()
 
 
 _DIAG_ALIAS_MAP = {
