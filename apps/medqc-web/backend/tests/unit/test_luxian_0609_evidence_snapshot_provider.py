@@ -784,6 +784,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
+            "admission_record_diagnosis",
             "diagnosis",
             "exam_master",
             "inpat_drug_order",
@@ -819,6 +820,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
+        "admission_record_diagnosis",
         "pathology_exam_master",
         "pathology_exam_report",
         "diagnosis",
@@ -979,6 +981,15 @@ class _FakeConnection:
     def execute(self, statement, params):
         self.calls.append((str(statement), dict(params)))
         return _FakeResult(self.rows)
+
+
+def test_admission_snapshot_contract_keeps_structured_chief_complaint() -> None:
+    """018 必须读取主诉字段，不能只依赖可能为空的拼接正文。"""
+
+    assert (
+        "chief_complaint"
+        in source_evidence_reader._NATIVE_SOURCE_FIELDS["admission_record"]
+    )
 
 
 @pytest.mark.parametrize("rows", [[{"match": 1}], []])

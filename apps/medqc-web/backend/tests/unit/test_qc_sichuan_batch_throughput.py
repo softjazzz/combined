@@ -22,12 +22,15 @@ def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
         "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": True,
         "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED": True,
+        "LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED": True,
         "LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED": True,
         "LUXIAN_0609_NATIVE_TRANSFUSION_ENABLED": True,
         "LUXIAN_0609_NATIVE_TUMOR_PATHOLOGY_ENABLED": True,
         "LUXIAN_0609_NATIVE_COURSE_QUALITY_ENABLED": True,
         "LUXIAN_0609_NATIVE_SURGERY_GATE_ENABLED": True,
         "LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED": True,
+        "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": True,
+        "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED": True,
         "LUXIAN_0609_RUNTIME_SHADOW_ENABLED": False,
     }
     values.update(overrides)
@@ -1642,6 +1645,7 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
                         "rule_id": rule_id,
                         "status": "compliant",
                         "is_compliant": True,
+                        "reason_code": "requirement_satisfied",
                         "metadata": {
                             "execution_source": "lx0609_native",
                             "executor_type": "program",
@@ -1688,6 +1692,9 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
     assert {str(item.get("rule_id") or "") for item in workspace.items} == set(
         customer_rule_ids
     )
+    assert {
+        str(item.get("reason_code") or "") for item in workspace.items
+    } == {"requirement_satisfied"}
 
 
 @pytest.mark.asyncio

@@ -219,6 +219,7 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
     _entry("diagnosis", access_mode=_BOUNDED),
+    _entry("admission_record_diagnosis", access_mode=_BOUNDED),
     _entry("exam_master", access_mode=_BOUNDED),
     _entry("labtest_master", access_mode=_BOUNDED),
     _entry("inpat_drug_order", access_mode=_BOUNDED),
@@ -332,8 +333,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 026 的旧客户文书范围没有结构化诊断，RuleDecision 只允许同一快照
     # 中受控诊断代码决定恶性肿瘤适用性；化疗事实仍缺失时保守 DG。
     "LX0609-026": ("diagnosis",),
-    # 018 仅接受 diagnosis_type=主要诊断 的结构化首页诊断作为对照事实。
-    "LX0609-018": ("diagnosis",),
+    # 018 仅接受受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
+    "LX0609-018": ("diagnosis", "admission_record_diagnosis"),
     # 027 需要同一快照内的恶性诊断与出院记录，不能只绑定触发诊断。
     "LX0609-027": ("diagnosis", "discharge_record"),
     # 028 的客户文书范围只有病程，必须额外绑定严格已实施手术事实，

@@ -127,14 +127,29 @@ _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*
 _DATE_PATTERN = re.compile(r"\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?")
 _TIME_PATTERN = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?")
 _COMPLAINT_PATTERN = re.compile(r"主诉\s*[:：]\s*[^；;。]{2,}")
-_DIAGNOSIS_PATTERN = re.compile(r"(?:第一诊断|主要诊断|入院诊断|首页第一诊断)\s*[:：]\s*[^；;。]{2,}")
+_COMPLAINT_VALUE_PATTERN = re.compile(r"主诉\s*[:：]\s*([^；;。\r\n]{1,160})")
+_DIAGNOSIS_PATTERN = re.compile(r"(?:第一诊断|主要诊断|初步诊断|入院诊断|首页第一诊断)\s*[:：]\s*[^；;。]{2,}")
+_PRIMARY_DIAGNOSIS_TYPES = frozenset({"主要诊断", "主诊断", "第一诊断"})
+_ADMISSION_FIRST_DIAGNOSIS_TYPES = frozenset({"初步诊断", "入院诊断"})
+_LX018_DIAGNOSIS_SOURCES = ("diagnosis", "admission_record_diagnosis")
+_NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
+    r"(?:^|[，,；;\s]+)\d+\s*[、.．]\s*([^，,；;\n\r]+)"
+)
+_LX018_CUSTOMER_REASON_CODES = frozenset(
+    {
+        "complaint_too_short",
+        "complaint_lacks_diagnostic_clue",
+        "complaint_primary_diagnosis_mismatch",
+        "unknown",
+    }
+)
 
 _RULE_CONTEXT_SOURCES = {
     "LX0609-007": _RULE_007_RECORD_SOURCES,
     "LX0609-008": _TIMELINE_SOURCES,
     "LX0609-009": _TIMELINE_SOURCES,
     "LX0609-016": ("admission_record", "first_course_record"),
-    "LX0609-018": ("admission_record", "diagnosis"),
+    "LX0609-018": ("admission_record", "diagnosis", "admission_record_diagnosis"),
 }
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
@@ -216,9 +231,52 @@ def _row_text(row: Mapping[str, Any]) -> str:
         or row.get("raw_text")
         or row.get("content_preview")
         or row.get("text_preview")
+        or row.get("chief_complaint")
+        or row.get("complaint")
         or row.get("diagnosis_name")
         or row.get("diagnosis_code")
     )
+
+
+def _split_numbered_diagnosis_items(value: Any) -> tuple[str, ...]:
+    text = _clean(value)
+    if not text:
+        return ()
+    items = tuple(
+        item.strip()
+        for item in _NUMBERED_DIAGNOSIS_ITEM_PATTERN.findall(text)
+        if item.strip()
+    )
+    return items if len(items) >= 2 else ()
+
+
+def _lx018_primary_diagnosis_text(row: Mapping[str, Any]) -> str:
+    """返回 018 可采信的第一诊断文本；不把其他诊断补成第一诊断。"""
+
+    diagnosis_type = _clean(row.get("diagnosis_type"))
+    diagnosis_name = _clean(row.get("diagnosis_name") or row.get("diagnosis"))
+    diagnosis_code = _clean(row.get("diagnosis_code"))
+    label = diagnosis_name or diagnosis_code
+    if not label:
+        return ""
+    if diagnosis_type in _PRIMARY_DIAGNOSIS_TYPES:
+        return label
+    if diagnosis_type not in _ADMISSION_FIRST_DIAGNOSIS_TYPES:
+        return ""
+    numbered_items = _split_numbered_diagnosis_items(label)
+    if numbered_items:
+        return numbered_items[0]
+    # cdm.diagnosis 读取已按 diagnosis_id 等稳定字段升序；当初步诊断拆成多行时，
+    # 第一行即为入院第一诊断。这里仅返回该行自身，不采信“其他诊断”类型。
+    return label
+
+
+def _lx018_primary_diagnosis_available(documents: Mapping[str, Any]) -> bool:
+    for source_key in _LX018_DIAGNOSIS_SOURCES:
+        for row in _source_rows(documents, source_key, limit=None):
+            if _lx018_primary_diagnosis_text(row):
+                return True
+    return False
 
 
 def _rule_009_substantive_text(row: Mapping[str, Any]) -> str:
@@ -1490,20 +1548,24 @@ def _context(
         _substantive_rows(documents, _RULE_CONTEXT_SOURCES[rule_id])
     )
     if rule_id == "LX0609-018":
-        # trigger 读取完整 bounded diagnosis，模型上下文只保留最多8条受控主要诊断。
-        context_rows = [item for item in context_rows if item[0] != "diagnosis"]
-        context_rows.extend(
-            (
-                "diagnosis",
-                row,
-                content,
+        # trigger 读取完整 bounded diagnosis，模型上下文只保留最多8条受控第一诊断。
+        context_rows = [
+            item for item in context_rows if item[0] not in _LX018_DIAGNOSIS_SOURCES
+        ]
+        for source_key in _LX018_DIAGNOSIS_SOURCES:
+            context_rows.extend(
+                (
+                    source_key,
+                    row,
+                    content,
+                )
+                for row in _source_rows(documents, source_key, limit=None)
+                if (content := _lx018_primary_diagnosis_text(row))
             )
-            for row in _source_rows(documents, "diagnosis", limit=None)
-            if _clean(row.get("diagnosis_type")) == "主要诊断"
-            and (content := _row_text(row))
-        )
         admission_rows = [item for item in context_rows if item[0] == "admission_record"]
-        diagnosis_rows = [item for item in context_rows if item[0] == "diagnosis"]
+        diagnosis_rows = [
+            item for item in context_rows if item[0] in _LX018_DIAGNOSIS_SOURCES
+        ]
         context_rows = admission_rows[:_MAX_ROWS_PER_SOURCE] + diagnosis_rows[:_MAX_ROWS_PER_SOURCE]
     for source_key, row, content in context_rows:
         record_time = _clean(row.get("record_time")) or "未提供"
@@ -1515,10 +1577,22 @@ def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
     custom_prompt = _MAPPING_LINE_PATTERN.sub(
         "", str(wrapper.get("custom_prompt") or "")
     )
-    return (
+    prompt = (
         custom_prompt.replace("{defect_level}", str(wrapper.get("defect_level") or ""))
         .replace("{medical_text}", context)
         .strip()
+    )
+    if _clean(wrapper.get("rule_id") or wrapper.get("rule_code")) != "LX0609-018":
+        return prompt
+    return (
+        f"{prompt}\n\n"
+        "**客户展示补充字段：**\n"
+        "除既有 JSON 字段外，必须返回 customer_reason_code。"
+        "当 is_compliant=false 时只能取："
+        "complaint_too_short、complaint_lacks_diagnostic_clue、"
+        "complaint_primary_diagnosis_mismatch、unknown；"
+        "当 is_compliant=true 时填 unknown。"
+        "不要返回病历原文、姓名、住院号或提示词。"
     )
 
 
@@ -1531,7 +1605,7 @@ def _response_text(response: Mapping[str, Any]) -> str:
     return str(response.get("content") or response.get("text") or "")
 
 
-def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+def _response_json_payload(response: Mapping[str, Any]) -> Mapping[str, Any] | None:
     cleaned = re.sub(
         r"<think>[\s\S]*?</think>",
         "",
@@ -1545,8 +1619,19 @@ def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
         payload = json.loads(match.group(0))
     except (TypeError, ValueError):
         return None
-    value = payload.get("is_compliant") if isinstance(payload, Mapping) else None
+    return payload if isinstance(payload, Mapping) else None
+
+
+def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+    payload = _response_json_payload(response)
+    value = payload.get("is_compliant") if payload is not None else None
     return value if isinstance(value, bool) else None
+
+
+def _parse_lx018_customer_reason(response: Mapping[str, Any]) -> str:
+    payload = _response_json_payload(response)
+    value = _clean(payload.get("customer_reason_code")) if payload else ""
+    return value if value in _LX018_CUSTOMER_REASON_CODES else "unknown"
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -1928,7 +2013,7 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record", "diagnosis"),
+        "LX0609-018": ("admission_record", *_LX018_DIAGNOSIS_SOURCES),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -2059,7 +2144,7 @@ def _admission_material_ready(
         _fact_state(
             facts,
             _PRIMARY_DIAGNOSIS_FACT_TYPES,
-            frozenset({"admission_record", "diagnosis"}),
+            frozenset({"admission_record", *_LX018_DIAGNOSIS_SOURCES}),
         )
         == "present"
     )
@@ -2077,14 +2162,44 @@ def _admission_material_ready(
             )
             or _DIAGNOSIS_PATTERN.search(_row_text(row))
         )
-    # 只采信受控类型“主要诊断”；其他诊断、诊断史或任意文本都不能补齐018。
-    for row in _source_rows(documents, "diagnosis", limit=None):
-        if _clean(row.get("diagnosis_type")) != "主要诊断":
-            continue
-        diagnosis_text = diagnosis_text or bool(
-            _clean(row.get("diagnosis_name") or row.get("diagnosis_code"))
-        )
+    # 只采信受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
+    diagnosis_text = diagnosis_text or _lx018_primary_diagnosis_available(documents)
     return (complaint_fact or complaint_text) and (diagnosis_fact or diagnosis_text)
+
+
+def _lx018_customer_display_facts(
+    documents: Mapping[str, Any],
+    *,
+    failure_kind: str,
+) -> Mapping[str, Any]:
+    """只输出前端展示所需的受控事实，绝不回传主诉或诊断原文。"""
+
+    complaint = ""
+    primary_diagnosis_available = False
+    for row in _source_rows(documents, "admission_record"):
+        complaint = complaint or _clean(
+            row.get("chief_complaint") or row.get("complaint")
+        )
+        if not complaint:
+            match = _COMPLAINT_VALUE_PATTERN.search(_row_text(row))
+            complaint = _clean(match.group(1)) if match else ""
+        primary_diagnosis_available = primary_diagnosis_available or bool(
+            _clean(
+                row.get("first_diagnosis")
+                or row.get("primary_diagnosis")
+                or row.get("diagnosis")
+            )
+            or _DIAGNOSIS_PATTERN.search(_row_text(row))
+        )
+    primary_diagnosis_available = (
+        primary_diagnosis_available or _lx018_primary_diagnosis_available(documents)
+    )
+    return {
+        "complaint_length": len(re.sub(r"\s+", "", complaint)) if complaint else None,
+        "primary_diagnosis_available": primary_diagnosis_available,
+        "source_label": "入院记录—主诉",
+        "failure_kind": failure_kind,
+    }
 
 
 async def execute_luxian_0609_native_course_quality_rules(
@@ -2316,9 +2431,8 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
-            if rule_id == "LX0609-018" and (
-                not _substantive_admission_rows(typed_documents)
-                or not _admission_material_ready(typed_documents, ())
+            if rule_id == "LX0609-018" and not _admission_material_ready(
+                typed_documents, ()
             ):
                 emit_course_semantic(
                     _CourseSemanticOutcome(
@@ -2579,6 +2693,14 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             continue
         status = "compliant" if is_compliant else "non_compliant"
+        extra_metadata: Mapping[str, Any] | None = None
+        if rule_id == "LX0609-018" and status == "non_compliant":
+            extra_metadata = {
+                "customer_display_facts": _lx018_customer_display_facts(
+                    documents,
+                    failure_kind=_parse_lx018_customer_reason(response),
+                )
+            }
         results.append(
             _result(
                 rule_id,
@@ -2589,6 +2711,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 completion_tokens=completion,
                 total_tokens=total,
                 api_time=elapsed,
+                extra_metadata=extra_metadata,
             )
         )
 

@@ -2377,6 +2377,165 @@ async def test_typed_018_accepts_only_controlled_primary_diagnosis_material():
 
 
 @pytest.mark.asyncio
+async def test_typed_018_uses_numbered_initial_diagnosis_first_item():
+    rows_by_source = {
+        "admission_record": [
+            _row("主诉：反复腰腹部疼痛伴尿频1月。现病史与诊疗经过记录完整。")
+        ],
+        "diagnosis": [
+            {
+                "diagnosis_type": "初步诊断",
+                "diagnosis_name": "1、双侧肾周围炎,2、前列腺增生,3、2型糖尿病",
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}])
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert typed.llm_call_count == 1
+    assert "双侧肾周围炎" in client.prompts[0]
+    assert "前列腺增生" not in client.prompts[0]
+    assert typed.results == ()
+
+
+@pytest.mark.asyncio
+async def test_typed_018_reads_admission_record_diagnosis_source():
+    rows_by_source = {
+        "admission_record": [
+            _row("主诉：反复咳嗽咳痰气促10余年，加重伴纳差1天。现病史完整。")
+        ],
+        "diagnosis": [],
+        "admission_record_diagnosis": [
+            {"diagnosis_type": "入院诊断", "diagnosis_id": "1"},
+            {
+                "diagnosis_type": "初步诊断",
+                "diagnosis_id": "2",
+                "diagnosis_name": (
+                    "1、慢性阻塞性肺病伴有急性下呼吸道感染；"
+                    "2、慢性呼吸衰竭；3、尘肺？"
+                ),
+            },
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}])
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert typed.llm_call_count == 1
+    assert "慢性阻塞性肺病伴有急性下呼吸道感染" in client.prompts[0]
+    assert "慢性呼吸衰竭" not in client.prompts[0]
+    assert "尘肺" not in client.prompts[0]
+    assert typed.results == ()
+
+
+@pytest.mark.asyncio
+async def test_typed_018_accepts_structured_complaint_when_record_content_is_empty():
+    rows_by_source = {
+        "admission_record": [
+            {
+                "chief_complaint": "无明显诱因出现左膝疼痛3月。",
+                "record_content": "",
+            }
+        ],
+        "diagnosis": [],
+        "admission_record_diagnosis": [
+            {
+                "diagnosis_type": "初步诊断",
+                "diagnosis_id": "1",
+                "diagnosis_name": "左侧膝关节骨性关节病",
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-018",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-16T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([{"is_compliant": True}])
+    typed = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        decision_rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+
+    assert typed.llm_call_count == 1
+    assert "无明显诱因出现左膝疼痛3月" in client.prompts[0]
+    assert "左侧膝关节骨性关节病" in client.prompts[0]
+    assert typed.results == ()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("model_output", "expected_reason", "expected_tokens"),
     (
@@ -3414,6 +3573,41 @@ async def test_018_requires_complaint_and_primary_diagnosis_material():
     )
     assert [item["status"] for item in complete.results] == ["compliant"]
     assert complete.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_018_returns_safe_display_facts_without_returning_admission_text():
+    client = _Client(
+        [
+            {
+                "is_compliant": False,
+                "customer_reason_code": "complaint_too_short",
+            }
+        ]
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-018",),
+        wrapper_rules=[_wrapper("LX0609-018")],
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [
+                    _row("主诉：腹痛2天。入院诊断：急性胆囊炎。")
+                ]
+            }
+        ),
+        llm_client=client,
+    )
+
+    item = result.results[0]
+    display_facts = item["metadata"]["customer_display_facts"]
+    assert display_facts == {
+        "complaint_length": 4,
+        "primary_diagnosis_available": True,
+        "source_label": "入院记录—主诉",
+        "failure_kind": "complaint_too_short",
+    }
+    assert "腹痛2天" not in repr(item)
+    assert "customer_reason_code" in client.prompts[0]
 
 
 @pytest.mark.asyncio

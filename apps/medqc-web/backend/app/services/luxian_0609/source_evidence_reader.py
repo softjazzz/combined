@@ -49,7 +49,19 @@ _NATIVE_SOURCE_FIELDS = {
         "document_title",
         "record_time",
         "admission_datetime",
+        "chief_complaint",
         "record_content",
+    ),
+    "admission_record_diagnosis": (
+        "document_id",
+        "diagnosis_id",
+        "diagnosis_no",
+        "diagnosis_type",
+        "diagnosis_name",
+        "diagnosis_code",
+        "diagnosis_datetime",
+        "record_time",
+        "update_time",
     ),
     "first_course_record": (
         "document_id",
@@ -269,6 +281,7 @@ _SNAPSHOT_SOURCE_FIELDS = {
     for source_key in (
         "inpat_registration",
         "admission_record",
+        "admission_record_diagnosis",
         "first_course_record",
         "rescue_record",
         "mr_bloodtrans",
