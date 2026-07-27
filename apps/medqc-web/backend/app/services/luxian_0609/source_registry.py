@@ -234,7 +234,7 @@ _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
 _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 003 优先使用 surgery_record 自带时间，缺失时仅允许唯一 mr_surgery 时间配对。
     "LX0609-003": ("mr_surgery",),
-    "LX0609-001": ("inpat_registration",),
+    "LX0609-001": ("inpat_registration", "discharge_record"),
     "LX0609-002": (
         "admission_record",
         "first_course_record",
@@ -243,10 +243,15 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-004": ("rescue_record",),
     "LX0609-005": (
         "admission_record",
+        "discharge_record",
         "inpat_registration",
         "daily_course_record",
     ),
-    "LX0609-006": ("admission_record", "inpat_registration"),
+    "LX0609-006": (
+        "admission_record",
+        "discharge_record",
+        "inpat_registration",
+    ),
     "LX0609-008": (
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",

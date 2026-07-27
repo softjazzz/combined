@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import re
 from typing import Any, Mapping, Sequence
 
@@ -68,7 +68,11 @@ _TYPED_RULE_IDS = (
     "LX0609-006",
 )
 _TYPED_SOURCE_KEYS_BY_RULE = {
-    "LX0609-001": ("admission_record", "inpat_registration"),
+    "LX0609-001": (
+        "admission_record",
+        "discharge_record",
+        "inpat_registration",
+    ),
     "LX0609-002": (
         "admission_record",
         "first_course_record",
@@ -78,12 +82,14 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
     "LX0609-005": (
         "admission_record",
         "daily_course_record",
+        "discharge_record",
         "inpat_registration",
         "senior_course_record",
     ),
     "LX0609-006": (
         "admission_record",
         "daily_course_record",
+        "discharge_record",
         "inpat_registration",
         "senior_course_record",
     ),
@@ -221,6 +227,42 @@ def _authoritative_time(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is None else None
 
 
+def _authoritative_date(value: Any) -> date | None:
+    """仅接受权威日期字段整值；日期不能伪装成精确入院时刻。"""
+
+    if isinstance(value, datetime):
+        return None
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    try:
+        parsed = date.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == normalized else None
+
+
+def _elapsed_state_from_date_range(
+    *,
+    event_time: datetime,
+    admission_date: date,
+    threshold: timedelta,
+) -> str:
+    """在整日入院区间上只返回可证明的结论，中间边界保持未知。"""
+
+    range_start = datetime.combine(admission_date, datetime.min.time())
+    range_end = range_start + timedelta(days=1)
+    if event_time < range_start:
+        return "before"
+    if event_time - range_start <= threshold:
+        return "within"
+    if event_time - range_end >= threshold:
+        return "over"
+    return "ambiguous"
+
+
 def _typed_basic_decisions(
     *,
     rule_ids: tuple[str, ...],
@@ -241,7 +283,11 @@ def _typed_basic_decisions(
     evaluator_version = "basic-timeliness-authoritative-v1"
 
     allowed_sources = {
-        "LX0609-001": ("admission_record", "inpat_registration"),
+        "LX0609-001": (
+            "admission_record",
+            "discharge_record",
+            "inpat_registration",
+        ),
         "LX0609-002": (
             "admission_record",
             "first_course_record",
@@ -251,12 +297,14 @@ def _typed_basic_decisions(
         "LX0609-005": (
             "admission_record",
             "daily_course_record",
+            "discharge_record",
             "inpat_registration",
             "senior_course_record",
         ),
         "LX0609-006": (
             "admission_record",
             "daily_course_record",
+            "discharge_record",
             "inpat_registration",
             "senior_course_record",
         ),
@@ -355,8 +403,10 @@ def _typed_basic_decisions(
     )
     admission_issue: tuple[str, bool] | None = None
     registration_issue: tuple[str, bool] | None = None
+    discharge_issue: tuple[str, bool] | None = None
     admission_rows: tuple[Mapping[str, Any], ...] = ()
     registration_rows: tuple[Mapping[str, Any], ...] = ()
+    discharge_rows: tuple[Mapping[str, Any], ...] = ()
     if admission_needed:
         admission_issue = source_issue(("admission_record",))
         registration_issue = source_issue(
@@ -382,6 +432,21 @@ def _typed_basic_decisions(
         except ValueError:
             admission_issue = ("snapshot_mismatch", True)
             admission_rows = registration_rows = ()
+    if any(rule_id in _ADMISSION_ANCHOR_RULE_IDS for rule_id in rule_ids):
+        discharge_issue = source_issue(("discharge_record",))
+        try:
+            discharge_rows = (
+                rows("discharge_record")
+                if observation_by_source["discharge_record"].query_state.value
+                in {"available", "empty"}
+                else ()
+            )
+        except EvidenceMaterialTruncated:
+            discharge_issue = ("source_truncated", False)
+            discharge_rows = ()
+        except ValueError:
+            discharge_issue = ("snapshot_mismatch", True)
+            discharge_rows = ()
 
     admission_record_times = tuple(
         sorted(
@@ -412,24 +477,43 @@ def _typed_basic_decisions(
             is not None
         )
     )
+    discharge_admission_dates = tuple(
+        sorted(
+            {
+                parsed
+                for row in discharge_rows
+                if (
+                    parsed := _authoritative_date(row.get("admission_date"))
+                )
+                is not None
+            }
+        )
+    )
 
-    def admission_anchor(rule_id: str) -> tuple[datetime | None, RuleDecision | None]:
+    def admission_anchor(
+        rule_id: str,
+    ) -> tuple[datetime | None, date | None, RuleDecision | None]:
         if admission_issue is not None:
             reason, technical = admission_issue
-            return None, gap(rule_id, reason, technical=technical)
+            return None, None, gap(rule_id, reason, technical=technical)
         if registration_issue is not None:
             reason, technical = registration_issue
-            return None, gap(rule_id, reason, technical=technical)
+            return None, None, gap(rule_id, reason, technical=technical)
         registration_state = observation_by_source[
             "inpat_registration"
         ].query_state.value
-        if registration_state == "available":
-            if not registration_times:
-                return None, gap(rule_id, "authoritative_time_missing")
-            return registration_times[0], None
-        if not admission_record_admission_times:
-            return None, gap(rule_id, "authoritative_time_missing")
-        return admission_record_admission_times[0], None
+        if registration_state == "available" and registration_times:
+            return registration_times[0], None, None
+        if admission_record_admission_times:
+            return admission_record_admission_times[0], None, None
+        if rule_id not in _ADMISSION_ANCHOR_RULE_IDS:
+            return None, None, gap(rule_id, "authoritative_time_missing")
+        if discharge_issue is not None:
+            reason, technical = discharge_issue
+            return None, None, gap(rule_id, reason, technical=technical)
+        if len(discharge_admission_dates) != 1:
+            return None, None, gap(rule_id, "authoritative_time_missing")
+        return None, discharge_admission_dates[0], None
 
     def conclusive(
         rule_id: str,
@@ -457,7 +541,7 @@ def _typed_basic_decisions(
     decisions: list[RuleDecision] = []
     for rule_id in rule_ids:
         if rule_id == "LX0609-002":
-            anchor, anchor_gap = admission_anchor(rule_id)
+            anchor, _anchor_date, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or anchor is None:
                 decisions.append(
                     anchor_gap or gap(rule_id, "authoritative_time_missing")
@@ -596,12 +680,31 @@ def _typed_basic_decisions(
             if not admission_record_times:
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
                 continue
-            anchor, anchor_gap = admission_anchor(rule_id)
-            if anchor_gap is not None or anchor is None:
+            anchor, anchor_date, anchor_gap = admission_anchor(rule_id)
+            if anchor_gap is not None or (
+                anchor is None and anchor_date is None
+            ):
                 decisions.append(anchor_gap or gap(rule_id, "authoritative_time_missing"))
                 continue
-            delta = admission_record_times[0] - anchor
-            if delta < timedelta(0):
+            if anchor is not None:
+                delta_state = (
+                    "before"
+                    if admission_record_times[0] < anchor
+                    else (
+                        "within"
+                        if admission_record_times[0] - anchor
+                        <= timedelta(hours=24)
+                        else "over"
+                    )
+                )
+            else:
+                assert anchor_date is not None
+                delta_state = _elapsed_state_from_date_range(
+                    event_time=admission_record_times[0],
+                    admission_date=anchor_date,
+                    threshold=timedelta(hours=24),
+                )
+            if delta_state == "before":
                 decisions.append(
                     make(
                         rule_id,
@@ -611,7 +714,7 @@ def _typed_basic_decisions(
                         confidence=None,
                     )
                 )
-            elif delta <= timedelta(hours=24):
+            elif delta_state == "within":
                 decisions.append(
                     conclusive(
                         rule_id,
@@ -621,14 +724,18 @@ def _typed_basic_decisions(
                 )
             elif len(admission_record_times) < len(admission_rows):
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
+            elif delta_state == "ambiguous":
+                decisions.append(gap(rule_id, "authoritative_time_missing"))
             else:
                 decisions.append(
                     conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
                 )
             continue
 
-        anchor, anchor_gap = admission_anchor(rule_id)
-        if anchor_gap is not None or anchor is None:
+        anchor, anchor_date, anchor_gap = admission_anchor(rule_id)
+        if anchor_gap is not None or (
+            anchor is None and anchor_date is None
+        ):
             decisions.append(anchor_gap or gap(rule_id, "authoritative_time_missing"))
             continue
         source_keys = ("daily_course_record", "senior_course_record")
@@ -676,8 +783,24 @@ def _typed_basic_decisions(
                 ambiguous_round = True
 
         threshold = timedelta(hours=48 if rule_id == "LX0609-005" else 72)
-        deltas = sorted(value - anchor for value in qualifying_times)
-        if any(timedelta(0) <= delta <= threshold for delta in deltas):
+        if anchor is not None:
+            elapsed_states = tuple(
+                "before"
+                if value < anchor
+                else "within" if value - anchor <= threshold else "over"
+                for value in qualifying_times
+            )
+        else:
+            assert anchor_date is not None
+            elapsed_states = tuple(
+                _elapsed_state_from_date_range(
+                    event_time=value,
+                    admission_date=anchor_date,
+                    threshold=threshold,
+                )
+                for value in qualifying_times
+            )
+        if "within" in elapsed_states:
             decisions.append(
                 conclusive(
                     rule_id,
@@ -690,7 +813,7 @@ def _typed_basic_decisions(
         elif course_issue is not None:
             reason, technical = course_issue
             decisions.append(gap(rule_id, reason, technical=technical))
-        elif any(delta < timedelta(0) for delta in deltas):
+        elif "before" in elapsed_states:
             decisions.append(
                 make(
                     rule_id,
@@ -700,7 +823,9 @@ def _typed_basic_decisions(
                     confidence=None,
                 )
             )
-        elif deltas:
+        elif "ambiguous" in elapsed_states:
+            decisions.append(gap(rule_id, "authoritative_time_missing"))
+        elif elapsed_states:
             decisions.append(
                 conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
             )

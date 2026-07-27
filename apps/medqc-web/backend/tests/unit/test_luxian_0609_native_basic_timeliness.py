@@ -215,6 +215,121 @@ def test_001_005_006_do_not_use_admission_record_time_as_its_own_anchor():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    (
+        "admission_record_time",
+        "attending_time",
+        "senior_time",
+        "expected_state",
+        "expected_reason",
+    ),
+    [
+        (
+            "2026-06-01 23:59:59",
+            "2026-06-02 23:59:59",
+            "2026-06-03 23:59:59",
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+        ),
+        (
+            "2026-06-02 12:00:00",
+            "2026-06-03 12:00:00",
+            "2026-06-04 12:00:00",
+            CustomerFinalState.DATA_GAP,
+            "authoritative_time_missing",
+        ),
+        (
+            "2026-06-03 00:00:00",
+            "2026-06-04 00:00:00",
+            "2026-06-05 00:00:00",
+            CustomerFinalState.NON_COMPLIANT,
+            "threshold_exceeded",
+        ),
+    ],
+)
+def test_001_005_006_use_discharge_admission_date_only_for_conclusive_boundaries(
+    admission_record_time: str,
+    attending_time: str,
+    senior_time: str,
+    expected_state: CustomerFinalState,
+    expected_reason: str,
+):
+    """只有日期时按全天区间计算；边界不确定不得猜测入院时分秒。"""
+
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": admission_record_time,
+                }
+            ],
+            "discharge_record": [{"admission_date": "2026-06-01"}],
+            "daily_course_record": [
+                {
+                    "document_title": "主治医师首次查房记录",
+                    "record_time": attending_time,
+                }
+            ],
+            "senior_course_record": [
+                {
+                    "document_title": "副主任医师首次查房记录",
+                    "record_time": senior_time,
+                }
+            ],
+        }
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [expected_state] * 3
+    assert {item.reason_code for item in reduced} == {expected_reason}
+    assert all("2026-06" not in repr(item) for item in reduced)
+
+
+@pytest.mark.unit
+def test_001_005_006_exact_admission_datetime_wins_over_discharge_date_fallback():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-10 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-11 08:00:00",
+                }
+            ],
+            "discharge_record": [{"admission_date": "2026-06-01"}],
+            "daily_course_record": [
+                {
+                    "document_title": "主治医师首次查房记录",
+                    "record_time": "2026-06-12 08:00:00",
+                }
+            ],
+            "senior_course_record": [
+                {
+                    "document_title": "副主任医师首次查房记录",
+                    "record_time": "2026-06-13 08:00:00",
+                }
+            ],
+        }
+    )
+
+    _, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert {item.reason_code for item in reduced} == {
+        "requirement_within_threshold"
+    }
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("incomplete_time", ["2026-06-01", "2026-06-01T08"])
 def test_001_005_006_reject_incomplete_admission_datetime(incomplete_time: str):
     session = _typed_basic_session(

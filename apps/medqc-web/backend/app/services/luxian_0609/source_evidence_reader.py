@@ -237,6 +237,7 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         "record_time",
+        "admission_date",
         "discharge_date",
         "discharge_time",
         "discharge_order",

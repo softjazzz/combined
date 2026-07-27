@@ -759,6 +759,47 @@ def test_admission_record_body_is_private_material_and_never_safe_snapshot_outpu
     assert private_marker not in repr(session.materials.safe_summary())
 
 
+def test_001_005_006_read_private_discharge_admission_date_once_without_affecting_002_007() -> None:
+    calls: list[str] = []
+    admission_date = "2026-06-01"
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows = [{"admission_date": admission_date}] if source_key == "discharge_record" else []
+        return _rows(source_key, rows)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-001", "LX0609-005", "LX0609-006"),
+        institute_id="institute-private-admission-date",
+        patient_id="patient-private-admission-date",
+        visit_id="visit-private-admission-date",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls.count("discharge_record") == 1
+    assert session.materials.rows("discharge_record")[0]["admission_date"] == admission_date
+    assert "admission_date" in source_evidence_reader._NATIVE_SOURCE_FIELDS[
+        "discharge_record"
+    ]
+    assert admission_date not in repr(session.snapshot)
+    assert admission_date not in repr(session.materials.safe_summary())
+
+    calls.clear()
+    build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-002", "LX0609-007"),
+        institute_id="institute-private-other-rules",
+        patient_id="patient-private-other-rules",
+        visit_id="visit-private-other-rules",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    assert "discharge_record" not in calls
+
+
 def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
