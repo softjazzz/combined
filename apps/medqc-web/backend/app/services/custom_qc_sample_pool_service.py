@@ -22,7 +22,7 @@ from sqlalchemy import MetaData, Table, and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
-from ..database.models.cdm import MedicalRecordFrontpage
+from ..database.models.cdm import AdmissionRecord, InpatRegistration, MedicalRecordFrontpage
 from ..core.settings import get_settings
 from .bundles.assembly import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
 from .etl_sync import (
@@ -3918,40 +3918,76 @@ class CustomQCSamplePoolService:
         normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
         if not normalized_ids:
             return {}
-        rows = (
-            session.query(
-                MedicalRecordFrontpage.visit_id,
-                MedicalRecordFrontpage.name,
-                MedicalRecordFrontpage.sex,
-                MedicalRecordFrontpage.age,
-                MedicalRecordFrontpage.age_year,
-                MedicalRecordFrontpage.age_month,
-                MedicalRecordFrontpage.mr_no,
-                MedicalRecordFrontpage.inpat_no,
-                MedicalRecordFrontpage.admission_dept_name,
-                MedicalRecordFrontpage.discharge_dept_name,
+        rows = session.execute(
+            sa.union_all(
+                select(
+                    MedicalRecordFrontpage.visit_id.label("visit_id"),
+                    sa.literal(0).label("source_priority"),
+                    MedicalRecordFrontpage.name.label("patient_name"),
+                    MedicalRecordFrontpage.sex.label("patient_sex"),
+                    func.coalesce(
+                        MedicalRecordFrontpage.age,
+                        MedicalRecordFrontpage.age_year,
+                        MedicalRecordFrontpage.age_month,
+                    ).label("patient_age"),
+                    func.coalesce(
+                        MedicalRecordFrontpage.mr_no,
+                        MedicalRecordFrontpage.inpat_no,
+                    ).label("mr_no"),
+                    MedicalRecordFrontpage.admission_dept_name.label("department"),
+                ).where(MedicalRecordFrontpage.visit_id.in_(normalized_ids)),
+                select(
+                    InpatRegistration.visit_id.label("visit_id"),
+                    sa.literal(1).label("source_priority"),
+                    InpatRegistration.name.label("patient_name"),
+                    InpatRegistration.sex.label("patient_sex"),
+                    func.coalesce(
+                        InpatRegistration.age,
+                        InpatRegistration.age_year,
+                        InpatRegistration.age_month,
+                    ).label("patient_age"),
+                    func.coalesce(
+                        InpatRegistration.mr_no,
+                        InpatRegistration.inpat_no,
+                    ).label("mr_no"),
+                    InpatRegistration.admission_dept_name.label("department"),
+                ).where(InpatRegistration.visit_id.in_(normalized_ids)),
+                select(
+                    AdmissionRecord.visit_id.label("visit_id"),
+                    sa.literal(2).label("source_priority"),
+                    AdmissionRecord.name.label("patient_name"),
+                    AdmissionRecord.sex.label("patient_sex"),
+                    func.coalesce(
+                        AdmissionRecord.age,
+                        AdmissionRecord.age_year,
+                        AdmissionRecord.age_month,
+                    ).label("patient_age"),
+                    func.coalesce(
+                        AdmissionRecord.mr_no,
+                        AdmissionRecord.inpat_no,
+                    ).label("mr_no"),
+                    AdmissionRecord.dept_name.label("department"),
+                ).where(AdmissionRecord.visit_id.in_(normalized_ids)),
             )
-            .filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
-            .all()
-        )
+        ).mappings().all()
         display_map: Dict[str, Dict[str, str]] = {}
-        for row in rows:
-            visit_id = _safe_text(getattr(row, "visit_id", ""))
+        for row in sorted(rows, key=lambda item: int(item.get("source_priority") or 0)):
+            visit_id = _safe_text(row.get("visit_id"))
             if not visit_id:
                 continue
-            display_map[visit_id] = {
-                "patient_name": _safe_text(getattr(row, "name", "")),
-                "patient_sex": _safe_text(getattr(row, "sex", "")),
-                "patient_age": _safe_text(
-                    getattr(row, "age", "")
-                    or getattr(row, "age_year", "")
-                    or getattr(row, "age_month", "")
-                ),
-                "mr_no": _safe_text(getattr(row, "mr_no", "") or getattr(row, "inpat_no", "")),
-                "department": _safe_text(
-                    getattr(row, "admission_dept_name", "") or getattr(row, "discharge_dept_name", "")
-                ),
-            }
+            display = display_map.setdefault(
+                visit_id,
+                {
+                    "patient_name": "",
+                    "patient_sex": "",
+                    "patient_age": "",
+                    "mr_no": "",
+                    "department": "",
+                },
+            )
+            for field in ("patient_name", "patient_sex", "patient_age", "mr_no", "department"):
+                if not display[field]:
+                    display[field] = _safe_text(row.get(field))
         return display_map
 
     def _check_running_bundle_status(self, *, institute_id: str, patient_id: str, visit_id: str) -> str:

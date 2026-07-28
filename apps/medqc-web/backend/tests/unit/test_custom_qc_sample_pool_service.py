@@ -33,8 +33,10 @@ class _FakeExecuteResult:
 class _FakeSession:
     def __init__(self, rows):
         self._rows = rows
+        self.last_statement = None
 
-    def execute(self, _stmt):
+    def execute(self, statement):
+        self.last_statement = statement
         return _FakeExecuteResult(self._rows)
 
     def close(self):
@@ -1586,6 +1588,71 @@ def test_list_pool_records_should_backfill_patient_name_and_department_from_matc
     assert record["patient_age"] == "67"
     assert record["department"] == "普外科"
     assert record["mr_no"] == "147640"
+
+
+def test_record_display_map_should_fallback_to_running_registration_when_frontpage_is_blank():
+    service = CustomQCSamplePoolService()
+    session = _FakeSession(
+        [
+            {
+                "visit_id": "RUNNING-001",
+                "source_priority": 0,
+                "patient_name": "",
+                "patient_sex": "",
+                "patient_age": "",
+                "mr_no": "",
+                "department": "",
+            },
+            {
+                "visit_id": "RUNNING-001",
+                "source_priority": 1,
+                "patient_name": "在院患者",
+                "patient_sex": "女",
+                "patient_age": "68",
+                "mr_no": "ZY-RUNNING-001",
+                "department": "呼吸与危重症医学科",
+            },
+            {
+                "visit_id": "RUNNING-001",
+                "source_priority": 2,
+                "patient_name": "入院记录患者",
+                "patient_sex": "女",
+                "patient_age": "68",
+                "mr_no": "ZY-ADMISSION-001",
+                "department": "普通内科",
+            },
+            {
+                "visit_id": "RUNNING-002",
+                "source_priority": 2,
+                "patient_name": "仅入院记录患者",
+                "patient_sex": "男",
+                "patient_age": "57",
+                "mr_no": "ZY-ADMISSION-002",
+                "department": "消化内科",
+            },
+        ]
+    )
+
+    display_map = service._load_record_display_map(
+        session=session,
+        visit_ids=["RUNNING-001", "RUNNING-002"],
+    )
+
+    assert display_map["RUNNING-001"] == {
+        "patient_name": "在院患者",
+        "patient_sex": "女",
+        "patient_age": "68",
+        "mr_no": "ZY-RUNNING-001",
+        "department": "呼吸与危重症医学科",
+    }
+    assert display_map["RUNNING-002"] == {
+        "patient_name": "仅入院记录患者",
+        "patient_sex": "男",
+        "patient_age": "57",
+        "mr_no": "ZY-ADMISSION-002",
+        "department": "消化内科",
+    }
+    assert "discharge_dept_name" not in str(session.last_statement)
 
 
 def test_list_customer_test_pool_records_orders_newest_first(monkeypatch):
