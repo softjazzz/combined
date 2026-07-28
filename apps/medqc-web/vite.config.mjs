@@ -151,7 +151,7 @@ export default defineConfig(async ({ command }) => {
   const plugins = [
     vue(),
     Components({
-      dts: 'src/components.d.ts',
+      dts: process.env.MEDQC_DISABLE_COMPONENTS_DTS === '1' ? false : 'src/components.d.ts',
       resolvers: [
         AntDesignVueResolver({
           importStyle: false,
