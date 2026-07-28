@@ -464,6 +464,89 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("positive_source", "expected_state", "expected_reason"),
+    [
+        (None, "not_applicable", "performed_event_absent"),
+        ("surgery_application", "data_gap", "authoritative_time_missing"),
+        ("inpat_nondrug_order", "data_gap", "authoritative_time_missing"),
+        ("order_type_missing", "data_gap", "authoritative_time_missing"),
+        ("order_type_empty", "data_gap", "authoritative_time_missing"),
+        ("order_type_nonstandard", "data_gap", "authoritative_time_missing"),
+    ],
+)
+async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_is_unavailable(
+    positive_source,
+    expected_state,
+    expected_reason,
+):
+    """手术记录、申请和手术类医嘱均完整为空时，在院病历可确定规则不适用。"""
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "mr_surgery":
+            raise SourceEvidenceUnavailable()
+        if source_key == "surgery_application" and positive_source == source_key:
+            rows = ({"order_id": "surgery-application"},)
+        elif source_key == "inpat_nondrug_order":
+            order_type = {
+                "inpat_nondrug_order": "手术",
+                "order_type_empty": "",
+                "order_type_nonstandard": "手术医嘱",
+            }.get(positive_source, "检查")
+            rows = (
+                {
+                    "order_id": "order-ref",
+                    **(
+                        {}
+                        if positive_source == "order_type_missing"
+                        else {"order_type": order_type}
+                    ),
+                },
+            )
+        else:
+            rows = ()
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-003",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-003",),
+        decision_rule_ids=("LX0609-003",),
+        wrapper_rules=[_wrapper("LX0609-003")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-003",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("source_mode", "expected_state", "expected_reason"),
     [
         ("available", "data_gap", None),

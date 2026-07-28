@@ -370,7 +370,12 @@ def _typed_003_decision(
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
         raise ValueError("typed 003 requires one evidence session")
-    source_keys = ("surgery_record", "mr_surgery")
+    source_keys = (
+        "surgery_record",
+        "mr_surgery",
+        "surgery_application",
+        "inpat_nondrug_order",
+    )
     observations = {
         item.source_key: item
         for item in snapshot.observations
@@ -427,20 +432,75 @@ def _typed_003_decision(
     ordered = tuple(observations[key] for key in source_keys)
     if any(item.query_state.value == "error" for item in ordered):
         return decision("technical_error", "source_query_error")
-    if any(item.query_state.value == "unavailable" for item in ordered):
+    surgery_observation = observations["surgery_record"]
+    if surgery_observation.query_state.value == "unavailable":
         return decision("data_gap", "source_unavailable")
-    if any(item.completeness.value == "truncated" for item in ordered):
+    if surgery_observation.completeness.value == "truncated":
         return decision("data_gap", "source_truncated")
     try:
         surgery_rows = tuple(materials.rows("surgery_record"))
-        mr_rows = tuple(materials.rows("mr_surgery"))
     except EvidenceMaterialTruncated:
         return decision("data_gap", "source_truncated")
     except EvidenceMaterialUnavailable:
         return decision("technical_error", "snapshot_mismatch")
 
-    if not surgery_rows and not mr_rows:
-        return decision("not_applicable", "performed_event_absent")
+    support_rows: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    for source_key in source_keys[1:]:
+        observation = observations[source_key]
+        if observation.query_state.value == "unavailable":
+            support_rows[source_key] = ()
+            continue
+        if observation.completeness.value == "truncated":
+            support_rows[source_key] = ()
+            continue
+        try:
+            support_rows[source_key] = tuple(materials.rows(source_key))
+        except EvidenceMaterialTruncated:
+            support_rows[source_key] = ()
+        except EvidenceMaterialUnavailable:
+            return decision("technical_error", "snapshot_mismatch")
+
+    mr_rows = support_rows["mr_surgery"]
+    if not surgery_rows:
+        application_observation = observations["surgery_application"]
+        order_observation = observations["inpat_nondrug_order"]
+        if any(
+            item.completeness.value == "truncated"
+            for item in (observations["mr_surgery"], application_observation, order_observation)
+        ):
+            return decision("data_gap", "source_truncated")
+        if any(
+            item.query_state.value == "unavailable"
+            for item in (application_observation, order_observation)
+        ):
+            return decision("data_gap", "source_unavailable")
+        order_types = tuple(
+            _clean(row.get("order_type"))
+            for row in support_rows["inpat_nondrug_order"]
+        )
+        known_non_surgery_order_types = {
+            "检查",
+            "检验",
+            "治疗",
+            "护理",
+            "嘱托",
+            "转科",
+            "其他",
+        }
+        if any(
+            not order_type
+            or order_type not in {*known_non_surgery_order_types, "手术"}
+            for order_type in order_types
+        ):
+            return decision("data_gap", "authoritative_time_missing")
+        has_surgery_order = "手术" in order_types
+        if (
+            not mr_rows
+            and not support_rows["surgery_application"]
+            and not has_surgery_order
+        ):
+            return decision("not_applicable", "performed_event_absent")
+        return decision("data_gap", "authoritative_time_missing")
 
     intervals: list[timedelta] = []
     incomplete_performed_row = False
@@ -494,6 +554,11 @@ def _typed_003_decision(
         return decision("non_compliant", "threshold_exceeded")
     if intervals and (not incomplete_performed_row or fallback_resolved):
         return decision("compliant", "requirement_within_threshold")
+    mr_observation = observations["mr_surgery"]
+    if mr_observation.query_state.value == "unavailable":
+        return decision("data_gap", "source_unavailable")
+    if mr_observation.completeness.value == "truncated":
+        return decision("data_gap", "source_truncated")
     return decision("data_gap", "authoritative_time_missing")
 
 

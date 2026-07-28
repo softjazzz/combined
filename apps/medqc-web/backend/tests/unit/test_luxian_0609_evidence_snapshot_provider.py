@@ -834,6 +834,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
+            "surgery_application",
             "surgery_record",
         }
     )
