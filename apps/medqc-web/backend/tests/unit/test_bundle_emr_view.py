@@ -230,11 +230,65 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
     assert admission_doc["sort_time"] == "2026-03-01 08:00:00"
     assert "主诉：腹痛3天" in admission_doc["content"]
     assert "初步诊断" in admission_doc["content"]
+    assert "第一诊断: 右侧肩袖损伤" in admission_doc["content"]
+    assert "其他诊断: 疼痛" in admission_doc["content"]
     assert "右侧肩袖损伤" in admission_doc["content"]
     assert "诊断序号" not in admission_doc["content"]
     assert "诊断类型: 入院诊断" not in admission_doc["content"]
     assert "出院诊断污染" not in admission_doc["content"]
     assert admission_doc["sections"][-1]["section_label"] == "入院记录诊断"
+
+
+def test_build_documents_should_merge_first_course_diagnoses_into_first_course_record():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "first_course_record",
+                    "document_id": "first-course-1",
+                    "document_title": "首次病程记录",
+                    "display_time": "2026-03-01 10:00:00",
+                    "content": "病例特点：患者因颈背部包块入院。",
+                    "source_fields": [],
+                },
+                {
+                    "document_type": "first_course_record_diagnosis",
+                    "document_id": "diagnosis-row-1",
+                    "document_title": "首次病程诊断-初步诊断-1",
+                    "content": "诊断类型: 初步诊断\n诊断名称: 颈背部脂肪瘤",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "初步诊断"},
+                        {"source_field": "diagnosis_no", "used": True, "raw_value_preview": "1"},
+                        {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "颈背部脂肪瘤"},
+                    ],
+                },
+                {
+                    "document_type": "first_course_record_diagnosis",
+                    "document_id": "diagnosis-row-2",
+                    "document_title": "首次病程诊断-初步诊断-2",
+                    "content": "诊断类型: 初步诊断\n诊断名称: 肺结节",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "初步诊断"},
+                        {"source_field": "diagnosis_no", "used": True, "raw_value_preview": "2"},
+                        {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "肺结节"},
+                    ],
+                },
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    assert len(documents) == 1
+    assert not any(doc["doc_type"] == "first_course_record_diagnosis" for doc in documents)
+    first_course_doc = documents[0]
+    assert first_course_doc["doc_type"] == "first_course_record"
+    assert first_course_doc["doc_name"] == "首次病程记录"
+    assert "病例特点：患者因颈背部包块入院。" in first_course_doc["content"]
+    assert "首次病程诊断" in first_course_doc["content"]
+    assert "第一诊断: 颈背部脂肪瘤" in first_course_doc["content"]
+    assert "其他诊断: 肺结节" in first_course_doc["content"]
+    assert first_course_doc["sections"][-1]["section_label"] == "首次病程诊断"
 
 
 def test_build_documents_should_merge_only_discharge_diagnoses():

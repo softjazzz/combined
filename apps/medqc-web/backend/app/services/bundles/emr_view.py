@@ -185,6 +185,7 @@ _SURGERY_TEMPLATE_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 _ADMISSION_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"初步诊断", "入院诊断"}
+_FIRST_COURSE_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"初步诊断", "入院诊断"}
 _DISCHARGE_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"出院诊断", "出院主要诊断", "出院其他诊断"}
 
 
@@ -364,6 +365,7 @@ def build_documents_from_domain_bundles(
             documents.append(normalized)
 
     documents = _merge_admission_diagnosis_documents(documents)
+    documents = _merge_first_course_diagnosis_documents(documents)
     documents = _merge_discharge_diagnosis_documents(documents)
     documents.sort(
         key=lambda item: (
@@ -421,6 +423,17 @@ def _is_main_diagnosis(value: str) -> bool:
     return normalized in {"是", "true", "1", "yes", "y", "主诊断"}
 
 
+def _split_numbered_diagnosis_items(value: str) -> list[str]:
+    text = _safe_text(value)
+    if not text:
+        return []
+    matches = re.findall(r"(?:^|[，,；;\s]+)\d+\s*[、.．]\s*([^，,；;\n\r]+)", text)
+    items = [item.strip() for item in matches if item.strip()]
+    if len(items) >= 2:
+        return items
+    return []
+
+
 def _diagnosis_sort_key(doc: dict[str, Any]) -> tuple[int, str, str]:
     raw_no = _diagnosis_field(doc, "diagnosis_no") or _diagnosis_field(doc, "diagnosis_id")
     try:
@@ -439,6 +452,7 @@ def _format_merged_diagnosis_content(valid_docs: list[dict[str, Any]], *, sectio
     other_items: list[str] = []
     diagnosis_types: list[str] = []
     diagnosis_times: list[str] = []
+    first_diagnosis_fallback = section_label in {"入院记录诊断", "首次病程诊断"}
 
     for doc in sorted(valid_docs, key=_diagnosis_sort_key):
         diagnosis_type = _diagnosis_field(doc, "diagnosis_type")
@@ -459,7 +473,14 @@ def _format_merged_diagnosis_content(valid_docs: list[dict[str, Any]], *, sectio
         if _is_main_diagnosis(diagnosis_main):
             main_items.append(label)
         else:
-            other_items.append(label)
+            split_items = _split_numbered_diagnosis_items(label)
+            if first_diagnosis_fallback and not main_items and split_items:
+                main_items.append(split_items[0])
+                other_items.extend(split_items[1:])
+            elif first_diagnosis_fallback and not main_items and _diagnosis_sort_key(doc)[0] == 1:
+                main_items.append(label)
+            else:
+                other_items.append(label)
 
     if not main_items and not other_items:
         return ""
@@ -468,7 +489,8 @@ def _format_merged_diagnosis_content(valid_docs: list[dict[str, Any]], *, sectio
     if diagnosis_types:
         lines.append(f"诊断类型: {'；'.join(diagnosis_types)}")
     if main_items:
-        lines.append(f"主诊断: {'；'.join(main_items)}")
+        main_label = "第一诊断" if first_diagnosis_fallback else "主诊断"
+        lines.append(f"{main_label}: {'；'.join(main_items)}")
     if other_items:
         lines.append(f"其他诊断: {'；'.join(other_items)}")
     if diagnosis_times:
@@ -566,6 +588,17 @@ def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> lis
         parent_doc_type="admission_record",
         section_label="入院记录诊断",
         allowed_types=_ADMISSION_DIAGNOSIS_ALLOWED_TYPES,
+    )
+
+
+def _merge_first_course_diagnosis_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _merge_record_diagnosis_documents(
+        documents,
+        diagnosis_doc_type="first_course_record_diagnosis",
+        parent_doc_type="first_course_record",
+        section_label="首次病程诊断",
+        allowed_types=_FIRST_COURSE_DIAGNOSIS_ALLOWED_TYPES,
+        allow_single_parent_fallback=True,
     )
 
 
