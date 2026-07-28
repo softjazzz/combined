@@ -1033,6 +1033,20 @@ def test_admission_snapshot_contract_keeps_structured_chief_complaint() -> None:
     )
 
 
+def test_timeliness_snapshot_contract_keeps_authoritative_submit_time_aliases() -> None:
+    """客户文书表没有 record_time 时，仍需投影其正式提交时间供时限规则使用。"""
+
+    for source_key in (
+        "first_course_record",
+        "daily_course_record",
+        "senior_course_record",
+    ):
+        assert (
+            "submit_datetime"
+            in source_evidence_reader._NATIVE_SOURCE_FIELDS[source_key]
+        )
+
+
 @pytest.mark.parametrize("rows", [[{"match": 1}], []])
 def test_controlled_unstable_order_reader_uses_exact_bound_predicate(
     monkeypatch,

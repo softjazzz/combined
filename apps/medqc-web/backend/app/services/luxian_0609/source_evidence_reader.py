@@ -23,6 +23,12 @@ CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
 CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY = "inpat_nondrug_order.severity_order"
 CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
+AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
+    "record_time",
+    "record_datetime",
+    "submit_time",
+    "submit_datetime",
+)
 _SEVERITY_ORDER_NEGATIVE_MARKERS = (
     "解除",
     "取消",
@@ -43,6 +49,7 @@ _RESCUE_END_TIME_PATTERN = re.compile(
 _NATIVE_SOURCE_FIELDS = {
     "inpat_registration": (
         "admission_datetime",
+        "admission_time",
     ),
     "admission_record": (
         "document_id",
@@ -66,7 +73,7 @@ _NATIVE_SOURCE_FIELDS = {
     "first_course_record": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
     "rescue_record": (
@@ -117,13 +124,13 @@ _NATIVE_SOURCE_FIELDS = {
     "daily_course_record": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
     "senior_course_record": (
         "document_id",
         "document_title",
-        "record_time",
+        *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "record_content",
     ),
     "exam_master": (
@@ -443,6 +450,17 @@ def digest_source_evidence(value: Any) -> str:
     return hashlib.sha256(canonical_source_evidence(value).encode("utf-8")).hexdigest()
 
 
+def authoritative_document_time_value(row: Mapping[str, Any]) -> Any:
+    """返回文书表中优先级最高的正式记录/提交时间原值。"""
+
+    for field in AUTHORITATIVE_DOCUMENT_TIME_FIELDS:
+        value = row.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        return value
+    return None
+
+
 def build_luxian_0609_course_round_timeline_from_rows(
     rows_by_source: Mapping[str, tuple[Mapping[str, Any], ...]],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -456,7 +474,7 @@ def build_luxian_0609_course_round_timeline_from_rows(
         safe_rows: list[dict[str, Any]] = []
         for row in rows:
             title = str(row.get("document_title") or "").strip()
-            record_time = row.get("record_time")
+            record_time = authoritative_document_time_value(row)
             document_id = row.get("document_id") or row.get("id")
             safe_rows.append(
                 {
@@ -499,21 +517,23 @@ def read_luxian_0609_course_round_timeline(
             "patient_id",
             "visit_id",
             "document_title",
-            "record_time",
         }
-        if not required.issubset(columns):
+        available_time_fields = tuple(
+            field for field in AUTHORITATIVE_DOCUMENT_TIME_FIELDS if field in columns
+        )
+        if not required.issubset(columns) or not available_time_fields:
             raise SourceEvidenceUnavailable()
         document_id_field = next(
             (field for field in ("document_id", "id") if field in columns),
             None,
         )
-        selected = ["document_title", "record_time"]
+        selected = ["document_title", *available_time_fields]
         if document_id_field:
             selected.append(document_id_field)
         select_sql = ", ".join(
             bundle_assembly._quote_ident(field) for field in selected
         )
-        order_fields = ["record_time"]
+        order_fields = list(available_time_fields)
         if document_id_field:
             order_fields.append(document_id_field)
         order_sql = ", ".join(

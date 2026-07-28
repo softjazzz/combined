@@ -177,6 +177,49 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
 
 
 @pytest.mark.unit
+def test_002_006_accept_authoritative_submit_datetime_used_by_customer_documents():
+    """客户同步文书以 submit_datetime 展示记录时间时，原生时限链必须使用同一权威值。"""
+
+    selected = ("LX0609-002", "LX0609-006")
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-13 10:00:00"}
+            ],
+            "admission_record": [],
+            "first_course_record": [
+                {
+                    "document_id": "safe-first-course-ref",
+                    "document_title": "首次病程记录",
+                    "record_time": " ",
+                    "submit_datetime": "2026-06-13 15:57:27",
+                    "record_content": "患者入院后完成病史采集、体格检查及初步诊疗计划。",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-senior-ref",
+                    "document_title": "王飞副主任医师查房记录",
+                    "submit_datetime": "2026-06-15 08:00:00",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    _, reduced = _reduce_typed_basic(session, selected)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert {item.reason_code for item in reduced} == {
+        "requirement_within_threshold"
+    }
+
+
+@pytest.mark.unit
 def test_001_005_006_do_not_use_admission_record_time_as_its_own_anchor():
     session = _typed_basic_session(
         {

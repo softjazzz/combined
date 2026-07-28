@@ -19,6 +19,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
 from .source_evidence_reader import (
+    authoritative_document_time_value,
     build_luxian_0609_course_round_timeline_from_rows,
     parse_luxian_0609_rescue_end_time,
     read_luxian_0609_course_round_timeline,
@@ -452,7 +453,12 @@ def _typed_basic_decisions(
         sorted(
             parsed
             for row in admission_rows
-            if (parsed := _authoritative_time(row.get("record_time"))) is not None
+            if (
+                parsed := _authoritative_time(
+                    authoritative_document_time_value(row)
+                )
+            )
+            is not None
         )
     )
     admission_record_admission_times = tuple(
@@ -571,7 +577,9 @@ def _typed_basic_decisions(
             complete_times: list[datetime] = []
             incomplete = False
             for row in first_course_rows:
-                record_time = _authoritative_time(row.get("record_time"))
+                record_time = _authoritative_time(
+                    authoritative_document_time_value(row)
+                )
                 substantive = _is_substantive_first_course_text(
                     row.get("record_content")
                 )
@@ -768,7 +776,9 @@ def _typed_basic_decisions(
         for row in course_rows:
             title = str(row.get("document_title") or row.get("title") or "").strip()
             if qualifies(title):
-                parsed = _authoritative_time(row.get("record_time"))
+                parsed = _authoritative_time(
+                    authoritative_document_time_value(row)
+                )
                 if parsed is None:
                     qualifying_missing_time = True
                 else:
