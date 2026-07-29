@@ -119,6 +119,8 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "v2_schema",
     ),
     "exam_master": (
+        "exam_id",
+        "order_id",
         "exam_no",
         "exam_name",
         "item_name",
@@ -140,6 +142,7 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     "labtest_master": (
         "test_id",
+        "order_id",
         "test_no",
         "labtest_subject",
         "labtest_cause",
@@ -347,6 +350,18 @@ _SECTION_LABELS: dict[str, str] = {
     "billing_datetime": "费用发生时间",
     "order_dept_name": "开单科室",
     "executive_dept_name": "执行科室",
+    "exam_id": "检查编号",
+    "exam_type": "检查类型",
+    "exam_reason": "检查原因",
+    "request_time": "申请时间",
+    "exam_time": "检查时间",
+    "report_time": "报告时间",
+    "exam_result_status": "报告状态",
+    "test_id": "检验编号",
+    "labtest_subject": "检验项目",
+    "labtest_cause": "检验原因",
+    "specimen": "标本",
+    "labtest_result_status": "报告状态",
     "pathology_exam_id": "病理申请序号",
     "pathology_id": "病理号",
     "clinical_history": "临床病史",
@@ -559,6 +574,31 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
         AssemblyFieldSpec("billing_datetime"),
         AssemblyFieldSpec("order_dept_name"),
         AssemblyFieldSpec("executive_dept_name"),
+    ),
+    "exam_master": (
+        AssemblyFieldSpec("exam_id"),
+        AssemblyFieldSpec("exam_type"),
+        AssemblyFieldSpec("exam_reason"),
+        AssemblyFieldSpec("request_dept"),
+        AssemblyFieldSpec("request_physician"),
+        AssemblyFieldSpec("performed_dept"),
+        AssemblyFieldSpec("request_time"),
+        AssemblyFieldSpec("exam_time"),
+        AssemblyFieldSpec("report_time"),
+        AssemblyFieldSpec("exam_result_status"),
+        AssemblyFieldSpec("record_content"),
+    ),
+    "labtest_master": (
+        AssemblyFieldSpec("test_id"),
+        AssemblyFieldSpec("labtest_subject"),
+        AssemblyFieldSpec("labtest_cause"),
+        AssemblyFieldSpec("specimen"),
+        AssemblyFieldSpec("request_dept"),
+        AssemblyFieldSpec("request_physician"),
+        AssemblyFieldSpec("request_datetime"),
+        AssemblyFieldSpec("report_datetime"),
+        AssemblyFieldSpec("labtest_result_status"),
+        AssemblyFieldSpec("record_content"),
     ),
     "pathology_exam_master": (
         AssemblyFieldSpec("pathology_exam_id"),
@@ -919,6 +959,16 @@ def _resolve_display_times(
     elif document_type == "surgery_application":
         # 手术申请单没有通用记录时间时，申请时间是最接近该申请事件的展示时间。
         order_display_time = _normalize_text(row.get("request_datetime"))
+    elif document_type == "exam_master":
+        order_display_time = _normalize_text(
+            row.get("report_time")
+            or row.get("exam_time")
+            or row.get("request_time")
+        )
+    elif document_type == "labtest_master":
+        order_display_time = _normalize_text(
+            row.get("report_datetime") or row.get("request_datetime")
+        )
     display_time = (
         record_time
         or order_display_time
@@ -944,6 +994,10 @@ def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
         return document_id or _normalize_text(payload.get("pathology_exam_id"))
     if document_type == "surgery_application":
         return document_id or _merge_field_text(payload, "application_id", "order_id")
+    if document_type == "exam_master":
+        return document_id or _merge_field_text(payload, "exam_id", "order_id")
+    if document_type == "labtest_master":
+        return document_id or _merge_field_text(payload, "test_id", "order_id")
     return document_id
 
 

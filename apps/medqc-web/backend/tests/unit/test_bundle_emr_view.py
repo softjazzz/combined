@@ -1,9 +1,32 @@
 from app.services.bundles.emr_view import (
+    _course_bundle_needs_exam_lab_refresh,
     build_documents_from_domain_bundles,
     build_documents_tree,
     build_render_view,
     pick_document,
 )
+
+
+def test_old_course_bundle_without_exam_lab_coverage_requires_refresh():
+    assert _course_bundle_needs_exam_lab_refresh({"structured_context": {}}) is True
+
+
+def test_course_bundle_with_complete_exam_lab_coverage_does_not_require_refresh():
+    coverage = {
+        key: {"row_count": 0, "hit": False}
+        for key in (
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "pathology_exam_master",
+            "pathology_exam_report",
+        )
+    }
+
+    assert _course_bundle_needs_exam_lab_refresh(
+        {"structured_context": {"source_table_coverage": coverage}}
+    ) is False
 
 
 def test_build_documents_tree_from_domain_bundles():

@@ -4,7 +4,7 @@ from datetime import datetime
 import re
 from typing import Any
 
-from .assembly import assemble_domain_bundle, load_domain_bundle
+from .assembly import assemble_domain_bundle, load_domain_bundle, load_or_assemble_domain_bundle
 
 _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "admission",
@@ -13,6 +13,17 @@ _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "consult_discussion",
     "terminal",
     "index_coding_settlement",
+)
+
+_COURSE_SOURCE_COVERAGE_KEYS: frozenset[str] = frozenset(
+    {
+        "exam_master",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+        "pathology_exam_master",
+        "pathology_exam_report",
+    }
 )
 
 _GROUP_DEFS: tuple[dict[str, str], ...] = (
@@ -107,6 +118,12 @@ _RECORD_TIME_FALLBACK_DOC_TYPES = {
     "bloodtrans_record",
     "surgery_application",
     "discharge_record",
+    "exam_master",
+    "exam_item_report",
+    "labtest_master",
+    "labtest_item_report",
+    "pathology_exam_master",
+    "pathology_exam_report",
 }
 _SURGERY_STRUCT_DOC_TYPES: set[str] = {
     "surgery_record",
@@ -631,6 +648,18 @@ def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) 
     return any(_safe_text(item.get("doc_type") or item.get("source_table")) == wanted for item in documents)
 
 
+def _course_bundle_needs_exam_lab_refresh(bundle: dict[str, Any] | None) -> bool:
+    if not isinstance(bundle, dict):
+        return False
+    structured_context = bundle.get("structured_context")
+    if not isinstance(structured_context, dict):
+        return True
+    source_coverage = structured_context.get("source_table_coverage")
+    if not isinstance(source_coverage, dict):
+        return True
+    return not _COURSE_SOURCE_COVERAGE_KEYS.issubset(source_coverage)
+
+
 def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_group: dict[str, list[dict[str, Any]]] = {group["key"]: [] for group in _GROUP_DEFS}
 
@@ -687,6 +716,23 @@ def load_bundle_documents(
         domain_hits[domain] = bool(payload)
         if payload:
             domain_bundles[domain] = payload
+
+    course_bundle = domain_bundles.get("course")
+    if _course_bundle_needs_exam_lab_refresh(course_bundle):
+        try:
+            refreshed_course_bundle = load_or_assemble_domain_bundle(
+                execution_domain="course",
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                bundle_schema=bundle_schema,
+                force_refresh=True,
+            )
+        except Exception:
+            refreshed_course_bundle = None
+        if refreshed_course_bundle:
+            domain_bundles["course"] = refreshed_course_bundle
+            domain_hits["course_runtime_refresh"] = True
 
     documents = build_documents_from_domain_bundles(domain_bundles)
     if not _documents_include_doc_type(documents, "admission_record_diagnosis"):
