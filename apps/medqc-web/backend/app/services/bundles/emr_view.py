@@ -96,6 +96,17 @@ _GROUP_BY_DOC_TYPE: dict[str, str] = {
 }
 
 _ORDER_DOC_TYPES = {"inpat_drug_order", "inpat_nondrug_order"}
+_RECORD_TIME_FALLBACK_DOC_TYPES = {
+    "first_course_record",
+    "daily_course_record",
+    "senior_course_record",
+    "postsurg_firstcourse_record",
+    "rescue_record",
+    "transfer_in_record",
+    "transfer_out_record",
+    "bloodtrans_record",
+    "surgery_application",
+}
 _SURGERY_STRUCT_DOC_TYPES: set[str] = {
     "surgery_record",
     "anesthesia_record",
@@ -306,8 +317,9 @@ def _normalize_source_document(
         )
     source_record_time = _safe_text(raw_doc.get("record_time"))
     record_time_note = ""
-    if doc_type == "first_course_record" and not source_record_time and sort_time:
-        record_time_note = "源库 record_time 为空，当前使用提交时间、最后修改时间或更新时间等可用时间显示。"
+    can_use_display_time_as_record_time = doc_type in _RECORD_TIME_FALLBACK_DOC_TYPES
+    if can_use_display_time_as_record_time and not source_record_time and sort_time:
+        record_time_note = "源库未返回记录时间，当前使用提交时间、最后修改时间或更新时间等可用时间显示。"
     group_key = _infer_group_key(doc_type)
     label = _friendly_doc_label(doc_type, doc_title)
     doc_key = _build_doc_key(doc_type, doc_id, index)
@@ -326,10 +338,10 @@ def _normalize_source_document(
         "document_id": doc_id,
         "document_title": doc_title or label,
         "sort_time": sort_time,
-        "record_time": source_record_time or (sort_time if doc_type == "first_course_record" else ""),
+        "record_time": source_record_time or (sort_time if can_use_display_time_as_record_time else ""),
         "record_time_source": "source_record_time"
         if source_record_time
-        else ("fallback_display_time" if doc_type == "first_course_record" and sort_time else ""),
+        else ("fallback_display_time" if can_use_display_time_as_record_time and sort_time else ""),
         "record_time_note": record_time_note,
         "has_content": bool(content),
         "content": content or None,

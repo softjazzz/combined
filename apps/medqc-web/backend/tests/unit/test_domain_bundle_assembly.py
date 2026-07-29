@@ -76,6 +76,48 @@ def test_course_domain_bundle_should_assemble_transfer_structured_fields(monkeyp
     assert "current_situation" in context["assembly_coverage"]["transfer_out_record"]["used_source_fields"]
 
 
+def test_course_domain_bundle_should_keep_contentful_bloodtrans_record(monkeypatch):
+    select_calls: list[dict[str, object]] = []
+
+    def _fake_select_records(**kwargs):
+        select_calls.append(kwargs)
+        if kwargs["table"] == "bloodtrans_record":
+            return [
+                {
+                    "document_id": "bloodtrans-1",
+                    "document_title": "输血记录",
+                    "submit_datetime": "2026-07-10 20:19:03",
+                    "record_content": "输入A型Rh(D)阳性红细胞悬液1u，输血过程顺利。",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    monkeypatch.setattr(assembly_module, "_build_timeline_facts_from_docs", lambda docs: [])
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="course",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    context = bundle["structured_context"]
+    assert context["source_table_coverage"]["bloodtrans_record"]["row_count"] == 1
+    assert context["documents"]["bloodtrans_record"][0]["record_content"].startswith("输入A型")
+    assert any(
+        item["document_type"] == "bloodtrans_record"
+        and item["content"].startswith("输入A型")
+        and item["display_time"] == "2026-07-10 20:19:03"
+        for item in bundle["source_documents"]
+    )
+    bloodtrans_call = next(item for item in select_calls if item["table"] == "bloodtrans_record")
+    assert bloodtrans_call["limit"] == 50
+
+
 def test_assemble_domain_bundle_should_keep_more_than_three_course_documents(monkeypatch):
     course_rows = [
         {

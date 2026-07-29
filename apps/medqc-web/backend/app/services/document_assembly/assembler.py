@@ -105,6 +105,11 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "other_content",
         "v2_schema",
     ),
+    # 申请号只用于稳定文书引用，不作为客户侧正文展示字段。
+    "surgery_application": (
+        "application_id",
+        "order_id",
+    ),
     "presurg_discussion": (
         "discuss_staff",
         "host_summary",
@@ -357,6 +362,13 @@ _SECTION_LABELS: dict[str, str] = {
     "reporter": "报告者",
     "review_datetime": "审核时间",
     "reviewer": "审核者",
+    "application_id": "申请号",
+    "request_surgery_datetime": "申请手术时间",
+    "surgery_name": "手术名称",
+    "surgery_code": "手术编码",
+    "surgery_level": "手术等级",
+    "anesthesia_method": "麻醉方式",
+    "surgeon": "手术医师",
 }
 
 _DOC_TYPE_LABELS: dict[str, str] = {
@@ -391,6 +403,7 @@ _DOC_TYPE_LABELS: dict[str, str] = {
     "inpat_nondrug_order": "临时医嘱",
     "inpat_bill_item": "住院费用/执行明细",
     "blood_application": "输血申请单",
+    "surgery_application": "手术申请单",
     "docpat_commu_record": "医患沟通记录",
     "postane_surveil_record": "麻醉术后访视记录",
     "exam_attention_report": "检查关注摘要",
@@ -586,6 +599,18 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
         AssemblyFieldSpec("apply_dept_name"),
         AssemblyFieldSpec("transfusion_reason"),
         AssemblyFieldSpec("diagnosis"),
+    ),
+    "surgery_application": (
+        AssemblyFieldSpec("request_datetime"),
+        AssemblyFieldSpec("request_physician"),
+        AssemblyFieldSpec("request_dept"),
+        AssemblyFieldSpec("request_surgery_datetime"),
+        AssemblyFieldSpec("surgery_name"),
+        AssemblyFieldSpec("surgery_code"),
+        AssemblyFieldSpec("surgery_level"),
+        AssemblyFieldSpec("anesthesia_method"),
+        AssemblyFieldSpec("surgeon"),
+        AssemblyFieldSpec("record_content"),
     ),
     "docpat_commu_record": (
         AssemblyFieldSpec("record_time"),
@@ -891,6 +916,9 @@ def _resolve_display_times(
         order_display_time = _normalize_text(
             row.get("start_time") or row.get("order_time") or row.get("prescribed_datetime")
         )
+    elif document_type == "surgery_application":
+        # 手术申请单没有通用记录时间时，申请时间是最接近该申请事件的展示时间。
+        order_display_time = _normalize_text(row.get("request_datetime"))
     display_time = (
         record_time
         or order_display_time
@@ -914,6 +942,8 @@ def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
         # 两个领域包会复用同一病理行；缺少该回退时，展示层只能按包内序号生成
         # 临时键，因而无法折叠跨领域重复投影。
         return document_id or _normalize_text(payload.get("pathology_exam_id"))
+    if document_type == "surgery_application":
+        return document_id or _merge_field_text(payload, "application_id", "order_id")
     return document_id
 
 
