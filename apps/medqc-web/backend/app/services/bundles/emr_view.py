@@ -106,6 +106,7 @@ _RECORD_TIME_FALLBACK_DOC_TYPES = {
     "transfer_out_record",
     "bloodtrans_record",
     "surgery_application",
+    "discharge_record",
 }
 _SURGERY_STRUCT_DOC_TYPES: set[str] = {
     "surgery_record",

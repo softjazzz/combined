@@ -384,6 +384,96 @@ def test_build_documents_should_expose_display_time_when_record_time_missing():
     assert "源库未返回记录时间" in first_course_doc["record_time_note"]
 
 
+def test_build_documents_should_expose_senior_round_display_time_when_record_time_missing():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "senior_course_record",
+                    "document_id": "round-1",
+                    "document_title": "彭中主任医师查房记录",
+                    "record_time": "",
+                    "display_time": "2026-06-21 17:05:00",
+                    "content": "今日随彭中主任医师查房，患者病情变化记录。",
+                    "source_fields": [],
+                }
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    round_doc = next(doc for doc in documents if doc["doc_type"] == "senior_course_record")
+    assert round_doc["sort_time"] == "2026-06-21 17:05:00"
+    assert round_doc["record_time"] == "2026-06-21 17:05:00"
+    assert round_doc["record_time_source"] == "fallback_display_time"
+    assert "源库未返回记录时间" in round_doc["record_time_note"]
+
+
+def test_build_documents_should_expose_transfer_display_time_when_record_time_missing():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "transfer_in_record",
+                    "document_id": "transfer-in-1",
+                    "document_title": "转入记录",
+                    "record_time": "",
+                    "display_time": "2026-06-21 17:05:00",
+                    "content": "患者由外科转入本科继续治疗。",
+                    "source_fields": [],
+                },
+                {
+                    "document_type": "transfer_out_record",
+                    "document_id": "transfer-out-1",
+                    "document_title": "转出记录",
+                    "record_time": "",
+                    "display_time": "2026-06-22 11:27:47",
+                    "content": "患者转出至重症医学科进一步治疗。",
+                    "source_fields": [],
+                },
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    transfer_in_doc = next(doc for doc in documents if doc["doc_type"] == "transfer_in_record")
+    transfer_out_doc = next(doc for doc in documents if doc["doc_type"] == "transfer_out_record")
+    assert transfer_in_doc["record_time"] == "2026-06-21 17:05:00"
+    assert transfer_out_doc["record_time"] == "2026-06-22 11:27:47"
+    assert transfer_in_doc["record_time_source"] == "fallback_display_time"
+    assert transfer_out_doc["record_time_source"] == "fallback_display_time"
+    assert "源库未返回记录时间" in transfer_in_doc["record_time_note"]
+    assert "源库未返回记录时间" in transfer_out_doc["record_time_note"]
+
+
+def test_build_documents_should_expose_discharge_display_time_when_record_time_missing():
+    domain_bundles = {
+        "terminal": {
+            "source_documents": [
+                {
+                    "document_type": "discharge_record",
+                    "document_id": "discharge-1",
+                    "document_title": "出院记录",
+                    "record_time": "",
+                    "display_time": "2026-07-10 20:19:03",
+                    "content": "出院情况：好转。",
+                    "source_fields": [],
+                }
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    assert len(documents) == 1
+    discharge_doc = documents[0]
+    assert discharge_doc["record_time"] == "2026-07-10 20:19:03"
+    assert discharge_doc["record_time_source"] == "fallback_display_time"
+    assert "源库未返回记录时间" in discharge_doc["record_time_note"]
+
+
 def test_pick_document_priority():
     docs = [
         {
@@ -476,7 +566,8 @@ def test_build_documents_should_keep_senior_round_display_time_when_id_is_reused
     documents = build_documents_from_domain_bundles(domain_bundles)
     senior_doc = next(doc for doc in documents if doc["doc_type"] == "senior_course_record")
 
-    assert senior_doc["record_time"] == ""
+    assert senior_doc["record_time"] == "2026-04-19 09:39:42"
+    assert senior_doc["record_time_source"] == "fallback_display_time"
     assert senior_doc["sort_time"] == "2026-04-19 09:39:42"
 
     tree = build_documents_tree(documents)
