@@ -673,6 +673,210 @@ def test_upsert_to_local_derives_exam_document_id_from_source_keys(monkeypatch):
     assert executed_params[0]["record_content"] == "双肺炎症"
 
 
+def test_upsert_to_local_derives_presurg_summary_content_without_overwriting_source_content(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="presurg_summary",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "D1",
+                "preoperative_diagnosis": "急性硬膜下血肿",
+                "planned_surgery_name": "开颅血肿清除术",
+                "planned_surgery_time": "今日急诊",
+                "planned_anesthesia_method": "气管插管全麻",
+                "surgery_preparation": "备血并完善术前检查",
+            },
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "D2",
+                "record_content": "源端已提供完整正文",
+                "planned_surgery_name": "不应覆盖",
+            },
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 2
+    assert executed_params[0]["record_content"] == (
+        "术前诊断：急性硬膜下血肿\n"
+        "拟实施手术：开颅血肿清除术\n"
+        "手术时间：今日急诊\n"
+        "麻醉方式：气管插管全麻\n"
+        "术前准备：备血并完善术前检查"
+    )
+    assert executed_params[1]["record_content"] == "源端已提供完整正文"
+
+
+def test_upsert_to_local_derives_surgery_safecheck_content(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="surgery_safecheck_record",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "D1",
+                "surgery_begin_time": "2026-07-07 16:14:26",
+                "surgery_method": "开颅血肿清除术",
+                "surgeon": "张医生",
+                "anesthesia_method": "全麻",
+                "before_incision_surgeon_sign": "张医生",
+                "surgeon_statement": "确认手术部位与患者身份",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["record_content"] == (
+        "手术时间：2026-07-07 16:14:26\n"
+        "手术方式：开颅血肿清除术\n"
+        "手术医师：张医生\n"
+        "麻醉方式：全麻\n"
+        "切皮前手术医师签名：张医生\n"
+        "手术医师陈述：确认手术部位与患者身份"
+    )
+
+
+def test_upsert_to_local_derives_anesthesia_record_content(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="anesthesia_record",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "D1",
+                "surgery_name": "开颅血肿清除术",
+                "surgery_code": "01.2300",
+                "surgery_bodypost": "仰卧位",
+                "anesthesia_method": "气管插管全麻",
+                "ASA_level": "III",
+                "surgery_begin_datetime": "2026-07-07 16:14:26",
+                "surgery_end_datetime": "2026-07-07 18:14:26",
+                "anesthesia_begin_datetime": "2026-07-07 16:00:00",
+                "anesthesia_end_datetime": "2026-07-07 18:20:00",
+                "leave_operateroom_datetime": "2026-07-07 18:30:00",
+                "bleed_volume": "200ml",
+                "urine_volume": "300ml",
+                "patient_whereabout": "ICU",
+                "conscious_status": "昏睡",
+                "preanes_sbp": "120",
+                "preanes_dbp": "80",
+                "preanes_temperature": "36.5",
+                "preanes_hr": "88",
+                "preanes_rr": "18",
+                "generic_name": "丙泊酚注射液",
+                "single_dose": "20",
+                "single_dose_unit": "mg",
+                "dosage": "200",
+                "dosage_unit": "mg",
+                "drug_apply_method": "静脉注射",
+                "name": "不得输出患者姓名",
+                "dept_name": "不得输出科室",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    content = executed_params[0]["record_content"]
+    assert "手术名称：开颅血肿清除术" in content
+    assert "手术编码：01.2300" in content
+    assert "手术开始时间：2026-07-07 16:14:26" in content
+    assert "离室时间：2026-07-07 18:30:00" in content
+    assert "麻醉前收缩压：120" in content
+    assert "药物名称：丙泊酚注射液" in content
+    assert "给药途径：静脉注射" in content
+    assert "不得输出患者姓名" not in content
+    assert "不得输出科室" not in content
+
+
 def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
     executed_params: list[dict] = []
 

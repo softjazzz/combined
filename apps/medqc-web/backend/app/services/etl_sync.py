@@ -150,6 +150,91 @@ _GLOBAL_COLUMN_ALIASES: Dict[str, Tuple[str, ...]] = {
     "settle_datetime": ("settle_datetime", "settle_time", "settlement_time"),
 }
 
+# 部分手术相关源表以结构化章节保存正文。CDM 当前只保留通用文书列和
+# record_content；若不同步时不组装正文，这些章节会在列过滤阶段被静默丢弃。
+# 仅用于 record_content 为空时的展示/质控全文回填，顺序必须稳定。
+_STRUCTURED_DOCUMENT_CONTENT_FIELDS: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
+    "presurg_summary": (
+        ("术前诊断", ("preoperative_diagnosis", "preop_diagnosis", "surgery_diagnosis", "diagnosis")),
+        ("简要病情", ("condition_summary",)),
+        ("诊断依据", ("diagnose_based_on", "diagnosis_basis")),
+        ("辅助检查", ("assist_exam",)),
+        ("手术适应症", ("surgery_indication",)),
+        ("手术禁忌症", ("surgery_contraindication",)),
+        ("会诊意见", ("consultation_suggestion",)),
+        ("拟实施手术", ("planned_surgery_name", "surgery_method")),
+        ("手术部位", ("planned_surgery_position_name",)),
+        ("手术时间", ("planned_surgery_time", "planned_surgery_datetime", "surgery_datetime", "surgery_time")),
+        ("麻醉方式", ("planned_anesthesia_method", "anesthesia_method")),
+        ("手术要点", ("surgery_point",)),
+        ("术前准备", ("surgery_preparation",)),
+        ("术后可能发生的并发症", ("postsurg_complication",)),
+        ("术后处理", ("postsurg_operation",)),
+        ("参加人员", ("participants",)),
+        ("手术医师签名", ("surgeon_sign",)),
+        ("记录人签名", ("recorder_sign",)),
+    ),
+    "surgery_safecheck_record": (
+        ("手术时间", ("surgery_begin_time", "surgery_begin_datetime", "surgery_datetime", "surgery_time")),
+        ("手术方式", ("surgery_method",)),
+        ("手术医师", ("surgeon",)),
+        ("麻醉方式", ("anesthesia_method",)),
+        ("麻醉医师", ("anesthesiologist",)),
+        ("手术护士", ("surgery_nurse",)),
+        ("手术医师签名", ("surgeon_sign", "surgeon_signature", "surgeon_signature_name")),
+        ("麻醉医师签名", ("anesthesiologist_sign", "anesthesiologist_signature", "anesthetist_sign")),
+        ("手术护士签名", ("surgery_nurse_sign", "surg_nurse_sign", "surgery_nurse_signature")),
+        ("手术前手术医师签名", ("preoperative_surgeon_sign", "before_surgery_surgeon_sign")),
+        ("手术前麻醉医师签名", ("preoperative_anesthesiologist_sign", "before_surgery_anesthesiologist_sign")),
+        ("手术前手术护士签名", ("preoperative_surgery_nurse_sign", "before_surgery_surgery_nurse_sign")),
+        ("切皮前手术医师签名", ("before_incision_surgeon_sign",)),
+        ("切皮前麻醉医师签名", ("before_incision_anesthesiologist_sign",)),
+        ("切皮前手术护士签名", ("before_incision_surgery_nurse_sign",)),
+        ("离室前手术医师签名", ("before_leave_surgeon_sign", "before_exit_surgeon_sign")),
+        ("离室前麻醉医师签名", ("before_leave_anesthesiologist_sign", "before_exit_anesthesiologist_sign")),
+        ("离室前手术护士签名", ("before_leave_surgery_nurse_sign", "before_exit_surgery_nurse_sign")),
+        ("手术医师陈述", ("surgeon_statement",)),
+        ("麻醉医师陈述", ("anesthesiologist_statement",)),
+        ("手术护士陈述", ("surg_nurse_statement",)),
+    ),
+    "anesthesia_record": (
+        ("手术名称", ("surgery_name",)),
+        ("手术编码", ("surgery_code",)),
+        ("手术体位", ("surgery_bodypost",)),
+        ("麻醉方式", ("anesthesia_method",)),
+        ("ASA 分级", ("ASA_level", "asa_level")),
+        ("手术开始时间", ("surgery_begin_datetime", "surgery_begin_time")),
+        ("手术结束时间", ("surgery_end_datetime", "surgery_end_time")),
+        ("麻醉开始时间", ("anesthesia_begin_datetime", "anesthesia_begin_time")),
+        ("麻醉结束时间", ("anesthesia_end_datetime", "anesthesia_end_time")),
+        ("离室时间", ("leave_operateroom_datetime", "leave_operating_room_datetime", "leave_operateroom_time")),
+        ("出血量", ("bleed_volume",)),
+        ("尿量", ("urine_volume",)),
+        ("患者去向", ("patient_whereabout",)),
+        ("意识状态", ("conscious_status",)),
+        ("麻醉前收缩压", ("preanes_sbp",)),
+        ("麻醉前舒张压", ("preanes_dbp",)),
+        ("麻醉前体温", ("preanes_temperature",)),
+        ("麻醉前心率", ("preanes_hr",)),
+        ("麻醉前脉率", ("preanes_pr",)),
+        ("麻醉前呼吸频率", ("preanes_rr",)),
+        ("药物名称", ("generic_name", "drug_name", "brand_name")),
+        ("单次剂量", ("single_dose",)),
+        ("单次剂量单位", ("single_dose_unit",)),
+        ("总剂量", ("dosage",)),
+        ("总剂量单位", ("dosage_unit",)),
+        ("给药途径", ("drug_apply_method", "administration_route")),
+    ),
+    "surgery_inventory_record": (
+        ("手术名称", ("surgery_name",)),
+        ("手术日期", ("surgery_date",)),
+        ("手术间", ("surgery_room_name",)),
+        ("入室时间", ("surgery_room_enter_time",)),
+        ("出室时间", ("surgery_room_leave_time",)),
+        ("药物过敏史", ("allergy",)),
+    ),
+}
+
 
 def _get_local_target_schemas() -> Tuple[str, ...]:
     normalized: List[str] = []
@@ -581,6 +666,20 @@ def _first_non_empty(record: Dict[str, Any], field_names: Tuple[str, ...]) -> st
     return ""
 
 
+def _compose_structured_document_content(
+    *,
+    table_name: str,
+    normalized: Dict[str, Any],
+) -> str:
+    fields = _STRUCTURED_DOCUMENT_CONTENT_FIELDS.get(str(table_name or "").strip().lower(), ())
+    fragments: List[str] = []
+    for label, source_fields in fields:
+        value = _first_non_empty(normalized, source_fields)
+        if value:
+            fragments.append(f"{label}：{value}")
+    return "\n".join(fragments)
+
+
 def _apply_sync_derived_fields(
     *,
     table_name: str,
@@ -641,6 +740,15 @@ def _apply_sync_derived_fields(
             )
             if exam_text:
                 normalized["record_content"] = exam_text
+
+    if normalized_table in _STRUCTURED_DOCUMENT_CONTENT_FIELDS and "record_content" in existing_columns:
+        if not _first_non_empty(normalized, ("record_content",)):
+            structured_content = _compose_structured_document_content(
+                table_name=normalized_table,
+                normalized=normalized,
+            )
+            if structured_content:
+                normalized["record_content"] = structured_content
 
 
 def _route_tables_by_scene(
