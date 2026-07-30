@@ -366,6 +366,45 @@ describe('SingleRecordQcResultPanel', () => {
     )
   })
 
+  it('合规时限结果沿用指标带和时间轴，并翻译受控事实枚举', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-001',
+            rule_name: '入院记录：入院后24小时内是否完成',
+            status: 'compliant',
+            conclusion: '符合质控要求',
+            customer_display_facts: {
+              failure_kind: 'timeliness_requirement_satisfied',
+              target_document: 'admission_record',
+              source_label: '入院记录',
+              anchor_time: '2026-06-20 17:19:08',
+              observed_time: '2026-06-20 19:23:45',
+              threshold_hours: 24,
+              elapsed_hours: 2.08,
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    const metrics = wrapper.get('[data-testid="timeliness-metrics"]')
+    expect(metrics.classes()).toContain('has-2-metrics')
+    expect(metrics.text()).toContain('规定时限24 小时')
+    expect(metrics.text()).toContain('实际间隔2.08 小时')
+    expect(metrics.text()).not.toContain('超出时限')
+    expect(wrapper.get('[data-testid="timeliness-timeline"]').text()).toContain(
+      '2026-06-20 19:23:45',
+    )
+    expect(wrapper.text()).toContain('在规定时限内完成')
+    expect(wrapper.text()).toContain('目标文书入院记录')
+    expect(wrapper.text()).not.toContain('timeliness_requirement_satisfied')
+    expect(wrapper.text()).not.toContain('admission_record')
+  })
+
   it('合规结果可展开查看引擎保存的完整字段', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [explainedCompliantItem] } })
 

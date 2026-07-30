@@ -122,7 +122,7 @@
               item.detail ||
                 item.actual ||
                 item.standard ||
-                completeTimelinessMetrics(item).length ||
+                timelinessMetrics(item).length ||
                 timelinessTimeline(item).length
             "
             class="decision-summary"
@@ -149,12 +149,13 @@
             </div>
 
             <section
-              v-if="completeTimelinessMetrics(item).length"
+              v-if="timelinessMetrics(item).length"
               class="timeliness-metrics"
+              :class="`has-${timelinessMetrics(item).length}-metrics`"
               data-testid="timeliness-metrics"
             >
               <div
-                v-for="row in completeTimelinessMetrics(item)"
+                v-for="row in timelinessMetrics(item)"
                 :key="row.key"
                 class="timeliness-metric"
                 :class="{ 'is-overdue': row.key === 'overdue_hours' }"
@@ -370,6 +371,7 @@ const factLabels: Record<string, string> = {
 
 const factValueLabels: Record<string, string> = {
   timeliness_requirement_not_met: '未在规定时限内完成',
+  timeliness_requirement_satisfied: '在规定时限内完成',
   implant_information_incomplete: '植入物信息填写不完整',
   surgery_document_missing: '目标手术文书缺失',
   surgery_document_blank: '目标手术文书内容为空',
@@ -380,6 +382,7 @@ const factValueLabels: Record<string, string> = {
   implant_barcode: '条码/批号',
   implant_quantity: '数量',
   surgery_record: '手术记录',
+  admission_record: '入院记录',
   first_course_record: '首次病程记录',
   presurg_summary: '术前小结',
   surgery_safecheck_record: '手术安全核查表',
@@ -442,9 +445,8 @@ function rowsByKeyOrder(item: SingleRecordQcResultItem, keys: readonly string[])
     .filter((row): row is DisplayFactRow => Boolean(row))
 }
 
-function completeTimelinessMetrics(item: SingleRecordQcResultItem) {
-  const rows = rowsByKeyOrder(item, TIMELINESS_METRIC_KEYS)
-  return rows.length === TIMELINESS_METRIC_KEYS.length ? rows : []
+function timelinessMetrics(item: SingleRecordQcResultItem) {
+  return rowsByKeyOrder(item, TIMELINESS_METRIC_KEYS)
 }
 
 function timelinessTimeline(item: SingleRecordQcResultItem) {
@@ -453,7 +455,7 @@ function timelinessTimeline(item: SingleRecordQcResultItem) {
 
 function remainingDisplayFactRows(item: SingleRecordQcResultItem) {
   const displayedKeys = new Set(timelinessTimeline(item).map((row) => row.key))
-  completeTimelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
+  timelinessMetrics(item).forEach((row) => displayedKeys.add(row.key))
   return displayFactRows(item).filter((row) => !displayedKeys.has(row.key))
 }
 
@@ -936,6 +938,14 @@ watch(
   margin-top: 13px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.timeliness-metrics.has-1-metrics {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.timeliness-metrics.has-2-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .timeliness-metric {
