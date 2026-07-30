@@ -624,14 +624,17 @@ watch(
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  width: fit-content;
-  padding: 0;
-  background: transparent;
+  min-width: 58px;
+  padding: 1px 7px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  background: rgba(29, 29, 31, 0.035);
   color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 18px;
   white-space: nowrap;
 }
 
@@ -645,18 +648,25 @@ watch(
 }
 
 .is-danger.status-pill {
-  background: transparent;
-  color: #d92d20;
+  border-color: rgba(217, 45, 32, 0.12);
+  background: rgba(217, 45, 32, 0.055);
+  color: #c9362b;
 }
 
 .is-danger.status-pill::before {
   background: #d92d20;
 }
 
-.is-warning.status-pill,
+.is-warning.status-pill {
+  border-color: rgba(178, 106, 0, 0.11);
+  background: rgba(178, 106, 0, 0.05);
+  color: #98620c;
+}
+
 .is-success.status-pill {
-  background: transparent;
-  color: rgba(29, 29, 31, 0.62);
+  border-color: rgba(8, 116, 67, 0.1);
+  background: rgba(8, 116, 67, 0.045);
+  color: #166b48;
 }
 
 .result-tab {
@@ -682,8 +692,9 @@ watch(
 }
 
 .result-tab.is-active {
-  background: rgba(0, 0, 0, 0.045);
+  background: rgba(0, 102, 204, 0.065);
   color: #0066cc;
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.06);
 }
 
 .result-tab b {
@@ -705,22 +716,39 @@ watch(
 }
 
 .result-list {
-  padding: 0;
+  display: grid;
+  gap: 6px;
+  padding: 7px 8px 10px;
 }
 
 .result-row {
   position: relative;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.065);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.78);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.result-row:hover {
+  border-color: rgba(0, 0, 0, 0.11);
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.045);
 }
 
 .result-row.is-expanded {
-  background: rgba(0, 0, 0, 0.018);
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.025);
+  box-shadow: 0 4px 16px rgba(0, 76, 153, 0.06);
 }
 
 .result-trigger {
   display: block;
   width: 100%;
-  padding: 12px 14px 11px;
+  padding: 11px 12px 10px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -729,7 +757,7 @@ watch(
 }
 
 .result-trigger:hover {
-  background: rgba(0, 102, 204, 0.03);
+  background: transparent;
 }
 
 .result-row-header,
@@ -746,14 +774,20 @@ watch(
 
 .result-identity {
   flex: 1 1 auto;
-  gap: 8px;
+  gap: 7px;
 }
 
 .rule-code {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 5px;
+  background: rgba(29, 29, 31, 0.03);
   color: rgba(29, 29, 31, 0.5);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 20px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
   white-space: nowrap;
 }
 
@@ -777,8 +811,8 @@ watch(
 
 .rule-conclusion {
   display: -webkit-box;
-  margin-top: 5px;
-  margin-left: 0;
+  margin-top: 6px;
+  padding-left: 1px;
   color: rgba(29, 29, 31, 0.66);
   font-size: 13px;
   line-height: 20px;
@@ -789,7 +823,6 @@ watch(
 }
 
 .result-detail {
-  margin-left: 3px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
   background: rgba(246, 247, 249, 0.72);
 }
