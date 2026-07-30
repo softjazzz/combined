@@ -497,6 +497,43 @@ def test_build_documents_should_expose_discharge_display_time_when_record_time_m
     assert "源库未返回记录时间" in discharge_doc["record_time_note"]
 
 
+def test_build_documents_should_expose_surgery_form_display_time_when_record_time_missing():
+    domain_bundles = {
+        "surgery": {
+            "source_documents": [
+                {
+                    "document_type": "presurg_summary",
+                    "document_id": "summary-1",
+                    "document_title": "术前小结记录",
+                    "record_time": "",
+                    "display_time": "2026-07-07 19:42:23",
+                    "content": "手术适应症：明确。",
+                },
+                {
+                    "document_type": "surgery_safecheck_record",
+                    "document_id": "safecheck-1",
+                    "document_title": "手术安全核查记录",
+                    "record_time": "",
+                    "display_time": "2026-07-07 16:14:26",
+                    "content": "手术时间：2026-07-07 16:30:00",
+                },
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+    documents_by_type = {item["doc_type"]: item for item in documents}
+
+    summary = documents_by_type["presurg_summary"]
+    safecheck = documents_by_type["surgery_safecheck_record"]
+    assert summary["record_time"] == "2026-07-07 19:42:23"
+    assert safecheck["record_time"] == "2026-07-07 16:14:26"
+    assert summary["record_time_source"] == "fallback_display_time"
+    assert safecheck["record_time_source"] == "fallback_display_time"
+    assert "源库未返回记录时间" in summary["record_time_note"]
+    assert "源库未返回记录时间" in safecheck["record_time_note"]
+
+
 def test_pick_document_priority():
     docs = [
         {

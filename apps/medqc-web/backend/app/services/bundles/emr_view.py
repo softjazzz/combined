@@ -117,6 +117,8 @@ _RECORD_TIME_FALLBACK_DOC_TYPES = {
     "transfer_out_record",
     "bloodtrans_record",
     "surgery_application",
+    "presurg_summary",
+    "surgery_safecheck_record",
     "discharge_record",
     "exam_master",
     "exam_item_report",
