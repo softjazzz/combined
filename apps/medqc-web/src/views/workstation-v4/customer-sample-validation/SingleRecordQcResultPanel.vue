@@ -7,9 +7,11 @@
       class="result-toolbar"
       data-testid="single-record-result-toolbar"
     >
-      <div class="toolbar-summary">
-        <strong>质控结果</strong>
-        <span data-testid="single-record-result-summary">{{ viewItems.length }} 条结果</span>
+      <div class="toolbar-top">
+        <div class="toolbar-summary">
+          <strong>质控结果</strong>
+          <span data-testid="single-record-result-summary">{{ viewItems.length }} 条结果</span>
+        </div>
       </div>
       <div
         v-if="viewItems.length"
@@ -33,6 +35,16 @@
         </button>
       </div>
     </header>
+
+    <div
+      v-if="viewItems.length"
+      class="result-column-header"
+      aria-hidden="true"
+    >
+      <span>状态</span>
+      <span>规则与结论</span>
+      <span>核对</span>
+    </div>
 
     <div
       v-if="!visibleItems.length"
@@ -63,31 +75,42 @@
           :aria-expanded="expandedKey === item.key"
           @click="toggle(item.key)"
         >
-          <span
-            class="result-row-header"
-            data-testid="single-record-result-row-header"
-          >
-            <span class="result-identity">
-              <span
-                class="status-pill"
-                :class="`is-${item.tone}`"
-              >{{ item.displayStatus }}</span>
+          <span class="status-cell">
+            <span
+              class="status-pill"
+              :class="`is-${item.tone}`"
+            >{{ item.displayStatus }}</span>
+          </span>
+          <span class="result-main">
+            <span
+              class="result-row-header"
+              data-testid="single-record-result-row-header"
+            >
               <span class="rule-code">{{ item.rule_id }}</span>
               <strong class="rule-name">{{ item.rule_name }}</strong>
             </span>
             <span
-              class="toggle-mark"
-              aria-hidden="true"
+              class="rule-conclusion"
+              data-testid="single-record-result-conclusion"
             >{{
-              expandedKey === item.key ? '⌃' : '⌄'
+              item.conclusionText
             }}</span>
           </span>
           <span
-            class="rule-conclusion"
-            data-testid="single-record-result-conclusion"
-          >{{
-            item.conclusionText
-          }}</span>
+            class="toggle-mark"
+            aria-hidden="true"
+          >
+            <ChevronUp
+              v-if="expandedKey === item.key"
+              :size="17"
+              :stroke-width="2"
+            />
+            <ChevronRight
+              v-else
+              :size="17"
+              :stroke-width="2"
+            />
+          </span>
         </button>
 
         <section
@@ -158,7 +181,12 @@
                   v-if="index < timelinessTimeline(item).length - 1"
                   class="timeline-arrow"
                   aria-hidden="true"
-                >→</span>
+                >
+                  <ArrowRight
+                    :size="15"
+                    :stroke-width="1.8"
+                  />
+                </span>
               </template>
             </div>
           </div>
@@ -263,7 +291,11 @@
                     </span>
                     <span class="evidence-action">
                       定位原文
-                      <span aria-hidden="true">›</span>
+                      <ChevronRight
+                        aria-hidden="true"
+                        :size="14"
+                        :stroke-width="2"
+                      />
                     </span>
                   </button>
                 </div>
@@ -299,6 +331,7 @@
 </template>
 
 <script setup lang="ts">
+import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import {
   buildSingleRecordQcResultItems,
@@ -567,6 +600,7 @@ watch(
 
 <style scoped>
 .single-record-result-panel {
+  container-type: inline-size;
   min-width: 0;
   height: 100%;
   overflow: auto;
@@ -579,17 +613,16 @@ watch(
 
 .result-toolbar {
   position: sticky;
-  z-index: 2;
+  z-index: 3;
   top: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 48px;
-  padding: 8px 14px;
+  display: block;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(18px);
+}
+
+.toolbar-top {
+  padding: 13px 14px 7px;
 }
 
 .toolbar-summary {
@@ -600,9 +633,10 @@ watch(
 }
 
 .toolbar-summary strong {
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 22px;
+  font-size: 17px;
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.02em;
 }
 
 .toolbar-summary span,
@@ -614,69 +648,68 @@ watch(
 
 .result-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
+  padding: 0 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .status-pill {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 58px;
-  padding: 1px 7px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 6px;
-  background: rgba(29, 29, 31, 0.035);
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
+  position: relative;
+  display: block;
+  padding-left: 13px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 20px;
   white-space: nowrap;
 }
 
 .status-pill::before {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 30px;
+  border-radius: 999px;
   background: rgba(29, 29, 31, 0.28);
+  transform: translateY(-50%);
   content: '';
 }
 
 .is-danger.status-pill {
-  border-color: rgba(217, 45, 32, 0.12);
-  background: rgba(217, 45, 32, 0.055);
-  color: #c9362b;
+  color: #d92d20;
 }
 
 .is-danger.status-pill::before {
-  background: #d92d20;
+  background: #ef4444;
 }
 
 .is-warning.status-pill {
-  border-color: rgba(178, 106, 0, 0.11);
-  background: rgba(178, 106, 0, 0.05);
-  color: #98620c;
+  color: #a86500;
+}
+
+.is-warning.status-pill::before {
+  background: #d99512;
 }
 
 .is-success.status-pill {
-  border-color: rgba(8, 116, 67, 0.1);
-  background: rgba(8, 116, 67, 0.045);
-  color: #166b48;
+  color: #087443;
+}
+
+.is-success.status-pill::before {
+  background: #15966a;
 }
 
 .result-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 30px;
-  padding: 4px 7px;
+  min-height: 38px;
+  padding: 7px 9px 9px;
   border: 0;
-  border-radius: 8px;
   background: transparent;
   color: rgba(29, 29, 31, 0.62);
   cursor: pointer;
@@ -687,24 +720,55 @@ watch(
 }
 
 .result-tab:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: rgba(0, 0, 0, 0.025);
   color: rgba(29, 29, 31, 0.84);
 }
 
 .result-tab.is-active {
-  background: rgba(0, 102, 204, 0.065);
+  background: transparent;
   color: #0066cc;
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.06);
+}
+
+.result-tab.is-active::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: #0066cc;
+  content: '';
 }
 
 .result-tab b {
-  min-width: 17px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
+  min-width: auto;
+  padding: 0;
+  background: transparent;
   color: inherit;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 650;
+  text-align: center;
+}
+
+.result-column-header {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(247, 248, 250, 0.94);
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.result-column-header span:nth-child(2) {
+  padding-left: 16px;
+}
+
+.result-column-header span:last-child {
   text-align: center;
 }
 
@@ -716,39 +780,33 @@ watch(
 }
 
 .result-list {
-  display: grid;
-  gap: 6px;
-  padding: 7px 8px 10px;
+  padding: 0;
 }
 
 .result-row {
   position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.065);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.075);
+  background: rgba(255, 255, 255, 0.72);
   transition:
-    border-color 180ms ease,
     background 180ms ease,
     box-shadow 180ms ease;
 }
 
 .result-row:hover {
-  border-color: rgba(0, 0, 0, 0.11);
-  background: #fff;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.045);
+  background: rgba(0, 0, 0, 0.018);
 }
 
 .result-row.is-expanded {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(0, 102, 204, 0.025);
-  box-shadow: 0 4px 16px rgba(0, 76, 153, 0.06);
+  background: rgba(0, 102, 204, 0.022);
+  box-shadow: inset 2px 0 0 #0066cc;
 }
 
 .result-trigger {
-  display: block;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 28px;
   width: 100%;
-  padding: 11px 12px 10px;
+  min-height: 82px;
+  padding: 0 12px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -760,48 +818,56 @@ watch(
   background: transparent;
 }
 
-.result-row-header,
-.result-identity {
+.status-cell {
   display: flex;
   align-items: center;
+  align-self: stretch;
+  padding-right: 12px;
+  border-right: 1px solid rgba(0, 0, 0, 0.065);
+}
+
+.result-main {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 16px 11px;
 }
 
 .result-row-header {
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.result-identity {
-  flex: 1 1 auto;
-  gap: 7px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .rule-code {
-  flex: 0 0 auto;
-  padding: 1px 5px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 5px;
-  background: rgba(29, 29, 31, 0.03);
-  color: rgba(29, 29, 31, 0.5);
+  color: rgba(29, 29, 31, 0.46);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 17px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
   white-space: nowrap;
 }
 
 .toggle-mark {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   color: rgba(29, 29, 31, 0.42);
-  font-size: 15px;
+}
+
+.result-row.is-expanded .toggle-mark {
+  color: #0066cc;
 }
 
 .rule-name {
-  flex: 1 1 auto;
+  display: block;
   min-width: 0;
+  margin-top: 1px;
   overflow: hidden;
-  color: rgba(29, 29, 31, 0.9);
+  color: rgba(29, 29, 31, 0.92);
   font-size: 14px;
   line-height: 20px;
   font-weight: 650;
@@ -811,11 +877,10 @@ watch(
 
 .rule-conclusion {
   display: -webkit-box;
-  margin-top: 6px;
-  padding-left: 1px;
-  color: rgba(29, 29, 31, 0.66);
-  font-size: 13px;
-  line-height: 20px;
+  margin-top: 4px;
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  line-height: 19px;
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -823,14 +888,15 @@ watch(
 }
 
 .result-detail {
+  margin-left: 112px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
-  background: rgba(246, 247, 249, 0.72);
+  background: rgba(255, 255, 255, 0.64);
 }
 
 .decision-summary {
-  padding: 12px 14px 11px;
+  padding: 13px 16px 12px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.54);
 }
 
 .summary-narrative {
@@ -867,18 +933,18 @@ watch(
 .timeliness-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 11px;
-  border: 1px solid rgba(0, 0, 0, 0.075);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
+  margin-top: 13px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .timeliness-metric {
   display: grid;
   gap: 2px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 10px;
   border-right: 1px solid rgba(0, 0, 0, 0.07);
+  text-align: center;
 }
 
 .timeliness-metric:last-child {
@@ -894,9 +960,9 @@ watch(
 
 .timeliness-metric strong {
   color: rgba(29, 29, 31, 0.9);
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 650;
-  line-height: 20px;
+  line-height: 23px;
 }
 
 .timeliness-metric.is-overdue strong {
@@ -907,7 +973,7 @@ watch(
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 9px;
+  padding-top: 10px;
   color: rgba(29, 29, 31, 0.64);
 }
 
@@ -932,8 +998,9 @@ watch(
 }
 
 .timeline-arrow {
+  display: inline-flex;
+  align-items: center;
   color: rgba(0, 102, 204, 0.5);
-  font-size: 14px;
 }
 
 .detail-grid {
@@ -1149,13 +1216,7 @@ watch(
   line-height: 19px;
 }
 
-@media (max-width: 900px) {
-  .result-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-  }
-
+@container (max-width: 900px) {
   .result-tabs {
     width: 100%;
   }
@@ -1175,39 +1236,42 @@ watch(
   }
 
   .timeliness-timeline {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .timeline-arrow {
-    display: none;
+    flex-wrap: wrap;
+    gap: 6px 8px;
   }
 }
 
-@media (max-width: 560px) {
-  .result-identity {
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 4px 7px;
+@container (max-width: 560px) {
+  .result-column-header,
+  .result-trigger {
+    grid-template-columns: 92px minmax(0, 1fr) 24px;
   }
 
-  .rule-name {
-    flex-basis: 100%;
-    white-space: normal;
+  .result-detail {
+    margin-left: 92px;
   }
 
-  .timeliness-metrics {
-    grid-template-columns: 1fr;
+  .status-cell {
+    padding-right: 8px;
+  }
+
+  .status-pill {
+    padding-left: 10px;
+    font-size: 11px;
+  }
+
+  .result-main {
+    padding-right: 10px;
+    padding-left: 12px;
   }
 
   .timeliness-metric {
-    border-right: 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+    padding: 8px 4px;
   }
 
-  .timeliness-metric:last-child {
-    border-bottom: 0;
+  .timeliness-metric strong {
+    font-size: 14px;
+    line-height: 20px;
   }
 }
 </style>

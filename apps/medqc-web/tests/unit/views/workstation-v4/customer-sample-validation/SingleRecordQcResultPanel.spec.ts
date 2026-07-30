@@ -150,9 +150,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
       'LX0609-018',
     )
-    expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
-      '确定问题',
-    )
+    expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
     expect(rows[0]!.get('[data-testid="single-record-result-conclusion"]').text()).toContain(
       '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
     )
