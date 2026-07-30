@@ -832,6 +832,7 @@ def test_upsert_to_local_derives_anesthesia_record_content(monkeypatch):
                 "patient_id": "P1",
                 "visit_id": "V1",
                 "document_id": "D1",
+                "planned_surgery": "颅内血肿清除术",
                 "surgery_name": "开颅血肿清除术",
                 "surgery_code": "01.2300",
                 "surgery_bodypost": "仰卧位",
@@ -851,7 +852,12 @@ def test_upsert_to_local_derives_anesthesia_record_content(monkeypatch):
                 "preanes_temperature": "36.5",
                 "preanes_hr": "88",
                 "preanes_rr": "18",
-                "generic_name": "丙泊酚注射液",
+                "preanes_spo": "99",
+                "anesthesia_management_measures": "维持循环稳定",
+                "respiratory_management": "气管插管机械通气",
+                "anesthesia_summary": "麻醉过程平稳",
+                "anesthetist_sign": "麻醉医师甲",
+                "preanes_medication_generic_name": "丙泊酚注射液",
                 "single_dose": "20",
                 "single_dose_unit": "mg",
                 "dosage": "200",
@@ -866,11 +872,17 @@ def test_upsert_to_local_derives_anesthesia_record_content(monkeypatch):
 
     assert count == 1
     content = executed_params[0]["record_content"]
+    assert "拟实施手术：颅内血肿清除术" in content
     assert "手术名称：开颅血肿清除术" in content
     assert "手术编码：01.2300" in content
     assert "手术开始时间：2026-07-07 16:14:26" in content
     assert "离室时间：2026-07-07 18:30:00" in content
     assert "麻醉前收缩压：120" in content
+    assert "麻醉前血氧饱和度：99" in content
+    assert "麻醉中处理措施：维持循环稳定" in content
+    assert "呼吸管理：气管插管机械通气" in content
+    assert "麻醉总结：麻醉过程平稳" in content
+    assert "麻醉医师签名：麻醉医师甲" in content
     assert "药物名称：丙泊酚注射液" in content
     assert "给药途径：静脉注射" in content
     assert "不得输出患者姓名" not in content
