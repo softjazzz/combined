@@ -420,6 +420,9 @@ const factLabels: Record<string, string> = {
   target_document: '目标文书',
   performed_surgery_confirmed: '已实施手术',
   threshold_hours: '规定时限',
+  copy_similarity: '实际相似度',
+  copy_similarity_threshold: '判定阈值',
+  compared_sections: '比对范围',
   anchor_time: '起算时间',
   observed_time: '记录时间',
   elapsed_hours: '实际间隔',
@@ -432,6 +435,7 @@ const factValueLabels: Record<string, string> = {
   implant_information_incomplete: '植入物信息填写不完整',
   surgery_document_missing: '目标手术文书缺失',
   surgery_document_blank: '目标手术文书内容为空',
+  admission_first_course_copy_detected: '入院记录现病史与首次病程记录病例特点高度重复',
   implant_name: '名称',
   implant_category: '种类',
   implant_specification: '规格/型号',
@@ -472,6 +476,14 @@ function displayFactRows(item: SingleRecordQcResultItem) {
             Number.isFinite(entry)
           ) {
             return `${entry} 小时`
+          }
+          if (
+            ['copy_similarity', 'copy_similarity_threshold'].includes(key) &&
+            typeof entry === 'number' &&
+            Number.isFinite(entry)
+          ) {
+            const percentage = Math.round(entry * 1000) / 10
+            return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`
           }
           return factValueLabels[String(entry)] || String(entry)
         })

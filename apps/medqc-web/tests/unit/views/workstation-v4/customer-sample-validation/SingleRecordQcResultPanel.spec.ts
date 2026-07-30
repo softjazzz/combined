@@ -140,6 +140,40 @@ const explainedDataGapItem = {
 }
 
 describe('SingleRecordQcResultPanel', () => {
+  it('直接展示 016 Canonical facts 中的实际相似度、阈值和比对范围', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-016',
+            rule_name: '不合理复制病历',
+            status: 'non_compliant',
+            conclusion: '入院记录与首次病程记录存在高度重复',
+            customer_display_facts: {
+              failure_kind: 'admission_first_course_copy_detected',
+              copy_similarity: 1,
+              copy_similarity_threshold: 0.7,
+              compared_sections: ['入院记录现病史', '首次病程记录病例特点'],
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('.result-trigger').trigger('click')
+
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
+      '实际相似度100%',
+    )
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain('判定阈值70%')
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
+      '比对范围入院记录现病史、首次病程记录病例特点',
+    )
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
+      '判定类型入院记录现病史与首次病程记录病例特点高度重复',
+    )
+  })
+
   it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
 
