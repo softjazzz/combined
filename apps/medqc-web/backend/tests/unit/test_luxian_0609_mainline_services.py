@@ -1472,7 +1472,7 @@ async def test_unified_engine_snapshot_failure_is_technical_not_silent_legacy_fa
     assert context.native_results[0]["status"] == "technical_error"
     assert (
         context.native_results[0]["metadata"]["reason_code"]
-        == "unified_engine_snapshot_unavailable"
+        == "evidence_snapshot_build_failed"
     )
     assert "private failure" not in repr(context.native_results)
 

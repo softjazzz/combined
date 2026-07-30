@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Mapping
@@ -81,6 +82,9 @@ from .native_package import (
     resolve_selected_customer_rule_ids,
 )
 from ..luxian_0609_trigger_gate import Luxian0609GateDecision
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -188,6 +192,7 @@ async def prepare_luxian_0609_execution(
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
     evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+    evidence_snapshot_build_failed = False
     unified_engine_enabled = bool(
         getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", False)
     )
@@ -440,6 +445,8 @@ async def prepare_luxian_0609_execution(
             )
         except Exception:
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
+            logger.exception("LX0609 evidence snapshot 构建失败")
+            evidence_snapshot_build_failed = True
             evidence_snapshot = None
             evidence_materials = None
             evidence_snapshot_rule_refs = ()
@@ -479,7 +486,11 @@ async def prepare_luxian_0609_execution(
         native_results.extend(
             build_family_technical_envelope(
                 expected_rule_ids=expected_native_rule_ids,
-                reason_code="unified_engine_snapshot_unavailable",
+                reason_code=(
+                    "evidence_snapshot_build_failed"
+                    if evidence_snapshot_build_failed
+                    else "unified_engine_snapshot_unavailable"
+                ),
             ).results
         )
     if (
