@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
+from functools import lru_cache
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
 from .decision_model import (
     ApplicabilityState,
+    CriterionResult,
+    CriterionStatus,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -22,10 +25,12 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
+from .rule_contracts import RuleCriterionContract, load_luxian_0609_rule_contracts
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
+    authoritative_document_time_value,
     has_luxian_0609_current_visit_unstable_order,
     luxian_0609_native_source_row_limit,
     read_luxian_0609_native_source_rows,
@@ -56,7 +61,6 @@ _RULE_009_EXTERNAL_EVENT_SOURCES = (
     "exam_item_report",
     "labtest_master",
     "labtest_item_report",
-    "inpat_drug_order",
     "surgery_record",
     "mr_surgery",
 )
@@ -135,12 +139,16 @@ _LX018_DIAGNOSIS_SOURCES = ("diagnosis", "admission_record_diagnosis")
 _NUMBERED_DIAGNOSIS_ITEM_PATTERN = re.compile(
     r"(?:^|[，,；;\s]+)\d+\s*[、.．]\s*([^，,；;\n\r]+)"
 )
-_LX018_CUSTOMER_REASON_CODES = frozenset(
+_LX018_DIAGNOSTIC_RELATION_STATES = frozenset(
+    {"supported", "unsupported", "mismatch", "unknown"}
+)
+_LX018_DIAGNOSTIC_REASON_DIMENSIONS = frozenset(
     {
-        "complaint_too_short",
-        "complaint_lacks_diagnostic_clue",
-        "complaint_primary_diagnosis_mismatch",
-        "unknown",
+        "anatomic_site",
+        "laterality",
+        "symptom_pattern",
+        "disease_course",
+        "disease_direction",
     }
 )
 
@@ -154,6 +162,7 @@ _RULE_CONTEXT_SOURCES = {
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
 _RULE_008_MAX_GAP_DAYS = 2
+_RULE_016_COPY_THRESHOLD = 0.70
 _RULE_009_TEMPLATE_VALUES = frozenset(
     {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
 )
@@ -173,6 +182,10 @@ _CONTROLLED_MESSAGES = {
         "当前查房病程证据尚不能形成稳定结论。",
         "请结合当日病情变化、客观检查和诊疗调整进行人工确认。",
     ),
+    "technical_error": (
+        "本次自动判定未完成，未形成临床质控结论。",
+        "请稍后重新质控；若仍失败，请检查模型服务状态。",
+    ),
 }
 
 
@@ -186,6 +199,7 @@ class NativeCourseQualityExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -195,6 +209,67 @@ class NativeCourseQualityExecutionResult:
 
 def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+@lru_cache(maxsize=1)
+def _lx018_criteria() -> tuple[RuleCriterionContract, RuleCriterionContract]:
+    contract = next(
+        item
+        for item in load_luxian_0609_rule_contracts()
+        if item.rule_id == "LX0609-018"
+    )
+    criteria = {item.criterion_id: item for item in contract.criteria}
+    length = criteria.get("chief_complaint_length")
+    relation = criteria.get("diagnostic_direction")
+    if (
+        length is None
+        or length.kind != "text_length"
+        or relation is None
+        or relation.kind != "semantic_relation"
+        or len(criteria) != 2
+    ):
+        raise ValueError("LX0609-018 criteria contract is incomplete")
+    return length, relation
+
+
+def _lx018_complaint_text(documents: Mapping[str, Any]) -> str:
+    for row in _source_rows(documents, "admission_record"):
+        complaint = _clean(row.get("chief_complaint") or row.get("complaint"))
+        if complaint:
+            return complaint
+        match = _COMPLAINT_VALUE_PATTERN.search(_row_text(row))
+        if match:
+            return _clean(match.group(1))
+    return ""
+
+
+def _lx018_length_criterion_result(
+    documents: Mapping[str, Any],
+) -> CriterionResult:
+    criterion, _ = _lx018_criteria()
+    complaint = _lx018_complaint_text(documents)
+    if not complaint:
+        return CriterionResult(
+            criterion_id=criterion.criterion_id,
+            status=CriterionStatus.UNKNOWN,
+            reason_code="required_field_missing",
+            operator=criterion.operator,
+            unit=criterion.unit,
+            expected_value=criterion.expected,
+        )
+    actual = len(re.sub(r"\s+", "", complaint))
+    passed = actual <= int(criterion.expected)
+    return CriterionResult(
+        criterion_id=criterion.criterion_id,
+        status=CriterionStatus.PASSED if passed else CriterionStatus.FAILED,
+        reason_code=(
+            "requirement_satisfied" if passed else criterion.failure_reason_code
+        ),
+        actual_value=actual,
+        expected_value=criterion.expected,
+        operator=criterion.operator,
+        unit=criterion.unit,
+    )
 
 
 def _documents(
@@ -291,7 +366,8 @@ def _first_course_body_text(row: Mapping[str, Any]) -> str:
     """只返回首次病程实质正文，不把界面预览当作正文。"""
 
     content = _clean(
-        row.get("record_content")
+        row.get("case_characteristic")
+        or row.get("record_content")
         or row.get("content")
         or row.get("assembled_text")
         or row.get("raw_text")
@@ -314,7 +390,8 @@ def _admission_body_text(row: Mapping[str, Any]) -> str:
     """只接受入院记录正文承载字段，拒绝标题、时间和预览壳。"""
 
     content = _clean(
-        row.get("record_content")
+        row.get("history_of_present_illness")
+        or row.get("record_content")
         or row.get("content")
         or row.get("assembled_text")
         or row.get("raw_text")
@@ -383,6 +460,23 @@ def _substantive_admission_rows(
     )
 
 
+def _rule_016_comparison_material_state(documents: Mapping[str, Any]) -> str:
+    """区分 016 的“无可比文书”与“文书存在但正文不可用”。"""
+
+    admission_rows = _source_rows(documents, "admission_record")
+    first_course_rows = _source_rows(documents, "first_course_record")
+    # 任一端完全没有文书时都无法构成“入院记录 vs 首次病程”的比较对象，
+    # 属于规则不适用；只有文书行存在但正文不可比时才是资料不足。
+    if not admission_rows or not first_course_rows:
+        return "absent"
+    if (
+        not _substantive_admission_rows(documents)
+        or not _substantive_first_course_rows(documents)
+    ):
+        return "unavailable"
+    return "ready"
+
+
 def _fact_state(
     facts: Sequence[Any], fact_types: frozenset[str], source_keys: frozenset[str]
 ) -> str:
@@ -409,7 +503,9 @@ def _fact_state(
 def _timeline_ready(documents: Mapping[str, Any]) -> bool:
     time_markers: set[str] = set()
     for _, row, content in _substantive_rows(documents, _TIMELINE_SOURCES):
-        record_time = _clean(row.get("record_time"))
+        # 客户源库部分病程只回传 submit_datetime。演示阶段与 002/006
+        # 统一：优先记录时间，缺失时使用提交时间，不从正文猜测时间。
+        record_time = _clean(authoritative_document_time_value(row))
         if record_time:
             time_markers.add(record_time)
         time_markers.update(_DATE_PATTERN.findall(content))
@@ -417,7 +513,7 @@ def _timeline_ready(documents: Mapping[str, Any]) -> bool:
 
 
 def _authoritative_course_time(value: Any) -> datetime | None:
-    """007 只接受两类病程表的 record_time，不使用正文或更新时间。"""
+    """007 只接受受控文书时间字段，不使用正文或更新时间。"""
 
     if isinstance(value, datetime):
         return value if value.tzinfo is None else None
@@ -520,7 +616,7 @@ def _rule_007_result(
                     executor_type="program",
                 )
             for row in rows:
-                parsed = _authoritative_course_time(row.get("record_time"))
+                parsed = _authoritative_course_time(authoritative_document_time_value(row))
                 if parsed is not None:
                     record_times.add(parsed)
                 elif _row_text(row):
@@ -794,7 +890,7 @@ def _rule_007_decision(
                 confidence=None,
             )
         for row in rows:
-            parsed = _authoritative_course_time(row.get("record_time"))
+            parsed = _authoritative_course_time(authoritative_document_time_value(row))
             if parsed is not None:
                 record_times.add(parsed)
             elif _row_text(row):
@@ -839,11 +935,53 @@ def _rule_007_decision(
     )
 
 
+def _rule_007_customer_display_facts(
+    *,
+    materials: Luxian0609EvidenceMaterialStore,
+    decision: RuleDecision,
+) -> Mapping[str, Any] | None:
+    """为已确认的007超期间隔提供最小、无正文的客户核对事实。"""
+
+    if (
+        decision.rule_id != "LX0609-007"
+        or decision.reason_code != "threshold_exceeded"
+        or decision.qc_direction is not QcDirection.DEFECT
+    ):
+        return None
+    source_by_time: dict[datetime, str] = {}
+    try:
+        for source_key in _RULE_007_RECORD_SOURCES:
+            for row in materials.rows(source_key):
+                if (
+                    record_time := _authoritative_course_time(
+                        authoritative_document_time_value(row)
+                    )
+                ) is not None:
+                    source_by_time.setdefault(record_time, source_key)
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return None
+    ordered_times = sorted(source_by_time)
+    for previous, current in zip(ordered_times, ordered_times[1:]):
+        interval = current - previous
+        if interval > _RULE_007_MAX_INTERVAL:
+            return {
+                "failure_kind": "course_record_interval_over_72h",
+                "interval_start_source": source_by_time[previous],
+                "interval_end_source": source_by_time[current],
+                "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
+                "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
+                "interval_hours": round(interval.total_seconds() / 3600, 2),
+                "threshold_hours": 72,
+            }
+    return None
+
+
 def _rule_008_009_decision(
     *,
     rule_id: str,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] | None = None,
 ) -> RuleDecision:
     """按医嘱开立日及病程权威记录日裁决病重/病危查房时限。"""
 
@@ -867,7 +1005,10 @@ def _rule_008_009_decision(
         reason_code: str,
         refs: set[str],
         confidence: float | None,
+        display_facts: Mapping[str, Any] | None = None,
     ) -> RuleDecision:
+        if display_facts is not None and customer_display_facts is not None:
+            customer_display_facts.append((rule_id, display_facts))
         return RuleDecision(
             rule_id=rule_id,
             snapshot_hash=snapshot.snapshot_hash,
@@ -1165,7 +1306,9 @@ def _rule_008_009_decision(
                 confidence=None,
             )
         for row in rows:
-            parsed_date = _authoritative_natural_date(row.get("record_time"))
+            parsed_date = _authoritative_natural_date(
+                authoritative_document_time_value(row)
+            )
             if parsed_date is None:
                 return decision(
                     applicability=ApplicabilityState.APPLICABLE,
@@ -1185,13 +1328,18 @@ def _rule_008_009_decision(
         dates_with_anchor = [anchor_date, *ordered_dates]
         if horizon_date is not None:
             dates_with_anchor.append(horizon_date)
-        interval_exceeded = any(
-            (current - previous).days > _RULE_008_MAX_GAP_DAYS
-            for previous, current in zip(
-                dates_with_anchor,
-                dates_with_anchor[1:],
-            )
+        exceeded_interval = next(
+            (
+                (previous, current)
+                for previous, current in zip(
+                    dates_with_anchor,
+                    dates_with_anchor[1:],
+                )
+                if (current - previous).days > _RULE_008_MAX_GAP_DAYS
+            ),
+            None,
         )
+        interval_exceeded = exceeded_interval is not None
         if not interval_exceeded and horizon_date is None:
             return decision(
                 applicability=ApplicabilityState.APPLICABLE,
@@ -1216,6 +1364,20 @@ def _rule_008_009_decision(
             ),
             refs=refs,
             confidence=1.0,
+            display_facts=(
+                {
+                    "failure_kind": "severity_course_gap_exceeded",
+                    "severity": "serious",
+                    "anchor_date": anchor_date.isoformat(),
+                    "horizon_date": horizon_date.isoformat() if horizon_date else "",
+                    "gap_start_date": exceeded_interval[0].isoformat(),
+                    "gap_end_date": exceeded_interval[1].isoformat(),
+                    "gap_days": (exceeded_interval[1] - exceeded_interval[0]).days,
+                    "threshold_days": _RULE_008_MAX_GAP_DAYS,
+                }
+                if exceeded_interval is not None
+                else None
+            ),
         )
 
     prefix_end = horizon_date or (ordered_dates[-1] if ordered_dates else anchor_date)
@@ -1223,7 +1385,8 @@ def _rule_008_009_decision(
         anchor_date + timedelta(days=offset)
         for offset in range((prefix_end - anchor_date).days + 1)
     }
-    if expected_dates.difference(timed_record_dates):
+    missing_dates = tuple(sorted(expected_dates.difference(timed_record_dates)))
+    if missing_dates:
         return decision(
             applicability=ApplicabilityState.APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
@@ -1231,6 +1394,16 @@ def _rule_008_009_decision(
             reason_code="requirement_violated",
             refs=refs,
             confidence=1.0,
+            display_facts={
+                "failure_kind": "critical_daily_record_missing",
+                "severity": "critical",
+                "anchor_date": anchor_date.isoformat(),
+                "horizon_date": prefix_end.isoformat(),
+                "missing_dates": [item.isoformat() for item in missing_dates[:7]],
+                "missing_count": len(missing_dates),
+                "missing_first_date": missing_dates[0].isoformat(),
+                "missing_last_date": missing_dates[-1].isoformat(),
+            },
         )
     if horizon_date is None:
         return decision(
@@ -1241,7 +1414,7 @@ def _rule_008_009_decision(
             refs=refs,
             confidence=None,
         )
-    # 逐日记录已满足；“病情变化时是否记录”仍需 Phase 5 裁剪语义判断。
+    # 逐日记录已满足；外部事件存在时仍需语义核对是否及时记录。
     return decision(
         applicability=ApplicabilityState.APPLICABLE,
         evidence_state=EvidenceState.DATA_GAP,
@@ -1582,17 +1755,31 @@ def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
         .replace("{medical_text}", context)
         .strip()
     )
-    if _clean(wrapper.get("rule_id") or wrapper.get("rule_code")) != "LX0609-018":
-        return prompt
+    return prompt
+
+
+def _lx018_prompt(*, context: str) -> str:
+    """018 的模型只判断医学诊断指向，不接触字数阈值或最终质控状态。"""
+
     return (
-        f"{prompt}\n\n"
-        "**客户展示补充字段：**\n"
-        "除既有 JSON 字段外，必须返回 customer_reason_code。"
-        "当 is_compliant=false 时只能取："
-        "complaint_too_short、complaint_lacks_diagnostic_clue、"
-        "complaint_primary_diagnosis_mismatch、unknown；"
-        "当 is_compliant=true 时填 unknown。"
-        "不要返回病历原文、姓名、住院号或提示词。"
+        "你只核对本次入院记录主诉与入院第一诊断之间的医学诊断指向关系。"
+        "不要评价主诉字数，不要输出整条质控规则是否合规，也不要引入出院诊断或后续病程诊断。\n"
+        "diagnostic_relation_state只能取supported、unsupported、mismatch、unknown："
+        "supported表示主诉的部位、症状特征或病程足以支持第一诊断方向；"
+        "unsupported表示主诉信息存在但特异性不足；mismatch表示部位、侧别或症状方向冲突；"
+        "unknown表示材料本身无法形成可靠医学判断。\n"
+        "diagnostic_reason_dimensions只能从anatomic_site、laterality、symptom_pattern、"
+        "disease_course、disease_direction中选择实际参与判断的维度。"
+        "diagnostic_rationale_code只能取symptom_only、site_symptom_not_specific、"
+        "diagnosis_mismatch、insufficient_information、supported。"
+        "medical_analysis请用中文具体说明：主诉提供了哪些诊断线索、第一诊断需要哪些关键线索、"
+        "两者为何支持、不足或冲突；不得复述姓名、住院号等身份信息，最长600字。\n"
+        "严格输出JSON对象："
+        '{"diagnostic_relation_state":"supported|unsupported|mismatch|unknown",'
+        '"diagnostic_reason_dimensions":[],'
+        '"diagnostic_rationale_code":"supported|symptom_only|site_symptom_not_specific|diagnosis_mismatch|insufficient_information",'
+        '"medical_analysis":"..."}。\n'
+        f"受控材料：\n{context}"
     )
 
 
@@ -1628,10 +1815,115 @@ def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
-def _parse_lx018_customer_reason(response: Mapping[str, Any]) -> str:
+def _parse_lx018_diagnostic_relation(
+    response: Mapping[str, Any],
+    *,
+    is_compliant: bool | None = None,
+) -> tuple[str, tuple[str, ...]]:
     payload = _response_json_payload(response)
-    value = _clean(payload.get("customer_reason_code")) if payload else ""
-    return value if value in _LX018_CUSTOMER_REASON_CODES else "unknown"
+    raw_state = _clean(payload.get("diagnostic_relation_state")) if payload else ""
+    state = (
+        raw_state
+        if raw_state in _LX018_DIAGNOSTIC_RELATION_STATES
+        else "unknown"
+    )
+    raw_dimensions = payload.get("diagnostic_reason_dimensions") if payload else None
+    dimensions = (
+        tuple(
+            item
+            for item in raw_dimensions
+            if isinstance(item, str) and item in _LX018_DIAGNOSTIC_REASON_DIMENSIONS
+        )
+        if isinstance(raw_dimensions, list)
+        else ()
+    )
+    return state, tuple(dict.fromkeys(dimensions))
+
+
+_LX018_DIAGNOSTIC_RATIONALE_CODES = frozenset(
+    {
+        "symptom_only",
+        "site_symptom_not_specific",
+        "diagnosis_mismatch",
+        "insufficient_information",
+        "supported",
+    }
+)
+
+
+def _parse_lx018_diagnostic_rationale_code(
+    response: Mapping[str, Any],
+    *,
+    relation_state: str,
+    dimensions: Sequence[str],
+) -> str:
+    """只接受受控原因码，绝不把模型自由文本带入客户结果。"""
+
+    payload = _response_json_payload(response)
+    value = _clean(payload.get("diagnostic_rationale_code")) if payload else ""
+    if value in _LX018_DIAGNOSTIC_RATIONALE_CODES:
+        # 原因码必须与同一响应中的关系状态、参与维度自洽；例如已识别
+        # 部位/症状时不能再向客户说“仅描述症状”。
+        if relation_state == "supported":
+            return "supported"
+        if relation_state == "mismatch":
+            return "diagnosis_mismatch"
+        if relation_state == "unsupported":
+            if value == "symptom_only" and dimensions:
+                return "site_symptom_not_specific"
+            return value if value != "supported" else "site_symptom_not_specific"
+        return "insufficient_information"
+    if relation_state == "supported":
+        return "supported"
+    if relation_state == "mismatch":
+        return "diagnosis_mismatch"
+    if relation_state == "unsupported":
+        return (
+            "site_symptom_not_specific"
+            if dimensions
+            else "symptom_only"
+        )
+    return "insufficient_information"
+
+
+def _parse_lx018_medical_analysis(response: Mapping[str, Any]) -> str:
+    payload = _response_json_payload(response)
+    if not payload:
+        return ""
+    value = str(payload.get("medical_analysis") or "").strip()
+    return value[:2000] if value and "\x00" not in value else ""
+
+
+def _lx018_semantic_criterion_result(
+    *,
+    relation_state: str,
+    reason_dimensions: Sequence[str],
+    rationale_code: str,
+    medical_analysis: str,
+) -> CriterionResult:
+    _, criterion = _lx018_criteria()
+    status = {
+        "supported": CriterionStatus.PASSED,
+        "unsupported": CriterionStatus.FAILED,
+        "mismatch": CriterionStatus.FAILED,
+        "unknown": CriterionStatus.UNKNOWN,
+    }[relation_state]
+    reason_code = (
+        "requirement_satisfied"
+        if status is CriterionStatus.PASSED
+        else criterion.failure_reason_code
+        if status is CriterionStatus.FAILED
+        else "semantic_low_confidence"
+    )
+    return CriterionResult(
+        criterion_id=criterion.criterion_id,
+        status=status,
+        reason_code=reason_code,
+        actual_value=relation_state,
+        rationale_code=rationale_code,
+        dimensions=tuple(reason_dimensions),
+        medical_analysis=medical_analysis,
+    )
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -1654,6 +1946,7 @@ def _result(
     total_tokens: int = 0,
     api_time: float = 0.0,
     extra_metadata: Mapping[str, Any] | None = None,
+    criterion_results: tuple[CriterionResult, ...] = (),
 ) -> dict[str, Any]:
     item = build_luxian_0609_native_result(
         rule_id=rule_id,
@@ -1676,6 +1969,10 @@ def _result(
     )
     metadata.update(dict(extra_metadata or {}))
     item["metadata"] = metadata
+    if criterion_results:
+        item["criterion_results"] = [
+            criterion.to_safe_dict() for criterion in criterion_results
+        ]
     return item
 
 
@@ -1683,6 +1980,66 @@ def _normalized_for_similarity(content: str) -> str:
     value = _DATE_PATTERN.sub("", content)
     value = _TIME_PATTERN.sub("", value)
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", value).lower()
+
+
+def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
+    """只用结构化现病史与病例特点计算覆盖率，避免整篇文书误碰撞。"""
+
+    admission_texts = tuple(
+        _clean(row.get("history_of_present_illness"))
+        for row in _source_rows(documents, "admission_record")
+        if _clean(row.get("history_of_present_illness"))
+    )
+    first_course_texts = tuple(
+        _clean(row.get("case_characteristic"))
+        for row in _source_rows(documents, "first_course_record")
+        if _clean(row.get("case_characteristic"))
+    )
+    if not admission_texts or not first_course_texts:
+        return None
+    maximum = 0.0
+    for admission_text in admission_texts:
+        normalized_admission = _normalized_for_similarity(admission_text)
+        if not normalized_admission:
+            continue
+        for first_course_text in first_course_texts:
+            normalized_first = _normalized_for_similarity(first_course_text)
+            shorter_length = min(len(normalized_admission), len(normalized_first))
+            if shorter_length == 0:
+                continue
+            matching_length = sum(
+                block.size
+                for block in SequenceMatcher(
+                    None,
+                    normalized_admission,
+                    normalized_first,
+                    autojunk=False,
+                ).get_matching_blocks()
+            )
+            maximum = max(maximum, matching_length / shorter_length)
+    return maximum
+
+
+def _rule_016_customer_display_facts(
+    documents: Mapping[str, Any],
+    *,
+    copy_coverage: float,
+) -> Mapping[str, Any]:
+    """仅投影比对范围、相似度和可定位文书 ID，不返回病历正文。"""
+
+    source_document_ids = [
+        document_id
+        for source_key in ("admission_record", "first_course_record")
+        for row in _source_rows(documents, source_key)
+        if (document_id := _clean(row.get("document_id")))
+    ]
+    return {
+        "failure_kind": "admission_first_course_copy_detected",
+        "copy_similarity": round(copy_coverage, 4),
+        "copy_similarity_threshold": _RULE_016_COPY_THRESHOLD,
+        "compared_sections": ["入院记录现病史", "首次病程记录病例特点"],
+        "source_document_ids": list(dict.fromkeys(source_document_ids)),
+    }
 
 
 def _is_copy_template_shell(normalized_content: str) -> bool:
@@ -1729,6 +2086,8 @@ class _CourseSemanticOutcome:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    customer_display_facts: Mapping[str, Any] | None = None
+    criterion_results: tuple[CriterionResult, ...] = ()
 
 
 def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
@@ -1778,7 +2137,9 @@ def _assess_copy(
         normalized = _normalized_for_similarity(content)
         if len(normalized) < _MIN_COMPARABLE_CHARS:
             continue
-        record_time = _authoritative_course_time(row.get("record_time"))
+        record_time = _authoritative_course_time(
+            authoritative_document_time_value(row)
+        )
         if record_time is None:
             return _CopyRuleOutcome(
                 status="data_gap",
@@ -1810,6 +2171,7 @@ def _assess_copy(
         "similarity_threshold": _COPY_SIMILARITY_THRESHOLD,
         "similarity_band": "unknown",
         "best_match_source_types": [],
+        "best_match_record_times": [],
         "template_shell_only": False,
     }
     if len(comparable) < 2:
@@ -1870,6 +2232,10 @@ def _assess_copy(
             "maximum_similarity": round(maximum, 4),
             "similarity_band": _copy_similarity_band(maximum),
             "best_match_source_types": [best_pair[0][1], best_pair[1][1]] if best_pair else [],
+            "best_match_record_times": [
+                best_pair[0][0].strftime("%Y-%m-%d %H:%M:%S"),
+                best_pair[1][0].strftime("%Y-%m-%d %H:%M:%S"),
+            ] if best_pair else [],
             "longest_matching_block_chars": longest_block,
             "substantial_matching_coverage": round(substantial_coverage, 4),
             "template_shell_only": template_shell_only,
@@ -1888,6 +2254,35 @@ def _assess_copy(
         executor_type="program",
         safe_metadata=safe_metadata,
     )
+
+
+def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any] | None:
+    """017 仅投影可复核的比较对象和阈值，正文始终留在请求内材料仓。"""
+
+    metadata = outcome.safe_metadata
+    source_types = metadata.get("best_match_source_types")
+    record_times = metadata.get("best_match_record_times")
+    maximum = metadata.get("maximum_similarity")
+    threshold = metadata.get("similarity_threshold")
+    if (
+        outcome.status != "non_compliant"
+        or not isinstance(source_types, list)
+        or len(source_types) != 2
+        or any(value not in _COPY_SOURCES for value in source_types)
+        or not isinstance(record_times, list)
+        or len(record_times) != 2
+        or not all(isinstance(value, str) and value for value in record_times)
+        or not isinstance(maximum, (int, float))
+        or not isinstance(threshold, (int, float))
+    ):
+        return None
+    return {
+        "failure_kind": "copy_similarity_threshold_exceeded",
+        "copy_similarity": round(float(maximum), 4),
+        "copy_similarity_threshold": round(float(threshold), 4),
+        "copy_document_sources": list(source_types),
+        "copy_document_record_times": list(record_times),
+    }
 
 
 def _copy_result(
@@ -2080,7 +2475,7 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record", "diagnosis"),
+        "LX0609-018": ("admission_record", *_LX018_DIAGNOSIS_SOURCES),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -2100,10 +2495,24 @@ def _course_semantic_decision(
             QcDirection.DEFECT,
             "requirement_violated",
         )
+    elif outcome.status == "evaluation_unknown":
+        dimensions = (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.CONFLICT,
+            QcDirection.UNKNOWN,
+            "semantic_low_confidence",
+        )
     elif outcome.status == "technical_error":
         dimensions = (
             ApplicabilityState.ERROR,
             EvidenceState.TECHNICAL_ERROR,
+            QcDirection.UNKNOWN,
+            outcome.reason_code,
+        )
+    elif outcome.status == "not_applicable":
+        dimensions = (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
             QcDirection.UNKNOWN,
             outcome.reason_code,
         )
@@ -2130,6 +2539,9 @@ def _course_semantic_decision(
         fact_refs=refs,
         evaluator_version="course-semantic-v1",
         confidence=None,
+        criterion_results=tuple(
+            replace(item, fact_refs=refs) for item in outcome.criterion_results
+        ),
     )
 
 
@@ -2165,41 +2577,6 @@ def _admission_material_ready(
     # 只采信受控第一诊断：主要诊断，或入院/初步诊断中的编号首项。
     diagnosis_text = diagnosis_text or _lx018_primary_diagnosis_available(documents)
     return (complaint_fact or complaint_text) and (diagnosis_fact or diagnosis_text)
-
-
-def _lx018_customer_display_facts(
-    documents: Mapping[str, Any],
-    *,
-    failure_kind: str,
-) -> Mapping[str, Any]:
-    """只输出前端展示所需的受控事实，绝不回传主诉或诊断原文。"""
-
-    complaint = ""
-    primary_diagnosis_available = False
-    for row in _source_rows(documents, "admission_record"):
-        complaint = complaint or _clean(
-            row.get("chief_complaint") or row.get("complaint")
-        )
-        if not complaint:
-            match = _COMPLAINT_VALUE_PATTERN.search(_row_text(row))
-            complaint = _clean(match.group(1)) if match else ""
-        primary_diagnosis_available = primary_diagnosis_available or bool(
-            _clean(
-                row.get("first_diagnosis")
-                or row.get("primary_diagnosis")
-                or row.get("diagnosis")
-            )
-            or _DIAGNOSIS_PATTERN.search(_row_text(row))
-        )
-    primary_diagnosis_available = (
-        primary_diagnosis_available or _lx018_primary_diagnosis_available(documents)
-    )
-    return {
-        "complaint_length": len(re.sub(r"\s+", "", complaint)) if complaint else None,
-        "primary_diagnosis_available": primary_diagnosis_available,
-        "source_label": "入院记录—主诉",
-        "failure_kind": failure_kind,
-    }
 
 
 async def execute_luxian_0609_native_course_quality_rules(
@@ -2311,6 +2688,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         if rule_id in projection_gap_rule_ids
     ]
     decisions: list[RuleDecision] = []
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
 
@@ -2325,6 +2703,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                     materials=evidence_materials,
                 )
             )
+            display_facts = _copy_customer_display_facts(outcome)
+            if display_facts is not None:
+                customer_display_facts.append(("LX0609-017", display_facts))
         else:
             results.append(_render_copy_outcome(outcome))
 
@@ -2338,6 +2719,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                 materials=evidence_materials,
             )
         )
+        if outcome.customer_display_facts is not None:
+            customer_display_facts.append(
+                (outcome.rule_id, outcome.customer_display_facts)
+            )
 
     for rule_id in selected:
         if rule_id in projection_gap_rule_ids:
@@ -2345,12 +2730,16 @@ async def execute_luxian_0609_native_course_quality_rules(
         if rule_id == "LX0609-007" and rule_id in typed_requested:
             assert evidence_snapshot is not None
             assert evidence_materials is not None
-            decisions.append(
-                _rule_007_decision(
-                    snapshot=evidence_snapshot,
-                    materials=evidence_materials,
-                )
+            course_decision = _rule_007_decision(
+                snapshot=evidence_snapshot,
+                materials=evidence_materials,
             )
+            decisions.append(course_decision)
+            if (display_facts := _rule_007_customer_display_facts(
+                materials=evidence_materials,
+                decision=course_decision,
+            )) is not None:
+                customer_display_facts.append(("LX0609-007", display_facts))
             continue
         if rule_id in {"LX0609-008", "LX0609-009"} and rule_id in typed_requested:
             assert evidence_snapshot is not None
@@ -2359,6 +2748,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 rule_id=rule_id,
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
+                customer_display_facts=customer_display_facts,
             )
             # 008 是纯日期规则。009 也先由 Python 判定每日频次；仅频次完整
             # 且具有权威终点时，才允许一次受控语义调用补“病情变化是否及时记录”。
@@ -2379,7 +2769,12 @@ async def execute_luxian_0609_native_course_quality_rules(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
             )
-            if overflow or not ready or llm_client is None:
+            if overflow or not ready:
+                decisions.append(
+                    _rule_009_semantic_decision(base_decision=base_decision)
+                )
+                continue
+            if llm_client is None:
                 decisions.append(
                     _rule_009_semantic_decision(base_decision=base_decision)
                 )
@@ -2418,19 +2813,49 @@ async def execute_luxian_0609_native_course_quality_rules(
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
                 continue
-            if rule_id == "LX0609-016" and (
-                not _substantive_admission_rows(typed_documents)
-                or not _substantive_first_course_rows(typed_documents)
-            ):
-                emit_course_semantic(
-                    _CourseSemanticOutcome(
-                        rule_id=rule_id,
-                        status="data_gap",
-                        reason_code="admission_or_first_course_unavailable",
-                        executor_type="program",
-                    )
+            if rule_id == "LX0609-016":
+                comparison_material_state = _rule_016_comparison_material_state(
+                    typed_documents
                 )
-                continue
+                if comparison_material_state == "absent":
+                    emit_course_semantic(
+                        _CourseSemanticOutcome(
+                            rule_id=rule_id,
+                            status="not_applicable",
+                            reason_code="trigger_absent_complete",
+                            executor_type="program",
+                        )
+                    )
+                    continue
+                if comparison_material_state == "unavailable":
+                    emit_course_semantic(
+                        _CourseSemanticOutcome(
+                            rule_id=rule_id,
+                            status="data_gap",
+                            reason_code="admission_or_first_course_unavailable",
+                            executor_type="program",
+                        )
+                    )
+                    continue
+            if rule_id == "LX0609-016":
+                copy_coverage = _rule_016_copy_coverage(typed_documents)
+                if (
+                    copy_coverage is not None
+                    and copy_coverage > _RULE_016_COPY_THRESHOLD
+                ):
+                    emit_course_semantic(
+                        _CourseSemanticOutcome(
+                            rule_id=rule_id,
+                            status="non_compliant",
+                            reason_code="copy_similarity_threshold_exceeded",
+                            executor_type="program",
+                            customer_display_facts=_rule_016_customer_display_facts(
+                                typed_documents,
+                                copy_coverage=copy_coverage,
+                            ),
+                        )
+                    )
+                    continue
             if rule_id == "LX0609-018" and not _admission_material_ready(
                 typed_documents, ()
             ):
@@ -2445,7 +2870,16 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             context = _context(rule_id, typed_documents)
             wrapper = wrappers_by_id.get(rule_id)
-            if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
+            if (
+                not context
+                or (
+                    rule_id != "LX0609-018"
+                    and (
+                        wrapper is None
+                        or not _clean(wrapper.get("custom_prompt"))
+                    )
+                )
+            ):
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
@@ -2455,20 +2889,38 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
+            length_result = (
+                _lx018_length_criterion_result(typed_documents)
+                if rule_id == "LX0609-018"
+                else None
+            )
             if llm_client is None:
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
-                        status="data_gap",
-                        reason_code="course_llm_unavailable",
+                        status=(
+                            "technical_error"
+                            if rule_id == "LX0609-018"
+                            else "data_gap"
+                        ),
+                        reason_code=(
+                            "model_transport_error"
+                            if rule_id == "LX0609-018"
+                            else "course_llm_unavailable"
+                        ),
                         executor_type="program",
+                        criterion_results=(
+                            (length_result,) if length_result is not None else ()
+                        ),
                     )
                 )
                 continue
             llm_call_count += 1
             try:
                 response = await llm_client.generate(
-                    _prompt(wrapper, context=context)
+                    _lx018_prompt(context=context)
+                    if rule_id == "LX0609-018"
+                    else _prompt(wrapper, context=context)
                 )
             except Exception:
                 emit_course_semantic(
@@ -2477,6 +2929,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                         status="technical_error",
                         reason_code="model_transport_error",
                         executor_type="llm",
+                        criterion_results=(
+                            (length_result,) if length_result is not None else ()
+                        ),
                     )
                 )
                 continue
@@ -2486,6 +2941,74 @@ async def execute_luxian_0609_native_course_quality_rules(
             total_tokens += total
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
+            if rule_id == "LX0609-018":
+                payload = _response_json_payload(response)
+                raw_relation_state = (
+                    _clean(payload.get("diagnostic_relation_state"))
+                    if payload
+                    else ""
+                )
+                if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+                    emit_course_semantic(
+                        _CourseSemanticOutcome(
+                            rule_id=rule_id,
+                            status="technical_error",
+                            reason_code="model_invalid_output",
+                            executor_type="llm",
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                            total_tokens=total,
+                            api_time=elapsed,
+                            criterion_results=(
+                                (length_result,) if length_result is not None else ()
+                            ),
+                        )
+                    )
+                    continue
+                relation_state, reason_dimensions = _parse_lx018_diagnostic_relation(
+                    response
+                )
+                rationale_code = _parse_lx018_diagnostic_rationale_code(
+                    response,
+                    relation_state=relation_state,
+                    dimensions=reason_dimensions,
+                )
+                semantic_result = _lx018_semantic_criterion_result(
+                    relation_state=relation_state,
+                    reason_dimensions=reason_dimensions,
+                    rationale_code=rationale_code,
+                    medical_analysis=_parse_lx018_medical_analysis(response),
+                )
+                assert length_result is not None
+                if semantic_result.status is CriterionStatus.FAILED:
+                    status = "non_compliant"
+                elif length_result.status is CriterionStatus.FAILED:
+                    status = "non_compliant"
+                elif (
+                    length_result.status is CriterionStatus.PASSED
+                    and semantic_result.status is CriterionStatus.PASSED
+                ):
+                    status = "compliant"
+                else:
+                    status = "evaluation_unknown"
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status=status,
+                        reason_code=(
+                            "semantic_low_confidence"
+                            if status == "evaluation_unknown"
+                            else "course_customer_prompt"
+                        ),
+                        executor_type="llm",
+                        prompt_tokens=prompt,
+                        completion_tokens=completion,
+                        total_tokens=total,
+                        api_time=elapsed,
+                        criterion_results=(length_result, semantic_result),
+                    )
+                )
+                continue
             if is_compliant is None:
                 emit_course_semantic(
                     _CourseSemanticOutcome(
@@ -2611,14 +3134,37 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             controlled_fact = "当前就诊存在病危医嘱"
         elif rule_id == "LX0609-016":
-            if not _substantive_admission_rows(
-                documents
-            ) or not _substantive_first_course_rows(documents):
+            comparison_material_state = _rule_016_comparison_material_state(documents)
+            if comparison_material_state == "absent":
+                results.append(
+                    _result(
+                        rule_id,
+                        "not_applicable",
+                        "trigger_absent_complete",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if comparison_material_state == "unavailable":
                 results.append(
                     _result(
                         rule_id,
                         "data_gap",
                         "admission_or_first_course_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            copy_coverage = _rule_016_copy_coverage(documents)
+            if (
+                copy_coverage is not None
+                and copy_coverage > _RULE_016_COPY_THRESHOLD
+            ):
+                results.append(
+                    _result(
+                        rule_id,
+                        "non_compliant",
+                        "copy_similarity_threshold_exceeded",
                         executor_type="program",
                     )
                 )
@@ -2639,7 +3185,16 @@ async def execute_luxian_0609_native_course_quality_rules(
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)
-        if wrapper is None or not _clean(wrapper.get("custom_prompt")) or not context:
+        if (
+            not context
+            or (
+                rule_id != "LX0609-018"
+                and (
+                    wrapper is None
+                    or not _clean(wrapper.get("custom_prompt"))
+                )
+            )
+        ):
             results.append(
                 _result(
                     rule_id,
@@ -2649,26 +3204,49 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
+        length_result = (
+            _lx018_length_criterion_result(documents)
+            if rule_id == "LX0609-018"
+            else None
+        )
         if llm_client is None:
             results.append(
                 _result(
                     rule_id,
-                    "data_gap",
-                    "course_llm_unavailable",
+                    "technical_error" if rule_id == "LX0609-018" else "data_gap",
+                    (
+                        "model_transport_error"
+                        if rule_id == "LX0609-018"
+                        else "course_llm_unavailable"
+                    ),
                     executor_type="program",
+                    criterion_results=(
+                        (length_result,) if length_result is not None else ()
+                    ),
                 )
             )
             continue
         llm_call_count += 1
         try:
-            response = await llm_client.generate(_prompt(wrapper, context=context))
+            response = await llm_client.generate(
+                _lx018_prompt(context=context)
+                if rule_id == "LX0609-018"
+                else _prompt(wrapper, context=context)
+            )
         except Exception:
             results.append(
                 _result(
                     rule_id,
-                    "data_gap",
-                    "course_llm_failure",
+                    "technical_error" if rule_id == "LX0609-018" else "data_gap",
+                    (
+                        "model_transport_error"
+                        if rule_id == "LX0609-018"
+                        else "course_llm_failure"
+                    ),
                     executor_type="llm",
+                    criterion_results=(
+                        (length_result,) if length_result is not None else ()
+                    ),
                 )
             )
             continue
@@ -2678,7 +3256,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         total_tokens += total
         api_time += elapsed
         is_compliant = _parse_is_compliant(response)
-        if is_compliant is None:
+        if rule_id != "LX0609-018" and is_compliant is None:
             results.append(
                 _result(
                     rule_id,
@@ -2692,15 +3270,76 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
             )
             continue
+        if rule_id == "LX0609-018":
+            payload = _response_json_payload(response)
+            raw_relation_state = (
+                _clean(payload.get("diagnostic_relation_state"))
+                if payload
+                else ""
+            )
+            if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+                results.append(
+                    _result(
+                        rule_id,
+                        "technical_error",
+                        "model_invalid_output",
+                        executor_type="llm",
+                        prompt_tokens=prompt,
+                        completion_tokens=completion,
+                        total_tokens=total,
+                        api_time=elapsed,
+                        criterion_results=(
+                            (length_result,) if length_result is not None else ()
+                        ),
+                    )
+                )
+                continue
+            relation_state, reason_dimensions = _parse_lx018_diagnostic_relation(
+                response
+            )
+            rationale_code = _parse_lx018_diagnostic_rationale_code(
+                response,
+                relation_state=relation_state,
+                dimensions=reason_dimensions,
+            )
+            semantic_result = _lx018_semantic_criterion_result(
+                relation_state=relation_state,
+                reason_dimensions=reason_dimensions,
+                rationale_code=rationale_code,
+                medical_analysis=_parse_lx018_medical_analysis(response),
+            )
+            assert length_result is not None
+            if semantic_result.status is CriterionStatus.FAILED:
+                status = "non_compliant"
+            elif length_result.status is CriterionStatus.FAILED:
+                status = "non_compliant"
+            elif (
+                length_result.status is CriterionStatus.PASSED
+                and semantic_result.status is CriterionStatus.PASSED
+            ):
+                status = "compliant"
+            else:
+                status = "evaluation_unknown"
+            results.append(
+                _result(
+                    rule_id,
+                    status,
+                    (
+                        "semantic_low_confidence"
+                        if status == "evaluation_unknown"
+                        else "course_customer_prompt"
+                    ),
+                    executor_type="llm",
+                    prompt_tokens=prompt,
+                    completion_tokens=completion,
+                    total_tokens=total,
+                    api_time=elapsed,
+                    criterion_results=(length_result, semantic_result),
+                )
+            )
+            continue
         status = "compliant" if is_compliant else "non_compliant"
         extra_metadata: Mapping[str, Any] | None = None
-        if rule_id == "LX0609-018" and status == "non_compliant":
-            extra_metadata = {
-                "customer_display_facts": _lx018_customer_display_facts(
-                    documents,
-                    failure_kind=_parse_lx018_customer_reason(response),
-                )
-            }
         results.append(
             _result(
                 rule_id,
@@ -2719,6 +3358,7 @@ async def execute_luxian_0609_native_course_quality_rules(
         results=tuple(results),
         planned_rule_ids=selected,
         decisions=tuple(decisions),
+        customer_display_facts=tuple(customer_display_facts),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

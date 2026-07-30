@@ -243,6 +243,17 @@ async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_l
         snapshot=session.snapshot,
     )
     assert reduced[0].final_state == "non_compliant"
+    assert result.decisions[0].reason_code == "defect_proven"
+    assert result.customer_display_facts == (
+        (
+            "LX0609-029",
+            {
+                "failure_kind": "surgery_document_blank",
+                "target_document": "presurg_summary",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    )
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -254,10 +265,11 @@ async def test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_l
             ("empty", "available", "not_applicable"),
             ("nonexact", "available", "data_gap"),
             ("unavailable", "available", "data_gap"),
-        ("error", "available", "technical_error"),
-        ("exact", "unavailable", "data_gap"),
-        ("exact", "error", "technical_error"),
-    ),
+            ("error", "available", "technical_error"),
+            ("exact", "available", "non_compliant"),
+            ("exact", "unavailable", "data_gap"),
+            ("exact", "error", "technical_error"),
+        ),
 )
 async def test_typed_029_source_states_are_fail_closed_without_llm(
     surgery_mode: str,
@@ -286,6 +298,8 @@ async def test_typed_029_source_states_are_fail_closed_without_llm(
     )
 
     assert reduced[0].final_state == expected_state
+    if surgery_mode == "exact" and summary_mode == "available":
+        assert result.decisions[0].reason_code == "required_document_missing"
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -357,6 +371,287 @@ def _typed_session(
         row_reader=reader,
         additional_source_keys=("surgery_record",),
     )
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "observation_states", "expected_facts"),
+    [
+        (
+            "LX0609-034",
+            {"consent_form": "empty"},
+            {
+                "failure_kind": "anesthesia_consent_missing",
+                "performed_anesthesia_confirmed": True,
+                "consent_state": "missing",
+                "checked_sources": ["consent_form"],
+            },
+        ),
+        (
+            "LX0609-036",
+            {
+                "preane_surveil_record": "empty",
+                "postane_surveil_record": "empty",
+            },
+            {
+                "failure_kind": "anesthesia_visit_missing",
+                "performed_anesthesia_confirmed": True,
+                "missing_visit_sources": [
+                    "preane_surveil_record",
+                    "postane_surveil_record",
+                ],
+            },
+        ),
+    ],
+)
+def test_typed_anesthesia_missing_documents_emit_controlled_customer_facts(
+    monkeypatch,
+    rule_id: str,
+    observation_states: dict[str, str],
+    expected_facts: dict[str, object],
+):
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else ("unknown", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: observation_states.get(source_key, "available"),
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id=rule_id,
+        snapshot=object(),
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts == expected_facts
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "empty_sources", "reason_code"),
+    [
+        ("LX0609-035", {"consent_form"}, "anesthesia_consent_absent"),
+        (
+            "LX0609-037",
+            {"preane_surveil_record", "postane_surveil_record"},
+            "anesthesia_visit_absent",
+        ),
+    ],
+)
+def test_typed_detail_rules_are_not_applicable_when_parent_document_is_absent(
+    monkeypatch,
+    rule_id: str,
+    empty_sources: set[str],
+    reason_code: str,
+):
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: (
+            "empty" if source_key in empty_sources else "available"
+        ),
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id=rule_id,
+        snapshot=object(),
+    )
+
+    assert outcome.status == "not_applicable"
+    assert outcome.reason_code == reason_code
+
+
+def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record(
+    monkeypatch,
+):
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "mr_surgery"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: (
+            "empty" if source_key == "anesthesia_record" else "available"
+        ),
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-038",
+        snapshot=object(),
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.reason_code == "anesthesia_record_missing"
+
+
+def test_typed_039_missing_discussion_emits_controlled_customer_facts(monkeypatch):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda _rule_id: frozenset(
+            {
+                "surgery_record",
+                "mr_surgery",
+                "rescue_record",
+                "presurg_discussion",
+            }
+        ),
+    )
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "")
+            if source_key == "surgery_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "empty"
+        if source_key == "presurg_discussion"
+        else "available",
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "preop_discussion_missing",
+        "performed_surgery_confirmed": True,
+        "emergency_rescue_exception_absent": True,
+        "checked_sources": ["presurg_discussion"],
+    }
+
+
+class _RowsOnlyMaterials:
+    def __init__(self, rows_by_source: dict[str, tuple[dict, ...]]):
+        self._rows_by_source = rows_by_source
+
+    def rows(self, source_key: str) -> tuple[dict, ...]:
+        return self._rows_by_source.get(source_key, ())
+
+
+def test_typed_missing_document_facts_keep_only_unique_trigger_document_id(monkeypatch):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda _rule_id: frozenset(
+            {
+                "anesthesia_record",
+                "consent_form",
+                "preane_surveil_record",
+                "postane_surveil_record",
+                "surgery_record",
+                "mr_surgery",
+                "rescue_record",
+                "presurg_discussion",
+            }
+        ),
+    )
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else (("present", "") if source_key == "surgery_record" else ("absent", ""))
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "empty"
+        if source_key
+        in {
+            "consent_form",
+            "preane_surveil_record",
+            "postane_surveil_record",
+            "presurg_discussion",
+        }
+        else "available",
+    )
+    materials = _RowsOnlyMaterials(
+        {
+            "anesthesia_record": ({"document_id": "anesthesia-private-id"},),
+            "surgery_record": ({"document_id": "surgery-private-id"},),
+            "mr_surgery": ({"document_id": "mr-surgery-private-id"},),
+        }
+    )
+
+    for rule_id, expected_document_id, expected_document_type in (
+        ("LX0609-034", "anesthesia-private-id", "anesthesia_record"),
+        ("LX0609-036", "anesthesia-private-id", "anesthesia_record"),
+        ("LX0609-039", "surgery-private-id", "surgery_record"),
+    ):
+        outcome = surgery_doc._typed_terminal_outcome(
+            rule_id=rule_id,
+            snapshot=object(),
+            materials=materials,
+        )
+        assert outcome.status == "non_compliant"
+        assert outcome.customer_display_facts is not None
+        assert outcome.customer_display_facts["source_document_id"] == expected_document_id
+        assert outcome.customer_display_facts["source_document_type"] == expected_document_type
+
+
+def test_trigger_document_id_fails_closed_when_row_is_missing_or_ambiguous():
+    facts = {"failure_kind": "anesthesia_visit_missing"}
+
+    assert surgery_doc._with_trigger_document_id(
+        facts,
+        materials=_RowsOnlyMaterials({"anesthesia_record": ()}),
+        source_keys=("anesthesia_record",),
+    ) == facts
+    assert surgery_doc._with_trigger_document_id(
+        facts,
+        materials=_RowsOnlyMaterials(
+            {
+                "anesthesia_record": (
+                    {"document_id": "anesthesia-a"},
+                    {"document_id": "anesthesia-b"},
+                )
+            }
+        ),
+        source_keys=("anesthesia_record",),
+    ) == facts
+    assert surgery_doc._with_trigger_document_id(
+        facts,
+        materials=_RowsOnlyMaterials(
+            {"anesthesia_record": ({"record_content": "PRIVATE_BODY"},)}
+        ),
+        source_keys=("anesthesia_record",),
+    ) == facts
 
 
 @pytest.mark.asyncio
@@ -445,7 +740,7 @@ async def test_fully_silent_anesthesia_and_surgery_facts_are_data_gap_not_na():
 
 
 @pytest.mark.asyncio
-async def test_anesthesia_consent_source_unknown_is_data_gap_not_missing_defect():
+async def test_missing_consent_is_owned_by_034_and_035_is_not_applicable():
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
         rule_ids=("LX0609-034", "LX0609-035"),
         wrapper_rules=[_wrapper("LX0609-034"), _wrapper("LX0609-035")],
@@ -453,11 +748,14 @@ async def test_anesthesia_consent_source_unknown_is_data_gap_not_missing_defect(
         llm_client=_Client([]),
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
-    assert all(
-        item["metadata"]["reason_code"] == "anesthesia_consent_source_unproven"
-        for item in result.results
+    assert [item["status"] for item in result.results] == [
+        "data_gap",
+        "not_applicable",
+    ]
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "anesthesia_consent_source_unproven"
     )
+    assert result.results[1]["metadata"]["reason_code"] == "anesthesia_consent_absent"
     assert result.llm_call_count == 0
 
 
@@ -518,7 +816,7 @@ async def test_local_anesthesia_is_not_applicable_to_visit_and_record_sheet_rule
 
 
 @pytest.mark.asyncio
-async def test_nonlocal_anesthesia_missing_visit_projection_is_data_gap_not_defect():
+async def test_missing_visits_are_owned_by_036_and_037_is_not_applicable():
     result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
         rule_ids=("LX0609-036", "LX0609-037"),
         wrapper_rules=[_wrapper("LX0609-036"), _wrapper("LX0609-037")],
@@ -530,7 +828,10 @@ async def test_nonlocal_anesthesia_missing_visit_projection_is_data_gap_not_defe
         llm_client=_Client([]),
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert [item["status"] for item in result.results] == [
+        "data_gap",
+        "not_applicable",
+    ]
     assert result.llm_call_count == 0
 
 
@@ -624,7 +925,15 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
             decisions=(decision,),
         )[0].final_state
         for decision in result.decisions
-    ] == ["non_compliant", *("data_gap",) * 6]
+    ] == [
+        "non_compliant",
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
+        "not_applicable",
+        "data_gap",
+    ]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert secret not in repr(result)
@@ -658,7 +967,7 @@ async def test_typed_039_empty_surgery_is_not_applicable_after_binding_contract(
 
 
 @pytest.mark.asyncio
-async def test_typed_039_mr_surgery_positive_prevents_false_not_applicable():
+async def test_typed_039_ungraded_mr_operation_is_not_a_traditional_surgery_trigger():
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         rows = (
@@ -693,9 +1002,9 @@ async def test_typed_039_mr_surgery_positive_prevents_false_not_applicable():
     )
 
     assert result.results == ()
-    assert result.decisions[0].applicability.value == "unknown"
-    assert result.decisions[0].evidence_state.value == "data_gap"
-    assert result.decisions[0].reason_code == "applicability_source_gap"
+    assert result.decisions[0].applicability.value == "not_applicable"
+    assert result.decisions[0].evidence_state.value == "sufficient"
+    assert result.decisions[0].reason_code == "performed_event_absent"
     assert result.llm_call_count == result.total_tokens == 0
 
 

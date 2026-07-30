@@ -21,6 +21,7 @@ SURGERY_TIME_FIELDS = (
 )
 CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY = "inpat_nondrug_order.unstable_order"
 CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY = "inpat_nondrug_order.severity_order"
+CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
 CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
 EVALUATION_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 AUTHORITATIVE_DOCUMENT_TIME_FIELDS = (
@@ -57,6 +58,7 @@ _NATIVE_SOURCE_FIELDS = {
         "record_time",
         "admission_datetime",
         "chief_complaint",
+        "history_of_present_illness",
         "record_content",
     ),
     "admission_record_diagnosis": (
@@ -74,6 +76,7 @@ _NATIVE_SOURCE_FIELDS = {
         "document_id",
         "document_title",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
+        "case_characteristic",
         "record_content",
     ),
     "rescue_record": (
@@ -95,12 +98,39 @@ _NATIVE_SOURCE_FIELDS = {
         "record_content",
         "record_time",
     ),
+    "anesthesia_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "record_content",
+    ),
+    "preane_surveil_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "condition_summary",
+        "planned_anesthesia_method",
+        "ASA_level",
+        "record_content",
+        "anesthetist_sign",
+    ),
+    "postane_surveil_record": (
+        "document_id",
+        "document_title",
+        "record_time",
+        "surgery_name",
+        "anesthesia_method",
+        "resume_descirption",
+        "record_content",
+        "anesthetist_sign",
+    ),
     "mr_surgery": (
         "surgery_code",
         "surgery_name",
         "surgical_level",
         "surgial_incision_level",
         "surgical_incision_level",
+        "anesthesia_method",
         "surgery_begin_datetime",
         "surgery_end_datetime",
     ),
@@ -139,6 +169,7 @@ _NATIVE_SOURCE_FIELDS = {
         "exam_name",
         "exam_item_name",
         "item_name",
+        "performed_dept",
         "request_time",
         "exam_time",
         "exam_datetime",
@@ -240,6 +271,14 @@ _NATIVE_SOURCE_FIELDS = {
         "update_time",
         "record_content",
     ),
+    CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
+        "order_id",
+        "order_name",
+        "order_status",
+        "start_time",
+        "order_time",
+        "prescribed_datetime",
+    ),
     "discharge_record": (
         "document_id",
         "document_title",
@@ -294,6 +333,9 @@ _SNAPSHOT_SOURCE_FIELDS = {
         "rescue_record",
         "mr_bloodtrans",
         "bloodtrans_record",
+        "anesthesia_record",
+        "preane_surveil_record",
+        "postane_surveil_record",
         "mr_surgery",
         "presurg_discussion",
         "consultation_record",
@@ -319,6 +361,9 @@ _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY] = (
     "status_state",
     "prescribed_datetime",
     "row_ref",
+)
+_SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY] = (
+    _NATIVE_SOURCE_FIELDS[CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY]
 )
 _SNAPSHOT_SOURCE_FIELDS[CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY] = (
     "discharge_datetime",
@@ -791,14 +836,14 @@ def read_luxian_0609_severity_order_rows(
     )
 
 
-def read_luxian_0609_discharge_horizon_rows(
+def read_luxian_0609_exam_lab_order_rows(
     *,
     institute_id: str,
     patient_id: str,
     visit_id: str,
     source_schema: str | None,
 ) -> SnapshotSourceRows:
-    """只读取住院主索引的权威出院时间；不扩展既有登记投影。"""
+    """只读取当前住院 CT/MRI/培养/药敏医嘱，避免被全量医嘱截断。"""
 
     trusted_schema = bundle_assembly._default_source_schema()
     if source_schema not in (None, trusted_schema):
@@ -806,46 +851,139 @@ def read_luxian_0609_discharge_horizon_rows(
     engine = bundle_assembly.engine
     if engine is None:
         raise SourceEvidenceUnavailable()
-    table_name = "inpat_registration"
+    table = "inpat_nondrug_order"
     try:
-        columns = set(bundle_assembly._get_table_columns(trusted_schema, table_name))
+        columns = set(bundle_assembly._get_table_columns(trusted_schema, table))
     except Exception:
         raise SourceEvidenceQueryError() from None
+    if not {"institute_id", "patient_id", "visit_id", "order_name"}.issubset(columns):
+        raise SourceEvidenceUnavailable()
+    selected = [
+        field
+        for field in (
+            "order_id", "order_name", "order_status",
+            "start_time", "order_time", "prescribed_datetime",
+        )
+        if field in columns
+    ]
+    select_sql = ", ".join(bundle_assembly._quote_ident(field) for field in selected)
+    order_sql = ", ".join(
+        f"{bundle_assembly._quote_ident(field)} ASC NULLS LAST"
+        for field in ("prescribed_datetime", "order_time", "order_id", "order_name")
+        if field in columns
+    )
+    limit_rows = 50
+    order_name = bundle_assembly._quote_ident("order_name")
+    sql = (
+        f"SELECT {select_sql} FROM {bundle_assembly._qualified_table(trusted_schema, table)} "
+        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+        f"AND (UPPER({order_name}) LIKE :ct_name OR UPPER({order_name}) LIKE :mri_name "
+        f"OR {order_name} LIKE :magnetic_name OR {order_name} LIKE :nmr_name "
+        f"OR {order_name} LIKE :culture_name OR {order_name} LIKE :ast_name) "
+        f"ORDER BY {order_sql} LIMIT :limit_rows"
+    )
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                bundle_assembly.text(sql),
+                {
+                    "institute_id": institute_id,
+                    "patient_id": patient_id,
+                    "visit_id": visit_id,
+                    "ct_name": "%CT%",
+                    "mri_name": "%MRI%",
+                    "magnetic_name": "%磁共振%",
+                    "nmr_name": "%核磁%",
+                    "culture_name": "%培养%",
+                    "ast_name": "%药敏%",
+                    "limit_rows": limit_rows + 1,
+                },
+            ).mappings().all()
+    except Exception:
+        raise SourceEvidenceQueryError() from None
+    return SnapshotSourceRows.create(
+        source_key=CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+        rows=rows[:limit_rows],
+        truncated=len(rows) > limit_rows,
+        limit_rows=limit_rows,
+    )
+
+
+def read_luxian_0609_discharge_horizon_rows(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    source_schema: str | None,
+) -> SnapshotSourceRows:
+    """读取本次住院的权威出院时间，登记表缺行时回退病案首页。"""
+
+    trusted_schema = bundle_assembly._default_source_schema()
+    if source_schema not in (None, trusted_schema):
+        raise SourceEvidenceUnavailable()
+    engine = bundle_assembly.engine
+    if engine is None:
+        raise SourceEvidenceUnavailable()
     required = {
         "institute_id",
         "patient_id",
         "visit_id",
         "discharge_datetime",
     }
-    if not required.issubset(columns):
+    raw_rows: list[Mapping[str, Any]] = []
+    selected_table = ""
+    readable_source_found = False
+    query_failed = False
+    for table_name in ("inpat_registration", "mr"):
+        try:
+            columns = set(
+                bundle_assembly._get_table_columns(trusted_schema, table_name)
+            )
+        except Exception:
+            query_failed = True
+            continue
+        if not required.issubset(columns):
+            continue
+        readable_source_found = True
+        sql = (
+            f"SELECT {bundle_assembly._quote_ident('discharge_datetime')} "
+            f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
+            f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
+            f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
+            f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
+            "LIMIT :limit_rows"
+        )
+        try:
+            with engine.connect() as connection:
+                candidate_rows = connection.execute(
+                    bundle_assembly.text(sql),
+                    {
+                        "institute_id": institute_id,
+                        "patient_id": patient_id,
+                        "visit_id": visit_id,
+                        "limit_rows": 2,
+                    },
+                ).mappings().all()
+        except Exception:
+            query_failed = True
+            continue
+        if candidate_rows:
+            raw_rows = list(candidate_rows)
+            selected_table = table_name
+            break
+    if not readable_source_found:
+        if query_failed:
+            raise SourceEvidenceQueryError() from None
         raise SourceEvidenceUnavailable()
-    sql = (
-        f"SELECT {bundle_assembly._quote_ident('discharge_datetime')} "
-        f"FROM {bundle_assembly._qualified_table(trusted_schema, table_name)} "
-        f"WHERE {bundle_assembly._quote_ident('institute_id')} = :institute_id "
-        f"AND {bundle_assembly._quote_ident('patient_id')} = :patient_id "
-        f"AND {bundle_assembly._quote_ident('visit_id')} = :visit_id "
-        "LIMIT :limit_rows"
-    )
-    try:
-        with engine.connect() as connection:
-            raw_rows = connection.execute(
-                bundle_assembly.text(sql),
-                {
-                    "institute_id": institute_id,
-                    "patient_id": patient_id,
-                    "visit_id": visit_id,
-                    "limit_rows": 2,
-                },
-            ).mappings().all()
-    except Exception:
-        raise SourceEvidenceQueryError() from None
     safe_rows = tuple(
         {
             "discharge_datetime": row.get("discharge_datetime"),
             "row_ref": digest_source_evidence(
                 (
                     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+                    selected_table,
                     row.get("discharge_datetime"),
                 )
             ),
@@ -1001,6 +1139,13 @@ def read_luxian_0609_snapshot_source_rows(
         )
     if normalized_source == CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY:
         return read_luxian_0609_severity_order_rows(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+        )
+    if normalized_source == CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY:
+        return read_luxian_0609_exam_lab_order_rows(
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,

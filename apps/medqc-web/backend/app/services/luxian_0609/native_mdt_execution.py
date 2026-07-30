@@ -23,26 +23,6 @@ from .source_evidence_reader import read_luxian_0609_native_source_rows
 RULE_ID = "LX0609-040"
 LEGACY_RULE_IDS = ("SC-083", "CL-108")
 _LEVEL4_VALUES = frozenset({"四级", "4", "Ⅳ", "IV"})
-_KNOWN_LEVEL_VALUES = frozenset(
-    {
-        "一级",
-        "二级",
-        "三级",
-        "四级",
-        "1",
-        "2",
-        "3",
-        "4",
-        "Ⅰ",
-        "Ⅱ",
-        "Ⅲ",
-        "Ⅳ",
-        "I",
-        "II",
-        "III",
-        "IV",
-    }
-)
 _COMPLETED_MDT_PATTERN = re.compile(
     r"多学科会诊记录|经多学科(?:讨论|会诊)[^。；]{0,160}(?:一致认为|讨论后|会诊后)|"
     r"MDT讨论[^。；]{0,160}(?:一致认为|可手术|结论)",
@@ -598,19 +578,13 @@ async def execute_luxian_0609_native_mdt_rule(
         if _clean(row.get("surgical_level")).upper() in _LEVEL4_VALUES
     ]
     if not level4:
-        known = [
-            row
-            for row in performed
-            if _clean(row.get("surgical_level")).upper() in _KNOWN_LEVEL_VALUES
-        ]
-        state = "not_applicable" if len(known) == len(performed) else "data_gap"
-        kind = "trigger_absent" if state == "not_applicable" else "data_gap"
-        reason = (
-            "level4_surgery_absent"
-            if state == "not_applicable"
-            else "surgery_level_unavailable"
+        # 040只由“四级手术”积极事实触发。等级空缺不等于四级手术，
+        # 不能要求病历补充MDT材料；手术等级完整性应由其专属规则处理。
+        return finish(
+            _MdtRuleOutcome(
+                "not_applicable", "trigger_absent", "level4_surgery_absent"
+            )
         )
-        return finish(_MdtRuleOutcome(state, kind, reason))
     level4_session_times = {
         start
         for row in level4

@@ -30,7 +30,13 @@ from app.services.luxian_0609.evidence_snapshot import (
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
-from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+    SnapshotSourceRows,
+)
 from app.services.luxian_0609.source_manifest import QueryStatus
 
 
@@ -39,6 +45,7 @@ _TYPED_SOURCE_KEYS = (
     "exam_item_report",
     "labtest_master",
     "labtest_item_report",
+    "inpat_nondrug_order.exam_lab_order",
     "first_course_record",
     "daily_course_record",
     "senior_course_record",
@@ -52,7 +59,10 @@ def _typed_session(
     monkeypatch,
     *,
     exam_rows: tuple[dict, ...] = (),
+    exam_report_rows: tuple[dict, ...] = (),
     culture_rows: tuple[dict, ...] = (),
+    culture_report_rows: tuple[dict, ...] = (),
+    nondrug_order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] | None = None,
     discharge_horizon_rows: tuple[dict, ...] = (),
     evaluation_horizon_rows: tuple[dict, ...] = (),
@@ -80,9 +90,10 @@ def _typed_session(
 
     rows_by_source = {
         "exam_master": exam_rows,
-        "exam_item_report": (),
+        "exam_item_report": exam_report_rows,
         "labtest_master": culture_rows,
-        "labtest_item_report": (),
+        "labtest_item_report": culture_report_rows,
+        "inpat_nondrug_order.exam_lab_order": nondrug_order_rows,
         "first_course_record": (),
         "daily_course_record": course_rows if course_rows is not None else (
             {
@@ -316,6 +327,38 @@ async def test_generic_ct_mri_and_culture_words_do_not_replace_structured_fact_g
     assert [item["status"] for item in result.results] == ["data_gap"] * 5
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_typed_exam_department_can_prove_non_target_without_model(monkeypatch):
+    """源表未填检查类型时，执行科室仍可明确排除 CT/MRI。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {"performed_dept": "心电图室"},
+            {"performed_dept": "超声医学科"},
+        ),
+        culture_rows=(),
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-010", "LX0609-011", "LX0609-012"),
+        wrapper_rules=[
+            _wrapper(rule_id)
+            for rule_id in ("LX0609-010", "LX0609-011", "LX0609-012")
+        ],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012"),
+    )
+
+    assert [item.applicability.value for item in result.decisions] == [
+        "not_applicable"
+    ] * 3
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -901,6 +944,34 @@ def test_fact_parser_no_course_normalizes_impossible_present_to_absent():
     assert facts[0].course_doc_refs == ()
 
 
+def test_010_accepts_pre_order_reason_from_first_course_record_datetime():
+    """010 不能因源库只填 record_datetime 而漏掉医嘱前首次病程原因。"""
+
+    outcome = exam_lab._order_based_exam_reason_outcome(
+        {
+            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
+                {
+                    "order_name": "颅脑螺旋CT平扫",
+                    "order_status": "新开",
+                    "prescribed_datetime": "2026-07-08 09:05:49",
+                },
+            ),
+            "first_course_record": (
+                {
+                    "record_datetime": "2026-07-07 18:00:41",
+                    "case_characteristic": (
+                        "因头面部外伤伴意识障碍，拟复查头颅CT明确颅脑损伤情况。"
+                    ),
+                },
+            ),
+        }
+    )
+
+    assert outcome is not None
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "exam_order_reason_recorded"
+
+
 @pytest.mark.asyncio
 async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     snapshot, materials = _typed_session(
@@ -941,6 +1012,87 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     assert [item.final_state.value for item in reduced] == ["non_compliant"] * 5
     assert result.llm_call_count == 0
     assert client.prompts == []
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-010"] == {
+        "failure_kind": "exam_lab_requirement_not_documented",
+        "subject": "ct_mri",
+        "requirement": "reason_before_order",
+        "event_phase": "order",
+        "checked_sources": ["exam_lab_order", "course_record"],
+    }
+    assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
+    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
+    assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
+    assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
+
+
+@pytest.mark.asyncio
+async def test_noncompliant_exam_lab_facts_keep_only_explicit_report_document_ids(
+    monkeypatch,
+):
+    """定位只能使用来源行已经投影的 document_id，不能拿业务主键冒充文书。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_name": "胸部CT",
+            "exam_time": "2026-04-26 08:00:00",
+        },),
+        exam_report_rows=({
+            "document_id": "exam-report-document-1",
+            "item_name": "胸部CT",
+            "report_datetime": "2026-04-26 12:00:00",
+        },),
+        culture_rows=({
+            "labtest_subject": "痰培养及药敏",
+        },),
+        culture_report_rows=({
+            "document_id": "lab-report-document-1",
+            "item_name": "痰培养及药敏",
+            "report_time": "2026-04-26 12:00:00",
+        },),
+        course_rows=(),
+        discharge_horizon_rows=({
+            "discharge_datetime": "2026-04-30 12:00:00",
+        },),
+    )
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011", "LX0609-014"),
+        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-014")],
+        evidence_payload={},
+        llm_client=_Client([]),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011", "LX0609-014"),
+    )
+
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-011"]["source_document_ids"] == [
+        "exam-report-document-1"
+    ]
+    assert facts["LX0609-014"]["source_document_ids"] == [
+        "lab-report-document-1"
+    ]
+    assert [item.qc_direction.value for item in result.decisions] == [
+        "defect",
+        "defect",
+    ]
+
+
+def test_exam_lab_document_locator_refuses_non_document_business_ids():
+    assert exam_lab._target_source_document_ids(
+        {
+            "exam_item_report": ({
+                "id": "database-row-id-must-not-be-used",
+                "item_name": "胸部CT",
+            },),
+            "inpat_nondrug_order.exam_lab_order": ({
+                "order_id": "order-id-must-not-be-used",
+                "order_name": "胸部CT",
+            },),
+        },
+        fact_kind="exam",
+    ) == ()
 
 
 @pytest.mark.parametrize("mutation", ("missing", "duplicate", "extra"))
@@ -1137,6 +1289,112 @@ async def test_typed_all_empty_complete_sources_are_not_applicable_in_requested_
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_empty_exam_lab_tables_use_orders_without_fabricating_report_time(
+):
+    """医嘱可证明触发和检查前原因，但不能伪装实际检查/报告时间。"""
+    rows_by_source = {
+        CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: (
+            {
+                "order_id": "CT-1",
+                "order_name": "头颅CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 14:31:00",
+            },
+            {
+                "order_id": "CULTURE-1",
+                "order_name": "痰一般细菌培养及药敏",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 20:27:00",
+            },
+        ),
+        "daily_course_record": (
+            *tuple(
+                {
+                    "record_time": f"2026-07-{day:02d} 08:00:00",
+                    "record_content": "常规病程记录，生命体征平稳。",
+                }
+                for day in range(1, 9)
+            ),
+            {
+                "record_time": "2026-07-07 13:50:00",
+                "record_content": "因重型颅脑损伤，拟行头颅CT明确颅内出血情况。",
+            },
+            {
+                "record_time": "2026-07-07 18:04:00",
+                "record_content": (
+                    "头颅CT提示右侧硬膜下血肿，结合影像结果考虑急诊手术。"
+                ),
+            },
+            {
+                "record_time": "2026-07-12 10:30:00",
+                "record_content": (
+                    "痰培养提示金黄色葡萄球菌4+、肺炎克雷伯菌4+，"
+                    "结合药敏改用美罗培南抗感染。"
+                ),
+            },
+        ),
+        "inpat_registration.discharge_horizon": (
+            {"discharge_datetime": "2026-07-13 18:00:00"},
+        ),
+    }
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == "inpat_nondrug_order":
+            raise AssertionError("010-015 不得读取会被全量截断的通用医嘱源")
+        rows = rows_by_source.get(source_key, ())
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        evaluation_as_of_date="2026-07-16",
+        created_at="2026-07-17T07:00:00+08:00",
+        row_reader=reader,
+    )
+    snapshot, materials = session.snapshot, session.materials
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in exam_lab.EXAM_LAB_RULE_IDS],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=exam_lab.EXAM_LAB_RULE_IDS,
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == [
+        "compliant",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+    ]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert all(item.fact_refs for item in result.decisions)
+    assert CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY in calls
+    assert "inpat_nondrug_order" not in calls
 
 
 @pytest.mark.asyncio
@@ -1535,6 +1793,79 @@ async def test_typed_source_error_and_unavailable_are_distinct_and_zero_model(mo
     assert error_result.decisions[0].reason_code == "source_query_error"
     assert unavailable_result.decisions[0].evidence_state.value == "data_gap"
     assert unavailable_result.decisions[0].reason_code == "source_unavailable"
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_scoped_exam_lab_order_truncation_cannot_be_bypassed_by_course_fallback(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        nondrug_order_rows=(
+            {
+                "order_id": "CT-1",
+                "order_name": "头颅CT平扫",
+                "prescribed_datetime": "2026-07-07 14:31:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 18:04:00",
+                "record_content": "头颅CT提示右侧硬膜下血肿。",
+            },
+        ),
+        source_states={CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY: "truncated"},
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-010",),
+        wrapper_rules=[_wrapper("LX0609-010")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-010",),
+    )
+
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    assert result.decisions[0].reason_code == "source_unavailable"
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_cancelled_exam_order_does_not_create_native_trigger(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        nondrug_order_rows=(
+            {
+                "order_id": "CT-CANCELLED",
+                "order_name": "头颅CT平扫",
+                "order_status": "已撤销",
+                "prescribed_datetime": "2026-07-07 14:31:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 13:50:00",
+                "record_content": "因头痛拟行头颅CT检查。",
+            },
+        ),
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-010",),
+        wrapper_rules=[_wrapper("LX0609-010")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-010",),
+    )
+
+    assert result.decisions[0].applicability.value == "not_applicable"
     assert client.prompts == []
 
 

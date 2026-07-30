@@ -88,7 +88,9 @@ def _typed_decision_session(
     daily_content: str | None = None,
 ):
     bloodtrans_material = (
-        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
+        "输血前评估：患者具有输血指征，输血目的为纠正贫血，血红蛋白降低，"
+        "既往无输血不良反应，生命体征平稳；"
+        "开始时间14:20，输注去白悬浮红细胞2U，"
         "结束时间16:10。输血过程中严密观察，生命体征平稳，"
         "未见寒战、发热及其他输血不良反应。"
         if bloodtrans_content is None
@@ -352,10 +354,10 @@ async def test_typed_044_material_change_changes_state_snapshot_and_refs(monkeyp
 @pytest.mark.parametrize(
     ("source_mode", "expected_state", "expected_reason"),
     (
-        ("available", "compliant", "requirement_satisfied"),
+        ("available", "non_compliant", "requirement_violated"),
         ("empty", "not_applicable", "trigger_absent_complete"),
-        ("unavailable", "compliant", "requirement_satisfied"),
-        ("error", "compliant", "requirement_satisfied"),
+        ("unavailable", "data_gap", "source_unavailable"),
+        ("error", "technical_error", "source_query_error"),
     ),
 )
 @pytest.mark.asyncio
@@ -571,8 +573,8 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         "LX0609-041": "data_gap",
         "LX0609-042": "data_gap",
         "LX0609-043": "data_gap",
-        "LX0609-044": "compliant",
-        "LX0609-048": "data_gap",
+        "LX0609-044": "non_compliant",
+        "LX0609-048": "not_applicable",
         "LX0609-049": "data_gap",
     }
     bound = bind_and_reduce_luxian_0609_rule_decisions(
@@ -619,9 +621,9 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
             "daily_course_record": [
                 {"record_content": "病程中记录了输血后观察。"}
             ],
-            "first_course_record": [{"record_content": "首次病程记录。"}],
+            "postsurg_firstcourse_record": [{"record_content": "首次病程记录。"}],
             "mr_surgery": [{"record_content": "手术结构化摘要。"}],
-            "postsurg_firstcourse_record": [
+            "first_course_record": [
                 {"record_content": "术后首次病程记录。"}
             ],
             "presurg_discussion": [{"record_content": "术前讨论。"}],
@@ -667,7 +669,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["data_gap"] * len(selected)
+    ] == ["data_gap", "data_gap", "data_gap", "not_applicable", "data_gap"]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert private_marker not in repr(result)
@@ -915,7 +917,7 @@ async def test_transfusion_trigger_consumes_shared_material_without_live_reader(
     assert result.results[0]["status"] == "data_gap"
     assert (
         result.results[0]["metadata"]["reason_code"]
-        == "transfusion_rule_projection_incomplete"
+        == "consent_source_unavailable"
     )
 
 
@@ -1030,18 +1032,18 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
 
     assert [item["rule_id"] for item in result.results] == list(transfusion.TRANSFUSION_RULE_IDS)
     assert [item["status"] for item in result.results] == [
-        "compliant",
-        "non_compliant",
+        "data_gap",
+        "data_gap",
         "data_gap",
         "compliant",
         "compliant",
         "non_compliant",
         "compliant",
-        "compliant",
-        "non_compliant",
+        "not_applicable",
+        "data_gap",
     ]
-    assert result.llm_call_count == 5
-    assert result.total_tokens == 550
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
     assert all("SHOULD_NOT_LEAK" not in prompt for prompt in client.prompts)
 
 
@@ -1612,7 +1614,29 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     assert result.results[1]["metadata"]["reason_code"] == (
         "transfusion_purpose_or_indication_missing"
     )
-    assert result.results[2]["status"] == "compliant"
+    assert result.results[2]["status"] == "non_compliant"
+    assert result.results[2]["metadata"]["reason_code"] == (
+        "posttransfusion_evaluation_missing"
+    )
+    assert dict(result.customer_display_facts) == {
+        "LX0609-044": {
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "pretransfusion_assessment",
+            "checked_sources": [
+                "bloodtrans_record", "blood_application", "course_record",
+            ],
+        },
+        "LX0609-046": {
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "purpose_or_indication",
+            "checked_sources": ["bloodtrans_record"],
+        },
+        "LX0609-047": {
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "posttransfusion_evaluation",
+            "checked_sources": ["bloodtrans_record", "course_record"],
+        },
+    }
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1683,7 +1707,7 @@ async def test_043_incomplete_test_contract_is_data_gap_without_model(monkeypatc
         assert result.results[0]["status"] == "data_gap"
         assert (
             result.results[0]["metadata"]["reason_code"]
-            == "pretransfusion_test_contract_unavailable"
+            == "pretransfusion_item_contract_unavailable"
         )
         assert result.results[0]["metadata"]["executor_type"] == "program"
         assert result.llm_call_count == 0
@@ -2108,10 +2132,12 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         source_schema=None,
         llm_client=gray_client,
     )
-    assert gray.results[0]["status"] == "compliant"
-    assert gray.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
-    assert gray.llm_call_count == 1
-    assert len(gray_client.prompts) == 1
+    assert gray.results[0]["status"] == "non_compliant"
+    assert gray.results[0]["metadata"]["reason_code"] == (
+        "pretransfusion_assessment_missing"
+    )
+    assert gray.llm_call_count == 0
+    assert gray_client.prompts == []
 
     split_client = _Client([{"is_compliant": False}])
     split = await transfusion.execute_luxian_0609_native_transfusion_rules(
@@ -2160,7 +2186,7 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
 
 
 @pytest.mark.asyncio
-async def test_044_same_record_transfusion_purpose_and_individual_basis_is_compliant_without_model(
+async def test_044_same_record_purpose_without_assessment_marker_is_non_compliant(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
@@ -2188,9 +2214,9 @@ async def test_044_same_record_transfusion_purpose_and_individual_basis_is_compl
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant"]
     assert result.results[0]["metadata"]["reason_code"] == (
-        "pretransfusion_assessment_complete"
+        "pretransfusion_assessment_missing"
     )
     assert result.results[0]["metadata"]["executor_type"] == "program"
     assert result.llm_call_count == 0
@@ -2199,7 +2225,7 @@ async def test_044_same_record_transfusion_purpose_and_individual_basis_is_compl
 
 
 @pytest.mark.asyncio
-async def test_044_transfusion_purpose_without_risk_assessment_uses_one_cropped_llm_call(
+async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_without_llm(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
@@ -2222,12 +2248,120 @@ async def test_044_transfusion_purpose_without_risk_assessment_uses_one_cropped_
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant"]
     assert result.results[0]["metadata"]["reason_code"] == (
-        "transfusion_customer_prompt"
+        "pretransfusion_assessment_missing"
     )
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_048_dedicated_postop_course_omits_surgical_transfusion_is_defect(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-048",),
+        wrapper_rules=[_wrapper("LX0609-048")],
+        evidence_payload=_documents(
+            surgery_record=[
+                {"surgery_process": "术中出血约800ml，输注红细胞2U。"}
+            ],
+            anesthesia_record=[{"record_content": ""}],
+            postsurg_firstcourse_record=[
+                {"record_content": "术后患者生命体征平稳，切口敷料干燥。"}
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "postop_first_course_transfusion_omitted"
+    )
+    assert result.customer_display_facts == ((
+        "LX0609-048",
+        {
+            "failure_kind": "transfusion_requirement_not_documented",
+            "requirement": "postop_first_course_transfusion",
+            "checked_sources": ["surgery_record", "postsurg_firstcourse_record"],
+        },
+    ),)
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_048_without_credible_intraoperative_transfusion_is_not_applicable(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-048",),
+        wrapper_rules=[_wrapper("LX0609-048")],
+        evidence_payload=_documents(
+            surgery_record=[{"record_content": "中心静脉置管术，过程顺利。"}],
+            anesthesia_record=[],
+            postsurg_firstcourse_record=[],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == "not_applicable"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "intraoperative_transfusion_fact_absent"
+    )
+    assert result.results[0]["findings"] == "未发现可信的术中输血事实，本规则不适用。"
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_conservative_transfusion_gaps_explain_missing_material_not_patient_defect(
+    monkeypatch,
+):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    selected = ("LX0609-041", "LX0609-042", "LX0609-043", "LX0609-049")
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["data_gap"] * 4
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "consent_source_unavailable",
+        "consent_signature_contract_unavailable",
+        "pretransfusion_item_contract_unavailable",
+        "billing_linkage_source_unavailable",
+    ]
+    assert all(
+        item["metadata"]["data_gap_kind"] == "system_data_contract_gap"
+        and item["metadata"]["gap_owner"] == "system_integration"
+        for item in result.results
+    )
+    customer_copy = " ".join(
+        str(item[field])
+        for item in result.results
+        for field in ("findings", "suggestion")
+    )
+    assert "请补充患者资料" not in customer_copy
+    assert "数据源" not in customer_copy
+    assert "字段映射" not in customer_copy
+    assert "契约" not in customer_copy
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio

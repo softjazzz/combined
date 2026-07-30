@@ -92,6 +92,11 @@ _AUTHORITATIVE_RECORD_TIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}"
     r"(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_TRAUMA_DIAGNOSIS_PATTERN = re.compile(
+    r"外伤|创伤|颅内血肿|硬膜外血肿|硬膜下血肿"
+)
+_RESCUE_SURGERY_PATTERN = re.compile(r"血肿清除|去骨瓣减压|脑疝")
+_MALIGNANT_SURGERY_PATTERN = re.compile(r"恶性|癌|肿瘤|淋巴结清扫|根治术")
 
 _RULE_SOURCES = {
     "LX0609-003": ("surgery_record", "anesthesia_record"),
@@ -120,6 +125,7 @@ class NativeSurgeryGateExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -132,6 +138,7 @@ class _SurgeryTextOutcome:
     rule_id: str
     status: str
     reason_code: str
+    customer_display_facts: Mapping[str, Any] | None = None
 
 
 def _clean(value: Any) -> str:
@@ -199,6 +206,18 @@ def _source_rows(
     )
 
 
+def _first_source_document_id(
+    documents: Mapping[str, Any], source_key: str
+) -> str:
+    """只使用当前受控来源行明确提供的文书 ID，禁止按正文或标题猜测。"""
+
+    for row in _source_rows(documents, source_key):
+        candidate = _clean(row.get("document_id") or row.get("id"))
+        if candidate:
+            return candidate
+    return ""
+
+
 def _row_text(row: Mapping[str, Any]) -> str:
     approved_keys = (
         "content",
@@ -206,6 +225,7 @@ def _row_text(row: Mapping[str, Any]) -> str:
         "assembled_text",
         "record_time",
         "surgery_name",
+        "surgery_process",
         "surgeon",
         "recorder",
         "signer",
@@ -220,6 +240,79 @@ def _row_text(row: Mapping[str, Any]) -> str:
     )
 
 
+def _deterministic_024_outcome(
+    *,
+    surgery_rows: Sequence[Mapping[str, Any]],
+) -> _SurgeryTextOutcome | None:
+    """只收口手术记录中高特异性的非恶性急救手术事实。"""
+
+    text = _clean(" ".join(_row_text(row) for row in surgery_rows))
+    if not text:
+        return None
+    if (
+        _TRAUMA_DIAGNOSIS_PATTERN.search(text)
+        and _RESCUE_SURGERY_PATTERN.search(text)
+        and not _MALIGNANT_SURGERY_PATTERN.search(text)
+    ):
+        return _SurgeryTextOutcome(
+            "LX0609-024", "not_applicable", "surgery_text_fact_absent"
+        )
+    return None
+
+
+def _structured_nonmalignant_diagnoses(
+    diagnosis_rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """诊断编码完整且均不在ICD恶性肿瘤C段时，明确排除024适用性。"""
+
+    codes = tuple(
+        _clean(row.get("diagnosis_code")).upper().replace(".", "")
+        for row in diagnosis_rows
+    )
+    return bool(codes) and all(codes) and not any(
+        re.fullmatch(r"C(?:[0-8]\d|9[0-7]).*", code) for code in codes
+    )
+
+
+def _structured_028_not_applicable(
+    *,
+    surgery_rows: Sequence[Mapping[str, Any]],
+    mr_surgery_rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """没有手术记录且结构化手术行无I/II切口积极事实时，不触发028。"""
+
+    if surgery_rows or not mr_surgery_rows:
+        return False
+    target_classes = {"I", "II", "Ⅰ", "Ⅱ"}
+    incision_classes = {
+        _clean(
+            row.get("surgical_incision_level") or row.get("surgial_incision_level")
+        ).upper()
+        for row in mr_surgery_rows
+    }
+    return not bool(incision_classes.intersection(target_classes))
+
+
+def _qualified_traditional_surgery_present(
+    rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    """只以手术等级或切口等级确认传统手术，治疗性操作不触发手术专属规则。"""
+
+    known_levels = {
+        "一级", "二级", "三级", "四级", "1", "2", "3", "4",
+        "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "I", "II", "III", "IV",
+    }
+    known_incisions = {"I", "II", "III", "IV", "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ"}
+    return any(
+        _clean(row.get("surgical_level")).upper() in known_levels
+        or _clean(
+            row.get("surgical_incision_level") or row.get("surgial_incision_level")
+        ).upper()
+        in known_incisions
+        for row in rows
+    )
+
+
 def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
     parts: list[str] = []
     for source_key in _RULE_SOURCES[rule_id]:
@@ -231,11 +324,20 @@ def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
 
 def _prompt(wrapper: Mapping[str, Any], context: str) -> str:
     custom = _MAPPING_LINE_PATTERN.sub("", str(wrapper.get("custom_prompt") or ""))
-    return (
+    prompt = (
         custom.replace("{defect_level}", str(wrapper.get("defect_level") or ""))
         .replace("{medical_text}", context)
         .strip()
     )
+    rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+    if rule_id == "LX0609-025":
+        prompt += (
+            "\n补充输出要求：若判定不合规，必须同时返回 missing_fields 数组；仅可使用"
+            "implant_name、implant_type、implant_specification、implant_material、"
+            "implant_quantity、implant_barcode。数组只列本次手术记录中明确缺失的字段；"
+            "无法确定时返回空数组。"
+        )
+    return prompt
 
 
 def _response_text(response: Mapping[str, Any]) -> str:
@@ -247,7 +349,7 @@ def _response_text(response: Mapping[str, Any]) -> str:
     return str(response.get("content") or response.get("text") or "")
 
 
-def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+def _parse_response_payload(response: Mapping[str, Any]) -> Mapping[str, Any] | None:
     cleaned = re.sub(
         r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.IGNORECASE
     ).strip()
@@ -258,8 +360,27 @@ def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
         payload = json.loads(match.group(0))
     except (TypeError, ValueError):
         return None
+    return payload if isinstance(payload, Mapping) else None
+
+
+def _parse_is_compliant(response: Mapping[str, Any]) -> bool | None:
+    payload = _parse_response_payload(response)
+    if payload is None:
+        return None
     value = payload.get("is_compliant") if isinstance(payload, Mapping) else None
     return value if isinstance(value, bool) else None
+
+
+def _parse_implant_missing_fields(response: Mapping[str, Any]) -> tuple[str, ...]:
+    payload = _parse_response_payload(response)
+    values = payload.get("missing_fields") if payload is not None else None
+    if not isinstance(values, list):
+        return ()
+    allowed = {
+        "implant_name", "implant_type", "implant_specification",
+        "implant_material", "implant_quantity", "implant_barcode",
+    }
+    return tuple(value for value in values if value in allowed)
 
 
 def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
@@ -281,6 +402,7 @@ def _result(
     completion_tokens: int = 0,
     total_tokens: int = 0,
     api_time: float = 0.0,
+    customer_display_facts: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     item = build_luxian_0609_native_result(
         rule_id=rule_id,
@@ -301,6 +423,8 @@ def _result(
             "api_time": api_time,
         }
     )
+    if customer_display_facts is not None:
+        metadata["customer_display_facts"] = dict(customer_display_facts)
     item["metadata"] = metadata
     return item
 
@@ -361,6 +485,7 @@ def _typed_003_decision(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] | None = None,
 ) -> RuleDecision:
     """用同一 Evidence Session 的权威时间完成 003 判定。"""
 
@@ -387,7 +512,13 @@ def _typed_003_decision(
         if key in observations
     )
 
-    def decision(final_state: str, reason_code: str) -> RuleDecision:
+    def decision(
+        final_state: str,
+        reason_code: str,
+        display_facts: Mapping[str, Any] | None = None,
+    ) -> RuleDecision:
+        if display_facts is not None and customer_display_facts is not None:
+            customer_display_facts.append(("LX0609-003", display_facts))
         applicability, evidence_state, qc_direction = {
             "compliant": (
                 ApplicabilityState.APPLICABLE,
@@ -462,6 +593,20 @@ def _typed_003_decision(
 
     mr_rows = support_rows["mr_surgery"]
     if not surgery_rows:
+        if (
+            observations["mr_surgery"].query_state.value == "available"
+            and observations["mr_surgery"].completeness.value == "complete"
+            and mr_rows
+            and not _qualified_traditional_surgery_present(mr_rows)
+        ):
+            return decision(
+                "not_applicable",
+                "performed_event_absent",
+                {
+                    "failure_kind": "qualified_surgery_absent",
+                    "performed_surgery_confirmed": False,
+                },
+            )
         application_observation = observations["surgery_application"]
         order_observation = observations["inpat_nondrug_order"]
         if any(
@@ -499,10 +644,17 @@ def _typed_003_decision(
             and not support_rows["surgery_application"]
             and not has_surgery_order
         ):
-            return decision("not_applicable", "performed_event_absent")
+            return decision(
+                "not_applicable",
+                "performed_event_absent",
+                {
+                    "failure_kind": "surgery_not_performed",
+                    "performed_surgery_confirmed": False,
+                },
+            )
         return decision("data_gap", "authoritative_time_missing")
 
-    intervals: list[timedelta] = []
+    intervals: list[tuple[timedelta, datetime, datetime, str | None]] = []
     incomplete_performed_row = False
     fallback_resolved = False
     for row in surgery_rows:
@@ -517,7 +669,8 @@ def _typed_003_decision(
         if interval.total_seconds() < 0:
             incomplete_performed_row = True
             continue
-        intervals.append(interval)
+        document_id = str(row.get("document_id") or "").strip() or None
+        intervals.append((interval, surgery_end_time, record_time, document_id))
 
     # 当 surgery_record 自身没有批准手术时间时，仅允许唯一 mr_surgery 时间
     # 与唯一手术记录时间配对；多记录无关联键时必须保守为数据不足。
@@ -547,13 +700,59 @@ def _typed_003_decision(
         ):
             interval = record_times[0] - mr_end_times[0]
             if interval.total_seconds() >= 0:
-                intervals.append(interval)
+                document_id = (
+                    str(surgery_rows[0].get("document_id") or "").strip() or None
+                )
+                intervals.append((interval, mr_end_times[0], record_times[0], document_id))
                 fallback_resolved = True
 
-    if any(interval > timedelta(hours=24) for interval in intervals):
-        return decision("non_compliant", "threshold_exceeded")
+    late_interval = next(
+        (
+            item
+            for item in intervals
+            if item[0] > timedelta(hours=24)
+        ),
+        None,
+    )
+    if late_interval is not None:
+        interval, surgery_end_time, record_time, source_document_id = late_interval
+        display_facts: dict[str, Any] = {
+            "failure_kind": "surgery_record_late",
+            "performed_surgery_confirmed": True,
+            "surgery_end_time": surgery_end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "record_time": record_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "elapsed_hours": round(interval.total_seconds() / 3600, 2),
+            "threshold_hours": 24,
+            "source_label": "手术记录",
+        }
+        if source_document_id:
+            display_facts["source_document_id"] = source_document_id
+        return decision(
+            "non_compliant",
+            "threshold_exceeded",
+            display_facts,
+        )
     if intervals and (not incomplete_performed_row or fallback_resolved):
-        return decision("compliant", "requirement_within_threshold")
+        interval, surgery_end_time, record_time, source_document_id = min(
+            intervals,
+            key=lambda item: item[2],
+        )
+        display_facts = {
+            "failure_kind": "surgery_record_within_threshold",
+            "performed_surgery_confirmed": True,
+            "surgery_end_time": surgery_end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "record_time": record_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "elapsed_hours": round(interval.total_seconds() / 3600, 2),
+            "threshold_hours": 24,
+            "source_label": "手术记录",
+        }
+        if source_document_id:
+            display_facts["source_document_id"] = source_document_id
+        return decision(
+            "compliant",
+            "requirement_within_threshold",
+            display_facts,
+        )
     mr_observation = observations["mr_surgery"]
     if mr_observation.query_state.value == "unavailable":
         return decision("data_gap", "source_unavailable")
@@ -638,6 +837,39 @@ def _typed_conservative_surgery_gate_decision(
             qc_direction=QcDirection.UNKNOWN,
             reason_code="source_truncated",
         )
+
+    # 033只检查“已有手术记录时是否缺手术知情同意书”。手术记录来源已完整
+    # 查询且为空时，缺手术记录由030负责，不能把033继续推入同意书缺口。
+    if (
+        rule_id == "LX0609-033"
+        and surgery_observation.query_state.value == "empty"
+        and surgery_observation.completeness.value == "complete"
+    ):
+        return decision(
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="performed_event_absent",
+        )
+
+    if (
+        rule_id in {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031"}
+        and surgery_observation.query_state.value == "empty"
+        and surgery_observation.completeness.value == "complete"
+        and mr_observation.query_state.value == "available"
+        and mr_observation.completeness.value == "complete"
+    ):
+        try:
+            mr_rows = tuple(materials.rows("mr_surgery"))
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            mr_rows = ()
+        if mr_rows and not _qualified_traditional_surgery_present(mr_rows):
+            return decision(
+                applicability=ApplicabilityState.NOT_APPLICABLE,
+                evidence_state=EvidenceState.SUFFICIENT,
+                qc_direction=QcDirection.UNKNOWN,
+                reason_code="performed_event_absent",
+            )
 
     performed_state = _snapshot_performed_surgery_state(snapshot)
     if performed_state == "negative":
@@ -728,6 +960,11 @@ def _surgery_text_outcome(
     """LLM 只抽取事实；规则状态、边界和多事件优先级由 Python 合成。"""
 
     event_states: list[str] = []
+    missing_implant_fields: set[str] = set()
+    implant_source_document_id = ""
+    missing_consent_signatures: set[str] = set()
+    lymph_node_checked_sources: tuple[str, ...] = ()
+    prophylaxis_display_facts: Mapping[str, Any] | None = None
     for fact in facts:
         if rule_id == "LX0609-024":
             if fact.surgery_occurrence == "planned":
@@ -742,23 +979,58 @@ def _surgery_text_outcome(
                 event_states.append("compliant")
             elif fact.lymph_node_documentation == "not_documented":
                 event_states.append("non_compliant")
+                lymph_node_checked_sources = tuple(
+                    dict.fromkeys(
+                        source_key
+                        for evidence_ref in fact.evidence_refs
+                        if (
+                            source_key := projection.document_source_keys.get(evidence_ref)
+                        )
+                        in {
+                            "surgery_record",
+                            "pathology_exam_master",
+                            "pathology_exam_report",
+                        }
+                    )
+                )
             else:
                 event_states.append("data_gap")
         elif rule_id == "LX0609-025":
             # 只有文书明确“本次未植入”才可判不适用。泛耗材、拟植入、
             # 取出旧物与沉默均不能被偷换成“未植入”。
-            if fact.implant_use == "explicit_no_implant":
+            # 025 的事实结论只能针对模型同时确认的“已实施本次手术”。手术
+            # 发生事实不清时，不能把一段文书的沉默写成“未使用植入物”。
+            if fact.surgery_occurrence != "performed":
+                event_states.append("data_gap")
+            elif fact.implant_use == "explicit_no_implant":
                 event_states.append("not_applicable")
             elif fact.implant_use != "actual_permanent_implant":
                 event_states.append("data_gap")
             else:
                 field_states = (
-                    fact.implant_name, fact.implant_type, fact.implant_specification,
-                    fact.implant_material, fact.implant_quantity, fact.implant_barcode,
+                    ("implant_name", fact.implant_name),
+                    ("implant_type", fact.implant_type),
+                    ("implant_specification", fact.implant_specification),
+                    ("implant_material", fact.implant_material),
+                    ("implant_quantity", fact.implant_quantity),
+                    ("implant_barcode", fact.implant_barcode),
                 )
-                if "missing" in field_states:
+                missing_implant_fields.update(
+                    field_name
+                    for field_name, field_state in field_states
+                    if field_state == "missing"
+                )
+                if not implant_source_document_id:
+                    for evidence_ref in fact.evidence_refs:
+                        if projection.document_source_keys.get(evidence_ref) != "surgery_record":
+                            continue
+                        candidate = _clean(projection.document_source_ids.get(evidence_ref))
+                        if candidate:
+                            implant_source_document_id = candidate
+                            break
+                if any(field_state == "missing" for _, field_state in field_states):
                     event_states.append("non_compliant")
-                elif "unknown" in field_states:
+                elif any(field_state == "unknown" for _, field_state in field_states):
                     event_states.append("data_gap")
                 else:
                     event_states.append("compliant")
@@ -820,8 +1092,28 @@ def _surgery_text_outcome(
                             event_states.append("data_gap")
                         else:
                             event_states.append("non_compliant_extension_missing")
+                            prophylaxis_display_facts = {
+                                "failure_kind": "prophylaxis_extension_reason_missing",
+                                "incision_class": fact.incision_class,
+                                "start_time": start.value.strftime("%Y-%m-%d %H:%M:%S"),
+                                "end_time": end.value.strftime("%Y-%m-%d %H:%M:%S"),
+                                "duration_hours": round(
+                                    duration.total_seconds() / 3600, 2
+                                ),
+                                "threshold_hours": 24,
+                            }
                     else:
                         event_states.append("non_compliant_over_48h")
+                        prophylaxis_display_facts = {
+                            "failure_kind": "prophylaxis_duration_over_48h",
+                            "incision_class": fact.incision_class,
+                            "start_time": start.value.strftime("%Y-%m-%d %H:%M:%S"),
+                            "end_time": end.value.strftime("%Y-%m-%d %H:%M:%S"),
+                            "duration_hours": round(
+                                duration.total_seconds() / 3600, 2
+                            ),
+                            "threshold_hours": 48,
+                        }
         elif rule_id == "LX0609-033":
             if (
                 fact.consent_role != "surgery_informed_consent"
@@ -829,6 +1121,10 @@ def _surgery_text_outcome(
             ):
                 event_states.append("data_gap")
             elif "missing" in {fact.patient_signature, fact.surgeon_signature}:
+                if fact.patient_signature == "missing":
+                    missing_consent_signatures.add("patient")
+                if fact.surgeon_signature == "missing":
+                    missing_consent_signatures.add("surgeon")
                 event_states.append("non_compliant")
             elif "unknown" in {fact.patient_signature, fact.surgeon_signature}:
                 event_states.append("data_gap")
@@ -839,10 +1135,32 @@ def _surgery_text_outcome(
 
     if not event_states:
         return _SurgeryTextOutcome(rule_id, "data_gap", "surgery_fact_scope_missing")
+    if rule_id == "LX0609-024" and "non_compliant" in event_states:
+        return _SurgeryTextOutcome(
+            rule_id,
+            "non_compliant",
+            "lymph_node_dissection_not_documented",
+            {
+                "failure_kind": "lymph_node_dissection_not_documented",
+                "performed_surgery_confirmed": True,
+                "malignant_surgery_confirmed": True,
+                "checked_sources": list(lymph_node_checked_sources),
+            },
+        )
     if "non_compliant_over_48h" in event_states:
-        return _SurgeryTextOutcome(rule_id, "non_compliant", "prophylaxis_over_48h")
+        return _SurgeryTextOutcome(
+            rule_id,
+            "non_compliant",
+            "prophylaxis_over_48h",
+            prophylaxis_display_facts,
+        )
     if "non_compliant_extension_missing" in event_states:
-        return _SurgeryTextOutcome(rule_id, "non_compliant", "extension_reason_missing")
+        return _SurgeryTextOutcome(
+            rule_id,
+            "non_compliant",
+            "extension_reason_missing",
+            prophylaxis_display_facts,
+        )
     for state, reason in (
         ("non_compliant", "surgery_text_fact_defect"),
         ("data_gap", "surgery_text_fact_unknown"),
@@ -850,7 +1168,35 @@ def _surgery_text_outcome(
         ("not_applicable", "surgery_text_fact_absent"),
     ):
         if state in event_states:
-            return _SurgeryTextOutcome(rule_id, state, reason)
+            display_facts = (
+                {
+                    "failure_kind": "implant_information_incomplete",
+                    "missing_fields": sorted(missing_implant_fields),
+                    "source_label": "手术记录",
+                    **(
+                        {"source_document_id": implant_source_document_id}
+                        if implant_source_document_id
+                        else {}
+                    ),
+                }
+                if rule_id == "LX0609-025"
+                and state == "non_compliant"
+                and missing_implant_fields
+                else None
+            )
+            if rule_id == "LX0609-033" and state == "non_compliant":
+                display_facts = {
+                    "failure_kind": "surgery_consent_signature_missing",
+                    "consent_state": "signature_missing",
+                    "performed_surgery_confirmed": True,
+                    "missing_signature_roles": sorted(missing_consent_signatures),
+                }
+            return _SurgeryTextOutcome(
+                rule_id,
+                state,
+                reason,
+                customer_display_facts=display_facts,
+            )
     raise ValueError("unsupported surgery text outcome")
 
 
@@ -1129,6 +1475,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     ):
         raise ValueError("typed surgery gate requires one evidence session")
     decisions: list[RuleDecision] = []
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
     typed_text_rule_ids: list[str] = []
@@ -1140,6 +1487,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 _typed_003_decision(
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
+                    customer_display_facts=customer_display_facts,
                 )
             )
             continue
@@ -1163,6 +1511,10 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 # 误用 029/030 的严格 +08 文本时间合同。受控 surgery_record
                 # 可用且未截断时，允许一次裁剪事实抽取；无材料仍保守收口。
                 or (rule_id == "LX0609-024" and surgery_record_available)
+                # 025 的实际手术事实可由同一份受控手术记录正文抽取；若快照
+                # 因严格时间/字段缺失未形成 performed 事实，也不能提前跳过
+                # “明确未植入 / 已植入且字段缺失”的既有三分支。
+                or (rule_id == "LX0609-025" and surgery_record_available)
                 or (
                     rule_id == "LX0609-028"
                     and performed_state == "unknown"
@@ -1199,10 +1551,42 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 key: source_states[key] for key in _TYPED_TEXT_SOURCES[rule_id]
             }
             states = set(states_by_source.values())
+            deterministic_outcome = (
+                _deterministic_024_outcome(
+                    surgery_rows=rows_by_source["surgery_record"],
+                )
+                if rule_id == "LX0609-024"
+                and states_by_source.get("surgery_record") == "available"
+                else None
+            )
+            structured_not_applicable = (
+                (
+                    rule_id == "LX0609-024"
+                    and states_by_source.get("diagnosis") == "available"
+                    and _structured_nonmalignant_diagnoses(
+                        rows_by_source["diagnosis"]
+                    )
+                )
+                or (
+                    rule_id == "LX0609-028"
+                    and states_by_source.get("surgery_record") == "empty"
+                    and states_by_source.get("mr_surgery") == "available"
+                    and _structured_028_not_applicable(
+                        surgery_rows=rows_by_source["surgery_record"],
+                        mr_surgery_rows=rows_by_source["mr_surgery"],
+                    )
+                )
+            )
             if "error" in states:
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
                     rule_id, "technical_error", "source_query_error"
                 )
+            elif structured_not_applicable:
+                pending_outcomes[rule_id] = _SurgeryTextOutcome(
+                    rule_id, "not_applicable", "surgery_text_fact_absent"
+                )
+            elif deterministic_outcome is not None:
+                pending_outcomes[rule_id] = deterministic_outcome
             elif rule_id == "LX0609-033":
                 consent_state = states_by_source.get("surgery_inform_consent")
                 consent_rows = rows_by_source["surgery_inform_consent"]
@@ -1224,15 +1608,36 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 ):
                     if _snapshot_surgery_consent_readiness(evidence_snapshot) != "complete":
                         pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                            rule_id, "data_gap", "surgery_consent_source_unproven"
+                            rule_id,
+                            "data_gap",
+                            "surgery_consent_source_unproven",
+                            {
+                                "failure_kind": "surgery_consent_source_unproven",
+                                "consent_state": "source_unproven",
+                                "performed_surgery_confirmed": True,
+                            },
                         )
                     else:
                         pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                            rule_id, "non_compliant", "surgery_consent_document_missing"
+                            rule_id,
+                            "non_compliant",
+                            "surgery_consent_document_missing",
+                            {
+                                "failure_kind": "surgery_consent_document_missing",
+                                "consent_state": "missing",
+                                "performed_surgery_confirmed": True,
+                            },
                         )
                 elif consent_state != "available":
                     pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                        rule_id, "data_gap", "surgery_consent_source_unproven"
+                        rule_id,
+                        "data_gap",
+                        "surgery_consent_source_unproven",
+                        {
+                            "failure_kind": "surgery_consent_source_unproven",
+                            "consent_state": "source_unproven",
+                            "performed_surgery_confirmed": True,
+                        },
                     )
                 elif not any(
                     _clean(row.get("record_content") or row.get("content"))
@@ -1241,7 +1646,14 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     # 空壳行不是可供模型判断的同意书正文；完整来源中只有空壳时，
                     # 直接按缺少有效同意书处理，既不扩大上下文也不浪费一次模型调用。
                     pending_outcomes[rule_id] = _SurgeryTextOutcome(
-                        rule_id, "non_compliant", "surgery_consent_body_missing"
+                        rule_id,
+                        "non_compliant",
+                        "surgery_consent_body_missing",
+                        {
+                            "failure_kind": "surgery_consent_body_missing",
+                            "consent_state": "blank",
+                            "performed_surgery_confirmed": True,
+                        },
                     )
                 else:
                     active_rule_ids.append(rule_id)
@@ -1374,6 +1786,11 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                                         rule_id, "data_gap", "surgery_projection_partial"
                                     )
                                 pending_outcomes[rule_id] = outcome
+        customer_display_facts.extend(
+            (rule_id, outcome.customer_display_facts)
+            for rule_id, outcome in pending_outcomes.items()
+            if outcome.customer_display_facts is not None
+        )
         decisions.extend(
             _decision_from_surgery_outcome(
                 outcome=pending_outcomes[rule_id],
@@ -1389,6 +1806,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             results=(),
             planned_rule_ids=selected,
             decisions=tuple(sorted(decisions, key=lambda item: selected.index(item.rule_id))),
+            customer_display_facts=tuple(customer_display_facts),
             llm_call_count=llm_call_count,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -1482,6 +1900,49 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
             )
             continue
+        if rule_id == "LX0609-025" and not is_compliant:
+            missing_fields = _parse_implant_missing_fields(response)
+            if not missing_fields:
+                # 未明确指出缺项时，不能把通用模型结论包装成确定的植入物缺陷。
+                results.append(
+                    _result(
+                        rule_id,
+                        "data_gap",
+                        "implant_missing_fields_unavailable",
+                        executor_type="llm",
+                        prompt_tokens=prompt_count,
+                        completion_tokens=completion_count,
+                        total_tokens=total_count,
+                        api_time=elapsed,
+                    )
+                )
+                continue
+            source_document_id = _first_source_document_id(
+                documents, "surgery_record"
+            )
+            results.append(
+                _result(
+                    rule_id,
+                    "non_compliant",
+                    "surgery_customer_prompt",
+                    executor_type="llm",
+                    prompt_tokens=prompt_count,
+                    completion_tokens=completion_count,
+                    total_tokens=total_count,
+                    api_time=elapsed,
+                    customer_display_facts={
+                        "failure_kind": "implant_information_incomplete",
+                        "missing_fields": list(missing_fields),
+                        "source_label": "手术记录",
+                        **(
+                            {"source_document_id": source_document_id}
+                            if source_document_id
+                            else {}
+                        ),
+                    },
+                )
+            )
+            continue
         results.append(
             _result(
                 rule_id,
@@ -1499,6 +1960,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
         results=tuple(results),
         planned_rule_ids=selected,
         decisions=tuple(sorted(decisions, key=lambda item: selected.index(item.rule_id))),
+        customer_display_facts=tuple(customer_display_facts),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

@@ -112,7 +112,18 @@ _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
 _STATES = frozenset({"clear", "vague", "missing", "absent", "unknown"})
 _CONFIDENCE = frozenset({"high", "medium", "low"})
 _EXECUTION_STATES = frozenset({"linked_specific", "linked_vague", "absent", "unknown"})
+_EXECUTION_RECORD_STATES = frozenset({
+    "specific_trace",
+    "generic_trace",
+    "copied_opinion",
+    "no_trace",
+    "unknown",
+})
 _RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
+_SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN = re.compile(
+    r"(?:遵|按|依照|根据).{0,12}(?:会诊|专科).{0,12}(?:意见|建议).{0,12}"
+    r"(?:执行|处理|落实|治疗)"
+)
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
@@ -158,6 +169,7 @@ class NativeConsultationEpisodeExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -193,6 +205,8 @@ class _ExecutionAssessment:
     execution_refs: tuple[str, ...]
     confidence: str
     execution_quotes: tuple[str, ...]
+    execution_record_state: str = "no_trace"
+    trace_refs: tuple[str, ...] = ()
     context_only_refs: tuple[str, ...] = ()
 
 
@@ -486,6 +500,7 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
             raise _SourceGap()
         documents.append({
             "ref": f"{_SOURCE_KEY}-{index}",
+            "document_id": _clean(row.get("document_id")),
             "time": _clean(row.get("record_time")),
             "text": text,
         })
@@ -886,6 +901,54 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
+def _all_completed_episodes_have_same_document_generic_execution(
+    episodes: Sequence[_Episode],
+    documents: Sequence[Mapping[str, str]],
+) -> bool:
+    """识别会诊文书自身明确写出的笼统执行痕迹。
+
+    这里只处理可逐字验证的“遵/按会诊意见执行”类表达：它足以证明存在
+    请会诊执行记录（020），但仍未归纳具体执行情况（023）。
+    """
+
+    documents_by_ref = {str(item["ref"]): item for item in documents}
+    completed = tuple(
+        item
+        for item in episodes
+        if item.opinion_state == "clear"
+        and item.confidence == "high"
+        and item.recommendations
+    )
+    if not completed:
+        return False
+    return all(
+        any(
+            _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(
+                _clean(documents_by_ref.get(ref, {}).get("text"))
+            )
+            for ref in item.opinion_refs
+        )
+        for item in completed
+    )
+
+
+def _generic_execution_display_facts(
+    documents: Sequence[Mapping[str, str]],
+) -> Mapping[str, Any]:
+    document_ids = [
+        document_id
+        for row in documents
+        if _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(_clean(row.get("text")))
+        if (document_id := _clean(row.get("document_id")))
+    ]
+    return {
+        "failure_kind": "consultation_execution_too_generic",
+        "observed_expression": "仅笼统记录已按会诊意见执行",
+        "missing_details": ["具体执行措施", "执行结果或后续安排"],
+        "source_document_ids": list(dict.fromkeys(document_ids))[:8],
+    }
+
+
 def _completed_recommendations(
     episodes: Sequence[_Episode],
     documents: Sequence[Mapping[str, str]],
@@ -975,25 +1038,34 @@ def _execution_prompt(
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
     prompt = (
-        "你只判断每条会诊建议与其后续候选文书是否存在执行关联，不得补充病历之外的信息。"
+        "你分两步判断每条会诊建议的后续落实，不得补充病历之外的信息。"
+        "第一步先识别病程/查房中是否存在请会诊执行记录痕迹："
+        "specific_trace=明确写出按会诊意见采取的具体措施；"
+        "generic_trace=仅写遵会诊意见执行/已按建议处理等笼统表述；"
+        "copied_opinion=照抄会诊意见、没有归纳执行情况；"
+        "no_trace=未见请会诊执行记录痕迹；unknown=无法判断。"
+        "第二步再判断结构化医嘱/操作候选是否与该建议存在动作对应关系。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
-        "linked_specific只在结构化候选明确落实同一条建议的具体措施，或直接点名该会诊建议且包含明确措施时使用。"
-        "daily_course_record和senior_course_record只作为病程上下文，不能单独证明执行，不能放入execution_refs；"
-        "只有病程写“遵会诊意见执行”“已按建议处理”或具体动作、但无对应医嘱/检查/检验/手术/操作结构化记录时，必须输出absent。"
-        "仅直接写“遵/按本次会诊意见”但未写具体措施时为linked_vague。"
+        "execution_state只描述结构化动作匹配：linked_specific=结构化候选明确落实同一条建议，"
+        "linked_vague=结构化候选仅笼统相关，absent=无结构化动作匹配，unknown=无法判断。"
+        "daily_course_record和senior_course_record只允许进入trace_refs，不能进入structured_action_refs；"
+        "inpat_drug_order和inpat_nondrug_order只允许进入structured_action_refs。"
+        "只有病程写“遵会诊意见执行”“已按建议处理”或具体动作、但无对应医嘱/检查/检验/手术/操作结构化记录时，"
+        "execution_record_state按其具体程度填写，但execution_state必须输出absent。"
+        "只有结构化医嘱/检查/检验/操作动作、没有病程/查房执行记录痕迹时，execution_record_state必须为no_trace。"
         "同一治疗类别的多个细项建议（例如同属康复训练的关节活动、肌力训练），"
         "若候选明确记载该治疗类别已经实施、但未逐项写明细项，可对每个细项输出linked_vague且confidence=high；"
         "这只适用于同一临床治疗类别，绝不得用一句泛化记录覆盖药物、检查、转运等跨类别建议。"
         "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
-        "execution_state只能为linked_specific（有具体落实内容）、linked_vague（仅笼统遵医嘱/遵会诊意见）、"
-        "absent（候选中无执行）或unknown。confidence只能为high/medium/low。"
-        "execution_refs只能引用该建议输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
-        "linked_specific或linked_vague必须至少返回一个execution_refs；没有可验证的candidate_documents ref时必须返回unknown。"
-        "每个linked_specific或linked_vague都必须返回execution_quotes：每项是所引执行候选中的连续原文摘录，"
+        "confidence只能为high/medium/low。"
+        "trace_refs和structured_action_refs只能引用该建议输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
+        "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
+        "没有可验证的candidate_documents ref时必须返回unknown。"
+        "每个非空trace_refs或structured_action_refs都必须返回execution_quotes：每项是所引执行候选中的连续原文摘录，"
         "用于证明该候选真的支持你的关联；不得改写、拼接或引用未选候选。"
-        "absent或unknown必须返回空数组execution_refs和execution_quotes。"
+        "no_trace/absent组合必须返回空数组trace_refs、structured_action_refs和execution_quotes。"
         "每个输入recommendation_ref恰好输出一项，禁止重复。"
-        "严格输出JSON：{executions:[{recommendation_ref,execution_state,execution_refs,execution_quotes,confidence}]}。输入："
+        "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,execution_state,structured_action_refs,execution_quotes,confidence}]}。输入："
         + payload
     )
     return prompt, allowed_refs
@@ -1018,52 +1090,79 @@ def _parse_executions(
             raise _SemanticInvalid()
         recommendation_ref = _clean(item.get("recommendation_ref"))
         state = _clean(item.get("execution_state")).lower()
+        original_state = state
         confidence = _clean(item.get("confidence")).lower()
         refs = item.get("execution_refs")
+        raw_trace_refs = item.get("trace_refs")
+        raw_structured_refs = item.get("structured_action_refs")
         raw_quotes = item.get("execution_quotes")
+        execution_record_state = _clean(item.get("execution_record_state")).lower()
         if (
             recommendation_ref not in expected_refs
             or recommendation_ref in seen
             or state not in _EXECUTION_STATES
             or confidence not in _CONFIDENCE
-            or not isinstance(refs, list)
+            or (execution_record_state and execution_record_state not in _EXECUTION_RECORD_STATES)
+            or (refs is not None and not isinstance(refs, list))
+            or (raw_trace_refs is not None and not isinstance(raw_trace_refs, list))
+            or (raw_structured_refs is not None and not isinstance(raw_structured_refs, list))
             or not isinstance(raw_quotes, list)
-            or len(refs) != len(set(refs))
-            or not all(isinstance(ref, str) and ref in allowed_refs[recommendation_ref] for ref in refs)
-            or (state in {"linked_specific", "linked_vague"} and not refs)
-            or (state in {"absent", "unknown"} and refs)
+        ):
+            raise _SemanticInvalid()
+        refs = refs if isinstance(refs, list) else []
+        trace_refs = raw_trace_refs if isinstance(raw_trace_refs, list) else []
+        structured_refs = raw_structured_refs if isinstance(raw_structured_refs, list) else []
+        if raw_trace_refs is None and raw_structured_refs is None:
+            trace_refs = [
+                ref
+                for ref in refs
+                if isinstance(ref, str)
+                and ref in candidate_by_ref
+                and candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
+            ]
+            structured_refs = [
+                ref
+                for ref in refs
+                if isinstance(ref, str)
+                and ref in candidate_by_ref
+                and candidate_by_ref[ref].source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
+            ]
+            if trace_refs and not structured_refs and state in {"linked_specific", "linked_vague"}:
+                state = "absent"
+        all_refs = [*trace_refs, *structured_refs]
+        if (
+            len(trace_refs) != len(set(trace_refs))
+            or len(structured_refs) != len(set(structured_refs))
+            or len(all_refs) != len(set(all_refs))
+            or not all(isinstance(ref, str) and ref in allowed_refs[recommendation_ref] for ref in all_refs)
+            or not all(candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS for ref in trace_refs)
+            or not all(candidate_by_ref[ref].source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS for ref in structured_refs)
+            or (state in {"linked_specific", "linked_vague"} and not structured_refs)
+            or (state in {"absent", "unknown"} and structured_refs)
+        ):
+            raise _SemanticInvalid()
+        if not execution_record_state:
+            if trace_refs and original_state == "linked_vague":
+                execution_record_state = "generic_trace"
+            elif trace_refs and original_state == "linked_specific":
+                execution_record_state = "specific_trace"
+            elif trace_refs:
+                execution_record_state = "unknown"
+            else:
+                execution_record_state = "no_trace"
+        if (
+            execution_record_state in {"specific_trace", "generic_trace", "copied_opinion"} and not trace_refs
+        ) or (
+            execution_record_state in {"no_trace", "unknown"} and trace_refs
         ):
             raise _SemanticInvalid()
         quotes = tuple(_clean(quote) for quote in raw_quotes)
         if any(not quote or len(quote) > _MAX_RECOMMENDATION_CHARS for quote in quotes) or len(quotes) != len(set(quotes)):
             raise _SemanticInvalid()
         selected_documents = tuple(
-            candidate_by_ref[ref] for ref in refs if ref in candidate_by_ref
+            candidate_by_ref[ref] for ref in all_refs if ref in candidate_by_ref
         )
-        if state in {"linked_specific", "linked_vague"}:
-            context_only_refs = tuple(
-                ref
-                for ref in refs
-                if candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
-            )
-            structured_refs = tuple(
-                ref
-                for ref in refs
-                if candidate_by_ref[ref].source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS
-            )
-            if context_only_refs and not structured_refs:
-                seen.add(recommendation_ref)
-                parsed.append(_ExecutionAssessment(
-                    recommendation_ref,
-                    "absent",
-                    (),
-                    confidence,
-                    (),
-                    context_only_refs,
-                ))
-                continue
-            if context_only_refs:
-                raise _SemanticInvalid()
+        if all_refs:
             if not quotes or any(
                 not any(_quote_is_grounded(quote=quote, source=candidate.text) for candidate in selected_documents)
                 for quote in quotes
@@ -1072,7 +1171,16 @@ def _parse_executions(
         elif quotes:
             raise _SemanticInvalid()
         seen.add(recommendation_ref)
-        parsed.append(_ExecutionAssessment(recommendation_ref, state, tuple(refs), confidence, quotes))
+        parsed.append(_ExecutionAssessment(
+            recommendation_ref,
+            state,
+            tuple(structured_refs),
+            confidence,
+            quotes,
+            execution_record_state,
+            tuple(trace_refs),
+            tuple(trace_refs),
+        ))
     if seen != expected_refs:
         raise _SemanticInvalid()
     return tuple(parsed)
@@ -1117,18 +1225,36 @@ def _execution_outcome(
         return "not_applicable", "trigger_absent_complete"
     if source_technical:
         return "technical_error", "source_query_error"
-    if assessments is None or any(item.confidence != "high" or item.execution_state == "unknown" for item in assessments):
+    if assessments is None or any(
+        item.confidence != "high"
+        or item.execution_state == "unknown"
+        or item.execution_record_state == "unknown"
+        for item in assessments
+    ):
         if source_technical:
             return "technical_error", "source_query_error"
         return "evaluation_unknown", "semantic_low_confidence"
-    states = tuple(item.execution_state for item in assessments)
-    absent_refs = {
+    action_states = tuple(item.execution_state for item in assessments)
+    trace_states = tuple(item.execution_record_state for item in assessments)
+    complete_specific_links = all(
+        item.execution_record_state == "specific_trace"
+        and item.execution_state == "linked_specific"
+        and bool(item.trace_refs)
+        and bool(item.execution_refs)
+        for item in assessments
+    )
+    no_trace_no_action_refs = {
         item.recommendation_ref
         for item in assessments
-        if item.execution_state == "absent"
+        if item.execution_record_state == "no_trace" and not item.execution_refs
     }
-    if absent_refs and any(
-        item.recommendation.recommendation_ref in absent_refs
+    no_trace_with_action_refs = {
+        item.recommendation_ref
+        for item in assessments
+        if item.execution_record_state == "no_trace" and item.execution_refs
+    }
+    if no_trace_no_action_refs and any(
+        item.recommendation.recommendation_ref in no_trace_no_action_refs
         and bool(
             _ACTION_TYPE_REQUIRED_SOURCE_KEYS.get(
                 item.recommendation.action_type,
@@ -1139,22 +1265,28 @@ def _execution_outcome(
     ):
         return "data_gap", "candidate_scope_incomplete"
     if rule_id == "LX0609-020":
-        if absent_refs:
+        if no_trace_no_action_refs:
             if source_technical:
                 return "technical_error", "source_query_error"
             return "non_compliant", "requirement_violated"
-        return "compliant", "requirement_satisfied"
-    if absent_refs:
-        if context_only_candidate_present or any(item.context_only_refs for item in assessments):
-            return "non_compliant", "requirement_violated"
-        return "not_applicable", "trigger_absent_complete"
-    if "linked_vague" in states:
+        if complete_specific_links:
+            return "evaluation_unknown", "semantic_output_unknown"
+        return "evaluation_unknown", "semantic_output_unknown"
+    if any(state in {"generic_trace", "copied_opinion"} for state in trace_states):
         return "non_compliant", "requirement_violated"
-    if "linked_specific" in states:
-        return "compliant", "requirement_satisfied"
+    if no_trace_no_action_refs:
+        if any(state != "no_trace" for state in trace_states) or any(
+            state != "absent" for state in action_states
+        ):
+            return "evaluation_unknown", "semantic_output_unknown"
+        return "not_applicable", "trigger_absent_complete"
+    if "linked_vague" in action_states:
+        return "non_compliant", "requirement_violated"
+    if complete_specific_links:
+        return "evaluation_unknown", "semantic_output_unknown"
     if source_technical:
         return "technical_error", "source_query_error"
-    return "not_applicable", "trigger_absent_complete"
+    return "evaluation_unknown", "semantic_output_unknown"
 
 
 def _diagnostic_unknown_reason(
@@ -1170,12 +1302,20 @@ def _diagnostic_unknown_reason(
         return "source_truncated"
     if assessment is None:
         return "candidate_missing" if relevant_candidate_count == 0 else "candidate_available_but_unlinked"
-    if assessment.confidence != "high" or assessment.execution_state == "unknown":
+    if (
+        assessment.confidence != "high"
+        or assessment.execution_state == "unknown"
+        or assessment.execution_record_state == "unknown"
+    ):
         return "model_low_confidence"
-    if assessment.execution_state == "absent":
+    if assessment.execution_record_state == "no_trace" and not assessment.execution_refs:
         return "candidate_missing" if relevant_candidate_count == 0 else "candidate_available_but_unlinked"
-    if assessment.execution_state == "linked_vague":
+    if assessment.execution_record_state == "no_trace" and assessment.execution_refs:
+        return "structured_action_without_execution_trace"
+    if assessment.execution_record_state in {"generic_trace", "copied_opinion"}:
         return "generic_execution_only"
+    if assessment.execution_state == "linked_vague":
+        return "generic_structured_action"
     return "linked"
 
 
@@ -1189,11 +1329,13 @@ def _diagnostic_link_state(
         return "source_error"
     if assessment is None:
         return "no_candidate" if relevant_candidate_count == 0 else "ambiguous"
-    if assessment.execution_state == "linked_specific":
+    if assessment.execution_record_state == "specific_trace":
         return "linked_specific"
-    if assessment.execution_state == "linked_vague":
+    if assessment.execution_record_state in {"generic_trace", "copied_opinion"}:
         return "linked_vague"
-    if assessment.execution_state == "absent":
+    if assessment.execution_record_state == "no_trace" and assessment.execution_refs:
+        return "structured_action_only"
+    if assessment.execution_record_state == "no_trace":
         return "no_candidate" if relevant_candidate_count == 0 else "candidate_exists_unlinked"
     return "ambiguous"
 
@@ -1251,6 +1393,12 @@ def _link_diagnostics(
             "candidate_source_types": candidate_source_types,
             "link_state": link_state,
             "unknown_reason": unknown_reason,
+            "execution_record_state": (
+                assessment.execution_record_state if assessment is not None else "unknown"
+            ),
+            "structured_action_count": (
+                len(assessment.execution_refs) if assessment is not None else 0
+            ),
             "source_incomplete_types": tuple(sorted(relevant_incomplete_keys)),
         })
     return tuple(diagnostics)
@@ -1409,7 +1557,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             stage_two_boundary_status = ("technical_error", "source_query_error")
         except _SourceGap:
             stage_two_boundary_status = ("data_gap", "linkage_unresolved")
-        if stage_two_boundary_status is not None and len(stage_two_rule_ids) == len(selected):
+        if stage_two_boundary_status is not None and (
+            stage_two_boundary_status[0] == "technical_error"
+            or not any(
+                _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(
+                    _clean(document.get("text"))
+                )
+                for document in documents
+            )
+        ):
             return _finish(
                 selected=selected,
                 status=stage_two_boundary_status[0],
@@ -1443,6 +1599,14 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         for rule_id in selected
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
+    if _all_completed_episodes_have_same_document_generic_execution(
+        episodes,
+        documents,
+    ):
+        if "LX0609-020" in stage_two_rule_ids:
+            statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
+        if "LX0609-023" in stage_two_rule_ids:
+            statuses["LX0609-023"] = ("non_compliant", "requirement_violated")
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
@@ -1450,7 +1614,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
-        if stage_two_boundary_status is not None:
+        if stage_two_boundary_status is not None and not any(
+            rule_id in statuses for rule_id in stage_two_rule_ids
+        ):
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = stage_two_boundary_status
             completed_recommendations = ()
@@ -1517,11 +1683,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 (),
                                 "high",
                                 (),
-                                tuple(
-                                    candidate.ref
-                                    for candidate in projection.candidates
-                                    if candidate.source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
-                                ),
+                                "no_trace",
+                                (),
+                                (),
                             )
                             for item in completed_recommendations
                         )
@@ -1547,6 +1711,9 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                     "absent",
                                     (),
                                     "high",
+                                    (),
+                                    "no_trace",
+                                    (),
                                     (),
                                 )
                                 for item in completed_recommendations
@@ -1624,9 +1791,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         for rule_id in selected
         if rule_id in typed and evidence_snapshot is not None
     )
+    customer_display_facts = (
+        (("LX0609-023", _generic_execution_display_facts(documents)),)
+        if statuses.get("LX0609-023") == ("non_compliant", "requirement_violated")
+        else ()
+    )
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(item for item in results if item["rule_id"] not in typed), planned_rule_ids=selected,
-        decisions=decisions, llm_call_count=calls,
+        decisions=decisions, customer_display_facts=customer_display_facts,
+        llm_call_count=calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         total_tokens=total_tokens, api_time=api_time,
     )

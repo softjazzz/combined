@@ -17,6 +17,7 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
 )
 from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+    CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
@@ -35,6 +36,43 @@ from app.services.luxian_0609.executor_registry import (
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
 HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
+
+
+def test_exam_lab_session_uses_filtered_order_source_not_truncated_generic_order() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        if source_key == CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"order_name": "头颅CT平扫", "prescribed_datetime": "2026-07-07 14:31:00"}],
+            )
+        if source_key == "inpat_nondrug_order":
+            raise AssertionError("exam/lab rules must not read the generic order source")
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        evaluation_as_of_date="2026-07-16",
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY in calls
+    assert "inpat_nondrug_order" not in calls
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY
+    )
+    assert observation.query_state is SourceQueryState.AVAILABLE
+    assert observation.completeness is SourceCompleteness.COMPLETE
 
 
 def test_exam_lab_post_rules_freeze_existing_horizon_sources() -> None:
@@ -623,6 +661,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
 
     assert calls == sorted(calls)
     assert calls == [
+        "anesthesia_record",
         "mr_surgery",
         "presurg_discussion",
         "presurg_summary",
@@ -646,13 +685,49 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         if item.query_state is SourceQueryState.UNAVAILABLE
     }
     assert unavailable == {
-        "anesthesia_record",
         "postsurg_firstcourse_record",
         "surgery_risk_assessment",
     }
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
-    assert len(snapshot.document_refs) == 5
+    assert len(snapshot.document_refs) == 6
     assert snapshot.facts == ()
+
+
+def test_provider_reads_anesthesia_and_visit_sources_for_034_to_038() -> None:
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        return _rows(
+            source_key,
+            [{"document_id": f"{source_key}-001", "record_content": source_key}],
+        )
+
+    snapshot = _build(
+        selected_rule_ids=(
+            "LX0609-034",
+            "LX0609-035",
+            "LX0609-036",
+            "LX0609-037",
+            "LX0609-038",
+        ),
+        row_reader=reader,
+    )
+
+    assert calls == [
+        "anesthesia_record",
+        "consent_form",
+        "mr_surgery",
+        "postane_surveil_record",
+        "preane_surveil_record",
+        "surgery_inform_consent",
+    ]
+    observations = {item.source_key: item for item in snapshot.observations}
+    assert all(
+        observations[source_key].query_state is SourceQueryState.AVAILABLE
+        for source_key in calls
+    )
 
 
 def test_consultation_decision_support_retains_private_material_once_without_safe_output_leak() -> None:
@@ -734,6 +809,8 @@ def test_mdt_040_decision_support_includes_consultation_record() -> None:
 
     assert "consultation_record" in calls
     assert calls.count("consultation_record") == 1
+    assert "mr_surgery" in calls
+    assert calls.count("mr_surgery") == 1
 
 
 def test_admission_record_body_is_private_material_and_never_safe_snapshot_output() -> None:
@@ -823,6 +900,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
         {
             *expected_bounded,
             CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+            CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
             "admission_record_diagnosis",
@@ -834,6 +912,8 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
+            "postane_surveil_record",
+            "preane_surveil_record",
             "surgery_application",
             "surgery_record",
         }
@@ -859,12 +939,15 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
     assert set(source_evidence_reader._SNAPSHOT_SOURCE_FIELDS) == {
         *expected,
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
         "admission_record_diagnosis",
         "pathology_exam_master",
         "pathology_exam_report",
+        "postane_surveil_record",
+        "preane_surveil_record",
         "diagnosis",
         "exam_master",
         "inpat_drug_order",
@@ -1172,6 +1255,70 @@ def test_severity_order_reader_is_bounded_private_and_excludes_stop_orders(
     assert params["institute_id"] == "private-institute"
     assert params["patient_id"] == "private-patient"
     assert params["visit_id"] == "private-visit"
+    assert params["limit_rows"] == 51
+
+
+def test_exam_lab_order_reader_filters_before_limit_and_keeps_complete_state(
+    monkeypatch,
+) -> None:
+    rows = [
+        {
+            "order_id": "CT-1",
+            "order_name": "头颅CT平扫",
+            "order_status": "新开",
+            "prescribed_datetime": "2026-07-07 14:31:00",
+        },
+        {
+            "order_id": "CULTURE-1",
+            "order_name": "痰一般细菌培养及药敏",
+            "order_status": "新开",
+            "prescribed_datetime": "2026-07-07 20:27:00",
+        },
+    ]
+    connection = _FakeConnection(rows)
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "engine",
+        _FakeEngine(connection),
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_default_source_schema",
+        lambda: "cdm",
+    )
+    monkeypatch.setattr(
+        source_evidence_reader.bundle_assembly,
+        "_get_table_columns",
+        lambda _schema, source_key: (
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "order_id",
+                "order_name",
+                "order_status",
+                "prescribed_datetime",
+            ]
+            if source_key == "inpat_nondrug_order"
+            else []
+        ),
+    )
+
+    result = source_evidence_reader.read_luxian_0609_snapshot_source_rows(
+        source_key=CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
+        institute_id="private-institute",
+        patient_id="private-patient",
+        visit_id="private-visit",
+        source_schema=None,
+    )
+
+    assert result.source_key == CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY
+    assert [row["order_id"] for row in result.rows] == ["CT-1", "CULTURE-1"]
+    assert result.truncated is False
+    sql, params = connection.calls[0]
+    assert 'FROM "cdm"."inpat_nondrug_order"' in sql
+    assert 'UPPER("order_name") LIKE :ct_name' in sql
+    assert '"order_name" LIKE :culture_name' in sql
     assert params["limit_rows"] == 51
 
 
@@ -1502,6 +1649,7 @@ def test_every_bounded_snapshot_source_uses_only_allowlisted_columns_and_bound_c
 
     special_sources = {
         CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+        CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,

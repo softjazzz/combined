@@ -544,6 +544,45 @@ async def test_mdt_non_target_does_not_enter_recommendation_execution_stage(monk
 
 
 @pytest.mark.asyncio
+async def test_same_document_generic_execution_does_not_require_stay_horizon(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: (
+            _rows(
+                "会诊意见：建议复查血常规；遵会诊意见执行",
+                action_suffix=False,
+            )
+            if source_key == "consultation_record"
+            else []
+        ),
+    )
+    client = _Client(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "compliant",
+        "non_compliant",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "requirement_satisfied",
+        "requirement_violated",
+    ]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_explicit_anesthesia_assessment_is_non_target_before_any_llm(monkeypatch):
     """无痛检查前的疼痛/麻醉评估不是 020--023 的普通会诊。"""
 
@@ -633,7 +672,7 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "uncertain"]
     assert result.llm_call_count == 2
     assert "recommendation_ref" in client.prompts[1]
     assert "source_quote" in client.prompts[1]
@@ -667,7 +706,7 @@ async def test_execution_prompt_forbids_planned_symptom_only_and_unrelated_treat
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗" in client.prompts[1]
 
 
@@ -704,7 +743,7 @@ async def test_semantic_neuroblock_recommendation_can_link_to_different_specific
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
 
 
@@ -736,7 +775,7 @@ async def test_one_execution_document_can_explicitly_cover_two_recommendations(m
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
 
 
@@ -770,7 +809,7 @@ async def test_same_category_generic_execution_is_vague_for_each_rehabilitation_
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "non_compliant"]
     assert "同一治疗类别的多个细项" in client.prompts[1]
 
 
@@ -815,7 +854,8 @@ def test_execution_prompt_requires_candidate_ref_for_linked_states():
 
     prompt, _ = episode._execution_prompt(completed=completed, candidates=candidates)
 
-    assert "linked_specific或linked_vague必须至少返回一个execution_refs" in prompt
+    assert "linked_specific或linked_vague必须至少返回一个structured_action_refs" in prompt
+    assert "trace_refs" in prompt
     assert "没有可验证的candidate_documents ref时必须返回unknown" in prompt
     assert "不得引用会诊申请或会诊意见的ref" in prompt
     assert "execution_quotes" in prompt
@@ -1199,7 +1239,7 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
         rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "compliant", "compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "compliant", "compliant", "uncertain"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
     assert "daily_course_record-1" in client.prompts[1]
@@ -1210,9 +1250,9 @@ async def test_shared_specific_execution_can_cover_two_clear_episodes_without_un
 @pytest.mark.parametrize(
     ("execution_state", "expected"),
     [
-        ("linked_specific", ("non_compliant", "non_compliant")),
-        ("linked_vague", ("non_compliant", "non_compliant")),
-        ("absent", ("non_compliant", "non_compliant")),
+        ("linked_specific", ("uncertain", "uncertain")),
+        ("linked_vague", ("uncertain", "non_compliant")),
+        ("absent", ("non_compliant", "not_applicable")),
         ("unknown", ("uncertain", "uncertain")),
     ],
 )
@@ -1237,6 +1277,69 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
 
 
 @pytest.mark.asyncio
+async def test_020_023_specific_trace_and_structured_action_stay_review_state(monkeypatch):
+    """020/023 正向闭环先进入建议复核，避免模型正向漂移直接改客户结论。"""
+
+    source_rows = {
+        "consultation_record": _rows("意见：建议加强抗感染治疗。"),
+        "daily_course_record": _rows("已按会诊意见启动抗感染治疗。", hour_start=2),
+        "senior_course_record": [],
+        "inpat_drug_order": [
+            {
+                "generic_name": "头孢哌酮舒巴坦",
+                "order_name": "抗感染治疗",
+                "prescribed_datetime": "2026-07-20 03:00:00",
+            }
+        ],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode(
+                "consultation_record-1",
+                ["consultation_record-1"],
+                recommendations=[
+                    {
+                        "recommendation_ref": "consultation_record-1#r1",
+                        "action_type": "medication",
+                        "source_quote": "加强抗感染治疗",
+                        "normalized_action": "加强抗感染治疗",
+                        "opinion_ref": "__AUTO__",
+                    }
+                ],
+            )
+        ]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": ["inpat_drug_order-1"],
+            "execution_quotes": ["启动抗感染治疗", "抗感染治疗"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+
+
+@pytest.mark.asyncio
 async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch):
     source_rows = {
         "consultation_record": _rows("意见：使用康复排痰设备"),
@@ -1252,7 +1355,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert "无关治疗或同部位一般治疗都不是已经执行" in client.prompts[1]
 
 
@@ -1314,7 +1417,7 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 1
 
 
@@ -1340,7 +1443,7 @@ async def test_same_day_date_only_candidate_can_be_semantically_linked(monkeypat
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert "已完成复查血常规" in client.prompts[1]
 
@@ -1382,7 +1485,7 @@ async def test_same_day_date_only_candidate_does_not_block_later_specific_link(m
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert len(client.prompts) == 2
 
@@ -1498,7 +1601,7 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     )
 
     assert result.results == ()
-    assert [item.qc_direction.value for item in result.decisions] == ["defect", "defect"]
+    assert [item.qc_direction.value for item in result.decisions] == ["unknown", "unknown"]
     assert all(len(item.fact_refs) >= 3 for item in result.decisions)
     daily_ref = next(
         item.snapshot_ref.removeprefix("sha256:")
@@ -1534,7 +1637,7 @@ async def test_020_023_window_allows_later_specific_execution_when_admission_reg
         source_schema=None, llm_client=client, evidence_snapshot=session.snapshot, evidence_materials=session.materials,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
 
 
@@ -1578,7 +1681,7 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
     )
     assert result.results == ()
     assert [(item.rule_id, item.qc_direction.value) for item in result.decisions] == [
-        ("LX0609-020", "defect"), ("LX0609-023", "defect"),
+        ("LX0609-020", "unknown"), ("LX0609-023", "unknown"),
     ]
     assert all(item.fact_refs for item in result.decisions)
     rendered = repr(result)
@@ -1750,6 +1853,8 @@ async def test_link_diagnostics_classifies_candidate_available_but_unlinked():
             "candidate_source_types": ("inpat_drug_order",),
             "link_state": "candidate_exists_unlinked",
             "unknown_reason": "candidate_available_but_unlinked",
+            "execution_record_state": "no_trace",
+            "structured_action_count": 0,
             "source_incomplete_types": (),
         },
     )
@@ -1809,7 +1914,7 @@ async def test_untimed_order_does_not_block_linked_execution_candidate(monkeypat
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert timely_execution in client.prompts[1]
     assert untimed_order not in client.prompts[1]
@@ -1829,7 +1934,7 @@ async def test_untimed_unrelated_order_does_not_block_absent_test_recommendation
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
     assert untimed_order not in client.prompts[1]
 
@@ -1873,7 +1978,7 @@ async def test_test_recommendation_absent_ignores_incomplete_unrelated_drug_sour
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
 
 
 @pytest.mark.asyncio
@@ -1947,7 +2052,7 @@ async def test_specific_execution_stays_compliant_when_unrelated_source_is_incom
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
 
 
 @pytest.mark.asyncio
@@ -1989,9 +2094,10 @@ async def test_absent_action_uses_high_confidence_llm_judgment(monkeypatch, acti
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert {item["metadata"]["reason_code"] for item in result.results} == {
-        "requirement_violated"
+        "requirement_violated",
+        "trigger_absent_complete",
     }
 
 
@@ -2048,7 +2154,7 @@ async def test_execution_linker_accepts_complete_master_and_nondrug_order_source
         evidence_materials=session.materials, evidence_snapshot=session.snapshot,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert f"{source_key}-1" in client.prompts[1]
 
@@ -2091,7 +2197,7 @@ async def test_direct_reader_accepts_nondrug_order_execution_source_without_snap
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
     assert result.llm_call_count == 2
     assert "inpat_nondrug_order-1" in client.prompts[1]
     assert "不应作为正文候选" not in client.prompts[1]
@@ -2119,7 +2225,7 @@ async def test_out_of_window_candidate_is_not_scope_gap_or_prompt_input(monkeypa
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
     assert outside_text not in client.prompts[1]
 

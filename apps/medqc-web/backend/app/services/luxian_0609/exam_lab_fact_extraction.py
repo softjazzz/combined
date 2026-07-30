@@ -142,7 +142,7 @@ def _parse_date(value: Any) -> date | None:
 def _row_text(row: Mapping[str, Any]) -> str:
     fields = (
         "record_content", "content", "exam_type", "exam_name", "exam_item_name",
-        "item_name", "exam_result", "exam_impression", "exam_conclusion",
+        "performed_dept", "item_name", "exam_result", "exam_impression", "exam_conclusion",
         "impression", "conclusion", "labtest_subject", "lab_type", "test_type",
         "specimen", "result", "abnormal_indicator",
     )

@@ -703,7 +703,7 @@ async def test_non_level4_surgery_is_not_applicable(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ungraded_surgery_is_data_gap_not_not_applicable(monkeypatch):
+async def test_ungraded_surgery_does_not_trigger_level4_mdt_rule(monkeypatch):
     monkeypatch.setattr(
         native_mdt_execution,
         "read_luxian_0609_native_source_rows",
@@ -727,8 +727,8 @@ async def test_ungraded_surgery_is_data_gap_not_not_applicable(monkeypatch):
         llm_client=_LLM(),
     )
 
-    assert execution.result["status"] == "data_gap"
-    assert execution.result["metadata"]["reason_code"] == "surgery_level_unavailable"
+    assert execution.result["status"] == "not_applicable"
+    assert execution.result["metadata"]["reason_code"] == "level4_surgery_absent"
 
 
 @pytest.mark.asyncio

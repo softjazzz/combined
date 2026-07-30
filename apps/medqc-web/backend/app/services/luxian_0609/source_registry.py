@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v12"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v15"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -156,7 +156,7 @@ _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 
 _REGISTRY_ENTRIES = (
     _entry("admission_record", access_mode=_BOUNDED),
-    _entry("anesthesia_record"),
+    _entry("anesthesia_record", access_mode=_BOUNDED),
     _entry("bloodtrans_record", "bloodtrans_record", "mr_bloodtrans", access_mode=_BOUNDED),
     _entry(
         "consent_form",
@@ -215,6 +215,11 @@ _INTERNAL_SOURCE_ENTRIES = (
         access_mode=_BOUNDED,
         query_version="snapshot-provider-inpat_nondrug_order.severity_order-v2",
     ),
+    _entry(
+        "inpat_nondrug_order.exam_lab_order",
+        access_mode=_BOUNDED,
+        query_version="snapshot-provider-inpat_nondrug_order.exam_lab_order-v1",
+    ),
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
@@ -225,6 +230,8 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("inpat_drug_order", access_mode=_BOUNDED),
     _entry("inpat_nondrug_order", access_mode=_BOUNDED),
     _entry("surgery_application", access_mode=_BOUNDED),
+    _entry("preane_surveil_record", access_mode=_BOUNDED),
+    _entry("postane_surveil_record", access_mode=_BOUNDED),
 )
 
 _CONTROLLED_FACT_SOURCES_BY_RULE = MappingProxyType(
@@ -286,6 +293,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "mr_surgery",
     ),
     "LX0609-010": (
+        "inpat_nondrug_order.exam_lab_order",
         "exam_master",
         "exam_item_report",
         "daily_course_record",
@@ -296,6 +304,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-011": (
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.exam_lab_order",
         "exam_master",
         "exam_item_report",
         "daily_course_record",
@@ -306,6 +315,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-012": (
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.exam_lab_order",
         "exam_master",
         "exam_item_report",
         "daily_course_record",
@@ -316,6 +326,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-014": (
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.exam_lab_order",
         "labtest_master",
         "labtest_item_report",
         "daily_course_record",
@@ -326,6 +337,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-015": (
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.exam_lab_order",
         "labtest_master",
         "labtest_item_report",
         "daily_course_record",
@@ -354,11 +366,27 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),
     "LX0609-033": ("surgery_record", "mr_surgery", "surgery_inform_consent"),
+    # 麻醉同意书、访视和记录单规则都必须先由结构化手术清单确认
+    # 本次住院是否实施麻醉以及麻醉方式，才能正确处理局麻例外。
+    "LX0609-034": ("mr_surgery",),
+    "LX0609-035": ("mr_surgery",),
+    "LX0609-036": (
+        "mr_surgery",
+        "preane_surveil_record",
+        "postane_surveil_record",
+    ),
+    "LX0609-037": (
+        "mr_surgery",
+        "preane_surveil_record",
+        "postane_surveil_record",
+    ),
+    "LX0609-038": ("mr_surgery",),
     # 039 必须同时绑定严格手术事实与急救例外来源，不能只看术前讨论表。
     "LX0609-039": ("surgery_record", "mr_surgery", "rescue_record"),
     # 020/023 的“复会诊是否执行”可由病程、医嘱、检查检验或手术记录体现。
     # 全部候选必须进入同一 Evidence Session，避免判定使用了材料但 fact refs 未绑定来源。
     "LX0609-020": (
+        "evaluation_context.horizon",
         "inpat_registration",
         "inpat_registration.discharge_horizon",
         "daily_course_record",
@@ -372,6 +400,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "surgery_record",
     ),
     "LX0609-023": (
+        "evaluation_context.horizon",
         "inpat_registration",
         "inpat_registration.discharge_horizon",
         "daily_course_record",
@@ -384,8 +413,8 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
         "surgery_record",
     ),
-    # 040 的 MDT 结论允许使用同次就诊会诊记录，必须将该来源绑定进决策 refs。
-    "LX0609-040": ("consultation_record",),
+    # 040 先由结构化手术等级确认四级手术，再核对同次就诊会诊记录。
+    "LX0609-040": ("mr_surgery", "consultation_record"),
     # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
     # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。
     "LX0609-042": ("bloodtrans_record",),

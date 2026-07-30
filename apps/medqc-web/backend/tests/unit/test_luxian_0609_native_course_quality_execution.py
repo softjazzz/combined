@@ -374,6 +374,24 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
     )
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].fact_refs
+    assert result.customer_display_facts == (
+        (
+            "LX0609-017",
+            {
+                "failure_kind": "copy_similarity_threshold_exceeded",
+                "copy_similarity": 1.0,
+                "copy_similarity_threshold": 0.7,
+                "copy_document_sources": [
+                    "daily_course_record",
+                    "senior_course_record",
+                ],
+                "copy_document_record_times": [
+                    "2026-01-01 09:00:00",
+                    "2026-01-02 09:00:00",
+                ],
+            },
+        ),
+    )
     assert result.llm_call_count == 0
     assert not result.prompt_tokens and not result.total_tokens
     assert private_marker not in repr(result)
@@ -434,7 +452,19 @@ async def test_typed_017_preserves_source_query_state_without_model(
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client(
+        [
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": [
+                    "anatomic_site",
+                    "symptom_pattern",
+                ],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "胸痛症状支持心绞痛诊断方向。",
+            }
+        ]
+    )
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-017",),
         decision_rule_ids=("LX0609-017",),
@@ -736,6 +766,7 @@ async def test_course_007_emits_snapshot_bound_rule_decision_without_legacy_resu
     [
         ("unstable", CustomerFinalState.NOT_APPLICABLE, "eligibility_not_met"),
         ("over_72h", CustomerFinalState.NON_COMPLIANT, "threshold_exceeded"),
+        ("submit_time", CustomerFinalState.COMPLIANT, "requirement_within_threshold"),
         ("missing_time", CustomerFinalState.DATA_GAP, "authoritative_time_missing"),
         ("unavailable", CustomerFinalState.DATA_GAP, "source_unavailable"),
         ("query_error", CustomerFinalState.TECHNICAL_ERROR, "source_query_error"),
@@ -771,6 +802,19 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
                 rows = [
                     _row("首次查房。", "2026-01-01 09:00:00"),
                     _row("再次查房。", "2026-01-05 09:00:01"),
+                ]
+            elif scenario == "submit_time":
+                rows = [
+                    {
+                        "record_content": "首次查房。",
+                        "record_time": None,
+                        "submit_datetime": "2026-01-01 09:00:00",
+                    },
+                    {
+                        "record_content": "再次查房。",
+                        "record_time": None,
+                        "submit_datetime": "2026-01-02 09:00:00",
+                    },
                 ]
             elif scenario == "missing_time":
                 rows = [
@@ -829,6 +873,19 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     assert "2026-01" not in repr(result.decisions)
+    if scenario == "over_72h":
+        assert result.customer_display_facts == (("LX0609-007", {
+            "failure_kind": "course_record_interval_over_72h",
+            "interval_start_source": "daily_course_record",
+            "interval_end_source": "daily_course_record",
+            "interval_start_time": "2026-01-01 09:00:00",
+            "interval_end_time": "2026-01-05 09:00:01",
+            "interval_hours": 96.0,
+            "threshold_hours": 72,
+        }),)
+        assert "首次查房" not in repr(result.customer_display_facts)
+    else:
+        assert result.customer_display_facts == ()
 
 
 @pytest.mark.asyncio
@@ -891,6 +948,11 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             ("source_unavailable", "source_unavailable"),
         ),
         (
+            "severity_status_unresolved",
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("source_unavailable", "source_unavailable"),
+        ),
+        (
             "source_truncated",
             (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
             ("source_truncated", "source_truncated"),
@@ -937,7 +999,7 @@ async def test_course_008_009_typed_natural_day_truth_table_is_python_only(
         ]
     elif scenario == "query_error":
         failure = SourceEvidenceQueryError()
-    elif scenario == "source_unavailable":
+    elif scenario in {"source_unavailable", "severity_status_unresolved"}:
         failure = SourceEvidenceUnavailable()
     elif scenario == "source_truncated":
         severity_rows = [
@@ -989,6 +1051,40 @@ async def test_course_008_009_typed_natural_day_truth_table_is_python_only(
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert "2026-01" not in repr(result.decisions)
+
+
+@pytest.mark.asyncio
+async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
+    session = _severity_session(
+        rows=[
+            {
+                "severity": "critical",
+                "prescribed_datetime": "2026-07-07 14:25:24",
+                "row_ref": "9" * 64,
+            }
+        ],
+        daily_rows=[
+            _row("七月七日病程", "2026-07-07 18:04:51"),
+            _row("七月八日病程", "2026-07-08 11:47:05"),
+            _row("七月十日病程", "2026-07-10 20:38:53"),
+            _row("七月十一日病程", "2026-07-11 11:41:05"),
+            _row("七月十三日病程", "2026-07-13 17:09:07"),
+        ],
+        senior_rows=[
+            _row("七月九日上级查房", "2026-07-09 10:24:03"),
+            _row("七月十二日上级查房", "2026-07-12 09:30:26"),
+        ],
+        evaluation_as_of_date="2026-07-13",
+    )
+    client = _Client([{"semantic_state": "satisfied"}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -1200,6 +1296,64 @@ async def test_course_009_checks_every_day_through_horizon_then_keeps_semantic_u
     assert reduced[1].reason_code == expected_reason
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
+    serious_session = _severity_session(
+        rows=[{
+            "severity": "serious",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+            "row_ref": "s" * 64,
+        }],
+        daily_rows=[_row("PRIVATE_COURSE_TEXT", "2026-01-04 08:00:00")],
+        evaluation_as_of_date="2026-01-04",
+    )
+    serious_result, serious_reduced = await _run_typed_severity(serious_session)
+    assert serious_reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert serious_result.customer_display_facts[0] == (
+        "LX0609-008",
+        {
+            "failure_kind": "severity_course_gap_exceeded",
+            "severity": "serious",
+            "anchor_date": "2026-01-01",
+            "horizon_date": "2026-01-04",
+            "gap_start_date": "2026-01-01",
+            "gap_end_date": "2026-01-04",
+            "gap_days": 3,
+            "threshold_days": 2,
+        },
+    )
+
+    critical_session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+            "row_ref": "c" * 64,
+        }],
+        daily_rows=[
+            _row("PRIVATE_COURSE_TEXT", "2026-01-01 08:00:00"),
+            _row("PRIVATE_COURSE_TEXT", "2026-01-03 08:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-03",
+    )
+    critical_result, critical_reduced = await _run_typed_severity(critical_session)
+    assert critical_reduced[1].final_state is CustomerFinalState.NON_COMPLIANT
+    assert critical_result.customer_display_facts[0] == (
+        "LX0609-009",
+        {
+            "failure_kind": "critical_daily_record_missing",
+            "severity": "critical",
+            "anchor_date": "2026-01-01",
+            "horizon_date": "2026-01-03",
+            "missing_dates": ["2026-01-02"],
+            "missing_count": 1,
+            "missing_first_date": "2026-01-02",
+            "missing_last_date": "2026-01-02",
+        },
+    )
+    assert "PRIVATE_COURSE_TEXT" not in repr(serious_result)
+    assert "PRIVATE_COURSE_TEXT" not in repr(critical_result)
 
 
 @pytest.mark.asyncio
@@ -1890,6 +2044,36 @@ async def test_007_uses_only_daily_and_senior_record_time_without_model(
 
 
 @pytest.mark.asyncio
+async def test_007_accepts_authoritative_record_datetime_fallback_without_model(
+    monkeypatch,
+):
+    def fake_reader(**kwargs):
+        if kwargs["source_key"] == "daily_course_record":
+            return [{"record_time": None, "record_datetime": "2026-06-01 09:00:00"}]
+        if kwargs["source_key"] == "senior_course_record":
+            return [{"record_time": None, "submit_time": "2026-06-04 09:00:00"}]
+        raise AssertionError(kwargs["source_key"])
+
+    monkeypatch.setattr(course, "read_luxian_0609_native_source_rows", fake_reader)
+    monkeypatch.setattr(
+        course, "has_luxian_0609_current_visit_unstable_order", lambda **_: False
+    )
+
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-007",),
+        wrapper_rules=[_wrapper("LX0609-007")],
+        evidence_payload=_payload(documents={}),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        llm_client=_Client([]),
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant"]
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_007_unstable_order_is_not_applicable_without_reading_course_rows(
     monkeypatch,
 ):
@@ -2106,14 +2290,14 @@ async def test_008_009_require_current_visit_serious_or_critical_strong_fact():
 
 
 @pytest.mark.asyncio
-async def test_016_requires_admission_and_first_course_before_model():
+async def test_016_requires_two_comparable_documents_before_model():
     missing = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-016",),
         wrapper_rules=[_wrapper("LX0609-016")],
         evidence_payload=_payload(documents={"admission_record": [_row("入院记录现病史。")]}),
         llm_client=_Client([]),
     )
-    assert [item["status"] for item in missing.results] == ["data_gap"]
+    assert [item["status"] for item in missing.results] == ["not_applicable"]
     assert missing.llm_call_count == 0
 
     client = _Client([{"is_compliant": False}])
@@ -2133,14 +2317,192 @@ async def test_016_requires_admission_and_first_course_before_model():
 
 
 @pytest.mark.asyncio
+async def test_2496813_016_structured_history_copy_is_non_compliant_without_model():
+    history = (
+        "患者于1小时前骑电动车不慎侧滑，摔倒致头面部外伤、持续出血、"
+        "呼唤无反应，伴肢体不自主抖动、小便失禁。"
+    )
+    rows_by_source = {
+        "admission_record": [
+            {
+                "record_content": "",
+                "history_of_present_illness": history,
+            }
+        ],
+        "first_course_record": [
+            {
+                "record_content": "",
+                "case_characteristic": (
+                    "1.患者为54岁女性，起病急，病程短；"
+                    f"2.{history}"
+                    "3.既往史一般；4.体格检查完整。"
+                ),
+            }
+        ],
+    }
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-016",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-28T12:00:00+08:00",
+        row_reader=read,
+    )
+    client = _Client([])
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016",),
+        decision_rule_ids=("LX0609-016",),
+        wrapper_rules=[_wrapper("LX0609-016")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-016",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("rows_by_source", "expected_state"),
+    [
+        (
+            {
+                "admission_record": [],
+                "first_course_record": [],
+            },
+            CustomerFinalState.NOT_APPLICABLE,
+        ),
+        (
+            {
+                "admission_record": [
+                    {"record_content": "入院记录现病史具备可比正文。"}
+                ],
+                "first_course_record": [],
+            },
+            CustomerFinalState.NOT_APPLICABLE,
+        ),
+        (
+            {
+                "admission_record": [],
+                "first_course_record": [
+                    {"record_content": "首次病程病例特点具备可比正文。"}
+                ],
+            },
+            CustomerFinalState.NOT_APPLICABLE,
+        ),
+        (
+            {
+                "admission_record": [
+                    {"record_content": "", "history_of_present_illness": ""}
+                ],
+                "first_course_record": [
+                    {"record_content": "首次病程病例特点具备可比正文。"}
+                ],
+            },
+            CustomerFinalState.DATA_GAP,
+        ),
+        (
+            {
+                "admission_record": [
+                    {
+                        "record_content": "",
+                        "history_of_present_illness": (
+                            "患者反复咳嗽咳痰伴活动后气促三月，加重两天，"
+                            "入院后予氧疗及抗感染等对症支持治疗。"
+                        ),
+                    }
+                ],
+                "first_course_record": [
+                    {
+                        "record_content": "",
+                        "case_characteristic": (
+                            "患者反复咳嗽咳痰伴活动后气促三月，加重两天，"
+                            "入院后予氧疗及抗感染等对症支持治疗。"
+                        ),
+                    }
+                ],
+            },
+            CustomerFinalState.NON_COMPLIANT,
+        ),
+    ],
+)
+async def test_typed_016_distinguishes_absent_unavailable_and_structured_comparable_bodies(
+    rows_by_source: dict[str, list[dict[str, str]]],
+    expected_state: CustomerFinalState,
+):
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows_by_source.get(source_key, []),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-016",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-28T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-016",),
+        decision_rule_ids=("LX0609-016",),
+        wrapper_rules=[_wrapper("LX0609-016")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-016",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_typed_016_018_use_same_material_session_without_legacy_payload():
     private_marker = "PRIVATE_ADMISSION_MATERIAL_MARKER"
     rows_by_source = {
         "admission_record": [
-            _row(
-                f"{private_marker} 主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。"
-                "现病史与病例特点完整。"
-            )
+            {
+                **_row(
+                    f"{private_marker} 主诉：反复胸痛伴胸闷气短三个月，"
+                    "活动后加重，休息后可缓解。入院诊断：不稳定型心绞痛。"
+                    "现病史与病例特点完整。"
+                ),
+                "chief_complaint": (
+                    "反复胸痛3个月，加重2天"
+                ),
+            }
         ],
         "first_course_record": [
             _row("首次病程记录包含病例特点、诊断依据、鉴别诊断和诊疗计划。")
@@ -2165,7 +2527,20 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": False}, {"is_compliant": True}])
+    client = _Client(
+        [
+            {"is_compliant": False},
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": [
+                    "anatomic_site",
+                    "symptom_pattern",
+                ],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "主诉与第一诊断方向一致。",
+            },
+        ]
+    )
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-016", "LX0609-018"),
         decision_rule_ids=("LX0609-016", "LX0609-018"),
@@ -2245,7 +2620,19 @@ async def test_typed_018_preserves_source_state_without_model(
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client(
+        [
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": [
+                    "anatomic_site",
+                    "symptom_pattern",
+                ],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "胸痛症状支持心绞痛诊断方向。",
+            }
+        ]
+    )
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
@@ -2297,14 +2684,30 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
         evidence_payload=_payload(documents={"admission_record": [admission_row]}),
-        llm_client=_Client([{"is_compliant": False}]),
+        llm_client=_Client(
+            [
+                {
+                    "is_compliant": False,
+                    "diagnostic_relation_state": "supported",
+                    "diagnostic_rationale_code": "supported",
+                }
+            ]
+        ),
     )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
         evidence_payload={"stale": "payload"},
-        llm_client=_Client([{"is_compliant": False}]),
+        llm_client=_Client(
+            [
+                {
+                    "is_compliant": False,
+                    "diagnostic_relation_state": "supported",
+                    "diagnostic_rationale_code": "supported",
+                }
+            ]
+        ),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -2353,7 +2756,15 @@ async def test_typed_018_accepts_only_controlled_primary_diagnosis_material():
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": False}])
+    client = _Client(
+        [
+            {
+                "is_compliant": False,
+                "diagnostic_relation_state": "mismatch",
+                "diagnostic_rationale_code": "diagnosis_mismatch",
+            }
+        ]
+    )
     typed = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
@@ -2726,6 +3137,34 @@ async def test_017_similarity_threshold_is_programmatic_and_never_outputs_review
     assert exact_threshold["metadata"]["maximum_similarity"] == 0.7
     assert exact_threshold["status"] == "compliant"
     assert exact_threshold["metadata"]["reason_code"] == "copy_similarity_within_threshold"
+
+
+@pytest.mark.parametrize(
+    "fallback_field",
+    ["record_datetime", "submit_time", "submit_datetime"],
+)
+def test_017_accepts_controlled_authoritative_time_fallback(fallback_field):
+    copied = "患者神志清楚，咳嗽咳痰，双肺呼吸音粗，继续抗感染平喘化痰治疗，观察病情变化。"
+    result = course._copy_result(
+        {
+            "daily_course_record": [
+                {
+                    "record_content": copied,
+                    "record_time": None,
+                    fallback_field: "2026-06-01 09:00:00",
+                },
+                {
+                    "record_content": copied,
+                    "record_time": None,
+                    fallback_field: "2026-06-02 09:00:00",
+                },
+            ]
+        },
+        source_complete=True,
+    )
+
+    assert result["status"] == "non_compliant"
+    assert result["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
 def test_017_same_day_only_records_are_not_applicable_without_comparison_pair():
@@ -3562,7 +4001,19 @@ async def test_018_requires_complaint_and_primary_diagnosis_material():
     assert [item["status"] for item in incomplete.results] == ["data_gap"]
     assert incomplete.llm_call_count == 0
 
-    client = _Client([{"is_compliant": True}])
+    client = _Client(
+        [
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": [
+                    "anatomic_site",
+                    "symptom_pattern",
+                ],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "胸痛症状支持心绞痛诊断方向。",
+            }
+        ]
+    )
     complete = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
@@ -3576,22 +4027,25 @@ async def test_018_requires_complaint_and_primary_diagnosis_material():
 
 
 @pytest.mark.asyncio
-async def test_018_returns_safe_display_facts_without_returning_admission_text():
+async def test_018_returns_safe_criterion_results_without_returning_admission_text():
     client = _Client(
         [
             {
-                "is_compliant": False,
-                "customer_reason_code": "complaint_too_short",
+                "diagnostic_relation_state": "unsupported",
+                "diagnostic_reason_dimensions": ["symptom_pattern"],
+                "diagnostic_rationale_code": "symptom_only",
+                "medical_analysis": "主诉症状与第一诊断缺少特异性对应。",
             }
         ]
     )
+    complaint = "胸痛" * 10 + "加"
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
         evidence_payload=_payload(
             documents={
                 "admission_record": [
-                    _row("主诉：腹痛2天。入院诊断：急性胆囊炎。")
+                    _row(f"主诉：{complaint}。入院诊断：急性胆囊炎。")
                 ]
             }
         ),
@@ -3599,15 +4053,77 @@ async def test_018_returns_safe_display_facts_without_returning_admission_text()
     )
 
     item = result.results[0]
-    display_facts = item["metadata"]["customer_display_facts"]
-    assert display_facts == {
-        "complaint_length": 4,
-        "primary_diagnosis_available": True,
-        "source_label": "入院记录—主诉",
-        "failure_kind": "complaint_too_short",
+    criteria = item["criterion_results"]
+    assert [(row["criterion_id"], row["status"]) for row in criteria] == [
+        ("chief_complaint_length", "failed"),
+        ("diagnostic_direction", "failed"),
+    ]
+    assert criteria[0]["actual_value"] == 21
+    assert criteria[0]["expected_value"] == 20
+    assert criteria[0]["operator"] == "lte"
+    assert criteria[1]["actual_value"] == "unsupported"
+    assert criteria[1]["medical_analysis"] == "主诉症状与第一诊断缺少特异性对应。"
+    assert complaint not in repr(item)
+    assert "20字" not in client.prompts[0]
+    assert "不超过20" not in client.prompts[0]
+    assert "is_compliant" not in client.prompts[0]
+    assert "diagnostic_rationale_code" in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_018_length_boundary_allows_20_chars_and_rejects_21_chars():
+    client = _Client(
+        [
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": ["anatomic_site"],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "诊断方向一致。",
+            },
+            {
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": ["anatomic_site"],
+                "diagnostic_rationale_code": "supported",
+                "medical_analysis": "诊断方向一致。",
+            },
+        ]
+    )
+    statuses = []
+    lengths = []
+    for complaint in ("胸痛" * 10, "胸痛" * 10 + "加"):
+        result = await course.execute_luxian_0609_native_course_quality_rules(
+            rule_ids=("LX0609-018",),
+            wrapper_rules=[_wrapper("LX0609-018")],
+            evidence_payload=_payload(
+                documents={
+                    "admission_record": [
+                        _row(f"主诉：{complaint}。入院诊断：冠心病。")
+                    ]
+                }
+            ),
+            llm_client=client,
+        )
+        statuses.append(result.results[0]["status"])
+        lengths.append(result.results[0]["criterion_results"][0]["actual_value"])
+
+    assert lengths == [20, 21]
+    assert statuses == ["compliant", "non_compliant"]
+
+
+def test_018_diagnostic_rationale_code_cannot_contradict_returned_dimensions():
+    response = {
+        "content": json.dumps(
+            {
+                "diagnostic_rationale_code": "symptom_only",
+            }
+        )
     }
-    assert "腹痛2天" not in repr(item)
-    assert "customer_reason_code" in client.prompts[0]
+
+    assert course._parse_lx018_diagnostic_rationale_code(
+        response,
+        relation_state="unsupported",
+        dimensions=("anatomic_site", "symptom_pattern"),
+    ) == "site_symptom_not_specific"
 
 
 @pytest.mark.asyncio
@@ -3628,6 +4144,9 @@ async def test_model_failure_and_invalid_json_are_isolated_and_safe():
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
+    assert [item["status"] for item in result.results] == [
+        "data_gap",
+        "technical_error",
+    ]
     assert result.llm_call_count == 2
     assert secret not in repr(result)

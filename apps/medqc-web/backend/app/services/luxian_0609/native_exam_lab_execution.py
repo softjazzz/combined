@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -31,6 +31,7 @@ from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     EVALUATION_HORIZON_SOURCE_KEY,
+    authoritative_document_time_value,
 )
 
 
@@ -55,6 +56,7 @@ _COURSE_SOURCE_KEYS = (
     "senior_course_record",
     "rescue_record",
 )
+_ORDER_SOURCE_KEY = "inpat_nondrug_order.exam_lab_order"
 _MAX_ROWS_PER_SOURCE = 6
 _MAX_ROW_CHARS = 1200
 _MAX_CONTEXT_CHARS = 12000
@@ -109,18 +111,18 @@ _TYPED_TRIGGER_SOURCES = {
 }
 _TYPED_RULE_SOURCE_KEYS = {
     # 010 只依赖已实施检查及病程；报告表异常不应阻断“检查前原因”判断。
-    "LX0609-010": ("exam_master", *_COURSE_SOURCE_KEYS),
-    "LX0609-011": (*_TYPED_TRIGGER_SOURCES["exam"], *_COURSE_SOURCE_KEYS),
-    "LX0609-012": (*_TYPED_TRIGGER_SOURCES["exam"], *_COURSE_SOURCE_KEYS),
-    "LX0609-014": (*_TYPED_TRIGGER_SOURCES["culture"], *_COURSE_SOURCE_KEYS),
-    "LX0609-015": (*_TYPED_TRIGGER_SOURCES["culture"], *_COURSE_SOURCE_KEYS),
+    "LX0609-010": ("exam_master", _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-011": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-012": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-014": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
+    "LX0609-015": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY, *_COURSE_SOURCE_KEYS),
 }
 _TRIGGER_SOURCES_BY_RULE = {
-    "LX0609-010": ("exam_master",),
-    "LX0609-011": _TYPED_TRIGGER_SOURCES["exam"],
-    "LX0609-012": _TYPED_TRIGGER_SOURCES["exam"],
-    "LX0609-014": _TYPED_TRIGGER_SOURCES["culture"],
-    "LX0609-015": _TYPED_TRIGGER_SOURCES["culture"],
+    "LX0609-010": ("exam_master", _ORDER_SOURCE_KEY),
+    "LX0609-011": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
+    "LX0609-012": (*_TYPED_TRIGGER_SOURCES["exam"], _ORDER_SOURCE_KEY),
+    "LX0609-014": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
+    "LX0609-015": (*_TYPED_TRIGGER_SOURCES["culture"], _ORDER_SOURCE_KEY),
 }
 _POST_RULE_IDS = frozenset({"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"})
 _HORIZON_SOURCE_KEYS = (
@@ -133,6 +135,7 @@ _EXAM_CONTROLLED_FIELDS = (
     "exam_name",
     "item_name",
     "exam_item_name",
+    "performed_dept",
     "exam_result",
     "exam_impression",
     "exam_conclusion",
@@ -150,6 +153,17 @@ _EXAM_TRIGGER_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 _CULTURE_TRIGGER_PATTERN = re.compile(r"(?:细菌|真菌|血|痰|尿|分泌物)?培养|药敏")
+_EXAM_ORDER_NAME_PATTERN = re.compile(
+    r"(?:^|[^A-Z])CT(?:$|[^A-Z])|(?:^|[^A-Z])MRI(?:$|[^A-Z])|磁共振|核磁",
+    flags=re.IGNORECASE,
+)
+_CANCELLED_ORDER_PATTERN = re.compile(r"撤销|作废|取消")
+_REASON_COURSE_PATTERN = re.compile(r"因|为明确|为排除|评估|了解|复查|拟行|完善|目的")
+_RESULT_COURSE_PATTERN = re.compile(
+    r"提示|显示|结果|结合|诊断意见|未见|发现|阳性|阴性|无生长|检出|分离|"
+    r"血肿|出血|梗死|骨折|异常|菌|\d+\+|敏感|耐药"
+)
+_MAX_RELEVANT_COURSE_ROWS = 4
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("检查检验相关记录满足该项要求。", ""),
@@ -168,6 +182,7 @@ class NativeExamLabExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -212,7 +227,8 @@ def _timeline_facts(evidence_payload: Mapping[str, Any] | None) -> Sequence[Any]
 
 def _row_text(row: Mapping[str, Any]) -> str:
     return _clean(
-        row.get("content")
+        row.get("case_characteristic")
+        or row.get("content")
         or row.get("record_content")
         or row.get("raw_text")
         or row.get("content_preview")
@@ -325,7 +341,9 @@ def _controlled_trigger_from_rows(
     pattern = _EXAM_TRIGGER_PATTERN if fact_kind == "exam" else _CULTURE_TRIGGER_PATTERN
     for source in sources:
         for row in source.rows:
-            for field in fields:
+            if _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status"))):
+                continue
+            for field in (*fields, "order_name"):
                 value = _clean(row.get(field))
                 if value and pattern.search(value):
                     return True
@@ -382,6 +400,186 @@ def _typed_trigger_state(
     return "unknown", loaded
 
 
+def _parse_current_visit_time(value: Any) -> datetime | None:
+    text = _clean(value).replace("T", " ")
+    try:
+        return datetime.fromisoformat(text).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _target_order_pattern(fact_kind: str) -> re.Pattern[str]:
+    return _EXAM_ORDER_NAME_PATTERN if fact_kind == "exam" else _CULTURE_TRIGGER_PATTERN
+
+
+def _effective_target_orders(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    fact_kind: str,
+) -> tuple[tuple[datetime | None, Mapping[str, Any]], ...]:
+    pattern = _target_order_pattern(fact_kind)
+    return tuple(
+        (
+            _parse_current_visit_time(
+                row.get("prescribed_datetime")
+                or row.get("order_time")
+                or row.get("start_time")
+            ),
+            row,
+        )
+        for row in rows_by_source.get(_ORDER_SOURCE_KEY, ())
+        if not _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status")))
+        and pattern.search(_clean(row.get("order_name")))
+    )
+
+
+def _course_rows_relevant_to_target_orders(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> dict[str, tuple[Mapping[str, Any], ...]]:
+    """先按目标事件和时序筛病程，再做 LLM 预算裁剪。
+
+    医嘱仅证明目标事项已下达，绝不伪造实际检查时间、报告时间或结果。
+    """
+
+    projected = {
+        key: tuple(row for row in rows if isinstance(row, Mapping))
+        for key, rows in rows_by_source.items()
+    }
+    anchors = {
+        fact_kind: min(
+            (time for time, _row in _effective_target_orders(projected, fact_kind=fact_kind)
+             if time is not None),
+            default=None,
+        )
+        for fact_kind in ("exam", "culture")
+    }
+    if all(anchor is None for anchor in anchors.values()):
+        return projected
+
+    entries: list[
+        tuple[str, int, Mapping[str, Any], datetime | None, str, frozenset[str]]
+    ] = []
+    for source_key in _COURSE_SOURCE_KEYS:
+        for index, row in enumerate(projected.get(source_key, ())):
+            text = _row_text(row)
+            families = frozenset(
+                fact_kind
+                for fact_kind in ("exam", "culture")
+                if _target_order_pattern(fact_kind).search(text)
+            )
+            if not families or not (
+                _REASON_COURSE_PATTERN.search(text)
+                or _RESULT_COURSE_PATTERN.search(text)
+            ):
+                continue
+            entries.append(
+                (
+                    source_key,
+                    index,
+                    row,
+                    _parse_current_visit_time(authoritative_document_time_value(row)),
+                    text,
+                    families,
+                )
+            )
+
+    selected: set[tuple[str, int]] = set()
+    for fact_kind, anchor in anchors.items():
+        if anchor is None:
+            continue
+        family_entries = [item for item in entries if fact_kind in item[5] and item[3] is not None]
+        before = [
+            item
+            for item in family_entries
+            if item[3] <= anchor and _REASON_COURSE_PATTERN.search(item[4])
+        ]
+        after = [
+            item
+            for item in family_entries
+            if item[3] >= anchor and _RESULT_COURSE_PATTERN.search(item[4])
+        ]
+        if before:
+            item = min(before, key=lambda candidate: anchor - candidate[3])
+            selected.add((item[0], item[1]))
+        if after:
+            item = min(after, key=lambda candidate: candidate[3] - anchor)
+            selected.add((item[0], item[1]))
+
+    ranked = sorted(
+        entries,
+        key=lambda item: (
+            -int(bool(_RESULT_COURSE_PATTERN.search(item[4]))),
+            min(
+                (
+                    abs((item[3] - anchors[family]).total_seconds())
+                    for family in item[5]
+                    if item[3] is not None and anchors[family] is not None
+                ),
+                default=float("inf"),
+            ),
+            item[3] or datetime.max,
+            item[0],
+            item[1],
+        ),
+    )
+    for item in ranked:
+        if len(selected) >= _MAX_RELEVANT_COURSE_ROWS:
+            break
+        selected.add((item[0], item[1]))
+    if len(selected) > _MAX_RELEVANT_COURSE_ROWS:
+        selected = set(
+            sorted(
+                selected,
+                key=lambda key: next(
+                    index
+                    for index, item in enumerate(ranked)
+                    if (item[0], item[1]) == key
+                ),
+            )[:_MAX_RELEVANT_COURSE_ROWS]
+        )
+    for source_key in _COURSE_SOURCE_KEYS:
+        projected[source_key] = tuple(
+            row
+            for index, row in enumerate(projected.get(source_key, ()))
+            if (source_key, index) in selected
+        )
+    return projected
+
+
+def _order_based_exam_reason_outcome(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> _ExamLabOutcome | None:
+    """010 仅以目标检查医嘱时间为文书原因记录的最晚边界。"""
+
+    orders = _effective_target_orders(rows_by_source, fact_kind="exam")
+    if not orders:
+        return None
+    order_time = min((time for time, _row in orders if time is not None), default=None)
+    if order_time is None:
+        return _ExamLabOutcome(
+            "LX0609-010", "data_gap", "authoritative_order_time_missing"
+        )
+    reason_recorded = any(
+        (
+            record_time := _parse_current_visit_time(
+                authoritative_document_time_value(row)
+            )
+        ) is not None
+        and record_time <= order_time
+        and _EXAM_ORDER_NAME_PATTERN.search(_row_text(row))
+        and _REASON_COURSE_PATTERN.search(_row_text(row))
+        for source_key in _COURSE_SOURCE_KEYS
+        for row in rows_by_source.get(source_key, ())
+    )
+    return _ExamLabOutcome(
+        "LX0609-010",
+        "compliant" if reason_recorded else "non_compliant",
+        "exam_order_reason_recorded"
+        if reason_recorded
+        else "exam_order_reason_missing",
+    )
+
+
 def _typed_context(
     *,
     fact_kind: str,
@@ -412,7 +610,7 @@ def _typed_context(
                 text = _clean(" ".join(_clean(row.get(key)) for key in fields if _clean(row.get(key))))
             else:
                 text = _row_text(row)
-                record_time = _clean(row.get("record_time"))
+                record_time = _clean(authoritative_document_time_value(row))
                 if record_time:
                     text = f"记录时间={record_time} {text}".strip()
             if text:
@@ -503,6 +701,102 @@ def _decision_from_outcome(
         evaluator_version=_TYPED_EVALUATOR_VERSION,
         confidence=None,
     )
+
+
+def _customer_display_facts_for_outcome(
+    *,
+    rule_id: str,
+    status: str,
+    reason_code: str,
+    source_document_ids: Sequence[str] = (),
+) -> Mapping[str, Any] | None:
+    """仅为可确定的不合规输出可展示的检查/检验事实，不携带正文或模型输出。"""
+
+    if status != "non_compliant":
+        return None
+    if reason_code not in {"exam_order_reason_missing", "exam_lab_text_fact"}:
+        return None
+    def with_document_ids(facts: dict[str, Any]) -> dict[str, Any]:
+        # document_id 仅在来源行显式提供时才写入内部事实。后续聚合器须将其
+        # 转为 HMAC evidence_ref；这里绝不根据 order_id、行号或正文猜测文书。
+        ids = tuple(
+            dict.fromkeys(
+                value
+                for raw in source_document_ids
+                if (value := _clean(raw))
+            )
+        )
+        if ids:
+            facts["source_document_ids"] = list(ids)
+        return facts
+
+    if rule_id == "LX0609-010":
+        return with_document_ids({
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "ct_mri",
+            "requirement": "reason_before_order",
+            "event_phase": "order",
+            "checked_sources": ["exam_lab_order", "course_record"],
+        })
+    if rule_id in {"LX0609-011", "LX0609-014"}:
+        return with_document_ids({
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "ct_mri" if rule_id == "LX0609-011" else "culture_susceptibility",
+            "requirement": "result_recording_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+        })
+    if rule_id in {"LX0609-012", "LX0609-015"}:
+        return with_document_ids({
+            "failure_kind": "exam_lab_requirement_not_documented",
+            "subject": "ct_mri" if rule_id == "LX0609-012" else "culture_susceptibility",
+            "requirement": "positive_result_analysis_within_24h",
+            "event_phase": "report",
+            "checked_sources": ["exam_lab_report", "course_record"],
+        })
+    return None
+
+
+def _target_source_document_ids(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    fact_kind: str,
+) -> tuple[str, ...]:
+    """返回当前单事件目标行中显式给出的文书 ID。
+
+    主表和医嘱表未必提供可供病历对照页解析的 document_id；没有时宁可不定位。
+    这里不使用 exam_id、test_id、order_id 或行下标作为替代，防止跨文书错误跳转。
+    """
+
+    source_keys = (
+        (*_EXAM_SOURCE_KEYS, _ORDER_SOURCE_KEY)
+        if fact_kind == "exam"
+        else (*_CULTURE_SOURCE_KEYS, _ORDER_SOURCE_KEY)
+    )
+    pattern = _target_order_pattern(fact_kind)
+    document_ids: list[str] = []
+    for source_key in source_keys:
+        for row in rows_by_source.get(source_key, ()):
+            if not isinstance(row, Mapping):
+                continue
+            values = (
+                _clean(row.get(field))
+                for field in (
+                    "order_name",
+                    *(
+                        _EXAM_CONTROLLED_FIELDS
+                        if fact_kind == "exam"
+                        else _CULTURE_CONTROLLED_FIELDS
+                    ),
+                )
+            )
+            if not any(value and pattern.search(value) for value in values):
+                continue
+            # 只认可 source reader 已投影的显式 document_id，不回退 id。
+            document_id = _clean(row.get("document_id"))
+            if document_id:
+                document_ids.append(document_id)
+    return tuple(dict.fromkeys(document_ids))
 
 
 def _context(documents: Mapping[str, Any], *, fact_kind: str) -> str:
@@ -786,16 +1080,34 @@ async def execute_luxian_0609_native_exam_lab_rules(
 
     results: list[dict[str, Any]] = []
     decisions: list[RuleDecision] = []
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+    # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
+    display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
 
     def emit_typed(
         rule_id: str,
         status: str,
         reason_code: str,
         fact_refs: tuple[str, ...] = (),
+        source_document_ids: Sequence[str] = (),
     ) -> None:
         assert evidence_snapshot is not None
+        if status == "non_compliant" and not source_document_ids:
+            fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+            source_document_ids = _target_source_document_ids(
+                display_rows_by_source,
+                fact_kind=fact_kind,
+            )
+        display_facts = _customer_display_facts_for_outcome(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason_code,
+            source_document_ids=source_document_ids,
+        )
+        if display_facts is not None:
+            customer_display_facts.append((rule_id, display_facts))
         decisions.append(
             _decision_from_outcome(
                 outcome=_ExamLabOutcome(rule_id, status, reason_code, fact_refs),
@@ -865,6 +1177,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
         for rule_id in eligible_rule_ids:
             for source_key in _TYPED_RULE_SOURCE_KEYS[rule_id]:
                 rows_by_source[source_key] = loaded_sources[source_key].rows
+        display_rows_by_source = rows_by_source
         observed_source_keys = {item.source_key for item in evidence_snapshot.observations}
         for source_key in _HORIZON_SOURCE_KEYS:
             if source_key not in observed_source_keys:
@@ -877,8 +1190,26 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if material.state in {"present", "empty"}:
                 rows_by_source[source_key] = material.rows
         if eligible_rule_ids:
+            structured_exam_present = any(
+                _EXAM_TRIGGER_PATTERN.search(_clean(value))
+                for source_key in _TYPED_TRIGGER_SOURCES["exam"]
+                for row in rows_by_source.get(source_key, ())
+                for value in row.values()
+            )
+            if "LX0609-010" in eligible_rule_ids and not structured_exam_present:
+                order_outcome = _order_based_exam_reason_outcome(rows_by_source)
+                if order_outcome is not None:
+                    emit_typed(
+                        order_outcome.rule_id,
+                        order_outcome.status,
+                        order_outcome.reason_code,
+                    )
+                    typed_processed.add("LX0609-010")
+                    eligible_rule_ids.remove("LX0609-010")
             try:
-                projection = build_exam_lab_text_projection(rows_by_source=rows_by_source)
+                projection = build_exam_lab_text_projection(
+                    rows_by_source=_course_rows_relevant_to_target_orders(rows_by_source)
+                )
             except ValueError:
                 projection = None
             if projection is not None:
@@ -890,7 +1221,19 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         else projection.culture_event
                     )
                     if event is None:
-                        emit_typed(rule_id, "not_applicable", "exam_lab_target_event_absent")
+                        fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                        if _effective_target_orders(rows_by_source, fact_kind=fact_kind):
+                            emit_typed(
+                                rule_id,
+                                "data_gap",
+                                "authoritative_report_time_missing",
+                            )
+                        else:
+                            emit_typed(
+                                rule_id,
+                                "not_applicable",
+                                "exam_lab_target_event_absent",
+                            )
                         typed_processed.add(rule_id)
                     elif event.target_explicitly_absent:
                         # 单事件口径下，腹超/血常规这类可验证的非目标项目可直接
@@ -1131,6 +1474,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 key=lambda item: normalized_decision_ids.index(item.rule_id),
             )
         ),
+        customer_display_facts=tuple(customer_display_facts),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

@@ -105,9 +105,45 @@ def test_renderer_maps_only_reducer_state_to_customer_status(
     assert result["reason_code"] == _reduced(final_state).reason_code
     assert set(result) == CUSTOMER_RESULT_KEYS
     assert result["evidence_items"] == []
+    assert result["criterion_results"] == []
     assert "metadata" not in result
     assert "audit" not in result
     assert "diagnostic_trace" not in result
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "expected_finding"),
+    [
+        ("source_unavailable", "本次未读取到判断所需资料"),
+        ("source_truncated", "本次读取的相关资料不完整"),
+        ("source_readiness_unproven", "相关资料是否完整尚待确认"),
+        ("required_field_missing", "相关记录缺少判断所需信息"),
+        ("authoritative_time_missing", "相关记录缺少明确时间"),
+        ("linkage_unresolved", "暂未找到可相互核对的对应记录"),
+        ("applicability_source_gap", "暂无法确认本质控点是否适用"),
+    ],
+)
+def test_renderer_explains_data_gap_as_system_evidence_condition(
+    reason_code,
+    expected_finding,
+):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-001",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="basic-timeliness-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == expected_finding
+    assert "请补充或同步所需数据" not in result["suggestion"]
 
 
 def test_rule_identity_and_name_come_only_from_the_trusted_catalog():

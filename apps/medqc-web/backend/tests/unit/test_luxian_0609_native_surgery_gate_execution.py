@@ -460,6 +460,20 @@ async def test_typed_003_uses_same_session_authoritative_times_and_zero_model(
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_within_threshold"
     assert result.llm_call_count == 0
+    assert result.customer_display_facts == (
+        (
+            "LX0609-003",
+            {
+                "failure_kind": "surgery_record_within_threshold",
+                "performed_surgery_confirmed": True,
+                "surgery_end_time": "2026-01-01 08:00:00",
+                "record_time": "2026-01-02 08:00:00",
+                "elapsed_hours": 24.0,
+                "threshold_hours": 24,
+                "source_label": "手术记录",
+            },
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -551,7 +565,7 @@ async def test_typed_003_uses_independent_negative_gate_when_terminal_mr_source_
     [
         ("available", "data_gap", None),
         ("empty", "not_applicable", "performed_event_absent"),
-        ("mr_only", "data_gap", "applicability_source_gap"),
+        ("mr_only", "not_applicable", "performed_event_absent"),
         ("unavailable", "data_gap", "source_unavailable"),
         ("error", "technical_error", "source_query_error"),
     ],
@@ -627,11 +641,14 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
         snapshot=session.snapshot,
     )
     expected_states = [expected_state] * 5
-    # 空同意书查询本身不能证明该来源已完整同步；没有独立完整性事实时，
-    # 033 与其它缺字段规则一样保守为数据不足。
+    # 033以“有手术记录”为规则前提；手术记录完整查询为空时由030负责，
+    # 033直接不适用，不再继续要求同意书。
+    if source_mode in {"empty", "mr_only"}:
+        expected_states[-1] = "not_applicable"
     assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
-        assert {item.reason_code for item in result.decisions} == {expected_reason}
+        expected_reasons = {expected_reason}
+        assert {item.reason_code for item in result.decisions} == expected_reasons
     elif source_mode == "available":
         assert {item.reason_code for item in result.decisions} == {
             "required_field_missing",
@@ -692,6 +709,16 @@ async def test_033_unproven_readiness_with_empty_source_is_data_gap_without_mode
         snapshot=snapshot,
     )
     assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert result.customer_display_facts == (
+        (
+            "LX0609-033",
+            {
+                "failure_kind": "surgery_consent_source_unproven",
+                "consent_state": "source_unproven",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    )
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -722,6 +749,16 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
         snapshot=snapshot,
     )
     assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert result.customer_display_facts == (
+        (
+            "LX0609-033",
+            {
+                "failure_kind": "surgery_consent_document_missing",
+                "consent_state": "missing",
+                "performed_surgery_confirmed": True,
+            },
+        ),
+    )
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -803,6 +840,64 @@ async def test_typed_024_025_028_033_share_one_joint_fact_call() -> None:
     assert [item.final_state.value for item in reduced] == [
         "compliant", "compliant", "data_gap", "compliant",
     ]
+
+
+@pytest.mark.asyncio
+async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() -> None:
+    selected = ("LX0609-024",)
+    surgery_text = (
+        "因外伤性颅内血肿行血肿清除术、去骨瓣减压术及硬脑膜修补术。"
+        "术中人工硬脑膜一张覆盖缺损处，硬膜下置入颅内压监测探头一根。"
+    )
+
+    def reader(**kwargs):
+        rows_by_source = {
+            "surgery_record": (
+                {
+                    "surgery_begin_time": "2026-01-01 08:00:00+08",
+                    "surgery_name": "血肿清除术+去骨瓣减压术+颅内压监测探头植入术",
+                    "surgery_process": surgery_text,
+                },
+            ),
+            "mr_surgery": ({"surgery_name": "血肿清除术"},),
+        }
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=rows_by_source.get(kwargs["source_key"], ()),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=selected,
+        decision_rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=selected,
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["not_applicable"]
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -977,8 +1072,8 @@ async def test_typed_028_alone_binds_both_surgery_sources_without_snapshot_misma
 
     assert result.results == ()
     assert result.llm_call_count == result.total_tokens == 0
-    assert reduced[0].final_state.value == "data_gap"
-    assert result.decisions[0].reason_code == "applicability_source_gap"
+    assert reduced[0].final_state.value == "not_applicable"
+    assert result.decisions[0].reason_code == "performed_event_absent"
     assert len(result.decisions[0].fact_refs) == 2
 
 
@@ -1078,6 +1173,33 @@ async def test_typed_003_preserves_time_and_source_boundaries(
     assert result.total_tokens == 0
     assert client.prompts == []
     assert "NOT_A_TIME" not in repr(result)
+    if expected_state == "non_compliant":
+        assert result.customer_display_facts == (
+            (
+                "LX0609-003",
+                {
+                    "failure_kind": "surgery_record_late",
+                    "performed_surgery_confirmed": True,
+                    "surgery_end_time": "2026-01-01 08:00:00",
+                    "record_time": "2026-01-02 08:00:01",
+                    "elapsed_hours": 24.0,
+                    "threshold_hours": 24,
+                    "source_label": "手术记录",
+                },
+            ),
+        )
+    elif expected_state == "not_applicable":
+        assert result.customer_display_facts == (
+            (
+                "LX0609-003",
+                {
+                    "failure_kind": "surgery_not_performed",
+                    "performed_surgery_confirmed": False,
+                },
+            ),
+        )
+    else:
+        assert result.customer_display_facts == ()
 
 
 @pytest.mark.asyncio
@@ -1311,6 +1433,50 @@ async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkey
 
 
 @pytest.mark.asyncio
+async def test_025_legacy_llm_requires_field_level_implant_evidence_for_non_compliant():
+    client = _Client([{
+        "is_compliant": False,
+        "missing_fields": ["implant_material", "implant_quantity", "PRIVATE_FIELD"],
+    }])
+
+    result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        wrapper_rules=[_wrapper("LX0609-025")],
+        evidence_payload=_payload(
+            facts=[
+                _performed(),
+                _fact(
+                    "current_visit_surgical_implant_used",
+                    source_key="implant_usage",
+                ),
+            ],
+            surgery_record=[
+                {
+                    "document_id": "surgery-document-025",
+                    "record_time": "2026-01-01 10:00:00+08",
+                    "surgeon": "术者甲",
+                }
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["customer_display_facts"] == {
+        "failure_kind": "implant_information_incomplete",
+        "missing_fields": ["implant_material", "implant_quantity"],
+        "source_label": "手术记录",
+        "source_document_id": "surgery-document-025",
+    }
+    assert "PRIVATE_FIELD" not in repr(result.results[0])
+    assert "missing_fields" in client.prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_003_rejects_nonexact_surgery_time_before_model(monkeypatch):
     monkeypatch.setattr(surgery, "read_luxian_0609_native_source_rows", lambda **_: [])
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
@@ -1519,6 +1685,36 @@ def test_025_actual_implant_field_contract_is_python_owned(
     )
 
     assert outcome.status == expected
+    if expected == "non_compliant":
+        assert outcome.customer_display_facts == {
+            "failure_kind": "implant_information_incomplete",
+            "missing_fields": [field],
+            "source_label": "手术记录",
+        }
+
+
+def test_025_binds_missing_fields_to_the_model_validated_surgery_document_only() -> None:
+    outcome = surgery._surgery_text_outcome(
+        rule_id="LX0609-025",
+        facts=(_surgery_text_fact(implant_material="missing"),),
+        projection=surgery.SurgeryTextProjection(
+            context="<redacted>",
+            time_candidates={},
+            document_refs=frozenset({"S01-01", "S02-01"}),
+            document_source_keys={
+                "S01-01": "surgery_record",
+                "S02-01": "mr_surgery",
+            },
+            document_source_ids={"S01-01": "surgery-document-1"},
+        ),
+    )
+
+    assert outcome.customer_display_facts == {
+        "failure_kind": "implant_information_incomplete",
+        "missing_fields": ["implant_material"],
+        "source_label": "手术记录",
+        "source_document_id": "surgery-document-1",
+    }
 
 
 @pytest.mark.asyncio
@@ -1623,3 +1819,33 @@ async def test_model_error_invalid_json_and_sensitive_marker_never_echo():
     assert failure.results[0]["status"] == invalid.results[0]["status"] == "data_gap"
     assert secret not in repr(failure)
     assert secret not in repr(invalid)
+
+
+def test_024_structured_nonmalignant_diagnoses_do_not_trigger_rule():
+    assert surgery._structured_nonmalignant_diagnoses(
+        (
+            {"diagnosis_code": "S06.5"},
+            {"diagnosis_code": "J18.9"},
+        )
+    )
+    assert not surgery._structured_nonmalignant_diagnoses(
+        ({"diagnosis_code": "C34.9"},)
+    )
+    assert not surgery._structured_nonmalignant_diagnoses(
+        ({"diagnosis_code": ""},)
+    )
+
+
+def test_028_requires_positive_i_or_ii_incision_fact_without_surgery_record():
+    assert surgery._structured_028_not_applicable(
+        surgery_rows=(),
+        mr_surgery_rows=(
+            {"surgery_name": "受控操作", "surgical_incision_level": "-"},
+        ),
+    )
+    assert not surgery._structured_028_not_applicable(
+        surgery_rows=(),
+        mr_surgery_rows=(
+            {"surgery_name": "受控手术", "surgical_incision_level": "II"},
+        ),
+    )

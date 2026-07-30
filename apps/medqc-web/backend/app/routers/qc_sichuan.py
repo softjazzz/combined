@@ -645,7 +645,12 @@ def _has_meaningful_first_course_text_for_batch(*, eval_item: Dict[str, Any], re
                 _meaningful(
                     "\n".join(
                         str(item.get(key) or "").strip()
-                        for key in ("content", "raw_text", "content_preview")
+                        for key in (
+                            "case_characteristic",
+                            "content",
+                            "raw_text",
+                            "content_preview",
+                        )
                         if str(item.get(key) or "").strip()
                     )
                 )
@@ -675,6 +680,13 @@ def _guard_luxian_copy_result_for_batch(
 ) -> Dict[str, Any]:
     normalized_rule_id = str(rule_id or eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
     if normalized_rule_id != "LX0609-016":
+        return eval_item
+    display_facts = eval_item.get("customer_display_facts")
+    if (
+        isinstance(display_facts, dict)
+        and display_facts.get("failure_kind")
+        == "admission_first_course_copy_detected"
+    ):
         return eval_item
     if _has_meaningful_first_course_text_for_batch(eval_item=eval_item, record=record):
         return eval_item
@@ -3268,7 +3280,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "trigger_decision": diagnostic_trace.get("trigger_decision") or {},
                         "postprocess_reason": str(diagnostic_trace.get("postprocess_reason") or ""),
                         "executor_type": executor_type,
-                        "rule_version": str(metadata.get("rule_version") or ""),
+                        # 原生聚合结果将当前规则契约版本置于顶层；若此处只从
+                        # metadata 读取，带 criterion_results 的结果会在单病历
+                        # 读取端被误判为旧契约并过滤。兼容旧链的 metadata 回退。
+                        "rule_version": str(
+                            eval_item.get("rule_version")
+                            or metadata.get("rule_version")
+                            or ""
+                        ),
                         "prompt_version": str(metadata.get("prompt_version") or ""),
                         "model_version": str(metadata.get("model_version") or ""),
                         "evidence_source": str(metadata.get("evidence_source") or ""),
@@ -3325,6 +3344,25 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "defect_level": str((rule or {}).get("defect_level") or ""),
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
                     }
+                    customer_display_facts = eval_item.get("customer_display_facts")
+                    if isinstance(customer_display_facts, dict):
+                        issue_item["customer_display_facts"] = _sanitize_trace_value(
+                            customer_display_facts,
+                            set(),
+                            max_text=120,
+                        )
+                    # 单病历新结果 Envelope 必须保留原生已生成的子结论和证据。
+                    # 这里不把 document_id/raw text 直接作为客户输出；workspace
+                    # 读取投影会对证据签名、对白名单字段做最终裁剪。
+                    criterion_results = eval_item.get("criterion_results")
+                    if isinstance(criterion_results, list):
+                        issue_item["criterion_results"] = criterion_results
+                    customer_evidence = eval_item.get("customer_evidence")
+                    if isinstance(customer_evidence, list):
+                        issue_item["customer_evidence"] = customer_evidence
+                    model_analysis = eval_item.get("model_analysis") or eval_item.get("medical_analysis")
+                    if isinstance(model_analysis, str) and model_analysis.strip():
+                        issue_item["model_analysis"] = model_analysis
                     if should_postprocess_formal_results:
                         issue_item = postprocess_qc_result(
                             issue_item,
@@ -4122,6 +4160,7 @@ async def list_workspace_batch_jobs(
     cache_hit: Optional[str] = Query(None),
     created_start_date: Optional[str] = Query(None),
     created_end_date: Optional[str] = Query(None),
+    record_id: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -4144,6 +4183,7 @@ async def list_workspace_batch_jobs(
         "cache_hit": cache_hit_filter,
         "created_start_date": created_start_date,
         "created_end_date": created_end_date,
+        "record_id": record_id,
         "page": page,
         "page_size": page_size,
     }
@@ -4187,6 +4227,28 @@ async def get_workspace_batch_job(
     return success_response(
         data=_workspace_batch_response_item(job),
         message="获取四川规则批量任务详情成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/records/{record_id}/latest-result")
+async def get_latest_workspace_record_result(
+    request: Request,
+    record_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """返回当前用户可访问的单病历最新 LX0609 保存结果。"""
+
+    workspace = _sichuan_workspace_service()
+    result = workspace.get_latest_luxian_0609_record_result(
+        created_by=_current_user_id(current_user),
+        record_id=record_id,
+    )
+    if str(result.get("state") or "") == "not_found":
+        raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")
+    return success_response(
+        data=result,
+        message="获取单病历最新质控结果成功",
         trace_id=get_trace_id(request),
     )
 

@@ -34,6 +34,7 @@ CUSTOMER_RESULT_KEYS = frozenset(
         "confidence",
         "reason_code",
         "evidence_items",
+        "criterion_results",
     }
 )
 
@@ -76,6 +77,82 @@ _CUSTOMER_MESSAGES = {
         "暂无法形成确定结论",
         "现有受控证据存在冲突或语义不确定性。",
         "建议补充证据后复核。",
+    ),
+}
+_DATA_GAP_MESSAGES = {
+    "source_unavailable": (
+        "本次未读取到判断所需资料",
+        "当前可查看的病历资料不足以完成本项判断。",
+        "请确认相关资料已同步完整后重新评估。",
+    ),
+    "source_truncated": (
+        "本次读取的相关资料不完整",
+        "当前结果仅依据部分病历资料，暂时不能形成确定结论。",
+        "请确认全部相关资料已同步后重新评估。",
+    ),
+    "source_readiness_unproven": (
+        "相关资料是否完整尚待确认",
+        "目前无法确认本项判断所需资料是否已经全部读取。",
+        "请确认相关资料完整后重新评估。",
+    ),
+    "required_field_missing": (
+        "相关记录缺少判断所需信息",
+        "当前读取到的记录中缺少完成本项判断的关键信息。",
+        "请核对相关记录内容是否完整后重新评估。",
+    ),
+    "authoritative_time_missing": (
+        "相关记录缺少明确时间",
+        "目前缺少本项判断所需的起始、完成或评估时间。",
+        "请核对相关记录时间后重新评估。",
+    ),
+    "linkage_unresolved": (
+        "暂未找到可相互核对的对应记录",
+        "现有资料中尚未找到能够明确对应的前后记录。",
+        "请核对相关记录及时间是否完整后重新评估。",
+    ),
+    "applicability_source_gap": (
+        "暂无法确认本质控点是否适用",
+        "现有资料不足以确认本次诊疗是否属于本质控点的检查范围。",
+        "请核对相关诊疗记录后重新评估。",
+    ),
+}
+_RULE_DATA_GAP_MESSAGES = {
+    "LX0609-009": (
+        "暂时无法核对病情变化时的病程记录",
+        "病危期间每日病程记录已完成，但相关检查检验结果明细不完整，无法继续核对病情变化时是否及时记录病程。",
+        "请确认检查检验结果明细已完整同步后重新评估。",
+    ),
+    "LX0609-041": (
+        "本次未读取到输血知情同意书",
+        "已读取到输血相关记录，但没有可核对的输血知情同意书。",
+        "请确认输血知情同意书已归档并同步后重新评估。",
+    ),
+    "LX0609-042": (
+        "输血知情同意书的签名信息不完整",
+        "当前资料不足以核对患者、家属或医师签名及签署时间是否完整。",
+        "请补充完整的签名和签署时间后重新评估。",
+    ),
+    "LX0609-043": (
+        "输血前检查资料不完整",
+        "当前未读取到可完整核对的输血前常规检查项目、结果和检查时间。",
+        "请补充输血前检查结果及检查时间后重新评估。",
+    ),
+    "LX0609-049": (
+        "暂时无法核对输血医嘱与收费",
+        "已读取到输血记录，但缺少可相互核对的输血医嘱或收费明细。",
+        "请确认输血医嘱和收费明细已同步后重新评估。",
+    ),
+}
+_RULE_NON_COMPLIANT_MESSAGES = {
+    "LX0609-016": (
+        "入院记录与首次病程记录存在高度重复",
+        "入院记录现病史与首次病程记录病例特点的相似度超过 70% 判定标准。",
+        "请结合首次病程记录要求，补充病例特点的归纳、分析和诊疗思路。",
+    ),
+    "LX0609-023": (
+        "会诊意见执行情况记录过于笼统",
+        "当前仅记录已按会诊意见执行，未说明具体执行措施、执行结果或后续安排。",
+        "请归纳记录会诊意见的具体执行措施、执行结果及后续安排。",
     ),
 }
 
@@ -146,6 +223,19 @@ def render_luxian_0609_customer_result(
     rule_name, rule_version, executor_key = _trusted_catalog_identity(decision.rule_id)
     status = _STATUS_MAP[decision.final_state]
     findings, evidence, suggestion = _CUSTOMER_MESSAGES[decision.final_state]
+    if decision.final_state is CustomerFinalState.DATA_GAP:
+        findings, evidence, suggestion = _RULE_DATA_GAP_MESSAGES.get(
+            decision.rule_id,
+            _DATA_GAP_MESSAGES.get(
+                decision.reason_code,
+                (findings, evidence, suggestion),
+            ),
+        )
+    elif decision.final_state is CustomerFinalState.NON_COMPLIANT:
+        findings, evidence, suggestion = _RULE_NON_COMPLIANT_MESSAGES.get(
+            decision.rule_id,
+            (findings, evidence, suggestion),
+        )
     if decision.final_state in {
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.NOT_APPLICABLE,
@@ -175,7 +265,32 @@ def render_luxian_0609_customer_result(
         # 仅返回 reducer 已验证的受控枚举码；不返回快照、文书、坐标或模型原文。
         "reason_code": _safe_code(decision.reason_code),
         "evidence_items": [],
+        "criterion_results": [],
     }
+    if decision.criterion_results:
+        contract = next(
+            item
+            for item in load_luxian_0609_rule_contracts()
+            if item.rule_id == decision.rule_id
+        )
+        criteria_by_id = {
+            item.criterion_id: item for item in contract.criteria
+        }
+        criterion_rows: list[dict[str, Any]] = []
+        for criterion_result in decision.criterion_results:
+            criterion = criteria_by_id.get(criterion_result.criterion_id)
+            if criterion is None:
+                raise ValueError("decision criterion is missing from rule contract")
+            criterion_rows.append(
+                {
+                    **criterion_result.to_safe_dict(),
+                    "kind": criterion.kind,
+                    "source_fact": criterion.source_fact,
+                    "left_fact": criterion.left_fact,
+                    "right_fact": criterion.right_fact,
+                }
+            )
+        result["criterion_results"] = criterion_rows
     _emit_safe_trace(
         trace_sink,
         decision=decision,
