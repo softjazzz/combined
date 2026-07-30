@@ -235,6 +235,17 @@ export type ManualSamplePoolSyncJob = {
     ambiguous?: number
     unmatched?: number
     eligible_visits?: number
+    admission_filter?: {
+      matched_source_count?: number
+      new_count?: number
+      existing_count?: number
+      failed_count?: number
+      filter?: {
+        start_date?: string
+        end_date?: string
+        departments?: string[]
+      }
+    }
   }
   error_message?: string
   created_by?: string
@@ -286,6 +297,14 @@ export type ManualTestRecordDocument = {
   enabled?: boolean
 }
 
+export type EditableMedicalRecordSection = {
+  key: string
+  label: string
+  text: string
+  source_field?: string
+  order_index?: number
+}
+
 export type ManualTestRecordSourceMeta = {
   type: 'customer_source_editable_copy' | string
   source_pool_id?: string
@@ -301,8 +320,10 @@ export type ManualTestRecordSourceMeta = {
 
 export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   key: string
+  source_ref?: string
   source_document_id?: string
   source_table?: string
+  sections?: EditableMedicalRecordSection[]
   order_start_time?: string
   order_stop_time?: string
   order_category?: string
@@ -311,8 +332,17 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   is_new?: boolean
 }
 
+export type EditableMedicalRecordEmptyReason =
+  | ''
+  | 'bundle_documents_empty'
+  | 'bundle_load_failed'
+  | 'missing_bundle_identity'
+  | 'document_not_found'
+  | 'document_empty'
+
 export type EditableMedicalRecordDocumentsResult = {
   visit_id?: string
+  empty_reason?: EditableMedicalRecordEmptyReason
   documents: EditableMedicalRecordDocument[]
   raw?: unknown
 }

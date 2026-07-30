@@ -136,6 +136,31 @@ function readStringField(source: Record<string, unknown>, keys: string[], fallba
   return fallback
 }
 
+function readDocumentSections(source: Record<string, unknown>) {
+  const sectionsSource = Array.isArray(source.sections) ? source.sections : []
+  return sectionsSource
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      const text = readStringField(row, ['text', 'content', 'value'])
+      const label = readStringField(row, ['section_label', 'label', 'title'])
+      if (!text || !label) return null
+      const rawOrderIndex = row.order_index
+      return {
+        key: readStringField(row, ['section_key', 'key', 'source_field'], `section-${index + 1}`),
+        label,
+        text,
+        source_field: readStringField(row, ['source_field']),
+        order_index:
+          typeof rawOrderIndex === 'number' && Number.isFinite(rawOrderIndex)
+            ? rawOrderIndex
+            : index,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .sort((left, right) => left.order_index - right.order_index)
+}
+
 function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalRecordDocumentsResult {
   const payload =
     value && typeof value === 'object' && 'data' in value
@@ -196,6 +221,7 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         documentType === 'inpat_drug_order' || documentType === 'inpat_nondrug_order'
           ? readStringField(row, ['sort_time', 'display_time', 'prescribed_datetime'])
           : ''
+      const submitTime = readStringField(row, ['submit_time', 'submit_datetime'])
       return {
         key: readStringField(
           row,
@@ -203,11 +229,13 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
           `${documentType}-${index + 1}`,
         ),
         source_document_id: readStringField(row, ['document_id', 'id']),
+        source_ref: readStringField(row, ['source_ref']),
         source_table: readStringField(row, ['source_table', 'table_name']),
         document_type: documentType,
         title,
-        record_time: rawRecordTime || orderDisplayTime,
-        submit_time: readStringField(row, ['submit_time', 'submit_datetime']),
+        sections: readDocumentSections(row),
+        record_time: rawRecordTime || orderDisplayTime || submitTime,
+        submit_time: submitTime,
         order_start_time: readStringField(row, [
           'order_start_time',
           'start_time',
@@ -270,6 +298,8 @@ export async function getEditableMedicalRecordDocuments(
     institute_id?: string
     patient_id?: string
     visit_id?: string
+    job_id?: string
+    record_ref?: string
   },
 ) {
   try {
@@ -373,6 +403,39 @@ export async function syncManualSamplePoolRecords(
       data: payload || {},
     },
     '同步样本病历失败',
+  )
+}
+
+export async function listManualSamplePoolAdmissionDepartments() {
+  return requestEnvelope<{ items: string[] }>(
+    {
+      method: 'GET',
+      url: '/api/v1/qc/sample-pools/source-admission-departments',
+    },
+    '获取入院科室失败',
+  )
+}
+
+export async function syncManualSamplePoolRecordsByAdmission(
+  poolId: string,
+  payload: {
+    start_date: string
+    end_date: string
+    departments?: string[]
+  },
+) {
+  return requestEnvelope<{
+    job_id: string
+    pool_id: string
+    status: string
+    summary?: ManualSamplePoolSyncJob['summary']
+  }>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/sync-by-admission`,
+      data: payload,
+    },
+    '按条件同步病历失败',
   )
 }
 

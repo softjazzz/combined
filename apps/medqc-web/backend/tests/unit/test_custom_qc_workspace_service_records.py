@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 
 
@@ -73,3 +74,161 @@ def test_hydrate_records_with_medical_text_should_preserve_scope_and_dates(monke
     assert hydrated[0]["scope"] == "final"
     assert hydrated[0]["discharge_datetime"] == "2026-04-05 09:00:00"
     assert hydrated[0]["medical_text"] == "补齐病历正文"
+
+
+def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):
+    service = CustomQCWorkspaceService()
+    executed = []
+
+    class _Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"id": "parent-1"}
+
+    class _Session:
+        def execute(self, statement):
+            executed.append(statement)
+            return _Result()
+
+        def commit(self):
+            return None
+
+        def close(self):
+            return None
+
+    parent = {"id": "parent-1", "job_kind": "parent", "summary": {}}
+    aggregate = {
+        **parent,
+        "status": "completed",
+        "summary": {"progress": {"step_key": "completed"}},
+        "success_count": 7,
+        "failed_count": 0,
+        "issue_records": 1,
+        "compliant_records": 6,
+        "total_tokens": 9,
+        "total_processing_time": 0.2,
+    }
+    monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda _: parent)
+    monkeypatch.setattr(service, "_aggregate_parent_job", lambda *_args, **_kwargs: aggregate)
+
+    service.refresh_parent_batch_job(parent_job_id="parent-1")
+
+    update_statement = next(statement for statement in executed if statement.is_update)
+    assert update_statement.compile().params["status"] == "completed"
+
+
+def test_record_result_envelope_keeps_delivery_facts_evidence_and_model_analysis():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "record_id": "R1",
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "rule_id": "LX0609-018",
+            "status": "non_compliant",
+            "findings": "引擎已形成的不合规结论。",
+            "criterion_results": [{"key": "chief_complaint_length", "passed": False}],
+            "customer_display_facts": {
+                "chief_complaint_length": 14,
+                "source_document_id": "doc-1",
+            },
+            "customer_evidence": [{"source_document_id": "doc-1"}],
+            "model_analysis": "主诉仅描述症状，无法区分第一诊断。",
+            "debug_trace": {"must_not": "persist"},
+        }
+    )
+
+    assert item["conclusion"] == "引擎已形成的不合规结论。"
+    assert item["decision_facts"] == {"chief_complaint_length": 14}
+    assert item["customer_display_facts"] == {"chief_complaint_length": 14}
+    assert item["criterion_results"] == [{"key": "chief_complaint_length", "passed": False}]
+    assert item["record_ref"].startswith("rec_")
+    assert item["evidence"][0]["source_ref"].startswith("src_")
+    assert "source_document_id" not in item["evidence"][0]
+    assert "record_id" not in item
+    assert "patient_id" not in item
+    assert item["model_analysis"] == "主诉仅描述症状，无法区分第一诊断。"
+    assert "debug_trace" not in item
+
+
+def test_record_result_envelope_normalizes_legacy_semantic_analysis_name():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {"rule_id": "LX0609-018", "semantic_analysis": "主诉症状无法区分急性下呼吸道感染。"}
+    )
+
+    assert item["model_analysis"] == "主诉症状无法区分急性下呼吸道感染。"
+
+
+def test_record_result_envelope_keeps_llm_analysis_and_actionable_suggestion():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-018",
+            "status": "non_compliant",
+            "medical_analysis": "主诉仅写咳嗽、咳痰，不能区分慢阻肺急性加重与下呼吸道感染。",
+            "model_suggestion": "补充急性加重的时间、痰色变化及感染相关症状。",
+        }
+    )
+
+    assert item["model_analysis"] == "主诉仅写咳嗽、咳痰，不能区分慢阻肺急性加重与下呼吸道感染。"
+    assert item["suggestion"] == "补充急性加重的时间、痰色变化及感染相关症状。"
+
+
+def test_record_result_envelope_keeps_compliant_facts_criteria_and_evidence():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-001",
+            "status": "compliant",
+            "detail": "入院记录在入院后 2 小时内完成。",
+            "actual": "记录时间：2026-07-07 16:10",
+            "standard": "应在入院后 24 小时内完成。",
+            "criterion_results": [{"criterion_id": "within_24_hours", "status": "passed"}],
+            "decision_facts": {"elapsed_hours": 2},
+            "evidence_refs": [{"source_ref": "src_admission_1"}],
+        }
+    )
+
+    assert item["detail"] == "入院记录在入院后 2 小时内完成。"
+    assert item["actual"] == "记录时间：2026-07-07 16:10"
+    assert item["standard"] == "应在入院后 24 小时内完成。"
+    assert item["criterion_results"] == [{"criterion_id": "within_24_hours", "status": "passed"}]
+    assert item["customer_display_facts"] == {"elapsed_hours": 2}
+    assert item["evidence"][0]["source_ref"].startswith("src_")
+    assert item["evidence"][0]["source_ref"] != "src_admission_1"
+
+
+def test_record_result_envelope_normalizes_text_evidence_to_empty_array():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-003",
+            "status": "not_applicable",
+            "findings": "本次不适用。",
+            "evidence": "完整适用性证据未触发本质控点。",
+        }
+    )
+
+    assert item["evidence"] == []
+
+
+def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-011",
+            "status": "data_gap",
+            "reason_code": "required_source_unavailable",
+            "reason": "影像报告已检出，但对应病程记录来源未返回。",
+            "missing_sources": ["daily_course_record"],
+            "missing_fields": ["report_time"],
+            "source_availability": {"daily_course_record": "unavailable"},
+        }
+    )
+
+    assert item["detail"] == "影像报告已检出，但对应病程记录来源未返回。"
+    assert item["data_gap_details"] == {
+        "reason_code": "required_source_unavailable",
+        "missing_sources": ["daily_course_record"],
+        "missing_fields": ["report_time"],
+        "source_availability": {"daily_course_record": "unavailable"},
+    }

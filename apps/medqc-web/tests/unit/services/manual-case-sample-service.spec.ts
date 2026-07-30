@@ -65,6 +65,31 @@ describe('editable medical-record document normalization', () => {
     expect(result.data?.documents[0]?.record_time).toBe('')
   })
 
+  it('uses submit time as display time when non-order document record_time is empty', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'senior_course_record::round-1',
+            document_type: 'senior_course_record',
+            document_title: '主任医师查房记录',
+            record_time: '',
+            submit_datetime: '2026-06-21 17:05:00',
+            content: '今日随主任医师查房，患者病情变化记录。',
+          },
+        ],
+      },
+    })
+
+    const result = await getEditableMedicalRecordDocuments('visit-1')
+
+    expect(result.success).toBe(true)
+    expect(result.data?.documents[0]).toMatchObject({
+      record_time: '2026-06-21 17:05:00',
+      submit_time: '2026-06-21 17:05:00',
+    })
+  })
+
   it('forwards the exact selected validation scope and preserves safe dedupe metadata', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {

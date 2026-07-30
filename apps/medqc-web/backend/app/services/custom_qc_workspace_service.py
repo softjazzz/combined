@@ -34,6 +34,17 @@ from .document_domain_alignment import (
     align_document_domain_fields,
     normalize_document_label,
 )
+from .luxian_0609.customer_renderer import RULE_SET_VERSION
+from .luxian_0609.record_result_read_model import (
+    select_latest_authoritative_record_result_job,
+)
+from .luxian_0609_rule_catalog import (
+    LUXIAN_0609_RULE_SET_KEY,
+    get_luxian_0609_rule,
+    load_luxian_0609_rules,
+)
+from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
+from .bundles.emr_view import load_bundle_documents
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 
@@ -56,6 +67,23 @@ DEFECT_LEVEL_TO_SEVERITY = {
 }
 
 _CUSTOMER_RESULT_SCHEMA = "customer-qc-result-v1"
+_RECORD_RESULT_ENVELOPE_SCHEMA = "lx0609-record-result-envelope-v1"
+_CANONICAL_RESULT_DELIVERY_MODE = "canonical_straight_through"
+_LX025_MISSING_FIELDS = {
+    "implant_name",
+    "implant_type",
+    "implant_specification",
+    "implant_material",
+    "implant_quantity",
+    "implant_barcode",
+}
+_LX018_DIAGNOSTIC_DIMENSIONS = {
+    "anatomic_site",
+    "laterality",
+    "symptom_pattern",
+    "disease_course",
+    "disease_direction",
+}
 _REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _SAFE_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
 _STATUS_ALIASES = {
@@ -124,6 +152,29 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
         return default
 
 
+def _sanitize_canonical_facts(value: Any) -> Any:
+    """移除 Canonical 交付事实中的内部身份主键，保留医学事实和值。"""
+
+    internal_keys = {
+        "record_id",
+        "visit_id",
+        "patient_id",
+        "institute_id",
+        "mr_no",
+        "source_document_id",
+        "document_id",
+    }
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_canonical_facts(item)
+            for key, item in value.items()
+            if key not in internal_keys
+        }
+    if isinstance(value, list):
+        return [_sanitize_canonical_facts(item) for item in value]
+    return value
+
+
 def customer_safe_projection_key() -> str:
     """返回仅用于客户结果不可逆引用的服务端密钥。"""
 
@@ -144,6 +195,12 @@ def _keyed_ref(prefix: str, value: Any, *, hmac_key: str) -> str:
         hashlib.sha256,
     ).hexdigest()
     return f"{prefix}_{digest[:24]}"
+
+
+def build_customer_safe_source_ref(value: Any) -> str:
+    """为受控文书生成与结果证据完全一致的不可逆引用。"""
+
+    return _keyed_ref("src", value, hmac_key=customer_safe_projection_key())
 
 
 def _canonical_customer_status(item: Dict[str, Any]) -> str:
@@ -234,10 +291,354 @@ def _safe_evidence_rows(item: Dict[str, Any], *, hmac_key: str) -> List[Dict[str
         if identity in seen:
             continue
         seen.add(identity)
-        rows.append({"source_type": source_type, "source_ref": source_ref})
+        row = {"source_type": source_type, "source_ref": source_ref}
+        # 字段路径不是病历正文，只用于让单病历页在已授权文书内定位结构化章节。
+        # 只允许普通字段名，禁止把任意模型输出或正文透传为字段路径。
+        field_path = _safe_text(
+            candidate.get("field_path") or candidate.get("source_field")
+        ).lower()
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field_path):
+            row["field_path"] = field_path
+        rows.append(row)
         if len(rows) >= 8:
             break
     return rows
+
+
+def _compact_authorized_evidence_excerpt(value: Any, *, limit: int = 300) -> str:
+    """把已授权文书的短文本收敛为单病历结果卡片可用的摘录。"""
+
+    compact = re.sub(r"\s+", " ", _safe_text(value)).strip()
+    if not compact:
+        return ""
+    return compact[:limit] + ("…" if len(compact) > limit else "")
+
+
+def _authorized_document_excerpt(
+    document: Dict[str, Any],
+    *,
+    field_path: str = "",
+) -> tuple[str, str]:
+    """返回精确字段摘录或明确标注的文书级摘录；不做正文相似匹配。"""
+
+    normalized_field = _safe_text(field_path).lower()
+    if normalized_field:
+        matches = [
+            section
+            for section in list(document.get("sections") or [])
+            if isinstance(section, dict)
+            and _safe_text(section.get("source_field") or section.get("key")).lower()
+            == normalized_field
+        ]
+        if len(matches) == 1:
+            excerpt = _compact_authorized_evidence_excerpt(matches[0].get("text"))
+            if excerpt:
+                return excerpt, "字段级依据"
+
+    # 缺失字段类结论没有“缺失字段原文”；只能呈现同一 src_ref 已绑定文书的
+    # 文书级摘录，且明确标识，避免客户误解为精确命中片段。
+    for section in list(document.get("sections") or []):
+        if not isinstance(section, dict):
+            continue
+        excerpt = _compact_authorized_evidence_excerpt(section.get("text"))
+        if excerpt:
+            return excerpt, "文书级依据"
+    return _compact_authorized_evidence_excerpt(document.get("content")), "文书级依据"
+
+
+def attach_authorized_evidence_excerpts(
+    items: Sequence[Dict[str, Any]],
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+) -> None:
+    """在单病历任务已授权的边界内，为精确 source_ref 附加短摘录。
+
+    本函数只由 ``build_latest_single_record_result_dto`` 调用。它不服务批量接口、
+    导出或日志，也不以标题、正文相似度或 source_type 猜测文书。
+    """
+
+    if not all((_safe_text(institute_id), _safe_text(patient_id), _safe_text(visit_id))):
+        return
+    try:
+        bundle = load_bundle_documents(
+            institute_id=_safe_text(institute_id),
+            patient_id=_safe_text(patient_id),
+            visit_id=_safe_text(visit_id),
+            bundle_schema="public",
+        )
+    except Exception:
+        # 单病历原文辅助能力失败不得改变已保存的质控结论。
+        return
+
+    documents_by_ref: Dict[str, List[Dict[str, Any]]] = {}
+    for document in list(bundle.get("documents") or []):
+        if not isinstance(document, dict):
+            continue
+        source_document_id = _safe_text(document.get("document_id"))
+        if not source_document_id:
+            continue
+        source_ref = build_customer_safe_source_ref(source_document_id)
+        documents_by_ref.setdefault(source_ref, []).append(document)
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for evidence in list(item.get("evidence") or []):
+            if not isinstance(evidence, dict):
+                continue
+            source_ref = _safe_text(evidence.get("source_ref"))
+            matches = documents_by_ref.get(source_ref) or []
+            # 同一 src_ref 对应零份或多份文书时 fail-closed，绝不返回摘录。
+            if len(matches) != 1:
+                continue
+            excerpt, excerpt_kind = _authorized_document_excerpt(
+                matches[0],
+                field_path=_safe_text(evidence.get("field_path")),
+            )
+            if excerpt:
+                evidence["evidence_excerpt"] = excerpt
+                evidence["excerpt_kind"] = excerpt_kind
+
+
+def _safe_customer_display_facts(
+    item: Dict[str, Any],
+    *,
+    rule_id: str,
+) -> Dict[str, Any]:
+    """只允许规则专属枚举和计数进入客户 DTO，拒绝自由文本与病历原文。"""
+
+    raw = item.get("customer_display_facts")
+    if not isinstance(raw, dict):
+        return {}
+    # 结果聚合与持久化/API 投影必须使用同一套字段白名单。过去这里维护了
+    # 第二份子集，导致聚合层已经生成的时限、检查检验等解释在保存后被丢弃。
+    shared = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=raw)
+    if shared is not None:
+        return shared
+    if rule_id == "LX0609-025":
+        missing_fields = raw.get("missing_fields")
+        result = {
+            "failure_kind": "implant_information_incomplete",
+            "source_label": "手术记录",
+        }
+        if isinstance(missing_fields, list):
+            result["missing_fields"] = [
+                value
+                for value in dict.fromkeys(missing_fields)
+                if isinstance(value, str) and value in _LX025_MISSING_FIELDS
+            ]
+        return result
+    if rule_id == "LX0609-024":
+        checked_sources = raw.get("checked_sources")
+        if (
+            raw.get("failure_kind") != "lymph_node_dissection_not_documented"
+            or raw.get("performed_surgery_confirmed") is not True
+            or raw.get("malignant_surgery_confirmed") is not True
+            or not isinstance(checked_sources, list)
+        ):
+            return {}
+        sources = list(
+            dict.fromkeys(
+                value
+                for value in checked_sources
+                if value
+                in {
+                    "surgery_record",
+                    "pathology_exam_master",
+                    "pathology_exam_report",
+                }
+            )
+        )
+        if not sources:
+            return {}
+        return {
+            "failure_kind": "lymph_node_dissection_not_documented",
+            "performed_surgery_confirmed": True,
+            "malignant_surgery_confirmed": True,
+            "checked_sources": sources,
+        }
+    if rule_id == "LX0609-028":
+        failure_kind = _safe_text(raw.get("failure_kind"))
+        start_time = _safe_text(raw.get("start_time"))
+        end_time = _safe_text(raw.get("end_time"))
+        duration_hours = raw.get("duration_hours")
+        threshold_hours = raw.get("threshold_hours")
+        if (
+            failure_kind
+            not in {
+                "prophylaxis_duration_over_48h",
+                "prophylaxis_extension_reason_missing",
+            }
+            or raw.get("incision_class") not in {"I", "II"}
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", start_time)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", end_time)
+            or not isinstance(duration_hours, (int, float))
+            or duration_hours <= 24
+            or threshold_hours not in {24, 48}
+        ):
+            return {}
+        if failure_kind == "prophylaxis_duration_over_48h" and (
+            threshold_hours != 48 or duration_hours <= 48
+        ):
+            return {}
+        if failure_kind == "prophylaxis_extension_reason_missing" and (
+            threshold_hours != 24 or duration_hours > 48
+        ):
+            return {}
+        return {
+            "failure_kind": failure_kind,
+            "incision_class": raw.get("incision_class"),
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration_hours": round(float(duration_hours), 2),
+            "threshold_hours": threshold_hours,
+        }
+    if rule_id in {"LX0609-034", "LX0609-035"}:
+        checked_sources = raw.get("checked_sources")
+        if (
+            raw.get("failure_kind") != "anesthesia_consent_missing"
+            or raw.get("performed_anesthesia_confirmed") is not True
+            or raw.get("consent_state") != "missing"
+            or checked_sources != ["consent_form"]
+        ):
+            return {}
+        return {
+            "failure_kind": "anesthesia_consent_missing",
+            "performed_anesthesia_confirmed": True,
+            "consent_state": "missing",
+            "checked_sources": ["consent_form"],
+        }
+    if rule_id in {"LX0609-036", "LX0609-037"}:
+        missing_sources = raw.get("missing_visit_sources")
+        if (
+            raw.get("failure_kind") != "anesthesia_visit_missing"
+            or raw.get("performed_anesthesia_confirmed") is not True
+            or not isinstance(missing_sources, list)
+        ):
+            return {}
+        safe_sources = list(
+            dict.fromkeys(
+                source
+                for source in missing_sources
+                if source in {"preane_surveil_record", "postane_surveil_record"}
+            )
+        )
+        if not safe_sources:
+            return {}
+        return {
+            "failure_kind": "anesthesia_visit_missing",
+            "performed_anesthesia_confirmed": True,
+            "missing_visit_sources": safe_sources,
+        }
+    if rule_id == "LX0609-039":
+        checked_sources = raw.get("checked_sources")
+        if (
+            raw.get("failure_kind") != "preop_discussion_missing"
+            or raw.get("performed_surgery_confirmed") is not True
+            or raw.get("emergency_rescue_exception_absent") is not True
+            or checked_sources != ["presurg_discussion"]
+        ):
+            return {}
+        return {
+            "failure_kind": "preop_discussion_missing",
+            "performed_surgery_confirmed": True,
+            "emergency_rescue_exception_absent": True,
+            "checked_sources": ["presurg_discussion"],
+        }
+    surgery_document_targets = {
+        "LX0609-029": "presurg_summary",
+        "LX0609-030": "surgery_record",
+        "LX0609-032": "surgery_safecheck_record",
+    }
+    target_document = surgery_document_targets.get(rule_id)
+    if target_document is not None:
+        failure_kind = _safe_text(raw.get("failure_kind"))
+        if (
+            failure_kind not in {"surgery_document_missing", "surgery_document_blank"}
+            or _safe_text(raw.get("target_document")) != target_document
+            or raw.get("performed_surgery_confirmed") is not True
+        ):
+            return {}
+        return {
+            "failure_kind": failure_kind,
+            "target_document": target_document,
+            "performed_surgery_confirmed": True,
+        }
+    return {}
+
+
+def _safe_criterion_results(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """透传 reducer/renderer 生成的通用子结论，不在 API 层重算业务规则。"""
+
+    raw_rows = item.get("criterion_results")
+    if not isinstance(raw_rows, list):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for raw in raw_rows[:8]:
+        if not isinstance(raw, dict):
+            continue
+        criterion_id = _safe_text(raw.get("criterion_id"))
+        kind = _safe_text(raw.get("kind"))
+        status = _safe_text(raw.get("status"))
+        reason_code = _safe_text(raw.get("reason_code"))
+        if (
+            not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", criterion_id)
+            or kind not in {"text_length", "semantic_relation"}
+            or status not in {"passed", "failed", "unknown"}
+            or not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", reason_code)
+        ):
+            continue
+        row: Dict[str, Any] = {
+            "criterion_id": criterion_id,
+            "kind": kind,
+            "status": status,
+            "reason_code": reason_code,
+        }
+        for key in ("source_fact", "left_fact", "right_fact"):
+            value = _safe_text(raw.get(key))
+            if value and re.fullmatch(r"[a-z][a-z0-9_.]{1,95}", value):
+                row[key] = value
+        for key in ("operator", "unit", "rationale_code"):
+            value = _safe_text(raw.get(key))
+            if value and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value):
+                row[key] = value
+        for key in ("actual_value", "expected_value"):
+            value = raw.get(key)
+            if (
+                isinstance(value, (int, bool))
+                and not isinstance(value, float)
+                or isinstance(value, str) and len(value) <= 120
+                or value is None
+            ):
+                row[key] = value
+        dimensions = raw.get("dimensions")
+        if isinstance(dimensions, list):
+            row["dimensions"] = [
+                value
+                for value in dict.fromkeys(dimensions)
+                if isinstance(value, str)
+                and value in _LX018_DIAGNOSTIC_DIMENSIONS
+            ][:8]
+        fact_refs = raw.get("fact_refs")
+        if isinstance(fact_refs, list):
+            row["fact_refs"] = [
+                value
+                for value in dict.fromkeys(fact_refs)
+                if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+            ][:16]
+        analysis = _safe_text(raw.get("medical_analysis"))
+        if analysis:
+            row["medical_analysis"] = analysis[:2000]
+        rows.append(row)
+    return rows
+
+
+def _single_record_model_analysis(item: Dict[str, Any]) -> str:
+    """保留规则执行器提供的医学分析，不在展示层二次概括或推断。"""
+
+    return _safe_text(item.get("model_analysis") or item.get("medical_analysis"))[:8000]
 
 
 def project_customer_safe_result_item(
@@ -259,7 +660,6 @@ def project_customer_safe_result_item(
         if re.fullmatch(r"rec_[0-9a-f]{24}", existing_record_ref)
         else _keyed_ref("rec", record_material, hmac_key=hmac_key)
     )
-    generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     is_safe_dto = _safe_text(raw.get("schema_version")) == _CUSTOMER_RESULT_SCHEMA
     rule_id = _safe_text(
         raw.get("customer_rule_id")
@@ -267,8 +667,23 @@ def project_customer_safe_result_item(
         or raw.get("rule_id")
         or raw.get("rule_code")
     ).upper()
+    customer_display_facts = _safe_customer_display_facts(raw, rule_id=rule_id)
+    criterion_results = _safe_criterion_results(raw)
+    # 不允许无规则专属事实或子结论的结果，以通用“发现问题”文案作为客户确定缺陷。
+    # 这只收紧客户投影；原始执行状态仍留在持久化记录中，供内部追溯。
+    explanation_incomplete = (
+        status == "non_compliant"
+        and not customer_display_facts
+        and not criterion_results
+    )
+    if explanation_incomplete:
+        status = "uncertain"
+    generic_conclusion, generic_suggestion = _GENERIC_CUSTOMER_TEXT[status]
     # 原始执行结果中的 customer_* 字段仍可能混入病历句子。只有已经通过本投影器
     # 生成的 DTO 才允许复用客户文案；首次投影一律按状态生成固定安全表述。
+    # 一旦确定性结论因缺少规则事实被降级，就绝不能继续复用历史 DTO 的
+    # “发现问题”类文案；否则状态和客户可见结论会彼此矛盾。
+    reuse_saved_customer_text = is_safe_dto and not explanation_incomplete
     conclusion = _explicit_customer_text(
         raw,
         (
@@ -277,7 +692,7 @@ def project_customer_safe_result_item(
             "customer_message",
             "customer_summary",
         )
-        if is_safe_dto
+        if reuse_saved_customer_text
         else (),
         generic_conclusion,
     )
@@ -289,7 +704,7 @@ def project_customer_safe_result_item(
             "customer_recommendation",
             "customer_action",
         )
-        if is_safe_dto
+        if reuse_saved_customer_text
         else (),
         generic_suggestion,
     )
@@ -298,7 +713,7 @@ def project_customer_safe_result_item(
         ("customer_rule_name", "rule_name"),
         rule_id,
     )
-    return {
+    projected = {
         "schema_version": _CUSTOMER_RESULT_SCHEMA,
         "record_ref": record_ref,
         "rule_id": rule_id,
@@ -310,7 +725,12 @@ def project_customer_safe_result_item(
         "display_status": status,
         "is_compliant": True if status == "compliant" else False if status == "non_compliant" else None,
         "is_confirmed_issue": status == "non_compliant",
-        "reason_code": _canonical_reason_code(raw),
+        "reason_code": (
+            "customer_explanation_incomplete"
+            if explanation_incomplete
+            else _canonical_reason_code(raw)
+        ),
+        "rule_version": _safe_text(raw.get("rule_version")),
         "conclusion": conclusion,
         "findings": conclusion,
         "customer_conclusion": conclusion,
@@ -318,6 +738,30 @@ def project_customer_safe_result_item(
         "customer_suggestion": suggestion,
         "evidence": _safe_evidence_rows(raw, hmac_key=hmac_key),
     }
+    if customer_display_facts:
+        projected["customer_display_facts"] = customer_display_facts
+    if criterion_results:
+        projected["criterion_results"] = criterion_results
+    model_analysis = _single_record_model_analysis(raw)
+    if model_analysis:
+        projected["model_analysis"] = model_analysis
+    return projected
+
+
+def _is_current_rule_contract_result(item: Dict[str, Any]) -> bool:
+    """带结构化 criteria 的规则只展示当前规则版本，旧结果需重新质控。"""
+
+    rule_id = _safe_text(
+        item.get("customer_rule_id")
+        or item.get("qc_point_id")
+        or item.get("rule_id")
+        or item.get("rule_code")
+    ).upper()
+    rule = get_luxian_0609_rule(rule_id)
+    if not rule or not isinstance(rule.get("criteria"), list):
+        return True
+    current_version = _safe_text(rule.get("rule_version"))
+    return bool(current_version) and _safe_text(item.get("rule_version")) == current_version
 
 
 def iter_unique_customer_result_source_items(
@@ -343,21 +787,28 @@ def iter_unique_customer_result_source_items(
                 raw_items.extend(
                     item for item in list(rule_result.get("items") or []) if isinstance(item, dict)
                 )
-    unique_items: List[Dict[str, Any]] = []
-    seen: set[tuple[str, str, str, str]] = set()
-    for item in raw_items:
+    # 同一父任务的分族子任务、重试残留或兼容路径都可能带来同一
+    # record_ref + rule_id 的多条结果。客户结果必须是“一病历一规则一结论”，
+    # 不能因为状态或原因码不同而把旧、新结论并排展示。
+    unique_by_rule: Dict[tuple[str, str], tuple[tuple[int, int], Dict[str, Any]]] = {}
+    for index, item in enumerate(raw_items):
+        if not _is_current_rule_contract_result(item):
+            continue
         projected = project_customer_safe_result_item(item, hmac_key=hmac_key)
         identity = (
             _safe_text(projected.get("record_ref")),
             _safe_text(projected.get("rule_id")),
-            _safe_text(projected.get("status")),
-            _safe_text(projected.get("reason_code")),
         )
-        if identity in seen:
-            continue
-        seen.add(identity)
-        unique_items.append(item)
-    return unique_items
+        # 规则专属事实/子结论比空泛历史状态更有权威性；在解释能力相同的
+        # 情况下，保留输入序列中较后的候选，以适配同一任务内重跑后的追加结果。
+        authority = (
+            int(bool(projected.get("customer_display_facts") or projected.get("criterion_results"))),
+            index,
+        )
+        current = unique_by_rule.get(identity)
+        if current is None or authority > current[0]:
+            unique_by_rule[identity] = (authority, item)
+    return [item for _, item in unique_by_rule.values()]
 
 
 def flatten_customer_safe_result_items(
@@ -610,7 +1061,7 @@ def project_customer_safe_batch_job(
         raw_rule_items = [
             project_customer_safe_result_item(item, hmac_key=hmac_key)
             for item in list(raw_rule.get("items") or [])
-            if isinstance(item, dict)
+            if isinstance(item, dict) and _is_current_rule_contract_result(item)
         ]
         safe_rule_results.append(
             {
@@ -654,6 +1105,16 @@ def project_customer_safe_batch_job(
         for item in list(job.get("failed_records") or [])
         if isinstance(item, dict)
     ]
+    item_record_refs = {
+        _safe_text(item.get("record_ref"))
+        for item in items
+        if _safe_text(item.get("record_ref"))
+    }
+    safe_record_focus = (
+        {"record_ref": next(iter(item_record_refs))}
+        if len(item_record_refs) == 1
+        else None
+    )
     execution_scope_hash = _safe_text(filters.get("execution_scope_hash")).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", execution_scope_hash):
         execution_scope_hash = ""
@@ -729,6 +1190,7 @@ def project_customer_safe_batch_job(
         "rule_results": safe_rule_results,
         "child_jobs": safe_children,
         "children": safe_children,
+        "record_focus": safe_record_focus,
     }
 
 
@@ -935,6 +1397,36 @@ def _batch_jobs_table() -> Table:
     metadata.create_all(bind=engine, checkfirst=True)
     _sync_batch_job_parent_columns(schema=schema)
     return table
+
+
+@lru_cache(maxsize=1)
+def _record_result_envelopes_table() -> Table:
+    """单病历结果交付 Envelope 的显式表定义。
+
+    这张表由 Alembic migration 创建，刻意不在运行时 ``create_all``。这样可以
+    避免单病历结果交付链再次依赖旧任务表的隐式建表/补列行为。
+    """
+
+    metadata = MetaData()
+    return Table(
+        "luxian_0609_record_result_envelopes",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("job_id", sa.String(36), nullable=False, index=True),
+        sa.Column("root_job_id", sa.String(36), nullable=False, index=True),
+        sa.Column("created_by", sa.String(64), nullable=False, index=True),
+        sa.Column("record_id", sa.String(128), nullable=False, index=True),
+        sa.Column("institute_id", sa.String(128), nullable=False),
+        sa.Column("patient_id", sa.String(128), nullable=False),
+        sa.Column("visit_id", sa.String(128), nullable=False),
+        sa.Column("rule_set_key", sa.String(96), nullable=False),
+        sa.Column("rule_set_version", sa.String(96), nullable=False),
+        sa.Column("envelope_json", sa.Text, nullable=False),
+        sa.Column("result_count", sa.Integer, nullable=False, default=0),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("updated_at", sa.DateTime, nullable=False),
+        schema=_draft_schema(),
+    )
 
 
 def _sync_batch_job_parent_columns(*, schema: Optional[str]) -> None:
@@ -1641,6 +2133,7 @@ class CustomQCWorkspaceService:
             raise RuntimeError("DATABASE_URL is not configured; custom qc workspace unavailable")
         self._draft_table = _drafts_table()
         self._batch_job_table = _batch_jobs_table()
+        self._record_result_envelope_table = _record_result_envelopes_table()
 
     @staticmethod
     def _aggregate_child_input_profiles(child_profiles: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1891,6 +2384,65 @@ class CustomQCWorkspaceService:
             "total_tokens": total_tokens,
             "total_processing_time": total_processing_time,
         }
+
+    def refresh_parent_batch_job(self, *, parent_job_id: Optional[str]) -> None:
+        """将规则族子任务的实际状态回写到父任务，供“已完成任务”查询使用。"""
+        normalized_parent_id = _safe_text(parent_job_id)
+        if not normalized_parent_id:
+            return
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == normalized_parent_id)
+            ).mappings().first()
+            if not row:
+                return
+            parent_job = _row_to_batch_job(dict(row))
+            if str(parent_job.get("job_kind") or "").strip().lower() != "parent":
+                return
+            aggregate = self._aggregate_parent_job(session, parent_job, include_items=True)
+            status = _safe_text(aggregate.get("status"), "queued")
+            now = _now_utc()
+            values: Dict[str, Any] = {
+                "status": status,
+                "summary_json": _safe_json_dumps(aggregate.get("summary") or {}),
+                "success_count": int(aggregate.get("success_count") or 0),
+                "failed_count": int(aggregate.get("failed_count") or 0),
+                "issue_records": int(aggregate.get("issue_records") or 0),
+                "compliant_records": int(aggregate.get("compliant_records") or 0),
+                "total_tokens": int(aggregate.get("total_tokens") or 0),
+                "total_processing_time": float(aggregate.get("total_processing_time") or 0.0),
+                "updated_at": now,
+            }
+            if status in {"completed", "failed", "canceled"}:
+                values["finished_at"] = now
+            session.execute(
+                update(self._batch_job_table)
+                .where(
+                    and_(
+                        self._batch_job_table.c.id == normalized_parent_id,
+                        self._batch_job_table.c.status != "canceled",
+                    )
+                )
+                .values(**values)
+            )
+            if status == "completed":
+                canonical_items = [
+                    item
+                    for child in list(aggregate.get("children") or [])
+                    if isinstance(child, dict)
+                    for item in list(child.get("items") or [])
+                    if isinstance(item, dict)
+                ]
+                self._write_record_result_envelopes(
+                    session,
+                    job_row=dict(row),
+                    items=canonical_items,
+                    now=now,
+                )
+            session.commit()
+        finally:
+            session.close()
 
     def _next_rule_code(self, session: Session) -> str:
         max_num = 0
@@ -2754,6 +3306,7 @@ class CustomQCWorkspaceService:
         cache_hit: Optional[bool] = None,
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
+        record_id: Optional[str] = None,
         include_children: bool = False,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
@@ -2790,6 +3343,21 @@ class CustomQCWorkspaceService:
                 clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
             if end:
                 clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
+            record_id_value = _safe_text(record_id)
+            if record_id_value:
+                escaped_record_id = (
+                    record_id_value
+                    .replace("\\", "\\\\")
+                    .replace("%", "\\%")
+                    .replace("_", "\\_")
+                    .replace('"', '\\"')
+                )
+                clauses.append(
+                    self._batch_job_table.c.record_ids_json.ilike(
+                        f'%"{escaped_record_id}"%',
+                        escape="\\",
+                    )
+                )
             where_clause = and_(*clauses)
             executor_value = _safe_text(executor_type).lower()
             enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
@@ -2867,6 +3435,244 @@ class CustomQCWorkspaceService:
             return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
         finally:
             session.close()
+
+    def build_latest_single_record_result_dto(
+        self,
+        *,
+        record_id: str,
+        created_by: str,
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version: str = RULE_SET_VERSION,
+        expected_rule_ids: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        """读取一份病历当前规则代次的唯一客户结果。
+
+        这是单病历结果页唯一允许使用的读取入口。任务的选择只由创建者、
+        已完成状态、明确病历归属、规则集和规则集版本决定；不得以结果状态、
+        文案丰富度、证据数量或完整度来替换较新的任务。
+        """
+
+        normalized_record_id = _safe_text(record_id)
+        normalized_created_by = _safe_text(created_by)
+        normalized_rule_set_key = _safe_text(rule_set_key)
+        normalized_rule_set_version = _safe_text(rule_set_version)
+        if not all(
+            (
+                normalized_record_id,
+                normalized_created_by,
+                normalized_rule_set_key,
+                normalized_rule_set_version,
+            )
+        ):
+            raise ValueError("单病历结果读取缺少必要身份或规则集参数")
+
+        session = _session()
+        try:
+            escaped_record_id = (
+                normalized_record_id
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+                .replace('"', '\\"')
+            )
+            root_rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .where(
+                        and_(
+                            self._batch_job_table.c.created_by == normalized_created_by,
+                            self._batch_job_table.c.status == "completed",
+                            or_(
+                                self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == "",
+                            ),
+                            self._batch_job_table.c.record_ids_json.ilike(
+                                f'%"{escaped_record_id}"%',
+                                escape="\\",
+                            ),
+                        )
+                    )
+                    .order_by(
+                        desc(self._batch_job_table.c.finished_at),
+                        desc(self._batch_job_table.c.created_at),
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            candidates = [
+                self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
+                for row in root_rows
+            ]
+            selection = select_latest_authoritative_record_result_job(
+                candidates,
+                record_id=normalized_record_id,
+                created_by=normalized_created_by,
+                rule_set_key=normalized_rule_set_key,
+                rule_set_version=normalized_rule_set_version,
+            )
+            if selection.state != "ready" or not isinstance(selection.job, dict):
+                return {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": selection.state,
+                    "reason_code": selection.reason_code,
+                    "record_ref": "",
+                    "job_id": "",
+                    "items": [],
+                    "expected_rule_count": len(
+                        list(expected_rule_ids or []) or load_luxian_0609_rules()
+                    ),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
+
+            selected_job = selection.job
+            envelope = self._load_record_result_envelope_items(
+                session,
+                job_id=_safe_text(selected_job.get("id")),
+                created_by=normalized_created_by,
+                record_id=normalized_record_id,
+                rule_set_key=normalized_rule_set_key,
+                rule_set_version=normalized_rule_set_version,
+            )
+            if not envelope:
+                return {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": "technical_error",
+                    "reason_code": "canonical_result_envelope_missing",
+                    "data_origin": "canonical_result_envelope",
+                    "record_ref": "",
+                    "job_id": _safe_text(selected_job.get("id")),
+                    "items": [],
+                    "expected_rule_count": len(
+                        list(expected_rule_ids or []) or load_luxian_0609_rules()
+                    ),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
+            items = [
+                dict(item)
+                for item in list(envelope.get("items") or [])
+                if isinstance(item, dict)
+            ]
+            resolved_expected_rule_ids = list(
+                dict.fromkeys(
+                    _safe_text(rule_id).upper()
+                    for rule_id in list(expected_rule_ids or [])
+                    if _safe_text(rule_id)
+                )
+            )
+            if not resolved_expected_rule_ids:
+                resolved_expected_rule_ids = [
+                    _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                    for item in load_luxian_0609_rules()
+                    if _safe_text(item.get("rule_id") or item.get("rule_code"))
+                ]
+            expected_rule_id_set = set(resolved_expected_rule_ids)
+            delivered_rule_ids = [
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                for item in items
+            ]
+            valid_rule_ids = [rule_id for rule_id in delivered_rule_ids if rule_id]
+            conflicting_rule_ids = sorted(
+                rule_id
+                for rule_id in set(valid_rule_ids)
+                if valid_rule_ids.count(rule_id) > 1
+            )
+            if len(valid_rule_ids) != len(items) or conflicting_rule_ids:
+                return {
+                    "schema_version": "lx0609-single-record-result-v1",
+                    "state": "technical_error",
+                    "reason_code": "canonical_result_envelope_invalid",
+                    "data_origin": "canonical_result_envelope",
+                    "record_ref": "",
+                    "job_id": _safe_text(selected_job.get("id")),
+                    "items": [],
+                    "expected_rule_count": len(resolved_expected_rule_ids),
+                    "result_rule_count": 0,
+                    "is_complete": False,
+                }
+
+            missing_rule_ids = [
+                rule_id for rule_id in resolved_expected_rule_ids if rule_id not in set(valid_rule_ids)
+            ]
+            return {
+                "schema_version": "lx0609-single-record-result-v1",
+                "state": "ready",
+                "reason_code": "",
+                "data_origin": "canonical_result_envelope",
+                "record_ref": _safe_text(envelope.get("record_ref")),
+                "job_id": _safe_text(selected_job.get("id")),
+                "rule_set_key": normalized_rule_set_key,
+                "rule_set_version": normalized_rule_set_version,
+                "items": items,
+                "expected_rule_count": len(resolved_expected_rule_ids),
+                "result_rule_count": len(items),
+                "is_complete": not missing_rule_ids and not conflicting_rule_ids,
+                "missing_rule_ids": missing_rule_ids,
+                "conflicting_rule_ids": sorted(conflicting_rule_ids),
+            }
+        finally:
+            session.close()
+
+    def get_latest_luxian_0609_record_result(
+        self,
+        *,
+        created_by: str,
+        record_id: str,
+        expected_rule_ids: Optional[Sequence[str]] = None,
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version: str = RULE_SET_VERSION,
+    ) -> Dict[str, Any]:
+        """单病历结果接口的唯一服务入口。"""
+
+        return self.build_latest_single_record_result_dto(
+            record_id=record_id,
+            created_by=created_by,
+            rule_set_key=rule_set_key,
+            rule_set_version=rule_set_version,
+            expected_rule_ids=expected_rule_ids,
+        )
+
+    @staticmethod
+    def _result_item_belongs_to_record(item: Dict[str, Any], record_id: str) -> bool:
+        """只接受原始结果明确携带的病历标识，禁止按文本或相似内容关联。"""
+
+        normalized_record_id = _safe_text(record_id)
+        return normalized_record_id in {
+            _safe_text(item.get("record_id")),
+            _safe_text(item.get("visit_id")),
+        }
+
+    @staticmethod
+    def _single_record_result_source_items(
+        job: Dict[str, Any],
+        *,
+        created_by: str,
+    ) -> List[Dict[str, Any]]:
+        """提取一个已选任务的原始结果行，不在此处做展示优先级去重。"""
+
+        children = [
+            child
+            for child in list(job.get("child_jobs") or job.get("children") or [])
+            if isinstance(child, dict) and _safe_text(child.get("created_by")) == _safe_text(created_by)
+        ]
+        sources = children or [job]
+        items: List[Dict[str, Any]] = []
+        for source in sources:
+            items.extend(
+                item for item in list(source.get("items") or []) if isinstance(item, dict)
+            )
+        if items:
+            return items
+        for source in sources:
+            summary = source.get("summary") if isinstance(source.get("summary"), dict) else {}
+            for rule_result in list(summary.get("rule_results") or source.get("rule_results") or []):
+                if isinstance(rule_result, dict):
+                    items.extend(
+                        item for item in list(rule_result.get("items") or []) if isinstance(item, dict)
+                    )
+        return items
 
     def cancel_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
         session = _session()
@@ -3156,6 +3962,12 @@ class CustomQCWorkspaceService:
     ) -> None:
         session = _session()
         try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            if not row:
+                return
+            parent_job_id = _safe_text(row.get("parent_job_id"))
             now = _now_utc()
             merged_summary = {
                 **(summary or {}),
@@ -3191,8 +4003,343 @@ class CustomQCWorkspaceService:
                 )
             )
             session.commit()
+            self._persist_record_result_envelopes(
+                job_row=dict(row),
+                items=items,
+                now=now,
+            )
+            self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         finally:
             session.close()
+
+    def _persist_record_result_envelopes(
+        self,
+        *,
+        job_row: Dict[str, Any],
+        items: Sequence[Dict[str, Any]],
+        now: datetime,
+    ) -> None:
+        """独立保存失败不得反向把已完成质控任务标记为失败。
+
+        正常环境必须已由 migration 创建 Envelope 表；这里采用独立事务，仅是为了
+        兼容旧客户库尚未迁移时保留历史读取回退，不让一次发布导致全量任务失败。
+        """
+
+        session = _session()
+        try:
+            self._write_record_result_envelopes(session, job_row=job_row, items=items, now=now)
+            session.commit()
+        except (sa.exc.ProgrammingError, sa.exc.OperationalError):
+            session.rollback()
+        finally:
+            session.close()
+
+    @staticmethod
+    def _envelope_item_from_rule_result(item: Dict[str, Any]) -> Dict[str, Any]:
+        """截取 RuleDecision 交付所需字段，避免 Envelope 变成任务调试日志。"""
+
+        allowed_keys = {
+            "schema_version",
+            "record_id",
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "mr_no",
+            "record_ref",
+            "customer_rule_id",
+            "qc_point_id",
+            "rule_id",
+            "rule_code",
+            "rule_name",
+            "rule_version",
+            "status",
+            "result_status",
+            "display_status",
+            "is_compliant",
+            "reason_code",
+            "reason",
+            "reason_detail",
+            "reason_details",
+            "conclusion",
+            "findings",
+            "detail",
+            "actual",
+            "standard",
+            "suggestion",
+            "customer_conclusion",
+            "customer_suggestion",
+            "customer_display_facts",
+            "criterion_results",
+            "decision_facts",
+            "customer_evidence",
+            "evidence_items",
+            "evidence_refs",
+            "evidence",
+            "model_analysis",
+            "medical_analysis",
+            "semantic_analysis",
+            "llm_analysis",
+            "model_suggestion",
+            "llm_suggestion",
+            # data_gap / evaluation_unknown 不能只剩一个状态码。以下字段均来自
+            # RuleDecision 已有事实或来源可用性，不在此处推断或补造医学结论。
+            "data_gap_details",
+            "missing_sources",
+            "missing_fields",
+            "required_sources",
+            "unavailable_sources",
+            "missing_evidence",
+            "source_availability",
+            "source_status",
+            "evidence_availability",
+        }
+        result = {
+            key: item.get(key)
+            for key in allowed_keys
+            if key in item and item.get(key) is not None
+        }
+        if not isinstance(result.get("decision_facts"), dict) and isinstance(
+            result.get("customer_display_facts"), dict
+        ):
+            result["decision_facts"] = result["customer_display_facts"]
+        if not isinstance(result.get("customer_display_facts"), dict) and isinstance(
+            result.get("decision_facts"), dict
+        ):
+            result["customer_display_facts"] = result["decision_facts"]
+
+        # 单病历读模型已约定 conclusion/detail/actual/standard/suggestion；这里仅把
+        # 同一 RuleDecision 的历史别名投影到该固定字段，不改结论、状态或规则语义。
+        if not _safe_text(result.get("conclusion")):
+            for key in ("customer_conclusion", "findings"):
+                value = _safe_text(item.get(key))
+                if value:
+                    result["conclusion"] = value
+                    break
+        if not _safe_text(result.get("suggestion")):
+            for key in ("customer_suggestion", "model_suggestion", "llm_suggestion"):
+                value = _safe_text(item.get(key))
+                if value:
+                    result["suggestion"] = value
+                    break
+        if not _safe_text(result.get("detail")):
+            for key in ("reason_detail", "reason", "reason_details"):
+                raw_value = item.get(key)
+                # reason_details 在少数旧执行器中可能是结构体；不把 Python repr
+                # 当作客户说明。结构体仍会作为 data_gap_details 原样交付。
+                value = _safe_text(raw_value) if isinstance(raw_value, str) else ""
+                if value:
+                    result["detail"] = value
+                    break
+
+        # LLM 事实提取器在不同规则族中历史命名并不完全一致。Envelope 统一为
+        # ``model_analysis``，前端才能稳定展示“医学分析”折叠区；不以 findings
+        # 等规则结论充数，避免把模板文案误标为模型分析。
+        if not _safe_text(result.get("model_analysis")):
+            for key in ("medical_analysis", "semantic_analysis", "llm_analysis"):
+                value = _safe_text(item.get(key))
+                if value:
+                    result["model_analysis"] = value
+                    break
+
+        # 资料不足/待确认的“缺什么”必须随结果交付。只聚合已有的受控字段，保留
+        # 原值结构，便于前端按来源、字段或时间展示；没有来源字段时不凭空编造。
+        item_status = _safe_text(
+            result.get("status") or result.get("result_status") or result.get("display_status")
+        )
+        if item_status in {"data_gap", "evaluation_unknown", "uncertain"}:
+            gap_details = result.get("data_gap_details")
+            if not isinstance(gap_details, dict):
+                gap_details = {}
+            for key in (
+                "reason_code",
+                "missing_sources",
+                "missing_fields",
+                "required_sources",
+                "unavailable_sources",
+                "missing_evidence",
+                "source_availability",
+                "source_status",
+                "evidence_availability",
+            ):
+                value = result.get(key)
+                if value not in (None, "", [], {}):
+                    gap_details.setdefault(key, value)
+            if gap_details:
+                result["data_gap_details"] = gap_details
+
+        # Canonical Envelope 是客户交付边界：业务判定字段保持不变，只把内部身份
+        # 和文书主键转换为不可逆授权引用。读取 API 不再重复执行该步骤。
+        hmac_key = customer_safe_projection_key()
+        record_id = _safe_text(item.get("record_id") or item.get("visit_id"))
+        if record_id:
+            result["record_ref"] = _keyed_ref("rec", record_id, hmac_key=hmac_key)
+        for key in ("record_id", "institute_id", "patient_id", "visit_id", "mr_no"):
+            result.pop(key, None)
+
+        evidence_rows: List[Dict[str, Any]] = []
+        for key in ("customer_evidence", "evidence_items", "evidence_refs", "evidence"):
+            candidates = item.get(key)
+            if not isinstance(candidates, list):
+                continue
+            for candidate in candidates:
+                if not isinstance(candidate, dict):
+                    continue
+                source_material = (
+                    candidate.get("source_ref")
+                    or candidate.get("document_ref")
+                    or candidate.get("fact_ref")
+                    or candidate.get("source_document_id")
+                )
+                if not _safe_text(source_material):
+                    continue
+                row = {
+                    key: value
+                    for key, value in candidate.items()
+                    if key not in {"source_document_id", "document_id", "fact_ref", "document_ref"}
+                }
+                source_ref = _safe_text(source_material)
+                row["source_ref"] = (
+                    source_ref
+                    if re.fullmatch(r"src_[0-9a-f]{24}", source_ref)
+                    else _keyed_ref("src", source_material, hmac_key=hmac_key)
+                )
+                evidence_rows.append(row)
+        for key in ("customer_evidence", "evidence_items", "evidence_refs"):
+            result.pop(key, None)
+        result["evidence"] = evidence_rows
+        for key in ("customer_display_facts", "decision_facts"):
+            if isinstance(result.get(key), (dict, list)):
+                result[key] = _sanitize_canonical_facts(result[key])
+        return result
+
+    def _write_record_result_envelopes(
+        self,
+        session: Session,
+        *,
+        job_row: Dict[str, Any],
+        items: Sequence[Dict[str, Any]],
+        now: datetime,
+    ) -> None:
+        """将每个病历的原生结果写入独立交付 Envelope。
+
+        任务 ``items_json`` 仍保留给历史批量任务和导出使用；单病历结果页的新任务
+        不再从它读取事实、子结论或模型分析。
+        """
+
+        filters = _safe_json_loads(job_row.get("filters_json"), {})
+        filters = filters if isinstance(filters, dict) else {}
+        rule_set_key = _safe_text(filters.get("rule_set_key"), LUXIAN_0609_RULE_SET_KEY)
+        rule_set_version = _safe_text(filters.get("rule_set_version"), RULE_SET_VERSION)
+        job_id = _safe_text(job_row.get("id"))
+        root_job_id = _safe_text(job_row.get("parent_job_id")) or job_id
+        created_by = _safe_text(job_row.get("created_by"))
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for raw_item in items:
+            if not isinstance(raw_item, dict):
+                continue
+            record_id = _safe_text(raw_item.get("record_id") or raw_item.get("visit_id"))
+            if record_id:
+                grouped.setdefault(record_id, []).append(raw_item)
+
+        for record_id, record_items in grouped.items():
+            identity_values = {
+                key: {
+                    _safe_text(item.get(key))
+                    for item in record_items
+                    if _safe_text(item.get(key))
+                }
+                for key in ("institute_id", "patient_id", "visit_id")
+            }
+            # Envelope 的授权身份必须是唯一三坐标；否则只保留旧链，禁止创建可被
+            # 前端误用的独立结果。
+            if not all(len(values) == 1 for values in identity_values.values()):
+                continue
+            envelope = {
+                "schema_version": _RECORD_RESULT_ENVELOPE_SCHEMA,
+                "delivery_mode": _CANONICAL_RESULT_DELIVERY_MODE,
+                "record_id": record_id,
+                "record_ref": _keyed_ref(
+                    "rec",
+                    record_id,
+                    hmac_key=customer_safe_projection_key(),
+                ),
+                "job_id": job_id,
+                "root_job_id": root_job_id,
+                "rule_set_key": rule_set_key,
+                "rule_set_version": rule_set_version,
+                "items": [self._envelope_item_from_rule_result(item) for item in record_items],
+            }
+            session.execute(
+                self._record_result_envelope_table.delete().where(
+                    and_(
+                        self._record_result_envelope_table.c.job_id == job_id,
+                        self._record_result_envelope_table.c.record_id == record_id,
+                    )
+                )
+            )
+            session.execute(
+                self._record_result_envelope_table.insert().values(
+                    id=str(uuid.uuid4()),
+                    job_id=job_id,
+                    root_job_id=root_job_id,
+                    created_by=created_by,
+                    record_id=record_id,
+                    institute_id=next(iter(identity_values["institute_id"])),
+                    patient_id=next(iter(identity_values["patient_id"])),
+                    visit_id=next(iter(identity_values["visit_id"])),
+                    rule_set_key=rule_set_key,
+                    rule_set_version=rule_set_version,
+                    envelope_json=_safe_json_dumps(envelope),
+                    result_count=len(record_items),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+    def _load_record_result_envelope_items(
+        self,
+        session: Session,
+        *,
+        job_id: str,
+        created_by: str,
+        record_id: str,
+        rule_set_key: str,
+        rule_set_version: str,
+    ) -> Dict[str, Any]:
+        """读取已选定任务唯一的 Canonical Envelope，不拼接、不回退。"""
+
+        try:
+            rows = (
+                session.execute(
+                    select(self._record_result_envelope_table)
+                    .where(
+                        and_(
+                            self._record_result_envelope_table.c.job_id == job_id,
+                            self._record_result_envelope_table.c.created_by == created_by,
+                            self._record_result_envelope_table.c.record_id == record_id,
+                            self._record_result_envelope_table.c.rule_set_key == rule_set_key,
+                            self._record_result_envelope_table.c.rule_set_version == rule_set_version,
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        except (sa.exc.ProgrammingError, sa.exc.OperationalError):
+            # 兼容尚未运行 migration 的环境；不允许因为结果交付表缺失而让质控任务失败。
+            return {}
+
+        if len(rows) != 1:
+            return {}
+        envelope = _safe_json_loads(rows[0].get("envelope_json"), {})
+        if (
+            not isinstance(envelope, dict)
+            or envelope.get("schema_version") != _RECORD_RESULT_ENVELOPE_SCHEMA
+            or envelope.get("delivery_mode") != _CANONICAL_RESULT_DELIVERY_MODE
+            or not isinstance(envelope.get("items"), list)
+        ):
+            return {}
+        return envelope
 
     def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
         session = _session()
@@ -3202,6 +4349,7 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return
+            parent_job_id = _safe_text(row.get("parent_job_id"))
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
                 current_summary = {}
@@ -3231,6 +4379,7 @@ class CustomQCWorkspaceService:
                 )
             )
             session.commit()
+            self.refresh_parent_batch_job(parent_job_id=parent_job_id)
         finally:
             session.close()
 

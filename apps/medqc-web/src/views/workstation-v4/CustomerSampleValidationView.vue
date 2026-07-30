@@ -70,6 +70,12 @@
                           同步样本病历
                         </a-menu-item>
                         <a-menu-item
+                          :disabled="!selectedPoolId || syncLoading"
+                          @click="handleMoreActionKey('sync-by-admission')"
+                        >
+                          按条件同步病历…
+                        </a-menu-item>
+                        <a-menu-item
                           :disabled="!selectedPoolId || matchLoading"
                           @click="handleMoreActionKey('match')"
                         >
@@ -581,6 +587,16 @@
                   {{ syncResultNotice.description }}
                 </div>
               </div>
+              <div
+                v-if="syncAdmissionSummary"
+                class="mx-5 mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-[13px] leading-6 text-slate-600"
+              >
+                <span class="font-semibold text-slate-800">本次按条件同步：</span>
+                {{ syncAdmissionSummary.range }}；新增
+                {{ syncAdmissionSummary.newCount }} 份，已存在
+                {{ syncAdmissionSummary.existingCount }} 份，失败
+                {{ syncAdmissionSummary.failedCount }} 份。
+              </div>
               <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
                   <div class="text-[12px] text-slate-400">病历进度</div>
@@ -648,9 +664,7 @@
                   </div>
                   <div v-if="syncRecordProgress.missingMr > 0" class="mt-1 text-amber-700">
                     有
-                    {{
-                      syncRecordProgress.missingMr
-                    }}
+                    {{ syncRecordProgress.missingMr }}
                     份病历尚未写入主记录，暂时不会出现在病历池中。
                   </div>
                   <div v-if="syncJobDetail.error_message" class="mt-2 text-rose-600">
@@ -771,7 +785,11 @@
                 <p>查看当前任务进度和最近质控记录。</p>
               </div>
               <div class="customer-sample-task-center-head-actions">
-                <a-button size="small" :loading="taskHistoryLoading" @click="loadTaskHistory">
+                <a-button
+                  size="small"
+                  :loading="taskHistoryLoading"
+                  @click="() => loadTaskHistory()"
+                >
                   刷新
                 </a-button>
                 <a-button
@@ -1126,6 +1144,65 @@
       </div>
     </a-modal>
 
+    <a-modal
+      v-model:open="admissionSyncModalOpen"
+      title="同步病历到当前样本池"
+      :confirm-loading="admissionSyncSubmitting"
+      ok-text="开始同步"
+      cancel-text="取消"
+      @ok="handleAdmissionSync"
+    >
+      <div class="space-y-4 pt-2">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div class="text-[12px] text-slate-500">当前样本池</div>
+          <div class="mt-1 text-[15px] font-semibold text-slate-800">
+            {{ selectedPool?.name || '未选择样本池' }}
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block">
+            <span class="mb-1.5 block text-[13px] font-medium text-slate-700">入院开始日期</span>
+            <a-date-picker
+              v-model:value="admissionSyncForm.startDate"
+              class="w-full"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              :allow-clear="false"
+            />
+          </label>
+          <label class="block">
+            <span class="mb-1.5 block text-[13px] font-medium text-slate-700">入院结束日期</span>
+            <a-date-picker
+              v-model:value="admissionSyncForm.endDate"
+              class="w-full"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              :allow-clear="false"
+            />
+          </label>
+        </div>
+        <label class="block">
+          <span class="mb-1.5 block text-[13px] font-medium text-slate-700">科室（可不选）</span>
+          <a-select
+            v-model:value="admissionSyncForm.departments"
+            mode="multiple"
+            allow-clear
+            :loading="admissionSyncDepartmentsLoading"
+            :options="admissionSyncDepartmentOptions"
+            placeholder="不选择则同步该日期范围内全部科室"
+            class="w-full"
+            :max-tag-count="3"
+          />
+        </label>
+        <div
+          class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[13px] leading-6 text-slate-600"
+        >
+          仅按入院日期和科室筛选本次住院；自动按住院三坐标去重，并复用当前样本池的文书、医嘱和
+          Bundle 同步任务。日期范围最多 31 天，在院病历也会同步。
+        </div>
+      </div>
+    </a-modal>
+
     <a-drawer :open="detailOpen" width="720" title="病历关联问题" @close="detailOpen = false">
       <div v-if="activeRecord" class="space-y-5">
         <a-card size="small" class="rounded-2xl">
@@ -1221,11 +1298,25 @@
     <a-modal
       v-model:open="editableCopyOpen"
       :title="null"
-      :width="1120"
+      :width="editableCopyReadonly ? '100vw' : 'min(1720px, calc(100vw - 24px))'"
+      :style="editableCopyReadonly ? { top: '0', paddingBottom: '0', maxWidth: 'none' } : undefined"
+      :body-style="
+        editableCopyReadonly
+          ? { height: '100vh', maxHeight: '100vh', padding: 0, overflowY: 'auto' }
+          : undefined
+      "
       :footer="null"
       :destroy-on-close="false"
-      centered
-      class="editable-copy-workstation-modal"
+      :centered="!editableCopyReadonly"
+      :wrap-class-name="
+        editableCopyReadonly
+          ? 'editable-copy-workstation-modal-wrap is-readonly-fullscreen'
+          : 'editable-copy-workstation-modal-wrap'
+      "
+      :class="[
+        'editable-copy-workstation-modal',
+        { 'is-readonly-fullscreen': editableCopyReadonly },
+      ]"
       @cancel="closeEditableCopyDrawer"
     >
       <div class="editable-copy-drawer">
@@ -1384,15 +1475,33 @@
                     :class="{ 'is-tree': editableCopyReadonly }"
                   >
                     <template v-for="group in editableCopyDocumentGroups" :key="group.key">
-                      <div class="editable-copy-document-group-title">
+                      <button
+                        v-if="editableCopyReadonly"
+                        type="button"
+                        class="editable-copy-document-group-title is-collapsible"
+                        :aria-expanded="isEditableCopyDocumentGroupExpanded(group.key)"
+                        :data-testid="`editable-copy-group-toggle-${group.key}`"
+                        @click="toggleEditableCopyDocumentGroup(group.key)"
+                      >
                         <span>
-                          <i v-if="editableCopyReadonly" />
+                          <i />
+                          <b class="editable-copy-document-group-chevron" aria-hidden="true">{{
+                            isEditableCopyDocumentGroupExpanded(group.key) ? '⌄' : '›'
+                          }}</b>
                           {{ group.label }}
                         </span>
                         <em>{{ group.documents.length }}</em>
+                      </button>
+                      <div v-else class="editable-copy-document-group-title">
+                        <span>{{ group.label }}</span>
+                        <em>{{ group.documents.length }}</em>
                       </div>
                       <button
-                        v-if="group.key === 'order'"
+                        v-if="
+                          (!editableCopyReadonly ||
+                            isEditableCopyDocumentGroupExpanded(group.key)) &&
+                          group.key === 'order'
+                        "
                         type="button"
                         class="editable-copy-document-nav-item"
                         :class="{
@@ -1403,7 +1512,11 @@
                         <span>医嘱</span>
                         <small>{{ formatEditableCopyOrderGroupMeta(group.documents) }}</small>
                       </button>
-                      <template v-else>
+                      <template
+                        v-else-if="
+                          !editableCopyReadonly || isEditableCopyDocumentGroupExpanded(group.key)
+                        "
+                      >
                         <button
                           v-for="document in group.documents"
                           :key="document.key"
@@ -1543,7 +1656,14 @@
                       />
                     </label>
                   </div>
+                  <ReadonlyMedicalDocumentContent
+                    v-if="
+                      editableCopyReadonly && !isEditableOrderDocument(editableCopyActiveDocument)
+                    "
+                    :document="editableCopyActiveDocument"
+                  />
                   <a-textarea
+                    v-else
                     v-model:value="editableCopyActiveDocument.content"
                     :rows="isEditableOrderDocument(editableCopyActiveDocument) ? 12 : 16"
                     :readonly="editableCopyReadonly"
@@ -1598,9 +1718,6 @@
       :batch-job-debug-snapshot="null"
       :batch-job-debug-loading="false"
       :fetch-batch-job-debug-snapshot="undefined"
-      :focus-visit-id="batchResultFocusRecord?.visitId"
-      :focus-record-id="batchResultFocusRecord?.recordId"
-      :focus-record-label="batchResultFocusRecord?.label"
       :close="closeBatchDrawer"
       :export-batch-job-report="handleExportBatchReport"
       :review-batch-job-result="handleReviewBatchResult"
@@ -1608,6 +1725,12 @@
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"
+    />
+
+    <QCRecordResultComparisonDrawer
+      :open="recordResultComparisonOpen"
+      :focus="recordResultComparisonFocus"
+      @close="closeRecordResultComparison"
     />
 
     <a-drawer
@@ -1621,8 +1744,8 @@
       <div class="customer-sample-luxian-aggregate">
         <div class="customer-sample-luxian-aggregate-head">
           <div>
-            <strong>按 7 个质控族并发执行</strong>
-            <p>前端展示为一个总任务，后端按质控族拆成子任务执行；每个子任务可单独查看结果。</p>
+            <strong>质控结果概览</strong>
+            <p>{{ luxianAggregateHeadline }}</p>
           </div>
           <a-button
             size="small"
@@ -1634,20 +1757,25 @@
         </div>
 
         <div class="customer-sample-luxian-aggregate-summary">
-          <div>
-            <span>总进度</span>
-            <strong>
-              已完成 {{ luxianAggregateSummary.completed }} /
-              {{ luxianAggregateSummary.total }} 个质控族
-            </strong>
+          <div class="is-danger">
+            <span>确定问题</span>
+            <strong>{{ luxianAggregateResultOverview.nonCompliant }}</strong>
+            <small>需要优先处理</small>
           </div>
-          <div>
-            <span>运行中</span>
-            <strong>{{ luxianAggregateSummary.running }} 个</strong>
+          <div class="is-review">
+            <span>建议复核</span>
+            <strong>{{ luxianAggregateResultOverview.review }}</strong>
+            <small>需人工确认</small>
           </div>
-          <div>
-            <span>异常</span>
-            <strong>{{ luxianAggregateSummary.failed }} 个</strong>
+          <div class="is-warning">
+            <span>待补资料</span>
+            <strong>{{ luxianAggregateResultOverview.dataGap }}</strong>
+            <small>暂不能形成结论</small>
+          </div>
+          <div class="is-muted">
+            <span>不适用</span>
+            <strong>{{ luxianAggregateResultOverview.notApplicable }}</strong>
+            <small>当前病历无需核查</small>
           </div>
         </div>
 
@@ -1656,6 +1784,7 @@
             v-for="item in luxianAggregateSortedJobs"
             :key="item.family.key"
             class="customer-sample-luxian-aggregate-item"
+            :class="luxianAggregateItemPriorityClass(item)"
           >
             <div class="customer-sample-luxian-aggregate-main">
               <div class="customer-sample-luxian-aggregate-title">
@@ -1666,14 +1795,27 @@
               </div>
               <div class="customer-sample-luxian-aggregate-meta">
                 <span>{{ item.family.ruleIds.length }} 个客户质控点</span>
-                <span :title="item.jobId ? `子任务编号：${item.jobId}` : '任务创建中'">
-                  {{ item.jobId ? '子任务已生成' : '任务创建中' }}
+              </div>
+              <div
+                v-if="luxianAggregateStatusChips(item).length"
+                class="customer-sample-luxian-aggregate-chips"
+              >
+                <span
+                  v-for="chip in luxianAggregateStatusChips(item)"
+                  :key="chip.key"
+                  class="customer-sample-luxian-aggregate-chip"
+                  :class="chip.className"
+                >
+                  {{ chip.label }} {{ chip.value }}
                 </span>
               </div>
               <div v-if="item.errorMessage" class="customer-sample-luxian-aggregate-error">
                 {{ item.errorMessage }}
               </div>
-              <div v-else class="customer-sample-luxian-aggregate-result">
+              <div
+                v-else-if="!luxianAggregateStatusChips(item).length"
+                class="customer-sample-luxian-aggregate-result"
+              >
                 {{ luxianAggregateResultSummary(item) }}
               </div>
             </div>
@@ -1683,7 +1825,7 @@
                 :disabled="!item.jobId"
                 @click="openLuxianAggregateChildJob(item)"
               >
-                查看结果
+                {{ luxianAggregateActionText(item) }}
               </a-button>
             </div>
           </article>
@@ -1702,7 +1844,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
@@ -1748,11 +1890,13 @@ import {
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
   importManualSamplePoolByUpload,
+  listManualSamplePoolAdmissionDepartments,
   listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   listManualSamplePools,
   matchManualSamplePool,
   runManualSamplePool,
+  syncManualSamplePoolRecordsByAdmission,
   syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
 import { syntheticCaseRuleFamilies } from './customer-sample-validation/syntheticCaseTemplates'
@@ -1767,6 +1911,8 @@ import {
 } from '@/services/sichuan-rule-workspace-service'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
+import QCRecordResultComparisonDrawer from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import ReadonlyMedicalDocumentContent from './customer-sample-validation/ReadonlyMedicalDocumentContent.vue'
 import type {
   SichuanBatchJob,
   SichuanBatchIssueItem,
@@ -1788,6 +1934,15 @@ const initialQueryJobHandled = ref(false)
 const initialFocusedRecordSearchHandled = ref(false)
 const importModalOpen = ref(false)
 const importFileList = ref<UploadFile[]>([])
+const admissionSyncModalOpen = ref(false)
+const admissionSyncSubmitting = ref(false)
+const admissionSyncDepartmentsLoading = ref(false)
+const admissionSyncDepartments = ref<string[]>([])
+const admissionSyncForm = ref({
+  startDate: '',
+  endDate: '',
+  departments: [] as string[],
+})
 const customerSampleGuideOpen = ref(false)
 const customerSampleGuideStepIndex = ref(0)
 const customerSampleTourCardStyle = ref<CSSProperties>({})
@@ -2200,6 +2355,9 @@ const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
 const selectedPool = ref<ManualSamplePool>()
 const records = ref<ManualSamplePoolRecord[]>([])
+const admissionSyncDepartmentOptions = computed(() =>
+  admissionSyncDepartments.value.map((department) => ({ label: department, value: department })),
+)
 const ruleSets = ref<ManualSampleValidationRuleSet[]>(fallbackRuleSets)
 const selectedRuleSetKey = ref<string>(LUXIAN_0609_RULE_SET_KEY)
 const ruleSetDirectoryFallbackActive = ref(false)
@@ -2234,6 +2392,7 @@ const editableCopyDocumentQuery = ref('')
 const editableCopyDocumentFilter = ref<EditableCopyDocumentFilter>('all')
 const editableCopyOrderTypeFilter = ref<EditableCopyOrderTypeFilter>('temporary')
 const editableCopyActiveDocumentKey = ref('')
+const editableCopyExpandedGroupKeys = ref(new Set<string>())
 const editableCopyAllDocuments = computed(() => editableCopyDraft.value?.documents || [])
 const editableCopyEnabledDocumentCount = computed(
   () => editableCopyAllDocuments.value.filter((document) => document.enabled !== false).length,
@@ -2293,6 +2452,10 @@ const editableCopyActiveDocument = computed(() => {
     null
   )
 })
+const editableCopyActiveDocumentGroupKey = computed(() => {
+  const document = editableCopyActiveDocument.value
+  return document ? editableCopyDocumentGroupKey(document) : ''
+})
 
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob | null>(null)
@@ -2348,15 +2511,51 @@ const luxianAggregateSummary = computed(() => {
     running,
   }
 })
+const luxianAggregateResultOverview = computed(() => {
+  const overview = {
+    nonCompliant: 0,
+    review: 0,
+    dataGap: 0,
+    notApplicable: 0,
+  }
+
+  luxianAggregateJobs.value.forEach((item) => {
+    const counts = luxianAggregateDisplayCounts(item)
+    overview.nonCompliant += Number(counts.non_compliant || 0)
+    overview.review +=
+      Number(counts.ai_suggested_non_compliant || 0) + Number(counts.uncertain || 0)
+    overview.dataGap += Number(counts.data_gap || 0)
+    overview.notApplicable += Number(counts.not_applicable || 0)
+  })
+
+  return overview
+})
+const luxianAggregateHeadline = computed(() => {
+  const summary = luxianAggregateSummary.value
+  const overview = luxianAggregateResultOverview.value
+  const completedText = `已完成 ${summary.completed} / ${summary.total} 个质控族`
+  if (summary.running > 0) return `${completedText}，其余结果正在汇总。`
+  if (summary.failed > 0) return `${completedText}，${summary.failed} 个质控族需查看异常。`
+  const attentionCount = overview.nonCompliant + overview.review
+  if (attentionCount > 0) return `${completedText}，发现 ${attentionCount} 项需要优先关注。`
+  if (overview.dataGap > 0) return `${completedText}，其中 ${overview.dataGap} 项待补充资料。`
+  return `${completedText}，暂未发现需要优先处理的结果。`
+})
 const luxianAggregateSortedJobs = computed(() =>
   [...luxianAggregateJobs.value].sort((left, right) => {
-    const priority = luxianAggregateItemPriority(right) - luxianAggregateItemPriority(left)
-    return priority || left.family.name.localeCompare(right.family.name, 'zh-CN')
+    const priorityDifference =
+      luxianAggregateItemPriority(right) - luxianAggregateItemPriority(left)
+    if (priorityDifference !== 0) return priorityDifference
+    return left.family.name.localeCompare(right.family.name, 'zh-CN')
   }),
 )
-const batchResultFocusRecord = ref<{
+const recordResultComparisonOpen = ref(false)
+const recordResultComparisonFocus = ref<{
   visitId: string
+  instituteId: string
+  patientId: string
   recordId: string
+  recordRef?: string
   label: string
 } | null>(null)
 let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
@@ -2507,7 +2706,11 @@ const selectedRuleSetCoverageChips = computed(() => {
   const extraChips: Array<{ label: string; value: string | number; className: string }> = []
   if (selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY) {
     if (freshness?.status && freshness.status !== 'fresh') {
-      extraChips.push({ label: '验收工件', value: '需刷新', className: 'border-amber-200 bg-amber-50 text-amber-700' })
+      extraChips.push({
+        label: '验收工件',
+        value: '需刷新',
+        className: 'border-amber-200 bg-amber-50 text-amber-700',
+      })
     }
     if (gate) {
       extraChips.push({
@@ -2712,6 +2915,18 @@ const exactReviewBacklogBuckets = computed(
 )
 
 const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
+const syncAdmissionSummary = computed(() => {
+  const filter = syncJobDetail.value?.summary?.admission_filter
+  if (!filter?.filter) return null
+  const departments = filter.filter.departments || []
+  const departmentLabel = departments.length ? departments.join('、') : '全部科室'
+  return {
+    range: `${filter.filter.start_date || '—'} 至 ${filter.filter.end_date || '—'} · ${departmentLabel}`,
+    newCount: Number(filter.new_count || 0),
+    existingCount: Number(filter.existing_count || 0),
+    failedCount: Number(filter.failed_count || 0),
+  }
+})
 const syncRecordProgress = computed(() => {
   const summary = syncJobDetail.value?.summary || {}
   const rawProgress = syncProgress.value.record_progress || summary.record_progress || {}
@@ -2893,21 +3108,43 @@ const currentScopeDescription = computed(() => {
 })
 
 const selectedRecordStats = computed(() => {
-  const selectedRecords = records.value.filter((record) => selectedRowKeys.value.includes(record.id))
+  const selectedRecords = records.value.filter((record) =>
+    selectedRowKeys.value.includes(record.id),
+  )
   const runnableRecords = selectedRecords.filter((record) => isRunnableRecord(record))
-  const blockerCounts = selectedRecords.reduce((counts, record) => {
-    if (record.match_status === 'ambiguous') counts.ambiguous += 1
-    else if (record.match_status !== 'matched' || !record.matched_visit_id) counts.unmatched += 1
-    else if (!isRecordSyncedForValidation(record)) counts.notSynced += 1
-    else if ((isLuxian0609Mode.value || selectedValidationMode.value === 'customer' || selectedValidationMode.value === 'sc') && record.bundle_status !== 'ready') counts.bundleNotReady += 1
-    return counts
-  }, { ambiguous: 0, unmatched: 0, notSynced: 0, bundleNotReady: 0 })
+  const blockerCounts = selectedRecords.reduce(
+    (counts, record) => {
+      if (record.match_status === 'ambiguous') {
+        counts.ambiguous += 1
+      } else if (record.match_status !== 'matched' || !record.matched_visit_id) {
+        counts.unmatched += 1
+      } else if (!isRecordSyncedForValidation(record)) {
+        counts.notSynced += 1
+      } else if (
+        (isLuxian0609Mode.value ||
+          selectedValidationMode.value === 'customer' ||
+          selectedValidationMode.value === 'sc') &&
+        record.bundle_status !== 'ready'
+      ) {
+        counts.bundleNotReady += 1
+      }
+      return counts
+    },
+    {
+      ambiguous: 0,
+      unmatched: 0,
+      notSynced: 0,
+      bundleNotReady: 0,
+    },
+  )
   return {
     selectedCount: selectedRecords.length,
     runnableCount: runnableRecords.length,
     blockedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
     blockerCounts,
-    runnableRecordIds: runnableRecords.map((record) => String(record.matched_visit_id || '').trim()).filter(Boolean),
+    runnableRecordIds: runnableRecords
+      .map((record) => String(record.matched_visit_id || '').trim())
+      .filter((recordId) => Boolean(recordId)),
   }
 })
 
@@ -3383,25 +3620,14 @@ function buildRecordActions(record: ManualSamplePoolRecord) {
       ),
     )
   }
-  if (selectedPool.value?.latest_job_id && record.matched_visit_id) {
+  if (record.matched_visit_id) {
     actions.push(
       h(
         'button',
         {
           type: 'button',
           class: 'customer-sample-secondary-link',
-          onClick: () =>
-            openBatchJob(selectedPool.value?.latest_job_id || '', {
-              visitId: record.matched_visit_id || '',
-              recordId: resolveRecordIdentifier(record),
-              label: [
-                resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
-                record.department || '',
-                resolveRecordIdentifier(record),
-              ]
-                .filter(Boolean)
-                .join(' · '),
-            }),
+          onClick: () => openRecordLatestBatchJob(record),
         },
         '查看结果',
       ),
@@ -3429,12 +3655,26 @@ function isRecordSyncedForValidation(record: ManualSamplePoolRecord): boolean {
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
   if (isLuxian0609Mode.value) {
-    return record.match_status === 'matched' && isRecordSyncedForValidation(record) && record.bundle_status === 'ready' && !!record.matched_visit_id
+    return (
+      record.match_status === 'matched' &&
+      isRecordSyncedForValidation(record) &&
+      record.bundle_status === 'ready' &&
+      !!record.matched_visit_id
+    )
   }
   if (isSyncedOnlyValidationMode.value) {
-    return record.match_status === 'matched' && isRecordSyncedForValidation(record) && !!record.matched_visit_id
+    return (
+      record.match_status === 'matched' &&
+      isRecordSyncedForValidation(record) &&
+      !!record.matched_visit_id
+    )
   }
-  return record.match_status === 'matched' && isRecordSyncedForValidation(record) && record.bundle_status === 'ready' && !!record.matched_visit_id
+  return (
+    record.match_status === 'matched' &&
+    isRecordSyncedForValidation(record) &&
+    record.bundle_status === 'ready' &&
+    !!record.matched_visit_id
+  )
 }
 
 function runnableRequirementHint(): string {
@@ -4155,6 +4395,10 @@ async function handleMoreActionKey(key: string) {
     await handleSyncPoolRecords()
     return
   }
+  if (key === 'sync-by-admission') {
+    await openAdmissionSyncModal()
+    return
+  }
   if (key === 'match') {
     await handleMatchPool()
     return
@@ -4870,6 +5114,9 @@ function formatEditableCopyOrderGroupMeta(documents: EditableMedicalRecordDocume
 function selectEditableCopyDocument(key: string) {
   editableCopyActiveDocumentKey.value = key
   const document = editableCopyAllDocuments.value.find((item) => item.key === key)
+  if (document && editableCopyReadonly.value) {
+    editableCopyExpandedGroupKeys.value = new Set([editableCopyDocumentGroupKey(document)])
+  }
   if (document && isEditableOrderDocument(document)) {
     editableCopyOrderTypeFilter.value = resolveEditableOrderTypeKey(document)
   }
@@ -4882,9 +5129,55 @@ function selectEditableCopyOrderGroup() {
   const first = rows[0]?.document
   if (first) {
     editableCopyActiveDocumentKey.value = first.key
+    if (editableCopyReadonly.value) {
+      editableCopyExpandedGroupKeys.value = new Set(['order'])
+    }
     editableCopyOrderTypeFilter.value = resolveEditableOrderTypeKey(first)
   }
 }
+
+function isEditableCopyDocumentGroupExpanded(groupKey: string): boolean {
+  return !editableCopyReadonly.value || editableCopyExpandedGroupKeys.value.has(groupKey)
+}
+
+function toggleEditableCopyDocumentGroup(groupKey: string) {
+  if (!editableCopyReadonly.value) return
+  const next = new Set(editableCopyExpandedGroupKeys.value)
+  if (next.has(groupKey)) next.delete(groupKey)
+  else next.add(groupKey)
+  editableCopyExpandedGroupKeys.value = next
+}
+
+function syncEditableCopyExpandedDocumentGroups() {
+  if (!editableCopyReadonly.value) return
+  const groupKeys = editableCopyDocumentGroups.value.map((group) => group.key)
+  if (editableCopyDocumentQuery.value.trim()) {
+    editableCopyExpandedGroupKeys.value = new Set(groupKeys)
+    return
+  }
+
+  const activeGroupKey = editableCopyActiveDocumentGroupKey.value
+  if (activeGroupKey && groupKeys.includes(activeGroupKey)) {
+    editableCopyExpandedGroupKeys.value = new Set([activeGroupKey])
+    return
+  }
+
+  if (!editableCopyExpandedGroupKeys.value.size && groupKeys[0]) {
+    editableCopyExpandedGroupKeys.value = new Set([groupKeys[0]])
+  }
+}
+
+watch(
+  [
+    editableCopyReadonly,
+    editableCopyActiveDocumentGroupKey,
+    editableCopyDocumentQuery,
+    editableCopyDocumentFilter,
+    () => editableCopyDocumentGroups.value.map((group) => group.key).join('|'),
+  ],
+  syncEditableCopyExpandedDocumentGroups,
+  { immediate: true },
+)
 
 function createEditableCopyDocument(documentType: string): EditableMedicalRecordDocument {
   const normalizedType =
@@ -5112,13 +5405,7 @@ async function saveEditableCopy(options: { runAfterSave: boolean }) {
     return
   }
   message.success('编辑副本验证任务已创建')
-  await openBatchJob(runResult.data.job_id, {
-    visitId: createdVisitId,
-    recordId: createResult.data.item?.id || createdVisitId,
-    label: [payload.basic_info.patient_name, payload.basic_info.department, createdVisitId]
-      .filter(Boolean)
-      .join(' · '),
-  })
+  await openBatchJob(runResult.data.job_id)
 }
 
 function formatMatchSummary(matched: number, ambiguous: number, unmatched: number) {
@@ -5181,6 +5468,72 @@ async function handleMatchPool() {
   await runPoolMatch({ source: 'manual' })
 }
 
+function currentLocalDate(): string {
+  const now = new Date()
+  const offset = now.getTimezoneOffset() * 60_000
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
+}
+
+async function openAdmissionSyncModal() {
+  if (!selectedPoolId.value) {
+    message.warning('请先选择样本池')
+    return
+  }
+  if (!admissionSyncForm.value.startDate || !admissionSyncForm.value.endDate) {
+    const today = currentLocalDate()
+    admissionSyncForm.value = { startDate: today, endDate: today, departments: [] }
+  }
+  admissionSyncModalOpen.value = true
+  if (admissionSyncDepartments.value.length || admissionSyncDepartmentsLoading.value) return
+  admissionSyncDepartmentsLoading.value = true
+  const result = await listManualSamplePoolAdmissionDepartments()
+  admissionSyncDepartmentsLoading.value = false
+  if (!result.success) {
+    message.warning(result.message || '入院科室暂未加载，可直接按日期同步全部科室')
+    return
+  }
+  admissionSyncDepartments.value = Array.from(
+    new Set((result.data?.items || []).map((item) => String(item || '').trim()).filter(Boolean)),
+  )
+}
+
+async function handleAdmissionSync() {
+  const poolId = selectedPoolId.value
+  const { startDate, endDate, departments } = admissionSyncForm.value
+  if (!poolId) {
+    message.warning('请先选择样本池')
+    return
+  }
+  if (!startDate || !endDate) {
+    message.warning('请填写入院日期范围')
+    return
+  }
+  const start = new Date(`${startDate}T00:00:00`).getTime()
+  const end = new Date(`${endDate}T00:00:00`).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+    message.warning('入院日期范围不正确')
+    return
+  }
+  if ((end - start) / 86_400_000 > 30) {
+    message.warning('入院日期范围最多 31 天')
+    return
+  }
+  admissionSyncSubmitting.value = true
+  const result = await syncManualSamplePoolRecordsByAdmission(poolId, {
+    start_date: startDate,
+    end_date: endDate,
+    departments: departments.filter(Boolean),
+  })
+  admissionSyncSubmitting.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '按条件同步病历失败')
+    return
+  }
+  admissionSyncModalOpen.value = false
+  message.success('按条件同步病历任务已创建')
+  await openSyncJob(result.data.job_id)
+}
+
 async function handleSyncPoolRecords() {
   if (!selectedPoolId.value) return
   syncLoading.value = true
@@ -5222,7 +5575,8 @@ async function handleSyncPoolRecords() {
 async function handleRunPool() {
   if (runLoading.value) return
   if (!selectedPoolId.value) return
-  const { selectedCount, runnableCount, blockedCount, runnableRecordIds } = selectedRecordStats.value
+  const { selectedCount, runnableCount, blockedCount, runnableRecordIds } =
+    selectedRecordStats.value
   if (requiresSelectedRecords.value && selectedCount === 0) {
     message.warning('请先选择要质控的病历')
     return
@@ -5428,6 +5782,41 @@ function isSameRecordScope(job: SichuanBatchJob, recordIds: string[]): boolean {
   return expected === actual
 }
 
+function resolveRecordResultFocus(record: ManualSamplePoolRecord) {
+  return {
+    visitId: String(record.matched_visit_id || '').trim(),
+    instituteId: String(record.matched_institute_id || '').trim(),
+    patientId: String(record.matched_patient_id || '').trim(),
+    recordId: resolveRecordIdentifier(record),
+    label: [
+      resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
+      record.department || '',
+      resolveRecordIdentifier(record),
+    ]
+      .filter(Boolean)
+      .join(' · '),
+  }
+}
+
+async function openRecordLatestBatchJob(record: ManualSamplePoolRecord) {
+  const focus = resolveRecordResultFocus(record)
+  if (!focus.visitId) {
+    message.warning('这份病历尚未匹配源库，暂无可查看的质控结果')
+    return
+  }
+  openRecordResultComparison(focus)
+}
+
+function openRecordResultComparison(focus: NonNullable<typeof recordResultComparisonFocus.value>) {
+  recordResultComparisonFocus.value = focus
+  recordResultComparisonOpen.value = true
+}
+
+function closeRecordResultComparison() {
+  recordResultComparisonOpen.value = false
+  recordResultComparisonFocus.value = null
+}
+
 function isSameLuxianRuleScope(job: SichuanBatchJob, selectedRuleIds: string[]): boolean {
   const expected = normalizeLuxianRuleIds(selectedRuleIds)
   const filters = job.filters && typeof job.filters === 'object' ? job.filters : {}
@@ -5506,12 +5895,12 @@ async function openLatestJob() {
   await openBatchJob(selectedPool.value.latest_job_id)
 }
 
-async function loadTaskHistory() {
+async function loadTaskHistory(options: { pageSize?: number } = {}) {
   taskHistoryLoading.value = true
   try {
     const result = await listSichuanWorkspaceBatchJobs({
       page: 1,
-      page_size: 20,
+      page_size: options.pageSize || 20,
     })
     if (!result.success || !result.data) {
       message.error(result.message || '获取质控记录失败')
@@ -5764,14 +6153,59 @@ async function openLuxianAggregateChildJob(item: LuxianAggregateJob) {
   await openBatchJob(jobId)
 }
 
+function luxianAggregateDisplayCounts(item: LuxianAggregateJob): Record<string, number> {
+  return item.detail ? taskHistoryDisplayCounts(item.detail) : {}
+}
+
+function luxianAggregateStatusChips(item: LuxianAggregateJob) {
+  return item.detail ? taskHistoryStatusChips(item.detail) : []
+}
+
+function luxianAggregateAttentionCount(item: LuxianAggregateJob): number {
+  const counts = luxianAggregateDisplayCounts(item)
+  return (
+    Number(counts.non_compliant || 0) +
+    Number(counts.ai_suggested_non_compliant || 0) +
+    Number(counts.uncertain || 0) +
+    Number(counts.technical_error || 0)
+  )
+}
+
 function luxianAggregateItemPriority(item: LuxianAggregateJob): number {
   if (['failed', 'canceled'].includes(item.status)) return 6
-  const counts = item.detail ? taskHistoryDisplayCounts(item.detail) : {}
-  if (Number(counts.technical_error || 0) > 0 || Number(counts.non_compliant || 0) > 0) return 5
-  if (Number(counts.ai_suggested_non_compliant || 0) > 0 || Number(counts.uncertain || 0) > 0 || Number(counts.data_gap || 0) > 0) return 4
+  const counts = luxianAggregateDisplayCounts(item)
+  if (Number(counts.technical_error || 0) > 0 || Number(counts.non_compliant || 0) > 0) {
+    return 5
+  }
+  if (
+    Number(counts.ai_suggested_non_compliant || 0) > 0 ||
+    Number(counts.uncertain || 0) > 0 ||
+    Number(counts.data_gap || 0) > 0
+  ) {
+    return 4
+  }
   if (isBatchJobRunning(item.status)) return 3
-  if (Number(counts.compliant || 0) > 0 || Number(counts.ai_suggested_compliant || 0) > 0) return 2
+  if (Number(counts.compliant || 0) > 0 || Number(counts.ai_suggested_compliant || 0) > 0) {
+    return 2
+  }
   return 1
+}
+
+function luxianAggregateItemPriorityClass(item: LuxianAggregateJob): string {
+  const priority = luxianAggregateItemPriority(item)
+  if (priority >= 5) return 'is-danger'
+  if (priority === 4) return 'is-warning'
+  if (priority === 3) return 'is-running'
+  return 'is-calm'
+}
+
+function luxianAggregateActionText(item: LuxianAggregateJob): string {
+  if (['failed', 'canceled'].includes(item.status)) return '查看异常'
+  const attentionCount = luxianAggregateAttentionCount(item)
+  if (attentionCount > 0) return `查看 ${attentionCount} 项关注结果`
+  const counts = luxianAggregateDisplayCounts(item)
+  if (Number(counts.data_gap || 0) > 0) return '查看缺失原因'
+  return '查看详情'
 }
 
 function luxianAggregateResultSummary(item: LuxianAggregateJob): string {
@@ -6001,7 +6435,9 @@ function taskHistoryOverviewText(job: SichuanBatchJob): string {
   if (issueCount > 0) {
     const parts = [
       counts.non_compliant > 0 ? `不合规 ${counts.non_compliant}` : '',
-      counts.ai_suggested_non_compliant > 0 ? `AI建议复核 ${counts.ai_suggested_non_compliant}` : '',
+      counts.ai_suggested_non_compliant > 0
+        ? `AI建议复核 ${counts.ai_suggested_non_compliant}`
+        : '',
       counts.data_gap > 0 ? `数据不足 ${counts.data_gap}` : '',
       counts.uncertain > 0 ? `AI判断 ${counts.uncertain}` : '',
       counts.technical_error > 0 ? `技术异常 ${counts.technical_error}` : '',
@@ -6358,23 +6794,10 @@ async function openSyncJob(jobId: string) {
   }
 }
 
-async function openBatchJob(
-  jobId: string,
-  focusRecord?: { visitId?: string; recordId?: string; label?: string } | null,
-) {
+async function openBatchJob(jobId: string) {
   stopBatchJobPolling()
   batchJobLoading.value = true
   batchResultOpen.value = true
-  const focusVisitId = String(focusRecord?.visitId || '').trim()
-  const focusRecordId = String(focusRecord?.recordId || '').trim()
-  batchResultFocusRecord.value =
-    focusVisitId || focusRecordId
-      ? {
-          visitId: focusVisitId,
-          recordId: focusRecordId,
-          label: String(focusRecord?.label || '').trim(),
-        }
-      : null
   const result = await getSichuanWorkspaceBatchJob(jobId)
   batchJobLoading.value = false
   if (!result.success || !result.data) {
@@ -6384,7 +6807,6 @@ async function openBatchJob(
   if (String(result.data.job_kind || '').toLowerCase() === 'parent') {
     batchResultOpen.value = false
     batchJobDetail.value = null
-    batchResultFocusRecord.value = null
     await openLuxianAggregateParentJob(jobId)
     return
   }
@@ -6398,7 +6820,6 @@ function closeBatchDrawer() {
   stopBatchJobPolling()
   batchResultOpen.value = false
   batchJobDetail.value = null
-  batchResultFocusRecord.value = null
 }
 
 function isBatchJobRunning(status?: string) {
@@ -7797,8 +8218,7 @@ onUnmounted(() => {
 }
 
 .customer-sample-luxian-aggregate-head,
-.customer-sample-luxian-aggregate-summary,
-.customer-sample-luxian-aggregate-item {
+.customer-sample-luxian-aggregate-summary {
   border-radius: 16px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.9);
@@ -7809,7 +8229,7 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px;
+  padding: 16px;
 }
 
 .customer-sample-luxian-aggregate-head strong {
@@ -7828,15 +8248,19 @@ onUnmounted(() => {
 
 .customer-sample-luxian-aggregate-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 .customer-sample-luxian-aggregate-summary div {
-  border-radius: 12px;
-  background: rgba(0, 102, 204, 0.06);
-  padding: 10px 12px;
+  min-width: 0;
+  padding: 13px 16px;
+}
+
+.customer-sample-luxian-aggregate-summary div + div {
+  border-left: 1px solid rgba(0, 0, 0, 0.07);
 }
 
 .customer-sample-luxian-aggregate-summary span {
@@ -7848,16 +8272,37 @@ onUnmounted(() => {
 
 .customer-sample-luxian-aggregate-summary strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 2px;
   color: #1d1d1f;
-  font-size: 15px;
+  font-size: 22px;
+  line-height: 28px;
   font-weight: 750;
+}
+
+.customer-sample-luxian-aggregate-summary small {
+  display: block;
+  margin-top: 1px;
+  color: rgba(29, 29, 31, 0.45);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.customer-sample-luxian-aggregate-summary .is-danger strong {
+  color: #d92d20;
+}
+
+.customer-sample-luxian-aggregate-summary .is-review strong {
+  color: #7c3aed;
+}
+
+.customer-sample-luxian-aggregate-summary .is-warning strong {
+  color: #c97a00;
 }
 
 .customer-sample-luxian-aggregate-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .customer-sample-luxian-aggregate-item {
@@ -7865,7 +8310,37 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-left: 3px solid rgba(0, 102, 204, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.customer-sample-luxian-aggregate-item:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.customer-sample-luxian-aggregate-item.is-danger {
+  border-left-color: #ef4444;
+}
+
+.customer-sample-luxian-aggregate-item.is-warning {
+  border-left-color: #f59e0b;
+}
+
+.customer-sample-luxian-aggregate-item.is-running {
+  border-left-color: #0066cc;
+}
+
+.customer-sample-luxian-aggregate-item.is-calm {
+  border-left-color: rgba(29, 29, 31, 0.22);
 }
 
 .customer-sample-luxian-aggregate-main {
@@ -7898,7 +8373,7 @@ onUnmounted(() => {
 }
 
 .customer-sample-luxian-aggregate-meta {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .customer-sample-luxian-aggregate-meta span {
@@ -7911,9 +8386,46 @@ onUnmounted(() => {
   padding: 3px 8px;
 }
 
+.customer-sample-luxian-aggregate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.customer-sample-luxian-aggregate-chip {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 2px 8px;
+}
+
+.customer-sample-luxian-aggregate-chip.is-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #c2410c;
+}
+
+.customer-sample-luxian-aggregate-chip.is-review {
+  background: rgba(124, 58, 237, 0.09);
+  color: #6d28d9;
+}
+
+.customer-sample-luxian-aggregate-chip.is-warning {
+  background: rgba(245, 158, 11, 0.11);
+  color: #a16207;
+}
+
+.customer-sample-luxian-aggregate-chip.is-ok {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
 .customer-sample-luxian-aggregate-result,
 .customer-sample-luxian-aggregate-error {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 13px;
   line-height: 20px;
 }
@@ -7950,7 +8462,16 @@ onUnmounted(() => {
   }
 
   .customer-sample-luxian-aggregate-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-sample-luxian-aggregate-summary div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.07);
+  }
+
+  .customer-sample-luxian-aggregate-summary div:nth-child(4) {
+    border-top: 1px solid rgba(0, 0, 0, 0.07);
   }
 }
 
@@ -8518,6 +9039,44 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.customer-sample-page
+  :deep(.editable-copy-workstation-modal.is-readonly-fullscreen .ant-modal-content) {
+  height: 100vh;
+  border-radius: 0;
+}
+
+.customer-sample-page
+  :deep(.editable-copy-workstation-modal.is-readonly-fullscreen .ant-modal-body) {
+  height: 100vh;
+  max-height: none;
+  overflow-y: auto;
+}
+
+/* Modal is teleported outside `.customer-sample-page`; readonly fullscreen must scroll on its body. */
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen) {
+  overflow: hidden;
+}
+
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal) {
+  top: 0;
+  max-width: none;
+  padding-bottom: 0;
+}
+
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-content) {
+  height: 100vh;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+:global(.editable-copy-workstation-modal-wrap.is-readonly-fullscreen .ant-modal-body) {
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .customer-sample-page :deep(.editable-copy-workstation-modal .ant-modal-close) {
   top: 16px;
   right: 16px;
@@ -8533,6 +9092,14 @@ onUnmounted(() => {
   padding: 22px;
   color: #1d1d1f;
   overscroll-behavior: contain;
+}
+
+.editable-copy-workstation-modal.is-readonly-fullscreen .editable-copy-drawer {
+  min-height: 100vh;
+  height: auto;
+  gap: 0;
+  overflow: visible;
+  padding: 0;
 }
 
 .editable-copy-drawer :deep(.ant-spin-nested-loading),
@@ -8848,6 +9415,16 @@ onUnmounted(() => {
   color: rgba(29, 29, 31, 0.54);
 }
 
+.editable-copy-document-directory-list.is-tree .editable-copy-document-group-title.is-collapsible {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .editable-copy-document-directory-list.is-tree .editable-copy-document-group-title span {
   display: inline-flex;
   align-items: center;
@@ -8860,6 +9437,20 @@ onUnmounted(() => {
   border: 2px solid rgba(0, 102, 204, 0.55);
   border-radius: 999px;
   background: #ffffff;
+}
+
+.editable-copy-document-group-chevron {
+  display: inline-grid;
+  width: 10px;
+  place-items: center;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.editable-copy-document-group-title.is-collapsible:hover .editable-copy-document-group-chevron {
+  color: var(--customer-sample-primary);
 }
 
 .editable-copy-document-group-title em {

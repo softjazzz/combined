@@ -143,7 +143,7 @@ describe('SingleRecordQcResultPanel', () => {
   it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
 
-    expect(wrapper.get('[data-testid="single-record-result-toolbar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="single-record-result-toolbar"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="single-record-result-summary"]').text()).toContain('3 条结果')
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
@@ -232,7 +232,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('模型分析 / 医学判断')
     expect(wrapper.text()).toContain('当前主诉缺少可区分第一诊断的特异性线索')
     expect(wrapper.text()).toContain('处理建议')
-    expect(wrapper.get('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="single-record-detail-grid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="single-record-evidence"]').classes()).toContain(
       'evidence-row',
     )

@@ -225,6 +225,58 @@ class _InMemorySichuanWorkspaceService:
         page_items = items[offset : offset + int(page_size)]
         return _ListResult(items=page_items, total=total, page=page, page_size=page_size)
 
+    def get_latest_luxian_0609_record_result(
+        self,
+        *,
+        created_by: str,
+        record_id: str,
+        expected_rule_ids=None,
+        rule_set_key: str = "luxian_0609_qc_v1",
+        rule_set_version: str = "2026-06-09",
+    ) -> Dict[str, Any]:
+        candidates = [
+            job
+            for job in self.jobs.values()
+            if str(job.get("created_by")) == str(created_by)
+            and str(job.get("status")) == "completed"
+            and str(record_id) in {str(value) for value in list(job.get("record_ids") or [])}
+            and str((job.get("filters") or {}).get("rule_set_key") or "") == rule_set_key
+            and str((job.get("filters") or {}).get("rule_set_version") or "") == rule_set_version
+        ]
+        if not candidates:
+            return {
+                "schema_version": "lx0609-single-record-result-v1",
+                "state": "not_found",
+                "reason_code": "record_result_not_found",
+                "record_ref": "",
+                "job_id": "",
+                "items": [],
+                "expected_rule_count": 49,
+                "result_rule_count": 0,
+                "is_complete": False,
+            }
+        current = sorted(candidates, key=lambda item: str(item.get("finished_at") or item.get("created_at") or ""), reverse=True)[0]
+        items = [
+            item
+            for item in list(current.get("items") or [])
+            if str(item.get("record_id") or item.get("visit_id") or "") == str(record_id)
+        ]
+        return {
+            "schema_version": "lx0609-single-record-result-v1",
+            "state": "ready",
+            "reason_code": "",
+            "record_ref": f"rec_{record_id}",
+            "job_id": str(current.get("id") or ""),
+            "rule_set_key": rule_set_key,
+            "rule_set_version": rule_set_version,
+            "items": items,
+            "expected_rule_count": 49,
+            "result_rule_count": len(items),
+            "is_complete": len(items) == 49,
+            "missing_rule_ids": [],
+            "conflicting_rule_ids": [],
+        }
+
     def cancel_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
         job = self.jobs.get(job_id)
         if not job or str(job.get("created_by")) != str(created_by):
@@ -429,6 +481,39 @@ def test_sichuan_workspace_batch_cancel_and_retry_flow(client, sichuan_workspace
     assert detail_resp.status_code == 200
     detail = _extract_data(detail_resp)
     assert detail.get("status") in {"queued", "running", "completed"}
+
+
+def test_latest_luxian_record_result_is_read_by_server_bound_record(client, sichuan_workspace_stub):
+    job = sichuan_workspace_stub.create_batch_job(
+        draft={"id": "luxian-0609", "rule_code": "LX0609", "name": "泸县0609", "scene": "final"},
+        created_by="u-admin",
+        scope="final",
+        filters={"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09"},
+        record_ids=["visit-lx-1", "visit-lx-2"],
+        total_records=2,
+        job_kind="parent",
+    )
+    sichuan_workspace_stub.complete_batch_job(
+        job_id=str(job["id"]),
+        summary={"total_records": 2},
+        items=[
+            {"record_id": "visit-lx-1", "rule_id": "LX0609-018", "status": "non_compliant"},
+            {"record_id": "visit-lx-2", "rule_id": "LX0609-018", "status": "compliant"},
+        ],
+        failed_records=[],
+    )
+
+    response = client.get("/api/v1/qc/sichuan/workspace/records/visit-lx-1/latest-result")
+
+    assert response.status_code == 200
+    data = _extract_data(response)
+    assert data.get("state") == "ready"
+    assert data.get("job_id") == job["id"]
+    assert data.get("record_ref") == "rec_visit-lx-1"
+    assert [item.get("record_id") for item in data.get("items") or []] == ["visit-lx-1"]
+
+    missing_response = client.get("/api/v1/qc/sichuan/workspace/records/visit-not-saved/latest-result")
+    assert missing_response.status_code == 404
 
 
 def test_workspace_batch_create_should_block_when_sc_source_not_pg(client, sichuan_workspace_stub):

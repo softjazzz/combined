@@ -8,6 +8,7 @@ import type {
   SichuanBatchJobQuery,
   Luxian0609ReviewReport,
 } from '@/views/workstation-v4/semantic-rules/types'
+import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
 type ServiceResult<T> = {
   success: boolean
@@ -95,6 +96,18 @@ export async function getSichuanWorkspaceBatchJob(jobId: string) {
       timeout: WORKSPACE_QUERY_TIMEOUT_MS,
     },
     '获取四川规则批量任务详情失败',
+  )
+}
+
+/** 单病历结果页唯一允许使用的结果读取接口。 */
+export async function getLatestLuxian0609RecordResult(recordId: string) {
+  return requestEnvelope<SingleRecordQcResultPayload>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(recordId)}/latest-result`,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '获取该病历最近一次质控结果失败',
   )
 }
 

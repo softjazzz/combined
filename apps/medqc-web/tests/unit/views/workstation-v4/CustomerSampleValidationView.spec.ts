@@ -5,6 +5,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
 
 let latestBatchResultDrawerProps: Record<string, unknown> | null = null
+let latestRecordResultComparisonDrawerProps: Record<string, unknown> | null = null
 const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
 
 const {
@@ -568,9 +569,41 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
   name: 'SemanticRulesBatchResultDrawerStub',
   props: {
     open: Boolean,
+    focusVisitId: {
+      type: String,
+      default: '',
+    },
+    focusInstituteId: {
+      type: String,
+      default: '',
+    },
+    focusPatientId: {
+      type: String,
+      default: '',
+    },
+    focusRecordId: {
+      type: String,
+      default: '',
+    },
+    focusRecordRef: {
+      type: String,
+      default: '',
+    },
+    focusRecordLabel: {
+      type: String,
+      default: '',
+    },
     batchJobDetail: {
       type: Object,
       default: null,
+    },
+    enableRecordComparison: {
+      type: Boolean,
+      default: false,
+    },
+    defaultRecordComparison: {
+      type: Boolean,
+      default: false,
     },
   },
   setup(props) {
@@ -580,6 +613,25 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
         class: 'batch-result-drawer-stub',
         'data-open': props.open ? 'true' : 'false',
         style: props.open ? '' : 'display:none;',
+      })
+  },
+})
+
+const QCRecordResultComparisonDrawerStub = defineComponent({
+  name: 'QCRecordResultComparisonDrawerStub',
+  props: {
+    open: Boolean,
+    focus: {
+      type: Object,
+      default: null,
+    },
+  },
+  setup(props) {
+    latestRecordResultComparisonDrawerProps = props as unknown as Record<string, unknown>
+    return () =>
+      h('div', {
+        class: 'record-result-comparison-drawer-stub',
+        'data-open': props.open ? 'true' : 'false',
       })
   },
 })
@@ -893,8 +945,10 @@ async function mountView() {
         ADrawer: ADrawerStub,
         QCReviewDrawer: QCReviewDrawerStub,
         SemanticRulesBatchResultDrawer: SemanticRulesBatchResultDrawerStub,
+        QCRecordResultComparisonDrawer: QCRecordResultComparisonDrawerStub,
         'q-c-review-drawer': QCReviewDrawerStub,
         'semantic-rules-batch-result-drawer': SemanticRulesBatchResultDrawerStub,
+        'q-c-record-result-comparison-drawer': QCRecordResultComparisonDrawerStub,
         'a-button': AButtonStub,
         'a-tag': ATagStub,
         'a-card': ACardStub,
@@ -965,6 +1019,7 @@ describe('CustomerSampleValidationView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     latestBatchResultDrawerProps = null
+    latestRecordResultComparisonDrawerProps = null
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     window.localStorage.clear()
     window.localStorage.setItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY, 'true')
@@ -1468,9 +1523,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('不适用')
     expect(wrapper.text()).not.toContain('结果回写：0 / 6 条')
     const historyItemText = wrapper.find('.customer-sample-task-history-item').text()
-    expect(historyItemText.indexOf('AI建议复核')).toBeLessThan(
-      historyItemText.indexOf('合规'),
-    )
+    expect(historyItemText.indexOf('AI建议复核')).toBeLessThan(historyItemText.indexOf('合规'))
     expect(historyItemText.indexOf('合规')).toBeLessThan(historyItemText.indexOf('不适用'))
   })
 
@@ -2270,6 +2323,19 @@ describe('CustomerSampleValidationView', () => {
     expect(modalText).toContain('只读原文')
     expect(modalText).toContain('入院记录')
     expect(wrapper.find('.editable-copy-document-directory-list.is-tree').exists()).toBe(true)
+    const admissionToggle = wrapper.get('[data-testid="editable-copy-group-toggle-admission"]')
+    const courseToggle = wrapper.get('[data-testid="editable-copy-group-toggle-course"]')
+    expect(admissionToggle.attributes('aria-expanded')).toBe('true')
+    expect(courseToggle.attributes('aria-expanded')).toBe('false')
+
+    await courseToggle.trigger('click')
+    expect(courseToggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.text()).toContain('日常病程记录')
+
+    await wrapper.get('.editable-copy-document-search').setValue('头孢')
+    expect(
+      wrapper.get('[data-testid="editable-copy-group-toggle-order"]').attributes('aria-expanded'),
+    ).toBe('true')
     expect(modalText).not.toContain('副本信息')
     expect(modalText).not.toContain('张三编辑副本')
     expect(modalText).not.toContain('源病历编辑副本')
@@ -2278,7 +2344,7 @@ describe('CustomerSampleValidationView', () => {
     expect(modalText).not.toContain('保存为测试病历')
   })
 
-  it('点击查看结果后打开批量任务结果抽屉', async () => {
+  it('单病历点击查看结果必须只打开病历对照页，不能进入批量结果抽屉', async () => {
     const wrapper = await mountView()
 
     const resultLink = wrapper
@@ -2288,8 +2354,60 @@ describe('CustomerSampleValidationView', () => {
     await resultLink!.trigger('click')
     await flushPromises()
 
-    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
-    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
+    expect(latestRecordResultComparisonDrawerProps?.open).toBe(true)
+    expect(latestRecordResultComparisonDrawerProps?.focus).toMatchObject({
+      visitId: 'V001',
+      instituteId: 'H1',
+      patientId: 'P001',
+      recordId: '2248248',
+      label: '张三 · 普外科 · 2248248',
+    })
+    expect(latestBatchResultDrawerProps?.open).not.toBe(true)
+  })
+
+  it('单病历查看结果只把当前病历坐标交给对照页，不在父页面回退到样本池任务', async () => {
+    listSichuanWorkspaceBatchJobs.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 5,
+      },
+    })
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ latest_job_id: 'pool-latest-other-record' }),
+        items: [
+          buildRecord({
+            id: 'V002',
+            matched_visit_id: 'V002',
+            mr_no: '2249001',
+            patient_name: '李四',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const resultLink = wrapper
+      .findAll('.customer-sample-secondary-link')
+      .find((node) => node.text() === '查看结果')
+    expect(resultLink).toBeTruthy()
+    await resultLink!.trigger('click')
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(latestBatchResultDrawerProps?.open).not.toBe(true)
+    expect(latestRecordResultComparisonDrawerProps?.open).toBe(true)
+    expect(latestRecordResultComparisonDrawerProps?.focus).toMatchObject({
+      visitId: 'V002',
+      recordId: '2249001',
+    })
   })
 
   it('打开泸县0609任务详情时保留 scoped run 计数和映射字段', async () => {
@@ -2326,9 +2444,16 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
+    const historyButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('质控记录'))
+    expect(historyButton).toBeTruthy()
+    await historyButton!.trigger('click')
+    await flushPromises()
+
     const resultLink = wrapper
-      .findAll('.customer-sample-secondary-link')
-      .find((node) => node.text() === '查看结果')
+      .findAll('.customer-sample-task-history-item button')
+      .find((node) => node.text().includes('查看结果'))
     expect(resultLink).toBeTruthy()
     await resultLink!.trigger('click')
     await flushPromises()
