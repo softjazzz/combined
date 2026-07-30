@@ -114,16 +114,72 @@
         </button>
 
         <section
-          v-if="expandedKey === item.key"
+          v-if="
+            expandedKey === item.key &&
+              (!isCompliantResult(item) ||
+                timelinessMetrics(item).length ||
+                timelinessTimeline(item).length)
+          "
           class="result-detail"
         >
           <div
             v-if="
-              item.detail ||
-                item.actual ||
-                item.standard ||
-                timelinessMetrics(item).length ||
-                timelinessTimeline(item).length
+              isCompliantResult(item) &&
+                (timelinessMetrics(item).length || timelinessTimeline(item).length)
+            "
+            class="compliant-detail"
+            data-testid="single-record-compliant-detail"
+          >
+            <section
+              v-if="timelinessMetrics(item).length"
+              class="timeliness-metrics"
+              :class="`has-${timelinessMetrics(item).length}-metrics`"
+              data-testid="timeliness-metrics"
+            >
+              <div
+                v-for="row in timelinessMetrics(item)"
+                :key="row.key"
+                class="timeliness-metric"
+              >
+                <span>{{ row.label }}</span>
+                <strong>{{ row.value }}</strong>
+              </div>
+            </section>
+            <div
+              v-if="timelinessTimeline(item).length"
+              class="timeliness-timeline"
+              data-testid="timeliness-timeline"
+            >
+              <template
+                v-for="(row, index) in timelinessTimeline(item)"
+                :key="row.key"
+              >
+                <span class="timeline-point">
+                  <small>{{ row.label }}</small>
+                  <strong>{{ row.value }}</strong>
+                </span>
+                <span
+                  v-if="index < timelinessTimeline(item).length - 1"
+                  class="timeline-arrow"
+                  aria-hidden="true"
+                >
+                  <ArrowRight
+                    :size="15"
+                    :stroke-width="1.8"
+                  />
+                </span>
+              </template>
+            </div>
+          </div>
+
+          <div
+            v-if="
+              !isCompliantResult(item) &&
+                (item.detail ||
+                  item.actual ||
+                  item.standard ||
+                  timelinessMetrics(item).length ||
+                  timelinessTimeline(item).length)
             "
             class="decision-summary"
           >
@@ -193,6 +249,7 @@
           </div>
 
           <div
+            v-if="!isCompliantResult(item)"
             class="detail-grid"
             data-testid="single-record-detail-grid"
           >
@@ -319,7 +376,7 @@
           </div>
 
           <section
-            v-if="item.suggestion"
+            v-if="!isCompliantResult(item) && item.suggestion"
             class="suggestion-footer"
           >
             <strong>处理建议</strong>
@@ -560,6 +617,10 @@ function criterionFactText(criterion: SingleRecordQcCriterionResult) {
   const expected =
     criterion.expected_value === undefined ? '' : `标准：${criterion.expected_value}。`
   return actual || expected ? `${actual}${expected}` : '该子项已按规则要求完成核对。'
+}
+
+function isCompliantResult(item: SingleRecordQcResultItem) {
+  return item.status === 'compliant'
 }
 
 function isPendingEvidenceStatus(item: SingleRecordQcResultItem) {
@@ -893,6 +954,15 @@ watch(
   margin-left: 112px;
   border-top: 1px solid rgba(0, 0, 0, 0.065);
   background: rgba(255, 255, 255, 0.64);
+}
+
+.compliant-detail {
+  padding: 14px 16px 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.compliant-detail .timeliness-metrics {
+  margin-top: 0;
 }
 
 .decision-summary {

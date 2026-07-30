@@ -375,6 +375,7 @@ describe('SingleRecordQcResultPanel', () => {
             rule_name: '入院记录：入院后24小时内是否完成',
             status: 'compliant',
             conclusion: '符合质控要求',
+            suggestion: '继续保持。',
             customer_display_facts: {
               failure_kind: 'timeliness_requirement_satisfied',
               target_document: 'admission_record',
@@ -384,6 +385,13 @@ describe('SingleRecordQcResultPanel', () => {
               threshold_hours: 24,
               elapsed_hours: 2.08,
             },
+            evidence: [
+              {
+                source_ref: 'src_admission_record',
+                source_type: 'admission_record',
+                source_label: '入院记录',
+              },
+            ],
           },
         ],
       },
@@ -399,8 +407,10 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="timeliness-timeline"]').text()).toContain(
       '2026-06-20 19:23:45',
     )
-    expect(wrapper.text()).toContain('在规定时限内完成')
-    expect(wrapper.text()).toContain('目标文书入院记录')
+    expect(wrapper.text()).not.toContain('判定事实')
+    expect(wrapper.text()).not.toContain('关键证据')
+    expect(wrapper.text()).not.toContain('处理建议')
+    expect(wrapper.text()).not.toContain('继续保持')
     expect(wrapper.text()).not.toContain('timeliness_requirement_satisfied')
     expect(wrapper.text()).not.toContain('admission_record')
   })
@@ -410,12 +420,11 @@ describe('SingleRecordQcResultPanel', () => {
 
     expect(wrapper.text()).toContain('合规')
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
-    expect(wrapper.text()).toContain(explainedCompliantItem.actual)
-    expect(wrapper.text()).toContain(explainedCompliantItem.standard)
-    expect(wrapper.text()).toContain('关键证据')
-    expect(wrapper.text()).toContain('上级医师查房记录')
-    expect(wrapper.text()).toContain('模型分析 / 医学判断')
-    expect(wrapper.text()).toContain('无需处理。')
+    expect(wrapper.find('.result-detail').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(explainedCompliantItem.actual)
+    expect(wrapper.text()).not.toContain(explainedCompliantItem.standard)
+    expect(wrapper.text()).not.toContain('模型分析 / 医学判断')
+    expect(wrapper.text()).not.toContain('无需处理。')
   })
 
   it('合规结果不补造通过依据或重跑提示', async () => {
@@ -426,7 +435,7 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('未发现问题。')
     expect(wrapper.text()).not.toContain('历史结果缺少可核查通过依据')
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
-    expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 
   it('数据不足展示具体缺口、当前已知事实和可定位证据，不泛化为资料不足', async () => {
