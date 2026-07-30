@@ -151,7 +151,12 @@ export default defineConfig(async ({ command }) => {
   const plugins = [
     vue(),
     Components({
-      dts: process.env.MEDQC_DISABLE_COMPONENTS_DTS === '1' ? false : 'src/components.d.ts',
+      // 默认不在开发或构建过程中改写源码声明文件，避免 Windows 文件锁导致
+      // Vite 进程退出。确需刷新声明时显式设置 MEDQC_GENERATE_COMPONENTS_DTS=1。
+      dts:
+        process.env.MEDQC_GENERATE_COMPONENTS_DTS === '1'
+          ? 'src/components.d.ts'
+          : false,
       resolvers: [
         AntDesignVueResolver({
           importStyle: false,
