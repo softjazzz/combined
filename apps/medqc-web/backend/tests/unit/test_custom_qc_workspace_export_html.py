@@ -88,7 +88,7 @@ def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
     assert html.count("data-result-row") == 2
     assert "LX0609-001" in html
     assert "LX0609-002" in html
-    assert "发现该质控点对应的明确问题" in html
+    assert "发现该质控点对应的明确问题" not in html
     assert "当前受控数据不足以形成确定结论" in html
     assert "V001" not in html
     assert "V002" not in html
@@ -230,6 +230,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
             {
                 "不合规": "non_compliant",
                 "AI判断：疑似问题": "ai_suggested_non_compliant",
+                "AI判断": "uncertain",
                 "数据不足": "data_gap",
             }[row[3]],
             row[4],
@@ -241,6 +242,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
             {
                 "不合规": "non_compliant",
                 "AI判断：疑似问题": "ai_suggested_non_compliant",
+                "AI判断": "uncertain",
                 "数据不足": "data_gap",
             }[row[3]],
             row[4],
@@ -258,7 +260,7 @@ def test_html_csv_xlsx_share_customer_safe_rows_and_confirmed_issue_semantics():
         assert csv_text.find(rule_id) >= 0
 
     summary_rows = dict(workbook["管理摘要"].iter_rows(min_row=2, values_only=True))
-    assert summary_rows["确定问题病历数"] == 1
+    assert summary_rows["确定问题病历数"] == 0
 
     combined = html + csv_text
     for sheet in workbook.worksheets:

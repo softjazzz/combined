@@ -31,6 +31,32 @@ def test_serialize_record_row_should_include_programmatic_execution_keys():
     assert item["discharge_datetime"] == "2026-04-05 09:00:00"
 
 
+def test_serialize_record_row_should_not_treat_update_time_as_discharge_time():
+    service = CustomQCWorkspaceService()
+    row = SimpleNamespace(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="RUN-1",
+        name="在院患者",
+        mr_no="MR1",
+        inpat_no="IP1",
+        discharge_dept_name=None,
+        admission_dept_name="重症医学科",
+        attending_physician_sign="李医生",
+        admission_datetime="2026-07-30 08:00:00",
+        discharge_datetime=None,
+        record_content="在院病历",
+        update_time="2026-07-30 10:00:00",
+    )
+
+    item = service._serialize_record_row(row)
+
+    assert item["scope"] == "running"
+    assert item["status"] == "running"
+    assert item["discharge_date"] == ""
+    assert item["discharge_datetime"] == ""
+
+
 def test_hydrate_records_with_medical_text_should_preserve_scope_and_dates(monkeypatch):
     service = CustomQCWorkspaceService()
 
@@ -74,6 +100,97 @@ def test_hydrate_records_with_medical_text_should_preserve_scope_and_dates(monke
     assert hydrated[0]["scope"] == "final"
     assert hydrated[0]["discharge_datetime"] == "2026-04-05 09:00:00"
     assert hydrated[0]["medical_text"] == "补齐病历正文"
+
+
+def test_collect_records_should_use_inpat_registration_for_active_record_without_frontpage(
+    monkeypatch,
+):
+    service = CustomQCWorkspaceService()
+    active_registration = SimpleNamespace(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="ACTIVE-1",
+        name="在院患者",
+        mr_no="",
+        inpat_no="IP-1",
+        admission_dept_name="重症医学科（ICU）",
+        discharge_dept_name=None,
+        admission_datetime="2026-07-30 08:00:00",
+        discharge_datetime=None,
+        record_content="在院登记资料",
+    )
+
+    class _Query:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return self.rows
+
+    class _Session:
+        def query(self, model, *_args, **_kwargs):
+            if model is workspace_module.InpatRegistration:
+                return _Query([active_registration])
+            return _Query([])
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
+    monkeypatch.setattr(
+        service,
+        "_build_records_query",
+        lambda *_args, **_kwargs: _Query([]),
+    )
+
+    records = service.collect_records(
+        scope="running",
+        department=None,
+        doctor=None,
+        date_field="admission",
+        start_date=None,
+        end_date=None,
+        keyword=None,
+        record_ids=["ACTIVE-1"],
+    )
+
+    assert records == [
+        {
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "record_id": "ACTIVE-1",
+            "visit_id": "ACTIVE-1",
+            "patient_name": "在院患者",
+            "mr_no": "",
+            "inpat_no": "IP-1",
+            "scope": "running",
+            "department": "重症医学科（ICU）",
+            "doctor": "",
+            "admission_date": "2026-07-30",
+            "discharge_date": "",
+            "admission_datetime": "2026-07-30 08:00:00",
+            "discharge_datetime": "",
+            "status": "running",
+            "medical_text": "在院登记资料",
+            "medical_text_length": 6,
+        }
+    ]
+    assert service.count_records(
+        scope="running",
+        department=None,
+        doctor=None,
+        date_field="admission",
+        start_date=None,
+        end_date=None,
+        keyword=None,
+        record_ids=["ACTIVE-1"],
+    ) == 1
 
 
 def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):

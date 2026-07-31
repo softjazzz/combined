@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from .custom_qc_workspace_service import (
+    _canonical_customer_status,
     customer_safe_projection_key,
     iter_unique_customer_result_source_items,
     project_customer_safe_result_item,
@@ -215,13 +216,8 @@ def _rule_id(item: dict[str, Any]) -> str:
 
 
 def _status(item: dict[str, Any]) -> str:
-    return str(
-        project_customer_safe_result_item(
-            item,
-            hmac_key=customer_safe_projection_key(),
-        ).get("status")
-        or "uncertain"
-    )
+    """内部复核读取原始规范状态，不受客户展示降级影响。"""
+    return _canonical_customer_status(item)
 
 
 def _combined_text(item: dict[str, Any]) -> str:

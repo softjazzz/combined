@@ -44,9 +44,15 @@ from .luxian_0609_rule_catalog import (
     load_luxian_0609_rules,
 )
 from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
+from .luxian_0609.customer_renderer import compliant_customer_finding
 from .bundles.emr_view import load_bundle_documents
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
-from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
+from ..database.models.cdm import (
+    AdmissionRecord,
+    DischargeRecord,
+    InpatRegistration,
+    MedicalRecordFrontpage,
+)
 
 
 DEFAULT_DOCUMENT_TYPE = "日常病程记录"
@@ -696,6 +702,13 @@ def project_customer_safe_result_item(
         else (),
         generic_conclusion,
     )
+    if status == "compliant" and rule_id.startswith("LX0609-"):
+        # Canonical Envelope 在此唯一生成。合规说明只取规则身份和已经过
+        # 白名单校验的子结论，不能复用任意上游自由文本。
+        conclusion = compliant_customer_finding(
+            rule_id=rule_id,
+            criterion_results=criterion_results,
+        )
     suggestion = _explicit_customer_text(
         raw,
         (
@@ -2582,6 +2595,146 @@ class CustomQCWorkspaceService:
             "medical_text_length": len(_safe_text(source_row.record_content)),
         }
 
+    def _collect_explicit_anchor_records(
+        self,
+        session: Session,
+        *,
+        record_ids: Sequence[str],
+        excluded_record_ids: set[str],
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """为没有病案首页的在院病例补充本地执行锚点。"""
+        missing_ids = list(
+            dict.fromkeys(
+                _safe_text(record_id)
+                for record_id in record_ids
+                if _safe_text(record_id)
+                and _safe_text(record_id) not in excluded_record_ids
+            )
+        )
+        if not missing_ids:
+            return []
+
+        discharge_rows = (
+            session.query(DischargeRecord)
+            .filter(DischargeRecord.visit_id.in_(missing_ids))
+            .all()
+        )
+        discharge_by_visit = {
+            _safe_text(row.visit_id): row
+            for row in discharge_rows
+            if _safe_text(getattr(row, "visit_id", ""))
+        }
+        registration_rows = (
+            session.query(InpatRegistration)
+            .filter(InpatRegistration.visit_id.in_(missing_ids))
+            .all()
+        )
+        admission_rows = (
+            session.query(AdmissionRecord)
+            .filter(AdmissionRecord.visit_id.in_(missing_ids))
+            .all()
+        )
+
+        anchor_by_visit: Dict[str, Any] = {}
+        for row in registration_rows:
+            visit_id = _safe_text(getattr(row, "visit_id", ""))
+            if visit_id and visit_id not in anchor_by_visit:
+                anchor_by_visit[visit_id] = row
+        for row in admission_rows:
+            visit_id = _safe_text(getattr(row, "visit_id", ""))
+            if visit_id and visit_id not in anchor_by_visit:
+                anchor_by_visit[visit_id] = row
+
+        scope_value = _normalize_scope(scope)
+        date_field_value = _normalize_date_field(date_field)
+        start = _as_date(start_date)
+        end = _as_date(end_date)
+        records: List[Dict[str, Any]] = []
+        for visit_id in missing_ids:
+            source = anchor_by_visit.get(visit_id)
+            if source is None:
+                continue
+            discharge_source = discharge_by_visit.get(visit_id)
+            discharge_datetime = (
+                getattr(source, "discharge_datetime", None)
+                or getattr(discharge_source, "discharge_date", None)
+            )
+            item_scope = "final" if discharge_datetime else "running"
+            if scope_value != "all" and item_scope != scope_value:
+                continue
+
+            item_department = _safe_text(
+                getattr(source, "discharge_dept_name", None)
+                or getattr(source, "admission_dept_name", None)
+                or getattr(source, "dept_name", None)
+                or getattr(discharge_source, "dept_name", None)
+            )
+            item_doctor = _safe_text(
+                getattr(source, "attending_physician_sign", None)
+                or getattr(source, "submitter", None)
+            )
+            if department and item_department != department:
+                continue
+            if doctor and item_doctor != doctor:
+                continue
+            if keyword:
+                normalized_keyword = keyword.strip().lower()
+                searchable_values = (
+                    visit_id,
+                    _safe_text(getattr(source, "name", "")),
+                    _safe_text(getattr(source, "mr_no", "")),
+                    _safe_text(getattr(source, "inpat_no", "")),
+                )
+                if normalized_keyword and not any(
+                    normalized_keyword in value.lower()
+                    for value in searchable_values
+                    if value
+                ):
+                    continue
+
+            admission_datetime = getattr(source, "admission_datetime", None)
+            effective_date = (
+                admission_datetime
+                if date_field_value == "admission"
+                else discharge_datetime
+            )
+            effective_date_value = _as_date(_to_iso_date(effective_date))
+            if start and (effective_date_value is None or effective_date_value < start):
+                continue
+            if end and (effective_date_value is None or effective_date_value > end):
+                continue
+
+            medical_text = _safe_text(getattr(source, "record_content", None))
+            records.append(
+                {
+                    "institute_id": _safe_text(getattr(source, "institute_id", "")),
+                    "patient_id": _safe_text(getattr(source, "patient_id", "")),
+                    "record_id": visit_id,
+                    "visit_id": visit_id,
+                    "patient_name": _safe_text(getattr(source, "name", "")),
+                    "mr_no": _safe_text(getattr(source, "mr_no", "")),
+                    "inpat_no": _safe_text(getattr(source, "inpat_no", "")),
+                    "scope": item_scope,
+                    "department": item_department,
+                    "doctor": item_doctor,
+                    "admission_date": _to_iso_date(admission_datetime),
+                    "discharge_date": _to_iso_date(discharge_datetime),
+                    "admission_datetime": _to_iso_datetime(admission_datetime),
+                    "discharge_datetime": _to_iso_datetime(discharge_datetime),
+                    "status": "completed" if item_scope == "final" else "running",
+                    "medical_text": medical_text,
+                    "medical_text_length": len(medical_text),
+                }
+            )
+        return records
+
     def list_drafts(
         self,
         *,
@@ -2792,7 +2945,11 @@ class CustomQCWorkspaceService:
             AdmissionRecord.update_time,
         )
         query = (
-            session.query(MedicalRecordFrontpage)
+            session.query(
+                MedicalRecordFrontpage,
+                discharge_dt_expr.label("effective_discharge_datetime"),
+                admission_dt_expr.label("effective_admission_datetime"),
+            )
             .outerjoin(
                 DischargeRecord,
                 and_(
@@ -2849,27 +3006,45 @@ class CustomQCWorkspaceService:
         return query
 
     def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
-        effective_discharge_datetime = row.discharge_datetime or getattr(row, "update_time", None)
+        source_row = row
+        effective_discharge_datetime = None
+        effective_admission_datetime = None
+        if isinstance(row, tuple) or (
+            hasattr(row, "_mapping") and not hasattr(row, "visit_id")
+        ):
+            source_row = row[0]
+            if len(row) > 1:
+                effective_discharge_datetime = row[1]
+            if len(row) > 2:
+                effective_admission_datetime = row[2]
+        effective_discharge_datetime = (
+            effective_discharge_datetime or source_row.discharge_datetime
+        )
+        effective_admission_datetime = (
+            effective_admission_datetime or source_row.admission_datetime
+        )
         item_scope = "final" if effective_discharge_datetime else "running"
-        item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
+        item_department = _safe_text(
+            source_row.discharge_dept_name or source_row.admission_dept_name
+        )
         return {
-            "institute_id": _safe_text(getattr(row, "institute_id", "")),
-            "patient_id": _safe_text(getattr(row, "patient_id", "")),
-            "record_id": _safe_text(row.visit_id),
-            "visit_id": _safe_text(row.visit_id),
-            "patient_name": _safe_text(row.name),
-            "mr_no": _safe_text(row.mr_no),
-            "inpat_no": _safe_text(row.inpat_no),
+            "institute_id": _safe_text(getattr(source_row, "institute_id", "")),
+            "patient_id": _safe_text(getattr(source_row, "patient_id", "")),
+            "record_id": _safe_text(source_row.visit_id),
+            "visit_id": _safe_text(source_row.visit_id),
+            "patient_name": _safe_text(source_row.name),
+            "mr_no": _safe_text(source_row.mr_no),
+            "inpat_no": _safe_text(source_row.inpat_no),
             "scope": item_scope,
             "department": item_department,
-            "doctor": _safe_text(row.attending_physician_sign),
-            "admission_date": _to_iso_date(row.admission_datetime),
+            "doctor": _safe_text(source_row.attending_physician_sign),
+            "admission_date": _to_iso_date(effective_admission_datetime),
             "discharge_date": _to_iso_date(effective_discharge_datetime),
-            "admission_datetime": _to_iso_datetime(row.admission_datetime),
+            "admission_datetime": _to_iso_datetime(effective_admission_datetime),
             "discharge_datetime": _to_iso_datetime(effective_discharge_datetime),
             "status": "completed" if item_scope == "final" else "running",
-            "medical_text": _safe_text(row.record_content),
-            "medical_text_length": len(_safe_text(row.record_content)),
+            "medical_text": _safe_text(source_row.record_content),
+            "medical_text_length": len(_safe_text(source_row.record_content)),
         }
 
     def list_records(
@@ -3002,7 +3177,27 @@ class CustomQCWorkspaceService:
                 desc(MedicalRecordFrontpage.discharge_datetime),
                 desc(MedicalRecordFrontpage.admission_datetime),
             ).all()
-            return [self._serialize_record_row(row) for row in rows]
+            records = [self._serialize_record_row(row) for row in rows]
+            if record_ids:
+                records.extend(
+                    self._collect_explicit_anchor_records(
+                        session,
+                        record_ids=record_ids,
+                        excluded_record_ids={
+                            _safe_text(item.get("visit_id"))
+                            for item in records
+                            if _safe_text(item.get("visit_id"))
+                        },
+                        scope=scope,
+                        department=department,
+                        doctor=doctor,
+                        date_field=date_field,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                    )
+                )
+            return records
         finally:
             session.close()
 
@@ -3018,6 +3213,25 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
     ) -> int:
+        if record_ids:
+            records = self.collect_records(
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                record_ids=record_ids,
+            )
+            return len(
+                {
+                    _safe_text(item.get("visit_id") or item.get("record_id"))
+                    for item in records
+                    if _safe_text(item.get("visit_id") or item.get("record_id"))
+                }
+            )
+
         session = _session()
         try:
             query = self._build_records_query(
