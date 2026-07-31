@@ -73,11 +73,19 @@ class BenchmarkContractError(ValueError):
 
 
 def _rule_attestations() -> tuple[tuple[str, ...], dict[str, str]]:
-    contracts = tuple(load_luxian_0609_rule_contracts())
-    rule_ids = tuple(str(getattr(item, "rule_id", "") or "") for item in contracts)
+    all_contracts = tuple(load_luxian_0609_rule_contracts())
     expected = tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    expected_set = set(expected)
+    contracts = tuple(
+        item
+        for item in all_contracts
+        if str(getattr(item, "rule_id", "") or "") in expected_set
+    )
+    rule_ids = tuple(str(getattr(item, "rule_id", "") or "") for item in contracts)
     if rule_ids != expected:
-        raise BenchmarkContractError("LX0609 rule catalog is not the expected 49 rules")
+        raise BenchmarkContractError(
+            "LX0609 benchmark catalog is missing the ordered base 49 rules"
+        )
     executor_types: dict[str, str] = {}
     for contract in contracts:
         authority = str(getattr(contract, "decision_authority", "") or "").strip()
@@ -265,6 +273,7 @@ def _validate_response(
     value: Mapping[str, Any],
     *,
     expected_rule_ids: tuple[str, ...],
+    executor_types: Mapping[str, str],
 ) -> tuple[list[Mapping[str, Any]], Mapping[str, Any]]:
     if not isinstance(value, Mapping):
         raise BenchmarkContractError("invalid preproduction response")
@@ -308,6 +317,137 @@ def _validate_response(
         or (llm_call_count > 0 and total_tokens == 0)
     ):
         raise BenchmarkContractError("invalid preproduction token metrics")
+    if type(metrics.get("usage_complete")) is not bool:
+        raise BenchmarkContractError("invalid preproduction usage attribution")
+    usage_error_reason = metrics.get("usage_error_reason")
+    if not isinstance(usage_error_reason, str) or (
+        usage_error_reason and not _ATTESTED_REASON_RE.fullmatch(usage_error_reason)
+    ):
+        raise BenchmarkContractError("invalid preproduction usage attribution")
+    if (
+        not metrics["usage_complete"]
+        or usage_error_reason
+        or type(metrics.get("unattributed_prompt_tokens")) is not int
+        or int(metrics["unattributed_prompt_tokens"]) != 0
+        or type(metrics.get("unattributed_completion_tokens")) is not int
+        or int(metrics["unattributed_completion_tokens"]) != 0
+        or type(metrics.get("unattributed_total_tokens")) is not int
+        or int(metrics["unattributed_total_tokens"]) != 0
+    ):
+        raise BenchmarkContractError("incomplete preproduction usage attribution")
+    api_time_seconds = metrics.get("api_time_seconds")
+    if (
+        isinstance(api_time_seconds, bool)
+        or not isinstance(api_time_seconds, (int, float))
+        or not math.isfinite(float(api_time_seconds))
+        or float(api_time_seconds) < 0
+    ):
+        raise BenchmarkContractError("invalid preproduction usage attribution")
+    raw_attributions = metrics.get("usage_attributions")
+    if not isinstance(raw_attributions, list) or not raw_attributions:
+        raise BenchmarkContractError("missing preproduction usage attribution")
+    expected_fields = {
+        "executor_key",
+        "llm_call_count",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "covered_customer_rule_ids",
+        "latency_ms",
+    }
+    rule_position = {
+        rule_id: index for index, rule_id in enumerate(expected_rule_ids)
+    }
+    seen_executors: set[str] = set()
+    seen_rules: set[str] = set()
+    attribution_calls = 0
+    attribution_prompt = 0
+    attribution_completion = 0
+    attribution_total = 0
+    attribution_latency_ms = 0.0
+    for attribution in raw_attributions:
+        if not isinstance(attribution, Mapping) or set(attribution) != expected_fields:
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        executor_key = attribution.get("executor_key")
+        if (
+            not isinstance(executor_key, str)
+            or not _ATTESTED_REASON_RE.fullmatch(executor_key)
+            or executor_key in seen_executors
+        ):
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        seen_executors.add(executor_key)
+        token_fields = (
+            "llm_call_count",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+        )
+        if any(
+            type(attribution.get(field)) is not int
+            or int(attribution[field]) < 0
+            for field in token_fields
+        ):
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        latency_ms = attribution.get("latency_ms")
+        if (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(float(latency_ms))
+            or float(latency_ms) < 0
+        ):
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        covered_rule_ids = attribution.get("covered_customer_rule_ids")
+        if (
+            not isinstance(covered_rule_ids, list)
+            or not covered_rule_ids
+            or any(
+                not isinstance(rule_id, str) or rule_id not in rule_position
+                for rule_id in covered_rule_ids
+            )
+            or len(covered_rule_ids) != len(set(covered_rule_ids))
+            or covered_rule_ids
+            != sorted(covered_rule_ids, key=rule_position.__getitem__)
+            or seen_rules.intersection(covered_rule_ids)
+        ):
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        seen_rules.update(covered_rule_ids)
+        calls = int(attribution["llm_call_count"])
+        prompt = int(attribution["prompt_tokens"])
+        completion = int(attribution["completion_tokens"])
+        total = int(attribution["total_tokens"])
+        if (
+            total != prompt + completion
+            or (calls == 0 and total != 0)
+            or (calls > 0 and total == 0)
+            or (
+                total > 0
+                and not any(
+                    executor_types[rule_id] == "llm"
+                    for rule_id in covered_rule_ids
+                )
+            )
+        ):
+            raise BenchmarkContractError("invalid preproduction usage attribution")
+        attribution_calls += calls
+        attribution_prompt += prompt
+        attribution_completion += completion
+        attribution_total += total
+        attribution_latency_ms += float(latency_ms)
+    latency_tolerance_ms = 0.001 + len(raw_attributions) * 0.0005
+    if (
+        seen_rules != set(expected_rule_ids)
+        or attribution_calls != llm_call_count
+        or attribution_prompt != prompt_tokens
+        or attribution_completion != completion_tokens
+        or attribution_total != total_tokens
+        or not math.isclose(
+            attribution_latency_ms,
+            float(api_time_seconds) * 1000.0,
+            rel_tol=0.0,
+            abs_tol=latency_tolerance_ms,
+        )
+    ):
+        raise BenchmarkContractError("incomplete preproduction usage attribution")
     return results, metrics
 
 
@@ -349,53 +489,47 @@ def _golden_response(
                 ],
             }
         if runtime_bound:
-            result_metadata = result.get("metadata")
-            if not isinstance(result_metadata, Mapping):
-                raise BenchmarkContractError("missing rule token attribution")
-            token_names = ("prompt_tokens", "completion_tokens", "total_tokens")
-            if any(
-                type(result_metadata.get(name)) is not int
-                or int(result_metadata.get(name) or 0) < 0
-                for name in token_names
-            ):
-                raise BenchmarkContractError("missing rule token attribution")
-            prompt_tokens = int(result_metadata["prompt_tokens"])
-            completion_tokens = int(result_metadata["completion_tokens"])
-            total_tokens = int(result_metadata["total_tokens"])
-            if total_tokens != prompt_tokens + completion_tokens:
-                raise BenchmarkContractError("invalid rule token attribution")
-            projected_result["metadata"].update(
-                {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
             projected_result["evidence_source_types"] = ["evidence_snapshot"]
         projected_results.append(projected_result)
-    if runtime_bound:
-        metrics = response.get("metrics")
-        if not isinstance(metrics, Mapping):
-            raise BenchmarkContractError("missing rule token attribution")
-        attributed_prompt = sum(
-            int(item["metadata"]["prompt_tokens"]) for item in projected_results
-        )
-        attributed_completion = sum(
-            int(item["metadata"]["completion_tokens"]) for item in projected_results
-        )
-        attributed_total = sum(
-            int(item["metadata"]["total_tokens"]) for item in projected_results
-        )
-        if (
-            attributed_prompt != int(metrics.get("prompt_tokens") or 0)
-            or attributed_completion != int(metrics.get("completion_tokens") or 0)
-            or attributed_total != int(metrics.get("total_tokens") or 0)
-        ):
-            raise BenchmarkContractError("incomplete rule token attribution")
-    return {
+    projected_response = {
         "schema_version": str(response.get("schema_version") or ""),
         "results": projected_results,
     }
+    if runtime_bound:
+        metrics = response.get("metrics")
+        if not isinstance(metrics, Mapping):
+            raise BenchmarkContractError("missing preproduction usage attribution")
+        projected_response["metrics"] = {
+            "llm_call_count": int(metrics["llm_call_count"]),
+            "prompt_tokens": int(metrics["prompt_tokens"]),
+            "completion_tokens": int(metrics["completion_tokens"]),
+            "total_tokens": int(metrics["total_tokens"]),
+            "usage_complete": bool(metrics["usage_complete"]),
+            "usage_error_reason": str(metrics["usage_error_reason"]),
+            "unattributed_prompt_tokens": int(
+                metrics["unattributed_prompt_tokens"]
+            ),
+            "unattributed_completion_tokens": int(
+                metrics["unattributed_completion_tokens"]
+            ),
+            "unattributed_total_tokens": int(metrics["unattributed_total_tokens"]),
+            "api_time_seconds": float(metrics["api_time_seconds"]),
+            "usage_attributions": [
+                {
+                    "executor_key": str(item["executor_key"]),
+                    "llm_call_count": int(item["llm_call_count"]),
+                    "prompt_tokens": int(item["prompt_tokens"]),
+                    "completion_tokens": int(item["completion_tokens"]),
+                    "total_tokens": int(item["total_tokens"]),
+                    "covered_customer_rule_ids": list(
+                        item["covered_customer_rule_ids"]
+                    ),
+                    "latency_ms": float(item["latency_ms"]),
+                }
+                for item in metrics["usage_attributions"]
+            ],
+        }
+    return projected_response
 
 
 async def build_benchmark_batch(
@@ -474,6 +608,7 @@ async def build_benchmark_batch(
         results, metrics = _validate_response(
             response,
             expected_rule_ids=selected_rule_ids,
+            executor_types=executor_types,
         )
         if (
             len(evidence_attestation_rows) != len(selected_rule_ids)

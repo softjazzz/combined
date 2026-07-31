@@ -110,9 +110,14 @@ def _normalized_rule_ids(rule_catalog: Sequence[Mapping[str, Any]]) -> list[str]
         str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
         for item in rule_catalog
     ]
-    expected = [f"LX0609-{index:03d}" for index in range(1, 50)]
-    if rule_ids != expected:
-        raise ValueError("LX0609 runtime manifest requires the ordered 49-rule catalog")
+    if not rule_ids:
+        raise ValueError("LX0609 runtime manifest requires a non-empty rule catalog")
+    if any(not rule_id.startswith("LX0609-") for rule_id in rule_ids):
+        raise ValueError("LX0609 runtime manifest only accepts LX0609 rule ids")
+    if len(rule_ids) != len(set(rule_ids)):
+        raise ValueError("LX0609 runtime manifest requires unique rule ids")
+    if rule_ids != sorted(rule_ids):
+        raise ValueError("LX0609 runtime manifest requires an ordered rule catalog")
     return rule_ids
 
 

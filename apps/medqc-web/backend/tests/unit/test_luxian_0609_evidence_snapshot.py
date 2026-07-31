@@ -17,6 +17,7 @@ from app.services.luxian_0609.source_registry import (
     EXACT_VISIT_BINDING_FIELDS,
     SOURCE_REGISTRY_VERSION,
     load_luxian_0609_source_registry,
+    resolve_luxian_0609_decision_support_source_keys,
     resolve_luxian_0609_rule_sources,
     source_key_supports_proven_completeness,
 )
@@ -293,7 +294,7 @@ def test_sensitive_or_raw_source_metadata_is_rejected(field: str, value: str) ->
         _observation(**values)
 
 
-def test_source_registry_covers_every_document_type_declared_by_all_49_rules() -> None:
+def test_source_registry_covers_every_document_type_declared_by_registered_rules() -> None:
     contracts = load_luxian_0609_rule_contracts()
     registry = load_luxian_0609_source_registry()
     declared_documents = {
@@ -301,7 +302,7 @@ def test_source_registry_covers_every_document_type_declared_by_all_49_rules() -
         for contract in contracts
         for document_type in contract.applicable_documents
     }
-    assert len(contracts) == 49
+    assert len(contracts) == 63
     assert set(registry) == declared_documents
     assert all(entry.binding_fields == EXACT_VISIT_BINDING_FIELDS for entry in registry.values())
     assert all(entry.default_completeness is SourceCompleteness.UNPROVEN for entry in registry.values())
@@ -316,6 +317,8 @@ def test_source_registry_covers_every_document_type_declared_by_all_49_rules() -
 
 
 def test_only_bounded_registered_sources_may_claim_complete_or_truncated() -> None:
+    registry = load_luxian_0609_source_registry()
+    unbounded_source = registry["surgery_risk_assessment"]
     assert source_key_supports_proven_completeness(
         "surgery_record",
         "snapshot-provider-surgery_record-v2",
@@ -325,21 +328,21 @@ def test_only_bounded_registered_sources_may_claim_complete_or_truncated() -> No
         "legacy-query-v1",
     ) is False
     assert source_key_supports_proven_completeness(
-        "anesthesia_record",
-        "legacy_projection_v1-anesthesia_record",
+        "surgery_risk_assessment",
+        unbounded_source.query_version,
     ) is False
 
     legacy_unproven = _observation(
-        source_key="anesthesia_record",
+        source_key="surgery_risk_assessment",
         completeness="unproven",
-        query_version="legacy_projection_v1-anesthesia_record",
+        query_version=unbounded_source.query_version,
     )
     _snapshot(legacy_unproven)
 
     legacy_complete = _observation(
-        source_key="anesthesia_record",
+        source_key="surgery_risk_assessment",
         completeness="complete",
-        query_version="legacy_projection_v1-anesthesia_record",
+        query_version=unbounded_source.query_version,
     )
     with pytest.raises(ValueError, match="not allowed to claim proven completeness"):
         _snapshot(legacy_complete)
@@ -365,3 +368,20 @@ def test_rule_source_resolution_preserves_catalog_order_and_never_claims_unprove
     )
     with pytest.raises(ValueError, match="unknown LX0609 rule id"):
         resolve_luxian_0609_rule_sources(("SC-001",))
+
+
+def test_exam_lab_rules_bind_current_visit_nondrug_orders() -> None:
+    selected = ("LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+
+    resolved = resolve_luxian_0609_decision_support_source_keys(selected)
+
+    assert "inpat_nondrug_order.exam_lab_order" in resolved
+    assert "inpat_nondrug_order" not in resolved
+
+
+def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
+    resolved = resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-020", "LX0609-023")
+    )
+
+    assert "evaluation_context.horizon" in resolved

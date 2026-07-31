@@ -43,10 +43,15 @@ def _settings(**overrides: object) -> SimpleNamespace:
 
 
 def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
+    catalog = load_luxian_0609_rules()
+    expected_rule_ids = [
+        str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        for item in catalog
+    ]
     manifest = build_runtime_manifest(
         git_head="a" * 40,
         settings=_settings(),
-        rule_catalog=load_luxian_0609_rules(),
+        rule_catalog=catalog,
         inventory=load_luxian_0609_dependency_inventory(),
         generated_at="2026-07-23T18:00:00Z",
     )
@@ -54,12 +59,10 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["schema_version"] == "lx0609-runtime-manifest-v1"
     assert manifest["git_head"] == "a" * 40
     assert manifest["generated_at"] == "2026-07-23T18:00:00Z"
-    assert manifest["rule_set"]["rule_count"] == 49
-    assert manifest["rule_set"]["rule_ids"] == [
-        f"LX0609-{index:03d}" for index in range(1, 50)
-    ]
-    assert len(manifest["rules"]) == 49
-    assert len({item["rule_id"] for item in manifest["rules"]}) == 49
+    assert manifest["rule_set"]["rule_count"] == 63
+    assert manifest["rule_set"]["rule_ids"] == expected_rule_ids
+    assert len(manifest["rules"]) == 63
+    assert len({item["rule_id"] for item in manifest["rules"]}) == 63
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
     assert by_rule["LX0609-020"]["active_path"] == "compatibility"

@@ -25,6 +25,69 @@ _DETERMINISTIC_RULE_IDS = frozenset(
 )
 
 
+def test_rule_attestations_keep_base49_when_catalog_has_phase_extensions(
+    monkeypatch,
+):
+    contracts = [
+        SimpleNamespace(
+            rule_id=f"LX0609-{index:03d}",
+            decision_authority="program_only",
+        )
+        for index in range(1, 50)
+    ]
+    contracts.append(
+        SimpleNamespace(
+            rule_id="LX0609-051",
+            decision_authority="program_only",
+        )
+    )
+    monkeypatch.setattr(
+        benchmark20,
+        "load_luxian_0609_rule_contracts",
+        lambda: contracts,
+    )
+
+    rule_ids, executor_types = benchmark20._rule_attestations()
+
+    assert rule_ids == tuple(f"LX0609-{index:03d}" for index in range(1, 50))
+    assert set(executor_types) == set(rule_ids)
+
+
+def _usage_attributions(rule_ids: tuple[str, ...]) -> list[dict]:
+    program_rule_ids = [
+        rule_id for rule_id in rule_ids if rule_id in _DETERMINISTIC_RULE_IDS
+    ]
+    semantic_rule_ids = [
+        rule_id for rule_id in rule_ids if rule_id in _SEMANTIC_RULE_IDS
+    ]
+    items: list[dict] = []
+    if program_rule_ids:
+        items.append(
+            {
+                "executor_key": "programmatic",
+                "llm_call_count": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "covered_customer_rule_ids": program_rule_ids,
+                "latency_ms": 0.0,
+            }
+        )
+    if semantic_rule_ids:
+        items.append(
+            {
+                "executor_key": "semantic",
+                "llm_call_count": 1,
+                "prompt_tokens": 10,
+                "completion_tokens": 2,
+                "total_tokens": 12,
+                "covered_customer_rule_ids": semantic_rule_ids,
+                "latency_ms": 5.0,
+            }
+        )
+    return items
+
+
 def _case_map() -> dict:
     return {
         "selector_version": "fixed20-v1",
@@ -75,9 +138,6 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
             "status": "compliant",
             "metadata": {
                 "reason_code": "verified",
-                "prompt_tokens": 10 if index == 9 else 0,
-                "completion_tokens": 2 if index == 9 else 0,
-                "total_tokens": 12 if index == 9 else 0,
             },
             "evidence_items": [],
             "findings": "PRIVATE-BODY-MARKER",
@@ -97,6 +157,13 @@ def _safe_response(*, wall_time_ms: float = 10.0) -> dict:
             "rule_decision_count": 49,
             "typed_shadow_adapter_count": 0,
             "legacy_projection_count": 0,
+            "usage_complete": True,
+            "usage_error_reason": "",
+            "unattributed_prompt_tokens": 0,
+            "unattributed_completion_tokens": 0,
+            "unattributed_total_tokens": 0,
+            "api_time_seconds": 0.005,
+            "usage_attributions": _usage_attributions(_RULE_IDS),
         },
     }
 
@@ -109,15 +176,17 @@ def _selected_safe_response(
         item for item in response["results"] if item["rule_id"] in rule_ids
     ]
     response["metrics"]["rule_decision_count"] = len(rule_ids)
-    if "LX0609-009" not in rule_ids:
-        response["metrics"].update(
-            {
-                "llm_call_count": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            }
-        )
+    has_semantic = any(rule_id in _SEMANTIC_RULE_IDS for rule_id in rule_ids)
+    response["metrics"].update(
+        {
+            "llm_call_count": 1 if has_semantic else 0,
+            "prompt_tokens": 10 if has_semantic else 0,
+            "completion_tokens": 2 if has_semantic else 0,
+            "total_tokens": 12 if has_semantic else 0,
+            "usage_attributions": _usage_attributions(rule_ids),
+            "api_time_seconds": 0.005 if has_semantic else 0.0,
+        }
+    )
     return response
 
 
@@ -173,11 +242,11 @@ def _emit_selected_attestations(
 
 
 def _assert_candidate_decision_kind_contract(candidate: dict) -> None:
-    """锁定49点契约分类，避免017灰区被误记为Python决定。"""
+    """锁定49点契约分类和本阶段两个已明确的程序判定。"""
 
     rows = candidate["rows"]
-    assert len(_DETERMINISTIC_RULE_IDS) == 26
-    assert len(_SEMANTIC_RULE_IDS) == 23
+    assert len(_DETERMINISTIC_RULE_IDS) == 28
+    assert len(_SEMANTIC_RULE_IDS) == 21
     assert len(rows) == 20 * 49
     decision_kinds = [row["decision_kind"] for row in rows]
     assert decision_kinds.count("deterministic") == (
@@ -318,13 +387,105 @@ async def test_benchmark20_runs_exact_cases_in_order_and_returns_safe_golden_bat
         == {
             "reason_code",
             "executor_type",
-            "prompt_tokens",
-            "completion_tokens",
-            "total_tokens",
         }
         for case in batch["cases"]
         for result in case["response"]["results"]
     )
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_counts_one_family_call_once_while_covering_multiple_rules():
+    selected_rule_ids = ("LX0609-010", "LX0609-011")
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_selected_attestations(
+            kwargs,
+            salt=f"family-usage-{next(call_numbers)}",
+        )
+        response = _selected_safe_response(selected_rule_ids)
+        response["metrics"].update(
+            {
+                "usage_complete": True,
+                "usage_error_reason": "",
+                "unattributed_prompt_tokens": 0,
+                "unattributed_completion_tokens": 0,
+                "unattributed_total_tokens": 0,
+                "usage_attributions": [
+                    {
+                        "executor_key": "mixed_family",
+                        "llm_call_count": 1,
+                        "prompt_tokens": 10,
+                        "completion_tokens": 2,
+                        "total_tokens": 12,
+                        "covered_customer_rule_ids": [
+                            "LX0609-010",
+                            "LX0609-011",
+                        ],
+                        "latency_ms": 5.0,
+                    },
+                ],
+            }
+        )
+        return response
+
+    batch = await build_benchmark_batch(
+        case_map=_case_map(),
+        evaluation_as_of_date="2026-07-24",
+        bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+        runner=fake_runner,
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        selected_rule_ids=selected_rule_ids,
+    )
+
+    assert batch["summary"]["total_tokens"] == 20 * 12
+    for case in batch["cases"]:
+        safe_response = case["response"]
+        assert safe_response["metrics"]["usage_attributions"][0][
+            "covered_customer_rule_ids"
+        ] == ["LX0609-010", "LX0609-011"]
+        assert all(
+            not {"prompt_tokens", "completion_tokens", "total_tokens"}
+            & set(result["metadata"])
+            for result in safe_response["results"]
+        )
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="family-usage-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    by_rule = {
+        row["rule_id"]: row
+        for row in candidate["rows"]
+        if row["case_label"] == "case-01"
+    }
+    assert by_rule["LX0609-010"]["total_tokens"] == 12
+    assert by_rule["LX0609-011"]["total_tokens"] == 12
+
+
+@pytest.mark.asyncio
+async def test_benchmark20_rejects_incomplete_unattributed_and_latency_accounting():
+    call_numbers = count(1)
+
+    async def fake_runner(**kwargs):
+        _emit_attestations(
+            kwargs,
+            salt=f"latency-accounting-{next(call_numbers)}",
+        )
+        response = _safe_response()
+        response["metrics"]["api_time_seconds"] = 99.0
+        return response
+
+    with pytest.raises(BenchmarkContractError, match="usage attribution"):
+        await build_benchmark_batch(
+            case_map=_case_map(),
+            evaluation_as_of_date="2026-07-24",
+            bundle_loader=lambda **kwargs: {"scene": kwargs["scene"]},
+            runner=fake_runner,
+            llm_client=object(),
+            base_settings=SimpleNamespace(),
+        )
 
 
 @pytest.mark.asyncio
@@ -373,27 +534,64 @@ async def test_benchmark20_binds_current_runtime_manifest_and_rejects_stale_head
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_kind", ("missing", "incomplete"))
-async def test_benchmark20_fails_closed_for_rule_token_attribution(
+@pytest.mark.parametrize(
+    "failure_kind",
+    (
+        "missing",
+        "arithmetic",
+        "usage_incomplete",
+        "unattributed",
+        "unattributed_prompt",
+        "unattributed_completion",
+        "duplicate_executor",
+        "unknown_coverage",
+        "duplicate_coverage",
+        "boolean",
+        "latency_boolean",
+    ),
+)
+async def test_benchmark20_fails_closed_for_family_usage_attribution(
     failure_kind: str,
 ):
     async def fake_runner(**kwargs):
         _emit_attestations(kwargs, salt=f"token-{failure_kind}")
         response = _safe_response()
-        semantic_metadata = response["results"][8]["metadata"]
         if failure_kind == "missing":
-            semantic_metadata.pop("completion_tokens")
-        else:
-            semantic_metadata.update(
-                {
-                    "prompt_tokens": 9,
-                    "completion_tokens": 2,
-                    "total_tokens": 11,
-                }
+            response["metrics"].pop("usage_attributions")
+        elif failure_kind == "arithmetic":
+            response["metrics"]["usage_attributions"][-1]["total_tokens"] = 11
+        elif failure_kind == "usage_incomplete":
+            response["metrics"]["usage_complete"] = False
+            response["metrics"]["usage_error_reason"] = "usage_incomplete"
+        elif failure_kind == "unattributed":
+            response["metrics"]["unattributed_total_tokens"] = 1
+        elif failure_kind == "unattributed_prompt":
+            response["metrics"]["unattributed_prompt_tokens"] = 1
+        elif failure_kind == "unattributed_completion":
+            response["metrics"]["unattributed_completion_tokens"] = 1
+        elif failure_kind == "duplicate_executor":
+            duplicate = dict(response["metrics"]["usage_attributions"][0])
+            duplicate["covered_customer_rule_ids"] = ["LX0609-001"]
+            response["metrics"]["usage_attributions"].append(duplicate)
+        elif failure_kind == "unknown_coverage":
+            response["metrics"]["usage_attributions"][0][
+                "covered_customer_rule_ids"
+            ][0] = "LX0609-999"
+        elif failure_kind == "duplicate_coverage":
+            response["metrics"]["usage_attributions"][0][
+                "covered_customer_rule_ids"
+            ].append(
+                response["metrics"]["usage_attributions"][0][
+                    "covered_customer_rule_ids"
+                ][0]
             )
+        elif failure_kind == "boolean":
+            response["metrics"]["usage_attributions"][-1]["prompt_tokens"] = False
+        else:
+            response["metrics"]["api_time_seconds"] = False
         return response
 
-    with pytest.raises(BenchmarkContractError, match="rule token attribution"):
+    with pytest.raises(BenchmarkContractError, match="usage attribution"):
         await build_benchmark_batch(
             case_map=_case_map(),
             evaluation_as_of_date="2026-07-24",
