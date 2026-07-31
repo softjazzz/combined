@@ -1,3 +1,4 @@
+from app.services.bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from app.services.bundles.emr_view import (
     _course_bundle_needs_exam_lab_refresh,
     build_documents_from_domain_bundles,
@@ -25,8 +26,60 @@ def test_course_bundle_with_complete_exam_lab_coverage_does_not_require_refresh(
     }
 
     assert _course_bundle_needs_exam_lab_refresh(
-        {"structured_context": {"source_table_coverage": coverage}}
+        {
+            "bundle_schema_version": BUNDLE_SCHEMA_VERSION_CURRENT,
+            "structured_context": {"source_table_coverage": coverage},
+        }
     ) is False
+
+
+def test_course_bundle_with_previous_schema_requires_report_grouping_refresh():
+    coverage = {
+        key: {"row_count": 0, "hit": False}
+        for key in (
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "pathology_exam_master",
+            "pathology_exam_report",
+        )
+    }
+
+    assert _course_bundle_needs_exam_lab_refresh(
+        {
+            "bundle_schema_version": "bundle-v2",
+            "structured_context": {"source_table_coverage": coverage},
+        }
+    ) is True
+
+
+def test_build_documents_should_preserve_grouped_report_payload():
+    documents = build_documents_from_domain_bundles(
+        {
+            "course": {
+                "source_documents": [
+                    {
+                        "document_type": "labtest_item_report",
+                        "document_id": "LAB-1",
+                        "document_title": "血常规检验报告",
+                        "display_time": "2026-02-21 07:45:30",
+                        "content": "检验结果",
+                        "report_metadata": {"specimen": "外周血"},
+                        "report_items": [
+                            {"item_name": "白细胞计数", "result": "4.95"},
+                            {"item_name": "血小板计数", "result": "254"},
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+    assert len(documents) == 1
+    assert documents[0]["doc_key"] == "labtest_item_report::LAB-1"
+    assert documents[0]["report_metadata"] == {"specimen": "外周血"}
+    assert len(documents[0]["report_items"]) == 2
 
 
 def test_build_documents_tree_from_domain_bundles():

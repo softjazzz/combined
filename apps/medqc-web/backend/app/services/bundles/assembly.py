@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass, field
 from functools import lru_cache
 from datetime import date, datetime
 from typing import Any, Iterable, Optional
@@ -11,7 +12,11 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import inspect, text
 
 from ...database.connection import DB_SCHEMA_MODE, engine
-from ..document_assembly import assemble_document, build_document_select_columns
+from ..document_assembly import (
+    assemble_document,
+    build_document_select_columns,
+    extract_document_identity_metadata,
+)
 from .contracts import BUNDLE_DOMAINS, BUNDLE_SCHEMA_VERSION_CURRENT
 from .factory import (
     build_coding_bundle,
@@ -344,10 +349,10 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "blood_application": 50,
     "bloodtrans_record": 50,
     "crisis_value_record": 50,
-    "exam_master": 50,
-    "exam_item_report": 50,
-    "labtest_master": 50,
-    "labtest_item_report": 50,
+    "exam_master": 500,
+    "exam_item_report": 2000,
+    "labtest_master": 500,
+    "labtest_item_report": 5000,
     "pathology_exam_master": 50,
     "pathology_exam_report": 50,
     "presurg_summary": 50,
@@ -380,6 +385,134 @@ _DOMAIN_BUNDLE_TABLE: dict[str, str] = {
     "terminal": "terminal_domain_bundle",
     "index_coding_settlement": "index_coding_settlement_domain_bundle",
 }
+
+
+@dataclass
+class _MaterialSnapshot:
+    """一次病例 bundle 刷新内共享的源表物化快照。"""
+
+    key: tuple[str, str, str, str]
+    rows_by_table: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    errors_by_table: dict[str, Exception] = field(default_factory=dict)
+    material_reads: int = 0
+
+    def rows_for(
+        self,
+        *,
+        source_schema: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        table: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        expected_key = (source_schema, institute_id, patient_id, visit_id)
+        if self.key != expected_key:
+            raise ValueError("Material Snapshot 与当前病例不匹配")
+        if table in self.errors_by_table:
+            raise self.errors_by_table[table]
+        return list(self.rows_by_table.get(table, ()))[: max(1, int(limit))]
+
+
+def _merge_material_limit(
+    limits: dict[str, int],
+    table_name: str,
+    limit: int,
+) -> None:
+    limits[table_name] = max(limits.get(table_name, 0), max(1, int(limit)))
+
+
+def _material_limits_for_variants(
+    *,
+    scenes: Iterable[str],
+    domains: Iterable[str],
+) -> dict[str, int]:
+    limits: dict[str, int] = {}
+    for scene in scenes:
+        priority = _SCENE_DOC_PRIORITY[scene]
+        fetch_priority = tuple(
+            dict.fromkeys(
+                (
+                    *priority,
+                    *(_RUNNING_SUPPLEMENTARY_DOC_PRIORITY if scene == "running" else ()),
+                )
+            )
+        )
+        for table_name in fetch_priority:
+            _merge_material_limit(limits, table_name, 3)
+        if scene == "final":
+            _merge_material_limit(limits, "mr", 1)
+        for table_name, limit in _SCENE_ATTENTION_FETCH_LIMITS.items():
+            _merge_material_limit(limits, table_name, limit)
+        _merge_material_limit(limits, "patient_information", 1)
+        _merge_material_limit(limits, "mr", 1)
+
+    for execution_domain in domains:
+        for table_name in _DOMAIN_DOC_PRIORITY[execution_domain]:
+            _merge_material_limit(
+                limits,
+                table_name,
+                _DOMAIN_FETCH_LIMITS.get(table_name, 50),
+            )
+    return limits
+
+
+def _build_material_snapshot(
+    *,
+    source_schema: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    table_limits: dict[str, int],
+) -> _MaterialSnapshot:
+    snapshot = _MaterialSnapshot(
+        key=(source_schema, institute_id, patient_id, visit_id),
+    )
+    for table_name in sorted(table_limits):
+        limit = table_limits[table_name]
+        snapshot.material_reads += 1
+        try:
+            snapshot.rows_by_table[table_name] = _select_records(
+                schema=source_schema,
+                table=table_name,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                limit=limit,
+            )[:limit]
+        except Exception as exc:
+            # 延迟到实际消费该表的 variant 再失败，避免单表故障污染无关 bundle。
+            snapshot.errors_by_table[table_name] = exc
+    return snapshot
+
+
+def _material_rows(
+    *,
+    material_snapshot: _MaterialSnapshot | None,
+    source_schema: str,
+    table: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    if material_snapshot is not None:
+        return material_snapshot.rows_for(
+            source_schema=source_schema,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            table=table,
+            limit=limit,
+        )
+    return _select_records(
+        schema=source_schema,
+        table=table,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        limit=limit,
+    )
 
 
 def _default_source_schema() -> str:
@@ -724,6 +857,7 @@ def _fetch_patient_profile(
     institute_id: str,
     patient_id: str,
     visit_id: str,
+    material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, str]:
     candidates = ("patient_information", "mr")
     profile = {
@@ -732,8 +866,9 @@ def _fetch_patient_profile(
         "id_card": "",
     }
     for table in candidates:
-        rows = _select_records(
-            schema=source_schema,
+        rows = _material_rows(
+            material_snapshot=material_snapshot,
+            source_schema=source_schema,
             table=table,
             institute_id=institute_id,
             patient_id=patient_id,
@@ -1432,28 +1567,32 @@ def _build_scene_attention_artifacts(
     institute_id: str,
     patient_id: str,
     visit_id: str,
+    material_snapshot: _MaterialSnapshot | None = None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     extra_docs: dict[str, list[dict[str, Any]]] = {}
     timeline_facts: list[dict[str, Any]] = []
 
-    exam_rows = _select_records(
-        schema=source_schema,
+    exam_rows = _material_rows(
+        material_snapshot=material_snapshot,
+        source_schema=source_schema,
         table="exam_master",
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=visit_id,
         limit=_SCENE_ATTENTION_FETCH_LIMITS["exam_master"],
     )
-    lab_master_rows = _select_records(
-        schema=source_schema,
+    lab_master_rows = _material_rows(
+        material_snapshot=material_snapshot,
+        source_schema=source_schema,
         table="labtest_master",
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=visit_id,
         limit=_SCENE_ATTENTION_FETCH_LIMITS["labtest_master"],
     )
-    lab_item_rows = _select_records(
-        schema=source_schema,
+    lab_item_rows = _material_rows(
+        material_snapshot=material_snapshot,
+        source_schema=source_schema,
         table="labtest_item_report",
         institute_id=institute_id,
         patient_id=patient_id,
@@ -1501,31 +1640,362 @@ def _build_scene_attention_artifacts(
     return extra_docs, timeline_facts
 
 
+def _first_report_value(*rows: dict[str, Any], fields: tuple[str, ...]) -> str:
+    for row in rows:
+        for field_name in fields:
+            value = _normalize_text(row.get(field_name))
+            if value:
+                return value
+    return ""
+
+
+def _report_row_group_key(
+    row: dict[str, Any],
+    *,
+    id_fields: tuple[str, ...],
+    fallback_title_fields: tuple[str, ...],
+    row_index: int,
+) -> tuple[str, str]:
+    for field_name in id_fields:
+        value = _normalize_text(row.get(field_name))
+        if value:
+            return f"{field_name}:{value}", value
+    report_time = _first_report_value(
+        row,
+        fields=("report_time", "report_datetime", "record_time", "submit_datetime"),
+    )
+    title = _first_report_value(row, fields=fallback_title_fields)
+    if report_time or title:
+        fallback_id = f"{report_time or 'unknown-time'}::{title or 'unknown-report'}"
+        return f"fallback:{fallback_id}", fallback_id
+    row_id = _first_report_value(
+        row,
+        fields=("document_id", "item_id", "item_no"),
+    ) or str(row_index)
+    return f"row:{row_id}", row_id
+
+
+def _report_item_sort_key(row: dict[str, Any]) -> tuple[int, str, str]:
+    item_no = _normalize_text(row.get("item_no"))
+    try:
+        numeric_item_no = int(float(item_no))
+    except (TypeError, ValueError):
+        numeric_item_no = 10**9
+    return (
+        numeric_item_no,
+        item_no,
+        _first_report_value(row, fields=("item_name", "exam_name", "exam_item_name")),
+    )
+
+
+def _inventory_entry(
+    *,
+    table_name: str,
+    row: dict[str, Any],
+    report_items: list[dict[str, Any]] | None = None,
+    report_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    assembled = assemble_document(table_name, row)
+    identity_metadata = extract_document_identity_metadata(row)
+    text_value = assembled.assembled_text
+    entry = {
+        "source_table": table_name,
+        "document_type": table_name,
+        "group_key": _infer_scene_group_key(table_name),
+        "document_id": assembled.document_id,
+        "document_title": assembled.document_title,
+        "record_time": assembled.record_time or "",
+        "display_time": assembled.display_time or "",
+        "hit": bool(text_value),
+        "text_preview": text_value[:600],
+        "content": text_value,
+        "sections": [section.to_dict() for section in assembled.sections],
+        "source_fields": [field.to_dict() for field in assembled.source_fields],
+        "assembly_status": assembled.assembly_status,
+        "data_quality_flags": list(assembled.data_quality_flags),
+        "authors": identity_metadata["authors"],
+        "signatures": identity_metadata["signatures"],
+        "participants": identity_metadata["participants"],
+    }
+    if report_items is not None:
+        entry["report_items"] = _json_safe(report_items)
+    if report_metadata is not None:
+        entry["report_metadata"] = _json_safe(report_metadata)
+    return entry
+
+
+def _index_report_masters(
+    rows: list[dict[str, Any]],
+    *,
+    id_fields: tuple[str, ...],
+) -> dict[tuple[str, str], tuple[int, dict[str, Any]]]:
+    index: dict[tuple[str, str], tuple[int, dict[str, Any]]] = {}
+    for row_index, row in enumerate(rows):
+        for field_name in id_fields:
+            value = _normalize_text(row.get(field_name))
+            if value:
+                index.setdefault((field_name, value), (row_index, row))
+    return index
+
+
+def _build_grouped_lab_reports(
+    master_rows: list[dict[str, Any]],
+    item_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[int]]:
+    grouped: dict[str, tuple[str, list[dict[str, Any]]]] = {}
+    for row_index, row in enumerate(item_rows):
+        group_key, report_id = _report_row_group_key(
+            row,
+            id_fields=("test_id", "test_no"),
+            fallback_title_fields=("document_title", "labtest_subject"),
+            row_index=row_index,
+        )
+        grouped.setdefault(group_key, (report_id, []))[1].append(row)
+
+    master_index = _index_report_masters(master_rows, id_fields=("test_id", "test_no"))
+    consumed_master_indexes: set[int] = set()
+    reports: list[dict[str, Any]] = []
+    for report_id, rows in grouped.values():
+        rows.sort(key=_report_item_sort_key)
+        first = rows[0]
+        matched_master: dict[str, Any] = {}
+        for field_name in ("test_id", "test_no"):
+            value = _normalize_text(first.get(field_name))
+            matched = master_index.get((field_name, value)) if value else None
+            if matched:
+                consumed_master_indexes.add(matched[0])
+                matched_master = matched[1]
+                break
+        subject = _first_report_value(
+            first,
+            matched_master,
+            fields=("document_title", "labtest_subject"),
+        )
+        if not subject or subject in {"检验明细", "检验报告"}:
+            subject = _first_report_value(matched_master, fields=("labtest_subject",)) or "检验"
+        title = (
+            subject
+            if subject.endswith("检验报告")
+            else ("检验报告" if subject == "检验" else f"{subject}检验报告")
+        )
+        report_time = _first_report_value(
+            first,
+            matched_master,
+            fields=("report_time", "report_datetime", "record_time", "submit_datetime"),
+        )
+        report_items: list[dict[str, Any]] = []
+        result_lines: list[str] = []
+        for row in rows:
+            reference_min = _normalize_text(row.get("referencevalue_min"))
+            reference_max = _normalize_text(row.get("referencevalue_max"))
+            reference_range = _normalize_text(row.get("reference_range"))
+            if not reference_range and (reference_min or reference_max):
+                reference_range = f"{reference_min or '—'}-{reference_max or '—'}"
+            item = {
+                "item_no": _normalize_text(row.get("item_no")),
+                "item_id": _normalize_text(row.get("item_id")),
+                "item_code": _normalize_text(row.get("item_code")),
+                "item_name": _first_report_value(
+                    row,
+                    fields=("item_name", "item_abbreviation"),
+                ),
+                "result": _normalize_text(row.get("result")),
+                "abnormal_indicator": _normalize_text(row.get("abnormal_indicator")),
+                "reference_range": reference_range,
+                "referencevalue_min": reference_min,
+                "referencevalue_max": reference_max,
+                "unit": _normalize_text(row.get("unit")),
+            }
+            report_items.append(item)
+            line = f"{item['item_name'] or '未命名项目'}：{item['result'] or '—'}"
+            extras = [
+                value
+                for value in (
+                    f"提示 {item['abnormal_indicator']}" if item["abnormal_indicator"] else "",
+                    f"参考范围 {item['reference_range']}" if item["reference_range"] else "",
+                    f"单位 {item['unit']}" if item["unit"] else "",
+                )
+                if value
+            ]
+            result_lines.append(f"{line}（{'；'.join(extras)}）" if extras else line)
+        metadata = {
+            "request_datetime": _first_report_value(matched_master, fields=("request_datetime",)),
+            "report_datetime": report_time,
+            "specimen": _first_report_value(matched_master, fields=("specimen",)),
+            "request_dept": _first_report_value(matched_master, fields=("request_dept",)),
+            "request_physician": _first_report_value(matched_master, fields=("request_physician",)),
+            "reporter": _first_report_value(matched_master, fields=("reporter",)),
+            "verifier": _first_report_value(matched_master, fields=("verifier",)),
+        }
+        header_lines = [
+            f"检验项目：{subject.removesuffix('检验报告')}",
+            *(
+                f"{label}：{value}"
+                for label, value in (
+                    ("申请时间", metadata["request_datetime"]),
+                    ("报告时间", metadata["report_datetime"]),
+                    ("标本类型", metadata["specimen"]),
+                )
+                if value
+            ),
+            "检验结果：",
+        ]
+        synthetic_row = {
+            **matched_master,
+            **first,
+            "document_id": report_id,
+            "document_title": title,
+            "record_time": report_time,
+            "report_time": report_time,
+            "record_content": "\n".join([*header_lines, *result_lines]),
+        }
+        reports.append(
+            _inventory_entry(
+                table_name="labtest_item_report",
+                row=synthetic_row,
+                report_items=report_items,
+                report_metadata=metadata,
+            )
+        )
+    return reports, consumed_master_indexes
+
+
+def _build_grouped_exam_reports(
+    master_rows: list[dict[str, Any]],
+    item_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[int]]:
+    grouped: dict[str, tuple[str, list[dict[str, Any]]]] = {}
+    for row_index, row in enumerate(item_rows):
+        group_key, report_id = _report_row_group_key(
+            row,
+            id_fields=("exam_id", "exam_no"),
+            fallback_title_fields=("document_title", "exam_name", "exam_item_name"),
+            row_index=row_index,
+        )
+        grouped.setdefault(group_key, (report_id, []))[1].append(row)
+
+    master_index = _index_report_masters(master_rows, id_fields=("exam_id", "exam_no"))
+    consumed_master_indexes: set[int] = set()
+    reports: list[dict[str, Any]] = []
+    for report_id, rows in grouped.values():
+        rows.sort(key=_report_item_sort_key)
+        first = rows[0]
+        matched_master: dict[str, Any] = {}
+        for field_name in ("exam_id", "exam_no"):
+            value = _normalize_text(first.get(field_name))
+            matched = master_index.get((field_name, value)) if value else None
+            if matched:
+                consumed_master_indexes.add(matched[0])
+                matched_master = matched[1]
+                break
+        subject = _first_report_value(
+            first,
+            matched_master,
+            fields=("document_title", "exam_name", "exam_item_name", "exam_type"),
+        )
+        if not subject or subject in {"检查明细", "检查结果", "检查报告"}:
+            subject = _first_report_value(matched_master, fields=("exam_type",)) or "检查"
+        title = (
+            subject
+            if subject.endswith("检查报告")
+            else ("检查报告" if subject == "检查" else f"{subject}检查报告")
+        )
+        report_time = _first_report_value(
+            first,
+            matched_master,
+            fields=("report_time", "report_datetime", "record_time", "submit_datetime"),
+        )
+        report_items: list[dict[str, Any]] = []
+        result_lines: list[str] = []
+        for row in rows:
+            item = {
+                "item_no": _normalize_text(row.get("item_no")),
+                "item_id": _normalize_text(row.get("item_id")),
+                "item_code": _normalize_text(row.get("item_code")),
+                "item_name": _first_report_value(
+                    row,
+                    fields=("exam_name", "exam_item_name", "item_name"),
+                ),
+                "findings": _first_report_value(
+                    row,
+                    fields=("exam_findings", "findings", "description"),
+                ),
+                "impression": _first_report_value(
+                    row,
+                    fields=("exam_impression", "impression", "exam_conclusion", "conclusion", "diagnosis"),
+                ),
+            }
+            report_items.append(item)
+            if item["item_name"]:
+                result_lines.append(f"检查项目：{item['item_name']}")
+            if item["findings"]:
+                result_lines.append(f"检查所见：{item['findings']}")
+            if item["impression"]:
+                result_lines.append(f"检查结论：{item['impression']}")
+        metadata = {
+            "request_time": _first_report_value(matched_master, fields=("request_time", "request_datetime")),
+            "exam_time": _first_report_value(matched_master, fields=("exam_time",)),
+            "report_time": report_time,
+            "exam_type": _first_report_value(first, matched_master, fields=("exam_type",)),
+            "request_dept": _first_report_value(matched_master, fields=("request_dept",)),
+            "performed_dept": _first_report_value(matched_master, fields=("performed_dept",)),
+            "reporter": _first_report_value(matched_master, fields=("reporter",)),
+            "verifier": _first_report_value(matched_master, fields=("verifier",)),
+        }
+        header_lines = [
+            *(
+                f"{label}：{value}"
+                for label, value in (
+                    ("申请时间", metadata["request_time"]),
+                    ("检查时间", metadata["exam_time"]),
+                    ("报告时间", metadata["report_time"]),
+                    ("检查类型", metadata["exam_type"]),
+                )
+                if value
+            ),
+        ]
+        synthetic_row = {
+            **matched_master,
+            **first,
+            "document_id": report_id,
+            "document_title": title,
+            "record_time": report_time,
+            "report_time": report_time,
+            "record_content": "\n".join([*header_lines, *result_lines]),
+        }
+        reports.append(
+            _inventory_entry(
+                table_name="exam_item_report",
+                row=synthetic_row,
+                report_items=report_items,
+                report_metadata=metadata,
+            )
+        )
+    return reports, consumed_master_indexes
+
+
 def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str) -> list[dict[str, Any]]:
     inventory: list[dict[str, Any]] = []
+    lab_reports, consumed_lab_masters = _build_grouped_lab_reports(
+        list(docs.get("labtest_master") or []),
+        list(docs.get("labtest_item_report") or []),
+    )
+    exam_reports, consumed_exam_masters = _build_grouped_exam_reports(
+        list(docs.get("exam_master") or []),
+        list(docs.get("exam_item_report") or []),
+    )
+    inventory.extend(lab_reports)
+    inventory.extend(exam_reports)
     for table_name, rows in docs.items():
-        columns = set(_get_table_columns(schema, table_name))
-        for row in rows or []:
-            assembled = assemble_document(table_name, row)
-            text_value = assembled.assembled_text
-            inventory.append(
-                {
-                    "source_table": table_name,
-                    "document_type": table_name,
-                    "group_key": _infer_scene_group_key(table_name),
-                    "document_id": assembled.document_id,
-                    "document_title": assembled.document_title,
-                    "record_time": assembled.record_time or "",
-                    "display_time": assembled.display_time or "",
-                    "hit": bool(text_value),
-                    "text_preview": text_value[:600],
-                    "content": text_value,
-                    "sections": [section.to_dict() for section in assembled.sections],
-                    "source_fields": [field.to_dict() for field in assembled.source_fields],
-                    "assembly_status": assembled.assembly_status,
-                    "data_quality_flags": list(assembled.data_quality_flags),
-                }
-            )
+        _get_table_columns(schema, table_name)
+        if table_name in {"labtest_item_report", "exam_item_report"}:
+            continue
+        for row_index, row in enumerate(rows or []):
+            if table_name == "labtest_master" and row_index in consumed_lab_masters:
+                continue
+            if table_name == "exam_master" and row_index in consumed_exam_masters:
+                continue
+            inventory.append(_inventory_entry(table_name=table_name, row=row))
     return inventory
 
 
@@ -1594,6 +2064,7 @@ def _assemble_scene_bundle(
     patient_id: str,
     visit_id: str,
     policy_version: str = "",
+    material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, Any]:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; bundle assembly unavailable.")
@@ -1615,8 +2086,9 @@ def _assemble_scene_bundle(
     )
     docs: dict[str, list[dict[str, Any]]] = {}
     for table_name in fetch_priority:
-        docs[table_name] = _select_records(
-            schema=source_schema,
+        docs[table_name] = _material_rows(
+            material_snapshot=material_snapshot,
+            source_schema=source_schema,
             table=table_name,
             institute_id=institute_id,
             patient_id=patient_id,
@@ -1625,8 +2097,9 @@ def _assemble_scene_bundle(
         )
     context_rows: dict[str, list[dict[str, Any]]] = {}
     if scene == "final":
-        context_rows["mr"] = _select_records(
-            schema=source_schema,
+        context_rows["mr"] = _material_rows(
+            material_snapshot=material_snapshot,
+            source_schema=source_schema,
             table="mr",
             institute_id=institute_id,
             patient_id=patient_id,
@@ -1638,6 +2111,7 @@ def _assemble_scene_bundle(
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=visit_id,
+        material_snapshot=material_snapshot,
     )
     for table_name, rows in attention_docs.items():
         if rows:
@@ -1648,6 +2122,7 @@ def _assemble_scene_bundle(
         institute_id=institute_id,
         patient_id=patient_id,
         visit_id=visit_id,
+        material_snapshot=material_snapshot,
     )
     source_documents = _build_document_inventory(docs, source_schema)
     timeline_facts = _build_timeline_facts_from_docs(docs)
@@ -1992,6 +2467,7 @@ def assemble_domain_bundle(
     visit_id: str,
     policy_version: str = "",
     source_schema: str | None = None,
+    material_snapshot: _MaterialSnapshot | None = None,
 ) -> dict[str, Any]:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
@@ -2002,8 +2478,9 @@ def assemble_domain_bundle(
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
     docs: dict[str, list[dict[str, Any]]] = {}
     for table_name in priority:
-        docs[table_name] = _select_records(
-            schema=effective_schema,
+        docs[table_name] = _material_rows(
+            material_snapshot=material_snapshot,
+            source_schema=effective_schema,
             table=table_name,
             institute_id=institute_id,
             patient_id=patient_id,
@@ -2214,6 +2691,192 @@ def refresh_domain_bundles_for_rows(
                     raise
 
     return {"processed": processed, "updated": updated, "failed": failed, "skipped": skipped}
+
+
+def refresh_all_bundle_variants_for_rows(
+    *,
+    rows: list[dict[str, Any]],
+    policy_version: str = "",
+    source_schema: str | None = None,
+    bundle_schema: str = "public",
+    trigger_source: str = "sync",
+    job_id: str = "",
+    continue_on_error: bool = True,
+    scenes: list[str] | tuple[str, ...] | None = None,
+    domains: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """以病例级短生命周期快照统一刷新 scene 与 domain bundles。"""
+
+    effective_source_schema = source_schema or _default_source_schema()
+    requested_scenes = tuple(("running", "final") if scenes is None else scenes)
+    requested_domains = tuple(
+        sorted(_DOMAIN_DOC_PRIORITY.keys()) if domains is None else domains
+    )
+
+    target_scenes: list[str] = []
+    for scene in requested_scenes:
+        if scene not in _SCENE_BUNDLE_TABLE:
+            if _pg_required_in_current_env():
+                raise ValueError(f"Unsupported scene for bundle refresh: {scene}")
+            continue
+        target_scenes.append(scene)
+
+    target_domains: list[str] = []
+    for execution_domain in requested_domains:
+        if execution_domain not in _DOMAIN_DOC_PRIORITY:
+            if _pg_required_in_current_env():
+                raise ValueError(f"Unsupported domain for bundle refresh: {execution_domain}")
+            continue
+        target_domains.append(execution_domain)
+
+    if target_scenes:
+        ensure_scene_bundle_tables(schema=bundle_schema)
+    if target_domains:
+        ensure_domain_bundle_tables(schema=bundle_schema)
+
+    scene_counts = {
+        scene: {"processed": 0, "updated": 0, "failed": 0, "skipped": 0}
+        for scene in target_scenes
+    }
+    domain_counts = {
+        execution_domain: {"processed": 0, "updated": 0, "failed": 0, "skipped": 0}
+        for execution_domain in target_domains
+    }
+    material_limits = _material_limits_for_variants(
+        scenes=target_scenes,
+        domains=target_domains,
+    )
+    material_reads = 0
+    processed_visits = 0
+    skipped_rows = 0
+    seen: set[tuple[str, str, str]] = set()
+
+    for row in rows or []:
+        institute_id = str(row.get("institute_id") or "").strip()
+        patient_id = str(row.get("patient_id") or "").strip()
+        visit_id = str(row.get("visit_id") or "").strip()
+        if not (institute_id and patient_id and visit_id):
+            skipped_rows += 1
+            for counts in (*scene_counts.values(), *domain_counts.values()):
+                counts["skipped"] += 1
+            continue
+        visit_key = (institute_id, patient_id, visit_id)
+        if visit_key in seen:
+            continue
+        seen.add(visit_key)
+        processed_visits += 1
+
+        material_snapshot = _build_material_snapshot(
+            source_schema=effective_source_schema,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            table_limits=material_limits,
+        )
+        material_reads += material_snapshot.material_reads
+
+        for scene in target_scenes:
+            counts = scene_counts[scene]
+            counts["processed"] += 1
+            try:
+                bundle = _assemble_scene_bundle(
+                    scene=scene,
+                    source_schema=effective_source_schema,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    policy_version=policy_version,
+                    material_snapshot=material_snapshot,
+                )
+                _upsert_scene_bundle(
+                    scene=scene,
+                    bundle=bundle,
+                    bundle_schema=bundle_schema,
+                )
+                counts["updated"] += 1
+                if scene in {"running", "final", "frontpage", "coding"}:
+                    mark_bundle_refresh_success(
+                        scene=scene,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        resolved_by=str(trigger_source or "sync"),
+                        job_id=str(job_id or ""),
+                    )
+            except Exception as exc:
+                counts["failed"] += 1
+                logger.warning(
+                    "unified bundle refresh failed scene=%s visit=(%s,%s,%s) "
+                    "source_schema=%s bundle_schema=%s error=%s",
+                    scene,
+                    institute_id,
+                    patient_id,
+                    visit_id,
+                    effective_source_schema,
+                    bundle_schema,
+                    exc,
+                )
+                if scene in {"running", "final", "frontpage", "coding"}:
+                    record_bundle_refresh_failure(
+                        scene=scene,
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        policy_version=str(policy_version or ""),
+                        source_schema=effective_source_schema,
+                        bundle_schema=bundle_schema,
+                        trigger_source=str(trigger_source or "sync"),
+                        error_stage="assemble_or_upsert",
+                        error_message=str(exc),
+                        error_detail={"scene": scene, "trigger_source": trigger_source},
+                        job_id=str(job_id or ""),
+                    )
+                if not continue_on_error:
+                    raise
+
+        for execution_domain in target_domains:
+            counts = domain_counts[execution_domain]
+            counts["processed"] += 1
+            try:
+                bundle = assemble_domain_bundle(
+                    execution_domain=execution_domain,
+                    source_schema=effective_source_schema,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    policy_version=policy_version,
+                    material_snapshot=material_snapshot,
+                )
+                _upsert_domain_bundle(
+                    execution_domain=execution_domain,
+                    bundle=bundle,
+                    bundle_schema=bundle_schema,
+                )
+                counts["updated"] += 1
+            except Exception as exc:
+                counts["failed"] += 1
+                logger.warning(
+                    "unified domain bundle refresh failed domain=%s visit=(%s,%s,%s) "
+                    "source_schema=%s bundle_schema=%s trigger=%s error=%s",
+                    execution_domain,
+                    institute_id,
+                    patient_id,
+                    visit_id,
+                    effective_source_schema,
+                    bundle_schema,
+                    trigger_source,
+                    exc,
+                )
+                if not continue_on_error:
+                    raise
+
+    return {
+        "processed": processed_visits,
+        "skipped": skipped_rows,
+        "material_reads": material_reads,
+        "scenes": scene_counts,
+        "domains": domain_counts,
+    }
 
 
 def load_or_assemble_domain_bundle(

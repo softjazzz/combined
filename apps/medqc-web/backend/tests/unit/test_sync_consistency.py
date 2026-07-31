@@ -553,6 +553,51 @@ def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
     assert "ON CONFLICT (institute_id, patient_id, visit_id)" in executed_sql[0]
 
 
+def test_upsert_to_local_batches_rows_with_the_same_column_shape(monkeypatch):
+    executed_params = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, _stmt, params=None):
+            executed_params.append(params)
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "name"],
+            ["institute_id", "patient_id", "visit_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="mr",
+        records=[
+            {"institute_id": "A", "patient_id": "P1", "visit_id": "V1", "name": "甲"},
+            {"institute_id": "A", "patient_id": "P2", "visit_id": "V2", "name": "乙"},
+            {"institute_id": "A", "patient_id": "P3", "visit_id": "V3", "name": "丙"},
+        ],
+        primary_keys=["patient_id", "visit_id"],
+        batch_size=500,
+    )
+
+    assert count == 3
+    assert len(executed_params) == 1
+    assert isinstance(executed_params[0], list)
+    assert [row["visit_id"] for row in executed_params[0]] == ["V1", "V2", "V3"]
+
+
 def test_upsert_to_local_derives_labtest_document_id_from_source_keys(monkeypatch):
     executed_params: list[dict] = []
 
@@ -1254,6 +1299,131 @@ def test_upsert_to_local_raises_when_records_cannot_match_local_primary_keys(mon
             ],
             primary_keys=["patient_id", "visit_id", "document_id"],
         )
+
+
+def test_sync_table_candidate_fields_do_not_enable_incremental_strategy():
+    tables = etl_sync.list_sync_tables()
+
+    assert tables
+    assert all(
+        table["incremental_strategy"] == "full_visit_reload"
+        for table in tables
+    )
+    assert all("watermark_columns" in table for table in tables)
+    assert all("schema_version" in table for table in tables)
+
+
+def test_upsert_to_local_external_session_does_not_commit(monkeypatch):
+    class _ExternalSession:
+        def __init__(self):
+            self.commit_calls = 0
+            self.execute_calls = 0
+
+        def execute(self, _stmt, _params=None):
+            self.execute_calls += 1
+
+        def commit(self):
+            self.commit_calls += 1
+
+    external = _ExternalSession()
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id"],
+            ["institute_id", "patient_id", "visit_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        "mr",
+        [{"institute_id": "H1", "patient_id": "P1", "visit_id": "V1"}],
+        ["patient_id", "visit_id"],
+        session=external,
+    )
+
+    assert count == 1
+    assert external.execute_calls == 1
+    assert external.commit_calls == 0
+
+
+def test_fetch_remote_rows_by_visit_keys_applies_explicit_watermark(monkeypatch):
+    executed = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((str(sql), list(params or [])))
+
+        def fetchall(self):
+            return []
+
+        def close(self):
+            return None
+
+    class _Connection:
+        def cursor(self, cursor_factory=None):
+            return _Cursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        etl_sync.psycopg2,
+        "connect",
+        lambda *_args, **_kwargs: _Connection(),
+    )
+    monkeypatch.setattr(etl_sync, "_remote_column_exists", lambda *_args: True)
+    watermark = __import__("datetime").datetime(2026, 7, 31, 8, 0)
+
+    etl_sync.fetch_remote_rows_by_visit_keys(
+        remote_url="postgresql://source",
+        remote_schema="public",
+        source_table="daily_course_record",
+        visit_keys=[("P1", "V1")],
+        watermark_column="update_time",
+        watermark_after=watermark,
+    )
+
+    assert "update_time >= %s" in executed[0][0]
+    assert executed[0][1][-1] == watermark
+
+
+def test_fetch_remote_rows_by_visit_keys_full_reload_has_no_time_condition(monkeypatch):
+    executed = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append(str(sql))
+
+        def fetchall(self):
+            return []
+
+        def close(self):
+            return None
+
+    class _Connection:
+        def cursor(self, cursor_factory=None):
+            return _Cursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        etl_sync.psycopg2,
+        "connect",
+        lambda *_args, **_kwargs: _Connection(),
+    )
+    monkeypatch.setattr(etl_sync, "_remote_column_exists", lambda *_args: True)
+
+    etl_sync.fetch_remote_rows_by_visit_keys(
+        remote_url="postgresql://source",
+        remote_schema="public",
+        source_table="daily_course_record",
+        visit_keys=[("P1", "V1")],
+    )
+
+    assert " >= %s" not in executed[0]
 
 
 def test_sync_run_history_persists_and_caps_records(monkeypatch):

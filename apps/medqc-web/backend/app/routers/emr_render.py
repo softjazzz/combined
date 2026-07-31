@@ -12,6 +12,7 @@ from ..services.bundles.emr_view import (
     pick_document,
     build_render_view,
 )
+from ..services.custom_qc_workspace_service import build_customer_safe_source_ref
 
 router = APIRouter(prefix="/api/v1/emr", tags=["emr"])
 logger = logging.getLogger(__name__)
@@ -53,12 +54,19 @@ def _load_documents_from_bundle(
         return _build_empty_documents_payload("missing_bundle_identity")
 
     try:
-        return load_bundle_documents(
+        payload = load_bundle_documents(
             institute_id=normalized_institute_id,
             patient_id=normalized_patient_id,
             visit_id=normalized_visit_id,
             bundle_schema="public",
         )
+        for document in list(payload.get("documents") or []):
+            if not isinstance(document, dict):
+                continue
+            source_document_id = str(document.get("document_id") or "").strip()
+            if source_document_id:
+                document["source_ref"] = build_customer_safe_source_ref(source_document_id)
+        return payload
     except Exception as exc:
         logger.warning("加载 bundle 文书失败: %s", exc)
         return _build_empty_documents_payload("bundle_load_failed")

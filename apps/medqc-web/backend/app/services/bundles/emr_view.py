@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from .assembly import assemble_domain_bundle, load_domain_bundle, load_or_assemble_domain_bundle
+from .contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 
 _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "admission",
@@ -372,6 +373,11 @@ def _normalize_source_document(
         "source_fields": source_fields,
         "assembly_status": _safe_text(raw_doc.get("assembly_status")),
         "data_quality_flags": list(raw_doc.get("data_quality_flags") or []),
+        "authors": list(raw_doc.get("authors") or []),
+        "signatures": list(raw_doc.get("signatures") or []),
+        "participants": list(raw_doc.get("participants") or []),
+        "report_items": list(raw_doc.get("report_items") or []),
+        "report_metadata": dict(raw_doc.get("report_metadata") or {}),
         "source": "bundle",
     }
 
@@ -653,6 +659,8 @@ def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) 
 def _course_bundle_needs_exam_lab_refresh(bundle: dict[str, Any] | None) -> bool:
     if not isinstance(bundle, dict):
         return False
+    if _safe_text(bundle.get("bundle_schema_version")) != BUNDLE_SCHEMA_VERSION_CURRENT:
+        return True
     structured_context = bundle.get("structured_context")
     if not isinstance(structured_context, dict):
         return True

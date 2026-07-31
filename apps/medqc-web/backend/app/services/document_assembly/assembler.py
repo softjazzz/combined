@@ -9,6 +9,7 @@ from typing import Any
 COMMON_META_FIELDS: tuple[str, ...] = (
     "document_id",
     "document_title",
+    "document_status",
     "record_time",
     "record_datetime",
     "round_datetime",
@@ -17,6 +18,47 @@ COMMON_META_FIELDS: tuple[str, ...] = (
     "last_modified_datetime",
     "last_modified_time",
     "update_time",
+    "submitter",
+    "submitter_id",
+    "last_modifier",
+    "last_modifier_id",
+    "recorder",
+    "recorder_id",
+    "signer",
+    "signer_id",
+    "physician_sign",
+    "physician_sign_datetime",
+    "resident_physician_sign",
+    "attending_physician_sign",
+    "chief_physician_sign",
+    "surgeon_sign",
+    "anesthetist_sign",
+    "patient_sign",
+    "responsible_nurse_sign",
+    "deptdirector_sign",
+    "QC_physician_sign",
+    "QC_nurse_sign",
+    "coder_sign",
+    "archive_sign",
+    "print_sign",
+    "main_surgery_sign",
+    "death_autopsy_sign",
+    "allergy_sign",
+    "skintest_sign",
+    "sign_datetime",
+    "signature_datetime",
+    "surgeon",
+    "surgeon_physician_code",
+    "first_assistant",
+    "second_assistant",
+    "anesthesiologist",
+    "anesthesiologist_code",
+    "host_name",
+    "discuss_staff",
+    "request_physician",
+    "prescribed_doctor",
+    "reviewer",
+    "verifier",
 )
 
 _TEXT_CANDIDATES: tuple[str, ...] = (
@@ -29,6 +71,101 @@ _TEXT_CANDIDATES: tuple[str, ...] = (
     "original_text",
     "follow_up_visit_content",
 )
+
+_AUTHOR_FIELDS: tuple[tuple[str, str | None], ...] = (
+    ("submitter", "submitter_id"),
+    ("last_modifier", "last_modifier_id"),
+    ("recorder", "recorder_id"),
+)
+
+_SIGNATURE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("signer", "signer"),
+    ("physician_sign", "physician"),
+    ("resident_physician_sign", "resident_physician"),
+    ("attending_physician_sign", "attending_physician"),
+    ("chief_physician_sign", "chief_physician"),
+    ("surgeon_sign", "surgeon"),
+    ("anesthetist_sign", "anesthetist"),
+    ("patient_sign", "patient"),
+    ("responsible_nurse_sign", "responsible_nurse"),
+    ("deptdirector_sign", "department_director"),
+    ("QC_physician_sign", "qc_physician"),
+    ("QC_nurse_sign", "qc_nurse"),
+    ("coder_sign", "coder"),
+    ("archive_sign", "archiver"),
+    ("print_sign", "printer"),
+)
+
+_PARTICIPANT_FIELDS: tuple[tuple[str, str, str | None], ...] = (
+    ("surgeon", "surgeon", "surgeon_physician_code"),
+    ("first_assistant", "first_assistant", None),
+    ("second_assistant", "second_assistant", None),
+    ("anesthesiologist", "anesthesiologist", "anesthesiologist_code"),
+    ("host_name", "discussion_host", None),
+    ("discuss_staff", "discussion_staff", None),
+    ("request_physician", "request_physician", None),
+    ("prescribed_doctor", "prescribed_doctor", None),
+    ("reviewer", "reviewer", None),
+    ("verifier", "verifier", None),
+)
+
+
+def _identity_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def extract_document_identity_metadata(
+    row: dict[str, Any] | None,
+) -> dict[str, list[dict[str, str]]]:
+    """保留作者、明确签名和业务参与人，三类身份语义不得混用。"""
+
+    payload = dict(row or {})
+    authors: list[dict[str, str]] = []
+    signatures: list[dict[str, str]] = []
+    participants: list[dict[str, str]] = []
+
+    for name_field, code_field in _AUTHOR_FIELDS:
+        name = _identity_text(payload.get(name_field))
+        if not name:
+            continue
+        item = {"role": name_field, "name": name}
+        code = _identity_text(payload.get(code_field)) if code_field else ""
+        if code:
+            item["code"] = code
+        authors.append(item)
+
+    generic_signed_at = _identity_text(
+        payload.get("sign_datetime") or payload.get("signature_datetime")
+    )
+    for source_field, role in _SIGNATURE_FIELDS:
+        name = _identity_text(payload.get(source_field))
+        if not name:
+            continue
+        item = {"role": role, "name": name, "source_field": source_field}
+        signed_at = (
+            _identity_text(payload.get("physician_sign_datetime"))
+            if source_field == "physician_sign"
+            else generic_signed_at
+        )
+        if signed_at:
+            item["signed_at"] = signed_at
+        signatures.append(item)
+
+    for name_field, role, code_field in _PARTICIPANT_FIELDS:
+        name = _identity_text(payload.get(name_field))
+        if not name:
+            continue
+        item = {"role": role, "name": name}
+        code = _identity_text(payload.get(code_field)) if code_field else ""
+        if code:
+            item["code"] = code
+        participants.append(item)
+
+    return {
+        "authors": authors,
+        "signatures": signatures,
+        "participants": participants,
+    }
 
 _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
     "admission_record_diagnosis": (
@@ -266,6 +403,18 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     "blood_application": (
         "application_id",
+        "inpat_no",
+        "dept_name",
+        "name",
+        "sex",
+        "age_year",
+        "patient_bloodtype_abo",
+        "patient_bloodtype_rhd",
+        "transfuse_variety",
+        "transfuse_volume",
+        "transfuse_volume_unit",
+        "request_datetime",
+        "physician_name",
         "apply_no",
         "blood_type",
         "blood_component",
@@ -378,6 +527,17 @@ _SECTION_LABELS: dict[str, str] = {
     "review_datetime": "审核时间",
     "reviewer": "审核者",
     "application_id": "申请号",
+    "inpat_no": "住院号",
+    "dept_name": "科室",
+    "name": "患者姓名",
+    "sex": "性别",
+    "age_year": "年龄",
+    "patient_bloodtype_abo": "ABO血型",
+    "patient_bloodtype_rhd": "Rh血型",
+    "transfuse_variety": "输血品种",
+    "transfuse_volume": "输血剂量",
+    "transfuse_volume_unit": "剂量单位",
+    "physician_name": "申请医师",
     "request_surgery_datetime": "申请手术时间",
     "surgery_name": "手术名称",
     "surgery_code": "手术编码",
@@ -626,7 +786,18 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
         AssemblyFieldSpec("record_content"),
     ),
     "blood_application": (
-        AssemblyFieldSpec("application_id"),
+        AssemblyFieldSpec("inpat_no"),
+        AssemblyFieldSpec("dept_name"),
+        AssemblyFieldSpec("name"),
+        AssemblyFieldSpec("sex"),
+        AssemblyFieldSpec("age_year"),
+        AssemblyFieldSpec("patient_bloodtype_abo"),
+        AssemblyFieldSpec("patient_bloodtype_rhd"),
+        AssemblyFieldSpec("transfuse_variety"),
+        AssemblyFieldSpec("transfuse_volume"),
+        AssemblyFieldSpec("transfuse_volume_unit"),
+        AssemblyFieldSpec("request_datetime"),
+        AssemblyFieldSpec("physician_name"),
         AssemblyFieldSpec("apply_no"),
         AssemblyFieldSpec("blood_type"),
         AssemblyFieldSpec("blood_component"),
@@ -959,6 +1130,12 @@ def _resolve_display_times(
     elif document_type == "surgery_application":
         # 手术申请单没有通用记录时间时，申请时间是最接近该申请事件的展示时间。
         order_display_time = _normalize_text(row.get("request_datetime"))
+    elif document_type == "blood_application":
+        order_display_time = _normalize_text(
+            row.get("request_datetime")
+            or row.get("apply_datetime")
+            or row.get("application_datetime")
+        )
     elif document_type == "exam_master":
         order_display_time = _normalize_text(
             row.get("report_time")
@@ -992,7 +1169,7 @@ def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
         # 两个领域包会复用同一病理行；缺少该回退时，展示层只能按包内序号生成
         # 临时键，因而无法折叠跨领域重复投影。
         return document_id or _normalize_text(payload.get("pathology_exam_id"))
-    if document_type == "surgery_application":
+    if document_type in {"surgery_application", "blood_application"}:
         return document_id or _merge_field_text(payload, "application_id", "order_id")
     if document_type == "exam_master":
         return document_id or _merge_field_text(payload, "exam_id", "order_id")

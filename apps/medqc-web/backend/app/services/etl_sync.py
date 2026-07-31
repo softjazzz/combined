@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import Callable, Dict, List, Optional, Any, Tuple
@@ -48,6 +49,10 @@ _SCENE_ANCHOR_TABLES = {
     "settlement": {"medical_insurance_settlement"},
     "both": {"admission_record", "discharge_record", "mr"},
 }
+_SUPPORTED_INCREMENTAL_STRATEGIES = frozenset(
+    {"updated_at", "append_only_record_time", "full_visit_reload"}
+)
+_SYNC_CURSOR_SCHEMA_VERSION = "sample-sync-v1"
 
 # 源库字段与本地 CDM 列名不一致时的同步映射（目标列 -> 源候选列）。
 # 仅在目标列存在、本条记录未携带目标列时生效。
@@ -1127,6 +1132,7 @@ SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
         "description": "客户样本验证专用，覆盖已纳管 CDM 证据域",
         "table_names": [
             "mr",
+            "inpat_registration",
             "diagnosis",
             "mr_diagnosis",
             "mr_surgery",
@@ -1213,6 +1219,13 @@ SYNC_TABLES = [
         "key_fields": ["patient_id", "visit_id"],
     },
     # ---- 入院 / 出院 / 死亡 ----
+    {
+        "name": "inpat_registration",
+        "label": "住院登记",
+        "procedure": "web.inpat_registration",
+        "params": 1,
+        "key_fields": ["institute_id", "patient_id", "visit_id"],
+    },
     {
         "name": "admission_record",
         "label": "入院记录",
@@ -1629,6 +1642,10 @@ for _item in SYNC_TABLES:
     _item.setdefault("date_field", "update_time")
     _item.setdefault("fallback_date_field", None)
     _item.setdefault("enabled", _name in _CORE_ENABLED_TABLES)
+    # 增量能力必须由代码显式批准。date_field/候选时间列不能自动提升同步策略。
+    _item.setdefault("incremental_strategy", "full_visit_reload")
+    _item.setdefault("watermark_columns", [])
+    _item.setdefault("schema_version", _SYNC_CURSOR_SCHEMA_VERSION)
 
 _CDM_SYNC_TABLE_NAMES = {
     str(item.get("name") or "").strip()
@@ -1698,7 +1715,22 @@ _apply_sync_table_overrides()
 
 
 def list_sync_tables() -> List[Dict[str, Any]]:
-    return [dict(item) for item in SYNC_TABLES]
+    return [
+        {
+            **dict(item),
+            "incremental_strategy": (
+                str(item.get("incremental_strategy") or "full_visit_reload")
+                if str(item.get("incremental_strategy") or "full_visit_reload")
+                in _SUPPORTED_INCREMENTAL_STRATEGIES
+                else "full_visit_reload"
+            ),
+            "watermark_columns": list(item.get("watermark_columns") or []),
+            "schema_version": str(
+                item.get("schema_version") or _SYNC_CURSOR_SCHEMA_VERSION
+            ),
+        }
+        for item in SYNC_TABLES
+    ]
 
 
 def save_sync_tables_config(updates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2282,6 +2314,8 @@ def fetch_remote_rows_by_visit_keys(
     remote_schema: str,
     source_table: str,
     visit_keys: List[Tuple[str, str]],
+    watermark_column: Optional[str] = None,
+    watermark_after: Optional[datetime] = None,
 ) -> List[Dict]:
     if not visit_keys:
         return []
@@ -2295,6 +2329,15 @@ def fetch_remote_rows_by_visit_keys(
             cursor, remote_schema, source_table, "visit_id"
         ):
             raise ValueError(f"{source_table} 缺少 patient_id/visit_id 字段，无法按病例集合抽取")
+        watermark_ident = ""
+        if watermark_column:
+            watermark_ident = _safe_identifier(watermark_column)
+            if not _remote_column_exists(
+                cursor, remote_schema, source_table, watermark_column
+            ):
+                raise ValueError(
+                    f"{source_table} 缺少受控水位字段 {watermark_column}，无法执行增量抽取"
+                )
 
         all_rows: List[Dict] = []
         for chunk in _chunk_visit_keys(visit_keys):
@@ -2306,6 +2349,9 @@ def fetch_remote_rows_by_visit_keys(
                 f"SELECT * FROM {schema_ident}.{table_ident} "
                 f"WHERE (patient_id::text, visit_id::text) IN ({placeholders})"
             )
+            if watermark_ident and watermark_after is not None:
+                sql += f" AND {watermark_ident} >= %s"
+                params.append(watermark_after)
             cursor.execute(sql, params)
             rows = cursor.fetchall() or []
             all_rows.extend([dict(row) for row in rows])
@@ -2474,7 +2520,14 @@ def validate_pg_sync_plan(
             local_session.close()
 
 
-def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str]) -> int:
+def upsert_to_local(
+    table_name: str,
+    records: List[Dict],
+    primary_keys: List[str],
+    *,
+    batch_size: int = 1,
+    session: Optional[Session] = None,
+) -> int:
     """将数据写入本地 PG（按本地真实主键 UPSERT）。"""
     if not records:
         return 0
@@ -2483,8 +2536,10 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
     for key in requested_primary_keys:
         _safe_identifier(key)
 
-    with Session(engine) as session:
-        local_schema, local_columns, local_primary_keys = _get_local_table_meta(session, table_name)
+    owns_session = session is None
+    session_context = Session(engine) if owns_session else nullcontext(session)
+    with session_context as active_session:
+        local_schema, local_columns, local_primary_keys = _get_local_table_meta(active_session, table_name)
         if not local_schema:
             raise ValueError(f"表 {table_name} 本地目标 schema 未命中，无法执行 UPSERT")
         if not local_primary_keys:
@@ -2507,7 +2562,8 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
         table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
         existing_columns = set(local_columns)
 
-        inserted = 0
+        normalized_batch_size = max(1, min(int(batch_size), 2000))
+        grouped_rows: Dict[Tuple[str, ...], List[Dict[str, Any]]] = {}
         skipped_empty_rows = 0
         skipped_missing_pk_rows = 0
         missing_pk_names: set[str] = set()
@@ -2532,7 +2588,12 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
                 missing_pk_names.update(row_missing_pks)
                 continue
 
-            columns = list(filtered.keys())
+            column_shape = tuple(filtered.keys())
+            grouped_rows.setdefault(column_shape, []).append(filtered)
+
+        inserted = sum(len(rows) for rows in grouped_rows.values())
+        for column_shape, rows_with_same_shape in grouped_rows.items():
+            columns = list(column_shape)
             placeholders = ", ".join([f":{c}" for c in columns])
             col_list = ", ".join([_safe_identifier(c) for c in columns])
             conflict_clause = ", ".join([_safe_identifier(k) for k in effective_primary_keys])
@@ -2551,10 +2612,12 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
                     f"ON CONFLICT ({conflict_clause}) DO NOTHING"
                 )
 
-            session.execute(text(sql), filtered)
-            inserted += 1
+            for start in range(0, len(rows_with_same_shape), normalized_batch_size):
+                chunk = rows_with_same_shape[start : start + normalized_batch_size]
+                active_session.execute(text(sql), chunk if len(chunk) > 1 else chunk[0])
 
-        session.commit()
+        if owns_session:
+            active_session.commit()
         if inserted == 0 and records:
             if skipped_missing_pk_rows:
                 missing_keys = ", ".join(sorted(missing_pk_names))
