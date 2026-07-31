@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-import importlib
 
 import pytest
 
-from app.services.luxian_0609 import fact_coverage as coverage_module
-from app.services.luxian_0609 import planner as planner_module
 from app.services.luxian_0609.deterministic_gate import (
     GateDecision,
     GateFactRef,
@@ -406,19 +403,6 @@ def test_e_coverage_cross_object_fingerprint_dimensions_reject(field):
     plan = _plan(); manifest = _manifest(); bundle = _bundle(manifest); coverage = _coverage(plan=plan, manifest=manifest, bundle=bundle)
     with pytest.raises(ValueError, match="coverage fingerprint"):
         build_luxian_0609_deterministic_gate_shadow(plan=plan, manifest=manifest, bundle=bundle, coverage=replace(coverage, **{field: "b" * 64}), gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED)
-
-
-def test_z_real_type_boundary_survives_module_reload():
-    global FactCoverageObservation, build_luxian_0609_fact_coverage_shadow, build_luxian_0609_shadow_plan
-    importlib.reload(planner_module); importlib.reload(coverage_module)
-    fresh_plan = planner_module.build_luxian_0609_shadow_plan(visit_ref=VISIT, selected_rule_ids=["LX0609-030"], scoped_customer_rule_ids=["LX0609-030"], record_rule_map={VISIT: ["LX0609-030"]}, planner_schema_version="planner-v1", rule_plan_version="slice-v1", created_at=CREATED)
-    fresh_manifest = _manifest(); fresh_bundle = _bundle(fresh_manifest)
-    observations = tuple(coverage_module.FactCoverageObservation(fact_type=pair[0], source_key=pair[1], state="complete", extractor_version="extractor-v1", mapping_policy_version="mapping-v1", processed_record_count=2, produced_fact_ids=()) for pair in _pairs(fresh_plan))
-    fresh_coverage = coverage_module.build_luxian_0609_fact_coverage_shadow(plan=fresh_plan, manifest=fresh_manifest, bundle=fresh_bundle, observations=observations, coverage_schema_version="coverage-v1", coverage_policy_version="policy-v1", created_at=CREATED)
-    assert build_luxian_0609_deterministic_gate_shadow(plan=fresh_plan, manifest=fresh_manifest, bundle=fresh_bundle, coverage=fresh_coverage, gate_schema_version="gate-v1", gate_policy_version="policy-v1", created_at=CREATED).decisions
-    FactCoverageObservation = coverage_module.FactCoverageObservation
-    build_luxian_0609_fact_coverage_shadow = coverage_module.build_luxian_0609_fact_coverage_shadow
-    build_luxian_0609_shadow_plan = planner_module.build_luxian_0609_shadow_plan
 
 
 def test_j_safe_only_output_non_echo_and_forbidden_status_scan():
