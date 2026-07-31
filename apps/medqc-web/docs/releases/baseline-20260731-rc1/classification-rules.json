@@ -100,6 +100,13 @@
       "reason": "实际环境配置必须由部署侧注入，不提交工作区值"
     },
     {
+      "pattern": "apps/medqc-web/.gitignore",
+      "category": "B",
+      "owner": "发布源码治理",
+      "release_required": true,
+      "reason": "隔离本地产物、历史交付包和临时验证输出"
+    },
+    {
       "pattern": "apps/medqc-web/backend/.env.example",
       "category": "B",
       "owner": "后端部署配置",

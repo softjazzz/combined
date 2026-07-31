@@ -113,6 +113,17 @@ src/**/*.js.map
 # Temporary folders
 tmp/
 temp/
+/tmp-*
+/tmp_*
+
+# Local release and analysis artifacts
+/.codegraph/
+/.release-packages/
+/6.6.6304.400local.stat
+/inputstat.dat
+/sgim_punc.bin
+/share.config
+/*user.config
 
 # Upload directories
 uploads/

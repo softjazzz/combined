@@ -1,6 +1,8 @@
 param(
   [string]$OutputRoot = "D:\LLM\LX888\release",
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [string]$InventoryPath = "",
+  [switch]$AllowDirty
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,7 +10,12 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent (Split-Path -Parent $projectRoot)
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$releaseDir = Join-Path $OutputRoot "medqc-web-customer-$stamp"
+$releaseName = if ($AllowDirty) {
+  "NON-RELEASABLE-medqc-web-customer-$stamp"
+} else {
+  "medqc-web-customer-$stamp"
+}
+$releaseDir = Join-Path $OutputRoot $releaseName
 $backendDir = Join-Path $releaseDir "backend"
 $frontendDir = Join-Path $releaseDir "frontend"
 $toolsDir = Join-Path $releaseDir "tools"
@@ -86,6 +93,57 @@ function Assert-NoReleaseForbiddenContent([string]$path) {
     $sample = ($forbiddenFiles | Select-Object -First 10 | ForEach-Object { $_.FullName }) -join "`n"
     throw "Forbidden release files found:`n$sample"
   }
+
+  $frontendDist = Join-Path $path "frontend\dist"
+  if (Test-Path -LiteralPath $frontendDist) {
+    $forbiddenApiHits = @(
+      Get-ChildItem -LiteralPath $frontendDist -Recurse -File -Force |
+        Where-Object { $_.Extension -in @(".js", ".css", ".html", ".json") } |
+        Select-String -SimpleMatch "api.medqc.com" -List
+    )
+    if ($forbiddenApiHits.Count -gt 0) {
+      $sample = ($forbiddenApiHits | Select-Object -First 10 | ForEach-Object { $_.Path }) -join "`n"
+      throw "Forbidden public API domain found in customer frontend:`n$sample"
+    }
+  }
+}
+
+Write-Step "Verify release source state"
+if ([string]::IsNullOrWhiteSpace($InventoryPath)) {
+  $inventoryCandidate = Get-ChildItem `
+    -LiteralPath (Join-Path $projectRoot "docs\releases") `
+    -Filter "change-inventory.json" `
+    -File `
+    -Recurse `
+    -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 1
+  if ($null -eq $inventoryCandidate) {
+    throw "Release inventory not found. Pass -InventoryPath explicitly."
+  }
+  $resolvedInventoryPath = $inventoryCandidate.FullName
+} else {
+  $candidate = if ([System.IO.Path]::IsPathRooted($InventoryPath)) {
+    $InventoryPath
+  } else {
+    Join-Path $projectRoot $InventoryPath
+  }
+  $resolvedInventoryPath = (Resolve-Path -LiteralPath $candidate).Path
+}
+
+$sourceVerifyArgs = @(
+  (Join-Path $projectRoot "scripts\verify_release_source.py"),
+  "--repo",
+  $projectRoot,
+  "--inventory",
+  $resolvedInventoryPath
+)
+if ($AllowDirty) {
+  $sourceVerifyArgs += "--allow-dirty"
+}
+& python @sourceVerifyArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Release source verification failed."
 }
 
 if (-not $SkipBuild) {
@@ -193,6 +251,7 @@ $readmeLines = @(
   "# Customer deployment package",
   "",
   "Generated at: $generatedAt",
+  "Non-releasable development package: $($AllowDirty.IsPresent)",
   "",
   "## Directory layout",
   "- frontend/dist: frontend static assets",

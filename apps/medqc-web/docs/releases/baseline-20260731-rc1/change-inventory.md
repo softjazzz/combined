@@ -1,19 +1,17 @@
 # 发布基线改动清单
 
 - 候选标识：`baseline-20260731-rc1`
-- Git HEAD：`3f00cb52963826c378c124dfcae84d335acce772`
+- Git HEAD：`b89e2a065d1cc504253e8960af2db8dbb343a0e6`
 - 分支：`codex/lx0609-tech-debt-20260730`
-- 已跟踪改动：179
-- 未跟踪文件：163
+- 已跟踪改动：181
+- 未跟踪文件：35
 - 未分类：0
 
 | 类别 | 发布需要 | Git  | 路径                                                                                                               | 责任域           | 原因                                                        |
 | ---- | -------: | ---- | ------------------------------------------------------------------------------------------------------------------ | ---------------- | ----------------------------------------------------------- |
 | D    |       否 | `??` | `.worktrees`                                                                                                       | 本地工作树       | 本机 Git worktree 目录，不属于发布源码                      |
-| D    |       否 | `??` | `apps/medqc-web/.codegraph`                                                                                        | 代码索引         | CodeGraph 本机索引，不进入源码和交付包                      |
 | E    |       否 | ` M` | `apps/medqc-web/.env.production`                                                                                   | 前端环境配置     | 实际环境配置必须由部署侧注入，不提交工作区值                |
-| D    |       否 | `??` | `apps/medqc-web/.release-packages`                                                                                 | 历史交付产物     | 历史构建和交付目录，正式包从干净源码重新生成                |
-| D    |       否 | `??` | `apps/medqc-web/6.6.6304.400local.stat`                                                                            | 输入法本地文件   | 机器级输入法状态文件                                        |
+| B    |       是 | ` M` | `apps/medqc-web/.gitignore`                                                                                        | 发布源码治理     | 隔离本地产物、历史交付包和临时验证输出                      |
 | C    |       否 | ` M` | `apps/medqc-web/AGENTS.md`                                                                                         | 开发治理         | Agent 工作约束，不属于客户运行版本                          |
 | B    |       是 | ` M` | `apps/medqc-web/backend/.env.example`                                                                              | 后端部署配置     | 安全环境变量模板和部署边界                                  |
 | A    |       是 | ` M` | `apps/medqc-web/backend/app/core/settings.py`                                                                      | 后端发布功能     | 样本同步、Bundle、Native 规则、Envelope 或结果 API 运行代码 |
@@ -113,9 +111,9 @@
 | B    |       是 | ` M` | `apps/medqc-web/backend/tests/unit/test_luxian_0609_surgery_text_fact_contract.py`                                 | 后端测试         | 发布功能和结果链的回归证据                                  |
 | B    |       是 | ` M` | `apps/medqc-web/backend/tests/unit/test_qc_sample_pools_router.py`                                                 | 后端测试         | 发布功能和结果链的回归证据                                  |
 | B    |       是 | ` M` | `apps/medqc-web/backend/tests/unit/test_qc_sichuan_batch_throughput.py`                                            | 后端测试         | 发布功能和结果链的回归证据                                  |
-| B    |       是 | `??` | `apps/medqc-web/backend/tests/unit/test_release_baseline_inventory.py`                                             | 后端测试         | 发布功能和结果链的回归证据                                  |
 | B    |       是 | ` M` | `apps/medqc-web/backend/tests/unit/test_settings_llm_env_alias.py`                                                 | 后端测试         | 发布功能和结果链的回归证据                                  |
 | B    |       是 | ` M` | `apps/medqc-web/backend/tests/unit/test_sync_consistency.py`                                                       | 后端测试         | 发布功能和结果链的回归证据                                  |
+| B    |       是 | `??` | `apps/medqc-web/backend/tests/unit/test_verify_release_source.py`                                                  | 后端测试         | 发布功能和结果链的回归证据                                  |
 | B    |       是 | `??` | `apps/medqc-web/docs/0602/luxian0609-user-manual-assets`                                                           | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
 | B    |       是 | `??` | `apps/medqc-web/docs/0602/泸县0609客户样本验证用户使用手册.html`                                                   | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
 | B    |       是 | `??` | `apps/medqc-web/docs/0602/泸县0609质控点-客户业务口径反馈表-系统预填-v2.xlsx`                                      | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
@@ -127,13 +125,9 @@
 | B    |       是 | `??` | `apps/medqc-web/docs/plans/2026-07-29-lx0609-result-chain-stabilization-ledger.md`                                 | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
 | B    |       是 | `??` | `apps/medqc-web/docs/plans/2026-07-29-lx0609-single-record-result-vertical-slice.md`                               | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
 | B    |       是 | `??` | `apps/medqc-web/docs/plans/2026-07-31-qc-rule-defined-scope-development-task.md`                                   | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
-| B    |       是 | `??` | `apps/medqc-web/docs/plans/2026-07-31-release-baseline-debt-clearance-plan.md`                                     | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
-| B    |       是 | `??` | `apps/medqc-web/docs/releases`                                                                                     | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
-| D    |       否 | `??` | `apps/medqc-web/inputstat.dat`                                                                                     | 输入法本地文件   | 机器级输入法状态文件                                        |
+| B    |       是 | ` M` | `apps/medqc-web/docs/releases/baseline-20260731-rc1/classification-rules.json`                                     | 发布文档         | 规则范围、客户口径、部署或发布验收文档                      |
 | B    |       是 | ` M` | `apps/medqc-web/scripts/package-customer-release.ps1`                                                              | 发布脚本         | 客户版打包、基线盘点和发布门禁脚本                          |
-| B    |       是 | `??` | `apps/medqc-web/scripts/release_baseline_inventory.py`                                                             | 发布脚本         | 客户版打包、基线盘点和发布门禁脚本                          |
-| D    |       否 | `??` | `apps/medqc-web/sgim_punc.bin`                                                                                     | 输入法本地文件   | 机器级输入法数据文件                                        |
-| E    |       否 | `??` | `apps/medqc-web/share.config`                                                                                      | 机器级配置       | 本机共享配置，可能包含环境信息                              |
+| B    |       是 | `??` | `apps/medqc-web/scripts/verify_release_source.py`                                                                  | 发布脚本         | 客户版打包、基线盘点和发布门禁脚本                          |
 | D    |       否 | ` M` | `apps/medqc-web/src/components.d.ts`                                                                               | 前端生成文件     | 组件声明自动生成文件，开发环境已要求默认不生成              |
 | A    |       是 | `??` | `apps/medqc-web/src/domain/customer-qc/status-policy.ts`                                                           | 前端质控领域模型 | Canonical 状态展示策略                                      |
 | A    |       是 | ` M` | `apps/medqc-web/src/services/manual-case-sample-service.ts`                                                        | 前端样本服务     | 客户样本池 API 数据链                                       |
@@ -230,124 +224,4 @@
 | B    |       是 | `??` | `apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/CustomerQcResultDetailCard.spec.ts`                 | 前端测试         | 客户样本验证和结果展示的回归证据                            |
 | B    |       是 | ` M` | `apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/SemanticRulesBatchResultDrawer.spec.ts`             | 前端测试         | 客户样本验证和结果展示的回归证据                            |
 | B    |       是 | `??` | `apps/medqc-web/tests/unit/views/workstation-v4/semantic-rules/recordComparisonModel.spec.ts`                      | 前端测试         | 客户样本验证和结果展示的回归证据                            |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-after-aggregator-fix-logged-in.png`                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-after-aggregator-fix.png`                                                              | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-customer-validation-after-result-layout-change.png`                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-customer-validation.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-history-state-final.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-parent-child-seven-family.png`                                                         | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-281b25ec-b703-421e-bda6-eefc054707ff.png`                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-3a6372e5-9cfd-40f0-877e-b74aac1c35a5.png`                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-67ba04f7-a4b3-41ed-a99c-c1ec3f725888.png`                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-after-jobs-auth.png`                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-after-jobs.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-d0c4d962-25f6-44e3-b58e-b521918d2b78.png`                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-rerun-list.png`                                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-qc-review`                                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-after-tech-hide-2.png`                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-after-tech-hide.png`                                                            | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-cleanup-final.png`                                                              | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-detail-layout-after-fix.png`                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-detail-layout-check.png`                                                        | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-detail-layout-history-with-issues.png`                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-drawer-multirecord-smoke.png`                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-final.png`                                                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-result-issues.png`                                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-state-before-history.png`                                                              | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-stop-button-auth-fast.png`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-stop-button-auth-page.png`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-stop-button-page.png`                                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-stop-button-smoke.png`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-task-center-bottom-bar.png`                                                            | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-task-center-smoke.png`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-verify-customer-sample-after-commit.png`                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-browser-verify-system-config-after-commit.png`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-api-smoke.mjs`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-api-smoke.ps1`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-browser-check-after-fix.png`                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-browser-check.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-browser-verify-latest.png`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-copy-evidence-run-smoke.mjs`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-customer-sample-task-history-drawer.png`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-customer-sample-task-history-entry.png`                                                        | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-019-028-fix-rerun-20260709`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-019-028-fix-rerun-20260709-v2`                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-024-gate-check`                                                                         | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-028-two-record-rerun-after-incision-gate`                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-current-audit`                                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-five-record-run`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-random-family-run`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-random-review-current`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-surgery-family-10-20260709`                                                        | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-synthetic-v2`                                                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun`                                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun2`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun3`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun4`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun5`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun6`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun7`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-rerun8`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-0426-ten-record-run`                                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-LX0609-019-trace-after-persist-525c0fd0-6df9-4309-8c3c-1b1dd27894fa.json`       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-LX0609-019-trace-after-restart.json`                                            | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-LX0609-019-trace-rerun-c782feab-67b2-43e5-9af8-9df559046361.json`               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-rerun-after-gate-fix`                                                           | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-tumor-pathology-job.json`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-tumor-pathology-rerun-after-trace-525c0fd0-6df9-4309-8c3c-1b1dd27894fa.json`    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2032008-tumor-pathology-rerun-c782feab-67b2-43e5-9af8-9df559046361.json`                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-2287309-seven-family-run`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-result-20260710-161743.json`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-result-20260710-233522.json`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-result-20260710-233922.json`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-result-20260710-234423.json`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-summary-20260710-161743.md`                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-summary-20260710-233522.md`                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-summary-20260710-233922.md`                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/ab-summary-20260710-234423.md`                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/full-text-summary-20260710-162447.json`                                         | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/latest.json`                                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-ab-test/latest.md`                                                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-context-gate-poc`                                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-fact-model-benchmark`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-family-validation`                                                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-llm-gate-rerun-20260709`                                                                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-perf-rulesets.json`                                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-perf-run-start.json`                                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-performance-profile-20260709`                                                           | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-profile-check-20260710`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-profile-check-20260710-after-fix`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-profile-check-20260710-final`                                                           | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-qwen36-probe-20260709`                                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-qwen36-run-20260709`                                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-select-all-families.png`                                                                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-seven-family-ten-record-afterfix-20260708`                                              | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-seven-family-ten-record-concurrent-trace-20260708`                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-seven-family-ten-record-regression`                                                     | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-seven-family-ten-record-regression-20260708-r2`                                         | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-seven-family-ten-record-regression-20260708-r2-afterfix`                                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-surgery-rerun-20260709`                                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-lx0609-surgery-rerun-stability-20260709`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-qc-359787-job.json`                                                                            | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-rerun-2032008-after-fix.mjs`                                                                   | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-component-layer-after-skill.png`                                                 | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-component-layer.png`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-layout-after-overview.png`                                                       | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-layout-stats.json`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-layout-viewport.png`                                                             | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-no-occlusion-check.png`                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-scroll-check-small.png`                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-scroll-check.png`                                                                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-result-review-scroll-fixed.png`                                                                | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-runtime-logs`                                                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-single-record-result`                                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-system-config-browser-check-expanded.png`                                                      | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-system-config-browser-check.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-task-detail-redesign`                                                                          | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-task-history-right-fit-1280.png`                                                               | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-task-history-right-fit.png`                                                                    | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp-visual-check`                                                                                  | 本地临时产物     | 浏览器截图、trace、探针和临时验证输出                       |
-| D    |       否 | `??` | `apps/medqc-web/tmp_latest_job_944ff.json`                                                                         | 本地临时产物     | 临时验证输出                                                |
-| E    |       否 | `??` | `apps/medqc-web/user.config`                                                                                       | 机器级配置       | 本机用户配置，不进入发布                                    |
-| E    |       否 | `??` | `apps/medqc-web/혰luser.config`                                                                                   | 机器级配置       | 异常命名的本机用户配置，不进入发布                          |
 | D    |       否 | `??` | `tmp-npm-single-record-panel`                                                                                      | 本地临时产物     | 仓库根目录临时验证产物                                      |
