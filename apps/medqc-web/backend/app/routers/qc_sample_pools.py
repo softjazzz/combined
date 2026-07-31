@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
@@ -17,6 +17,7 @@ from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_
 from ..routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
+    SampleSyncJobConflictError,
     build_sample_validation_execution_scope_hash,
     load_manual_case_rows_from_excel,
 )
@@ -179,6 +180,62 @@ class SamplePoolSyncRequest(BaseModel):
     )
 
 
+class SamplePoolAdmissionSyncRequest(BaseModel):
+    start_date: date = Field(..., description="入院日期开始，含当天")
+    end_date: date = Field(..., description="入院日期结束，含当天")
+    departments: list[str] = Field(default_factory=list, description="入院科室；为空表示全部科室")
+
+
+class SamplePoolHospitalizationScopeRequest(BaseModel):
+    scope_mode: str = Field(
+        default="active_and_discharged",
+        description="住院范围：active/discharged/active_and_discharged",
+    )
+    as_of_date: date = Field(..., description="当前在院统计日期")
+    discharge_start_date: Optional[date] = Field(default=None, description="出院日期开始，含当天")
+    discharge_end_date: Optional[date] = Field(default=None, description="出院日期结束，含当天")
+    departments: list[str] = Field(default_factory=list, description="有效科室；为空表示全部科室")
+
+
+def _normalize_hospitalization_scope_payload(
+    payload: SamplePoolHospitalizationScopeRequest,
+) -> Dict[str, Any]:
+    scope_mode = str(payload.scope_mode or "").strip().lower()
+    if scope_mode not in {"active", "discharged", "active_and_discharged"}:
+        raise HTTPException(status_code=422, detail="住院范围仅支持当前在院、期间出院或两者合并")
+    needs_discharge_range = scope_mode in {"discharged", "active_and_discharged"}
+    if needs_discharge_range and (
+        payload.discharge_start_date is None or payload.discharge_end_date is None
+    ):
+        raise HTTPException(status_code=422, detail="期间出院范围必须填写出院开始日期和结束日期")
+    if (
+        payload.discharge_start_date
+        and payload.discharge_end_date
+        and payload.discharge_start_date > payload.discharge_end_date
+    ):
+        raise HTTPException(status_code=422, detail="出院开始日期不能晚于结束日期")
+    if (
+        payload.discharge_start_date
+        and payload.discharge_end_date
+        and (payload.discharge_end_date - payload.discharge_start_date).days > 30
+    ):
+        raise HTTPException(status_code=422, detail="出院日期范围最多 31 天")
+    departments = list(
+        dict.fromkeys(item.strip() for item in payload.departments if item.strip())
+    )
+    return {
+        "mode": scope_mode,
+        "as_of_date": payload.as_of_date.isoformat(),
+        "discharge_start_date": payload.discharge_start_date.isoformat()
+        if payload.discharge_start_date
+        else None,
+        "discharge_end_date": payload.discharge_end_date.isoformat()
+        if payload.discharge_end_date
+        else None,
+        "departments": departments,
+    }
+
+
 class TestRecordBasicInfo(BaseModel):
     patient_name: str = Field(..., description="患者姓名")
     sex: str = Field(default="男", description="性别")
@@ -264,13 +321,129 @@ def _run_sample_pool_sync_job(job_id: str) -> None:
         service.update_sync_job_progress(job_id=job_id, progress=progress)
 
     try:
+        hospitalization_scope = payload.get("hospitalization_scope")
+        hospitalization_summary: Dict[str, Any] = {}
+        admission_filter = payload.get("admission_filter")
+        admission_summary: Dict[str, Any] = {}
+        item_ids = None
+        if isinstance(hospitalization_scope, dict):
+            scope_mode = str(hospitalization_scope.get("mode") or "").strip().lower()
+            as_of_date = date.fromisoformat(str(hospitalization_scope.get("as_of_date") or ""))
+            discharge_start_raw = hospitalization_scope.get("discharge_start_date")
+            discharge_end_raw = hospitalization_scope.get("discharge_end_date")
+            discharge_start_date = (
+                date.fromisoformat(str(discharge_start_raw)) if discharge_start_raw else None
+            )
+            discharge_end_date = (
+                date.fromisoformat(str(discharge_end_raw)) if discharge_end_raw else None
+            )
+            hospitalization_summary = service.append_pool_items_by_hospitalization_scope(
+                pool_id=pool_id,
+                scope_mode=scope_mode,
+                as_of_date=as_of_date,
+                discharge_start_date=discharge_start_date,
+                discharge_end_date=discharge_end_date,
+                departments=list(hospitalization_scope.get("departments") or []),
+            )
+            item_ids = list(hospitalization_summary.get("sync_item_ids") or [])
+            emit_progress(
+                {
+                    "step_key": "selected",
+                    "step_label": "已按住院范围筛选病历",
+                    "total_candidates": len(item_ids),
+                    "eligible_visits": len(item_ids),
+                    "record_progress": {
+                        "total": len(item_ids),
+                        "completed": 0,
+                        "remaining": len(item_ids),
+                        "basis": "hospitalization_scope",
+                        "label": "住院范围病历",
+                    },
+                    "processed_tables": 0,
+                    "total_tables": 0,
+                    "current_table": "住院范围",
+                    "remaining_tables": 0,
+                }
+            )
+            if not item_ids:
+                service.finish_sync_job(
+                    job_id=job_id,
+                    summary={
+                        "pool_id": pool_id,
+                        "hospitalization_scope": hospitalization_summary,
+                        "eligible_visits": 0,
+                        "total_rows_pulled": 0,
+                        "total_rows_upserted": 0,
+                        "record_progress": {
+                            "total": 0,
+                            "completed": 0,
+                            "remaining": 0,
+                            "basis": "hospitalization_scope",
+                            "label": "住院范围病历",
+                        },
+                    },
+                )
+                return
+        elif isinstance(admission_filter, dict):
+            start_date = date.fromisoformat(str(admission_filter.get("start_date") or ""))
+            end_date = date.fromisoformat(str(admission_filter.get("end_date") or ""))
+            admission_summary = service.append_pool_items_by_admission_filter(
+                pool_id=pool_id,
+                start_date=start_date,
+                end_date=end_date,
+                departments=list(admission_filter.get("departments") or []),
+            )
+            item_ids = list(admission_summary.get("sync_item_ids") or [])
+            emit_progress(
+                {
+                    "step_key": "selected",
+                    "step_label": "已按入院日期和科室筛选病历",
+                    "total_candidates": len(item_ids),
+                    "eligible_visits": len(item_ids),
+                    "record_progress": {
+                        "total": len(item_ids),
+                        "completed": 0,
+                        "remaining": len(item_ids),
+                        "basis": "admission_filter",
+                        "label": "条件筛选病历",
+                    },
+                    "processed_tables": 0,
+                    "total_tables": 0,
+                    "current_table": "inpat_registration",
+                    "remaining_tables": 0,
+                }
+            )
+            if not item_ids:
+                service.finish_sync_job(
+                    job_id=job_id,
+                    summary={
+                        "pool_id": pool_id,
+                        "admission_filter": admission_summary,
+                        "eligible_visits": 0,
+                        "total_rows_pulled": 0,
+                        "total_rows_upserted": 0,
+                        "record_progress": {
+                            "total": 0,
+                            "completed": 0,
+                            "remaining": 0,
+                            "basis": "admission_filter",
+                            "label": "条件筛选病历",
+                        },
+                    },
+                )
+                return
         result = service.sync_pool_records(
             pool_id=pool_id,
             only_intrinsic=bool(payload.get("only_intrinsic", True)),
             include_in_batch_1=bool(payload.get("include_in_batch_1", True)),
             table_groups=payload.get("table_groups") or None,
+            item_ids=item_ids,
             progress_callback=emit_progress,
         )
+        if hospitalization_summary:
+            result["hospitalization_scope"] = hospitalization_summary
+        elif admission_summary:
+            result["admission_filter"] = admission_summary
         service.finish_sync_job(job_id=job_id, summary=result)
     except Exception as exc:
         service.fail_sync_job(job_id=job_id, error_message=str(exc))
@@ -437,6 +610,20 @@ async def download_luxian_0609_evaluation_report(
     )
 
 
+@router.get("/source-admission-departments")
+async def list_source_admission_departments(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    departments = _service().list_remote_admission_departments()
+    return success_response(
+        data={"items": departments},
+        message="获取入院科室成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.get("/{pool_id}")
 async def get_sample_pool(
     request: Request,
@@ -449,6 +636,30 @@ async def get_sample_pool(
     return success_response(
         data=pool,
         message="获取客户样本池成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.delete("/{pool_id}")
+async def delete_sample_pool(
+    request: Request,
+    pool_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    result = _service().delete_pool(pool_id=pool_id)
+    reason = str(result.get("reason") or "")
+    if reason == "not_found":
+        raise HTTPException(status_code=404, detail="样本池不存在或已删除")
+    if reason == "protected_pool":
+        raise HTTPException(status_code=409, detail="客户自建测试病历为系统样本池，不能删除")
+    if reason == "active_sync_job":
+        raise HTTPException(status_code=409, detail="该样本池仍有同步任务正在执行，请完成或停止后再删除")
+    if reason == "active_qc_job":
+        raise HTTPException(status_code=409, detail="该样本池仍有质控任务正在执行，请完成或停止后再删除")
+    return success_response(
+        data=result,
+        message="样本池已删除",
         trace_id=get_trace_id(request),
     )
 
@@ -564,6 +775,8 @@ async def sync_sample_pool_records(
             created_by=_current_user_id(current_user),
             payload=payload.model_dump(exclude_unset=True),
         )
+    except SampleSyncJobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     background_tasks.add_task(_run_sample_pool_sync_job, job["id"])
@@ -575,6 +788,130 @@ async def sync_sample_pool_records(
             "summary": job["summary"],
         },
         message="样本病历定向同步任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/{pool_id}/hospitalization-scope/preview")
+async def preview_sample_pool_hospitalization_scope(
+    request: Request,
+    pool_id: str,
+    payload: SamplePoolHospitalizationScopeRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    del current_user
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    normalized = _normalize_hospitalization_scope_payload(payload)
+    try:
+        result = service.preview_hospitalization_scope(
+            pool_id=pool_id,
+            scope_mode=normalized["mode"],
+            as_of_date=date.fromisoformat(normalized["as_of_date"]),
+            discharge_start_date=date.fromisoformat(normalized["discharge_start_date"])
+            if normalized["discharge_start_date"]
+            else None,
+            discharge_end_date=date.fromisoformat(normalized["discharge_end_date"])
+            if normalized["discharge_end_date"]
+            else None,
+            departments=normalized["departments"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(
+        data=result,
+        message="住院范围预览已更新",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/{pool_id}/sync-by-hospitalization")
+async def sync_sample_pool_by_hospitalization(
+    request: Request,
+    pool_id: str,
+    payload: SamplePoolHospitalizationScopeRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    normalized = _normalize_hospitalization_scope_payload(payload)
+    job_payload = {
+        "only_intrinsic": False,
+        "include_in_batch_1": False,
+        "hospitalization_scope": normalized,
+    }
+    try:
+        job = service.create_sync_job(
+            pool_id=pool_id,
+            created_by=_current_user_id(current_user),
+            payload=job_payload,
+        )
+    except SampleSyncJobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    background_tasks.add_task(_run_sample_pool_sync_job, job["id"])
+    return success_response(
+        data={
+            "job_id": job["id"],
+            "pool_id": pool_id,
+            "status": job["status"],
+            "summary": job["summary"],
+        },
+        message="住院范围同步任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/{pool_id}/sync-by-admission", deprecated=True)
+async def sync_sample_pool_by_admission(
+    request: Request,
+    pool_id: str,
+    payload: SamplePoolAdmissionSyncRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    if payload.start_date > payload.end_date:
+        raise HTTPException(status_code=422, detail="入院开始日期不能晚于结束日期")
+    if (payload.end_date - payload.start_date).days > 30:
+        raise HTTPException(status_code=422, detail="入院日期范围最多 31 天")
+    pool = _service().get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    departments = list(dict.fromkeys(item.strip() for item in payload.departments if item.strip()))
+    job_payload = {
+        "only_intrinsic": False,
+        "include_in_batch_1": False,
+        "admission_filter": {
+            "start_date": payload.start_date.isoformat(),
+            "end_date": payload.end_date.isoformat(),
+            "departments": departments,
+        },
+    }
+    try:
+        job = _service().create_sync_job(
+            pool_id=pool_id,
+            created_by=_current_user_id(current_user),
+            payload=job_payload,
+        )
+    except SampleSyncJobConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    background_tasks.add_task(_run_sample_pool_sync_job, job["id"])
+    return success_response(
+        data={
+            "job_id": job["id"],
+            "pool_id": pool_id,
+            "status": job["status"],
+            "summary": job["summary"],
+        },
+        message="按条件同步病历任务已创建",
         trace_id=get_trace_id(request),
     )
 

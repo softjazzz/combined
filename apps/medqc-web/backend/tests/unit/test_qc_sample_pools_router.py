@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -50,6 +50,20 @@ class _SamplePoolServiceStub:
         return {
             "id": pool_id,
             "name": "手工问题样本池-首轮验证",
+        }
+
+    def delete_pool(self, *, pool_id: str):
+        if pool_id == "pool-active":
+            return {"deleted": False, "reason": "active_sync_job"}
+        if pool_id != "pool-1":
+            return {"deleted": False, "reason": "not_found"}
+        return {
+            "deleted": True,
+            "reason": "deleted",
+            "pool_id": pool_id,
+            "pool_name": "手工问题样本池-首轮验证",
+            "deleted_item_count": 2,
+            "deleted_sync_job_count": 1,
         }
 
     def get_runnable_items(self, *, pool_id: str, validation_mode: str, item_ids: list[str], record_ids: list[str]):
@@ -259,6 +273,68 @@ class _SyncServiceStub:
     def sync_pool_records(self, **kwargs):
         self.sync_calls.append(kwargs)
         return {"sync_group_ids": ["sample_full_domain"], "total_rows_pulled": 1, "total_rows_upserted": 1}
+
+    def list_remote_admission_departments(self):
+        return ["内科", "外科"]
+
+    def append_pool_items_by_admission_filter(self, **kwargs):
+        self.admission_filter_call = dict(kwargs)
+        return {
+            "pool_id": kwargs["pool_id"],
+            "matched_source_count": 2,
+            "new_count": 1,
+            "existing_count": 1,
+            "failed_count": 0,
+            "sync_item_ids": ["item-new", "item-existing"],
+            "filter": {
+                "start_date": kwargs["start_date"].isoformat(),
+                "end_date": kwargs["end_date"].isoformat(),
+                "departments": list(kwargs["departments"]),
+            },
+        }
+
+    def preview_hospitalization_scope(self, **kwargs):
+        self.hospitalization_preview_call = dict(kwargs)
+        return {
+            "scope": {"mode": kwargs["scope_mode"]},
+            "counts": {
+                "active": 2,
+                "discharged": 1,
+                "deduplicated": 3,
+                "existing_in_pool": 1,
+                "new_to_pool": 2,
+            },
+            "departments": [
+                {
+                    "name": "重症医学科（ICU）",
+                    "active_count": 2,
+                    "discharged_count": 0,
+                    "total_count": 2,
+                    "basis": ["current_department"],
+                }
+            ],
+            "sources_used": ["admission_record", "mr"],
+            "source_status": "degraded",
+            "warnings": ["源库未提供住院登记表，已使用入院记录识别当前在院患者。"],
+        }
+
+    def append_pool_items_by_hospitalization_scope(self, **kwargs):
+        self.hospitalization_scope_call = dict(kwargs)
+        return {
+            "pool_id": kwargs["pool_id"],
+            "matched_source_count": 3,
+            "new_count": 2,
+            "existing_count": 1,
+            "failed_count": 0,
+            "sync_item_ids": ["item-active", "item-discharged", "item-existing"],
+            "scope": {
+                "mode": kwargs["scope_mode"],
+                "as_of_date": kwargs["as_of_date"].isoformat(),
+                "discharge_start_date": kwargs["discharge_start_date"].isoformat(),
+                "discharge_end_date": kwargs["discharge_end_date"].isoformat(),
+                "departments": list(kwargs["departments"]),
+            },
+        }
 
     def finish_sync_job(self, *, job_id: str, summary: dict) -> None:
         self.finished_summary = dict(summary)
@@ -516,6 +592,159 @@ def test_run_sample_pool_sync_job_should_preserve_explicit_table_groups(monkeypa
     qc_sample_pools._run_sample_pool_sync_job("job-1")
 
     assert sample_service.sync_calls[0]["table_groups"] == ["core_8"]
+
+
+@pytest.mark.asyncio
+async def test_sync_sample_pool_by_admission_should_create_filtered_job(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.sync_sample_pool_by_admission(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolAdmissionSyncRequest(
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 31),
+            departments=["内科", "内科", "外科"],
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert sample_service.created_payloads[0]["payload"] == {
+        "only_intrinsic": False,
+        "include_in_batch_1": False,
+        "admission_filter": {
+            "start_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "departments": ["内科", "外科"],
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_sync_sample_pool_by_admission_should_reject_more_than_31_days(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.sync_sample_pool_by_admission(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolAdmissionSyncRequest(
+                start_date=date(2026, 7, 1),
+                end_date=date(2026, 8, 1),
+            ),
+            background_tasks=BackgroundTasks(),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert sample_service.created_payloads == []
+
+
+@pytest.mark.asyncio
+async def test_preview_hospitalization_scope_should_return_counts_and_department_options(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.preview_sample_pool_hospitalization_scope(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolHospitalizationScopeRequest(
+            scope_mode="active_and_discharged",
+            as_of_date=date(2026, 7, 30),
+            discharge_start_date=date(2026, 7, 30),
+            discharge_end_date=date(2026, 7, 30),
+            departments=[],
+        ),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert response["data"]["counts"]["deduplicated"] == 3
+    assert sample_service.hospitalization_preview_call["scope_mode"] == "active_and_discharged"
+
+
+@pytest.mark.asyncio
+async def test_sync_by_hospitalization_should_create_scope_job(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.sync_sample_pool_by_hospitalization(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolHospitalizationScopeRequest(
+            scope_mode="active_and_discharged",
+            as_of_date=date(2026, 7, 30),
+            discharge_start_date=date(2026, 7, 30),
+            discharge_end_date=date(2026, 7, 30),
+            departments=["重症医学科（ICU）"],
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert sample_service.created_payloads[0]["payload"]["hospitalization_scope"] == {
+        "mode": "active_and_discharged",
+        "as_of_date": "2026-07-30",
+        "discharge_start_date": "2026-07-30",
+        "discharge_end_date": "2026-07-30",
+        "departments": ["重症医学科（ICU）"],
+    }
+
+
+def test_run_sample_pool_sync_job_should_add_hospitalization_scope_items_before_sync(monkeypatch):
+    sample_service = _SyncServiceStub()
+    sample_service.jobs["job-1"]["payload"] = {
+        "only_intrinsic": False,
+        "include_in_batch_1": False,
+        "hospitalization_scope": {
+            "mode": "active_and_discharged",
+            "as_of_date": "2026-07-30",
+            "discharge_start_date": "2026-07-30",
+            "discharge_end_date": "2026-07-30",
+            "departments": ["重症医学科（ICU）"],
+        },
+    }
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    qc_sample_pools._run_sample_pool_sync_job("job-1")
+
+    assert sample_service.hospitalization_scope_call["scope_mode"] == "active_and_discharged"
+    assert sample_service.sync_calls[0]["item_ids"] == [
+        "item-active",
+        "item-discharged",
+        "item-existing",
+    ]
+    assert sample_service.finished_summary["hospitalization_scope"]["new_count"] == 2
+
+
+def test_run_sample_pool_sync_job_should_add_filtered_admission_items_before_reusing_sync(monkeypatch):
+    sample_service = _SyncServiceStub()
+    sample_service.jobs["job-1"]["payload"] = {
+        "only_intrinsic": False,
+        "include_in_batch_1": False,
+        "admission_filter": {
+            "start_date": "2026-07-01",
+            "end_date": "2026-07-31",
+            "departments": ["内科"],
+        },
+    }
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    qc_sample_pools._run_sample_pool_sync_job("job-1")
+
+    assert sample_service.admission_filter_call == {
+        "pool_id": "pool-1",
+        "start_date": date(2026, 7, 1),
+        "end_date": date(2026, 7, 31),
+        "departments": ["内科"],
+    }
+    assert sample_service.sync_calls[0]["item_ids"] == ["item-new", "item-existing"]
+    assert sample_service.finished_summary["admission_filter"]["new_count"] == 1
 
 
 class _ListResult:
@@ -1004,25 +1233,31 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
         current_user={"id": "tester"},
     )
 
-    expected_execution_rule_ids = []
+    expected_execution_rule_ids = ["LX0609-020", "LX0609-021"]
     created = workspace_service.create_batch_job_calls[0]
     assert response["success"] is True
     assert created["draft_ids"] == expected_execution_rule_ids
     assert created["rule_count"] == len(expected_execution_rule_ids)
     assert created["filters"]["rule_ids"] == expected_execution_rule_ids
     assert created["filters"]["selected_rule_ids"] == ["LX0609-020", "LX0609-021"]
-    assert "record_rule_map" not in created["filters"]
+    assert created["filters"]["record_rule_map"] == {
+        "V001": expected_execution_rule_ids,
+        "V002": expected_execution_rule_ids,
+    }
     assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert created["filters"]["customer_rule_count"] == 2
     assert created["filters"]["execution_rule_count"] == len(expected_execution_rule_ids)
-    assert created["filters"]["gate_only_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
+    assert created["filters"]["gate_only_customer_rule_ids"] == []
     assert response["data"]["rule_count"] == len(expected_execution_rule_ids)
     assert response["data"]["customer_rule_count"] == 2
     assert response["data"]["execution_rule_count"] == len(expected_execution_rule_ids)
     assert response["data"]["selected_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert response["data"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
-    assert response["data"]["record_rule_map"] == {}
-    assert response["data"]["gate_only_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
+    assert response["data"]["record_rule_map"] == {
+        "V001": expected_execution_rule_ids,
+        "V002": expected_execution_rule_ids,
+    }
+    assert response["data"]["gate_only_customer_rule_ids"] == []
     assert response["data"]["rule_ids"] == expected_execution_rule_ids
 
 
@@ -1343,7 +1578,7 @@ async def test_family_jobs_should_share_safe_identity_and_keep_scope_order(monke
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_intrinsic_validation_should_allow_gate_only_luxian_0609_point(monkeypatch):
+async def test_run_sample_pool_intrinsic_validation_should_execute_selected_luxian_0609_point(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -1369,10 +1604,13 @@ async def test_run_sample_pool_intrinsic_validation_should_allow_gate_only_luxia
     assert created["filters"]["selected_rule_ids"] == ["LX0609-028"]
     assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-028"]
     assert created["filters"]["customer_rule_count"] == 1
-    assert created["filters"]["execution_rule_count"] == 0
-    assert created["filters"]["gate_only_customer_rule_ids"] == ["LX0609-028"]
-    assert "record_rule_map" not in created["filters"]
-    assert response["data"]["gate_only_customer_rule_ids"] == ["LX0609-028"]
+    assert created["filters"]["execution_rule_count"] == 1
+    assert created["filters"]["gate_only_customer_rule_ids"] == []
+    assert created["filters"]["record_rule_map"] == {
+        "V001": ["LX0609-028"],
+        "V002": ["LX0609-028"],
+    }
+    assert response["data"]["gate_only_customer_rule_ids"] == []
 
 
 @pytest.mark.asyncio
@@ -1645,3 +1883,33 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_
     assert created["filters"]["execution_strategy"] == "standard"
     assert created["filters"]["record_rule_map"] == {"V069": ["SC-069"]}
     assert response["data"]["rule_ids"] == ["SC-069"]
+
+
+@pytest.mark.asyncio
+async def test_delete_sample_pool_returns_deleted_counts(monkeypatch):
+    monkeypatch.setattr(qc_sample_pools, "_service", _SamplePoolServiceStub)
+
+    response = await qc_sample_pools.delete_sample_pool(
+        request=_build_request(),
+        pool_id="pool-1",
+        current_user={"id": "tester"},
+    )
+
+    assert response["data"]["deleted"] is True
+    assert response["data"]["deleted_item_count"] == 2
+    assert response["data"]["deleted_sync_job_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_sample_pool_rejects_active_sync_job(monkeypatch):
+    monkeypatch.setattr(qc_sample_pools, "_service", _SamplePoolServiceStub)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.delete_sample_pool(
+            request=_build_request(),
+            pool_id="pool-active",
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "该样本池仍有同步任务正在执行，请完成或停止后再删除"

@@ -1,4 +1,5 @@
 from app.services import custom_qc_sample_pool_service as sample_pool_module
+from app.core.settings import Settings
 from app.database.models.cdm import FirstCourseRecord, TransferInRecord, TransferOutRecord
 from app.services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
@@ -8,9 +9,11 @@ from app.services.custom_qc_sample_pool_service import (
     summarize_sample_validation_run_readiness,
 )
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 import pandas as pd
 import pytest
+import sqlalchemy as sa
+import threading
 from types import SimpleNamespace
 
 
@@ -209,6 +212,7 @@ def test_sample_full_domain_group_is_available_for_source_coverage_audit():
 
     assert "sample_full_domain" in group_ids
     assert missing == []
+    assert "inpat_registration" in table_names
     assert "admission_record" in table_names
     assert "consultation_record" in table_names
     assert "exam_item_report" in table_names
@@ -220,6 +224,13 @@ def test_sample_full_domain_group_is_available_for_source_coverage_audit():
 def test_sample_full_domain_key_fields_cover_customer_source_tables():
     table_map = {item["name"]: item for item in list_sync_tables()}
 
+    assert table_map["inpat_registration"]["procedure"] == "web.inpat_registration"
+    assert table_map["inpat_registration"]["params"] == 1
+    assert table_map["inpat_registration"]["key_fields"] == [
+        "institute_id",
+        "patient_id",
+        "visit_id",
+    ]
     assert table_map["labtest_item_report"]["key_fields"] == ["patient_id", "visit_id", "test_no", "item_no"]
     assert table_map["exam_item_report"]["key_fields"] == ["patient_id", "visit_id", "exam_no", "item_no"]
     assert table_map["blood_application"]["key_fields"] == ["patient_id", "visit_id", "application_id"]
@@ -1243,6 +1254,430 @@ def test_resolve_sync_table_names_defaults_cover_core_groups():
     assert result["missing_group_ids"] == []
 
 
+def test_admission_filter_item_should_keep_display_fields_and_matched_identity():
+    now = datetime(2026, 7, 29, 8, 0, 0)
+
+    result = sample_pool_module._build_admission_filter_pool_item(
+        item_id="item-admission-1",
+        pool_id="pool-admission",
+        row_no=7,
+        source_row={
+            "institute_id": "hospital-1",
+            "patient_id": "patient-1",
+            "visit_id": "visit-1",
+            "patient_name": "测试患者",
+            "department": "骨科",
+            "mr_no": "MR-001",
+            "inpat_no": "IP-001",
+            "admission_time": "2026-07-28 08:30:00",
+        },
+        qc_date=datetime(2026, 7, 28).date(),
+        now=now,
+    )
+
+    assert result["patient_name"] == "测试患者"
+    assert result["department"] == "骨科"
+    assert result["matched_institute_id"] == "hospital-1"
+    assert result["matched_patient_id"] == "patient-1"
+    assert result["matched_visit_id"] == "visit-1"
+    payload = sample_pool_module._safe_json_loads(result["raw_payload_json"], {})
+    assert payload["patient_name"] == "测试患者"
+    assert payload["department"] == "骨科"
+
+
+def test_admission_filter_should_backfill_running_patient_name_from_patient_index():
+    result = sample_pool_module._backfill_admission_source_patient_names(
+        source_rows=[
+            {
+                "institute_id": "hospital-1",
+                "patient_id": "patient-1",
+                "visit_id": "running-visit-1",
+                "patient_name": "",
+            },
+            {
+                "institute_id": "hospital-1",
+                "patient_id": "patient-2",
+                "visit_id": "final-visit-1",
+                "patient_name": "出院患者",
+            },
+        ],
+        demographic_rows=[
+            {
+                "institute_id": "hospital-1",
+                "patient_id": "patient-1",
+                "patient_name": "在院患者",
+            }
+        ],
+    )
+
+    assert result[0]["patient_name"] == "在院患者"
+    assert result[1]["patient_name"] == "出院患者"
+
+
+def test_admission_filter_should_repair_existing_blank_display_fields():
+    patch = sample_pool_module._build_existing_admission_item_display_patch(
+        existing_row={
+            "patient_name": "",
+            "department": "",
+            "mr_no": "",
+            "raw_payload_json": '{"visit_id":"running-visit-1"}',
+        },
+        source_row={
+            "institute_id": "hospital-1",
+            "patient_id": "patient-1",
+            "visit_id": "running-visit-1",
+            "patient_name": "在院患者",
+            "department": "重症医学科",
+            "mr_no": "MR-001",
+            "inpat_no": "IP-001",
+            "admission_time": "2026-07-30 08:00:00",
+        },
+    )
+
+    assert patch["patient_name"] == "在院患者"
+    assert patch["department"] == "重症医学科"
+    assert patch["mr_no"] == "MR-001"
+    payload = sample_pool_module._safe_json_loads(patch["raw_payload_json"], {})
+    assert payload["patient_name"] == "在院患者"
+    assert payload["patient_id"] == "patient-1"
+
+
+def test_hospitalization_scope_should_include_old_active_and_period_discharge_records():
+    rows = [
+        {
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "ACTIVE-OLD",
+            "admission_time": "2026-06-01 08:00:00",
+            "discharge_time": None,
+            "current_department": "重症医学科（ICU）",
+        },
+        {
+            "institute_id": "H1",
+            "patient_id": "P2",
+            "visit_id": "DISCHARGED-TODAY",
+            "admission_time": "2026-07-20 08:00:00",
+            "discharge_time": "2026-07-30 10:00:00",
+            "discharge_department": "神经外科",
+        },
+        {
+            "institute_id": "H1",
+            "patient_id": "P3",
+            "visit_id": "DISCHARGED-BEFORE",
+            "admission_time": "2026-07-01 08:00:00",
+            "discharge_time": "2026-07-29 10:00:00",
+            "discharge_department": "内科",
+        },
+    ]
+
+    selected = sample_pool_module._select_hospitalization_candidates(
+        candidates=rows,
+        scope_mode="active_and_discharged",
+        as_of_date=date(2026, 7, 30),
+        discharge_start_date=date(2026, 7, 30),
+        discharge_end_date=date(2026, 7, 30),
+        departments=[],
+    )
+
+    assert [row["visit_id"] for row in selected] == ["ACTIVE-OLD", "DISCHARGED-TODAY"]
+    assert selected[0]["hospitalization_status"] == "active"
+    assert selected[0]["department"] == "重症医学科（ICU）"
+    assert selected[1]["hospitalization_status"] == "discharged"
+    assert selected[1]["department"] == "神经外科"
+
+
+def test_hospitalization_scope_should_deduplicate_coordinates_and_filter_by_effective_department():
+    duplicate = {
+        "institute_id": "H1",
+        "patient_id": "P1",
+        "visit_id": "V1",
+        "admission_time": "2026-06-01 08:00:00",
+        "discharge_time": None,
+        "admission_department": "急诊科",
+        "current_department": "重症医学科（ICU）",
+    }
+
+    selected = sample_pool_module._select_hospitalization_candidates(
+        candidates=[duplicate, {**duplicate, "source_table": "admission_record"}],
+        scope_mode="active",
+        as_of_date=date(2026, 7, 30),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=["重症医学科（ICU）"],
+    )
+
+    assert len(selected) == 1
+    assert selected[0]["department"] == "重症医学科（ICU）"
+    assert selected[0]["department_basis"] == "current_department"
+
+
+def test_hospitalization_source_plan_should_not_infer_active_without_registration():
+    with pytest.raises(ValueError, match="请同步住院登记"):
+        sample_pool_module._resolve_hospitalization_source_plan(
+            table_columns={
+                "admission_record": {
+                    "institute_id",
+                    "patient_id",
+                    "visit_id",
+                    "admission_datetime",
+                },
+                "mr": {
+                    "institute_id",
+                    "patient_id",
+                    "visit_id",
+                    "admission_datetime",
+                    "discharge_datetime",
+                },
+            },
+            scope_mode="active_and_discharged",
+        )
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_scene"),
+    [("active", "running"), ("discharged", "final")],
+)
+def test_hospitalization_scope_builder_writes_controlled_state_and_scene(
+    status,
+    expected_scene,
+):
+    now = datetime(2026, 7, 31, 8, 0)
+    item = sample_pool_module._build_hospitalization_scope_pool_item(
+        item_id="item-1",
+        pool_id="pool-1",
+        row_no=1,
+        source_row={
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "hospitalization_status": status,
+            "source_table": "inpat_registration",
+            "discharge_time": (
+                "2026-07-31 07:00:00" if status == "discharged" else ""
+            ),
+        },
+        qc_date=date(2026, 7, 31),
+        now=now,
+    )
+
+    payload = sample_pool_module._safe_json_loads(item["raw_payload_json"], {})
+    assert item["expected_scene"] == expected_scene
+    assert payload["_sample_sync_state"]["hospitalization_status"] == status
+    assert "hospitalization_status" not in payload
+
+
+def test_current_hospitalization_state_requires_registration_for_active_and_prioritizes_discharge():
+    states = sample_pool_module._collect_current_hospitalization_states(
+        {
+            "admission_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "ADMISSION-ONLY",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                }
+            ],
+            "mr": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P2",
+                    "visit_id": "V2",
+                    "discharge_datetime": "2026-07-31 09:00:00",
+                }
+            ],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P1",
+                    "visit_id": "ACTIVE",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": None,
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P2",
+                    "visit_id": "V2",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": "2026-07-31 10:00:00",
+                },
+            ],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P2",
+                    "visit_id": "V2",
+                    "discharge_time": "2026-07-31 11:00:00",
+                }
+            ],
+        }
+    )
+
+    assert ("H1", "P1", "ADMISSION-ONLY") not in states
+    assert states[("H1", "P1", "ACTIVE")]["hospitalization_status"] == "active"
+    assert states[("H1", "P2", "V2")]["status_source"] == "discharge_record"
+    assert states[("H1", "P2", "V2")]["discharge_time"].startswith(
+        "2026-07-31T11:00:00"
+    )
+
+
+def test_trusted_previous_state_ignores_customer_hospitalization_status():
+    assert (
+        sample_pool_module._trusted_item_hospitalization_state(
+            {
+                "raw_payload": {
+                    "hospitalization_status": "active",
+                }
+            }
+        )
+        is None
+    )
+    trusted = sample_pool_module._trusted_item_hospitalization_state(
+        {
+            "raw_payload": {
+                "_sample_sync_state": {
+                    "hospitalization_status": "active",
+                    "status_source": "inpat_registration",
+                }
+            }
+        }
+    )
+    assert trusted["hospitalization_status"] == "active"
+
+
+def test_hospitalization_source_plan_should_accept_discharge_record_without_admission_time():
+    plan = sample_pool_module._resolve_hospitalization_source_plan(
+        table_columns={
+            "discharge_record": {
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "discharge_datetime",
+                "discharge_dept_name",
+            },
+        },
+        scope_mode="discharged",
+    )
+
+    assert plan["discharged"]["table_name"] == "discharge_record"
+    assert plan["discharged"]["admission_time_column"] == ""
+    assert plan["source_status"] == "ready"
+
+
+def test_resolve_remote_visit_keys_prefers_mr_over_running_anchors(monkeypatch):
+    service = CustomQCSamplePoolService()
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        service,
+        "_lookup_remote_match_candidates",
+        lambda **kwargs: {
+            "visit_id": {
+                "V001": [
+                    {
+                        "source_anchor_table": "admission_record",
+                        "institute_id": "H1",
+                        "patient_id": "P-ADMISSION",
+                        "visit_id": "V001",
+                    },
+                    {
+                        "source_anchor_table": "inpat_registration",
+                        "institute_id": "H1",
+                        "patient_id": "P-REGISTRATION",
+                        "visit_id": "V001",
+                    },
+                    {
+                        "source_anchor_table": "mr",
+                        "institute_id": "H1",
+                        "patient_id": "P-MR",
+                        "visit_id": "V001",
+                    },
+                ]
+            },
+            "mr_no": {},
+            "inpat_no": {},
+        },
+    )
+
+    result = service._resolve_remote_visit_keys(items=[{"visit_id": "V001"}])
+
+    assert result["matched"] == 1
+    assert result["ambiguous"] == 0
+    assert result["unmatched"] == 0
+    assert result["visit_keys"] == [("P-MR", "V001")]
+
+
+def test_resolve_remote_visit_keys_uses_inpat_registration_without_mr(monkeypatch):
+    service = CustomQCSamplePoolService()
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        service,
+        "_lookup_remote_match_candidates",
+        lambda **kwargs: {
+            "visit_id": {
+                "V002": [
+                    {
+                        "source_anchor_table": "inpat_registration",
+                        "institute_id": "H1",
+                        "patient_id": "P002",
+                        "visit_id": "V002",
+                    },
+                    {
+                        "source_anchor_table": "admission_record",
+                        "institute_id": "H1",
+                        "patient_id": "P-LOWER",
+                        "visit_id": "V002",
+                    },
+                ]
+            },
+            "mr_no": {},
+            "inpat_no": {},
+        },
+    )
+
+    result = service._resolve_remote_visit_keys(items=[{"visit_id": "V002"}])
+
+    assert result["matched"] == 1
+    assert result["visit_keys"] == [("P002", "V002")]
+
+
+def test_resolve_remote_visit_keys_uses_admission_record_and_rejects_incomplete_identity(monkeypatch):
+    service = CustomQCSamplePoolService()
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        service,
+        "_lookup_remote_match_candidates",
+        lambda **kwargs: {
+            "visit_id": {
+                "V003": [
+                    {
+                        "source_anchor_table": "admission_record",
+                        "institute_id": "H1",
+                        "patient_id": "P003",
+                        "visit_id": "V003",
+                    }
+                ],
+                "V004": [
+                    {
+                        "source_anchor_table": "admission_record",
+                        "institute_id": "H1",
+                        "patient_id": "",
+                        "visit_id": "V004",
+                    }
+                ],
+            },
+            "mr_no": {},
+            "inpat_no": {},
+        },
+    )
+
+    result = service._resolve_remote_visit_keys(
+        items=[{"visit_id": "V003"}, {"visit_id": "V004"}]
+    )
+
+    assert result["matched"] == 1
+    assert result["unmatched"] == 1
+    assert result["visit_keys"] == [("P003", "V003")]
+
+
 def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundles(monkeypatch):
     service = object.__new__(CustomQCSamplePoolService)
 
@@ -1263,16 +1698,18 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "visit_keys": [("P001", "V001")],
         },
     )
-    monkeypatch.setattr(
-        service,
-        "match_pool_items",
-        lambda **_: {
+    match_calls = []
+
+    def _match_pool_items(**kwargs):
+        match_calls.append(dict(kwargs))
+        return {
             "pool": {"id": "pool-1", "matched_items": 1, "ready_items": 1},
             "matched": 1,
             "ambiguous": 0,
             "unmatched": 0,
-        },
-    )
+        }
+
+    monkeypatch.setattr(service, "match_pool_items", _match_pool_items)
 
     monkeypatch.setattr(
         sample_pool_module,
@@ -1281,22 +1718,49 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             {"name": "mr", "source_table": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]},
             {"name": "admission_record", "source_table": "admission_record", "key_fields": ["institute_id", "patient_id", "visit_id"]},
             {"name": "daily_course_record", "source_table": "daily_course_record", "key_fields": ["institute_id", "patient_id", "visit_id", "document_id"]},
+            {"name": "procedure_record", "source_table": "procedure_record", "key_fields": ["institute_id", "patient_id", "visit_id", "document_id"]},
         ],
+    )
+    monkeypatch.setattr(
+        service,
+        "resolve_sync_table_names",
+        lambda **_: {
+            "table_names": ["mr", "admission_record", "daily_course_record", "procedure_record"],
+            "group_ids": ["core_8"],
+            "missing_group_ids": [],
+        },
     )
     monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
     monkeypatch.setattr(sample_pool_module, "load_db_config", lambda: {"remote_schema": "public"})
 
     rows_by_table = {
-        "mr": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}],
+        "mr": [],
         "admission_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}],
         "daily_course_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001", "document_id": "D1"}],
+        "procedure_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001", "document_id": "P1"}],
     }
     remote_read_calls = []
     local_write_calls = []
+    detail_release = threading.Event()
+    detail_lock = threading.Lock()
+    active_detail_reads = 0
+    max_active_detail_reads = 0
 
     def _fetch_remote_rows(**kwargs):
+        nonlocal active_detail_reads, max_active_detail_reads
         remote_read_calls.append(dict(kwargs))
-        return list(rows_by_table.get(kwargs["source_table"], []))
+        source_table = kwargs["source_table"]
+        if source_table not in {"mr", "admission_record"}:
+            assert len(match_calls) == 1
+            with detail_lock:
+                active_detail_reads += 1
+                max_active_detail_reads = max(max_active_detail_reads, active_detail_reads)
+                if active_detail_reads >= 2:
+                    detail_release.set()
+            detail_release.wait(timeout=0.5)
+            with detail_lock:
+                active_detail_reads -= 1
+        return list(rows_by_table.get(source_table, []))
 
     def _upsert_local_rows(**kwargs):
         local_write_calls.append(dict(kwargs))
@@ -1313,7 +1777,25 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     refresh_calls = []
     progress_events = []
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: ingest_calls.append(kwargs))
-    monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: refresh_calls.append(kwargs))
+
+    def _refresh_all(**kwargs):
+        refresh_calls.append(kwargs)
+        return {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 4,
+            "scenes": {
+                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+                "final": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+            },
+            "domains": {},
+        }
+
+    monkeypatch.setattr(
+        sample_pool_module,
+        "refresh_all_bundle_variants_for_rows",
+        _refresh_all,
+    )
 
     result = service.sync_pool_records(
         pool_id="pool-1",
@@ -1327,10 +1809,18 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert result["matched"] == 1
     assert result["total_rows_pulled"] == 3
     assert result["total_rows_upserted"] == 3
-    assert [item["table_name"] for item in result["synced_tables"]] == ["mr", "admission_record", "daily_course_record"]
-    assert len(ingest_calls) == 2
-    assert len(refresh_calls) == 6
-    assert [call["scene"] for call in refresh_calls] == ["running", "final", "running", "final", "running", "final"]
+    assert [item["table_name"] for item in result["synced_tables"]] == [
+        "mr",
+        "admission_record",
+        "daily_course_record",
+        "procedure_record",
+    ]
+    assert len(ingest_calls) == 1
+    assert len(refresh_calls) == 1
+    assert refresh_calls[0]["scenes"] == ("running", "final")
+    assert refresh_calls[0]["policy_version"] == "sample_pool_incremental_sync"
+    assert result["bundle_refresh"]["material_reads"] == 4
+    assert max_active_detail_reads >= 2
     assert progress_events[0]["step_key"] == "resolving"
     assert progress_events[1]["step_key"] == "resolved"
     assert progress_events[1]["record_progress"] == {
@@ -1338,25 +1828,140 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
         "completed": 0,
         "remaining": 1,
         "missing_mr": 1,
-        "basis": "mr_visible",
+        "missing_primary_record": 1,
+        "basis": "primary_record_visible",
         "label": "病历池可见进度",
     }
-    assert progress_events[3]["record_progress"]["completed"] == 1
+    assert any(
+        int((event.get("record_progress") or {}).get("completed") or 0) == 1
+        for event in progress_events
+    )
     assert progress_events[-1]["step_key"] == "matching"
     assert progress_events[-1]["record_progress"] == {
         "total": 1,
         "completed": 1,
         "remaining": 0,
         "missing_mr": 0,
-        "basis": "mr_visible",
+        "missing_primary_record": 0,
+        "basis": "primary_record_visible",
         "label": "病历池可见进度",
     }
     assert result["record_progress"]["completed"] == 1
     assert result["record_progress"]["total"] == 1
-    assert len(remote_read_calls) == 3
+    assert len(remote_read_calls) == 4
     assert all(call["remote_url"] == "postgresql://demo" for call in remote_read_calls)
-    assert len(local_write_calls) == 3
+    assert len(local_write_calls) == 4
     assert all("remote_url" not in call for call in local_write_calls)
+    assert all(call["batch_size"] == 500 for call in local_write_calls)
+    assert result["sync_performance"]["detail_table_workers"] == 2
+    assert result["sync_performance"]["source_resolve_ms"] >= 0
+    assert result["sync_performance"]["primary_visible_ms"] >= 0
+    assert result["sync_performance"]["detail_sync_ms"] >= 0
+    assert result["sync_performance"]["bundle_refresh_ms"] >= 0
+    assert result["sync_performance"]["visits_refreshed"] == 1
+    assert result["sync_performance"]["retry_count"] == 0
+    assert [call["item_ids"] for call in match_calls] == [["item-1"], ["item-1"]]
+    detail_progress = [
+        event
+        for event in progress_events
+        if event.get("phase") == "detail_sync"
+    ]
+    assert detail_progress
+    assert all(event["primary_visible"] is True for event in detail_progress)
+
+
+@pytest.mark.parametrize(
+    "candidate_model",
+    [
+        sample_pool_module.InpatRegistration,
+        sample_pool_module.AdmissionRecord,
+    ],
+)
+def test_match_pool_items_falls_back_to_running_primary_records(
+    monkeypatch,
+    candidate_model,
+):
+    service = object.__new__(CustomQCSamplePoolService)
+    service._item_table = sa.table(
+        "sample_pool_items",
+        sa.column("id"),
+        sa.column("pool_id"),
+        sa.column("row_no"),
+    )
+    source_row = {
+        "id": "item-inpatient",
+        "raw_payload_json": '{"visit_id":"V-INPATIENT","patient_name":"在院患者"}',
+    }
+    admission_candidate = SimpleNamespace(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V-INPATIENT",
+        name="在院患者",
+        dept_name="重症医学科（ICU）",
+        admission_datetime=datetime(2026, 7, 30, 8, 0, 0),
+        discharge_datetime=None,
+        update_time=datetime(2026, 7, 30, 9, 0, 0),
+    )
+
+    class _Query:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *_args):
+            return self
+
+        def all(self):
+            if self.model is sample_pool_module.MedicalRecordFrontpage:
+                return []
+            if self.model is candidate_model:
+                return [admission_candidate]
+            return []
+
+    class _Result:
+        def mappings(self):
+            return _FakeMappingsResult([source_row])
+
+    class _MatchSession:
+        def __init__(self):
+            self.update_params = []
+
+        def execute(self, statement):
+            if isinstance(statement, sa.sql.Select):
+                return _Result()
+            self.update_params.append(statement)
+            return None
+
+        def query(self, model):
+            return _Query(model)
+
+        def commit(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Update:
+        def where(self, *_args):
+            return self
+
+        def values(self, **kwargs):
+            self.values_payload = kwargs
+            return self
+
+    fake_session = _MatchSession()
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: fake_session)
+    monkeypatch.setattr(sample_pool_module, "update", lambda *_args: _Update())
+    monkeypatch.setattr(service, "_update_pool_counters", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
+    monkeypatch.setattr(service, "_check_running_bundle_status", lambda **_: "ready")
+
+    result = service.match_pool_items(
+        pool_id="pool-1",
+        item_ids=["item-inpatient"],
+    )
+
+    assert result["matched"] == 1
+    assert result["unmatched"] == 0
 
 
 def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
@@ -1413,8 +2018,17 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
     monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
     monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
-    monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: None)
-    monkeypatch.setattr(sample_pool_module, "refresh_domain_bundles_for_rows", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sample_pool_module,
+        "refresh_all_bundle_variants_for_rows",
+        lambda **kwargs: {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 0,
+            "scenes": {},
+            "domains": {},
+        },
+    )
 
     result = service.sync_pool_records(
         pool_id="pool-1",
@@ -1425,9 +2039,22 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
 
     assert result["total_rows_pulled"] == 1
     assert result["total_rows_upserted"] == 1
-    assert result["synced_tables"][1]["table_name"] == "docpat_commu_record"
-    assert result["synced_tables"][1]["sync_status"] == "source_table_unavailable"
-    assert result["skipped_optional_tables"][0]["source_table"] == "docpat_commu_record"
+    skipped_by_table = {
+        item["table_name"]: item
+        for item in result["skipped_optional_tables"]
+    }
+    assert skipped_by_table["docpat_commu_record"]["sync_status"] == (
+        "source_table_unavailable"
+    )
+    assert skipped_by_table["docpat_commu_record"]["source_table"] == (
+        "docpat_commu_record"
+    )
+    assert skipped_by_table["docpat_commu_record"]["skip_reason"] == (
+        "该类资料暂未从源系统提供，本次同步已跳过。"
+    )
+    assert skipped_by_table["docpat_commu_record"]["error_category"] == (
+        "source_field_missing"
+    )
 
 
 def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypatch):
@@ -1464,6 +2091,16 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
     )
     monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
     monkeypatch.setattr(sample_pool_module, "load_db_config", lambda: {"remote_schema": "public"})
+    monkeypatch.setattr(
+        service,
+        "match_pool_items",
+        lambda **_: {
+            "pool": {"id": "pool-1"},
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+        },
+    )
 
     def fake_fetch(**kwargs):
         if kwargs["source_table"] == "docpat_commu_record":
@@ -1473,7 +2110,17 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
     monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
     monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
-    monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sample_pool_module,
+        "refresh_all_bundle_variants_for_rows",
+        lambda **kwargs: {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 0,
+            "scenes": {},
+            "domains": {},
+        },
+    )
 
     with pytest.raises(RuntimeError, match="permission denied"):
         service.sync_pool_records(
@@ -1482,6 +2129,1283 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
             include_in_batch_1=True,
             table_groups=["sample_full_domain"],
         )
+
+
+def _run_two_stage_primary_sync(
+    monkeypatch,
+    primary_outcomes,
+    capture=None,
+    upsert_impl=None,
+    table_config_overrides=None,
+    item_payload=None,
+    item_payloads=None,
+    extra_table_names=None,
+    refresh_scene_impl=None,
+    resolved_visit_keys=None,
+):
+    service = object.__new__(CustomQCSamplePoolService)
+    service._item_table = sa.table(
+        "custom_qc_sample_pool_items",
+        sa.column("id"),
+        sa.column("raw_payload_json"),
+        sa.column("expected_scene"),
+        sa.column("updated_at"),
+    )
+    operations = []
+    progress_events = []
+    match_calls = []
+    fetch_calls = []
+    bundle_refresh_calls = []
+    if capture is not None:
+        capture.update(
+            {
+                "operations": operations,
+                "progress_events": progress_events,
+                "match_calls": match_calls,
+                "fetch_calls": fetch_calls,
+                "bundle_refresh_calls": bundle_refresh_calls,
+            }
+        )
+    table_names = [
+        "mr",
+        "inpat_registration",
+        "admission_record",
+        "daily_course_record",
+        *(extra_table_names or []),
+    ]
+    table_configs = [
+        {
+            "name": table_name,
+            "source_table": table_name,
+            "key_fields": ["institute_id", "patient_id", "visit_id"],
+            **dict((table_config_overrides or {}).get(table_name) or {}),
+        }
+        for table_name in table_names
+    ]
+    monkeypatch.setattr(
+        service,
+        "_list_sync_candidate_items",
+        lambda **_: list(item_payloads or [dict(item_payload or {
+                "id": "item-1",
+                "visit_id": "V001",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+            })]),
+    )
+    monkeypatch.setattr(
+        service,
+        "_resolve_remote_visit_keys",
+        lambda **_: {
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+            "visit_keys": list(resolved_visit_keys or [("P001", "V001")]),
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "resolve_sync_table_names",
+        lambda **_: {
+            "table_names": table_names,
+            "group_ids": ["sample_full_domain"],
+            "missing_group_ids": [],
+        },
+    )
+    monkeypatch.setattr(sample_pool_module, "list_sync_tables", lambda: table_configs)
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        sample_pool_module,
+        "load_db_config",
+        lambda: {
+            "remote_schema": "public",
+            "remote_host": "source-db",
+            "remote_port": "5432",
+            "remote_database": "clinical",
+        },
+    )
+
+    def _fetch(**kwargs):
+        fetch_calls.append(dict(kwargs))
+        table_name = kwargs["source_table"]
+        operations.append(f"fetch:{table_name}")
+        outcome = primary_outcomes.get(table_name)
+        if isinstance(outcome, Exception):
+            raise outcome
+        if table_name in primary_outcomes:
+            return list(outcome or [])
+        return [
+            {
+                "institute_id": "H1",
+                "patient_id": "P001",
+                "visit_id": "V001",
+                "document_id": "D1",
+            }
+        ]
+
+    def _match(**kwargs):
+        operations.append("match")
+        match_calls.append(dict(kwargs))
+        return {
+            "pool": {"id": "pool-1"},
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+        }
+
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", _fetch)
+    monkeypatch.setattr(
+        sample_pool_module,
+        "upsert_to_local",
+        upsert_impl or (lambda **kwargs: len(kwargs["records"])),
+    )
+    monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **_: None)
+    monkeypatch.setattr(service, "match_pool_items", _match)
+    monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
+    def _refresh_all(**kwargs):
+        operations.append("bundle:all")
+        bundle_refresh_calls.append(dict(kwargs))
+        return {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 8,
+            "scenes": {
+                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+                "final": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+            },
+            "domains": {},
+        }
+
+    monkeypatch.setattr(
+        sample_pool_module,
+        "refresh_all_bundle_variants_for_rows",
+        refresh_scene_impl or _refresh_all,
+    )
+
+    result = service.sync_pool_records(
+        pool_id="pool-1",
+        table_groups=["sample_full_domain"],
+        progress_callback=lambda progress: progress_events.append(dict(progress)),
+    )
+    return result, operations, match_calls, progress_events
+
+
+def test_sync_pool_records_makes_inpat_registration_only_case_visible_before_details(
+    monkeypatch,
+):
+    primary_row = {
+        "institute_id": "H1",
+        "patient_id": "P001",
+        "visit_id": "V001",
+    }
+    result, operations, match_calls, progress_events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [primary_row],
+            "admission_record": [],
+        },
+    )
+
+    assert result["primary_visible"] is True
+    assert result["primary_progress"]["completed"] == 1
+    assert len(match_calls) == 2
+    assert all(call["item_ids"] == ["item-1"] for call in match_calls)
+    assert operations.index("match") < operations.index("fetch:daily_course_record")
+    assert operations.index("fetch:daily_course_record") < operations.index("bundle:all")
+    primary_visible_events = [
+        event
+        for event in progress_events
+        if event.get("step_key") == "primary_visible"
+    ]
+    assert len(primary_visible_events) == 1
+    assert primary_visible_events[0]["phase"] == "primary_visible"
+    assert primary_visible_events[0]["step_label"] == (
+        "病历已进入样本池，文书整理中"
+    )
+    assert all(
+        event["primary_visible"] is True
+        for event in progress_events
+        if event.get("phase") == "detail_sync"
+    )
+
+
+def test_sync_pool_records_refreshes_changed_visit_once_and_reports_material_reads(
+    monkeypatch,
+):
+    capture = {}
+    result, operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                }
+            ],
+            "admission_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "document_id": "D1",
+                }
+            ],
+        },
+        capture=capture,
+    )
+
+    assert operations.count("bundle:all") == 1
+    assert len(capture["bundle_refresh_calls"]) == 1
+    refresh_call = capture["bundle_refresh_calls"][0]
+    assert refresh_call["rows"] == [
+        {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+    ]
+    assert refresh_call["scenes"] == ("running", "final")
+    assert refresh_call["policy_version"] == "sample_pool_incremental_sync"
+    assert result["bundle_refresh"]["material_reads"] == 8
+
+
+def test_sync_pool_records_passes_only_changed_visits_to_bundle_refresh(
+    monkeypatch,
+):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+    rows_by_table = {
+        "mr": [],
+        "inpat_registration": [
+            {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"},
+            {"institute_id": "H1", "patient_id": "P002", "visit_id": "V002"},
+        ],
+        "admission_record": [
+            {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"},
+            {"institute_id": "H1", "patient_id": "P002", "visit_id": "V002"},
+        ],
+        "daily_course_record": [
+            {
+                "institute_id": "H1",
+                "patient_id": "P001",
+                "visit_id": "V001",
+                "document_id": "D1",
+            },
+            {
+                "institute_id": "H1",
+                "patient_id": "P002",
+                "visit_id": "V002",
+                "document_id": "D2",
+            },
+        ],
+    }
+    unchanged_signatures = {
+        table_name: sample_pool_module.build_sample_sync_content_signature(
+            [
+                row
+                for row in rows
+                if row.get("patient_id") == "P002" and row.get("visit_id") == "V002"
+            ]
+        )
+        for table_name, rows in rows_by_table.items()
+    }
+
+    class _LocalSession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, *, source_identity, visit_keys, table_names):
+            table_name = table_names[0]
+            return {
+                sample_pool_module.CursorKey(
+                    source_identity,
+                    "H1",
+                    "P002",
+                    "V002",
+                    table_name,
+                ): SimpleNamespace(
+                    content_signature=unchanged_signatures[table_name],
+                    watermark_value=None,
+                )
+            }
+
+        def mark_full_sync(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module,
+        "SampleSyncCursorRepository",
+        _Repository,
+    )
+    capture = {}
+    result, _operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        rows_by_table,
+        capture=capture,
+        item_payloads=[
+            {
+                "id": "item-1",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+            },
+            {
+                "id": "item-2",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P002",
+                "matched_visit_id": "V002",
+            },
+        ],
+        resolved_visit_keys=[("P001", "V001"), ("P002", "V002")],
+    )
+
+    assert result["bundle_refresh"]["processed"] == 1
+    assert capture["bundle_refresh_calls"][0]["rows"] == [
+        {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("previous_status", "expected_reconciliation_count"),
+    [("active", 1), ("discharged", 0), ("", 0)],
+)
+def test_sync_pool_records_reconciles_only_explicit_active_to_discharged_transition(
+    monkeypatch,
+    previous_status,
+    expected_reconciliation_count,
+):
+    captured_persist = []
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_persist_hospitalization_sync_states",
+        lambda **kwargs: captured_persist.append(kwargs),
+    )
+    system_state = (
+        {
+            "_sample_sync_state": {
+                "hospitalization_status": previous_status,
+                "status_source": "inpat_registration",
+            }
+        }
+        if previous_status
+        else {}
+    )
+    capture = {}
+    result, operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": "2026-07-31 09:00:00",
+                }
+            ],
+            "admission_record": [],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "discharge_time": "2026-07-31 10:00:00",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "document_id": "D1",
+                    "update_time": datetime(2026, 7, 31, 10, 1),
+                }
+            ],
+        },
+        capture=capture,
+        extra_table_names=["discharge_record"],
+        table_config_overrides={
+            "daily_course_record": {
+                "incremental_strategy": "updated_at",
+                "watermark_columns": ["update_time"],
+            },
+            "discharge_record": {
+                "incremental_strategy": "updated_at",
+                "watermark_columns": ["update_time"],
+            },
+        },
+        item_payload={
+            "id": "item-1",
+            "matched_institute_id": "H1",
+            "matched_patient_id": "P001",
+            "matched_visit_id": "V001",
+            "raw_payload": system_state,
+        },
+    )
+
+    assert result["final_reconciliation_count"] == expected_reconciliation_count
+    assert result["final_reconciliation"] is bool(expected_reconciliation_count)
+    assert result["hard_delete_reconciliation"] == "not_supported"
+    assert operations.count("fetch:discharge_record") == 1
+    assert operations.index("fetch:discharge_record") < operations.index(
+        "fetch:daily_course_record"
+    )
+    discharge_fetch = next(
+        call
+        for call in capture["fetch_calls"]
+        if call["source_table"] == "discharge_record"
+    )
+    assert "watermark_column" not in discharge_fetch
+    assert captured_persist
+    assert len(captured_persist[0]["transition_identities"]) == (
+        expected_reconciliation_count
+    )
+
+
+def test_sync_pool_records_does_not_complete_transition_when_bundle_refresh_fails(
+    monkeypatch,
+):
+    persisted = []
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_persist_hospitalization_sync_states",
+        lambda **kwargs: persisted.append(kwargs),
+    )
+    with pytest.raises(RuntimeError, match="bundle failed"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": [],
+                "inpat_registration": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                        "admission_datetime": "2026-07-30 08:00:00",
+                        "discharge_datetime": "2026-07-31 09:00:00",
+                    }
+                ],
+                "admission_record": [],
+                "discharge_record": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                        "discharge_time": "2026-07-31 10:00:00",
+                    }
+                ],
+            },
+            extra_table_names=["discharge_record"],
+            refresh_scene_impl=lambda **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("bundle failed")
+            ),
+            item_payload={
+                "id": "item-1",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+                "raw_payload": {
+                    "_sample_sync_state": {
+                        "hospitalization_status": "active",
+                        "status_source": "inpat_registration",
+                    }
+                },
+            },
+        )
+
+    assert persisted == []
+
+
+def test_sync_pool_records_does_not_persist_transition_when_any_bundle_refresh_reports_failure(
+    monkeypatch,
+):
+    persisted = []
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_persist_hospitalization_sync_states",
+        lambda **kwargs: persisted.append(kwargs),
+    )
+
+    def _refresh_with_domain_failure(**kwargs):
+        return {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 12,
+            "scenes": {
+                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+                "final": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+            },
+            "domains": {
+                "medical_document": {
+                    "processed": 1,
+                    "updated": 0,
+                    "failed": 1,
+                    "skipped": 0,
+                }
+            },
+        }
+
+    with pytest.raises(RuntimeError, match="未更新出院同步状态"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": [],
+                "inpat_registration": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                        "admission_datetime": "2026-07-30 08:00:00",
+                        "discharge_datetime": "2026-07-31 09:00:00",
+                    }
+                ],
+                "admission_record": [],
+                "discharge_record": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                        "discharge_time": "2026-07-31 10:00:00",
+                    }
+                ],
+            },
+            extra_table_names=["discharge_record"],
+            refresh_scene_impl=_refresh_with_domain_failure,
+            item_payload={
+                "id": "item-1",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+                "raw_payload": {
+                    "_sample_sync_state": {
+                        "hospitalization_status": "active",
+                        "status_source": "inpat_registration",
+                    }
+                },
+            },
+        )
+
+    assert persisted == []
+
+
+def test_sync_pool_records_reports_nontransition_bundle_failure_without_aborting(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_persist_hospitalization_sync_states",
+        lambda **_kwargs: None,
+    )
+
+    def _refresh_with_final_failure(**kwargs):
+        return {
+            "processed": len(kwargs["rows"]),
+            "skipped": 0,
+            "material_reads": 6,
+            "scenes": {
+                "running": {"processed": 1, "updated": 1, "failed": 0, "skipped": 0},
+                "final": {"processed": 1, "updated": 0, "failed": 1, "skipped": 0},
+            },
+            "domains": {},
+        }
+
+    result, _operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": None,
+                }
+            ],
+            "admission_record": [],
+        },
+        refresh_scene_impl=_refresh_with_final_failure,
+    )
+
+    assert result["final_reconciliation"] is False
+    assert result["bundle_refresh"]["material_reads"] == 6
+    assert result["bundle_refresh"]["scenes"]["final"]["failed"] == 1
+
+
+def test_transition_visit_fetches_full_while_other_visit_keeps_watermark(
+    monkeypatch,
+):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+
+    class _LocalSession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, *, source_identity, visit_keys, table_names):
+            table_name = table_names[0]
+            if table_name != "daily_course_record":
+                return {}
+            return {
+                sample_pool_module.CursorKey(
+                    source_identity, "H1", "P002", "V002", table_name
+                ): SimpleNamespace(
+                    content_signature=None,
+                    watermark_value=datetime(2026, 7, 31, 8, 0),
+                )
+            }
+
+        def mark_full_sync(self, **_kwargs):
+            return None
+
+        def mark_success(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module, "SampleSyncCursorRepository", _Repository
+    )
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_persist_hospitalization_sync_states",
+        lambda **_kwargs: None,
+    )
+    capture = {}
+    _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": "2026-07-31 09:00:00",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P002",
+                    "visit_id": "V002",
+                    "admission_datetime": "2026-07-30 08:00:00",
+                    "discharge_datetime": None,
+                },
+            ],
+            "admission_record": [],
+            "discharge_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "discharge_time": "2026-07-31 10:00:00",
+                }
+            ],
+            "daily_course_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "document_id": "D1",
+                    "update_time": datetime(2026, 7, 31, 8, 1),
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P002",
+                    "visit_id": "V002",
+                    "document_id": "D2",
+                    "update_time": datetime(2026, 7, 31, 8, 2),
+                },
+            ],
+        },
+        capture=capture,
+        extra_table_names=["discharge_record"],
+        table_config_overrides={
+            "daily_course_record": {
+                "incremental_strategy": "updated_at",
+                "watermark_columns": ["update_time"],
+            }
+        },
+        item_payloads=[
+            {
+                "id": "item-1",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+                "raw_payload": {
+                    "_sample_sync_state": {
+                        "hospitalization_status": "active",
+                        "status_source": "inpat_registration",
+                    }
+                },
+            },
+            {
+                "id": "item-2",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P002",
+                "matched_visit_id": "V002",
+                "raw_payload": {
+                    "_sample_sync_state": {
+                        "hospitalization_status": "active",
+                        "status_source": "inpat_registration",
+                    }
+                },
+            },
+        ],
+        resolved_visit_keys=[("P001", "V001"), ("P002", "V002")],
+    )
+
+    detail_fetches = [
+        call
+        for call in capture["fetch_calls"]
+        if call["source_table"] == "daily_course_record"
+    ]
+    assert any(
+        call["visit_keys"] == [("P001", "V001")]
+        and "watermark_column" not in call
+        for call in detail_fetches
+    )
+    assert any(
+        call["visit_keys"] == [("P002", "V002")]
+        and call["watermark_column"] == "update_time"
+        for call in detail_fetches
+    )
+
+
+def test_sync_pool_records_degrades_missing_primary_relation_to_admission_record(
+    monkeypatch,
+):
+    primary_row = {
+        "institute_id": "H1",
+        "patient_id": "P001",
+        "visit_id": "V001",
+    }
+    result, operations, match_calls, _progress_events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": RuntimeError('relation "public.mr" does not exist'),
+            "inpat_registration": [],
+            "admission_record": [primary_row],
+        },
+    )
+
+    assert result["primary_visible"] is True
+    assert result["skipped_optional_tables"][0]["table_name"] == "mr"
+    assert result["skipped_optional_tables"][0]["sync_status"] == "source_table_unavailable"
+    assert len(match_calls) == 2
+    assert operations.index("match") < operations.index("fetch:daily_course_record")
+
+
+def test_sync_pool_records_stops_before_details_when_all_primary_records_unavailable(
+    monkeypatch,
+):
+    unavailable = RuntimeError("relation does not exist")
+    capture = {}
+    with pytest.raises(RuntimeError, match="源系统未提供可用"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": unavailable,
+                "inpat_registration": unavailable,
+                "admission_record": unavailable,
+            },
+            capture=capture,
+        )
+
+    assert capture["match_calls"] == []
+    assert "fetch:daily_course_record" not in capture["operations"]
+    assert not any(
+        operation.startswith("bundle:")
+        for operation in capture["operations"]
+    )
+
+
+def test_sync_pool_records_returns_missing_primary_when_sources_are_available_but_empty(
+    monkeypatch,
+):
+    result, operations, match_calls, progress_events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [],
+            "admission_record": [],
+        },
+    )
+
+    assert result["primary_visible"] is False
+    assert result["record_progress"]["missing_primary_record"] == 1
+    assert match_calls == []
+    assert "fetch:daily_course_record" not in operations
+    assert not any(operation.startswith("bundle:") for operation in operations)
+    assert progress_events[-1]["step_key"] == "primary_unavailable"
+
+
+def test_sample_sync_content_signature_is_order_stable_and_content_sensitive():
+    first = [
+        {"b": 2, "a": 1, "payload": b"\x01"},
+        {"a": 3, "b": datetime(2026, 7, 31, 8, 0)},
+    ]
+    reordered = [
+        {"b": datetime(2026, 7, 31, 8, 0), "a": 3},
+        {"payload": b"\x01", "a": 1, "b": 2},
+    ]
+    changed = [
+        {"b": 2, "a": 1, "payload": b"\x01"},
+        {"a": 4, "b": datetime(2026, 7, 31, 8, 0)},
+    ]
+
+    assert sample_pool_module.build_sample_sync_content_signature(
+        first
+    ) == sample_pool_module.build_sample_sync_content_signature(reordered)
+    assert sample_pool_module.build_sample_sync_content_signature(
+        first
+    ) != sample_pool_module.build_sample_sync_content_signature(changed)
+
+
+def test_sync_watermark_normalizes_naive_and_aware_values_to_utc():
+    naive = datetime(2026, 7, 31, 8, 0)
+    aware = datetime(2026, 7, 31, 16, 0, tzinfo=timezone(timedelta(hours=8)))
+
+    assert sample_pool_module._coerce_sync_watermark(naive) == datetime(
+        2026, 7, 31, 8, 0, tzinfo=timezone.utc
+    )
+    assert sample_pool_module._coerce_sync_watermark(aware) == datetime(
+        2026, 7, 31, 8, 0, tzinfo=timezone.utc
+    )
+    assert sample_pool_module.build_sample_sync_content_signature(
+        [{"time": naive}]
+    ) == sample_pool_module.build_sample_sync_content_signature(
+        [{"time": aware}]
+    )
+
+
+def test_incremental_full_reload_same_signature_skips_upsert_and_bundle_refresh(
+    monkeypatch,
+):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+    rows_by_table = {
+        "mr": [],
+        "inpat_registration": [
+            {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+        ],
+        "admission_record": [],
+        "daily_course_record": [
+            {
+                "institute_id": "H1",
+                "patient_id": "P001",
+                "visit_id": "V001",
+                "document_id": "D1",
+            }
+        ],
+    }
+    signatures = {
+        table_name: sample_pool_module.build_sample_sync_content_signature(rows)
+        for table_name, rows in rows_by_table.items()
+    }
+
+    class _LocalSession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, *, source_identity, visit_keys, table_names):
+            table_name = table_names[0]
+            return {
+                sample_pool_module.CursorKey(
+                    source_identity, "H1", "P001", "V001", table_name
+                ): SimpleNamespace(
+                    content_signature=signatures[table_name],
+                    watermark_value=None,
+                )
+            }
+
+        def mark_full_sync(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module, "SampleSyncCursorRepository", _Repository
+    )
+    upsert_records = []
+    capture = {}
+    result, operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        rows_by_table,
+        capture=capture,
+        upsert_impl=lambda **kwargs: upsert_records.append(
+            list(kwargs["records"])
+        )
+        or 0,
+    )
+
+    assert result["primary_visible"] is True
+    assert all(records == [] for records in upsert_records)
+    assert not any(operation.startswith("bundle:") for operation in operations)
+    assert result["sync_performance"]["tables_skipped_unchanged"] == 4
+    assert result["sync_performance"]["visits_refreshed"] == 0
+
+
+def test_incremental_cursor_transaction_rolls_back_when_upsert_fails(monkeypatch):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+    sessions = []
+    marks = []
+
+    class _LocalSession:
+        def __init__(self):
+            self.commits = 0
+            self.rollbacks = 0
+            sessions.append(self)
+
+        def commit(self):
+            self.commits += 1
+
+        def rollback(self):
+            self.rollbacks += 1
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, **_kwargs):
+            return {}
+
+        def mark_full_sync(self, **kwargs):
+            marks.append(kwargs)
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module, "SampleSyncCursorRepository", _Repository
+    )
+    with pytest.raises(RuntimeError, match="local upsert failed"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": [],
+                "inpat_registration": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                    }
+                ],
+                "admission_record": [],
+            },
+            upsert_impl=lambda **_kwargs: (_ for _ in ()).throw(
+                RuntimeError("local upsert failed")
+            ),
+        )
+
+    assert marks
+    assert any(session.rollbacks == 1 for session in sessions)
+    assert all(session.commits == 0 for session in sessions)
+
+
+def test_incremental_updated_at_uses_ten_minute_overlap(monkeypatch):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+    watermark = datetime(2026, 7, 31, 8, 0)
+
+    class _LocalSession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, *, source_identity, visit_keys, table_names):
+            table_name = table_names[0]
+            if table_name != "daily_course_record":
+                return {}
+            return {
+                sample_pool_module.CursorKey(
+                    source_identity, "H1", "P001", "V001", table_name
+                ): SimpleNamespace(
+                    content_signature=None,
+                    watermark_value=watermark,
+                )
+            }
+
+        def mark_full_sync(self, **_kwargs):
+            return None
+
+        def mark_success(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module, "SampleSyncCursorRepository", _Repository
+    )
+    capture = {}
+    _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "document_id": "D1",
+                    "update_time": datetime(2026, 7, 31, 8, 1),
+                }
+            ],
+        },
+        capture=capture,
+        table_config_overrides={
+            "daily_course_record": {
+                "incremental_strategy": "updated_at",
+                "watermark_columns": ["update_time"],
+            }
+        },
+        item_payload={"id": "item-1", "visit_id": "V001"},
+    )
+
+    detail_fetch = next(
+        call
+        for call in capture["fetch_calls"]
+        if call["source_table"] == "daily_course_record"
+    )
+    assert detail_fetch["watermark_column"] == "update_time"
+    assert detail_fetch["watermark_after"] == datetime(
+        2026, 7, 31, 7, 50, tzinfo=timezone.utc
+    )
+
+
+def test_incremental_updated_at_first_run_fetches_full_visit(monkeypatch):
+    monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
+
+    class _LocalSession:
+        def commit(self):
+            return None
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _Repository:
+        def __init__(self, _session):
+            pass
+
+        def get_many(self, **_kwargs):
+            return {}
+
+        def mark_full_sync(self, **_kwargs):
+            return None
+
+        def mark_success(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(sample_pool_module, "_session", _LocalSession)
+    monkeypatch.setattr(
+        sample_pool_module, "SampleSyncCursorRepository", _Repository
+    )
+    capture = {}
+    _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                    "document_id": "D1",
+                    "update_time": datetime(2026, 7, 31, 8, 1),
+                }
+            ],
+        },
+        capture=capture,
+        table_config_overrides={
+            "daily_course_record": {
+                "incremental_strategy": "updated_at",
+                "watermark_columns": ["update_time"],
+            }
+        },
+    )
+
+    detail_fetch = next(
+        call
+        for call in capture["fetch_calls"]
+        if call["source_table"] == "daily_course_record"
+    )
+    assert "watermark_column" not in detail_fetch
+    assert "watermark_after" not in detail_fetch
+
+
+def test_sample_sync_settings_enforce_safe_bounds():
+    settings = Settings(
+        _env_file=None,
+        JWT_SECRET="test-secret",
+        SAMPLE_SYNC_DETAIL_TABLE_WORKERS=6,
+        SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX=4,
+        SAMPLE_SYNC_UPSERT_BATCH_SIZE=50,
+        SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES=0,
+    )
+    assert settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS == 6
+    assert settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX == 4
+    assert settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE == 50
+    assert settings.SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES == 0
+
+    with pytest.raises(ValueError):
+        Settings(
+            _env_file=None,
+            JWT_SECRET="test-secret",
+            SAMPLE_SYNC_DETAIL_TABLE_WORKERS=7,
+        )
+    with pytest.raises(ValueError):
+        Settings(
+            _env_file=None,
+            JWT_SECRET="test-secret",
+            SAMPLE_SYNC_UPSERT_BATCH_SIZE=49,
+        )
+
+
+def test_sync_pool_records_uses_runtime_worker_and_batch_limits(monkeypatch):
+    monkeypatch.setattr(
+        sample_pool_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            SAMPLE_SYNC_INCREMENTAL_ENABLED=False,
+            SAMPLE_SYNC_DETAIL_TABLE_WORKERS=6,
+            SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX=2,
+            SAMPLE_SYNC_UPSERT_BATCH_SIZE=100,
+            SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES=7,
+        ),
+    )
+    upsert_calls = []
+    result, _operations, _match_calls, _events = _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [],
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P001",
+                    "visit_id": "V001",
+                }
+            ],
+            "admission_record": [],
+        },
+        upsert_impl=lambda **kwargs: upsert_calls.append(dict(kwargs))
+        or len(kwargs["records"]),
+    )
+
+    assert result["sync_performance"]["detail_table_workers"] == 1
+    assert upsert_calls
+    assert all(call["batch_size"] == 100 for call in upsert_calls)
+
+
+def test_create_sync_job_rejects_same_pool_until_active_job_finishes(monkeypatch):
+    db_engine = sa.create_engine("sqlite:///:memory:")
+    metadata = sa.MetaData()
+    sync_jobs = sa.Table(
+        "custom_qc_sample_pool_sync_jobs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("pool_id", sa.String(36), nullable=False),
+        sa.Column("status", sa.String(20), nullable=False),
+        sa.Column("payload_json", sa.Text, nullable=False),
+        sa.Column("summary_json", sa.Text, nullable=False),
+        sa.Column("error_message", sa.Text),
+        sa.Column("created_by", sa.String(64), nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("started_at", sa.DateTime),
+        sa.Column("finished_at", sa.DateTime),
+        sa.Column("updated_at", sa.DateTime, nullable=False),
+    )
+    metadata.create_all(db_engine)
+    session_factory = sa.orm.sessionmaker(bind=db_engine)
+    monkeypatch.setattr(sample_pool_module, "_session", session_factory)
+    service = object.__new__(CustomQCSamplePoolService)
+    service._sync_job_table = sync_jobs
+
+    first = service.create_sync_job(
+        pool_id="pool-1",
+        created_by="tester",
+        payload={},
+    )
+    with pytest.raises(
+        sample_pool_module.SampleSyncJobConflictError,
+        match="已有同步任务",
+    ):
+        service.create_sync_job(
+            pool_id="pool-1",
+            created_by="tester",
+            payload={},
+        )
+
+    other_pool = service.create_sync_job(
+        pool_id="pool-2",
+        created_by="tester",
+        payload={},
+    )
+    assert other_pool["pool_id"] == "pool-2"
+
+    with db_engine.begin() as connection:
+        connection.execute(
+            sync_jobs.update()
+            .where(sync_jobs.c.id == first["id"])
+            .values(status="completed")
+        )
+    next_job = service.create_sync_job(
+        pool_id="pool-1",
+        created_by="tester",
+        payload={},
+    )
+    assert next_job["id"] != first["id"]
 
 
 def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeypatch):
@@ -1504,7 +3428,10 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
             "match_status": "matched",
             "sync_status": "synced",
             "bundle_status": "ready",
-            "raw_payload_json": "{}",
+            "raw_payload_json": (
+                '{"_sample_sync_state":{"hospitalization_status":"active",'
+                '"status_source":"inpat_registration"}}'
+            ),
         },
         {
             "id": "item-2",
@@ -1523,7 +3450,11 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
             "match_status": "matched",
             "sync_status": "synced",
             "bundle_status": "ready",
-            "raw_payload_json": "{}",
+            "raw_payload_json": (
+                '{"_sample_sync_state":{"hospitalization_status":"discharged",'
+                '"status_source":"discharge_record",'
+                '"discharge_time":"2026-07-30T15:20:00+00:00"}}'
+            ),
         },
     ]
     monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
@@ -1538,6 +3469,8 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
     assert record["issue_count"] == 2
     assert record["sample_item_ids"] == ["item-1", "item-2"]
     assert record["candidate_rule_ids"] == ["SC-026", "SC-033"]
+    assert record["hospitalization_status"] == "discharged"
+    assert record["discharge_time"] == "2026-07-30T15:20:00+00:00"
     assert "首次病程记录鉴别诊断不全面" in record["issue_preview_text"]
 
 
@@ -2556,3 +4489,188 @@ def test_get_runnable_items_should_allow_formal_fast_screen_without_bundle_ready
     assert len(runnable) == 1
     assert runnable[0]["matched_visit_id"] == "V010"
     assert runnable[0]["bundle_status"] == "missing"
+
+
+def _deletion_test_service(monkeypatch):
+    engine = sa.create_engine("sqlite:///:memory:")
+    metadata = sa.MetaData()
+    pool_table = sa.Table(
+        "sample_pools",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("name", sa.String),
+        sa.Column("latest_job_id", sa.String),
+        sa.Column("latest_job_status", sa.String),
+    )
+    item_table = sa.Table(
+        "sample_pool_items",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("pool_id", sa.String),
+    )
+    sync_job_table = sa.Table(
+        "sample_pool_sync_jobs",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("pool_id", sa.String),
+        sa.Column("status", sa.String),
+    )
+    batch_job_status_table = sa.Table(
+        "batch_job_status",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("status", sa.String),
+    )
+    metadata.create_all(engine)
+    session_factory = sa.orm.sessionmaker(bind=engine)
+    monkeypatch.setattr(sample_pool_module, "_session", session_factory)
+    service = object.__new__(CustomQCSamplePoolService)
+    service._pool_table = pool_table
+    service._item_table = item_table
+    service._sync_job_table = sync_job_table
+    service._batch_job_status_table = batch_job_status_table
+    return (
+        service,
+        session_factory,
+        pool_table,
+        item_table,
+        sync_job_table,
+        batch_job_status_table,
+    )
+
+
+def test_delete_pool_removes_only_pool_owned_rows(monkeypatch):
+    service, session_factory, pool_table, item_table, sync_job_table, _batch_job_table = (
+        _deletion_test_service(monkeypatch)
+    )
+    session = session_factory()
+    session.execute(
+        pool_table.insert(),
+        [
+            {"id": "pool-delete", "name": "待删除池", "latest_job_status": "completed"},
+            {"id": "pool-keep", "name": "保留池", "latest_job_status": "completed"},
+        ],
+    )
+    session.execute(
+        item_table.insert(),
+        [
+            {"id": "item-delete", "pool_id": "pool-delete"},
+            {"id": "item-keep", "pool_id": "pool-keep"},
+        ],
+    )
+    session.execute(
+        sync_job_table.insert(),
+        [
+            {"id": "sync-delete", "pool_id": "pool-delete", "status": "completed"},
+            {"id": "sync-keep", "pool_id": "pool-keep", "status": "completed"},
+        ],
+    )
+    session.commit()
+    session.close()
+
+    result = service.delete_pool(pool_id="pool-delete")
+
+    assert result == {
+        "deleted": True,
+        "reason": "deleted",
+        "pool_id": "pool-delete",
+        "pool_name": "待删除池",
+        "deleted_item_count": 1,
+        "deleted_sync_job_count": 1,
+    }
+    session = session_factory()
+    assert session.execute(sa.select(pool_table.c.id)).scalars().all() == ["pool-keep"]
+    assert session.execute(sa.select(item_table.c.id)).scalars().all() == ["item-keep"]
+    assert session.execute(sa.select(sync_job_table.c.id)).scalars().all() == ["sync-keep"]
+    session.close()
+
+
+def test_get_pool_uses_actual_batch_job_status_instead_of_stale_cached_status(
+    monkeypatch,
+):
+    (
+        service,
+        session_factory,
+        pool_table,
+        _item_table,
+        _sync_job_table,
+        batch_job_table,
+    ) = _deletion_test_service(monkeypatch)
+    session = session_factory()
+    session.execute(
+        pool_table.insert().values(
+            id="pool-finished",
+            name="已完成池",
+            latest_job_id="job-finished",
+            latest_job_status="queued",
+        )
+    )
+    session.execute(
+        batch_job_table.insert().values(
+            id="job-finished",
+            status="completed",
+        )
+    )
+    session.commit()
+    session.close()
+
+    pool = service.get_pool(pool_id="pool-finished")
+
+    assert pool is not None
+    assert pool["latest_job_status"] == "completed"
+
+
+@pytest.mark.parametrize(
+    ("pool_id", "job_status", "sync_status", "reason"),
+    [
+        (sample_pool_module.CUSTOMER_TEST_POOL_ID, "completed", "completed", "protected_pool"),
+        ("pool-active-qc", "running", "completed", "active_qc_job"),
+        ("pool-active-sync", "completed", "queued", "active_sync_job"),
+    ],
+)
+def test_delete_pool_blocks_protected_or_active_pool(
+    monkeypatch,
+    pool_id,
+    job_status,
+    sync_status,
+    reason,
+):
+    service, session_factory, pool_table, _item_table, sync_job_table, batch_job_table = (
+        _deletion_test_service(monkeypatch)
+    )
+    session = session_factory()
+    session.execute(
+        pool_table.insert().values(
+            id=pool_id,
+            name="不可删除池",
+            latest_job_status=job_status,
+        )
+    )
+    session.execute(
+        sync_job_table.insert().values(
+            id=f"sync-{pool_id}",
+            pool_id=pool_id,
+            status=sync_status,
+        )
+    )
+    if job_status in {"queued", "running", "cancel_requested"}:
+        session.execute(
+            batch_job_table.insert().values(
+                id=f"job-{pool_id}",
+                status=job_status,
+            )
+        )
+        session.execute(
+            pool_table.update()
+            .where(pool_table.c.id == pool_id)
+            .values(
+                latest_job_id=f"job-{pool_id}",
+                latest_job_status=job_status,
+            )
+        )
+    session.commit()
+    session.close()
+
+    result = service.delete_pool(pool_id=pool_id)
+
+    assert result == {"deleted": False, "reason": reason}

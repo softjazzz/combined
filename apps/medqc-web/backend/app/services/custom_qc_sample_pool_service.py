@@ -4,12 +4,15 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import re
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -18,13 +21,23 @@ import psycopg2.extras
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy import MetaData, Table, and_, desc, func, or_, select, update
+from sqlalchemy import MetaData, Table, and_, delete, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
-from ..database.models.cdm import AdmissionRecord, InpatRegistration, MedicalRecordFrontpage
+from ..database.models.cdm import (
+    AdmissionRecord,
+    DischargeRecord,
+    InpatRegistration,
+    MedicalRecordFrontpage,
+    PatientInformation,
+)
 from ..core.settings import get_settings
-from .bundles.assembly import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
+from .bundles.assembly import (
+    refresh_all_bundle_variants_for_rows,
+    refresh_domain_bundles_for_rows,
+    refresh_scene_bundles_for_rows,
+)
 from .etl_sync import (
     expand_table_groups,
     fetch_remote_rows_by_visit_keys,
@@ -33,12 +46,113 @@ from .etl_sync import (
     load_db_config,
     upsert_to_local,
 )
+from .sample_sync_cursor_repository import (
+    CursorKey,
+    SampleSyncCursorRepository,
+    VisitKey,
+    build_source_identity,
+)
 from .visit_index_service import ingest_sync_rows
 
 CUSTOMER_TEST_POOL_ID = "customer-created-test-records-v1"
 CUSTOMER_TEST_POOL_NAME = "客户自建测试病历"
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+
+
+class SampleSyncJobConflictError(RuntimeError):
+    """同一样本池已有排队中或执行中的同步任务。"""
+
+
+def _lock_sample_sync_pool_transaction(session: Session, pool_id: str) -> None:
+    """生产 PG 使用事务级 advisory lock；SQLite 测试使用写事务锁。"""
+    bind = session.get_bind()
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", ""))
+    if dialect_name == "postgresql":
+        digest = hashlib.sha256(_safe_text(pool_id).encode("utf-8")).digest()
+        lock_key_1 = int.from_bytes(digest[:4], "big", signed=True)
+        lock_key_2 = int.from_bytes(digest[4:8], "big", signed=True)
+        session.execute(
+            sa.text("SELECT pg_advisory_xact_lock(:key1, :key2)"),
+            {"key1": lock_key_1, "key2": lock_key_2},
+        )
+    elif dialect_name == "sqlite":
+        session.execute(sa.text("BEGIN IMMEDIATE"))
+
+
+def _sample_sync_incremental_enabled() -> bool:
+    return bool(get_settings().SAMPLE_SYNC_INCREMENTAL_ENABLED)
+
+
+def _normalize_sync_signature_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        normalized = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+        return normalized.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return format(value.normalize(), "f")
+    if isinstance(value, (bytes, memoryview)):
+        return {"__bytes_hex__": bytes(value).hex()}
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_sync_signature_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_sync_signature_value(item) for item in value]
+    return value
+
+
+def build_sample_sync_content_signature(rows: Sequence[Dict[str, Any]]) -> str:
+    """构造与字段/行返回顺序无关的稳定内容签名。"""
+
+    normalized_rows = [
+        _normalize_sync_signature_value(dict(row))
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    serialized_rows = sorted(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for row in normalized_rows
+    )
+    payload = "[" + ",".join(serialized_rows) + "]"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _row_visit_key(row: Dict[str, Any]) -> Optional[VisitKey]:
+    values = VisitKey(
+        _safe_text(row.get("institute_id")),
+        _safe_text(row.get("patient_id")),
+        _safe_text(row.get("visit_id")),
+    )
+    return values if all(values) else None
+
+
+def _coerce_sync_watermark(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            return (
+                parsed.replace(tzinfo=timezone.utc)
+                if parsed.tzinfo is None
+                else parsed.astimezone(timezone.utc)
+            )
+        except ValueError:
+            return None
+    return None
 
 
 def build_sample_validation_execution_scope_hash(
@@ -240,7 +354,36 @@ def _is_remote_source_unavailable_error(exc: Exception) -> bool:
         "表不存在",
         "字段不存在",
     )
-    return any(pattern in message for pattern in unavailable_patterns)
+    quoted_relation_missing = (
+        "relation " in message
+        and " does not exist" in message
+    )
+    quoted_column_missing = (
+        "column " in message
+        and " does not exist" in message
+    )
+    return (
+        quoted_relation_missing
+        or quoted_column_missing
+        or any(pattern in message for pattern in unavailable_patterns)
+    )
+
+
+def _remote_source_unavailable_category(exc: Exception) -> str:
+    """将源表契约异常收敛为可审计类别，禁止向前端透出 SQL/连接详情。"""
+    message = _safe_text(str(exc)).lower()
+    pgcode = _safe_text(getattr(exc, "pgcode", ""))
+    if pgcode == "42P01" or "undefinedtable" in message or "relation " in message or "表不存在" in message:
+        return "source_relation_missing"
+    if (
+        pgcode == "42703"
+        or "undefinedcolumn" in message
+        or "column " in message
+        or "字段不存在" in message
+        or "缺少 patient_id/visit_id" in message
+    ):
+        return "source_field_missing"
+    return "source_contract_unavailable"
 
 
 def _sanitize_json_value(value: Any) -> Any:
@@ -2391,6 +2534,721 @@ def _pick_best_remote_candidate(
     )
 
 
+_REMOTE_MATCH_ANCHOR_PRIORITY = ("mr", "inpat_registration", "admission_record")
+PRIMARY_VISIBILITY_TABLES = ("mr", "inpat_registration", "admission_record")
+_HOSPITALIZATION_SCOPE_MODES = {"active", "discharged", "active_and_discharged"}
+_HOSPITALIZATION_ID_COLUMNS = {"institute_id", "patient_id", "visit_id"}
+_HOSPITALIZATION_ADMISSION_TIME_COLUMNS = (
+    "admission_datetime",
+    "admission_time",
+    "inpat_datetime",
+    "inpat_time",
+    "record_time",
+)
+_HOSPITALIZATION_DISCHARGE_TIME_COLUMNS = (
+    "discharge_datetime",
+    "discharge_time",
+    "discharge_date",
+)
+_SAMPLE_SYNC_STATE_KEY = "_sample_sync_state"
+
+
+def _hospitalization_identity(row: Dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        _safe_text(row.get("institute_id")),
+        _safe_text(row.get("patient_id")),
+        _safe_text(row.get("visit_id")),
+    )
+
+
+def _hospitalization_state(
+    *,
+    status: str,
+    discharge_time: Any = None,
+    status_source: str,
+) -> Dict[str, Any]:
+    parsed_discharge_time = _parse_datetime_value(discharge_time)
+    return {
+        "hospitalization_status": status,
+        "discharge_time": (
+            parsed_discharge_time.isoformat() if parsed_discharge_time else ""
+        ),
+        "status_source": status_source,
+    }
+
+
+def _collect_current_hospitalization_states(
+    rows_by_table: Dict[str, Sequence[Dict[str, Any]]],
+) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+    """按受控优先级解析本轮源端住院状态，不用空字段推断在院。"""
+    states: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+
+    # active 只允许住院登记证明；病案首页和入院记录缺少出院时间并非在院证据。
+    for row in rows_by_table.get("inpat_registration", ()):
+        identity = _hospitalization_identity(row)
+        if not all(identity):
+            continue
+        admission_time = _parse_datetime_value(
+            row.get("admission_datetime") or row.get("admission_time")
+        )
+        discharge_time = _parse_datetime_value(
+            row.get("discharge_datetime") or row.get("discharge_time")
+        )
+        if admission_time and discharge_time is None:
+            states[identity] = _hospitalization_state(
+                status="active",
+                status_source="inpat_registration",
+            )
+
+    # 出院证据由弱到强覆盖：mr → inpat_registration → discharge_record。
+    for table_name, discharge_fields in (
+        ("mr", ("discharge_datetime",)),
+        ("inpat_registration", ("discharge_datetime",)),
+        ("discharge_record", ("discharge_time", "discharge_date")),
+    ):
+        for row in rows_by_table.get(table_name, ()):
+            identity = _hospitalization_identity(row)
+            if not all(identity):
+                continue
+            discharge_time = next(
+                (
+                    _parse_datetime_value(row.get(field))
+                    for field in discharge_fields
+                    if _parse_datetime_value(row.get(field)) is not None
+                ),
+                None,
+            )
+            if discharge_time is not None:
+                states[identity] = _hospitalization_state(
+                    status="discharged",
+                    discharge_time=discharge_time,
+                    status_source=table_name,
+                )
+    return states
+
+
+def _trusted_item_hospitalization_state(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    raw_payload = item.get("raw_payload")
+    if not isinstance(raw_payload, dict):
+        raw_payload = _safe_json_loads(item.get("raw_payload_json"), {})
+    system_state = (
+        raw_payload.get(_SAMPLE_SYNC_STATE_KEY)
+        if isinstance(raw_payload, dict)
+        else None
+    )
+    if not isinstance(system_state, dict):
+        return None
+    status = _safe_text(system_state.get("hospitalization_status")).lower()
+    if status not in {"active", "discharged"}:
+        return None
+    return {
+        "hospitalization_status": status,
+        "discharge_time": _safe_text(system_state.get("discharge_time")),
+        "status_source": _safe_text(system_state.get("status_source"), "sample_sync_state"),
+    }
+
+
+def _load_previous_hospitalization_states(
+    items: Sequence[Dict[str, Any]],
+) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+    """同步前快照：优先系统命名空间，旧数据才回查本地受控表。"""
+    previous: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    legacy_identities: set[tuple[str, str, str]] = set()
+    for item in items:
+        raw_payload = item.get("raw_payload")
+        if not isinstance(raw_payload, dict):
+            raw_payload = _safe_json_loads(item.get("raw_payload_json"), {})
+        identity = (
+            _safe_text(item.get("matched_institute_id"))
+            or _safe_text((raw_payload or {}).get("institute_id")),
+            _safe_text(item.get("matched_patient_id"))
+            or _safe_text((raw_payload or {}).get("patient_id")),
+            _safe_text(item.get("matched_visit_id"))
+            or _safe_text((raw_payload or {}).get("visit_id")),
+        )
+        if not all(identity):
+            continue
+        trusted = _trusted_item_hospitalization_state(item)
+        if trusted is not None:
+            previous[identity] = trusted
+        else:
+            legacy_identities.add(identity)
+    if not legacy_identities:
+        return previous
+
+    session = _session()
+    try:
+        for institute_id, patient_id, visit_id in legacy_identities:
+            # 先查出院证据，避免旧表之间短暂不一致把出院病例误记为在院。
+            discharge = (
+                session.query(DischargeRecord)
+                .filter(
+                    DischargeRecord.institute_id == institute_id,
+                    DischargeRecord.patient_id == patient_id,
+                    DischargeRecord.visit_id == visit_id,
+                )
+                .first()
+            )
+            discharge_time = (
+                getattr(discharge, "discharge_time", None)
+                or getattr(discharge, "discharge_date", None)
+                if discharge is not None
+                else None
+            )
+            registration = (
+                session.query(InpatRegistration)
+                .filter(
+                    InpatRegistration.institute_id == institute_id,
+                    InpatRegistration.patient_id == patient_id,
+                    InpatRegistration.visit_id == visit_id,
+                )
+                .first()
+            )
+            if discharge_time is None and registration is not None:
+                discharge_time = getattr(registration, "discharge_datetime", None)
+            frontpage = (
+                session.query(MedicalRecordFrontpage)
+                .filter(
+                    MedicalRecordFrontpage.institute_id == institute_id,
+                    MedicalRecordFrontpage.patient_id == patient_id,
+                    MedicalRecordFrontpage.visit_id == visit_id,
+                )
+                .first()
+            )
+            if discharge_time is None and frontpage is not None:
+                discharge_time = getattr(frontpage, "discharge_datetime", None)
+            if discharge_time is not None:
+                previous[(institute_id, patient_id, visit_id)] = (
+                    _hospitalization_state(
+                        status="discharged",
+                        discharge_time=discharge_time,
+                        status_source="legacy_local",
+                    )
+                )
+            elif (
+                registration is not None
+                and _parse_datetime_value(
+                    getattr(registration, "admission_datetime", None)
+                )
+                is not None
+            ):
+                previous[(institute_id, patient_id, visit_id)] = (
+                    _hospitalization_state(
+                        status="active",
+                        status_source="legacy_inpat_registration",
+                    )
+                )
+    except Exception:
+        # 旧病例回查只是兼容证据；无法可靠读取时保持未知，绝不猜测 active。
+        return previous
+    finally:
+        session.close()
+    return previous
+
+
+def _persist_hospitalization_sync_states(
+    *,
+    item_table: Table,
+    items: Sequence[Dict[str, Any]],
+    current_states: Dict[tuple[str, str, str], Dict[str, Any]],
+    transition_identities: set[tuple[str, str, str]],
+) -> None:
+    """仅在明细及 Bundle 全部成功后提交状态，失败时不留下伪完成标记。"""
+    if not current_states:
+        return
+    session = _session()
+    observed_at = _now_utc().isoformat()
+    try:
+        for item in items:
+            raw_payload = item.get("raw_payload")
+            if not isinstance(raw_payload, dict):
+                raw_payload = _safe_json_loads(item.get("raw_payload_json"), {})
+            if not isinstance(raw_payload, dict):
+                raw_payload = {}
+            identity = (
+                _safe_text(item.get("matched_institute_id"))
+                or _safe_text(raw_payload.get("institute_id")),
+                _safe_text(item.get("matched_patient_id"))
+                or _safe_text(raw_payload.get("patient_id")),
+                _safe_text(item.get("matched_visit_id"))
+                or _safe_text(raw_payload.get("visit_id")),
+            )
+            current = current_states.get(identity)
+            item_id = _safe_text(item.get("id"))
+            if current is None or not item_id:
+                continue
+            status = _safe_text(current.get("hospitalization_status")).lower()
+            state_payload = {
+                "hospitalization_status": status,
+                "discharge_time": _safe_text(current.get("discharge_time")),
+                "status_source": _safe_text(current.get("status_source")),
+                "observed_at": observed_at,
+                "reconciliation_completed_at": (
+                    observed_at if identity in transition_identities else ""
+                ),
+            }
+            raw_payload[_SAMPLE_SYNC_STATE_KEY] = state_payload
+            session.execute(
+                update(item_table)
+                .where(item_table.c.id == item_id)
+                .values(
+                    raw_payload_json=_safe_json_dumps(raw_payload),
+                    expected_scene="final" if status == "discharged" else "running",
+                    updated_at=_now_utc(),
+                )
+            )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def _first_available_column(columns: set[str], candidates: Sequence[str]) -> str:
+    return next((column for column in candidates if column in columns), "")
+
+
+def _parse_datetime_value(value: Any) -> Optional[datetime]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    text = _safe_text(value)
+    if not text:
+        return None
+    normalized = text.replace("/", "-").replace("T", " ")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        parsed_date = _parse_date(normalized)
+        return datetime.combine(parsed_date, datetime.min.time()) if parsed_date else None
+
+
+def _resolve_hospitalization_source_plan(
+    *,
+    table_columns: Dict[str, set[str]],
+    scope_mode: str,
+) -> Dict[str, Any]:
+    normalized_mode = _safe_text(scope_mode).lower()
+    if normalized_mode not in _HOSPITALIZATION_SCOPE_MODES:
+        raise ValueError("住院范围仅支持当前在院、期间出院或两者合并")
+
+    def choose_source(
+        table_names: Sequence[str],
+        *,
+        require_admission_time: bool,
+    ) -> Optional[Dict[str, Any]]:
+        for table_name in table_names:
+            columns = set(table_columns.get(table_name) or set())
+            if not _HOSPITALIZATION_ID_COLUMNS.issubset(columns):
+                continue
+            admission_column = _first_available_column(
+                columns,
+                _HOSPITALIZATION_ADMISSION_TIME_COLUMNS,
+            )
+            discharge_column = _first_available_column(
+                columns,
+                _HOSPITALIZATION_DISCHARGE_TIME_COLUMNS,
+            )
+            if (require_admission_time and not admission_column) or not discharge_column:
+                continue
+            return {
+                "table_name": table_name,
+                "columns": columns,
+                "admission_time_column": admission_column,
+                "discharge_time_column": discharge_column,
+            }
+        return None
+
+    needs_active = normalized_mode in {"active", "active_and_discharged"}
+    needs_discharged = normalized_mode in {"discharged", "active_and_discharged"}
+    active_source = (
+        choose_source(
+            ("inpat_registration",),
+            require_admission_time=True,
+        )
+        if needs_active
+        else None
+    )
+    discharged_source = (
+        choose_source(
+            ("discharge_record", "mr", "inpat_registration", "admission_record"),
+            require_admission_time=False,
+        )
+        if needs_discharged
+        else None
+    )
+    if needs_active and active_source is None:
+        raise ValueError("源库没有可识别的当前在院患者数据，请同步住院登记")
+    if needs_discharged and discharged_source is None:
+        raise ValueError("源库没有可识别的已出院患者数据，请同步出院记录或病案首页")
+
+    warnings: List[str] = []
+    if needs_discharged and discharged_source and discharged_source["table_name"] != "discharge_record":
+        warnings.append("源库未提供可用出院记录表，已使用病案首页或住院记录识别期间出院患者。")
+    sources_used = list(
+        dict.fromkeys(
+            source["table_name"]
+            for source in (active_source, discharged_source)
+            if source is not None
+        )
+    )
+    return {
+        "active": active_source,
+        "discharged": discharged_source,
+        "sources_used": sources_used,
+        "source_status": "degraded" if warnings else "ready",
+        "warnings": warnings,
+    }
+
+
+def _select_hospitalization_candidates(
+    *,
+    candidates: Sequence[Dict[str, Any]],
+    scope_mode: str,
+    as_of_date: date,
+    discharge_start_date: Optional[date],
+    discharge_end_date: Optional[date],
+    departments: Sequence[str],
+) -> List[Dict[str, Any]]:
+    normalized_mode = _safe_text(scope_mode).lower()
+    if normalized_mode not in _HOSPITALIZATION_SCOPE_MODES:
+        raise ValueError("住院范围仅支持当前在院、期间出院或两者合并")
+    if normalized_mode in {"discharged", "active_and_discharged"}:
+        if discharge_start_date is None or discharge_end_date is None:
+            raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
+        if discharge_start_date > discharge_end_date:
+            raise ValueError("出院开始日期不能晚于结束日期")
+        if (discharge_end_date - discharge_start_date).days > 30:
+            raise ValueError("出院日期范围最多 31 天")
+
+    department_filter = {
+        _safe_text(item)
+        for item in departments
+        if _safe_text(item)
+    }
+    as_of_end = datetime.combine(as_of_date + timedelta(days=1), datetime.min.time())
+    selected_by_identity: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    for candidate in candidates:
+        institute_id = _safe_text(candidate.get("institute_id"))
+        patient_id = _safe_text(candidate.get("patient_id"))
+        visit_id = _safe_text(candidate.get("visit_id"))
+        identity = (institute_id, patient_id, visit_id)
+        if not all(identity):
+            continue
+        admission_time = _parse_datetime_value(
+            candidate.get("admission_time") or candidate.get("admission_datetime")
+        )
+        discharge_time = _parse_datetime_value(
+            candidate.get("discharge_time") or candidate.get("discharge_datetime")
+        )
+        is_active = bool(
+            admission_time
+            and admission_time < as_of_end
+            and (discharge_time is None or discharge_time >= as_of_end)
+        )
+        is_period_discharge = bool(
+            discharge_time
+            and discharge_start_date
+            and discharge_end_date
+            and discharge_start_date <= discharge_time.date() <= discharge_end_date
+        )
+        status = ""
+        if normalized_mode in {"active", "active_and_discharged"} and is_active:
+            status = "active"
+        elif normalized_mode in {"discharged", "active_and_discharged"} and is_period_discharge:
+            status = "discharged"
+        if not status:
+            continue
+
+        if status == "active":
+            department_candidates = (
+                ("current_department", candidate.get("current_department")),
+                ("admission_department", candidate.get("admission_department")),
+            )
+        else:
+            department_candidates = (
+                ("discharge_department", candidate.get("discharge_department")),
+                ("current_department", candidate.get("current_department")),
+                ("admission_department", candidate.get("admission_department")),
+            )
+        department_basis, department = next(
+            (
+                (basis, _safe_text(value))
+                for basis, value in department_candidates
+                if _safe_text(value)
+            ),
+            ("unavailable", ""),
+        )
+        if department_filter and department not in department_filter:
+            continue
+
+        normalized = dict(candidate)
+        normalized.update(
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "admission_time": admission_time,
+                "discharge_time": discharge_time,
+                "hospitalization_status": status,
+                "department": department,
+                "department_basis": department_basis,
+            }
+        )
+        selected_by_identity.setdefault(identity, normalized)
+    return list(selected_by_identity.values())
+
+
+def _build_admission_filter_pool_item(
+    *,
+    item_id: str,
+    pool_id: str,
+    row_no: int,
+    source_row: Dict[str, Any],
+    qc_date: date,
+    now: datetime,
+) -> Dict[str, Any]:
+    """将入院登记筛到的病例直接写成可展示、已匹配的样本池条目。"""
+    institute_id = _safe_text(source_row.get("institute_id"))
+    patient_id = _safe_text(source_row.get("patient_id"))
+    visit_id = _safe_text(source_row.get("visit_id"))
+    patient_name = _safe_text(source_row.get("patient_name"))
+    department = _safe_text(source_row.get("department"))
+    raw_payload = {
+        "source": "admission_filter",
+        "institute_id": institute_id,
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "mr_no": _safe_text(source_row.get("mr_no")),
+        "inpat_no": _safe_text(source_row.get("inpat_no")),
+        "patient_name": patient_name,
+        "department": department,
+        "admission_time": str(source_row.get("admission_time") or ""),
+    }
+    return {
+        "id": item_id,
+        "pool_id": pool_id,
+        "row_no": row_no,
+        # 在插入时回填展示字段，不能等待病历池列表的后续兜底。
+        "department": department,
+        "patient_name": patient_name,
+        "mr_no": raw_payload["mr_no"],
+        "manual_issue_text": "按入院日期与科室条件同步",
+        "normalized_issue_text": "按入院日期与科室条件同步",
+        "doctor_name": "",
+        "qc_date": qc_date,
+        "qc_user": "",
+        "coverage_type": "llm_intrinsic",
+        "issue_category": "source_sync",
+        "expected_scene": "running",
+        "candidate_rule_ids_json": "[]",
+        "include_in_batch_1": True,
+        "exclude_reason": "",
+        "matched_institute_id": institute_id,
+        "matched_patient_id": patient_id,
+        "matched_visit_id": visit_id,
+        "match_status": "matched",
+        "sync_status": "pending",
+        "bundle_status": "pending",
+        "latest_job_id": "",
+        "latest_match_status": "",
+        "raw_payload_json": _safe_json_dumps(raw_payload),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _build_hospitalization_scope_pool_item(
+    *,
+    item_id: str,
+    pool_id: str,
+    row_no: int,
+    source_row: Dict[str, Any],
+    qc_date: date,
+    now: datetime,
+) -> Dict[str, Any]:
+    item = _build_admission_filter_pool_item(
+        item_id=item_id,
+        pool_id=pool_id,
+        row_no=row_no,
+        source_row=source_row,
+        qc_date=qc_date,
+        now=now,
+    )
+    item["manual_issue_text"] = "按住院范围同步"
+    item["normalized_issue_text"] = "按住院范围同步"
+    raw_payload = _safe_json_loads(item.get("raw_payload_json"), {})
+    hospitalization_status = _safe_text(
+        source_row.get("hospitalization_status")
+    ).lower()
+    expected_scene = "final" if hospitalization_status == "discharged" else "running"
+    raw_payload.update(
+        {
+            "source": "hospitalization_scope",
+            "department_basis": _safe_text(source_row.get("department_basis")),
+            "source_table": _safe_text(source_row.get("source_table")),
+            "discharge_time": str(source_row.get("discharge_time") or ""),
+            _SAMPLE_SYNC_STATE_KEY: {
+                "hospitalization_status": hospitalization_status,
+                "discharge_time": str(source_row.get("discharge_time") or ""),
+                "status_source": _safe_text(
+                    source_row.get("source_table"),
+                    "hospitalization_scope",
+                ),
+                "observed_at": now.isoformat(),
+                "reconciliation_completed_at": (
+                    now.isoformat() if hospitalization_status == "discharged" else ""
+                ),
+            },
+        }
+    )
+    item["expected_scene"] = expected_scene
+    item["raw_payload_json"] = _safe_json_dumps(raw_payload)
+    return item
+
+
+def _backfill_admission_source_patient_names(
+    *,
+    source_rows: Sequence[Dict[str, Any]],
+    demographic_rows: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """用患者主索引补齐在院登记可能缺失的姓名，不改变住院三坐标。"""
+    name_by_identity = {
+        (
+            _safe_text(row.get("institute_id")),
+            _safe_text(row.get("patient_id")),
+        ): _safe_text(row.get("patient_name") or row.get("name"))
+        for row in demographic_rows
+        if _safe_text(row.get("institute_id"))
+        and _safe_text(row.get("patient_id"))
+        and _safe_text(row.get("patient_name") or row.get("name"))
+    }
+    results: List[Dict[str, Any]] = []
+    for source_row in source_rows:
+        row = dict(source_row)
+        if not _safe_text(row.get("patient_name")):
+            row["patient_name"] = name_by_identity.get(
+                (
+                    _safe_text(row.get("institute_id")),
+                    _safe_text(row.get("patient_id")),
+                ),
+                "",
+            )
+        results.append(row)
+    return results
+
+
+def _build_existing_admission_item_display_patch(
+    *,
+    existing_row: Dict[str, Any],
+    source_row: Dict[str, Any],
+) -> Dict[str, Any]:
+    """再次按条件同步时，修复既有病历池条目的空白展示字段。"""
+    patch: Dict[str, Any] = {}
+    field_mapping = {
+        "patient_name": "patient_name",
+        "department": "department",
+        "mr_no": "mr_no",
+    }
+    for target_field, source_field in field_mapping.items():
+        source_value = _safe_text(source_row.get(source_field))
+        if source_value and not _safe_text(existing_row.get(target_field)):
+            patch[target_field] = source_value
+
+    raw_payload = _safe_json_loads(existing_row.get("raw_payload_json"), {})
+    if not isinstance(raw_payload, dict):
+        raw_payload = {}
+    raw_changed = False
+    for field in (
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "patient_name",
+        "department",
+        "mr_no",
+        "inpat_no",
+        "admission_time",
+    ):
+        source_value = _safe_text(source_row.get(field))
+        if source_value and not _safe_text(raw_payload.get(field)):
+            raw_payload[field] = source_value
+            raw_changed = True
+    hospitalization_status = _safe_text(
+        source_row.get("hospitalization_status")
+    ).lower()
+    if hospitalization_status in {"active", "discharged"}:
+        source_state = {
+            "hospitalization_status": hospitalization_status,
+            "discharge_time": str(source_row.get("discharge_time") or ""),
+            "status_source": _safe_text(
+                source_row.get("source_table"),
+                "hospitalization_scope",
+            ),
+            "observed_at": _now_utc().isoformat(),
+            "reconciliation_completed_at": (
+                _now_utc().isoformat()
+                if hospitalization_status == "discharged"
+                else ""
+            ),
+        }
+        if raw_payload.get(_SAMPLE_SYNC_STATE_KEY) != source_state:
+            raw_payload[_SAMPLE_SYNC_STATE_KEY] = source_state
+            raw_changed = True
+        expected_scene = "final" if hospitalization_status == "discharged" else "running"
+        if _safe_text(existing_row.get("expected_scene"), "running") != expected_scene:
+            patch["expected_scene"] = expected_scene
+    if raw_changed:
+        patch["raw_payload_json"] = _safe_json_dumps(raw_payload)
+    return patch
+
+
+def _pick_best_remote_candidate_by_anchor_priority(
+    *,
+    candidates: Sequence[Dict[str, Any]],
+    patient_name: str,
+    department: str,
+    qc_date_value: Optional[date],
+) -> Optional[Dict[str, Any]]:
+    """按病案首页、在院登记、入院记录顺序选择具备完整三坐标的远端病例。"""
+    valid_candidates = [
+        candidate
+        for candidate in candidates
+        if _safe_text(candidate.get("institute_id"))
+        and _safe_text(candidate.get("patient_id"))
+        and _safe_text(candidate.get("visit_id"))
+    ]
+    for anchor_table in _REMOTE_MATCH_ANCHOR_PRIORITY:
+        anchor_candidates = [
+            candidate
+            for candidate in valid_candidates
+            if _safe_text(candidate.get("source_anchor_table")) == anchor_table
+        ]
+        chosen = _pick_best_remote_candidate(
+            candidates=anchor_candidates,
+            patient_name=patient_name,
+            department=department,
+            qc_date_value=qc_date_value,
+        )
+        if chosen is not None:
+            return chosen
+
+    # 兼容既有调用方或测试中尚未携带 source_anchor_table 的候选。
+    return _pick_best_remote_candidate(
+        candidates=[
+            candidate
+            for candidate in valid_candidates
+            if _safe_text(candidate.get("source_anchor_table")) not in _REMOTE_MATCH_ANCHOR_PRIORITY
+        ],
+        patient_name=patient_name,
+        department=department,
+        qc_date_value=qc_date_value,
+    )
+
+
 def _candidate_recency_key(
     *,
     admission_value: Any,
@@ -2528,6 +3386,20 @@ def _sample_pool_sync_jobs_table() -> Table:
     return table
 
 
+@lru_cache(maxsize=1)
+def _sample_validation_batch_job_status_table() -> Table:
+    """只读引用真实质控任务状态，避免样本池缓存状态长期停留在 queued。"""
+
+    metadata = MetaData()
+    return Table(
+        "custom_qc_batch_jobs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("status", sa.String(20), nullable=False),
+        schema=_schema(),
+    )
+
+
 @dataclass
 class SamplePoolListResult:
     items: List[Dict[str, Any]]
@@ -2541,6 +3413,7 @@ class CustomQCSamplePoolService:
         self._pool_table = _sample_pools_table()
         self._item_table = _sample_pool_items_table()
         self._sync_job_table = _sample_pool_sync_jobs_table()
+        self._batch_job_status_table = _sample_validation_batch_job_status_table()
 
     @staticmethod
     def resolve_sync_table_names(group_ids: Optional[Sequence[str]] = None) -> Dict[str, List[str]]:
@@ -2556,6 +3429,7 @@ class CustomQCSamplePoolService:
         }
 
     def _row_to_pool(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        actual_job_status = _safe_text(row.get("actual_latest_job_status"))
         return {
             "id": _safe_text(row.get("id")),
             "name": _safe_text(row.get("name")),
@@ -2575,7 +3449,8 @@ class CustomQCSamplePoolService:
             "unmatched_items": int(row.get("unmatched_items") or 0),
             "ready_items": int(row.get("ready_items") or 0),
             "latest_job_id": _safe_text(row.get("latest_job_id")),
-            "latest_job_status": _safe_text(row.get("latest_job_status")),
+            # 有真实任务行时只认任务表；任务已被清理时不继续展示样本池中的陈旧缓存。
+            "latest_job_status": actual_job_status,
         }
 
     def _row_to_item(self, row: Dict[str, Any]) -> Dict[str, Any]:
@@ -2767,7 +3642,16 @@ class CustomQCSamplePoolService:
             if where_clause is not None:
                 total_stmt = total_stmt.where(where_clause)
             total = int(session.execute(total_stmt).scalar() or 0)
-            stmt = select(self._pool_table)
+            stmt = select(
+                self._pool_table,
+                self._batch_job_status_table.c.status.label(
+                    "actual_latest_job_status"
+                ),
+            ).outerjoin(
+                self._batch_job_status_table,
+                self._batch_job_status_table.c.id
+                == self._pool_table.c.latest_job_id,
+            )
             if where_clause is not None:
                 stmt = stmt.where(where_clause)
             stmt = (
@@ -2788,9 +3672,120 @@ class CustomQCSamplePoolService:
     def get_pool(self, *, pool_id: str) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
-            stmt = select(self._pool_table).where(self._pool_table.c.id == pool_id)
+            stmt = (
+                select(
+                    self._pool_table,
+                    self._batch_job_status_table.c.status.label(
+                        "actual_latest_job_status"
+                    ),
+                )
+                .outerjoin(
+                    self._batch_job_status_table,
+                    self._batch_job_status_table.c.id
+                    == self._pool_table.c.latest_job_id,
+                )
+                .where(self._pool_table.c.id == pool_id)
+            )
             row = session.execute(stmt).mappings().first()
             return self._row_to_pool(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def delete_pool(self, *, pool_id: str) -> Dict[str, Any]:
+        """删除样本池自身数据；病历、Bundle 和已完成质控任务不在删除范围内。"""
+
+        normalized_pool_id = _safe_text(pool_id)
+        if normalized_pool_id == CUSTOMER_TEST_POOL_ID:
+            return {"deleted": False, "reason": "protected_pool"}
+
+        session = _session()
+        try:
+            pool_row = (
+                session.execute(
+                    select(self._pool_table)
+                    .where(self._pool_table.c.id == normalized_pool_id)
+                    .with_for_update()
+                )
+                .mappings()
+                .first()
+            )
+            if not pool_row:
+                return {"deleted": False, "reason": "not_found"}
+
+            actual_latest_job_status = ""
+            latest_job_id = _safe_text(pool_row.get("latest_job_id"))
+            if latest_job_id:
+                actual_latest_job_status = _safe_text(
+                    session.execute(
+                        select(self._batch_job_status_table.c.status).where(
+                            self._batch_job_status_table.c.id == latest_job_id
+                        )
+                    ).scalar()
+                ).lower()
+            if actual_latest_job_status in {"queued", "running", "cancel_requested"}:
+                return {"deleted": False, "reason": "active_qc_job"}
+
+            active_sync_jobs = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(self._sync_job_table)
+                    .where(
+                        and_(
+                            self._sync_job_table.c.pool_id == normalized_pool_id,
+                            self._sync_job_table.c.status.in_(
+                                ("queued", "running", "cancel_requested")
+                            ),
+                        )
+                    )
+                ).scalar()
+                or 0
+            )
+            if active_sync_jobs:
+                return {"deleted": False, "reason": "active_sync_job"}
+
+            item_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(self._item_table)
+                    .where(self._item_table.c.pool_id == normalized_pool_id)
+                ).scalar()
+                or 0
+            )
+            sync_job_count = int(
+                session.execute(
+                    select(func.count())
+                    .select_from(self._sync_job_table)
+                    .where(self._sync_job_table.c.pool_id == normalized_pool_id)
+                ).scalar()
+                or 0
+            )
+            session.execute(
+                delete(self._sync_job_table).where(
+                    self._sync_job_table.c.pool_id == normalized_pool_id
+                )
+            )
+            session.execute(
+                delete(self._item_table).where(
+                    self._item_table.c.pool_id == normalized_pool_id
+                )
+            )
+            session.execute(
+                delete(self._pool_table).where(
+                    self._pool_table.c.id == normalized_pool_id
+                )
+            )
+            session.commit()
+            return {
+                "deleted": True,
+                "reason": "deleted",
+                "pool_id": normalized_pool_id,
+                "pool_name": _safe_text(pool_row.get("name")),
+                "deleted_item_count": item_count,
+                "deleted_sync_job_count": sync_job_count,
+            }
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
 
@@ -2835,6 +3830,21 @@ class CustomQCSamplePoolService:
             "total_rows_upserted": 0,
         }
         try:
+            _lock_sample_sync_pool_transaction(session, pool_id)
+            active_job_id = session.execute(
+                select(self._sync_job_table.c.id)
+                .where(
+                    and_(
+                        self._sync_job_table.c.pool_id == pool_id,
+                        self._sync_job_table.c.status.in_(("queued", "running")),
+                    )
+                )
+                .limit(1)
+            ).scalar()
+            if active_job_id:
+                raise SampleSyncJobConflictError(
+                    "该样本池已有同步任务正在排队或执行，请等待当前任务完成后再试。"
+                )
             session.execute(
                 self._sync_job_table.insert().values(
                     id=job_id,
@@ -2860,6 +3870,9 @@ class CustomQCSamplePoolService:
                 "created_at": now,
                 "updated_at": now,
             }
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
 
@@ -3807,6 +4820,7 @@ class CustomQCSamplePoolService:
             for item in items:
                 group_key = item["matched_visit_id"] or f"id:{item['visit_id'] or item['mr_no'] or item['id']}"
                 current = grouped.get(group_key)
+                hospitalization_state = _trusted_item_hospitalization_state(item) or {}
                 if current is None:
                     current = {
                         "id": group_key,
@@ -3818,6 +4832,12 @@ class CustomQCSamplePoolService:
                         "patient_age": "",
                         "mr_no": item["mr_no"],
                         "department": item["department"],
+                        "hospitalization_status": _safe_text(
+                            hospitalization_state.get("hospitalization_status")
+                        ),
+                        "discharge_time": _safe_text(
+                            hospitalization_state.get("discharge_time")
+                        ),
                         "match_status": item["match_status"],
                         "sync_status": item["sync_status"],
                         "bundle_status": item["bundle_status"],
@@ -3832,6 +4852,18 @@ class CustomQCSamplePoolService:
                         "updated_at": item.get("updated_at"),
                     }
                     grouped[group_key] = current
+                elif hospitalization_state:
+                    incoming_status = _safe_text(
+                        hospitalization_state.get("hospitalization_status")
+                    )
+                    if (
+                        not _safe_text(current.get("hospitalization_status"))
+                        or incoming_status == "discharged"
+                    ):
+                        current["hospitalization_status"] = incoming_status
+                        current["discharge_time"] = _safe_text(
+                            hospitalization_state.get("discharge_time")
+                        )
 
                 current_created_at = current.get("created_at")
                 item_created_at = item.get("created_at")
@@ -3864,12 +4896,27 @@ class CustomQCSamplePoolService:
                 for item in grouped.values()
                 if str(item.get("matched_visit_id") or "").strip()
             ]
+            matched_patient_ids = [
+                str(item.get("matched_patient_id") or "").strip()
+                for item in grouped.values()
+                if str(item.get("matched_patient_id") or "").strip()
+            ]
             record_display_map = self._load_record_display_map(session=session, visit_ids=matched_visit_ids)
+            patient_display_map = self._load_patient_display_map(
+                session=session,
+                patient_ids=matched_patient_ids,
+            )
             for row in grouped.values():
                 visit_id = str(row.get("matched_visit_id") or "").strip()
-                if not visit_id:
-                    continue
-                display = record_display_map.get(visit_id) or {}
+                patient_id = str(row.get("matched_patient_id") or "").strip()
+                display = {
+                    **(patient_display_map.get(patient_id) or {}),
+                    **{
+                        key: value
+                        for key, value in (record_display_map.get(visit_id) or {}).items()
+                        if _safe_text(value)
+                    },
+                }
                 if not _safe_text(row.get("patient_name")):
                     row["patient_name"] = _safe_text(display.get("patient_name"))
                 if not _safe_text(row.get("patient_sex")):
@@ -3990,6 +5037,34 @@ class CustomQCSamplePoolService:
                     display[field] = _safe_text(row.get(field))
         return display_map
 
+    def _load_patient_display_map(
+        self,
+        *,
+        session: Session,
+        patient_ids: Sequence[str],
+    ) -> Dict[str, Dict[str, str]]:
+        normalized_ids = [str(item).strip() for item in patient_ids if str(item).strip()]
+        if not normalized_ids:
+            return {}
+        rows = session.execute(
+            select(
+                PatientInformation.patient_id,
+                PatientInformation.name.label("patient_name"),
+                PatientInformation.sex.label("patient_sex"),
+            ).where(PatientInformation.patient_id.in_(normalized_ids))
+        ).mappings().all()
+        return {
+            _safe_text(row.get("patient_id")): {
+                "patient_name": _safe_text(row.get("patient_name")),
+                "patient_sex": _safe_text(row.get("patient_sex")),
+                "patient_age": "",
+                "mr_no": "",
+                "department": "",
+            }
+            for row in rows
+            if _safe_text(row.get("patient_id"))
+        }
+
     def _check_running_bundle_status(self, *, institute_id: str, patient_id: str, visit_id: str) -> str:
         if engine is None:
             return "pending"
@@ -4101,12 +5176,33 @@ class CustomQCSamplePoolService:
             session.commit()
         return healed_rows
 
-    def match_pool_items(self, *, pool_id: str) -> Dict[str, Any]:
+    def match_pool_items(
+        self,
+        *,
+        pool_id: str,
+        item_ids: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
         session = _session()
         try:
+            clauses = [self._item_table.c.pool_id == pool_id]
+            normalized_item_ids = [
+                _safe_text(item_id)
+                for item_id in (item_ids or [])
+                if _safe_text(item_id)
+            ]
+            if item_ids is not None:
+                if not normalized_item_ids:
+                    return {
+                        "pool_id": pool_id,
+                        "matched": 0,
+                        "ambiguous": 0,
+                        "unmatched": 0,
+                        "pool": self.get_pool(pool_id=pool_id),
+                    }
+                clauses.append(self._item_table.c.id.in_(normalized_item_ids))
             stmt = (
                 select(self._item_table)
-                .where(self._item_table.c.pool_id == pool_id)
+                .where(and_(*clauses))
                 .order_by(self._item_table.c.row_no.asc())
             )
             rows = session.execute(stmt).mappings().all()
@@ -4128,56 +5224,40 @@ class CustomQCSamplePoolService:
                 sync_status = "missing"
                 bundle_status = "pending"
                 candidate = None
-                if visit_id_input:
-                    visit_candidates = (
-                        session.query(MedicalRecordFrontpage)
-                        .filter(MedicalRecordFrontpage.visit_id == visit_id_input)
-                        .all()
-                    )
-                    candidate = _pick_best_local_candidate(
-                        candidates=visit_candidates,
-                        patient_name=patient_name,
-                        department=department,
-                        qc_date_value=qc_date_value,
-                    )
-                    if candidate is not None:
-                        match_status = "matched"
-                    elif visit_candidates:
-                        match_status = "ambiguous"
 
-                if candidate is None and match_status == "unmatched" and mr_no_input:
-                    mr_no_candidates = (
-                        session.query(MedicalRecordFrontpage)
-                        .filter(MedicalRecordFrontpage.mr_no == mr_no_input)
-                        .all()
-                    )
-                    candidate = _pick_best_local_candidate(
-                        candidates=mr_no_candidates,
-                        patient_name=patient_name,
-                        department=department,
-                        qc_date_value=qc_date_value,
-                    )
-                    if candidate is not None:
-                        match_status = "matched"
-                    elif mr_no_candidates:
-                        match_status = "ambiguous"
+                def _match_local_primary_record(identifier_name: str, identifier_value: str) -> Optional[Any]:
+                    if not identifier_value:
+                        return None
+                    # 出院病例优先使用病案首页；在院病例按住院登记、入院记录依次回退。
+                    for model in (
+                        MedicalRecordFrontpage,
+                        InpatRegistration,
+                        AdmissionRecord,
+                    ):
+                        candidates = (
+                            session.query(model)
+                            .filter(getattr(model, identifier_name) == identifier_value)
+                            .all()
+                        )
+                        selected = _pick_best_local_candidate(
+                            candidates=candidates,
+                            patient_name=patient_name,
+                            department=department,
+                            qc_date_value=qc_date_value,
+                        )
+                        if selected is not None:
+                            return selected
+                    return None
 
-                if candidate is None and match_status == "unmatched" and inpat_no_input:
-                    inpat_no_candidates = (
-                        session.query(MedicalRecordFrontpage)
-                        .filter(MedicalRecordFrontpage.inpat_no == inpat_no_input)
-                        .all()
-                    )
-                    candidate = _pick_best_local_candidate(
-                        candidates=inpat_no_candidates,
-                        patient_name=patient_name,
-                        department=department,
-                        qc_date_value=qc_date_value,
-                    )
+                for identifier_name, identifier_value in (
+                    ("visit_id", visit_id_input),
+                    ("mr_no", mr_no_input),
+                    ("inpat_no", inpat_no_input),
+                ):
+                    candidate = _match_local_primary_record(identifier_name, identifier_value)
                     if candidate is not None:
                         match_status = "matched"
-                    elif inpat_no_candidates:
-                        match_status = "ambiguous"
+                        break
 
                 if candidate is not None:
                     institute_id = _safe_text(candidate.institute_id)
@@ -4316,6 +5396,7 @@ class CustomQCSamplePoolService:
         pool_id: str,
         only_intrinsic: bool = True,
         include_in_batch_1: bool = True,
+        item_ids: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
         session = _session()
         try:
@@ -4324,6 +5405,11 @@ class CustomQCSamplePoolService:
                 clauses.append(self._item_table.c.coverage_type == "llm_intrinsic")
             if include_in_batch_1:
                 clauses.append(self._item_table.c.include_in_batch_1.is_(True))
+            normalized_item_ids = [
+                str(item_id).strip() for item_id in list(item_ids or []) if str(item_id).strip()
+            ]
+            if normalized_item_ids:
+                clauses.append(self._item_table.c.id.in_(normalized_item_ids))
             stmt = select(self._item_table).where(and_(*clauses)).order_by(self._item_table.c.row_no.asc())
             rows = session.execute(stmt).mappings().all()
             return [self._row_to_item(dict(row)) for row in rows]
@@ -4364,8 +5450,14 @@ class CustomQCSamplePoolService:
                     input_value = _safe_text(item.get(field_name))
                     if not input_value:
                         continue
-                    candidates = lookup.get(field_name, {}).get(input_value, [])
-                    chosen = _pick_best_remote_candidate(
+                    candidates = [
+                        candidate
+                        for candidate in lookup.get(field_name, {}).get(input_value, [])
+                        if _safe_text(candidate.get("institute_id"))
+                        and _safe_text(candidate.get("patient_id"))
+                        and _safe_text(candidate.get("visit_id"))
+                    ]
+                    chosen = _pick_best_remote_candidate_by_anchor_priority(
                         candidates=candidates,
                         patient_name=patient_name,
                         department=department,
@@ -4452,7 +5544,7 @@ class CustomQCSamplePoolService:
         conn = psycopg2.connect(remote_url, connect_timeout=10)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
-            for table_name in ("mr", "inpat_registration"):
+            for table_name in _REMOTE_MATCH_ANCHOR_PRIORITY:
                 if not _remote_column_exists(cursor, schema_ident, table_name, "visit_id"):
                     continue
 
@@ -4517,11 +5609,6 @@ class CustomQCSamplePoolService:
         remote_url = get_remote_db_url()
         if not remote_url:
             raise RuntimeError("远端 PG 未配置，无法执行样本定向同步")
-        cfg = load_db_config()
-        remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
-        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
-        if not schema_ident:
-            raise ValueError("远端 schema 非法")
 
         visit_ids = sorted(
             {str(item.get("visit_id") or "").strip() for item in items if str(item.get("visit_id") or "").strip()}
@@ -4540,69 +5627,10 @@ class CustomQCSamplePoolService:
                 "visit_keys": [],
             }
 
-        visit_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
-        mr_no_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
-        inpat_no_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
-        conn = psycopg2.connect(remote_url, connect_timeout=10)
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        try:
-            admission_expr = "NULL AS admission_datetime"
-            discharge_expr = "NULL AS discharge_datetime"
-            update_expr = "NULL AS update_time"
-            if _remote_column_exists(cursor, schema_ident, "mr", "admission_datetime"):
-                admission_expr = "admission_datetime AS admission_datetime"
-            elif _remote_column_exists(cursor, schema_ident, "mr", "admission_time"):
-                admission_expr = "admission_time AS admission_datetime"
-
-            if _remote_column_exists(cursor, schema_ident, "mr", "discharge_datetime"):
-                discharge_expr = "discharge_datetime AS discharge_datetime"
-            elif _remote_column_exists(cursor, schema_ident, "mr", "discharge_time"):
-                discharge_expr = "discharge_time AS discharge_datetime"
-
-            if _remote_column_exists(cursor, schema_ident, "mr", "update_time"):
-                update_expr = "update_time AS update_time"
-            elif _remote_column_exists(cursor, schema_ident, "mr", "last_modified_time"):
-                update_expr = "last_modified_time AS update_time"
-            elif _remote_column_exists(cursor, schema_ident, "mr", "mr_time"):
-                update_expr = "mr_time AS update_time"
-
-            chunk_size = 200
-
-            def _fetch_lookup_rows(field_name: str, values: Sequence[str], target_map: Dict[str, List[Dict[str, Any]]]) -> None:
-                for start in range(0, len(values), chunk_size):
-                    chunk = values[start : start + chunk_size]
-                    if not chunk:
-                        continue
-                    placeholders = ", ".join(["%s"] * len(chunk))
-                    sql = f"""
-                        SELECT
-                            institute_id::text AS institute_id,
-                            patient_id::text AS patient_id,
-                            visit_id::text AS visit_id,
-                            COALESCE(inpat_no::text, '') AS inpat_no,
-                            COALESCE(mr_no::text, '') AS mr_no,
-                            COALESCE(name::text, '') AS name,
-                            COALESCE(admission_dept_name::text, '') AS admission_dept_name,
-                            COALESCE(discharge_dept_name::text, '') AS discharge_dept_name,
-                            {admission_expr},
-                            {discharge_expr},
-                            {update_expr}
-                        FROM {schema_ident}.mr
-                        WHERE COALESCE({field_name}::text, '') IN ({placeholders})
-                    """
-                    cursor.execute(sql, chunk)
-                    for row in cursor.fetchall() or []:
-                        candidate = dict(row)
-                        lookup_key = str(candidate.get(field_name) or "").strip()
-                        if lookup_key:
-                            target_map.setdefault(lookup_key, []).append(candidate)
-
-            _fetch_lookup_rows("visit_id", visit_ids, visit_lookup_map)
-            _fetch_lookup_rows("mr_no", mr_nos, mr_no_lookup_map)
-            _fetch_lookup_rows("inpat_no", inpat_nos, inpat_no_lookup_map)
-        finally:
-            cursor.close()
-            conn.close()
+        lookup = self._lookup_remote_match_candidates(items=items)
+        visit_lookup_map = lookup.get("visit_id", {})
+        mr_no_lookup_map = lookup.get("mr_no", {})
+        inpat_no_lookup_map = lookup.get("inpat_no", {})
 
         visit_key_set: set[tuple[str, str]] = set()
         matched = 0
@@ -4615,8 +5643,14 @@ class CustomQCSamplePoolService:
             patient_name = str(item.get("patient_name") or "").strip()
             department = str(item.get("department") or "").strip()
             qc_date_value = _parse_date(item.get("qc_date"))
-            visit_candidates = visit_lookup_map.get(visit_id_input, []) if visit_id_input else []
-            chosen = _pick_best_remote_candidate(
+            visit_candidates = [
+                candidate
+                for candidate in (visit_lookup_map.get(visit_id_input, []) if visit_id_input else [])
+                if _safe_text(candidate.get("institute_id"))
+                and _safe_text(candidate.get("patient_id"))
+                and _safe_text(candidate.get("visit_id"))
+            ]
+            chosen = _pick_best_remote_candidate_by_anchor_priority(
                 candidates=visit_candidates,
                 patient_name=patient_name,
                 department=department,
@@ -4626,8 +5660,14 @@ class CustomQCSamplePoolService:
                 ambiguous += 1
                 continue
             if chosen is None and mr_no_input:
-                mr_no_candidates = mr_no_lookup_map.get(mr_no_input, [])
-                chosen = _pick_best_remote_candidate(
+                mr_no_candidates = [
+                    candidate
+                    for candidate in mr_no_lookup_map.get(mr_no_input, [])
+                    if _safe_text(candidate.get("institute_id"))
+                    and _safe_text(candidate.get("patient_id"))
+                    and _safe_text(candidate.get("visit_id"))
+                ]
+                chosen = _pick_best_remote_candidate_by_anchor_priority(
                     candidates=mr_no_candidates,
                     patient_name=patient_name,
                     department=department,
@@ -4637,8 +5677,14 @@ class CustomQCSamplePoolService:
                     ambiguous += 1
                     continue
             if chosen is None and inpat_no_input:
-                inpat_no_candidates = inpat_no_lookup_map.get(inpat_no_input, [])
-                chosen = _pick_best_remote_candidate(
+                inpat_no_candidates = [
+                    candidate
+                    for candidate in inpat_no_lookup_map.get(inpat_no_input, [])
+                    if _safe_text(candidate.get("institute_id"))
+                    and _safe_text(candidate.get("patient_id"))
+                    and _safe_text(candidate.get("visit_id"))
+                ]
+                chosen = _pick_best_remote_candidate_by_anchor_priority(
                     candidates=inpat_no_candidates,
                     patient_name=patient_name,
                     department=department,
@@ -4667,6 +5713,772 @@ class CustomQCSamplePoolService:
             "visit_keys": sorted(visit_key_set),
         }
 
+    def list_remote_admission_departments(self) -> List[str]:
+        """读取源库入院登记科室，仅供当前样本池的轻量筛选使用。"""
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            raise ValueError("远端 PG 未配置，无法读取入院科室")
+        cfg = load_db_config()
+        remote_schema = _safe_text(cfg.get("remote_schema"), "public") or "public"
+        table_name = "inpat_registration"
+        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
+        if not schema_ident:
+            raise ValueError("远端 schema 非法")
+
+        conn = psycopg2.connect(remote_url, connect_timeout=10)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            department_column = next(
+                (
+                    column
+                    for column in ("admission_dept_name", "dept_name", "department_name")
+                    if _remote_column_exists(cursor, schema_ident, table_name, column)
+                ),
+                "",
+            )
+            if not department_column:
+                raise ValueError("inpat_registration 缺少入院科室字段")
+            cursor.execute(
+                f"""
+                SELECT DISTINCT TRIM({department_column}::text) AS department
+                FROM {schema_ident}.{table_name}
+                WHERE {department_column} IS NOT NULL
+                  AND TRIM({department_column}::text) <> ''
+                ORDER BY department
+                LIMIT 500
+                """
+            )
+            return [
+                _safe_text(row.get("department"))
+                for row in (cursor.fetchall() or [])
+                if _safe_text(row.get("department"))
+            ]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _resolve_remote_hospitalization_scope(
+        self,
+        *,
+        scope_mode: str,
+        as_of_date: date,
+        discharge_start_date: Optional[date],
+        discharge_end_date: Optional[date],
+        departments: Sequence[str],
+    ) -> Dict[str, Any]:
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            raise ValueError("远端 PG 未配置，无法读取住院范围")
+        cfg = load_db_config()
+        remote_schema = _safe_text(cfg.get("remote_schema"), "public") or "public"
+        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
+        if not schema_ident:
+            raise ValueError("远端 schema 非法")
+
+        candidate_tables = (
+            "inpat_registration",
+            "admission_record",
+            "daily_admission_record",
+            "discharge_record",
+            "mr",
+            "patient_information",
+        )
+        conn = psycopg2.connect(remote_url, connect_timeout=10)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            cursor.execute(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = %s
+                  AND table_name = ANY(%s)
+                """,
+                (remote_schema, list(candidate_tables)),
+            )
+            table_columns: Dict[str, set[str]] = {}
+            for row in cursor.fetchall() or []:
+                table_name = _safe_text(row.get("table_name"))
+                column_name = _safe_text(row.get("column_name"))
+                if table_name and column_name:
+                    table_columns.setdefault(table_name, set()).add(column_name)
+            plan = _resolve_hospitalization_source_plan(
+                table_columns=table_columns,
+                scope_mode=scope_mode,
+            )
+
+            def column_expr(
+                *,
+                columns: set[str],
+                candidates: Sequence[str],
+                alias: str,
+            ) -> str:
+                column = _first_available_column(columns, candidates)
+                return f"{column} AS {alias}" if column else f"NULL AS {alias}"
+
+            def fetch_source(role: str, source: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+                if source is None:
+                    return []
+                table_name = _safe_text(source.get("table_name"))
+                columns = set(source.get("columns") or set())
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
+                    raise ValueError("住院来源表名称非法")
+                admission_column = _safe_text(source.get("admission_time_column"))
+                discharge_column = _safe_text(source.get("discharge_time_column"))
+                patient_name_expr = column_expr(
+                    columns=columns,
+                    candidates=("name", "patient_name"),
+                    alias="patient_name",
+                )
+                mr_no_expr = column_expr(
+                    columns=columns,
+                    candidates=("mr_no", "inpat_no"),
+                    alias="mr_no",
+                )
+                inpat_no_expr = column_expr(
+                    columns=columns,
+                    candidates=("inpat_no", "mr_no"),
+                    alias="inpat_no",
+                )
+                admission_department_expr = column_expr(
+                    columns=columns,
+                    candidates=("admission_dept_name", "department_name"),
+                    alias="admission_department",
+                )
+                current_department_expr = column_expr(
+                    columns=columns,
+                    candidates=("current_dept_name", "dept_name", "transfer_dept_name"),
+                    alias="current_department",
+                )
+                discharge_department_expr = column_expr(
+                    columns=columns,
+                    candidates=("discharge_dept_name", "dept_name", "transfer_dept_name"),
+                    alias="discharge_department",
+                )
+                if role == "active":
+                    where_sql = (
+                        f"{admission_column} < (%s::date + INTERVAL '1 day') "
+                        f"AND ({discharge_column} IS NULL "
+                        f"OR {discharge_column} >= (%s::date + INTERVAL '1 day'))"
+                    )
+                    params: List[Any] = [as_of_date.isoformat(), as_of_date.isoformat()]
+                else:
+                    if discharge_start_date is None or discharge_end_date is None:
+                        raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
+                    where_sql = (
+                        f"{discharge_column}::date >= %s::date "
+                        f"AND {discharge_column}::date <= %s::date"
+                    )
+                    params = [
+                        discharge_start_date.isoformat(),
+                        discharge_end_date.isoformat(),
+                    ]
+                admission_time_expr = (
+                    f"{admission_column} AS admission_time"
+                    if admission_column
+                    else "NULL AS admission_time"
+                )
+                order_time_column = admission_column or discharge_column
+                cursor.execute(
+                    f"""
+                    SELECT DISTINCT ON (institute_id::text, patient_id::text, visit_id::text)
+                        institute_id::text AS institute_id,
+                        patient_id::text AS patient_id,
+                        visit_id::text AS visit_id,
+                        {patient_name_expr},
+                        {mr_no_expr},
+                        {inpat_no_expr},
+                        {admission_time_expr},
+                        {discharge_column} AS discharge_time,
+                        {admission_department_expr},
+                        {current_department_expr},
+                        {discharge_department_expr}
+                    FROM {schema_ident}.{table_name}
+                    WHERE {where_sql}
+                    ORDER BY institute_id::text, patient_id::text, visit_id::text,
+                             {order_time_column} DESC NULLS LAST
+                    """,
+                    params,
+                )
+                return [
+                    {**dict(row), "source_table": table_name}
+                    for row in (cursor.fetchall() or [])
+                ]
+
+            candidates = [
+                *fetch_source("active", plan.get("active")),
+                *fetch_source("discharged", plan.get("discharged")),
+            ]
+            missing_name_identities = sorted(
+                {
+                    (
+                        _safe_text(row.get("institute_id")),
+                        _safe_text(row.get("patient_id")),
+                    )
+                    for row in candidates
+                    if _safe_text(row.get("institute_id"))
+                    and _safe_text(row.get("patient_id"))
+                    and not _safe_text(row.get("patient_name"))
+                }
+            )
+            patient_columns = set(table_columns.get("patient_information") or set())
+            patient_name_column = _first_available_column(
+                patient_columns,
+                ("name", "patient_name"),
+            )
+            demographic_rows: List[Dict[str, Any]] = []
+            if (
+                missing_name_identities
+                and patient_name_column
+                and {"institute_id", "patient_id"}.issubset(patient_columns)
+            ):
+                for start in range(0, len(missing_name_identities), 200):
+                    chunk = missing_name_identities[start : start + 200]
+                    placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+                    params: List[str] = []
+                    for institute_id, patient_id in chunk:
+                        params.extend([institute_id, patient_id])
+                    cursor.execute(
+                        f"""
+                        SELECT institute_id::text AS institute_id,
+                               patient_id::text AS patient_id,
+                               {patient_name_column}::text AS patient_name
+                        FROM {schema_ident}.patient_information
+                        WHERE (institute_id::text, patient_id::text) IN ({placeholders})
+                        """,
+                        params,
+                    )
+                    demographic_rows.extend(dict(row) for row in (cursor.fetchall() or []))
+                candidates = _backfill_admission_source_patient_names(
+                    source_rows=candidates,
+                    demographic_rows=demographic_rows,
+                )
+            all_selected = _select_hospitalization_candidates(
+                candidates=candidates,
+                scope_mode=scope_mode,
+                as_of_date=as_of_date,
+                discharge_start_date=discharge_start_date,
+                discharge_end_date=discharge_end_date,
+                departments=[],
+            )
+            selected = _select_hospitalization_candidates(
+                candidates=all_selected,
+                scope_mode=scope_mode,
+                as_of_date=as_of_date,
+                discharge_start_date=discharge_start_date,
+                discharge_end_date=discharge_end_date,
+                departments=departments,
+            )
+            return {
+                "selected": selected,
+                "all_selected": all_selected,
+                "sources_used": plan["sources_used"],
+                "source_status": plan["source_status"],
+                "warnings": plan["warnings"],
+            }
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _existing_pool_identity_set(self, *, pool_id: str) -> set[tuple[str, str, str]]:
+        session = _session()
+        try:
+            rows = session.execute(
+                select(self._item_table).where(self._item_table.c.pool_id == pool_id)
+            ).mappings().all()
+            identities: set[tuple[str, str, str]] = set()
+            for row in rows:
+                identity = (
+                    _safe_text(row.get("matched_institute_id")),
+                    _safe_text(row.get("matched_patient_id")),
+                    _safe_text(row.get("matched_visit_id")),
+                )
+                if all(identity):
+                    identities.add(identity)
+                    continue
+                raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+                raw_identity = (
+                    _safe_text(raw_payload.get("institute_id")),
+                    _safe_text(raw_payload.get("patient_id")),
+                    _safe_text(raw_payload.get("visit_id")),
+                )
+                if all(raw_identity):
+                    identities.add(raw_identity)
+            return identities
+        finally:
+            session.close()
+
+    def preview_hospitalization_scope(
+        self,
+        *,
+        pool_id: str,
+        scope_mode: str,
+        as_of_date: date,
+        discharge_start_date: Optional[date],
+        discharge_end_date: Optional[date],
+        departments: Sequence[str],
+    ) -> Dict[str, Any]:
+        resolved = self._resolve_remote_hospitalization_scope(
+            scope_mode=scope_mode,
+            as_of_date=as_of_date,
+            discharge_start_date=discharge_start_date,
+            discharge_end_date=discharge_end_date,
+            departments=departments,
+        )
+        selected = list(resolved["selected"])
+        existing_identities = self._existing_pool_identity_set(pool_id=pool_id)
+        selected_identities = {
+            (
+                _safe_text(row.get("institute_id")),
+                _safe_text(row.get("patient_id")),
+                _safe_text(row.get("visit_id")),
+            )
+            for row in selected
+        }
+        department_stats: Dict[str, Dict[str, Any]] = {}
+        for row in resolved["all_selected"]:
+            department = _safe_text(row.get("department"))
+            if not department:
+                continue
+            stats = department_stats.setdefault(
+                department,
+                {
+                    "name": department,
+                    "active_count": 0,
+                    "discharged_count": 0,
+                    "total_count": 0,
+                    "basis": set(),
+                },
+            )
+            status = _safe_text(row.get("hospitalization_status"))
+            if status == "active":
+                stats["active_count"] += 1
+            elif status == "discharged":
+                stats["discharged_count"] += 1
+            stats["total_count"] += 1
+            basis = _safe_text(row.get("department_basis"))
+            if basis:
+                stats["basis"].add(basis)
+        departments_payload = [
+            {**stats, "basis": sorted(stats["basis"])}
+            for _name, stats in sorted(department_stats.items())
+        ]
+        active_count = sum(
+            1 for row in selected if _safe_text(row.get("hospitalization_status")) == "active"
+        )
+        discharged_count = sum(
+            1 for row in selected if _safe_text(row.get("hospitalization_status")) == "discharged"
+        )
+        existing_count = len(selected_identities & existing_identities)
+        return {
+            "scope": {
+                "mode": scope_mode,
+                "as_of_date": as_of_date.isoformat(),
+                "discharge_start_date": discharge_start_date.isoformat()
+                if discharge_start_date
+                else None,
+                "discharge_end_date": discharge_end_date.isoformat()
+                if discharge_end_date
+                else None,
+                "departments": list(
+                    dict.fromkeys(_safe_text(item) for item in departments if _safe_text(item))
+                ),
+            },
+            "counts": {
+                "active": active_count,
+                "discharged": discharged_count,
+                "deduplicated": len(selected),
+                "existing_in_pool": existing_count,
+                "new_to_pool": max(len(selected) - existing_count, 0),
+            },
+            "departments": departments_payload,
+            "sources_used": resolved["sources_used"],
+            "source_status": resolved["source_status"],
+            "warnings": resolved["warnings"],
+        }
+
+    def append_pool_items_by_hospitalization_scope(
+        self,
+        *,
+        pool_id: str,
+        scope_mode: str,
+        as_of_date: date,
+        discharge_start_date: Optional[date],
+        discharge_end_date: Optional[date],
+        departments: Sequence[str],
+    ) -> Dict[str, Any]:
+        resolved = self._resolve_remote_hospitalization_scope(
+            scope_mode=scope_mode,
+            as_of_date=as_of_date,
+            discharge_start_date=discharge_start_date,
+            discharge_end_date=discharge_end_date,
+            departments=departments,
+        )
+        source_rows = list(resolved["selected"])
+        session = _session()
+        try:
+            current_rows = session.execute(
+                select(self._item_table).where(self._item_table.c.pool_id == pool_id)
+            ).mappings().all()
+            current_row_by_id = {
+                _safe_text(row.get("id")): dict(row)
+                for row in current_rows
+                if _safe_text(row.get("id"))
+            }
+            known_item_by_identity: Dict[tuple[str, str, str], str] = {}
+            for row in current_rows:
+                identity = (
+                    _safe_text(row.get("matched_institute_id")),
+                    _safe_text(row.get("matched_patient_id")),
+                    _safe_text(row.get("matched_visit_id")),
+                )
+                if all(identity) and _safe_text(row.get("id")):
+                    known_item_by_identity[identity] = _safe_text(row.get("id"))
+                    continue
+                raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+                raw_identity = (
+                    _safe_text(raw_payload.get("institute_id")),
+                    _safe_text(raw_payload.get("patient_id")),
+                    _safe_text(raw_payload.get("visit_id")),
+                )
+                if all(raw_identity) and _safe_text(row.get("id")):
+                    known_item_by_identity[raw_identity] = _safe_text(row.get("id"))
+            next_row_no = int(
+                session.execute(
+                    select(func.coalesce(func.max(self._item_table.c.row_no), 0)).where(
+                        self._item_table.c.pool_id == pool_id
+                    )
+                ).scalar()
+                or 0
+            )
+            now = _now_utc()
+            payload_rows: List[Dict[str, Any]] = []
+            sync_item_ids: List[str] = []
+            existing_count = 0
+            repaired_count = 0
+            for source_row in source_rows:
+                identity = (
+                    _safe_text(source_row.get("institute_id")),
+                    _safe_text(source_row.get("patient_id")),
+                    _safe_text(source_row.get("visit_id")),
+                )
+                if not all(identity):
+                    continue
+                existing_item_id = known_item_by_identity.get(identity)
+                if existing_item_id:
+                    existing_count += 1
+                    sync_item_ids.append(existing_item_id)
+                    display_patch = _build_existing_admission_item_display_patch(
+                        existing_row=current_row_by_id.get(existing_item_id, {}),
+                        source_row=source_row,
+                    )
+                    if display_patch:
+                        session.execute(
+                            update(self._item_table)
+                            .where(self._item_table.c.id == existing_item_id)
+                            .values(**display_patch, updated_at=now)
+                        )
+                        repaired_count += 1
+                    continue
+                next_row_no += 1
+                item_id = str(uuid.uuid4())
+                payload_rows.append(
+                    _build_hospitalization_scope_pool_item(
+                        item_id=item_id,
+                        pool_id=pool_id,
+                        row_no=next_row_no,
+                        source_row=source_row,
+                        qc_date=as_of_date,
+                        now=now,
+                    )
+                )
+                sync_item_ids.append(item_id)
+                known_item_by_identity[identity] = item_id
+            if payload_rows:
+                session.execute(self._item_table.insert(), payload_rows)
+            self._update_pool_counters(session, pool_id)
+            session.commit()
+            return {
+                "pool_id": pool_id,
+                "matched_source_count": len(source_rows),
+                "new_count": len(payload_rows),
+                "existing_count": existing_count,
+                "repaired_count": repaired_count,
+                "failed_count": 0,
+                "sync_item_ids": sync_item_ids,
+                "scope": {
+                    "mode": scope_mode,
+                    "as_of_date": as_of_date.isoformat(),
+                    "discharge_start_date": discharge_start_date.isoformat()
+                    if discharge_start_date
+                    else None,
+                    "discharge_end_date": discharge_end_date.isoformat()
+                    if discharge_end_date
+                    else None,
+                    "departments": list(
+                        dict.fromkeys(_safe_text(item) for item in departments if _safe_text(item))
+                    ),
+                },
+                "sources_used": resolved["sources_used"],
+                "source_status": resolved["source_status"],
+                "warnings": resolved["warnings"],
+            }
+        finally:
+            session.close()
+
+    def append_pool_items_by_admission_filter(
+        self,
+        *,
+        pool_id: str,
+        start_date: date,
+        end_date: date,
+        departments: Sequence[str],
+    ) -> Dict[str, Any]:
+        """按源库入院登记筛选住院，写入当前样本池但不直接执行同步。"""
+        if start_date > end_date:
+            raise ValueError("入院开始日期不能晚于结束日期")
+        if (end_date - start_date).days > 30:
+            raise ValueError("入院日期范围最多 31 天")
+
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            raise ValueError("远端 PG 未配置，无法按条件同步病历")
+        cfg = load_db_config()
+        remote_schema = _safe_text(cfg.get("remote_schema"), "public") or "public"
+        table_name = "inpat_registration"
+        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
+        if not schema_ident:
+            raise ValueError("远端 schema 非法")
+        normalized_departments = list(
+            dict.fromkeys(_safe_text(item) for item in list(departments or []) if _safe_text(item))
+        )
+
+        conn = psycopg2.connect(remote_url, connect_timeout=10)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            required_columns = ("institute_id", "patient_id", "visit_id")
+            missing_columns = [
+                column
+                for column in required_columns
+                if not _remote_column_exists(cursor, schema_ident, table_name, column)
+            ]
+            if missing_columns:
+                raise ValueError(
+                    "inpat_registration 缺少住院三坐标字段: " + ", ".join(missing_columns)
+                )
+
+            def first_column(candidates: Sequence[str]) -> str:
+                return next(
+                    (column for column in candidates if _remote_column_exists(cursor, schema_ident, table_name, column)),
+                    "",
+                )
+
+            admission_time_column = first_column(
+                ("admission_datetime", "admission_time", "inpat_datetime", "inpat_time", "record_time")
+            )
+            department_column = first_column(
+                ("admission_dept_name", "dept_name", "department_name")
+            )
+            if not admission_time_column:
+                raise ValueError("inpat_registration 缺少入院时间字段")
+
+            def select_expr(candidates: Sequence[str], alias: str, default_sql: str = "''") -> str:
+                column = first_column(candidates)
+                return f"{column}::text AS {alias}" if column else f"{default_sql} AS {alias}"
+
+            patient_name_expr = select_expr(("name", "patient_name"), "patient_name")
+            mr_no_expr = select_expr(("mr_no", "inpat_no"), "mr_no")
+            inpat_no_expr = select_expr(("inpat_no", "mr_no"), "inpat_no")
+            department_expr = (
+                f"{department_column}::text AS department" if department_column else "'' AS department"
+            )
+            where_parts = [
+                f"{admission_time_column}::date >= %s::date",
+                f"{admission_time_column}::date < (%s::date + INTERVAL '1 day')",
+            ]
+            params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
+            if normalized_departments:
+                if not department_column:
+                    raise ValueError("inpat_registration 缺少入院科室字段，无法按科室筛选")
+                placeholders = ", ".join(["%s"] * len(normalized_departments))
+                where_parts.append(
+                    f"TRIM(COALESCE({department_column}::text, '')) IN ({placeholders})"
+                )
+                params.extend(normalized_departments)
+            cursor.execute(
+                f"""
+                SELECT DISTINCT ON (institute_id::text, patient_id::text, visit_id::text)
+                    institute_id::text AS institute_id,
+                    patient_id::text AS patient_id,
+                    visit_id::text AS visit_id,
+                    {patient_name_expr},
+                    {mr_no_expr},
+                    {inpat_no_expr},
+                    {department_expr},
+                    {admission_time_column} AS admission_time
+                FROM {schema_ident}.{table_name}
+                WHERE {' AND '.join(where_parts)}
+                ORDER BY institute_id::text, patient_id::text, visit_id::text, {admission_time_column} DESC NULLS LAST
+                """,
+                params,
+            )
+            source_rows = [dict(row) for row in (cursor.fetchall() or [])]
+            missing_name_patient_ids = sorted(
+                {
+                    _safe_text(row.get("patient_id"))
+                    for row in source_rows
+                    if _safe_text(row.get("patient_id"))
+                    and not _safe_text(row.get("patient_name"))
+                }
+            )
+            demographic_rows: List[Dict[str, Any]] = []
+            patient_table = "patient_information"
+            if (
+                missing_name_patient_ids
+                and _remote_column_exists(cursor, schema_ident, patient_table, "institute_id")
+                and _remote_column_exists(cursor, schema_ident, patient_table, "patient_id")
+            ):
+                patient_name_column = next(
+                    (
+                        column
+                        for column in ("name", "patient_name")
+                        if _remote_column_exists(
+                            cursor,
+                            schema_ident,
+                            patient_table,
+                            column,
+                        )
+                    ),
+                    "",
+                )
+                if patient_name_column:
+                    chunk_size = 200
+                    for start in range(0, len(missing_name_patient_ids), chunk_size):
+                        chunk = missing_name_patient_ids[start : start + chunk_size]
+                        placeholders = ", ".join(["%s"] * len(chunk))
+                        cursor.execute(
+                            f"""
+                            SELECT
+                                institute_id::text AS institute_id,
+                                patient_id::text AS patient_id,
+                                {patient_name_column}::text AS patient_name
+                            FROM {schema_ident}.{patient_table}
+                            WHERE patient_id::text IN ({placeholders})
+                            """,
+                            chunk,
+                        )
+                        demographic_rows.extend(dict(row) for row in (cursor.fetchall() or []))
+            source_rows = _backfill_admission_source_patient_names(
+                source_rows=source_rows,
+                demographic_rows=demographic_rows,
+            )
+        finally:
+            cursor.close()
+            conn.close()
+
+        session = _session()
+        try:
+            current_rows = session.execute(
+                select(self._item_table).where(self._item_table.c.pool_id == pool_id)
+            ).mappings().all()
+            current_row_by_id = {
+                _safe_text(row.get("id")): dict(row)
+                for row in current_rows
+                if _safe_text(row.get("id"))
+            }
+            known_item_by_identity = {
+                (
+                    _safe_text(row.get("matched_institute_id")),
+                    _safe_text(row.get("matched_patient_id")),
+                    _safe_text(row.get("matched_visit_id")),
+                ): _safe_text(row.get("id"))
+                for row in current_rows
+                if _safe_text(row.get("matched_institute_id"))
+                and _safe_text(row.get("matched_patient_id"))
+                and _safe_text(row.get("matched_visit_id"))
+                and _safe_text(row.get("id"))
+            }
+            for row in current_rows:
+                raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
+                if isinstance(raw_payload, dict):
+                    identity = (
+                        _safe_text(raw_payload.get("institute_id")),
+                        _safe_text(raw_payload.get("patient_id")),
+                        _safe_text(raw_payload.get("visit_id")),
+                    )
+                    if all(identity):
+                        known_item_by_identity.setdefault(identity, _safe_text(row.get("id")))
+            next_row_no = int(
+                session.execute(
+                    select(func.coalesce(func.max(self._item_table.c.row_no), 0)).where(
+                        self._item_table.c.pool_id == pool_id
+                    )
+                ).scalar()
+                or 0
+            )
+            now = _now_utc()
+            payload_rows: List[Dict[str, Any]] = []
+            sync_item_ids: List[str] = []
+            existing_count = 0
+            repaired_count = 0
+            for source_row in source_rows:
+                identity = (
+                    _safe_text(source_row.get("institute_id")),
+                    _safe_text(source_row.get("patient_id")),
+                    _safe_text(source_row.get("visit_id")),
+                )
+                if not all(identity):
+                    continue
+                existing_item_id = known_item_by_identity.get(identity)
+                if existing_item_id:
+                    existing_count += 1
+                    sync_item_ids.append(existing_item_id)
+                    display_patch = _build_existing_admission_item_display_patch(
+                        existing_row=current_row_by_id.get(existing_item_id, {}),
+                        source_row=source_row,
+                    )
+                    if display_patch:
+                        session.execute(
+                            update(self._item_table)
+                            .where(self._item_table.c.id == existing_item_id)
+                            .values(**display_patch, updated_at=now)
+                        )
+                        repaired_count += 1
+                    continue
+                next_row_no += 1
+                item_id = str(uuid.uuid4())
+                payload_rows.append(
+                    _build_admission_filter_pool_item(
+                        item_id=item_id,
+                        pool_id=pool_id,
+                        row_no=next_row_no,
+                        source_row=source_row,
+                        qc_date=start_date,
+                        now=now,
+                    )
+                )
+                sync_item_ids.append(item_id)
+                known_item_by_identity[identity] = item_id
+            if payload_rows:
+                session.execute(self._item_table.insert(), payload_rows)
+            self._update_pool_counters(session, pool_id)
+            session.commit()
+            return {
+                "pool_id": pool_id,
+                "matched_source_count": len(source_rows),
+                "new_count": len(payload_rows),
+                "existing_count": existing_count,
+                "repaired_count": repaired_count,
+                "failed_count": 0,
+                "sync_item_ids": sync_item_ids,
+                "filter": {
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "departments": normalized_departments,
+                },
+            }
+        finally:
+            session.close()
+
     def sync_pool_records(
         self,
         *,
@@ -4674,16 +6486,20 @@ class CustomQCSamplePoolService:
         only_intrinsic: bool = True,
         include_in_batch_1: bool = True,
         table_groups: Optional[Sequence[str]] = None,
+        item_ids: Optional[Sequence[str]] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
+        overall_started_at = time.perf_counter()
         items = self._list_sync_candidate_items(
             pool_id=pool_id,
             only_intrinsic=only_intrinsic,
             include_in_batch_1=include_in_batch_1,
+            item_ids=item_ids,
         )
         if not items:
             raise ValueError("当前样本池没有可同步的样本")
 
+        previous_hospitalization_states = _load_previous_hospitalization_states(items)
         sync_plan = self.resolve_sync_table_names(group_ids=table_groups)
         total_tables = len(sync_plan["table_names"])
 
@@ -4698,8 +6514,10 @@ class CustomQCSamplePoolService:
                 "total": total,
                 "completed": completed,
                 "remaining": remaining,
+                # missing_mr 为前端兼容字段；实际语义已扩展为缺少任一可用主记录。
                 "missing_mr": remaining,
-                "basis": "mr_visible",
+                "missing_primary_record": remaining,
+                "basis": "primary_record_visible",
                 "label": "病历池可见进度",
             }
 
@@ -4717,14 +6535,19 @@ class CustomQCSamplePoolService:
                     "remaining_tables": total_tables,
                 }
             )
+        source_resolve_started_at = time.perf_counter()
         resolved = self._resolve_remote_visit_keys(items=items)
+        source_resolve_duration_ms = round(
+            (time.perf_counter() - source_resolve_started_at) * 1000,
+            2,
+        )
         visit_keys: List[tuple[str, str]] = resolved["visit_keys"]
         eligible_visit_ids = {
             str(visit_id or "").strip()
             for _patient_id, visit_id in visit_keys
             if str(visit_id or "").strip()
         }
-        mr_synced_visit_ids: set[str] = set()
+        primary_record_synced_visit_ids: set[str] = set()
         if progress_callback is not None:
             progress_callback(
                 {
@@ -4755,6 +6578,22 @@ class CustomQCSamplePoolService:
                 "total_rows_upserted": 0,
                 "sync_group_ids": sync_plan["group_ids"],
                 "missing_group_ids": sync_plan["missing_group_ids"],
+                "sync_performance": {
+                    "source_resolve_ms": source_resolve_duration_ms,
+                    "primary_visible_ms": round(
+                        (time.perf_counter() - overall_started_at) * 1000,
+                        2,
+                    ),
+                    "detail_sync_ms": 0.0,
+                    "bundle_refresh_ms": 0.0,
+                    "tables_skipped_unchanged": 0,
+                    "visits_refreshed": 0,
+                    "retry_count": 0,
+                    "total_duration_ms": round(
+                        (time.perf_counter() - overall_started_at) * 1000,
+                        2,
+                    ),
+                },
                 "pool": self.get_pool(pool_id=pool_id),
             }
 
@@ -4762,91 +6601,470 @@ class CustomQCSamplePoolService:
         remote_url = get_remote_db_url()
         cfg = load_db_config()
         remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
-        anchor_tables = {"mr", "admission_record"}
-        results: List[Dict[str, Any]] = []
+        incremental_enabled = _sample_sync_incremental_enabled()
+        source_identity = (
+            build_source_identity(
+                host=str(cfg.get("remote_host") or ""),
+                port=str(cfg.get("remote_port") or ""),
+                database=str(cfg.get("remote_database") or ""),
+                schema=remote_schema,
+            )
+            if incremental_enabled
+            else ""
+        )
+        requested_visit_keys = list(
+            dict.fromkeys(
+                VisitKey(
+                    _safe_text(item.get("matched_institute_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("institute_id")),
+                    _safe_text(item.get("matched_patient_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("patient_id")),
+                    _safe_text(item.get("matched_visit_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("visit_id")),
+                )
+                for item in items
+                if isinstance(item, dict)
+                and (
+                    _safe_text(item.get("matched_institute_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("institute_id"))
+                )
+                and (
+                    _safe_text(item.get("matched_patient_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("patient_id"))
+                )
+                and (
+                    _safe_text(item.get("matched_visit_id"))
+                    or _safe_text((item.get("raw_payload") or {}).get("visit_id"))
+                )
+            )
+        )
+        primary_visibility_tables = set(PRIMARY_VISIBILITY_TABLES)
+        sync_settings = get_settings()
+        detail_table_worker_limit = min(
+            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS,
+            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX,
+        )
+        detail_table_workers = 0
+        local_upsert_batch_size = sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE
+        cursor_overlap = timedelta(
+            minutes=sync_settings.SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES
+        )
+        results_by_table: Dict[str, Dict[str, Any]] = {}
+        source_rows_by_table: Dict[str, List[Dict[str, Any]]] = {}
         skipped_table_errors: List[Dict[str, Any]] = []
         total_rows_pulled = 0
         total_rows_upserted = 0
         bundle_refresh_rows: List[Dict[str, Any]] = []
+        bundle_refresh_row_keys: set[tuple[str, str, str]] = set()
+        sync_item_ids = [
+            _safe_text(item.get("id"))
+            for item in items
+            if _safe_text(item.get("id"))
+        ]
+        primary_visible = False
+        primary_completed_at = ""
+        current_phase = "primary_visibility"
+        force_full_visit_keys: set[VisitKey] = set()
 
-        for index, table_name in enumerate(sync_plan["table_names"], start=1):
+        def _emit_sync_progress(*, processed_tables: int, current_table: str) -> None:
             if progress_callback is not None:
+                primary_progress = _build_record_progress(
+                    total=len(eligible_visit_ids),
+                    completed_visit_ids=primary_record_synced_visit_ids,
+                )
                 progress_callback(
                     {
                         "step_key": "syncing",
                         "step_label": "正在同步病历表",
+                        "phase": current_phase,
+                        "primary_visible": primary_visible,
+                        "primary_completed_at": primary_completed_at,
+                        "primary_progress": primary_progress,
                         "total_candidates": len(items),
                         "eligible_visits": len(visit_keys),
-                        "record_progress": _build_record_progress(
-                            total=len(eligible_visit_ids),
-                            completed_visit_ids=mr_synced_visit_ids,
-                        ),
-                        "processed_tables": index - 1,
+                        "record_progress": primary_progress,
+                        "processed_tables": processed_tables,
                         "total_tables": total_tables,
-                        "current_table": table_name,
-                        "remaining_tables": max(total_tables - index + 1, 0),
+                        "current_table": current_table,
+                        "remaining_tables": max(total_tables - processed_tables, 0),
                         "total_rows_pulled": total_rows_pulled,
                         "total_rows_upserted": total_rows_upserted,
+                        "table_workers": detail_table_workers,
                     }
                 )
+
+        def _sync_table(
+            table_name: str,
+            *,
+            force_full_keys: Optional[set[VisitKey]] = None,
+        ) -> Optional[Dict[str, Any]]:
             table_config = table_map.get(table_name)
             if not table_config:
-                continue
+                return {
+                    "rows": [],
+                    "result": {
+                        "table_name": table_name,
+                        "source_table": table_name,
+                        "rows_pulled": 0,
+                        "rows_upserted": 0,
+                        "sync_status": "source_table_unavailable",
+                        "skip_reason": "该类资料暂未从源系统提供，本次同步已跳过。",
+                        "error_category": "source_config_missing",
+                        "fetch_duration_ms": 0.0,
+                        "upsert_duration_ms": 0.0,
+                        "duration_ms": 0.0,
+                    },
+                }
             source_table = str(table_config.get("source_table") or table_name)
+            strategy = str(
+                table_config.get("incremental_strategy") or "full_visit_reload"
+            )
+            if strategy not in {
+                "updated_at",
+                "append_only_record_time",
+                "full_visit_reload",
+            }:
+                strategy = "full_visit_reload"
+            if table_name in primary_visibility_tables:
+                # 主记录阶段始终全量快速核对，避免水位遗漏导致病例不可见。
+                strategy = "full_visit_reload"
+            watermark_columns = [
+                str(column).strip()
+                for column in (table_config.get("watermark_columns") or [])
+                if str(column).strip()
+            ]
+            if strategy != "full_visit_reload" and not watermark_columns:
+                # 未提供受控水位字段时禁止伪增量。
+                strategy = "full_visit_reload"
+            schema_version = str(
+                table_config.get("schema_version") or "sample-sync-v1"
+            )
+            table_started_at = time.perf_counter()
+            fetch_started_at = time.perf_counter()
+            local_session: Optional[Session] = None
             try:
-                rows = fetch_remote_rows_by_visit_keys(
-                    remote_url=remote_url,
-                    remote_schema=remote_schema,
-                    source_table=source_table,
-                    visit_keys=visit_keys,
-                )
+                effective_force_full_keys = set(force_full_keys or set())
+                cursors: Dict[CursorKey, Any] = {}
+                repository: Optional[SampleSyncCursorRepository] = None
+                watermark_column: Optional[str] = None
+                if incremental_enabled:
+                    local_session = _session()
+                    repository = SampleSyncCursorRepository(local_session)
+                    cursors = dict(
+                        repository.get_many(
+                            source_identity=source_identity,
+                            visit_keys=requested_visit_keys,
+                            table_names=[table_name],
+                        )
+                    )
+
+                if (
+                    incremental_enabled
+                    and {
+                        (key.patient_id, key.visit_id)
+                        for key in requested_visit_keys
+                    }
+                    == set(visit_keys)
+                    and strategy != "full_visit_reload"
+                    and watermark_columns
+                ):
+                    watermark_column = watermark_columns[0]
+                    regular_visit_keys = [
+                        key
+                        for key in requested_visit_keys
+                        if key not in effective_force_full_keys
+                    ]
+                    visits_without_watermark: List[VisitKey] = []
+                    visits_with_watermark: List[VisitKey] = []
+                    for key in regular_visit_keys:
+                        cursor_key = CursorKey(source_identity, *key, table_name)
+                        cursor = cursors.get(cursor_key)
+                        if cursor is not None and cursor.watermark_value is not None:
+                            visits_with_watermark.append(key)
+                        else:
+                            visits_without_watermark.append(key)
+
+                    rows = []
+                    if effective_force_full_keys:
+                        rows.extend(
+                            fetch_remote_rows_by_visit_keys(
+                                remote_url=remote_url,
+                                remote_schema=remote_schema,
+                                source_table=source_table,
+                                visit_keys=[
+                                    (key.patient_id, key.visit_id)
+                                    for key in effective_force_full_keys
+                                ],
+                            )
+                        )
+                    if visits_without_watermark:
+                        rows.extend(
+                            fetch_remote_rows_by_visit_keys(
+                                remote_url=remote_url,
+                                remote_schema=remote_schema,
+                                source_table=source_table,
+                                visit_keys=[
+                                    (key.patient_id, key.visit_id)
+                                    for key in visits_without_watermark
+                                ],
+                            )
+                        )
+                    if visits_with_watermark:
+                        minimum_watermark = min(
+                            _coerce_sync_watermark(
+                                cursors[
+                                    CursorKey(source_identity, *key, table_name)
+                                ].watermark_value
+                            )
+                            for key in visits_with_watermark
+                        )
+                        rows.extend(
+                            fetch_remote_rows_by_visit_keys(
+                                remote_url=remote_url,
+                                remote_schema=remote_schema,
+                                source_table=source_table,
+                                visit_keys=[
+                                    (key.patient_id, key.visit_id)
+                                    for key in visits_with_watermark
+                                ],
+                                watermark_column=watermark_column,
+                                watermark_after=minimum_watermark
+                                - cursor_overlap,
+                            )
+                        )
+                else:
+                    rows = fetch_remote_rows_by_visit_keys(
+                        remote_url=remote_url,
+                        remote_schema=remote_schema,
+                        source_table=source_table,
+                        visit_keys=visit_keys,
+                    )
             except Exception as exc:
-                error_message = _safe_text(str(exc))
-                if table_name in anchor_tables:
-                    raise
+                if local_session is not None:
+                    local_session.rollback()
+                    local_session.close()
                 if not _is_remote_source_unavailable_error(exc):
                     raise
-                skipped = {
+                error_category = _remote_source_unavailable_category(exc)
+                return {
+                    "rows": [],
+                    "result": {
+                        "table_name": table_name,
+                        "source_table": source_table,
+                        "rows_pulled": 0,
+                        "rows_upserted": 0,
+                        "sync_status": "source_table_unavailable",
+                        "skip_reason": "该类资料暂未从源系统提供，本次同步已跳过。",
+                        "error_category": error_category,
+                        "fetch_duration_ms": round((time.perf_counter() - fetch_started_at) * 1000, 2),
+                        "upsert_duration_ms": 0.0,
+                        "duration_ms": round((time.perf_counter() - table_started_at) * 1000, 2),
+                    },
+                }
+            fetch_duration_ms = round((time.perf_counter() - fetch_started_at) * 1000, 2)
+            upsert_started_at = time.perf_counter()
+            changed_rows = list(rows)
+            changed_visit_rows: List[Dict[str, Any]] = []
+            unchanged_visit_count = 0
+            try:
+                if incremental_enabled and local_session is not None and repository is not None:
+                    rows_by_visit: Dict[VisitKey, List[Dict[str, Any]]] = {}
+                    for row in rows:
+                        visit_key = _row_visit_key(row)
+                        if visit_key is not None:
+                            rows_by_visit.setdefault(visit_key, []).append(row)
+                    all_visit_keys = list(
+                        dict.fromkeys([*requested_visit_keys, *rows_by_visit.keys()])
+                    )
+                    changed_rows = []
+                    for visit_key in all_visit_keys:
+                        visit_rows = rows_by_visit.get(visit_key, [])
+                        cursor_key = CursorKey(
+                            source_identity, *visit_key, table_name
+                        )
+                        existing_cursor = cursors.get(cursor_key)
+                        if (
+                            strategy == "full_visit_reload"
+                            or visit_key in effective_force_full_keys
+                        ):
+                            signature = build_sample_sync_content_signature(
+                                visit_rows
+                            )
+                            changed = (
+                                visit_key in effective_force_full_keys
+                                or existing_cursor is None
+                                or existing_cursor.content_signature != signature
+                            )
+                            if changed:
+                                changed_rows.extend(visit_rows)
+                                if visit_rows or existing_cursor is not None:
+                                    changed_visit_rows.append(
+                                        {
+                                            "institute_id": visit_key.institute_id,
+                                            "patient_id": visit_key.patient_id,
+                                            "visit_id": visit_key.visit_id,
+                                        }
+                                    )
+                            else:
+                                unchanged_visit_count += 1
+                            repository.mark_full_sync(
+                                source_identity=source_identity,
+                                visit_key=visit_key,
+                                table_name=table_name,
+                                strategy=(
+                                    "full_visit_reload"
+                                    if visit_key in effective_force_full_keys
+                                    else strategy
+                                ),
+                                schema_version=schema_version,
+                                source_row_count=len(visit_rows),
+                                content_signature=signature,
+                            )
+                        else:
+                            cutoff = (
+                                _coerce_sync_watermark(
+                                    existing_cursor.watermark_value
+                                )
+                                - cursor_overlap
+                                if existing_cursor is not None
+                                and existing_cursor.watermark_value is not None
+                                else None
+                            )
+                            effective_rows = []
+                            for row in visit_rows:
+                                row_watermark = _coerce_sync_watermark(
+                                    row.get(watermark_column or "")
+                                )
+                                if cutoff is None or (
+                                    row_watermark is not None
+                                    and row_watermark >= cutoff
+                                ):
+                                    effective_rows.append(row)
+                            if effective_rows:
+                                changed_rows.extend(effective_rows)
+                                changed_visit_rows.append(
+                                    {
+                                        "institute_id": visit_key.institute_id,
+                                        "patient_id": visit_key.patient_id,
+                                        "visit_id": visit_key.visit_id,
+                                    }
+                                )
+                            elif existing_cursor is not None:
+                                unchanged_visit_count += 1
+                            watermark_values = [
+                                value
+                                for value in (
+                                    _coerce_sync_watermark(
+                                        row.get(watermark_column or "")
+                                    )
+                                    for row in effective_rows
+                                )
+                                if value is not None
+                            ]
+                            repository.mark_success(
+                                source_identity=source_identity,
+                                visit_key=visit_key,
+                                table_name=table_name,
+                                strategy=strategy,
+                                schema_version=schema_version,
+                                watermark_column=watermark_column,
+                                watermark_value=(
+                                    max(watermark_values)
+                                    if watermark_values
+                                    else (
+                                        _coerce_sync_watermark(
+                                            existing_cursor.watermark_value
+                                        )
+                                        if existing_cursor is not None
+                                        else None
+                                    )
+                                ),
+                                source_row_count=len(effective_rows),
+                            )
+
+                    upserted = upsert_to_local(
+                        table_name=table_name,
+                        records=changed_rows,
+                        primary_keys=[
+                            str(key)
+                            for key in (table_config.get("key_fields") or [])
+                            if str(key).strip()
+                        ],
+                        batch_size=local_upsert_batch_size,
+                        session=local_session,
+                    )
+                    local_session.commit()
+                else:
+                    upserted = upsert_to_local(
+                        table_name=table_name,
+                        records=rows,
+                        primary_keys=[
+                            str(key)
+                            for key in (table_config.get("key_fields") or [])
+                            if str(key).strip()
+                        ],
+                        batch_size=local_upsert_batch_size,
+                    )
+                    changed_visit_rows = [
+                        {
+                            "institute_id": key.institute_id,
+                            "patient_id": key.patient_id,
+                            "visit_id": key.visit_id,
+                        }
+                        for key in dict.fromkeys(
+                            key
+                            for key in (_row_visit_key(row) for row in rows)
+                            if key is not None
+                        )
+                    ]
+            except Exception:
+                if local_session is not None:
+                    local_session.rollback()
+                raise
+            finally:
+                if local_session is not None:
+                    local_session.close()
+            return {
+                "rows": rows,
+                "changed_rows": changed_rows,
+                "changed_visit_rows": changed_visit_rows,
+                "result": {
                     "table_name": table_name,
                     "source_table": source_table,
-                    "rows_pulled": 0,
-                    "rows_upserted": 0,
-                    "sync_status": "source_table_unavailable",
-                    "skip_reason": error_message,
-                }
-                results.append(skipped)
-                skipped_table_errors.append(skipped)
-                if progress_callback is not None:
-                    progress_callback(
-                        {
-                            "step_key": "syncing",
-                            "step_label": "正在同步病历表",
-                            "total_candidates": len(items),
-                            "eligible_visits": len(visit_keys),
-                            "record_progress": _build_record_progress(
-                                total=len(eligible_visit_ids),
-                                completed_visit_ids=mr_synced_visit_ids,
-                            ),
-                            "processed_tables": index,
-                            "total_tables": total_tables,
-                            "current_table": table_name,
-                            "remaining_tables": max(total_tables - index, 0),
-                            "total_rows_pulled": total_rows_pulled,
-                            "total_rows_upserted": total_rows_upserted,
-                            "skipped_optional_tables": len(skipped_table_errors),
-                        }
-                    )
-                continue
-            upserted = upsert_to_local(
-                table_name=table_name,
-                records=rows,
-                primary_keys=[str(key) for key in (table_config.get("key_fields") or []) if str(key).strip()],
-            )
-            for row in rows:
+                    "rows_pulled": len(rows),
+                    "rows_upserted": upserted,
+                    "changed_visit_count": len(changed_visit_rows),
+                    "unchanged_visit_count": unchanged_visit_count,
+                    "sync_status": "synced",
+                    "skip_reason": "",
+                    "fetch_duration_ms": fetch_duration_ms,
+                    "upsert_duration_ms": round((time.perf_counter() - upsert_started_at) * 1000, 2),
+                    "duration_ms": round((time.perf_counter() - table_started_at) * 1000, 2),
+                },
+            }
+
+        def _consume_table_result(table_name: str, outcome: Optional[Dict[str, Any]]) -> None:
+            nonlocal total_rows_pulled, total_rows_upserted
+            if outcome is None:
+                return
+            table_result = outcome["result"]
+            rows = outcome["rows"]
+            source_rows_by_table[table_name] = list(rows)
+            changed_visit_rows = outcome.get("changed_visit_rows", rows)
+            results_by_table[table_name] = table_result
+            if table_result["sync_status"] == "source_table_unavailable":
+                skipped_table_errors.append(table_result)
+                return
+
+            total_rows_pulled += len(rows)
+            total_rows_upserted += int(table_result["rows_upserted"])
+            for row in changed_visit_rows:
                 institute_id = _safe_text(row.get("institute_id"))
                 patient_id = _safe_text(row.get("patient_id"))
                 visit_id = _safe_text(row.get("visit_id"))
-                if institute_id and patient_id and visit_id:
+                row_key = (institute_id, patient_id, visit_id)
+                if all(row_key) and row_key not in bundle_refresh_row_keys:
+                    bundle_refresh_row_keys.add(row_key)
                     bundle_refresh_rows.append(
                         {
                             "institute_id": institute_id,
@@ -4854,18 +7072,25 @@ class CustomQCSamplePoolService:
                             "visit_id": visit_id,
                         }
                     )
-            total_rows_pulled += len(rows)
-            total_rows_upserted += upserted
-            if table_name == "mr":
+            valid_primary_rows: List[Dict[str, Any]] = []
+            if table_name in primary_visibility_tables:
                 for row in rows:
-                    visit_id = _safe_text(row.get("visit_id"))
-                    if visit_id:
-                        mr_synced_visit_ids.add(visit_id)
+                    primary_identity = (
+                        _safe_text(row.get("institute_id")),
+                        _safe_text(row.get("patient_id")),
+                        _safe_text(row.get("visit_id")),
+                    )
+                    if all(primary_identity):
+                        primary_record_synced_visit_ids.add(primary_identity[2])
+                        primary_visit_key = VisitKey(*primary_identity)
+                        if primary_visit_key not in requested_visit_keys:
+                            requested_visit_keys.append(primary_visit_key)
+                        valid_primary_rows.append(row)
 
-            if table_name in anchor_tables and rows:
+            if valid_primary_rows:
                 ingest_sync_rows(
                     table_name=table_name,
-                    rows=rows,
+                    rows=valid_primary_rows,
                     policy_version="sample_pool_sync",
                     sync_scene="running",
                     allow_frontpage_only=False,
@@ -4873,61 +7098,251 @@ class CustomQCSamplePoolService:
                     mirror_delay_base_minutes=30,
                     sync_interval_minutes=30,
                 )
-                refresh_scene_bundles_for_rows(
-                    scene="running",
-                    rows=rows,
-                    policy_version="sample_pool_sync",
-                )
-                refresh_scene_bundles_for_rows(
-                    scene="final",
-                    rows=rows,
-                    policy_version="sample_pool_sync",
-                )
 
-            results.append(
-                {
-                    "table_name": table_name,
-                    "source_table": source_table,
-                    "rows_pulled": len(rows),
-                    "rows_upserted": upserted,
-                    "sync_status": "synced",
-                    "skip_reason": "",
-                }
-            )
+        ordered_table_names = list(sync_plan["table_names"])
+        primary_table_names = [
+            name for name in PRIMARY_VISIBILITY_TABLES if name in ordered_table_names
+        ]
+        detail_table_names = [
+            name for name in ordered_table_names if name not in primary_visibility_tables
+        ]
+        detail_table_workers = min(
+            detail_table_worker_limit,
+            len(
+                [
+                    name
+                    for name in detail_table_names
+                    if name != "discharge_record"
+                ]
+            ),
+        )
+        processed_tables = 0
+
+        for table_name in primary_table_names:
+            _emit_sync_progress(processed_tables=processed_tables, current_table=table_name)
+            _consume_table_result(table_name, _sync_table(table_name))
+            processed_tables += 1
+            _emit_sync_progress(processed_tables=processed_tables, current_table=table_name)
+
+        if not primary_record_synced_visit_ids:
+            unavailable_primary_tables = [
+                table_name
+                for table_name in primary_table_names
+                if (results_by_table.get(table_name) or {}).get("sync_status")
+                == "source_table_unavailable"
+            ]
+            if primary_table_names and len(unavailable_primary_tables) == len(primary_table_names):
+                raise RuntimeError(
+                    "源系统未提供可用的病案首页、住院登记或入院记录，无法创建病历主记录。"
+                )
+            primary_completed_at = _now_utc().isoformat()
             if progress_callback is not None:
+                primary_progress = _build_record_progress(
+                    total=len(eligible_visit_ids),
+                    completed_visit_ids=primary_record_synced_visit_ids,
+                )
                 progress_callback(
                     {
-                        "step_key": "syncing",
-                        "step_label": "正在同步病历表",
+                        "step_key": "primary_unavailable",
+                        "step_label": "未找到对应病历主记录，已停止明细整理",
+                        "phase": "primary_visibility",
+                        "primary_visible": False,
+                        "primary_completed_at": primary_completed_at,
+                        "primary_progress": primary_progress,
+                        "record_progress": primary_progress,
                         "total_candidates": len(items),
                         "eligible_visits": len(visit_keys),
-                        "record_progress": _build_record_progress(
-                            total=len(eligible_visit_ids),
-                            completed_visit_ids=mr_synced_visit_ids,
-                        ),
-                        "processed_tables": index,
+                        "processed_tables": processed_tables,
                         "total_tables": total_tables,
-                        "current_table": table_name,
-                        "remaining_tables": max(total_tables - index, 0),
+                        "current_table": "",
+                        "remaining_tables": max(total_tables - processed_tables, 0),
                         "total_rows_pulled": total_rows_pulled,
                         "total_rows_upserted": total_rows_upserted,
                     }
                 )
+            results = [
+                results_by_table[table_name]
+                for table_name in ordered_table_names
+                if table_name in results_by_table
+            ]
+            record_progress = _build_record_progress(total=len(eligible_visit_ids))
+            return {
+                "pool_id": pool_id,
+                "matched": resolved["matched"],
+                "ambiguous": resolved["ambiguous"],
+                "unmatched": resolved["unmatched"],
+                "eligible_visits": len(visit_keys),
+                "primary_visible": False,
+                "primary_completed_at": primary_completed_at,
+                "primary_progress": record_progress,
+                "record_progress": record_progress,
+                "synced_tables": results,
+                "total_rows_pulled": total_rows_pulled,
+                "total_rows_upserted": total_rows_upserted,
+                "sync_group_ids": sync_plan["group_ids"],
+                "missing_group_ids": sync_plan["missing_group_ids"],
+                "skipped_optional_tables": skipped_table_errors,
+                "pool": self.get_pool(pool_id=pool_id),
+                "post_match": None,
+            }
 
+        primary_visible = True
+        primary_completed_at = _now_utc().isoformat()
+        primary_visible_duration_ms = round(
+            (time.perf_counter() - overall_started_at) * 1000,
+            2,
+        )
+        primary_match_result = self.match_pool_items(
+            pool_id=pool_id,
+            item_ids=sync_item_ids,
+        )
+        if progress_callback is not None:
+            primary_progress = _build_record_progress(
+                total=len(eligible_visit_ids),
+                completed_visit_ids=primary_record_synced_visit_ids,
+            )
+            progress_callback(
+                {
+                    "step_key": "primary_visible",
+                    "step_label": "病历已进入样本池，文书整理中",
+                    "phase": "primary_visible",
+                    "primary_visible": True,
+                    "primary_completed_at": primary_completed_at,
+                    "primary_progress": primary_progress,
+                    "record_progress": primary_progress,
+                    "total_candidates": len(items),
+                    "eligible_visits": len(visit_keys),
+                    "processed_tables": processed_tables,
+                    "total_tables": total_tables,
+                    "current_table": "",
+                    "remaining_tables": max(total_tables - processed_tables, 0),
+                    "total_rows_pulled": total_rows_pulled,
+                    "total_rows_upserted": total_rows_upserted,
+                }
+            )
+        current_phase = "detail_sync"
+        detail_sync_started_at = time.perf_counter()
+
+        # 出院记录是轻量状态探测表：在普通明细并发前全量读取一次，避免水位
+        # 遗漏出院事件；随后从明细列表移除，确保不会重复同步。
+        if "discharge_record" in detail_table_names:
+            _emit_sync_progress(
+                processed_tables=processed_tables,
+                current_table="discharge_record",
+            )
+            _consume_table_result(
+                "discharge_record",
+                _sync_table(
+                    "discharge_record",
+                    force_full_keys=set(requested_visit_keys),
+                ),
+            )
+            detail_table_names.remove("discharge_record")
+            processed_tables += 1
+            _emit_sync_progress(
+                processed_tables=processed_tables,
+                current_table="discharge_record",
+            )
+
+        current_hospitalization_states = _collect_current_hospitalization_states(
+            source_rows_by_table
+        )
+        transition_identities = {
+            identity
+            for identity, current_state in current_hospitalization_states.items()
+            if _safe_text(current_state.get("hospitalization_status")).lower()
+            == "discharged"
+            and _safe_text(
+                (previous_hospitalization_states.get(identity) or {}).get(
+                    "hospitalization_status"
+                )
+            ).lower()
+            == "active"
+        }
+        force_full_visit_keys = {
+            VisitKey(*identity) for identity in transition_identities
+        }
+        for identity in transition_identities:
+            if identity not in bundle_refresh_row_keys:
+                bundle_refresh_row_keys.add(identity)
+                bundle_refresh_rows.append(
+                    {
+                        "institute_id": identity[0],
+                        "patient_id": identity[1],
+                        "visit_id": identity[2],
+                    }
+                )
+
+        if detail_table_names:
+            _emit_sync_progress(processed_tables=processed_tables, current_table="并行同步明细表")
+            with ThreadPoolExecutor(
+                max_workers=min(detail_table_workers, len(detail_table_names)),
+                thread_name_prefix="sample-pool-sync",
+            ) as executor:
+                future_to_table = {
+                    executor.submit(
+                        _sync_table,
+                        table_name,
+                        force_full_keys=force_full_visit_keys,
+                    ): table_name
+                    for table_name in detail_table_names
+                }
+                for future in as_completed(future_to_table):
+                    table_name = future_to_table[future]
+                    _consume_table_result(table_name, future.result())
+                    processed_tables += 1
+                    _emit_sync_progress(
+                        processed_tables=processed_tables,
+                        current_table=table_name,
+                    )
+
+        results = [
+            results_by_table[table_name]
+            for table_name in ordered_table_names
+            if table_name in results_by_table
+        ]
+        detail_sync_duration_ms = round(
+            (time.perf_counter() - detail_sync_started_at) * 1000,
+            2,
+        )
+
+        bundle_refresh_started_at = time.perf_counter()
+        bundle_refresh_stats: Dict[str, Any] = {
+            "processed": 0,
+            "skipped": 0,
+            "material_reads": 0,
+            "scenes": {},
+            "domains": {},
+        }
         if bundle_refresh_rows:
-            refresh_scene_bundles_for_rows(
-                scene="running",
+            bundle_refresh_stats = refresh_all_bundle_variants_for_rows(
                 rows=bundle_refresh_rows,
-                policy_version="sample_pool_sync",
+                scenes=("running", "final"),
+                policy_version="sample_pool_incremental_sync",
             )
-            refresh_scene_bundles_for_rows(
-                scene="final",
-                rows=bundle_refresh_rows,
-                policy_version="sample_pool_sync",
+        bundle_refresh_duration_ms = round((time.perf_counter() - bundle_refresh_started_at) * 1000, 2)
+
+        bundle_refresh_failed = sum(
+            int((counts or {}).get("failed") or 0)
+            for variant_counts in (
+                bundle_refresh_stats.get("scenes") or {},
+                bundle_refresh_stats.get("domains") or {},
             )
-            refresh_domain_bundles_for_rows(
-                rows=bundle_refresh_rows,
-                policy_version="sample_pool_sync",
+            for counts in variant_counts.values()
+        )
+        if transition_identities and bundle_refresh_failed > 0:
+            raise RuntimeError(
+                "出院病例最终资料整理失败，请稍后重试；"
+                "本次未更新出院同步状态。"
+            )
+
+        # 状态完成标记必须晚于 running/final/domain 三类 Bundle 全部成功。
+        if current_hospitalization_states:
+            _persist_hospitalization_sync_states(
+                item_table=self._item_table,
+                items=items,
+                current_states=current_hospitalization_states,
+                transition_identities=transition_identities,
             )
 
         if progress_callback is not None:
@@ -4935,11 +7350,18 @@ class CustomQCSamplePoolService:
                 {
                     "step_key": "matching",
                     "step_label": "正在回写匹配结果",
+                    "phase": "detail_sync",
+                    "primary_visible": True,
+                    "primary_completed_at": primary_completed_at,
+                    "primary_progress": _build_record_progress(
+                        total=len(eligible_visit_ids),
+                        completed_visit_ids=primary_record_synced_visit_ids,
+                    ),
                     "total_candidates": len(items),
                     "eligible_visits": len(visit_keys),
                     "record_progress": _build_record_progress(
                         total=len(eligible_visit_ids),
-                        completed_visit_ids=mr_synced_visit_ids,
+                        completed_visit_ids=primary_record_synced_visit_ids,
                     ),
                     "processed_tables": total_tables,
                     "total_tables": total_tables,
@@ -4949,16 +7371,25 @@ class CustomQCSamplePoolService:
                     "total_rows_upserted": total_rows_upserted,
                 }
             )
-        match_result = self.match_pool_items(pool_id=pool_id)
+        match_result = self.match_pool_items(
+            pool_id=pool_id,
+            item_ids=sync_item_ids,
+        )
         return {
             "pool_id": pool_id,
             "matched": resolved["matched"],
             "ambiguous": resolved["ambiguous"],
             "unmatched": resolved["unmatched"],
             "eligible_visits": len(visit_keys),
+            "primary_visible": True,
+            "primary_completed_at": primary_completed_at,
+            "primary_progress": _build_record_progress(
+                total=len(eligible_visit_ids),
+                completed_visit_ids=primary_record_synced_visit_ids,
+            ),
             "record_progress": _build_record_progress(
                 total=len(eligible_visit_ids),
-                completed_visit_ids=mr_synced_visit_ids,
+                completed_visit_ids=primary_record_synced_visit_ids,
             ),
             "synced_tables": results,
             "total_rows_pulled": total_rows_pulled,
@@ -4966,7 +7397,34 @@ class CustomQCSamplePoolService:
             "sync_group_ids": sync_plan["group_ids"],
             "missing_group_ids": sync_plan["missing_group_ids"],
             "skipped_optional_tables": skipped_table_errors,
+            "bundle_refresh": bundle_refresh_stats,
+            "final_reconciliation": bool(transition_identities),
+            "final_reconciliation_count": len(transition_identities),
+            "hard_delete_reconciliation": "not_supported",
+            "sync_performance": {
+                "detail_table_workers": detail_table_workers,
+                "local_upsert_batch_size": local_upsert_batch_size,
+                "source_resolve_ms": source_resolve_duration_ms,
+                "primary_visible_ms": primary_visible_duration_ms,
+                "detail_sync_ms": detail_sync_duration_ms,
+                "table_sync_duration_ms": detail_sync_duration_ms,
+                "bundle_refresh_duration_ms": bundle_refresh_duration_ms,
+                "bundle_refresh_ms": bundle_refresh_duration_ms,
+                "tables_skipped_unchanged": sum(
+                    1
+                    for result in results
+                    if int(result.get("changed_visit_count") or 0) == 0
+                    and int(result.get("unchanged_visit_count") or 0) > 0
+                ),
+                "visits_refreshed": len(bundle_refresh_row_keys),
+                "retry_count": 0,
+                "total_duration_ms": round(
+                    (time.perf_counter() - overall_started_at) * 1000,
+                    2,
+                ),
+            },
             "pool": match_result.get("pool") or self.get_pool(pool_id=pool_id),
+            "primary_match": primary_match_result,
             "post_match": match_result,
         }
 
