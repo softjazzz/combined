@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 import ast
 import hashlib
-import importlib
 import json
 from pathlib import Path
 import re
@@ -545,4 +544,4 @@ def test_module_has_no_runtime_side_effect_imports_or_mutable_runtime_objects() 
     source = path.read_text(encoding="utf-8")
     assert "DocumentManifest" not in source
     assert "FactShadowBundle" not in source
-    assert importlib.reload(planner_module).SUPPORTED_RULE_IDS == tuple(ALL_SLICE_RULES)
+    assert planner_module.SUPPORTED_RULE_IDS == tuple(ALL_SLICE_RULES)

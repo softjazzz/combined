@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 from dataclasses import asdict
 import ast
-import importlib
 import json
 from pathlib import Path
 
@@ -453,4 +452,4 @@ def test_module_has_no_runtime_side_effect_imports() -> None:
     roots = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
     roots |= {(node.module or "").split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
     assert not roots & {"asyncio", "httpx", "logging", "os", "requests", "sqlalchemy"}
-    assert importlib.reload(coverage_module).MAX_COVERAGE_PAIRS > 0
+    assert coverage_module.MAX_COVERAGE_PAIRS > 0
