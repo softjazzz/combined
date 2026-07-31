@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "pattern": ".worktrees*",
+      "category": "D",
+      "owner": "本地工作树",
+      "release_required": false,
+      "reason": "本机 Git worktree 目录，不属于发布源码"
+    },
+    {
+      "pattern": "tmp-*",
+      "category": "D",
+      "owner": "本地临时产物",
+      "release_required": false,
+      "reason": "仓库根目录临时验证产物"
+    },
+    {
+      "pattern": "apps/medqc-web/.codegraph*",
+      "category": "D",
+      "owner": "代码索引",
+      "release_required": false,
+      "reason": "CodeGraph 本机索引，不进入源码和交付包"
+    },
+    {
+      "pattern": "apps/medqc-web/.release-packages*",
+      "category": "D",
+      "owner": "历史交付产物",
+      "release_required": false,
+      "reason": "历史构建和交付目录，正式包从干净源码重新生成"
+    },
+    {
+      "pattern": "apps/medqc-web/tmp-*",
+      "category": "D",
+      "owner": "本地临时产物",
+      "release_required": false,
+      "reason": "浏览器截图、trace、探针和临时验证输出"
+    },
+    {
+      "pattern": "apps/medqc-web/tmp_*",
+      "category": "D",
+      "owner": "本地临时产物",
+      "release_required": false,
+      "reason": "临时验证输出"
+    },
+    {
+      "pattern": "apps/medqc-web/src/components.d.ts",
+      "category": "D",
+      "owner": "前端生成文件",
+      "release_required": false,
+      "reason": "组件声明自动生成文件，开发环境已要求默认不生成"
+    },
+    {
+      "pattern": "apps/medqc-web/6.6.6304.400local.stat",
+      "category": "D",
+      "owner": "输入法本地文件",
+      "release_required": false,
+      "reason": "机器级输入法状态文件"
+    },
+    {
+      "pattern": "apps/medqc-web/inputstat.dat",
+      "category": "D",
+      "owner": "输入法本地文件",
+      "release_required": false,
+      "reason": "机器级输入法状态文件"
+    },
+    {
+      "pattern": "apps/medqc-web/sgim_punc.bin",
+      "category": "D",
+      "owner": "输入法本地文件",
+      "release_required": false,
+      "reason": "机器级输入法数据文件"
+    },
+    {
+      "pattern": "apps/medqc-web/share.config",
+      "category": "E",
+      "owner": "机器级配置",
+      "release_required": false,
+      "reason": "本机共享配置，可能包含环境信息"
+    },
+    {
+      "pattern": "apps/medqc-web/user.config",
+      "category": "E",
+      "owner": "机器级配置",
+      "release_required": false,
+      "reason": "本机用户配置，不进入发布"
+    },
+    {
+      "pattern": "apps/medqc-web/*user.config",
+      "category": "E",
+      "owner": "机器级配置",
+      "release_required": false,
+      "reason": "异常命名的本机用户配置，不进入发布"
+    },
+    {
+      "pattern": "apps/medqc-web/.env.production",
+      "category": "E",
+      "owner": "前端环境配置",
+      "release_required": false,
+      "reason": "实际环境配置必须由部署侧注入，不提交工作区值"
+    },
+    {
+      "pattern": "apps/medqc-web/backend/.env.example",
+      "category": "B",
+      "owner": "后端部署配置",
+      "release_required": true,
+      "reason": "安全环境变量模板和部署边界"
+    },
+    {
+      "pattern": "apps/medqc-web/backend/app/*",
+      "category": "A",
+      "owner": "后端发布功能",
+      "release_required": true,
+      "reason": "样本同步、Bundle、Native 规则、Envelope 或结果 API 运行代码"
+    },
+    {
+      "pattern": "apps/medqc-web/backend/tests/*",
+      "category": "B",
+      "owner": "后端测试",
+      "release_required": true,
+      "reason": "发布功能和结果链的回归证据"
+    },
+    {
+      "pattern": "apps/medqc-web/backend/scripts/*",
+      "category": "B",
+      "owner": "后端发布工具",
+      "release_required": true,
+      "reason": "数据导出、黄金闸门和预生产验证工具"
+    },
+    {
+      "pattern": "apps/medqc-web/docs/*",
+      "category": "B",
+      "owner": "发布文档",
+      "release_required": true,
+      "reason": "规则范围、客户口径、部署或发布验收文档"
+    },
+    {
+      "pattern": "apps/medqc-web/scripts/*",
+      "category": "B",
+      "owner": "发布脚本",
+      "release_required": true,
+      "reason": "客户版打包、基线盘点和发布门禁脚本"
+    },
+    {
+      "pattern": "apps/medqc-web/tests/*",
+      "category": "B",
+      "owner": "前端测试",
+      "release_required": true,
+      "reason": "客户样本验证和结果展示的回归证据"
+    },
+    {
+      "pattern": "apps/medqc-web/src/domain/customer-qc/*",
+      "category": "A",
+      "owner": "前端质控领域模型",
+      "release_required": true,
+      "reason": "Canonical 状态展示策略"
+    },
+    {
+      "pattern": "apps/medqc-web/src/services/manual-case-sample-service.ts",
+      "category": "A",
+      "owner": "前端样本服务",
+      "release_required": true,
+      "reason": "客户样本池 API 数据链"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/CustomerSampleValidationView.vue",
+      "category": "A",
+      "owner": "客户样本验证",
+      "release_required": true,
+      "reason": "样本池同步、任务执行和结果入口主页面"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/DataSyncConfigPage.vue",
+      "category": "A",
+      "owner": "数据同步配置",
+      "release_required": true,
+      "reason": "客户数据同步配置与科室/住院范围入口"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/WorkstationLoginView.vue",
+      "category": "A",
+      "owner": "客户工作台登录",
+      "release_required": true,
+      "reason": "客户版实际登录入口"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/WorkstationV4HomeEntry.vue",
+      "category": "A",
+      "owner": "客户工作台入口",
+      "release_required": true,
+      "reason": "客户样本验证页面入口集成"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/WorkstationV4View.vue",
+      "category": "A",
+      "owner": "客户工作台容器",
+      "release_required": true,
+      "reason": "客户样本验证路由和容器集成"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/customer-sample-validation/*",
+      "category": "A",
+      "owner": "客户样本验证",
+      "release_required": true,
+      "reason": "病历文书、任务历史和样本详情展示"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/semantic-rules/*",
+      "category": "A",
+      "owner": "质控结果展示",
+      "release_required": true,
+      "reason": "单一结果 API 的 Canonical Envelope 渲染与病历核对"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/sync-console/*",
+      "category": "A",
+      "owner": "数据同步控制台",
+      "release_required": true,
+      "reason": "住院范围、字段映射和同步进度展示"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/DetailHeader.vue",
+      "category": "A",
+      "owner": "病历详情",
+      "release_required": true,
+      "reason": "在院/出院病历详情状态展示"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/DetailSidebar.vue",
+      "category": "A",
+      "owner": "病历详情",
+      "release_required": true,
+      "reason": "文书目录和质控结果核对入口"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/PatientCardGrid.vue",
+      "category": "A",
+      "owner": "病历池",
+      "release_required": true,
+      "reason": "在院/出院病历状态与病历池展示"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/RecordDetailWorkspace.vue",
+      "category": "A",
+      "owner": "病历详情",
+      "release_required": true,
+      "reason": "病历文书与质控结果工作区"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/WorkstationV4DetailView.vue",
+      "category": "A",
+      "owner": "病历详情",
+      "release_required": true,
+      "reason": "客户工作台病历详情容器"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/components/WorkstationV4ListView.vue",
+      "category": "A",
+      "owner": "病历池",
+      "release_required": true,
+      "reason": "在院和已出院病历列表"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/workstation-v4/frontpage/components/StructuredDataView.vue",
+      "category": "A",
+      "owner": "结构化文书查看",
+      "release_required": true,
+      "reason": "输血、麻醉及其他结构化文书展示"
+    },
+    {
+      "pattern": "apps/medqc-web/src/views/*",
+      "category": "C",
+      "owner": "非本轮页面改动",
+      "release_required": false,
+      "reason": "与客户样本验证发布主链无直接关系，保留快照后转后续审查"
+    },
+    {
+      "pattern": "apps/medqc-web/AGENTS.md",
+      "category": "C",
+      "owner": "开发治理",
+      "release_required": false,
+      "reason": "Agent 工作约束，不属于客户运行版本"
+    }
+  ]
+}
