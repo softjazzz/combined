@@ -59,4 +59,13 @@ describe('QCReviewDrawer layout', () => {
     expect(responsiveIssues).toContain('grid-column: 1 / -1')
     expect(responsiveIssues).toContain('max-height: min(520px, 55vh)')
   })
+
+  it('保留并渲染 Bundle 返回的检验报告明细', () => {
+    expect(source).toContain('report_items: Array.isArray(source.report_items)')
+    expect(source).toContain('report_metadata:')
+    expect(source).toContain('data-testid="qc-review-report-content"')
+    expect(source).toContain('v-for="(item, index) in currentDocReportItems"')
+    expect(source).toContain('<th>检验项目</th>')
+    expect(source).toContain('<th>结果提示</th>')
+  })
 })

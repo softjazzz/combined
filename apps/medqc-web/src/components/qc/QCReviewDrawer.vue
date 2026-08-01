@@ -449,7 +449,83 @@
                 </div>
 
                 <div
-                  v-if="
+                  v-if="currentDocIsReport && currentDocReportItems.length > 0"
+                  class="review-card review-card--report"
+                  data-testid="qc-review-report-content"
+                >
+                  <div
+                    v-if="currentDocReportMetadata.length > 0"
+                    class="review-report-meta"
+                  >
+                    <div
+                      v-for="item in currentDocReportMetadata"
+                      :key="item.key"
+                      class="review-report-meta__item"
+                    >
+                      <span>{{ item.label }}</span>
+                      <strong>{{ item.value }}</strong>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="currentDocIsLabReport"
+                    class="review-report-table-wrap"
+                  >
+                    <table class="review-report-table">
+                      <thead>
+                        <tr>
+                          <th>检验项目</th>
+                          <th>结果</th>
+                          <th>结果提示</th>
+                          <th>正常值范围</th>
+                          <th>单位</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="(item, index) in currentDocReportItems"
+                          :key="item.item_id || item.item_no || index"
+                        >
+                          <td>{{ item.item_name || '未命名项目' }}</td>
+                          <td class="review-report-table__value">
+                            {{ item.result || '—' }}
+                          </td>
+                          <td :class="{ 'is-abnormal': Boolean(item.abnormal_indicator) }">
+                            {{ item.abnormal_indicator || '—' }}
+                          </td>
+                          <td>{{ item.reference_range || '—' }}</td>
+                          <td>{{ item.unit || '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div
+                    v-else
+                    class="review-exam-results"
+                  >
+                    <article
+                      v-for="(item, index) in currentDocReportItems"
+                      :key="item.item_id || item.item_no || index"
+                      class="review-exam-result"
+                    >
+                      <h4>{{ item.item_name || `检查项目 ${index + 1}` }}</h4>
+                      <dl>
+                        <template v-if="item.findings">
+                          <dt>检查所见</dt>
+                          <dd>{{ item.findings }}</dd>
+                        </template>
+                        <template v-if="item.impression">
+                          <dt>检查结论</dt>
+                          <dd>{{ item.impression }}</dd>
+                        </template>
+                      </dl>
+                    </article>
+                  </div>
+                </div>
+
+                <div
+                  v-else-if="
                     currentDocFieldList.length > 0 ||
                       currentDocSectionBlocks.length > 0 ||
                       shouldShowCurrentDocPlainContent
@@ -798,6 +874,18 @@ interface ReviewDocItem {
   }>
   assembly_status?: string
   data_quality_flags?: string[]
+  report_items?: Array<{
+    item_no?: string
+    item_id?: string
+    item_name?: string
+    result?: string
+    abnormal_indicator?: string
+    reference_range?: string
+    unit?: string
+    findings?: string
+    impression?: string
+  }>
+  report_metadata?: Record<string, unknown>
   order_filter?: OrderFilter
 }
 
@@ -1217,6 +1305,15 @@ function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | nu
     data_quality_flags: Array.isArray(source.data_quality_flags)
       ? source.data_quality_flags.map((item) => safeText(item)).filter(Boolean)
       : [],
+    report_items: Array.isArray(source.report_items)
+      ? source.report_items
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => item as ReviewDocItem['report_items'][number])
+      : [],
+    report_metadata:
+      source.report_metadata && typeof source.report_metadata === 'object'
+        ? (source.report_metadata as Record<string, unknown>)
+        : {},
   }
 }
 
@@ -1715,6 +1812,39 @@ const currentDoc = computed<ReviewDocItem | null>(() => {
 })
 
 const currentDocContent = computed(() => currentDoc.value?.content || '')
+const currentDocReportItems = computed(() => currentDoc.value?.report_items || [])
+const currentDocIsLabReport = computed(
+  () => safeText(currentDoc.value?.doc_type).toLowerCase() === 'labtest_item_report',
+)
+const currentDocIsExamReport = computed(
+  () => safeText(currentDoc.value?.doc_type).toLowerCase() === 'exam_item_report',
+)
+const currentDocIsReport = computed(
+  () => currentDocIsLabReport.value || currentDocIsExamReport.value,
+)
+const REPORT_METADATA_LABELS: Record<string, string> = {
+  request_datetime: '申请时间',
+  request_time: '申请时间',
+  exam_time: '检查时间',
+  report_datetime: '报告时间',
+  report_time: '报告时间',
+  specimen: '标本类型',
+  exam_type: '检查类型',
+  request_dept: '申请科室',
+  performed_dept: '执行科室',
+  request_physician: '申请医生',
+  reporter: '报告医生',
+  verifier: '审核医生',
+}
+const currentDocReportMetadata = computed(() =>
+  Object.entries(currentDoc.value?.report_metadata || {})
+    .filter(([key, value]) => Boolean(REPORT_METADATA_LABELS[key] && safeText(value)))
+    .map(([key, value]) => ({
+      key,
+      label: REPORT_METADATA_LABELS[key],
+      value: safeText(value),
+    })),
+)
 const shouldShowCurrentDocPlainContent = computed(
   () => Boolean(currentDocContent.value) && !shouldSuppressPlainContentFallback(currentDoc.value),
 )
@@ -2895,6 +3025,135 @@ watch(
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+}
+
+.review-card--report {
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.review-report-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 24px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 102, 204, 0.025);
+}
+
+.review-report-meta__item {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.review-report-meta__item span {
+  color: rgba(29, 29, 31, 0.52);
+}
+
+.review-report-meta__item strong {
+  overflow-wrap: anywhere;
+  color: #1d1d1f;
+  font-weight: 600;
+}
+
+.review-report-table-wrap {
+  overflow-x: auto;
+}
+
+.review-report-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #1d1d1f;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.review-report-table th,
+.review-report-table td {
+  padding: 9px 12px;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.review-report-table th:last-child,
+.review-report-table td:last-child {
+  border-right: 0;
+}
+
+.review-report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.review-report-table th {
+  background: #f5f5f7;
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.review-report-table th:first-child {
+  width: 36%;
+}
+
+.review-report-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.025);
+}
+
+.review-report-table__value {
+  font-weight: 600;
+}
+
+.review-report-table .is-abnormal {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+.review-exam-results {
+  padding: 0 16px;
+}
+
+.review-exam-result {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.review-exam-result:last-child {
+  border-bottom: 0;
+}
+
+.review-exam-result h4 {
+  margin: 0 0 8px;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.review-exam-result dl {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.review-exam-result dt {
+  color: rgba(29, 29, 31, 0.52);
+}
+
+.review-exam-result dd {
+  margin: 0;
+  color: #27364a;
+  white-space: pre-wrap;
 }
 
 .order-overview {
