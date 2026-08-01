@@ -5,11 +5,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from .luxian_0609_rule_master import load_luxian_0609_rule_master
+
 
 LUXIAN_0609_RULE_SET_KEY = "luxian_0609_qc_v1"
 LUXIAN_0609_RULE_SET_NAME = "泸县0609质控点验证 v1"
 
 _DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "luxian_0609_rules_v1.json"
+_PHASE1_EXTENSION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "data"
+    / "luxian_0609_phase1_rules_extension_v1.json"
+)
 
 
 @lru_cache(maxsize=1)
@@ -23,7 +30,33 @@ def load_luxian_0609_rules() -> list[dict[str, Any]]:
         payload = json.load(file)
     if not isinstance(payload, list):
         raise ValueError("luxian_0609_rules_v1.json must contain a list")
-    return [dict(item) for item in payload if isinstance(item, dict)]
+    with _PHASE1_EXTENSION_PATH.open("r", encoding="utf-8") as file:
+        extension = json.load(file)
+    if not isinstance(extension, list):
+        raise ValueError("LX0609 phase-1 extension must contain a list")
+    wrappers = [
+        dict(item)
+        for item in (*payload, *extension)
+        if isinstance(item, dict)
+    ]
+    wrappers_by_id: dict[str, dict[str, Any]] = {}
+    for wrapper in wrappers:
+        rule_id = str(
+            wrapper.get("rule_id") or wrapper.get("rule_code") or ""
+        ).strip().upper()
+        if not rule_id or rule_id in wrappers_by_id:
+            raise ValueError("LX0609 execution catalog contains an invalid or duplicate rule ID")
+        wrappers_by_id[rule_id] = wrapper
+
+    # 业务范围以 75 条唯一总表为准；执行目录只能投影总表中已启用的规则。
+    active_rule_ids = tuple(
+        entry.rule_id
+        for entry in load_luxian_0609_rule_master()
+        if entry.implementation_status == "active"
+    )
+    if set(wrappers_by_id) != set(active_rule_ids):
+        raise ValueError("LX0609 execution catalog drifted from the canonical rule master")
+    return [dict(wrappers_by_id[rule_id]) for rule_id in active_rule_ids]
 
 
 def get_luxian_0609_rule(rule_id: str) -> dict[str, Any] | None:

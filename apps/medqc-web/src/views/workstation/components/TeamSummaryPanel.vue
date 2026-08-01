@@ -5,7 +5,9 @@
     >
       <div class="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
-          <h3 class="text-[15px] font-bold text-slate-900">首屏关键指标通报</h3>
+          <h3 class="text-[15px] font-bold text-slate-900">
+            首屏关键指标通报
+          </h3>
         </div>
       </div>
       <div class="mt-4 space-y-3 max-h-[360px] overflow-y-auto custom-scrollbar">
@@ -35,7 +37,11 @@
             {{ formatDateTime(item.created_at) }}
           </div>
         </article>
-        <a-empty v-if="!batchSummaries.length" description="暂无通报提示" class="py-10" />
+        <a-empty
+          v-if="!batchSummaries.length"
+          description="暂无通报提示"
+          class="py-10"
+        />
       </div>
     </article>
 
@@ -43,7 +49,9 @@
       class="rounded-[16px] border border-slate-200 bg-white px-5 py-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.02)]"
     >
       <div class="pb-3 border-b border-slate-100">
-        <h3 class="text-[15px] font-bold text-slate-900">科室风险分布</h3>
+        <h3 class="text-[15px] font-bold text-slate-900">
+          科室风险分布
+        </h3>
       </div>
       <div class="mt-4 space-y-3 max-h-[360px] overflow-y-auto custom-scrollbar">
         <div
@@ -56,8 +64,7 @@
             <span
               class="text-[13px] font-bold text-[#1d1d1f] font-mono"
               style="font-variant-numeric: tabular-nums"
-              >{{ item.count }}</span
-            >
+            >{{ item.count }}</span>
           </div>
           <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
             <div
@@ -66,7 +73,11 @@
             />
           </div>
         </div>
-        <a-empty v-if="!departmentRisk.length" description="暂无科室风险数据" class="py-10" />
+        <a-empty
+          v-if="!departmentRisk.length"
+          description="暂无科室风险数据"
+          class="py-10"
+        />
       </div>
     </article>
 
@@ -74,7 +85,9 @@
       class="rounded-[16px] border border-slate-200 bg-white px-5 py-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.02)]"
     >
       <div class="pb-3 border-b border-slate-100">
-        <h3 class="text-[15px] font-bold text-slate-900">Workflow 状态分布</h3>
+        <h3 class="text-[15px] font-bold text-slate-900">
+          Workflow 状态分布
+        </h3>
       </div>
       <div class="mt-4 space-y-3 max-h-[360px] overflow-y-auto custom-scrollbar">
         <div
@@ -101,7 +114,9 @@
               >
                 {{ item.pending || 0 }}
               </div>
-              <div class="text-[10px] font-bold text-amber-600 mt-1">待处理</div>
+              <div class="text-[10px] font-bold text-amber-600 mt-1">
+                待处理
+              </div>
             </div>
             <div class="rounded-lg bg-emerald-50 px-2 py-2 text-center">
               <div
@@ -110,7 +125,9 @@
               >
                 {{ item.in_progress || item.running || 0 }}
               </div>
-              <div class="text-[10px] font-bold text-emerald-600 mt-1">处理中</div>
+              <div class="text-[10px] font-bold text-emerald-600 mt-1">
+                处理中
+              </div>
             </div>
             <div class="rounded-lg bg-rose-50 px-2 py-2 text-center">
               <div
@@ -119,11 +136,17 @@
               >
                 {{ item.overdue || item.failed || 0 }}
               </div>
-              <div class="text-[10px] font-bold text-rose-600 mt-1">风险项</div>
+              <div class="text-[10px] font-bold text-rose-600 mt-1">
+                风险项
+              </div>
             </div>
           </div>
         </div>
-        <a-empty v-if="!workflowStatus.length" description="暂无状态数据" class="py-10" />
+        <a-empty
+          v-if="!workflowStatus.length"
+          description="暂无状态数据"
+          class="py-10"
+        />
       </div>
     </article>
   </section>

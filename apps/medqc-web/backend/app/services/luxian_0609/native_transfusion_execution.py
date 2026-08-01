@@ -249,6 +249,10 @@ _SYSTEM_DATA_GAP_MESSAGES = {
         "本次质控未读取到完整的输血前评估相关记录，暂无法判断是否已完成评估。",
         "请确认输血申请及相关病程已纳入本次质控资料后重新评估。",
     ),
+    "transfusion_comparison_fields_unavailable": (
+        "已确认存在术中输血，但暂无法完成三份文书的一致性核对。",
+        "请确认手术记录、麻醉记录和术后首次病程中的输血成分、剂量及时间均已完整同步后重新评估。",
+    ),
 }
 
 
@@ -942,7 +946,7 @@ def _programmatic_047_status(documents: Mapping[str, Any]) -> tuple[str, str]:
 def _programmatic_048_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
-    """仅收口“手术已明确输血、术后首次病程明确漏记”的双文书矛盾。"""
+    """先确认术中输血门控；三文书字段合同闭环前禁止宣称不一致。"""
 
     surgery_texts = tuple(
         _clean(
@@ -984,24 +988,10 @@ def _programmatic_048_status(
     )
     if not intraoperative_transfusion_is_credible:
         return "not_applicable", "intraoperative_transfusion_fact_absent"
-
-    surgery_has_transfusion = any(
-        _SURGERY_TRANSFUSION_PATTERN.search(text)
-        and _TRANSFUSION_COMPONENT_PATTERN.search(text)
-        and _TRANSFUSION_DOSE_PATTERN.search(text)
-        for text in surgery_texts
-    )
-    if not surgery_has_transfusion:
-        return None
-
-    postop_entries = tuple(
-        _source_entries(documents, "postsurg_firstcourse_record")
-    )
-    if postop_entries and all(
-        not _POSTOP_TRANSFUSION_PATTERN.search(entry) for entry in postop_entries
-    ):
-        return "non_compliant", "postop_first_course_transfusion_omitted"
-    return None
+    # 本规则要求比较手术记录、麻醉记录、术后首次病程三方内容。目前只具备
+    # 文本存在性和输血触发识别，尚无受控的成分、剂量、时间三方归一化字段。
+    # 即使某一份文书未出现输血字样，也不能据此把“未提及”升级成“三方不一致”。
+    return "data_gap", "transfusion_comparison_fields_unavailable"
 
 
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
@@ -1099,10 +1089,6 @@ def _customer_display_facts_for_outcome(
         ("LX0609-047", "posttransfusion_evaluation_missing"): (
             "posttransfusion_evaluation",
             ["bloodtrans_record", "course_record"],
-        ),
-        ("LX0609-048", "postop_first_course_transfusion_omitted"): (
-            "postop_first_course_transfusion",
-            ["surgery_record", "postsurg_firstcourse_record"],
         ),
     }
     detail = cases.get((rule_id, reason_code))

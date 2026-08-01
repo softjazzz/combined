@@ -2,7 +2,10 @@
   <div class="running-records-page min-h-screen p-5 lg:p-6">
     <!-- 任务进度条（创建任务后显示） -->
     <transition name="slide-down">
-      <div v-if="taskProgress" class="apple-progress-panel mb-4 rounded-2xl p-4">
+      <div
+        v-if="taskProgress"
+        class="apple-progress-panel mb-4 rounded-2xl p-4"
+      >
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
             <ThunderboltOutlined class="text-[#0066cc]" />
@@ -23,14 +26,16 @@
           v-if="taskProgress.progress_pct >= 100"
           class="flex items-center gap-4 mt-2 text-xs text-slate-500"
         >
-          <span
-            >平均分:
-            <b class="text-slate-700">{{ taskProgress.avg_score?.toFixed(1) || '-' }}</b></span
+          <span>平均分:
+            <b class="text-slate-700">{{ taskProgress.avg_score?.toFixed(1) || '-' }}</b></span>
+          <span>缺陷数: <b class="text-slate-700">{{ taskProgress.total_defects || 0 }}</b></span>
+          <a-button
+            size="small"
+            type="link"
+            @click="handleCloseProgress"
           >
-          <span
-            >缺陷数: <b class="text-slate-700">{{ taskProgress.total_defects || 0 }}</b></span
-          >
-          <a-button size="small" type="link" @click="handleCloseProgress"> 关闭 </a-button>
+            关闭
+          </a-button>
         </div>
       </div>
     </transition>
@@ -38,7 +43,9 @@
     <div class="apple-hero-panel mb-5 p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-[11px] font-semibold tracking-normal text-slate-500">运行队列</div>
+          <div class="text-[11px] font-semibold tracking-normal text-slate-500">
+            运行队列
+          </div>
           <h1 class="mt-1 text-[28px] font-bold leading-8 tracking-normal text-slate-900">
             运行病历质控
           </h1>
@@ -47,7 +54,10 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <a-button class="apple-secondary-button !h-9 !rounded-lg" @click="handleRefresh">
+          <a-button
+            class="apple-secondary-button !h-9 !rounded-lg"
+            @click="handleRefresh"
+          >
             <ReloadOutlined :spin="loading" />
             刷新
           </a-button>
@@ -68,11 +78,15 @@
             <ClockCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">今日待审核</div>
+            <div class="queue-kpi-label">
+              今日待审核
+            </div>
             <div class="queue-kpi-value">
               {{ overviewStats.pending_count || 0 }}
             </div>
-            <div class="queue-kpi-desc">等待质控处理</div>
+            <div class="queue-kpi-desc">
+              等待质控处理
+            </div>
           </div>
         </div>
         <button
@@ -83,11 +97,15 @@
             <AlertOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">高风险病历</div>
+            <div class="queue-kpi-label">
+              高风险病历
+            </div>
             <div class="queue-kpi-value">
               {{ overviewStats.defects_by_severity?.critical || 0 }}
             </div>
-            <div class="queue-kpi-desc">建议优先复核</div>
+            <div class="queue-kpi-desc">
+              建议优先复核
+            </div>
           </div>
         </button>
         <div class="queue-kpi-card">
@@ -95,9 +113,15 @@
             <CheckCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">审核通过率</div>
-            <div class="queue-kpi-value">{{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%</div>
-            <div class="queue-kpi-desc">当前筛选范围</div>
+            <div class="queue-kpi-label">
+              审核通过率
+            </div>
+            <div class="queue-kpi-value">
+              {{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%
+            </div>
+            <div class="queue-kpi-desc">
+              当前筛选范围
+            </div>
           </div>
         </div>
         <div class="queue-kpi-card">
@@ -105,11 +129,15 @@
             <ThunderboltOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">总缺陷数</div>
+            <div class="queue-kpi-label">
+              总缺陷数
+            </div>
             <div class="queue-kpi-value">
               {{ overviewStats.total_defects || 0 }}
             </div>
-            <div class="queue-kpi-desc">已发现问题</div>
+            <div class="queue-kpi-desc">
+              已发现问题
+            </div>
           </div>
         </div>
       </div>
@@ -135,9 +163,15 @@
             placeholder="时间周期"
             :bordered="false"
           >
-            <a-select-option value="all"> 全部时间 </a-select-option>
-            <a-select-option value="recent7"> 近7日 </a-select-option>
-            <a-select-option value="month"> 本月 </a-select-option>
+            <a-select-option value="all">
+              全部时间
+            </a-select-option>
+            <a-select-option value="recent7">
+              近7日
+            </a-select-option>
+            <a-select-option value="month">
+              本月
+            </a-select-option>
           </a-select>
 
           <a-select
@@ -146,9 +180,15 @@
             placeholder="审核状态"
             :bordered="false"
           >
-            <a-select-option value="all"> 全部状态 </a-select-option>
-            <a-select-option value="pending"> 待审核 </a-select-option>
-            <a-select-option value="reviewing"> 审核中 </a-select-option>
+            <a-select-option value="all">
+              全部状态
+            </a-select-option>
+            <a-select-option value="pending">
+              待审核
+            </a-select-option>
+            <a-select-option value="reviewing">
+              审核中
+            </a-select-option>
           </a-select>
 
           <div class="h-6 w-px bg-slate-200 mx-1" />
@@ -164,8 +204,17 @@
 
         <template #actions>
           <ProTableToolbar>
-            <a-button type="primary" class="!h-9 !rounded-lg" @click="handleQuery"> 查询 </a-button>
-            <a-button class="!h-9 !rounded-lg !border-slate-200" @click="handleResetQuery">
+            <a-button
+              type="primary"
+              class="!h-9 !rounded-lg"
+              @click="handleQuery"
+            >
+              查询
+            </a-button>
+            <a-button
+              class="!h-9 !rounded-lg !border-slate-200"
+              @click="handleResetQuery"
+            >
               重置
             </a-button>
 
@@ -214,7 +263,10 @@
           </ProTableToolbar>
         </template>
 
-        <template v-if="stageHint" #hint>
+        <template
+          v-if="stageHint"
+          #hint
+        >
           {{ stageHint }}
         </template>
       </ProQueryBar>
@@ -264,7 +316,10 @@
       </div>
 
       <!-- 表格区域（仅在病历/缺陷视图时显示） -->
-      <div v-if="currentView !== 'remediation'" class="flex-1 overflow-hidden px-6 py-2">
+      <div
+        v-if="currentView !== 'remediation'"
+        class="flex-1 overflow-hidden px-6 py-2"
+      >
         <ProStandardTable
           :columns="currentColumns"
           :data-source="tableDataSource"
@@ -284,7 +339,7 @@
                   :src="patientAvatarSrc(record)"
                   alt=""
                   class="record-patient-avatar"
-                />
+                >
                 <div
                   v-else
                   class="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(0,102,204,0.14)] bg-[rgba(0,102,204,0.08)] text-[#0066cc]"
@@ -296,8 +351,7 @@
                     <span
                       class="cursor-pointer truncate text-sm font-semibold text-slate-800 transition-colors hover:text-[#0066cc]"
                       @click="handleViewDetail(record)"
-                      >{{ getPrimaryRecordTitle(record) }}</span
-                    >
+                    >{{ getPrimaryRecordTitle(record) }}</span>
                     <a-tag
                       v-if="record.status === 'completed'"
                       color="success"
@@ -433,7 +487,10 @@
                     <EyeOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip v-if="getStatusField(record) === 'pending'" title="催办">
+                <a-tooltip
+                  v-if="getStatusField(record) === 'pending'"
+                  title="催办"
+                >
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-all"
                     @click="handleUrgeRecord(record)"
@@ -450,11 +507,19 @@
                     </button>
                     <template #overlay>
                       <a-menu @click="({ key }: any) => handleMenuAction(key, record)">
-                        <a-menu-item v-if="currentView === 'records'" key="reanalyze">
+                        <a-menu-item
+                          v-if="currentView === 'records'"
+                          key="reanalyze"
+                        >
                           <ThunderboltOutlined /> 重新质控
                         </a-menu-item>
-                        <a-menu-item key="export"> <FilePdfOutlined /> 导出报告 </a-menu-item>
-                        <a-menu-item key="delete" class="!text-rose-500">
+                        <a-menu-item key="export">
+                          <FilePdfOutlined /> 导出报告
+                        </a-menu-item>
+                        <a-menu-item
+                          key="delete"
+                          class="!text-rose-500"
+                        >
                           <DeleteOutlined /> 删除记录
                         </a-menu-item>
                       </a-menu>
@@ -468,7 +533,10 @@
       </div>
 
       <!-- 整改闭环视图 -->
-      <div v-if="currentView === 'remediation'" class="flex-1 overflow-hidden px-6 py-2">
+      <div
+        v-if="currentView === 'remediation'"
+        class="flex-1 overflow-hidden px-6 py-2"
+      >
         <RemediationPanel />
       </div>
 
@@ -478,10 +546,8 @@
           v-if="selectedRowKeys.length > 0"
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-semibold"
-            >已选择
-            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span
-          >
+          <span class="text-sm font-semibold">已选择
+            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span>
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button

@@ -1,0 +1,1183 @@
+"""第一阶段新增的确定性文书规则。
+
+本执行器只消费同一个 Evidence Snapshot/Material Store，不调用旧四川规则，
+也不从自由文本结论反推状态。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, Mapping, Sequence
+
+from .decision_model import (
+    ApplicabilityState,
+    EvidenceState,
+    QcDirection,
+    RuleDecision,
+)
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
+from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .source_evidence_reader import (
+    authoritative_document_time_value,
+    trusted_performed_surgery_times,
+)
+
+
+EXECUTOR_KEY = "extended_document"
+EXTENDED_DOCUMENT_RULE_IDS = (
+    "LX0609-051",
+    "LX0609-060",
+    "LX0609-061",
+    "LX0609-062",
+    "LX0609-064",
+    "LX0609-065",
+    "LX0609-066",
+    "LX0609-067",
+    "LX0609-068",
+    "LX0609-069",
+    "LX0609-071",
+    "LX0609-072",
+    "LX0609-073",
+    "LX0609-074",
+)
+
+EXTENDED_DOCUMENT_SOURCE_KEYS = (
+    "inpat_registration",
+    "death_record",
+    "death_discussion",
+    "discharge_record",
+    "daily_course_record",
+    "senior_course_record",
+    "postsurg_firstcourse_record",
+    "mr_surgery",
+    "surgery_record",
+    "consultation_record",
+    "handoff_record",
+    "handover_record",
+    "physician_change_event",
+    "transfer_in_record",
+    "transfer_out_record",
+    "inpat_nondrug_order",
+    "diagnosis",
+)
+
+_DEATH_MARKERS = ("死亡", "病故")
+_ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
+
+
+def _clean(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    text = _clean(value)
+    if not text:
+        return None
+    normalized = text.replace("T", " ").replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=None)
+
+
+def _row_time(row: Mapping[str, Any]) -> datetime | None:
+    value = authoritative_document_time_value(row)
+    return _parse_datetime(
+        value
+        or row.get("death_datetime")
+        or row.get("death_time")
+        or row.get("discharge_datetime")
+        or row.get("discharge_time")
+    )
+
+
+def _source_rows(
+    materials: Luxian0609EvidenceMaterialStore,
+    source_key: str,
+) -> tuple[tuple[Mapping[str, Any], ...], str]:
+    try:
+        rows = materials.rows(source_key)
+    except EvidenceMaterialTruncated:
+        return (), "source_truncated"
+    except EvidenceMaterialUnavailable:
+        return (), "source_unavailable"
+    return tuple(dict(row) for row in rows), ""
+
+
+def _fact_refs(
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_keys: Sequence[str],
+) -> tuple[str, ...]:
+    wanted = set(source_keys)
+    return tuple(
+        sorted(
+            observation.snapshot_ref.removeprefix("sha256:")
+            for observation in snapshot.observations
+            if observation.source_key in wanted
+        )
+    )
+
+
+def _decision(
+    *,
+    rule_id: str,
+    snapshot: Luxian0609EvidenceSnapshot,
+    source_keys: Sequence[str],
+    final_state: str,
+    reason_code: str,
+) -> RuleDecision:
+    dimensions = {
+        "compliant": (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+        ),
+        "non_compliant": (
+            ApplicabilityState.APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+        ),
+        "not_applicable": (
+            ApplicabilityState.NOT_APPLICABLE,
+            EvidenceState.SUFFICIENT,
+            QcDirection.UNKNOWN,
+        ),
+        "data_gap": (
+            ApplicabilityState.UNKNOWN,
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+        ),
+    }
+    applicability, evidence_state, direction = dimensions[final_state]
+    return RuleDecision(
+        rule_id=rule_id,
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=applicability,
+        evidence_state=evidence_state,
+        qc_direction=direction,
+        reason_code=reason_code,
+        fact_refs=_fact_refs(snapshot, source_keys),
+        evaluator_version="extended-document-v1",
+        confidence=None,
+    )
+
+
+def _registration_status(rows: Sequence[Mapping[str, Any]]) -> str:
+    return " ".join(
+        _clean(
+            row.get("patient_status")
+            or row.get("discharge_status")
+            or row.get("discharge_type")
+        )
+        for row in rows
+    )
+
+
+def _death_context(
+    *,
+    registration_rows: Sequence[Mapping[str, Any]],
+    death_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, datetime | None]:
+    if death_rows:
+        death_time = next(
+            (
+                candidate
+                for row in death_rows
+                if (
+                    candidate := _parse_datetime(
+                        row.get("death_datetime") or row.get("death_time")
+                    )
+                )
+                is not None
+            ),
+            None,
+        )
+        if death_time is None:
+            death_time = next(
+                (
+                    candidate
+                    for row in death_rows
+                    if (candidate := _row_time(row)) is not None
+                ),
+                None,
+            )
+        if death_time is None:
+            death_time = next(
+                (
+                    _parse_datetime(row.get("death_datetime") or row.get("death_time"))
+                    for row in registration_rows
+                    if _parse_datetime(row.get("death_datetime") or row.get("death_time"))
+                    is not None
+                ),
+                None,
+            )
+        return "present", death_time
+
+    status = _registration_status(registration_rows)
+    death_time = next(
+        (
+            _parse_datetime(row.get("death_datetime") or row.get("death_time"))
+            for row in registration_rows
+            if _parse_datetime(row.get("death_datetime") or row.get("death_time"))
+            is not None
+        ),
+        None,
+    )
+    if death_time is not None or any(marker in status for marker in _DEATH_MARKERS):
+        return "present", death_time
+    if status and any(marker in status for marker in _ALIVE_DISCHARGE_MARKERS):
+        return "absent", None
+    return "unknown", None
+
+
+def _discharge_time(
+    registration_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
+) -> datetime | None:
+    for row in registration_rows:
+        parsed = _parse_datetime(row.get("discharge_datetime") or row.get("discharge_time"))
+        if parsed is not None:
+            return parsed
+    for row in discharge_rows:
+        parsed = _parse_datetime(
+            row.get("discharge_datetime")
+            or row.get("discharge_time")
+            or row.get("discharge_date")
+        )
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _row_text(row: Mapping[str, Any]) -> str:
+    return "\n".join(
+        _clean(row.get(key))
+        for key in ("record_content", "discharge_order", "document_title")
+        if _clean(row.get(key))
+    )
+
+
+def _structured_discharge_medications(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]] | None, str]:
+    for row in rows:
+        value = row.get("discharge_medications")
+        if value is None:
+            continue
+        if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
+            return list(value), ""
+        return None, "required_field_missing"
+    return None, "required_field_missing"
+
+
+def _course_dates(
+    rows: Sequence[Mapping[str, Any]],
+) -> set:
+    return {
+        parsed.date()
+        for row in rows
+        if (parsed := _row_time(row)) is not None
+    }
+
+
+def _performed_surgery_times(
+    mr_surgery_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> tuple[datetime, ...]:
+    values: list[datetime] = []
+    for source_key, rows in (
+        ("mr_surgery", mr_surgery_rows),
+        ("surgery_record", surgery_record_rows),
+    ):
+        for row in rows:
+            values.extend(
+                parsed
+                for value in trusted_performed_surgery_times(
+                    source_key=source_key, row=row
+                )
+                if (parsed := _parse_datetime(value)) is not None
+            )
+    return tuple(sorted(set(values)))
+
+
+def _person_tokens(row: Mapping[str, Any]) -> set[str]:
+    return {
+        _clean(row.get(key)).lower()
+        for key in (
+            "surgeon",
+            "surgeon_physician_code",
+            "main_surgery_sign",
+            "author_id",
+            "author_name",
+            "physician_sign",
+            "submitter",
+            "submitter_id",
+        )
+        if _clean(row.get(key))
+    }
+
+
+def _transfer_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(
+        row
+        for row in rows
+        if "转科" in _clean(row.get("order_name") or row.get("record_content"))
+        and not any(
+            marker in _clean(row.get("order_status"))
+            for marker in ("取消", "作废", "撤销")
+        )
+    )
+
+
+@dataclass(frozen=True)
+class NativeExtendedDocumentExecutionResult:
+    results: tuple[dict[str, Any], ...]
+    planned_rule_ids: tuple[str, ...]
+    decisions: tuple[RuleDecision, ...]
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+    llm_call_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_time: float = 0.0
+
+
+async def execute_luxian_0609_native_extended_document_rules(
+    *,
+    rule_ids: Sequence[str],
+    evidence_snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore,
+    decision_rule_ids: Sequence[str] = (),
+    **_: Any,
+) -> NativeExtendedDocumentExecutionResult:
+    selected = tuple(
+        rule_id
+        for rule_id in EXTENDED_DOCUMENT_RULE_IDS
+        if rule_id in {str(item or "").strip().upper() for item in rule_ids}
+    )
+    if not selected:
+        return NativeExtendedDocumentExecutionResult((), (), ())
+    if (
+        not isinstance(evidence_snapshot, Luxian0609EvidenceSnapshot)
+        or not isinstance(evidence_materials, Luxian0609EvidenceMaterialStore)
+        or evidence_materials.snapshot_hash != evidence_snapshot.snapshot_hash
+    ):
+        raise ValueError("extended document rules require one evidence session")
+    if set(decision_rule_ids) != set(selected):
+        raise ValueError("extended document rules require typed decisions")
+
+    registration_rows, registration_error = _source_rows(
+        evidence_materials, "inpat_registration"
+    )
+    death_rows, death_error = _source_rows(evidence_materials, "death_record")
+    discussion_rows, discussion_error = _source_rows(
+        evidence_materials, "death_discussion"
+    )
+    discharge_rows, discharge_error = _source_rows(
+        evidence_materials, "discharge_record"
+    )
+    daily_rows, daily_error = _source_rows(evidence_materials, "daily_course_record")
+    senior_rows, senior_error = _source_rows(
+        evidence_materials, "senior_course_record"
+    )
+    postop_first_rows, postop_first_error = _source_rows(
+        evidence_materials, "postsurg_firstcourse_record"
+    )
+    mr_surgery_rows, mr_surgery_error = _source_rows(
+        evidence_materials, "mr_surgery"
+    )
+    surgery_record_rows, surgery_record_error = _source_rows(
+        evidence_materials, "surgery_record"
+    )
+    consultation_rows, consultation_error = _source_rows(
+        evidence_materials, "consultation_record"
+    )
+    handoff_rows, handoff_error = _source_rows(evidence_materials, "handoff_record")
+    handover_rows, handover_error = _source_rows(evidence_materials, "handover_record")
+    physician_change_rows, physician_change_error = _source_rows(
+        evidence_materials, "physician_change_event"
+    )
+    transfer_in_rows, transfer_in_error = _source_rows(
+        evidence_materials, "transfer_in_record"
+    )
+    transfer_out_rows, transfer_out_error = _source_rows(
+        evidence_materials, "transfer_out_record"
+    )
+    nondrug_order_rows, nondrug_order_error = _source_rows(
+        evidence_materials, "inpat_nondrug_order"
+    )
+    diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
+    death_state, death_time = _death_context(
+        registration_rows=registration_rows,
+        death_rows=death_rows,
+    )
+    decisions: list[RuleDecision] = []
+    display: list[tuple[str, Mapping[str, Any]]] = []
+
+    for rule_id in selected:
+        if rule_id in {"LX0609-051", "LX0609-060"}:
+            source_error = registration_error or death_error
+            if source_error and death_state == "unknown":
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="data_gap",
+                        reason_code=source_error,
+                    )
+                )
+                continue
+            if death_state == "absent":
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="not_applicable",
+                        reason_code="trigger_absent_complete",
+                    )
+                )
+                continue
+            if death_state != "present":
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="data_gap",
+                        reason_code="applicability_source_gap",
+                    )
+                )
+                continue
+
+        if rule_id == "LX0609-060":
+            final_state = "compliant" if death_rows else "non_compliant"
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=("inpat_registration", "death_record"),
+                    final_state=final_state,
+                    reason_code=(
+                        "requirement_satisfied"
+                        if death_rows
+                        else "required_document_missing"
+                    ),
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-051":
+            if discussion_error:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("death_record", "death_discussion"),
+                        final_state="data_gap",
+                        reason_code=discussion_error,
+                    )
+                )
+                continue
+            if death_time is None:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("death_record", "death_discussion"),
+                        final_state="data_gap",
+                        reason_code="authoritative_time_missing",
+                    )
+                )
+                continue
+            discussion_time = next(
+                (
+                    candidate
+                    for row in discussion_rows
+                    if (candidate := _row_time(row)) is not None
+                ),
+                None,
+            )
+            if discussion_rows and discussion_time is None:
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif discussion_time is not None:
+                hours = (discussion_time - death_time).total_seconds() / 3600
+                final_state = "compliant" if hours <= 168 else "non_compliant"
+                reason_code = (
+                    "requirement_within_threshold"
+                    if hours <= 168
+                    else "threshold_exceeded"
+                )
+                display.append(
+                    (
+                        rule_id,
+                        {
+                            "threshold_hours": 168,
+                            "actual_interval_hours": round(hours, 2),
+                        },
+                    )
+                )
+            elif _parse_datetime(evidence_snapshot.created_at) is not None and (
+                _parse_datetime(evidence_snapshot.created_at) - death_time
+                >= timedelta(days=7)
+            ):
+                final_state, reason_code = (
+                    "non_compliant",
+                    "required_document_missing",
+                )
+            else:
+                final_state, reason_code = "data_gap", "source_readiness_unproven"
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=("death_record", "death_discussion"),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-061":
+            if registration_error or discharge_error:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "discharge_record"),
+                        final_state="data_gap",
+                        reason_code=registration_error or discharge_error,
+                    )
+                )
+                continue
+            discharge_time = _discharge_time(registration_rows, discharge_rows)
+            if discharge_time is None:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "discharge_record"),
+                        final_state="not_applicable",
+                        reason_code="trigger_absent_complete",
+                    )
+                )
+                continue
+            record_time = next(
+                (
+                    candidate
+                    for row in discharge_rows
+                    if (candidate := _row_time(row)) is not None
+                ),
+                None,
+            )
+            if not discharge_rows:
+                final_state, reason_code = (
+                    "non_compliant",
+                    "required_document_missing",
+                )
+            elif record_time is None:
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+            else:
+                hours = (record_time - discharge_time).total_seconds() / 3600
+                final_state = "compliant" if hours <= 24 else "non_compliant"
+                reason_code = (
+                    "requirement_within_threshold"
+                    if hours <= 24
+                    else "threshold_exceeded"
+                )
+                display.append(
+                    (
+                        rule_id,
+                        {
+                            "threshold_hours": 24,
+                            "actual_interval_hours": round(hours, 2),
+                        },
+                    )
+                )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=("inpat_registration", "discharge_record"),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-062":
+            if discharge_error:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("discharge_record",),
+                        final_state="data_gap",
+                        reason_code=discharge_error,
+                    )
+                )
+                continue
+            if not discharge_rows:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("discharge_record",),
+                        final_state="not_applicable",
+                        reason_code="trigger_absent_complete",
+                    )
+                )
+                continue
+            medications, medication_error = _structured_discharge_medications(
+                discharge_rows
+            )
+            if medication_error:
+                final_state, reason_code = "data_gap", medication_error
+            elif not medications:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            else:
+                required_groups = (
+                    ("drug_name", "generic_name", "name"),
+                    ("dose", "single_dose"),
+                    ("route", "drug_apply_method"),
+                    ("duration", "usage_time", "frequency"),
+                )
+                complete = all(
+                    all(
+                        any(_clean(item.get(key)) for key in group)
+                        for group in required_groups
+                    )
+                    for item in medications
+                )
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = (
+                    "requirement_satisfied" if complete else "requirement_violated"
+                )
+                display.append(
+                    (
+                        rule_id,
+                        {
+                            "medication_count": len(medications),
+                            "required_fields": (
+                                "drug_name",
+                                "dose",
+                                "route",
+                                "duration",
+                            ),
+                        },
+                    )
+                )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=("discharge_record",),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-066":
+            surgery_error = mr_surgery_error or surgery_record_error
+            if surgery_error:
+                final_state, reason_code = "data_gap", surgery_error
+            elif not mr_surgery_rows and not surgery_record_rows:
+                final_state, reason_code = "not_applicable", "performed_event_absent"
+            elif postop_first_error:
+                final_state, reason_code = "data_gap", postop_first_error
+            elif postop_first_rows:
+                final_state, reason_code = "compliant", "requirement_satisfied"
+            else:
+                final_state, reason_code = (
+                    "non_compliant",
+                    "required_document_missing",
+                )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "mr_surgery",
+                        "surgery_record",
+                        "postsurg_firstcourse_record",
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id in {"LX0609-064", "LX0609-065"}:
+            surgery_error = mr_surgery_error or surgery_record_error
+            surgery_times = _performed_surgery_times(
+                mr_surgery_rows, surgery_record_rows
+            )
+            if surgery_error:
+                final_state, reason_code = "data_gap", surgery_error
+            elif not mr_surgery_rows and not surgery_record_rows:
+                final_state, reason_code = "not_applicable", "performed_event_absent"
+            elif not surgery_times:
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif daily_error or senior_error:
+                final_state, reason_code = "data_gap", daily_error or senior_error
+            else:
+                surgery_time = surgery_times[-1]
+                deadline = surgery_time + timedelta(hours=72)
+                postop_rows = tuple(
+                    row
+                    for row in (*daily_rows, *senior_rows)
+                    if (record_time := _row_time(row)) is not None
+                    and surgery_time <= record_time <= deadline
+                )
+                if rule_id == "LX0609-065":
+                    present = any(
+                        (record_time := _row_time(row)) is not None
+                        and surgery_time <= record_time <= deadline
+                        for row in senior_rows
+                    )
+                    final_state = "compliant" if present else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if present
+                        else "required_document_missing"
+                    )
+                else:
+                    required_dates = {
+                        (surgery_time + timedelta(days=offset)).date()
+                        for offset in (1, 2, 3)
+                    }
+                    postop_rows = tuple(
+                        row
+                        for row in (*daily_rows, *senior_rows)
+                        if (record_time := _row_time(row)) is not None
+                        and record_time.date() in required_dates
+                    )
+                    covered_dates = _course_dates(postop_rows)
+                    surgeon_tokens = set().union(
+                        *(
+                            _person_tokens(row)
+                            for row in (*mr_surgery_rows, *surgery_record_rows)
+                        )
+                    )
+                    if not surgeon_tokens:
+                        final_state, reason_code = (
+                            "data_gap",
+                            "required_field_missing",
+                        )
+                    else:
+                        surgeon_round = any(
+                            bool(surgeon_tokens.intersection(_person_tokens(row)))
+                            for row in postop_rows
+                        )
+                        complete = required_dates.issubset(covered_dates) and surgeon_round
+                        final_state = "compliant" if complete else "non_compliant"
+                        reason_code = (
+                            "requirement_satisfied"
+                            if complete
+                            else "requirement_violated"
+                        )
+                        display.append(
+                            (
+                                rule_id,
+                                {
+                                    "required_postop_dates": tuple(
+                                        sorted(item.isoformat() for item in required_dates)
+                                    ),
+                                    "covered_postop_dates": tuple(
+                                        sorted(item.isoformat() for item in covered_dates)
+                                    ),
+                                    "surgeon_round_present": surgeon_round,
+                                },
+                            )
+                        )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        ("mr_surgery", "surgery_record", "senior_course_record")
+                        if rule_id == "LX0609-065"
+                        else (
+                            "mr_surgery",
+                            "surgery_record",
+                            "daily_course_record",
+                            "senior_course_record",
+                        )
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id in {"LX0609-067", "LX0609-068"}:
+            source_error = registration_error or discharge_error
+            discharge_time = _discharge_time(registration_rows, discharge_rows)
+            if source_error:
+                final_state, reason_code = "data_gap", source_error
+            elif discharge_time is None:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif daily_error or senior_error:
+                final_state, reason_code = (
+                    "data_gap",
+                    daily_error or senior_error,
+                )
+            else:
+                valid_dates = {
+                    discharge_time.date(),
+                    (discharge_time - timedelta(days=1)).date(),
+                }
+                if rule_id == "LX0609-067":
+                    present = bool(
+                        valid_dates.intersection(
+                            _course_dates((*daily_rows, *senior_rows))
+                        )
+                    )
+                else:
+                    present = any(
+                        _row_time(row) is not None
+                        and _row_time(row).date() in valid_dates
+                        and any(
+                            marker in _row_text(row)
+                            for marker in ("同意出院", "准予出院", "可以出院")
+                        )
+                        for row in senior_rows
+                    )
+                final_state = "compliant" if present else "non_compliant"
+                reason_code = (
+                    "requirement_satisfied"
+                    if present
+                    else "required_document_missing"
+                )
+                if rule_id == "LX0609-068":
+                    display.append(
+                        (
+                            rule_id,
+                            {
+                                "failure_kind": (
+                                    "senior_discharge_approval_present"
+                                    if present
+                                    else "senior_discharge_approval_missing"
+                                ),
+                                "discharge_date": discharge_time.date().isoformat(),
+                                "checked_dates": tuple(
+                                    sorted(item.isoformat() for item in valid_dates)
+                                ),
+                                "checked_source": "senior_course_record",
+                                "approval_present": present,
+                            },
+                        )
+                    )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        (
+                            "inpat_registration",
+                            "discharge_record",
+                            "senior_course_record",
+                        )
+                        if rule_id == "LX0609-068"
+                        else (
+                            "inpat_registration",
+                            "discharge_record",
+                            "daily_course_record",
+                            "senior_course_record",
+                        )
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-069":
+            if consultation_error:
+                final_state, reason_code = "data_gap", consultation_error
+            elif not consultation_rows:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            else:
+                intervals: list[float] = []
+                missing_time = False
+                for row in consultation_rows:
+                    request_time = _parse_datetime(
+                        row.get("request_time")
+                        or row.get("request_datetime")
+                        or row.get("application_time")
+                        or row.get("application_datetime")
+                    )
+                    record_time = _row_time(row)
+                    if request_time is None or record_time is None:
+                        missing_time = True
+                        continue
+                    intervals.append(
+                        (record_time - request_time).total_seconds() / 3600
+                    )
+                if missing_time or not intervals:
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
+                    )
+                else:
+                    compliant = all(0 <= value <= 24 for value in intervals)
+                    final_state = "compliant" if compliant else "non_compliant"
+                    reason_code = (
+                        "requirement_within_threshold"
+                        if compliant
+                        else "threshold_exceeded"
+                    )
+                    display.append(
+                        (
+                            rule_id,
+                            {
+                                "threshold_hours": 24,
+                                "actual_interval_hours": tuple(
+                                    round(value, 2) for value in intervals
+                                ),
+                            },
+                        )
+                    )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=("consultation_record",),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-071":
+            source_error = (
+                physician_change_error or handoff_error or handover_error
+            )
+            if source_error:
+                final_state, reason_code = "data_gap", source_error
+            elif not physician_change_rows:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            else:
+                change_times = tuple(
+                    parsed
+                    for row in physician_change_rows
+                    if (
+                        parsed := _parse_datetime(
+                            row.get("change_datetime")
+                            or row.get("handoff_datetime")
+                        )
+                    )
+                    is not None
+                )
+                handoff_times = tuple(
+                    parsed
+                    for row in handoff_rows
+                    if (parsed := _row_time(row)) is not None
+                )
+                handover_times = tuple(
+                    parsed
+                    for row in handover_rows
+                    if (parsed := _row_time(row)) is not None
+                )
+                if len(change_times) != len(physician_change_rows):
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
+                    )
+                else:
+                    compliant = all(
+                        any(item <= change_time for item in handoff_times)
+                        and any(
+                            change_time <= item <= change_time + timedelta(hours=24)
+                            for item in handover_times
+                        )
+                        for change_time in change_times
+                    )
+                    final_state = "compliant" if compliant else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if compliant
+                        else "requirement_violated"
+                    )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "physician_change_event",
+                        "handoff_record",
+                        "handover_record",
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id in {"LX0609-072", "LX0609-073"}:
+            source_error = (
+                nondrug_order_error or transfer_in_error or transfer_out_error
+            )
+            orders = _transfer_orders(nondrug_order_rows)
+            if source_error:
+                final_state, reason_code = "data_gap", source_error
+            elif not orders:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif not transfer_in_rows or not transfer_out_rows:
+                final_state, reason_code = (
+                    "non_compliant",
+                    "required_document_missing",
+                )
+            elif rule_id == "LX0609-073":
+                final_state, reason_code = "compliant", "requirement_satisfied"
+            else:
+                order_times = tuple(
+                    parsed
+                    for row in orders
+                    if (
+                        parsed := _parse_datetime(
+                            row.get("prescribed_datetime")
+                        )
+                    )
+                    is not None
+                )
+                record_times = tuple(
+                    parsed
+                    for row in (*transfer_in_rows, *transfer_out_rows)
+                    if (parsed := _row_time(row)) is not None
+                )
+                if not order_times or len(record_times) < 2:
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
+                    )
+                else:
+                    trigger_time = min(order_times)
+                    compliant = all(
+                        0
+                        <= (record_time - trigger_time).total_seconds() / 3600
+                        <= 24
+                        for record_time in record_times
+                    )
+                    final_state = "compliant" if compliant else "non_compliant"
+                    reason_code = (
+                        "requirement_within_threshold"
+                        if compliant
+                        else "threshold_exceeded"
+                    )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "inpat_nondrug_order",
+                        "transfer_in_record",
+                        "transfer_out_record",
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        if rule_id == "LX0609-074":
+            if diagnosis_error or daily_error or senior_error:
+                final_state, reason_code = (
+                    "data_gap",
+                    diagnosis_error or daily_error or senior_error,
+                )
+            else:
+                ordered_diagnoses = sorted(
+                    (
+                        (parsed, _clean(row.get("diagnosis_name")))
+                        for row in diagnosis_rows
+                        if (
+                            parsed := _parse_datetime(row.get("diagnosis_datetime"))
+                        )
+                        is not None
+                        and _clean(row.get("diagnosis_name"))
+                    ),
+                    key=lambda item: item[0],
+                )
+                change_events = tuple(
+                    current_time
+                    for (_, previous_name), (current_time, current_name) in zip(
+                        ordered_diagnoses, ordered_diagnoses[1:]
+                    )
+                    if current_name != previous_name
+                )
+                if diagnosis_rows and len(ordered_diagnoses) != len(diagnosis_rows):
+                    final_state, reason_code = (
+                        "data_gap",
+                        "authoritative_time_missing",
+                    )
+                elif not change_events:
+                    final_state, reason_code = (
+                        "not_applicable",
+                        "trigger_absent_complete",
+                    )
+                else:
+                    course_rows = tuple(
+                        (record_time, _row_text(row))
+                        for row in (*daily_rows, *senior_rows)
+                        if (record_time := _row_time(row)) is not None
+                    )
+                    reason_markers = (
+                        "修正诊断",
+                        "补充诊断",
+                        "诊断依据",
+                        "修改理由",
+                    )
+                    has_reason = all(
+                        any(
+                            record_time >= change_time
+                            and any(marker in text for marker in reason_markers)
+                            for record_time, text in course_rows
+                        )
+                        for change_time in change_events
+                    )
+                    final_state = "compliant" if has_reason else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if has_reason
+                        else "requirement_violated"
+                    )
+            decisions.append(
+                _decision(
+                    rule_id=rule_id,
+                    snapshot=evidence_snapshot,
+                    source_keys=(
+                        "diagnosis",
+                        "daily_course_record",
+                        "senior_course_record",
+                    ),
+                    final_state=final_state,
+                    reason_code=reason_code,
+                )
+            )
+            continue
+
+        decisions.append(
+            _decision(
+                rule_id=rule_id,
+                snapshot=evidence_snapshot,
+                source_keys=EXTENDED_DOCUMENT_SOURCE_KEYS,
+                final_state="data_gap",
+                reason_code="source_readiness_unproven",
+            )
+        )
+
+    return NativeExtendedDocumentExecutionResult(
+        results=(),
+        planned_rule_ids=selected,
+        decisions=tuple(decisions),
+        customer_display_facts=tuple(display),
+    )

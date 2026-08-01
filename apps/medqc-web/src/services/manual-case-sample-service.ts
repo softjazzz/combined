@@ -7,6 +7,8 @@ import type {
   ManualSamplePoolRecordsResult,
   ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
+  HospitalizationScopePayload,
+  HospitalizationScopePreview,
   ManualTestRecordCreateRequest,
   ManualTestRecordCreateResult,
   EditableMedicalRecordDocumentsResult,
@@ -80,6 +82,22 @@ export async function listManualSamplePools(params: {
       params,
     },
     '获取客户样本池失败',
+  )
+}
+
+export async function deleteManualSamplePool(poolId: string) {
+  return requestEnvelope<{
+    deleted: boolean
+    pool_id: string
+    pool_name: string
+    deleted_item_count: number
+    deleted_sync_job_count: number
+  }>(
+    {
+      method: 'DELETE',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}`,
+    },
+    '删除样本池失败',
   )
 }
 
@@ -222,6 +240,33 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
           ? readStringField(row, ['sort_time', 'display_time', 'prescribed_datetime'])
           : ''
       const submitTime = readStringField(row, ['submit_time', 'submit_datetime'])
+      const reportItems = Array.isArray(row.report_items)
+        ? row.report_items
+            .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
+            .map((entry) => ({
+              item_no: readStringField(entry, ['item_no']),
+              item_id: readStringField(entry, ['item_id']),
+              item_code: readStringField(entry, ['item_code']),
+              item_name: readStringField(entry, ['item_name']),
+              result: readStringField(entry, ['result']),
+              abnormal_indicator: readStringField(entry, ['abnormal_indicator']),
+              reference_range: readStringField(entry, ['reference_range']),
+              referencevalue_min: readStringField(entry, ['referencevalue_min']),
+              referencevalue_max: readStringField(entry, ['referencevalue_max']),
+              unit: readStringField(entry, ['unit']),
+              findings: readStringField(entry, ['findings']),
+              impression: readStringField(entry, ['impression']),
+            }))
+        : []
+      const reportMetadataSource =
+        row.report_metadata && typeof row.report_metadata === 'object'
+          ? (row.report_metadata as Record<string, unknown>)
+          : {}
+      const reportMetadata = Object.fromEntries(
+        Object.entries(reportMetadataSource)
+          .map(([key, fieldValue]) => [key, String(fieldValue ?? '').trim()])
+          .filter(([, fieldValue]) => Boolean(fieldValue)),
+      )
       return {
         key: readStringField(
           row,
@@ -234,6 +279,8 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
         document_type: documentType,
         title,
         sections: readDocumentSections(row),
+        report_items: reportItems,
+        report_metadata: reportMetadata,
         record_time: rawRecordTime || orderDisplayTime || submitTime,
         submit_time: submitTime,
         order_start_time: readStringField(row, [
@@ -413,6 +460,39 @@ export async function listManualSamplePoolAdmissionDepartments() {
       url: '/api/v1/qc/sample-pools/source-admission-departments',
     },
     '获取入院科室失败',
+  )
+}
+
+export async function previewManualSamplePoolHospitalizationScope(
+  poolId: string,
+  payload: HospitalizationScopePayload,
+) {
+  return requestEnvelope<HospitalizationScopePreview>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/hospitalization-scope/preview`,
+      data: payload,
+    },
+    '预览住院范围失败',
+  )
+}
+
+export async function syncManualSamplePoolRecordsByHospitalization(
+  poolId: string,
+  payload: HospitalizationScopePayload,
+) {
+  return requestEnvelope<{
+    job_id: string
+    pool_id: string
+    status: string
+    summary?: ManualSamplePoolSyncJob['summary']
+  }>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/sync-by-hospitalization`,
+      data: payload,
+    },
+    '按住院范围同步病历失败',
   )
 }
 

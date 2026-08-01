@@ -7,7 +7,9 @@
     >
       <div class="flex items-center gap-2">
         <FileTextOutlined class="text-[#0066cc]" />
-        <h3 class="font-semibold text-[#1d1d1f]">病历原文</h3>
+        <h3 class="font-semibold text-[#1d1d1f]">
+          病历原文
+        </h3>
       </div>
       <div class="flex gap-2">
         <button
@@ -23,8 +25,14 @@
       </div>
     </div>
 
-    <div v-if="loading" class="p-8">
-      <a-skeleton active :paragraph="{ rows: 10 }" />
+    <div
+      v-if="loading"
+      class="p-8"
+    >
+      <a-skeleton
+        active
+        :paragraph="{ rows: 10 }"
+      />
     </div>
     <div
       v-else-if="medicalText"
@@ -32,10 +40,12 @@
     >
       <pre
         class="font-mono text-sm leading-relaxed whitespace-pre-wrap text-[rgba(29,29,31,0.78)]"
-        >{{ medicalText }}</pre
-      >
+      >{{ medicalText }}</pre>
     </div>
-    <div v-else class="flex-1 flex flex-col items-center justify-start p-10 pt-16 bg-[#f5f5f7]/55">
+    <div
+      v-else
+      class="flex-1 flex flex-col items-center justify-start p-10 pt-16 bg-[#f5f5f7]/55"
+    >
       <div
         class="w-32 h-32 bg-[rgba(0,102,204,0.06)] border border-[rgba(0,102,204,0.12)] rounded-2xl flex items-center justify-center mb-6 relative group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.10),0_6px_22px_rgba(0,0,0,0.075)]"
         @click="() => $emit('selectTestCase', 0)"
@@ -49,7 +59,9 @@
           <RobotOutlined class="text-[#0066cc] text-xl" />
         </div>
       </div>
-      <h3 class="text-lg font-medium text-[#1d1d1f] mb-2">未加载病历</h3>
+      <h3 class="text-lg font-medium text-[#1d1d1f] mb-2">
+        未加载病历
+      </h3>
       <p class="text-[rgba(29,29,31,0.6)] text-sm mb-6 text-center max-w-xs">
         上传扫描的 PDF 或图片以开始 AI 分析流程。
       </p>

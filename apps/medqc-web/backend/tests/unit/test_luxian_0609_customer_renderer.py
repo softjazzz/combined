@@ -10,6 +10,8 @@ from app.services.luxian_0609.customer_renderer import (
 )
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
+    CriterionResult,
+    CriterionStatus,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -156,6 +158,94 @@ def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
     assert result["rule_id"] == result["rule_code"] == "LX0609-001"
     assert result["rule_name"] == trusted["name"]
     assert result["rule_version"] == trusted["rule_version"]
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "expected_finding"),
+    [
+        ("LX0609-001", "已确认入院记录在入院后 24 小时内完成。"),
+        ("LX0609-009", "已核对病危期间的查房记录，未发现应记录日期缺失。"),
+        ("LX0609-032", "已确认本次手术具备手术安全核查表。"),
+        ("LX0609-049", "已核对输血医嘱与收费记录，未发现不一致。"),
+    ],
+)
+def test_compliant_result_explains_why_it_is_compliant(rule_id, expected_finding):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.SATISFIED,
+            reason_code="requirement_satisfied",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-rule-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "compliant"
+    assert result["findings"] == expected_finding
+    assert result["findings"] != "符合质控要求"
+
+
+def test_lx037_parent_visit_missing_has_noncontradictory_customer_explanation():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-037",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="eligibility_not_met",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-surgery-document-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert "已确认实施麻醉" in result["findings"]
+    assert "LX0609-036" in result["evidence"]
+
+
+def test_lx018_compliant_result_uses_controlled_criterion_values():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-018",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.SATISFIED,
+            reason_code="requirement_satisfied",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-course-quality-v1",
+            criterion_results=(
+                CriterionResult(
+                    criterion_id="chief_complaint_length",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                    actual_value=8,
+                    expected_value=20,
+                    operator="lte",
+                    unit="character",
+                ),
+                CriterionResult(
+                    criterion_id="diagnostic_direction",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                ),
+            ),
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == "主诉共 8 字，不超过 20 字；诊断指向明确。"
 
 
 def test_renderer_has_no_free_text_or_wrapper_mapping_input_seam():

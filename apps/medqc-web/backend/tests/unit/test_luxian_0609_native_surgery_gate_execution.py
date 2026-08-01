@@ -27,6 +27,16 @@ from app.services.luxian_0609.decision_binding import (
 CREATED_AT = "2026-07-16T12:00:00+08:00"
 
 
+def test_signature_check_accepts_explicit_surgeon_signature_not_audit_author() -> None:
+    assert surgery._has_signature([{"surgeon": "韩平", "surgeon_sign": "韩平"}])
+    assert not surgery._has_signature(
+        [{"surgeon": "韩平", "last_modifier": "刘娟"}]
+    )
+    assert not surgery._has_signature(
+        [{"surgeon": "韩平", "surgeon_sign": "刘娟"}]
+    )
+
+
 def _fact(
     fact_type: str,
     *,

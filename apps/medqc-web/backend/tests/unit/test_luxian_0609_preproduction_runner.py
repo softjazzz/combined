@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.luxian_0609 import preproduction_runner
+from app.services.luxian_0609.execution_contract import FamilyUsageAttribution
 
 
 def _all_rule_ids() -> tuple[str, ...]:
@@ -43,7 +44,81 @@ class _FakeContext:
     native_completion_tokens: int = 10
     native_total_tokens: int = 40
     native_api_time: float = 0.25
+    native_usage_attributions: tuple[FamilyUsageAttribution, ...] = (
+        FamilyUsageAttribution(
+            executor_key="safe_test_family",
+            llm_call_count=2,
+            prompt_tokens=30,
+            completion_tokens=10,
+            total_tokens=40,
+            covered_customer_rule_ids=tuple(
+                f"LX0609-{index:03d}" for index in range(1, 50)
+            ),
+            latency_ms=250.0,
+        ),
+    )
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
+
+
+@pytest.mark.asyncio
+async def test_preproduction_runner_fails_closed_on_context_orchestrated_usage_mismatch(
+    monkeypatch,
+):
+    selected = _all_rule_ids()
+
+    async def _fake_prepare(**_):
+        return [], _FakeContext()
+
+    def _fake_aggregate(*, orchestrated, **_):
+        orchestrated.update(
+            {
+                "results": [
+                    {
+                        "rule_id": rule_id,
+                        "rule_code": rule_id,
+                        "rule_name": rule_id,
+                        "status": "compliant",
+                        "is_compliant": True,
+                    }
+                    for rule_id in selected
+                ],
+                "total_prompt_tokens": 99,
+                "total_completion_tokens": 10,
+                "total_tokens": 109,
+                "total_api_time": 0.25,
+            }
+        )
+        return orchestrated
+
+    monkeypatch.setattr(
+        preproduction_runner,
+        "prepare_luxian_0609_execution",
+        _fake_prepare,
+    )
+    monkeypatch.setattr(
+        preproduction_runner,
+        "aggregate_luxian_0609_orchestrated_results",
+        _fake_aggregate,
+    )
+
+    result = await preproduction_runner.run_luxian_0609_preproduction(
+        bundle=_bundle(),
+        selected_customer_rule_ids=selected,
+        evaluation_as_of_date="2026-07-17",
+        llm_client=object(),
+        base_settings=SimpleNamespace(),
+        model_name="safe-model",
+    )
+
+    assert result["metrics"]["technical_error_count"] == 49
+    assert result["metrics"]["llm_call_count"] == 2
+    assert result["metrics"]["prompt_tokens"] == 99
+    assert result["metrics"]["completion_tokens"] == 10
+    assert result["metrics"]["total_tokens"] == 109
+    assert result["metrics"]["usage_complete"] is False
+    assert result["metrics"]["usage_error_reason"] == "usage_accounting_mismatch"
+    assert result["metrics"]["usage_attributions"] == []
+    assert result["metrics"]["unattributed_total_tokens"] == 109
 
 
 @pytest.mark.asyncio
@@ -172,8 +247,21 @@ async def test_preproduction_runner_is_independent_ordered_and_privacy_safe(monk
     assert tuple(item["rule_id"] for item in result["results"]) == selected
     assert result["metrics"]["llm_call_count"] == 2
     assert result["metrics"]["total_tokens"] == 40
+    assert result["metrics"]["usage_complete"] is True
+    assert result["metrics"]["unattributed_total_tokens"] == 0
+    assert result["metrics"]["usage_attributions"] == [
+        {
+            "executor_key": "safe_test_family",
+            "llm_call_count": 2,
+            "prompt_tokens": 30,
+            "completion_tokens": 10,
+            "total_tokens": 40,
+            "covered_customer_rule_ids": list(selected),
+            "latency_ms": 250.0,
+        }
+    ]
     assert result["metrics"]["rule_decision_count"] == 49
-    assert result["metrics"]["typed_shadow_adapter_count"] == 0
+    assert result["metrics"]["typed_shadow_adapter_count"] == 14
     assert result["metrics"]["legacy_projection_count"] == 0
     assert result["metrics"]["customer_rule_count"] == 49
     assert result["metrics"]["technical_error_count"] == 0
@@ -255,6 +343,10 @@ async def test_preproduction_runner_builds_rule_bound_opaque_evidence_attestatio
             }
             for rule_id in selected
         ]
+        orchestrated["total_prompt_tokens"] = context.native_prompt_tokens
+        orchestrated["total_completion_tokens"] = context.native_completion_tokens
+        orchestrated["total_tokens"] = context.native_total_tokens
+        orchestrated["total_api_time"] = context.native_api_time
         return orchestrated
 
     monkeypatch.setattr(preproduction_runner, "prepare_luxian_0609_execution", fake_prepare)
@@ -579,6 +671,10 @@ async def test_preproduction_runner_reports_fixed_safe_failure_phase(
             {"rule_id": rule_id, "status": "compliant", "metadata": {}}
             for rule_id in selected
         ]
+        orchestrated["total_prompt_tokens"] = 30
+        orchestrated["total_completion_tokens"] = 10
+        orchestrated["total_tokens"] = 40
+        orchestrated["total_api_time"] = 0.25
         return orchestrated
 
     def _raise(*_args, **_kwargs):

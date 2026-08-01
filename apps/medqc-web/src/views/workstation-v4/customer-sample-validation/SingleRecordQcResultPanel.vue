@@ -10,7 +10,7 @@
       <div class="toolbar-top">
         <div class="toolbar-summary">
           <strong>质控结果</strong>
-          <span data-testid="single-record-result-summary">{{ viewItems.length }} 条结果</span>
+          <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
         </div>
       </div>
       <div
@@ -572,6 +572,14 @@ const DetailBlock = defineComponent({
 })
 
 const viewItems = computed(() => buildSingleRecordQcResultItems(props.items))
+const resultExecutionSummary = computed(() => {
+  const total = viewItems.value.length
+  const notExecuted = viewItems.value.filter((item) => item.status === 'not_executed').length
+  const executed = total - notExecuted
+  return notExecuted > 0
+    ? `${total} 个质控点 · 已执行 ${executed} · 未执行 ${notExecuted}`
+    : `${total} 个质控点 · 已执行 ${executed}`
+})
 const statusTabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
 const activeTab = ref<SingleRecordQcResultTabKey>('all')
 const visibleItems = computed(() =>

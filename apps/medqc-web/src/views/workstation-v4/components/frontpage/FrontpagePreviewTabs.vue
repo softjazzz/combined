@@ -7,13 +7,22 @@
       @update:active-key="onTabChange"
       @change="onTabChange"
     >
-      <a-tab-pane key="fields" tab="提取结果">
+      <a-tab-pane
+        key="fields"
+        tab="提取结果"
+      >
         <slot name="fields" />
       </a-tab-pane>
-      <a-tab-pane key="preview" tab="首页预览/打印">
+      <a-tab-pane
+        key="preview"
+        tab="首页预览/打印"
+      >
         <slot name="preview" />
       </a-tab-pane>
-      <a-tab-pane key="official" tab="系统首页">
+      <a-tab-pane
+        key="official"
+        tab="系统首页"
+      >
         <slot name="official" />
       </a-tab-pane>
     </a-tabs>

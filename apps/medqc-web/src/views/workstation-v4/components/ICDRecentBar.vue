@@ -1,10 +1,17 @@
 <template>
-  <div v-if="recentCodes.length > 0" class="icd-recent-bar">
+  <div
+    v-if="recentCodes.length > 0"
+    class="icd-recent-bar"
+  >
     <div class="recent-label">
       <ClockCircleOutlined />
       <div>
-        <div class="recent-label__title">最近查看</div>
-        <div class="recent-label__sub">{{ recentCodes.length }} 个编码</div>
+        <div class="recent-label__title">
+          最近查看
+        </div>
+        <div class="recent-label__sub">
+          {{ recentCodes.length }} 个编码
+        </div>
       </div>
     </div>
 
@@ -20,7 +27,12 @@
       </button>
     </div>
 
-    <button class="recent-clear" @click="$emit('clear')">清除</button>
+    <button
+      class="recent-clear"
+      @click="$emit('clear')"
+    >
+      清除
+    </button>
   </div>
 </template>
 

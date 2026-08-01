@@ -16,7 +16,7 @@ from types import MappingProxyType
 from typing import Any
 
 
-_RULE_ID_PATTERN = re.compile(r"^LX0609-(?:00[1-9]|0[1-4][0-9])$")
+_RULE_ID_PATTERN = re.compile(r"^LX0609-(?:00[1-9]|0[1-6][0-9]|07[0-5])$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _VERSION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -154,6 +154,93 @@ def _has_forbidden_version_marker(value: str) -> bool:
     return any(marker in compact for marker in _FORBIDDEN_COMPACT_VERSION_MARKERS)
 
 
+class CriterionStatus(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class CriterionResult:
+    """单个规则子项的受控结果；不参与 reducer 的六态推导。"""
+
+    criterion_id: str
+    status: CriterionStatus
+    reason_code: str
+    fact_refs: tuple[str, ...] = ()
+    actual_value: int | str | bool | None = None
+    expected_value: int | str | bool | None = None
+    operator: str = ""
+    unit: str = ""
+    rationale_code: str = ""
+    dimensions: tuple[str, ...] = ()
+    medical_analysis: str = ""
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"^[a-z][a-z0-9_]{1,63}$", self.criterion_id):
+            raise ValueError("invalid criterion_id")
+        _require_enum(self.status, CriterionStatus, "criterion status")
+        if not isinstance(self.reason_code, str) or not _REASON_CODE_PATTERN.fullmatch(
+            self.reason_code
+        ):
+            raise ValueError("invalid criterion reason_code")
+        if (
+            not isinstance(self.fact_refs, tuple)
+            or len(self.fact_refs) > _MAX_FACT_REFS
+            or len(self.fact_refs) != len(set(self.fact_refs))
+            or any(
+                not isinstance(ref, str) or not _SHA256_PATTERN.fullmatch(ref)
+                for ref in self.fact_refs
+            )
+        ):
+            raise ValueError("invalid criterion fact_refs")
+        object.__setattr__(self, "fact_refs", tuple(sorted(self.fact_refs)))
+        for value in (self.actual_value, self.expected_value):
+            if value is not None and (
+                not isinstance(value, (int, str, bool))
+                or isinstance(value, str) and len(value) > 120
+            ):
+                raise ValueError("invalid criterion scalar value")
+        for value, field_name in (
+            (self.operator, "operator"),
+            (self.unit, "unit"),
+            (self.rationale_code, "rationale_code"),
+        ):
+            if value and not re.fullmatch(r"^[a-z][a-z0-9_]{0,63}$", value):
+                raise ValueError(f"invalid criterion {field_name}")
+        if (
+            not isinstance(self.dimensions, tuple)
+            or len(self.dimensions) != len(set(self.dimensions))
+            or any(
+                not isinstance(value, str)
+                or not re.fullmatch(r"^[a-z][a-z0-9_]{0,63}$", value)
+                for value in self.dimensions
+            )
+        ):
+            raise ValueError("invalid criterion dimensions")
+        if (
+            not isinstance(self.medical_analysis, str)
+            or len(self.medical_analysis) > 2000
+            or "\x00" in self.medical_analysis
+        ):
+            raise ValueError("invalid criterion medical_analysis")
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        return {
+            "criterion_id": self.criterion_id,
+            "status": self.status.value,
+            "reason_code": self.reason_code,
+            "fact_refs": list(self.fact_refs),
+            "actual_value": self.actual_value,
+            "expected_value": self.expected_value,
+            "operator": self.operator,
+            "unit": self.unit,
+            "rationale_code": self.rationale_code,
+            "dimensions": list(self.dimensions),
+            "medical_analysis": self.medical_analysis,
+        }
+
+
 @dataclass(frozen=True)
 class RuleDecision:
     """一个规则执行器提交给统一 reducer 的安全决策。"""
@@ -167,6 +254,7 @@ class RuleDecision:
     fact_refs: tuple[str, ...]
     evaluator_version: str
     confidence: float | None = None
+    criterion_results: tuple[CriterionResult, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.rule_id, str) or not _RULE_ID_PATTERN.fullmatch(
@@ -213,6 +301,17 @@ class RuleDecision:
             object.__setattr__(self, "confidence", float(self.confidence))
         if self.reason_code not in _ALL_ALLOWED_REASON_CODES:
             raise ValueError("invalid reason_code")
+        if (
+            not isinstance(self.criterion_results, tuple)
+            or len({item.criterion_id for item in self.criterion_results})
+            != len(self.criterion_results)
+            or any(
+                not isinstance(item, CriterionResult)
+                or not set(item.fact_refs).issubset(self.fact_refs)
+                for item in self.criterion_results
+            )
+        ):
+            raise ValueError("invalid criterion_results")
 
     def _validate_dimensions(self) -> None:
         applicability = self.applicability
@@ -262,6 +361,9 @@ class RuleDecision:
             "fact_refs": list(self.fact_refs),
             "evaluator_version": self.evaluator_version,
             "confidence": self.confidence,
+            "criterion_results": [
+                item.to_safe_dict() for item in self.criterion_results
+            ],
         }
 
     def canonical_json(self) -> str:

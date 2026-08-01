@@ -38,7 +38,7 @@ from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
 
 RULE_BY_EXECUTOR = {
-    "surgery_presence": "LX0609-029",
+    "surgery_presence": "LX0609-030",
     "basic_timeliness": "LX0609-001",
     "exam_lab": "LX0609-010",
     "consultation_quality": "LX0609-020",
@@ -48,6 +48,7 @@ RULE_BY_EXECUTOR = {
     "surgery_gate": "LX0609-003",
     "surgery_document": "LX0609-034",
     "surgery_mdt": "LX0609-040",
+    "extended_document": "LX0609-051",
 }
 
 
@@ -105,6 +106,7 @@ def test_single_result_typed_envelope_omits_none_customer_result() -> None:
             total_tokens=0,
             api_time=0.0,
         ),
+        executor_key="surgery_mdt",
         selected_rule_ids=("LX0609-040",),
         single_result=True,
     )
@@ -112,6 +114,90 @@ def test_single_result_typed_envelope_omits_none_customer_result() -> None:
     assert envelope.results == ()
     assert envelope.decisions == (marker,)
     assert envelope.planned_rule_ids == ("LX0609-040",)
+
+
+def test_adapter_builds_one_safe_usage_attribution_for_multi_rule_family() -> None:
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-010"), _result("LX0609-011")),
+            planned_rule_ids=("LX0609-010", "LX0609-011"),
+            decisions=(),
+            llm_call_count=1,
+            prompt_tokens=120,
+            completion_tokens=20,
+            total_tokens=140,
+            api_time=0.25,
+        ),
+        selected_rule_ids=("LX0609-010", "LX0609-011"),
+        executor_key="exam_lab",
+    )
+
+    usage = envelope.usage_attribution
+    assert usage.executor_key == "exam_lab"
+    assert usage.covered_customer_rule_ids == ("LX0609-010", "LX0609-011")
+    assert usage.to_safe_dict() == {
+        "executor_key": "exam_lab",
+        "llm_call_count": 1,
+        "prompt_tokens": 120,
+        "completion_tokens": 20,
+        "total_tokens": 140,
+        "covered_customer_rule_ids": ["LX0609-010", "LX0609-011"],
+        "latency_ms": 250.0,
+    }
+
+
+def test_adapter_records_programmatic_family_as_explicit_zero_usage() -> None:
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-001"),),
+            planned_rule_ids=("LX0609-001",),
+            decisions=(),
+            llm_call_count=0,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            api_time=0.0,
+        ),
+        selected_rule_ids=("LX0609-001",),
+        executor_key="basic_timeliness",
+    )
+
+    assert envelope.usage_attribution.to_safe_dict() == {
+        "executor_key": "basic_timeliness",
+        "llm_call_count": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "covered_customer_rule_ids": ["LX0609-001"],
+        "latency_ms": 0.0,
+    }
+
+
+def test_adapter_preserves_model_call_when_provider_usage_is_missing() -> None:
+    envelope = _to_envelope(
+        SimpleNamespace(
+            results=(_result("LX0609-010"),),
+            planned_rule_ids=("LX0609-010",),
+            decisions=(),
+            llm_call_count=1,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            api_time=0.3,
+        ),
+        selected_rule_ids=("LX0609-010",),
+        executor_key="exam_lab",
+    )
+
+    assert envelope.usage_attribution.to_safe_dict() == {
+        "executor_key": "exam_lab",
+        "llm_call_count": 1,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "covered_customer_rule_ids": ["LX0609-010"],
+        "latency_ms": 300.0,
+    }
 
 
 def test_surgery_gate_declares_strict_surgery_record_material_dependency() -> None:
@@ -149,15 +235,15 @@ def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-026", "LX0609-027"),
-    ) == ("diagnosis", "inpat_drug_order")
+    ) == ("diagnosis", "discharge_record", "inpat_drug_order")
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-027",),
-    ) == ("diagnosis",)
+    ) == ("diagnosis", "discharge_record")
 
 
 @pytest.mark.asyncio
-async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order():
+async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     calls: list[tuple[str, dict]] = []
 
     def family(name: str):
@@ -198,6 +284,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
         surgery_gate=family("surgery_gate"),
         surgery_document=family("surgery_document"),
         surgery_mdt=mdt,
+        extended_document=family("extended_document"),
     )
     snapshot = _snapshot()
     materials = Luxian0609EvidenceMaterialStore.create(
@@ -255,5 +342,7 @@ async def test_legacy_adapters_cover_exact_ten_keys_and_preserve_old_call_order(
     assert calls[6][1]["evidence_materials"] is materials
     assert calls[6][1]["evidence_snapshot"] is snapshot
     assert calls[7][1]["evidence_snapshot"] is snapshot
+    assert calls[-2][1]["evidence_materials"] is materials
+    assert "rule_ids" not in calls[-2][1]
+    assert calls[-1][1]["rule_ids"] == ("LX0609-051",)
     assert calls[-1][1]["evidence_materials"] is materials
-    assert "rule_ids" not in calls[-1][1]

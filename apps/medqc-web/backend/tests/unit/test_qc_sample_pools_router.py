@@ -1169,7 +1169,9 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
 async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_set_by_key(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
-    luxian_rule_set = get_sichuan_rule_set("luxian_0609_qc_v1")
+    luxian_rule_set = (
+        sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set()
+    )
 
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
@@ -1188,7 +1190,8 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     )
 
     created = workspace_service.create_batch_job_calls[0]
-    assert luxian_rule_set is not None
+    assert len(luxian_rule_set.rule_ids) == 63
+    assert luxian_rule_set.rule_ids[-1] == "LX0609-074"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == list(luxian_rule_set.rule_ids)
     assert created["filters"]["validation_mode"] == "customer"

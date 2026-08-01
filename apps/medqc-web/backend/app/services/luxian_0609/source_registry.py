@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v15"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v16"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -171,6 +171,8 @@ _REGISTRY_ENTRIES = (
     ),
     _entry("consultation_record", access_mode=_BOUNDED),
     _entry("daily_course_record", access_mode=_BOUNDED),
+    _entry("death_discussion", access_mode=_BOUNDED),
+    _entry("death_record", access_mode=_BOUNDED),
     _entry("discharge_record", access_mode=_BOUNDED),
     _entry(
         "exam_attention_report",
@@ -179,6 +181,8 @@ _REGISTRY_ENTRIES = (
     ),
     _entry("exam_item_report", access_mode=_BOUNDED),
     _entry("first_course_record", access_mode=_BOUNDED),
+    _entry("handoff_record", access_mode=_BOUNDED),
+    _entry("handover_record", access_mode=_BOUNDED),
     _entry(
         "lab_attention_report",
         access_mode=_DERIVED,
@@ -190,7 +194,7 @@ _REGISTRY_ENTRIES = (
         access_mode=_DERIVED,
         derived_from_source_keys=("inpat_nondrug_order", "inpat_drug_order"),
     ),
-    _entry("postsurg_firstcourse_record"),
+    _entry("postsurg_firstcourse_record", access_mode=_BOUNDED),
     _entry("presurg_discussion", access_mode=_BOUNDED),
     _entry("presurg_summary", access_mode=_BOUNDED),
     _entry("rescue_record", access_mode=_BOUNDED),
@@ -204,9 +208,13 @@ _REGISTRY_ENTRIES = (
     ),
     _entry("surgery_risk_assessment"),
     _entry("surgery_safecheck_record", access_mode=_BOUNDED),
+    _entry("transfer_in_record", access_mode=_BOUNDED),
+    _entry("transfer_out_record", access_mode=_BOUNDED),
 )
 
 _INTERNAL_SOURCE_ENTRIES = (
+    # 第一阶段扩展规则在目录整体切换前先作为内部受控来源注册。
+    _entry("physician_change_event", access_mode=_BOUNDED),
     _entry("evaluation_context.horizon", access_mode=_BOUNDED),
     _entry("inpat_registration", access_mode=_BOUNDED),
     _entry("inpat_registration.discharge_horizon", access_mode=_BOUNDED),
@@ -425,6 +433,18 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-049": ("bloodtrans_record",),
+    # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
+    # Evidence Session，供适用性、时限和关联判定绑定。
+    "LX0609-051": ("inpat_registration",),
+    "LX0609-060": ("inpat_registration",),
+    "LX0609-061": ("inpat_registration",),
+    "LX0609-062": ("inpat_registration",),
+    "LX0609-067": ("inpat_registration",),
+    "LX0609-068": ("inpat_registration",),
+    "LX0609-071": ("physician_change_event",),
+    "LX0609-072": ("inpat_nondrug_order",),
+    "LX0609-073": ("inpat_nondrug_order",),
+    "LX0609-074": ("diagnosis",),
 })
 
 

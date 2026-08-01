@@ -174,6 +174,155 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
         CustomerFinalState.COMPLIANT,
     ]
     assert all(item.fact_refs for item in reduced)
+    assert execution.customer_display_facts == (
+        (
+            "LX0609-001",
+            {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "admission_record",
+                "source_label": "入院记录",
+                "timeliness_state": "within",
+                "threshold_hours": 24,
+                "anchor_time": "2026-06-01 08:00:00",
+                "observed_time": "2026-06-01 08:00:00",
+                "elapsed_hours": 0.0,
+                "source_document_id": "safe-admission-ref",
+            },
+        ),
+        (
+            "LX0609-005",
+            {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "attending_course_record",
+                "source_label": "主治医师及以上首次查房记录",
+                "timeliness_state": "within",
+                "threshold_hours": 48,
+                "anchor_time": "2026-06-01 08:00:00",
+                "observed_time": "2026-06-02 08:00:00",
+                "elapsed_hours": 24.0,
+                "source_document_id": "safe-attending-ref",
+            },
+        ),
+        (
+            "LX0609-006",
+            {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "senior_course_record",
+                "source_label": "副主任医师或主任医师首次查房记录",
+                "timeliness_state": "within",
+                "threshold_hours": 72,
+                "anchor_time": "2026-06-01 08:00:00",
+                "observed_time": "2026-06-03 08:00:00",
+                "elapsed_hours": 48.0,
+                "source_document_id": "safe-senior-ref",
+            },
+        ),
+    )
+
+
+@pytest.mark.unit
+def test_001_compliant_keeps_time_facts_without_guessing_a_missing_document_id():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-01 10:00:00",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        },
+        selected_rule_ids=("LX0609-001",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-001",))
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert execution.customer_display_facts == (
+        (
+            "LX0609-001",
+            {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "admission_record",
+                "source_label": "入院记录",
+                "timeliness_state": "within",
+                "threshold_hours": 24,
+                "anchor_time": "2026-06-01 08:00:00",
+                "observed_time": "2026-06-01 10:00:00",
+                "elapsed_hours": 2.0,
+            },
+        ),
+    )
+
+
+@pytest.mark.unit
+def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_facts():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [
+                {
+                    "document_id": "admission-private-id",
+                    "document_title": "入院记录",
+                    "record_time": "2026-06-02 10:00:00",
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [],
+        }
+    )
+
+    execution, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+    ]
+    assert execution.customer_display_facts == (
+        (
+            "LX0609-001",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "admission_record",
+                "source_label": "入院记录",
+                "timeliness_state": "late",
+                "threshold_hours": 24,
+                "anchor_time": "2026-06-01 08:00:00",
+                "observed_time": "2026-06-02 10:00:00",
+                "elapsed_hours": 26.0,
+                "source_document_id": "admission-private-id",
+            },
+        ),
+        (
+            "LX0609-005",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "attending_course_record",
+                "source_label": "主治医师及以上首次查房记录",
+                "timeliness_state": "missing",
+                "threshold_hours": 48,
+                "anchor_time": "2026-06-01 08:00:00",
+            },
+        ),
+        (
+            "LX0609-006",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "senior_course_record",
+                "source_label": "副主任医师或主任医师首次查房记录",
+                "timeliness_state": "missing",
+                "threshold_hours": 72,
+                "anchor_time": "2026-06-01 08:00:00",
+            },
+        ),
+    )
 
 
 @pytest.mark.unit
@@ -458,6 +607,75 @@ def test_002_uses_authoritative_first_course_time_without_model(
     assert "诊疗计划" not in repr(reduced[0])
 
 
+def test_002_late_result_exposes_actual_and_overdue_hours():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [],
+            "first_course_record": [
+                {
+                    "document_title": "首次病程记录",
+                    "record_time": "2026-06-01 18:30:00",
+                    "record_content": "患者入院后完成病史采集、体格检查和诊疗计划。",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-002",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(execution.customer_display_facts)["LX0609-002"] == {
+        "failure_kind": "timeliness_requirement_not_met",
+        "target_document": "first_course_record",
+        "source_label": "首次病程记录",
+        "timeliness_state": "late",
+        "threshold_hours": 8,
+        "anchor_time": "2026-06-01 08:00:00",
+        "observed_time": "2026-06-01 18:30:00",
+        "elapsed_hours": 10.5,
+        "overdue_hours": 2.5,
+    }
+
+
+def test_002_compliant_result_exposes_actual_interval_and_source_document():
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"}
+            ],
+            "admission_record": [],
+            "first_course_record": [
+                {
+                    "document_id": "first-course-safe-ref",
+                    "document_title": "首次病程记录",
+                    "record_time": "2026-06-01 10:30:00",
+                    "record_content": "患者入院后完成病史采集、体格检查和诊疗计划。",
+                }
+            ],
+        },
+        selected_rule_ids=("LX0609-002",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-002",))
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert dict(execution.customer_display_facts)["LX0609-002"] == {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "first_course_record",
+        "source_label": "首次病程记录",
+        "timeliness_state": "within",
+        "threshold_hours": 8,
+        "anchor_time": "2026-06-01 08:00:00",
+        "observed_time": "2026-06-01 10:30:00",
+        "elapsed_hours": 2.5,
+        "source_document_id": "first-course-safe-ref",
+    }
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("rows", "expected_state", "expected_reason"),
@@ -514,7 +732,79 @@ def test_004_uses_exact_rescue_end_label_without_model(
 
 
 @pytest.mark.unit
-def test_001_005_006_typed_thresholds_are_exact_and_senior_does_not_replace_attending():
+def test_004_projects_safe_late_rescue_timeline_facts() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [
+                {
+                    "document_id": "rescue-private-id",
+                    "record_time": "2026-06-01 16:15:00",
+                    "record_content": "抢救结束时间：2026年06月01日 09:00。",
+                }
+            ]
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert execution.customer_display_facts == (
+        (
+            "LX0609-004",
+            {
+                "failure_kind": "timeliness_requirement_not_met",
+                "target_document": "rescue_record",
+                "source_label": "抢救记录",
+                "timeliness_state": "late",
+                "threshold_hours": 6,
+                "anchor_time": "2026-06-01 09:00:00",
+                "observed_time": "2026-06-01 16:15:00",
+                "elapsed_hours": 7.25,
+                "source_document_id": "rescue-private-id",
+            },
+        ),
+    )
+
+
+@pytest.mark.unit
+def test_004_compliant_result_projects_worst_rescue_interval() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [
+                {
+                    "document_id": "rescue-first",
+                    "record_time": "2026-06-01 11:00:00",
+                    "record_content": "抢救结束时间：2026年06月01日 09:00。",
+                },
+                {
+                    "document_id": "rescue-worst",
+                    "record_time": "2026-06-02 15:30:00",
+                    "record_content": "抢救结束时间：2026年06月02日 10:00。",
+                },
+            ]
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert dict(execution.customer_display_facts)["LX0609-004"] == {
+        "failure_kind": "timeliness_requirement_satisfied",
+        "target_document": "rescue_record",
+        "source_label": "抢救记录",
+        "timeliness_state": "within",
+        "threshold_hours": 6,
+        "anchor_time": "2026-06-02 10:00:00",
+        "observed_time": "2026-06-02 15:30:00",
+        "elapsed_hours": 5.5,
+        "source_document_id": "rescue-worst",
+    }
+
+
+@pytest.mark.unit
+def test_001_005_006_typed_thresholds_are_exact_and_senior_satisfies_attending_or_above():
     session = _typed_basic_session(
         {
             "inpat_registration": [
@@ -530,7 +820,7 @@ def test_001_005_006_typed_thresholds_are_exact_and_senior_does_not_replace_atte
             "senior_course_record": [
                 {
                     "document_title": "副主任医师首次查房记录",
-                    "record_time": "2026-06-04 08:00:00",
+                    "record_time": "2026-06-03 08:00:00",
                 }
             ],
         }
@@ -540,14 +830,68 @@ def test_001_005_006_typed_thresholds_are_exact_and_senior_does_not_replace_atte
 
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.NON_COMPLIANT,
-        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.COMPLIANT,
         CustomerFinalState.COMPLIANT,
     ]
     assert [item.reason_code for item in reduced] == [
         "threshold_exceeded",
-        "required_document_missing",
+        "requirement_within_threshold",
         "requirement_within_threshold",
     ]
+
+
+@pytest.mark.unit
+def test_2496813_basic_timeliness_002_004_005_matches_source_truth():
+    selected = ("LX0609-002", "LX0609-004", "LX0609-005")
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-07 13:55:17"}
+            ],
+            "admission_record": [],
+            "first_course_record": [
+                {
+                    "document_title": "首次病程记录",
+                    "record_datetime": "2026-07-07 18:00:41",
+                    "record_content": "",
+                    "case_characteristic": (
+                        "患者为54岁女性，起病急，病程短；摔倒致头面部外伤、"
+                        "持续出血、呼唤无反应，伴肢体不自主抖动。"
+                    ),
+                }
+            ],
+            "rescue_record": [
+                {
+                    "record_time": "2026-07-07 17:50:15",
+                    "record_content": (
+                        "抢救开始时间：2026年07月07日 14:20       "
+                        "抢救结束时间:2026年07月07日 14:30 "
+                        "患者经抢救后生命体征相对稳定。"
+                    ),
+                }
+            ],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_title": "主刀医师韩平副主任医师查房记录",
+                    "record_time": "2026-07-07 15:10:30",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution, reduced = _reduce_typed_basic(session, selected)
+
+    assert execution.results == ()
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert {item.reason_code for item in reduced} == {
+        "requirement_within_threshold"
+    }
 
 
 @pytest.mark.unit

@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from types import MappingProxyType
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
 from .decision_model import (
@@ -67,6 +67,7 @@ class NativeExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     execution_fingerprint: str = ""
     terminal_reason_code: str = ""
 
@@ -175,6 +176,7 @@ def _typed_rule_decision(
     rule_id: str,
     final_state: str,
     snapshot: Luxian0609EvidenceSnapshot,
+    non_compliant_reason: str = "required_document_missing",
 ) -> RuleDecision:
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
@@ -194,7 +196,7 @@ def _typed_rule_decision(
             ApplicabilityState.APPLICABLE,
             EvidenceState.SUFFICIENT,
             QcDirection.DEFECT,
-            "required_document_missing",
+            non_compliant_reason,
         ),
         "not_applicable": (
             ApplicabilityState.NOT_APPLICABLE,
@@ -227,6 +229,8 @@ def _typed_rule_decision(
         ]
     except KeyError:
         raise ValueError("unsupported surgery presence final state") from None
+    if reason_code == "required_document_blank":
+        reason_code = "defect_proven"
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -338,12 +342,37 @@ def execute_luxian_0609_native_rules(
         )
     except Exception:
         return _technical_results(selected, reason_code="native_execution_failure")
+
+    def result_reason(rule_id: str, final_state: str) -> str:
+        if final_state != "non_compliant":
+            return "native_deterministic"
+        if rule_id == "LX0609-030":
+            return "required_document_missing"
+        if rule_id != "LX0609-032":
+            return "requirement_violated"
+        timeline = provided.evidence_payload.get("programmatic_timeline")
+        documents = timeline.get("documents") if isinstance(timeline, Mapping) else None
+        rows = (
+            documents.get("surgery_safecheck_record")
+            if isinstance(documents, Mapping)
+            else None
+        )
+        return (
+            "required_document_blank"
+            if isinstance(rows, list) and rows
+            else "required_document_missing"
+        )
+
+    reason_by_rule_id = {
+        result.rule_id: result_reason(result.rule_id, result.final_state.value)
+        for result in execution.results
+    }
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
             final_state=result.final_state.value,
             finding_kind=result.finding_kind.value,
-            reason_code="native_deterministic",
+            reason_code=reason_by_rule_id[result.rule_id],
         )
         for result in execution.results
     )
@@ -358,14 +387,60 @@ def execute_luxian_0609_native_rules(
             rule_id=str(item["rule_id"]),
             final_state=final_state_by_rule_id[str(item["rule_id"])],
             snapshot=evidence_snapshot,
+            non_compliant_reason=reason_by_rule_id[str(item["rule_id"])],
         )
         for item in all_results
         if item["rule_id"] in typed_set and evidence_snapshot is not None
     )
     results = tuple(item for item in all_results if item["rule_id"] not in typed_set)
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
+    target_documents = {
+        "LX0609-030": "surgery_record",
+        "LX0609-032": "surgery_safecheck_record",
+    }
+    for result in execution.results:
+        rule_id = result.rule_id
+        target_document = target_documents.get(rule_id)
+        if target_document is None:
+            continue
+        if (
+            rule_id == "LX0609-030"
+            and result.final_state.value == "compliant"
+        ):
+            # 030 是纯存在性判定。合规时也保存已核对的通过事实，避免客户侧
+            # 只能看到“合规”而不知道检查了什么；原文定位仍由 RuleDecision
+            # 在同一 Evidence Session 内反查，不能在这里猜测文书 ID。
+            customer_display_facts.append(
+                (
+                    rule_id,
+                    {
+                        "verification_kind": "surgery_document_present",
+                        "target_document": target_document,
+                        "performed_surgery_confirmed": True,
+                    },
+                )
+            )
+            continue
+        if result.final_state.value != "non_compliant":
+            continue
+        customer_display_facts.append(
+            (
+                rule_id,
+                {
+                    "failure_kind": (
+                        "surgery_document_blank"
+                        if reason_by_rule_id.get(rule_id) == "required_document_blank"
+                        else "surgery_document_missing"
+                    ),
+                    "target_document": target_document,
+                    "performed_surgery_confirmed": True,
+                },
+            )
+        )
     return NativeExecutionResult(
         results=results,
         planned_rule_ids=planned,
         decisions=decisions,
+        customer_display_facts=tuple(customer_display_facts),
         execution_fingerprint=execution.fingerprint(),
     )

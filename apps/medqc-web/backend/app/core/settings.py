@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     # Environment
     ENV: str = os.getenv("ENV", "development")
 
+    # 客户样本病历同步：保持病例级串行，仅允许明细表级有限并发。
+    SAMPLE_SYNC_INCREMENTAL_ENABLED: bool = False
+    SAMPLE_SYNC_DETAIL_TABLE_WORKERS: int = Field(default=3, ge=1, le=6)
+    SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX: int = Field(default=6, ge=1, le=6)
+    SAMPLE_SYNC_UPSERT_BATCH_SIZE: int = Field(default=500, ge=50, le=5000)
+    SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES: int = Field(default=10, ge=0, le=1440)
+
     # SC 规则来源治理（生产硬约束）
     # - strict: true 时要求 SC 规则必须来自 pg_governance，否则阻断执行
     # - block_batch_on_fallback: 即便非 strict，也可在 source 回退时阻断批量任务
@@ -131,9 +138,9 @@ class Settings(BaseSettings):
     # 会诊原生入口总开关：默认启用第一阶段021/022；关闭时020-023全回退兼容映射链。
     # 多专科会诊意见可能被同步在同一文书中；episode 分段完成真实验收前保持
     # compatibility 路径，避免把多个实际会诊压缩为单一对象。
-    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = False
+    LUXIAN_0609_NATIVE_CONSULTATION_ENABLED: bool = True
     # 第二阶段“会诊意见—后续执行”关联开关；关闭时仅 021/022 使用原生 episode。
-    LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED: bool = False
+    LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED: bool = True
     # 检查检验族原生入口；关闭时回滚到旧映射执行链。
     LUXIAN_0609_NATIVE_EXAM_LAB_ENABLED: bool = True
     # 输血族041-049独立包开关；关闭时精确回退现有映射执行链。
@@ -195,11 +202,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_API_KEY", "SICHUAN_API_KEY"),
     )
     LLM_MODEL: str = Field(
-        default="qwen3.5-35b-a3b",
+        default="qwen3.7-flash",
         validation_alias=AliasChoices("LLM_MODEL", "SICHUAN_MODEL"),
     )
     LLM_ADJUDICATOR_MODEL: Optional[str] = Field(
-        default="qwen3.6-35b-a3b",
+        default="qwen3.7-flash",
         validation_alias=AliasChoices("LLM_ADJUDICATOR_MODEL", "SICHUAN_ADJUDICATOR_MODEL"),
     )
     LLM_TIMEOUT_SECONDS: int = Field(

@@ -11,8 +11,12 @@
             <CheckSquareFilled class="text-[12px]" />
           </div>
           <div>
-            <div class="text-[11px] font-semibold text-[#0066cc]">我的紧急队列</div>
-            <h3 class="text-[16px] font-semibold text-[#1d1d1f]">我的特急待办</h3>
+            <div class="text-[11px] font-semibold text-[#0066cc]">
+              我的紧急队列
+            </div>
+            <h3 class="text-[16px] font-semibold text-[#1d1d1f]">
+              我的特急待办
+            </h3>
           </div>
         </div>
         <div>
@@ -27,19 +31,25 @@
 
       <div class="mt-3 grid grid-cols-3 gap-2">
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">待处理</div>
+          <div class="text-[11px] text-slate-400">
+            待处理
+          </div>
           <div class="mt-1 text-[18px] font-bold text-[#1d1d1f] font-mono">
             {{ summary.pending_total || 0 }}
           </div>
         </div>
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">进行中</div>
+          <div class="text-[11px] text-slate-400">
+            进行中
+          </div>
           <div class="mt-1 text-[18px] font-bold text-[#0066cc] font-mono">
             {{ summary.in_progress_total || 0 }}
           </div>
         </div>
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">已超时</div>
+          <div class="text-[11px] text-slate-400">
+            已超时
+          </div>
           <div class="mt-1 text-[18px] font-bold text-red-600 font-mono">
             {{ summary.overdue_total || 0 }}
           </div>
@@ -120,14 +130,21 @@
         </div>
       </div>
 
-      <div v-if="!items.length" class="py-16 flex flex-col items-center justify-center text-center">
+      <div
+        v-if="!items.length"
+        class="py-16 flex flex-col items-center justify-center text-center"
+      >
         <div
           class="h-12 w-12 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 mb-3 shadow-inner"
         >
           <CheckOutlined class="text-[20px]" />
         </div>
-        <div class="text-[13.5px] font-medium text-slate-500">太棒了，当前没有需要跟进的待办</div>
-        <div class="text-[12px] text-slate-400 mt-1">您可以通过其他纬度筛选工作</div>
+        <div class="text-[13.5px] font-medium text-slate-500">
+          太棒了，当前没有需要跟进的待办
+        </div>
+        <div class="text-[12px] text-slate-400 mt-1">
+          您可以通过其他纬度筛选工作
+        </div>
       </div>
     </div>
   </section>

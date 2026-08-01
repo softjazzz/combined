@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import logging
 import math
 from typing import Any, Callable, Iterable, Mapping
 
@@ -22,6 +23,9 @@ from .executor_registry import (
     Luxian0609ExecutorRegistry,
 )
 from .rule_contracts import Luxian0609RuleContract
+
+
+logger = logging.getLogger(__name__)
 
 
 _FAILURE_REASON_CODES = {
@@ -309,6 +313,10 @@ class Luxian0609ExecutionEngine:
                         # 执行器自行取消只污染本族，不得误伤独立 family。
                         failure_kind = "cancelled"
                     except Exception:
+                        logger.exception(
+                            "LX0609 规则族执行适配失败: executor_key=%s",
+                            executor_key,
+                        )
                         failure_kind = "exception"
                     else:
                         if not isinstance(payload, FamilyExecutionEnvelope):

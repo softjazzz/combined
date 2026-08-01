@@ -302,6 +302,41 @@ export interface SichuanBatchSafeEvidenceRef {
   source_ref: string
 }
 
+export interface QCRecordCompareEvidence {
+  key: string
+  source_ref?: string
+  source_document_id?: string
+  source_document_type?: string
+  source_document_name?: string
+  source_table?: string
+  record_time?: string
+  field_path?: string
+  /** 仅由客户展示白名单生成的章节锚点；普通 evidence.field_path 无定位权限。 */
+  section_field_path?: string
+  quote: string
+}
+
+export interface QCRecordCompareIssue {
+  key: string
+  rule_code: string
+  rule_name: string
+  status: string
+  status_text: string
+  result_kind_text: string
+  conclusion: string
+  suggestion: string
+  /** 已通过客户展示白名单的结果摘要；不得携带病历原文。 */
+  summary?: string
+  /** 已通过客户展示白名单的判定说明。 */
+  detail?: string
+  /** 已通过客户展示白名单的核对标准。 */
+  requirement?: string
+  /** 已通过客户展示白名单的实际值摘要。 */
+  actual_value?: string
+  target_document_type?: string
+  evidences: QCRecordCompareEvidence[]
+}
+
 export interface SichuanBatchIssueItem {
   rule_id?: string
   rule_job_id?: string
@@ -309,6 +344,7 @@ export interface SichuanBatchIssueItem {
   rule_name?: string
   record_ref?: string
   reason_code?: string
+  customer_display_facts?: Record<string, unknown>
   canonical_status?: string
   record_id?: string
   institute_id?: string
@@ -323,6 +359,8 @@ export interface SichuanBatchIssueItem {
   findings?: string
   evidence?: string | SichuanBatchSafeEvidenceRef[]
   suggestion?: string
+  /** 原生规则可选的安全展示事实；严禁写入病历正文或模型原文。 */
+  metadata?: Record<string, unknown>
   rewrite_example?: string
   confidence?: number
   llm_raw_output?: string
@@ -497,6 +535,9 @@ export interface SichuanBatchJob {
   status: SichuanBatchJobStatus
   filters?: Record<string, unknown>
   record_ids?: string[]
+  record_focus?: {
+    record_ref?: string
+  } | null
   progress?: Record<string, unknown>
   summary?: SichuanBatchJobSummary | null
   rule_set_key?: string
@@ -536,6 +577,7 @@ export interface SichuanBatchJobQuery {
   cache_hit?: 'hit' | 'miss'
   created_start_date?: string
   created_end_date?: string
+  record_id?: string
   page?: number
   page_size?: number
 }

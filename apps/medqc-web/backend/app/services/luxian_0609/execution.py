@@ -25,7 +25,11 @@ from .evidence_snapshot_provider import (
     build_luxian_0609_evidence_snapshot,
 )
 from .engine import Luxian0609ExecutionEngine
-from .execution_contract import build_family_technical_envelope
+from .execution_contract import (
+    FamilyUsageAttribution,
+    build_family_technical_envelope,
+    build_family_usage_attribution,
+)
 from .executor_registry import (
     LEGACY_NATIVE_EXECUTION_ORDER,
     LegacyFamilyExecutionResources,
@@ -73,6 +77,11 @@ from .native_surgery_document_execution import (
 from .native_mdt_execution import (
     execute_luxian_0609_native_mdt_rule,
 )
+from .native_extended_document_execution import (
+    EXECUTOR_KEY as EXTENDED_DOCUMENT_EXECUTOR_KEY,
+    EXTENDED_DOCUMENT_RULE_IDS,
+    execute_luxian_0609_native_extended_document_rules,
+)
 from .native_package import (
     EXECUTOR_SURGERY_MDT,
     EXECUTOR_SURGERY_PRESENCE,
@@ -104,11 +113,41 @@ class Luxian0609ExecutionContext:
     native_completion_tokens: int = 0
     native_total_tokens: int = 0
     native_api_time: float = 0.0
+    native_usage_attributions: tuple[FamilyUsageAttribution, ...] = ()
     package_plan: Luxian0609PackagePlan | None = None
     evidence_snapshot: Luxian0609EvidenceSnapshot | None = None
+    # 仅在本次执行/聚合调用内使用，用于把已绑定的 source snapshot 精确映射回
+    # 原始文书 ID；绝不能写入审计、持久化结果或客户 DTO。
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None
     evidence_snapshot_rule_refs: tuple[tuple[str, str], ...] = ()
     unified_engine_used: bool = False
     reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+
+
+def _build_execution_usage_attribution(
+    *,
+    executor_key: str,
+    rule_ids: tuple[str, ...],
+    execution: Any,
+) -> FamilyUsageAttribution:
+    existing = getattr(execution, "usage_attribution", None)
+    if isinstance(existing, FamilyUsageAttribution):
+        return existing
+    llm_call_count = getattr(execution, "llm_call_count", 0)
+    prompt_tokens = getattr(execution, "prompt_tokens", 0)
+    completion_tokens = getattr(execution, "completion_tokens", 0)
+    total_tokens = getattr(execution, "total_tokens", 0)
+    api_time = getattr(execution, "api_time", 0.0)
+    return build_family_usage_attribution(
+        executor_key=executor_key,
+        covered_customer_rule_ids=rule_ids,
+        llm_call_count=0 if llm_call_count is None else llm_call_count,
+        prompt_tokens=0 if prompt_tokens is None else prompt_tokens,
+        completion_tokens=0 if completion_tokens is None else completion_tokens,
+        total_tokens=0 if total_tokens is None else total_tokens,
+        api_time=0.0 if api_time is None else api_time,
+    )
 
 
 def build_luxian_0609_evidence_snapshot_rule_refs(
@@ -199,11 +238,16 @@ async def prepare_luxian_0609_execution(
     surgery_document_source_guard_required = bool(
         {"LX0609-029", "LX0609-032"}.intersection(package_plan.selected_rule_ids)
     )
+    extended_document_required = bool(
+        set(EXTENDED_DOCUMENT_RULE_IDS).intersection(package_plan.selected_rule_ids)
+    )
     typed_decision_rule_ids = tuple(
         rule_id
         for rule_id in package_plan.selected_rule_ids
-        if unified_engine_enabled
-        and (
+        if rule_id in EXTENDED_DOCUMENT_RULE_IDS
+        or (
+            unified_engine_enabled
+            and (
             (
                 rule_id == "LX0609-007"
                 and bool(
@@ -348,12 +392,15 @@ async def prepare_luxian_0609_execution(
                 )
             )
             or (
-                rule_id in {"LX0609-016", "LX0609-018"}
-                and bool(
-                    getattr(
-                        settings,
-                        "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED",
-                        False,
+                rule_id == "LX0609-018"
+                or (
+                    rule_id == "LX0609-016"
+                    and bool(
+                        getattr(
+                            settings,
+                            "LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED",
+                            False,
+                        )
                     )
                 )
             )
@@ -387,6 +434,7 @@ async def prepare_luxian_0609_execution(
                     )
                 )
             )
+            )
         )
     )
     if (
@@ -398,6 +446,7 @@ async def prepare_luxian_0609_execution(
             )
             or unified_engine_enabled
             or surgery_document_source_guard_required
+            or extended_document_required
         )
         and all(
             isinstance(value, str) and value.strip()
@@ -405,7 +454,7 @@ async def prepare_luxian_0609_execution(
         )
     ):
         try:
-            if unified_engine_enabled:
+            if unified_engine_enabled or extended_document_required:
                 evidence_session = build_luxian_0609_evidence_read_session(
                     selected_rule_ids=package_plan.selected_rule_ids,
                     institute_id=str(institute_id),
@@ -463,12 +512,14 @@ async def prepare_luxian_0609_execution(
     native_completion_tokens = 0
     native_total_tokens = 0
     native_api_time = 0.0
+    native_usage_attributions: list[FamilyUsageAttribution] = []
     native_customer_rule_ids = {
         *package_plan.native_sync_rule_ids,
         *package_plan.native_async_rule_ids,
     }
     unified_engine_used = False
     native_rule_decisions: list[RuleDecision] = []
+    native_customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     reduced_decisions: tuple[ReducedRuleDecision, ...] = ()
     if (
         unified_engine_enabled
@@ -531,6 +582,7 @@ async def prepare_luxian_0609_execution(
             surgery_gate=execute_luxian_0609_native_surgery_gate_rules,
             surgery_document=execute_luxian_0609_native_surgery_document_rules,
             surgery_mdt=execute_luxian_0609_native_mdt_rule,
+            extended_document=execute_luxian_0609_native_extended_document_rules,
         )
         contracts_by_id = {
             item.rule_id: item for item in load_luxian_0609_rule_contracts()
@@ -574,12 +626,26 @@ async def prepare_luxian_0609_execution(
                 envelope = outcome.envelope
                 native_results.extend(envelope.results)
                 native_rule_decisions.extend(envelope.decisions)
-                native_llm_call_count += envelope.llm_call_count
-                native_prompt_tokens += envelope.prompt_tokens
-                native_completion_tokens += envelope.completion_tokens
-                native_total_tokens += envelope.total_tokens
-                native_api_time += envelope.api_time
+                native_customer_display_facts.extend(envelope.customer_display_facts)
+                native_usage_attributions.append(
+                    _build_execution_usage_attribution(
+                        executor_key=outcome.executor_key,
+                        rule_ids=outcome.selected_rule_ids,
+                        execution=envelope,
+                    )
+                )
     if typed_decision_rule_ids and evidence_snapshot is not None:
+        typed_decision_rule_id_set = set(typed_decision_rule_ids)
+        # 各原生执行器可同时产出普通结果和 RuleDecision。只有本轮明确
+        # 启用的 typed 决策允许进入 binding；其他 executor 的附带决策
+        # 不能扩大 binding scope，更不能把已选规则整批降为合同错误。
+        # 对 typed 范围内的缺失或重复仍不做修复，继续交给 binding
+        # fail-closed 处理。
+        native_rule_decisions = [
+            decision
+            for decision in native_rule_decisions
+            if decision.rule_id in typed_decision_rule_id_set
+        ]
         decisions_by_rule_id = {
             decision.rule_id: decision for decision in native_rule_decisions
         }
@@ -596,7 +662,6 @@ async def prepare_luxian_0609_execution(
             expected_rule_ids=typed_decision_rule_ids,
             snapshot=evidence_snapshot,
         )
-        typed_decision_rule_id_set = set(typed_decision_rule_ids)
         native_results = [
             item
             for item in native_results
@@ -615,6 +680,13 @@ async def prepare_luxian_0609_execution(
             source_schema=source_schema,
         )
         native_results = list(native_execution.results)
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=EXECUTOR_SURGERY_PRESENCE,
+                rule_ids=surgery_presence_rule_ids,
+                execution=native_execution,
+            )
+        )
         if (
             tuple(str(item.get("rule_id") or "") for item in native_results)
             != surgery_presence_rule_ids
@@ -624,6 +696,10 @@ async def prepare_luxian_0609_execution(
                 reason_code="native_result_incomplete",
             )
             native_results = list(native_execution.results)
+        else:
+            native_customer_display_facts.extend(
+                native_execution.customer_display_facts
+            )
     basic_timeliness_rule_ids = package_plan.native_rule_ids_for_executor(
         BASIC_TIMELINESS_EXECUTOR_KEY
     )
@@ -637,6 +713,16 @@ async def prepare_luxian_0609_execution(
             source_schema=source_schema,
         )
         native_results.extend(basic_execution.results)
+        native_customer_display_facts.extend(
+            getattr(basic_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=BASIC_TIMELINESS_EXECUTOR_KEY,
+                rule_ids=basic_timeliness_rule_ids,
+                execution=basic_execution,
+            )
+        )
     if native_results and not unified_engine_used:
         native_result_by_rule_id = {
             str(item.get("rule_id") or "").strip().upper(): item
@@ -656,11 +742,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(exam_lab_execution.results)
-        native_llm_call_count += exam_lab_execution.llm_call_count
-        native_prompt_tokens += exam_lab_execution.prompt_tokens
-        native_completion_tokens += exam_lab_execution.completion_tokens
-        native_total_tokens += exam_lab_execution.total_tokens
-        native_api_time += exam_lab_execution.api_time
+        native_customer_display_facts.extend(
+            getattr(exam_lab_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=EXAM_LAB_EXECUTOR_KEY,
+                rule_ids=exam_lab_rule_ids,
+                execution=exam_lab_execution,
+            )
+        )
     consultation_rule_ids = package_plan.native_rule_ids_for_executor(
         CONSULTATION_EXECUTOR_KEY
     )
@@ -677,11 +768,16 @@ async def prepare_luxian_0609_execution(
             decision_rule_ids=typed_decision_rule_ids,
         )
         native_results.extend(consultation_execution.results)
-        native_llm_call_count += consultation_execution.llm_call_count
-        native_prompt_tokens += consultation_execution.prompt_tokens
-        native_completion_tokens += consultation_execution.completion_tokens
-        native_total_tokens += consultation_execution.total_tokens
-        native_api_time += consultation_execution.api_time
+        native_customer_display_facts.extend(
+            getattr(consultation_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=CONSULTATION_EXECUTOR_KEY,
+                rule_ids=consultation_rule_ids,
+                execution=consultation_execution,
+            )
+        )
     transfusion_rule_ids = package_plan.native_rule_ids_for_executor(
         TRANSFUSION_EXECUTOR_KEY
     )
@@ -697,11 +793,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(transfusion_execution.results)
-        native_llm_call_count += transfusion_execution.llm_call_count
-        native_prompt_tokens += transfusion_execution.prompt_tokens
-        native_completion_tokens += transfusion_execution.completion_tokens
-        native_total_tokens += transfusion_execution.total_tokens
-        native_api_time += transfusion_execution.api_time
+        native_customer_display_facts.extend(
+            getattr(transfusion_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=TRANSFUSION_EXECUTOR_KEY,
+                rule_ids=transfusion_rule_ids,
+                execution=transfusion_execution,
+            )
+        )
     tumor_pathology_rule_ids = package_plan.native_rule_ids_for_executor(
         TUMOR_PATHOLOGY_EXECUTOR_KEY
     )
@@ -717,11 +818,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(tumor_pathology_execution.results)
-        native_llm_call_count += tumor_pathology_execution.llm_call_count
-        native_prompt_tokens += tumor_pathology_execution.prompt_tokens
-        native_completion_tokens += tumor_pathology_execution.completion_tokens
-        native_total_tokens += tumor_pathology_execution.total_tokens
-        native_api_time += tumor_pathology_execution.api_time
+        native_customer_display_facts.extend(
+            getattr(tumor_pathology_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=TUMOR_PATHOLOGY_EXECUTOR_KEY,
+                rule_ids=tumor_pathology_rule_ids,
+                execution=tumor_pathology_execution,
+            )
+        )
     course_quality_rule_ids = package_plan.native_rule_ids_for_executor(
         COURSE_QUALITY_EXECUTOR_KEY
     )
@@ -737,11 +843,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(course_quality_execution.results)
-        native_llm_call_count += course_quality_execution.llm_call_count
-        native_prompt_tokens += course_quality_execution.prompt_tokens
-        native_completion_tokens += course_quality_execution.completion_tokens
-        native_total_tokens += course_quality_execution.total_tokens
-        native_api_time += course_quality_execution.api_time
+        native_customer_display_facts.extend(
+            getattr(course_quality_execution, "customer_display_facts", ())
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=COURSE_QUALITY_EXECUTOR_KEY,
+                rule_ids=course_quality_rule_ids,
+                execution=course_quality_execution,
+            )
+        )
     surgery_gate_rule_ids = package_plan.native_rule_ids_for_executor(
         SURGERY_GATE_EXECUTOR_KEY
     )
@@ -757,11 +868,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(surgery_gate_execution.results)
-        native_llm_call_count += surgery_gate_execution.llm_call_count
-        native_prompt_tokens += surgery_gate_execution.prompt_tokens
-        native_completion_tokens += surgery_gate_execution.completion_tokens
-        native_total_tokens += surgery_gate_execution.total_tokens
-        native_api_time += surgery_gate_execution.api_time
+        native_customer_display_facts.extend(
+            surgery_gate_execution.customer_display_facts
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=SURGERY_GATE_EXECUTOR_KEY,
+                rule_ids=surgery_gate_rule_ids,
+                execution=surgery_gate_execution,
+            )
+        )
     surgery_document_rule_ids = package_plan.native_rule_ids_for_executor(
         SURGERY_DOCUMENT_EXECUTOR_KEY
     )
@@ -773,11 +889,16 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.extend(surgery_document_execution.results)
-        native_llm_call_count += surgery_document_execution.llm_call_count
-        native_prompt_tokens += surgery_document_execution.prompt_tokens
-        native_completion_tokens += surgery_document_execution.completion_tokens
-        native_total_tokens += surgery_document_execution.total_tokens
-        native_api_time += surgery_document_execution.api_time
+        native_customer_display_facts.extend(
+            surgery_document_execution.customer_display_facts
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=SURGERY_DOCUMENT_EXECUTOR_KEY,
+                rule_ids=surgery_document_rule_ids,
+                execution=surgery_document_execution,
+            )
+        )
     mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
     if mdt_rule_ids and not unified_engine_used:
         native_mdt = await execute_luxian_0609_native_mdt_rule(
@@ -788,11 +909,61 @@ async def prepare_luxian_0609_execution(
             llm_client=llm_client,
         )
         native_results.append(native_mdt.result)
-        native_llm_call_count += native_mdt.llm_call_count
-        native_prompt_tokens += native_mdt.prompt_tokens
-        native_completion_tokens += native_mdt.completion_tokens
-        native_total_tokens += native_mdt.total_tokens
-        native_api_time += native_mdt.api_time
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=EXECUTOR_SURGERY_MDT,
+                rule_ids=mdt_rule_ids,
+                execution=native_mdt,
+            )
+        )
+    extended_document_rule_ids = package_plan.native_rule_ids_for_executor(
+        EXTENDED_DOCUMENT_EXECUTOR_KEY
+    )
+    if (
+        extended_document_rule_ids
+        and not unified_engine_used
+        and (evidence_snapshot is None or evidence_materials is None)
+    ):
+        native_results.extend(
+            build_family_technical_envelope(
+                expected_rule_ids=extended_document_rule_ids,
+                reason_code=(
+                    "evidence_snapshot_build_failed"
+                    if evidence_snapshot_build_failed
+                    else "extended_document_evidence_unavailable"
+                ),
+            ).results
+        )
+    if (
+        extended_document_rule_ids
+        and not unified_engine_used
+        and evidence_snapshot is not None
+        and evidence_materials is not None
+    ):
+        extended_document_execution = (
+            await execute_luxian_0609_native_extended_document_rules(
+                rule_ids=extended_document_rule_ids,
+                evidence_snapshot=evidence_snapshot,
+                evidence_materials=evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in extended_document_rule_ids
+                    if rule_id in typed_decision_rule_ids
+                ),
+            )
+        )
+        native_results.extend(extended_document_execution.results)
+        native_rule_decisions.extend(extended_document_execution.decisions)
+        native_customer_display_facts.extend(
+            extended_document_execution.customer_display_facts
+        )
+        native_usage_attributions.append(
+            _build_execution_usage_attribution(
+                executor_key=EXTENDED_DOCUMENT_EXECUTOR_KEY,
+                rule_ids=extended_document_rule_ids,
+                execution=extended_document_execution,
+            )
+        )
     if native_results:
         native_result_by_rule_id = {
             str(item.get("rule_id") or "").strip().upper(): item
@@ -848,6 +1019,22 @@ async def prepare_luxian_0609_execution(
             decisions=gate_decisions,
         )
 
+    native_llm_call_count = sum(
+        item.llm_call_count for item in native_usage_attributions
+    )
+    native_prompt_tokens = sum(
+        item.prompt_tokens for item in native_usage_attributions
+    )
+    native_completion_tokens = sum(
+        item.completion_tokens for item in native_usage_attributions
+    )
+    native_total_tokens = sum(
+        item.total_tokens for item in native_usage_attributions
+    )
+    native_api_time = sum(
+        item.latency_ms for item in native_usage_attributions
+    ) / 1000.0
+
     return executable_rules, Luxian0609ExecutionContext(
         enabled=True,
         trigger_gate_enabled=trigger_gate_enabled,
@@ -864,11 +1051,14 @@ async def prepare_luxian_0609_execution(
         native_completion_tokens=native_completion_tokens,
         native_total_tokens=native_total_tokens,
         native_api_time=native_api_time,
+        native_usage_attributions=tuple(native_usage_attributions),
         package_plan=package_plan,
         evidence_snapshot=evidence_snapshot,
+        evidence_materials=evidence_materials,
         evidence_snapshot_rule_refs=evidence_snapshot_rule_refs,
         unified_engine_used=unified_engine_used,
         reduced_decisions=reduced_decisions,
+        customer_display_facts=tuple(native_customer_display_facts),
     )
 
 
@@ -934,8 +1124,10 @@ def aggregate_luxian_0609_orchestrated_results(
             "evidence_payload": evidence_payload,
             # 仅供当前聚合调用核验来源状态；聚合输出会剥离内部审计对象。
             "evidence_snapshot": context.evidence_snapshot,
+            "evidence_materials": context.evidence_materials,
         },
         reduced_decisions=context.reduced_decisions,
+        customer_display_facts=context.customer_display_facts,
         decision_trace_sink=decision_trace_sink,
     )
     orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY

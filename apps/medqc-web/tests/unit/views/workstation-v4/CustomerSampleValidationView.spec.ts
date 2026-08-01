@@ -1347,6 +1347,50 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
+  it('病历池明确标注在院、已出院和状态待同步病例', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            hospitalization_status: 'active',
+          }),
+          buildRecord({
+            id: 'V002',
+            matched_visit_id: 'V002',
+            patient_name: '李四',
+            hospitalization_status: 'discharged',
+            discharge_time: '2026-07-30T15:20:00+08:00',
+          }),
+          buildRecord({
+            id: 'V003',
+            matched_visit_id: 'V003',
+            patient_name: '王五',
+            hospitalization_status: '',
+          }),
+        ],
+        total: 3,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    const badges = wrapper.findAll('.customer-sample-hospitalization-badge')
+    expect(badges.map((badge) => badge.text())).toEqual(['在院', '已出院', '状态待同步'])
+    expect(badges[0].classes()).toContain('is-active')
+    expect(badges[1].classes()).toContain('is-discharged')
+    expect(badges[1].attributes('title')).toContain('2026')
+    expect(badges[1].attributes('style')).toContain('display: inline-flex')
+    expect(badges[1].attributes('style')).toContain('border-radius: 999px')
+    expect(badges[2].classes()).toContain('is-unknown')
+    expect(wrapper.find('.customer-sample-patient-summary').attributes('style')).toContain(
+      'gap: 8px',
+    )
+  })
+
   it('样本池名称已包含数量时不应重复追加数量', async () => {
     listManualSamplePools.mockResolvedValueOnce({
       success: true,
@@ -1378,188 +1422,87 @@ describe('CustomerSampleValidationView', () => {
     expect(getSheet2ExactReviewAcceptancePackage).not.toHaveBeenCalled()
   })
 
-  it('提供显式质控记录入口并可从记录打开结果抽屉', async () => {
+  it('提供显式质控记录入口并跳转到独立历史页', async () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('质控记录')
-
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    expect(historyButton).toBeTruthy()
-    await historyButton?.trigger('click')
+    const historyButton = wrapper.find('.customer-sample-task-history-action')
+    expect(historyButton.exists()).toBe(true)
+    expect(historyButton.text()).toContain('查看质控记录')
+    await historyButton.trigger('click')
     await flushPromises()
 
-    expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledWith({
-      page: 1,
-      page_size: 20,
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'WorkstationV4CustomerSampleValidationTasks',
     })
-    expect(wrapper.text()).toContain('质控任务中心')
-    expect(wrapper.text()).toContain('最近质控记录')
-    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
-    expect(wrapper.text()).toContain('LX0609-001、LX0609-002、LX0609-005')
-    expect(wrapper.text()).toContain('发现需关注结果：不合规 2，数据不足 1')
-    expect(wrapper.text()).toContain('1 份病历 · 3 个客户质控点 · 3 条结果')
-    expect(wrapper.text()).toContain('问题点：LX0609-002 首次病程记录未在入院后8小时内完成')
-    expect(wrapper.text()).toContain('LX0609-018 主诉不能导出第一诊断')
-    expect(wrapper.text()).toContain('LX0609-005 缺少主治医师首次查房记录时间')
-    expect(wrapper.find('.customer-sample-task-history-status-grid').text()).toContain('不合规')
-    expect(wrapper.find('.customer-sample-task-history-status-grid').text()).toContain('数据不足')
-    expect(wrapper.text()).toContain('导出HTML')
-
-    const exportHtmlButton = wrapper
-      .findAll('.customer-sample-task-history-item button')
-      .find((button) => button.text().includes('导出HTML'))
-    expect(exportHtmlButton).toBeTruthy()
-    await exportHtmlButton!.trigger('click')
-    await flushPromises()
-
-    expect(exportSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
-      job_id: 'job-history-1',
-      format: 'html',
-    })
-    expect(message.success).toHaveBeenCalledWith('HTML 质控明细已开始下载')
-
-    const reviewButton = wrapper
-      .findAll('.customer-sample-task-history-item button')
-      .find((button) => button.text().includes('复核'))
-    expect(reviewButton).toBeTruthy()
-    await reviewButton!.trigger('click')
-    await flushPromises()
-
-    expect(reviewSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
-    expect(wrapper.text()).toContain('复核建议：P0 0，P1 1，P2 0')
-
-    const viewResultButton = wrapper
-      .findAll('.customer-sample-task-history-item button')
-      .find((button) => button.text().includes('查看结果'))
-    expect(viewResultButton).toBeTruthy()
-    await viewResultButton!.trigger('click')
-    await flushPromises()
-
-    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
-    expect(latestBatchResultDrawerProps?.open).toBe(true)
+    expect(listSichuanWorkspaceBatchJobs).not.toHaveBeenCalled()
+    expect(wrapper.find('.customer-sample-task-center').exists()).toBe(false)
   })
 
-  it('任务中心应识别压缩列表里的数组型状态分布', async () => {
-    listSichuanWorkspaceBatchJobs.mockResolvedValueOnce({
+  it('主任务状态条应识别压缩任务里的数组型状态分布', async () => {
+    getSichuanWorkspaceBatchJob.mockResolvedValueOnce({
       success: true,
       data: {
-        items: [
-          {
-            id: 'job-compact-aggregation',
-            rule_code: 'LX0609',
-            rule_name: '泸县0609质控点验证',
-            scope: 'running',
-            status: 'completed',
-            rule_set_key: 'luxian_0609_qc_v1',
-            rule_set_name: '泸县0609质控点验证 v1',
-            customer_rule_count: 6,
-            execution_rule_count: 6,
-            record_ids: ['V001'],
-            created_at: '2026-07-05T15:34:38Z',
-            filters: {
-              selected_rule_ids: [
-                'LX0609-007',
-                'LX0609-008',
-                'LX0609-009',
-                'LX0609-016',
-                'LX0609-017',
-                'LX0609-018',
-              ],
-            },
-            summary: {
-              total_records: 1,
-              success_count: 1,
-              failed_count: 0,
-              issue_records: 1,
-              compliant_records: 0,
-              total_tokens: 0,
-              total_processing_time: 0,
-              result_aggregation: {
-                cluster_count: 0,
-                duplicate_hits: 0,
-                clusters: [],
-                status_breakdown: [
-                  { key: 'not_applicable', count: 2 },
-                  { key: 'compliant', count: 1 },
-                  { key: 'uncertain', count: 1 },
-                  { key: 'ai_suggested_non_compliant', count: 1 },
-                  { key: 'data_gap', count: 1 },
-                ],
-              },
-              history_issue_summaries: [
-                {
-                  rule_id: 'LX0609-016',
-                  status: 'data_gap',
-                  text: '首次病程记录缺失或正文为空，无法判断是否存在复制病历内容。',
-                },
-              ],
-            },
-            items: [],
-            rule_results: [],
+        id: 'job-compact-aggregation',
+        rule_code: 'LX0609',
+        rule_name: '泸县0609质控点验证',
+        scope: 'running',
+        status: 'completed',
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_set_name: '泸县0609质控点验证 v1',
+        customer_rule_count: 6,
+        execution_rule_count: 6,
+        record_ids: ['V001'],
+        created_at: '2026-07-05T15:34:38Z',
+        filters: {
+          selected_rule_ids: [
+            'LX0609-007',
+            'LX0609-008',
+            'LX0609-009',
+            'LX0609-016',
+            'LX0609-017',
+            'LX0609-018',
+          ],
+        },
+        summary: {
+          total_records: 1,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 1,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          result_aggregation: {
+            cluster_count: 0,
+            duplicate_hits: 0,
+            clusters: [],
+            status_breakdown: [
+              { key: 'not_applicable', count: 2 },
+              { key: 'compliant', count: 1 },
+              { key: 'uncertain', count: 1 },
+              { key: 'ai_suggested_non_compliant', count: 1 },
+              { key: 'data_gap', count: 1 },
+            ],
           },
-        ],
-        total: 1,
-        page: 1,
-        page_size: 20,
-      },
-    })
-
-    const wrapper = await mountView()
-    await flushPromises()
-
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    await historyButton?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('结果回写：6 / 6 条')
-    expect(wrapper.text()).toContain('数据不足')
-    expect(wrapper.text()).toContain('AI判断')
-    expect(wrapper.text()).toContain('AI建议复核')
-    expect(wrapper.text()).toContain('不适用')
-    expect(wrapper.text()).not.toContain('结果回写：0 / 6 条')
-    const historyItemText = wrapper.find('.customer-sample-task-history-item').text()
-    expect(historyItemText.indexOf('AI建议复核')).toBeLessThan(historyItemText.indexOf('合规'))
-    expect(historyItemText.indexOf('合规')).toBeLessThan(historyItemText.indexOf('不适用'))
-  })
-
-  it('打开质控任务中心加载历史时不应提前显示空态', async () => {
-    let resolveHistory!: (value: unknown) => void
-    listSichuanWorkspaceBatchJobs.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveHistory = resolve
-      }),
-    )
-    const wrapper = await mountView()
-    await flushPromises()
-
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    expect(historyButton).toBeTruthy()
-    await historyButton?.trigger('click')
-    await nextTick()
-
-    expect(wrapper.text()).toContain('正在加载最近质控记录')
-    expect(wrapper.text()).not.toContain('暂无质控记录。发起验证后，最近任务会显示在这里。')
-
-    resolveHistory({
-      success: true,
-      data: {
+        },
         items: [],
-        total: 0,
-        page: 1,
-        page_size: 20,
+        rule_results: [],
       },
     })
-    await flushPromises()
-    await nextTick()
 
-    expect(wrapper.text()).toContain('暂无质控记录。发起验证后，最近任务会显示在这里。')
+    const wrapper = await mountView()
+    await flushPromises()
+
+    const statusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
+    expect(statusBar.exists()).toBe(true)
+    expect(statusBar.text()).toContain('结果回写：6 / 6 条')
+    expect(statusBar.text()).toContain('数据不足')
+    expect(statusBar.text()).toContain('AI判断')
+    expect(statusBar.text()).toContain('AI建议复核')
+    expect(statusBar.text()).toContain('不适用')
+    expect(statusBar.text()).not.toContain('结果回写：0 / 6 条')
+    expect(statusBar.text().indexOf('AI建议复核')).toBeLessThan(statusBar.text().indexOf('合规'))
+    expect(statusBar.text().indexOf('合规')).toBeLessThan(statusBar.text().indexOf('不适用'))
   })
 
   it('导出 HTML 时如果后端返回 Excel 二进制，不应保存成乱码 HTML', async () => {
@@ -1572,111 +1515,91 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    await historyButton?.trigger('click')
+    const exportHtmlButton = wrapper.find('[data-testid="qc-task-export"]')
+    expect(exportHtmlButton.exists()).toBe(true)
+    await exportHtmlButton.trigger('click')
     await flushPromises()
 
-    const exportHtmlButton = wrapper
-      .findAll('.customer-sample-task-history-item button')
-      .find((button) => button.text().includes('导出HTML'))
-    expect(exportHtmlButton).toBeTruthy()
-    await exportHtmlButton!.trigger('click')
-    await flushPromises()
-
+    expect(exportSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
+      job_id: 'job-2',
+      format: 'html',
+    })
     expect(message.error).toHaveBeenCalledWith(
       '后端未返回 HTML 明细文件，请确认客户机后端已更新到支持 HTML 导出的版本。',
     )
     expect(message.success).not.toHaveBeenCalledWith('HTML 质控明细已开始下载')
   })
 
-  it('质控记录存在执行中任务时应自动刷新到终态', async () => {
+  it('根据样本池最近任务恢复主状态条并在无历史面板时自动刷新到终态', async () => {
     vi.useFakeTimers()
-    listSichuanWorkspaceBatchJobs
+    getSichuanWorkspaceBatchJob
       .mockResolvedValueOnce({
         success: true,
         data: {
-          items: [
-            {
-              id: 'job-running-history',
-              rule_code: 'LX0609',
-              rule_name: '泸县0609质控点验证',
-              scope: 'running',
-              status: 'running',
-              rule_set_key: 'luxian_0609_qc_v1',
-              rule_set_name: '泸县0609质控点验证 v1',
-              customer_rule_count: 49,
-              record_ids: ['V001'],
-              created_at: '2026-07-02T13:59:35Z',
-              filters: {
-                selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
-              },
-              summary: {
-                display_status_counts: {
-                  non_compliant: 3,
-                  data_gap: 1,
-                },
-              },
+          id: 'job-1',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'running',
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+          customer_rule_count: 49,
+          record_ids: ['V001'],
+          created_at: '2026-07-02T13:59:35Z',
+          filters: {
+            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+          },
+          summary: {
+            display_status_counts: {
+              non_compliant: 3,
+              data_gap: 1,
             },
-          ],
-          total: 1,
-          page: 1,
-          page_size: 20,
+          },
         },
       })
       .mockResolvedValueOnce({
         success: true,
         data: {
-          items: [
-            {
-              id: 'job-running-history',
-              rule_code: 'LX0609',
-              rule_name: '泸县0609质控点验证',
-              scope: 'running',
-              status: 'completed',
-              rule_set_key: 'luxian_0609_qc_v1',
-              rule_set_name: '泸县0609质控点验证 v1',
-              customer_rule_count: 49,
-              record_ids: ['V001'],
-              created_at: '2026-07-02T13:59:35Z',
-              filters: {
-                selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
-              },
-              summary: {
-                display_status_counts: {
-                  non_compliant: 3,
-                  data_gap: 1,
-                },
-              },
+          id: 'job-1',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控点验证',
+          scope: 'running',
+          status: 'completed',
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+          customer_rule_count: 49,
+          record_ids: ['V001'],
+          created_at: '2026-07-02T13:59:35Z',
+          filters: {
+            selected_rule_ids: ['LX0609-001', 'LX0609-002', 'LX0609-004'],
+          },
+          summary: {
+            display_status_counts: {
+              non_compliant: 3,
+              data_gap: 1,
             },
-          ],
-          total: 1,
-          page: 1,
-          page_size: 20,
+          },
         },
       })
 
     const wrapper = await mountView()
     await flushPromises()
 
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    expect(historyButton).toBeTruthy()
-    await historyButton?.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('执行中')
-    expect(wrapper.text()).toContain('历史质控记录（不含当前任务）')
-    expect(wrapper.text()).toContain('不代表当前正在执行的质控结果')
+    const statusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenNthCalledWith(1, 'job-1')
+    expect(statusBar.exists()).toBe(true)
+    expect(statusBar.text()).toContain('正在执行质控')
+    expect(statusBar.text()).toContain('执行中')
+    expect(wrapper.find('.customer-sample-task-center').exists()).toBe(false)
 
     await vi.advanceTimersByTimeAsync(5000)
     await flushPromises()
 
-    expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).toContain('已完成')
-    expect(wrapper.text()).not.toContain('执行中')
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(2)
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenNthCalledWith(2, 'job-1')
+    expect(statusBar.text()).toContain('最近质控任务')
+    expect(statusBar.text()).toContain('已完成')
+    expect(statusBar.text()).not.toContain('执行中')
   })
 
   it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
@@ -1871,7 +1794,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
-  it('点击同步样本病历后展示同步进度区块', async () => {
+  it('点击同步样本病历后展示紧凑同步状态条', async () => {
     getManualSamplePoolSyncJob
       .mockResolvedValueOnce({
         success: true,
@@ -1918,9 +1841,10 @@ describe('CustomerSampleValidationView', () => {
       only_intrinsic: true,
       include_in_batch_1: true,
     })
-    expect(wrapper.text()).toContain('样本病历同步进度')
     expect(wrapper.text()).toContain('正在同步')
-    expect(wrapper.text()).toContain('已同步 1 / 2 份')
+    expect(wrapper.text()).toContain('病历 1/2')
+    expect(wrapper.text()).toContain('查看详情')
+    expect(wrapper.text()).not.toContain('样本病历同步进度')
   })
 
   it('同步任务轮询时应更新进度并在完成后刷新列表', async () => {
@@ -1934,6 +1858,8 @@ describe('CustomerSampleValidationView', () => {
           status: 'running',
           summary: {
             progress: {
+              phase: 'primary_visibility',
+              primary_visible: false,
               step_label: '正在同步病历文书',
               total_candidates: 3,
               eligible_visits: 2,
@@ -1957,6 +1883,33 @@ describe('CustomerSampleValidationView', () => {
           status: 'running',
           summary: {
             progress: {
+              phase: 'detail_sync',
+              primary_visible: true,
+              step_label: '继续同步病历文书',
+              total_candidates: 3,
+              eligible_visits: 2,
+              record_progress: {
+                total: 2,
+                completed: 2,
+                remaining: 0,
+                missing_mr: 0,
+              },
+              processed_tables: 2,
+              total_tables: 3,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              phase: 'detail_sync',
+              primary_visible: true,
               step_label: '继续同步病历文书',
               total_candidates: 3,
               eligible_visits: 2,
@@ -2008,23 +1961,115 @@ describe('CustomerSampleValidationView', () => {
     await syncButton!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('1/3')
-    expect(wrapper.text()).toContain('已同步 1 / 2 份')
-    expect(wrapper.text()).toContain('正在同步病历文书')
+    expect(wrapper.text()).toContain('表 1/3')
+    expect(wrapper.text()).toContain('病历 1/2')
+    expect(wrapper.text()).toContain('正在同步病历基本信息')
 
     await vi.advanceTimersByTimeAsync(3000)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('2/3')
-    expect(wrapper.text()).toContain('已同步 2 / 2 份')
-    expect(wrapper.text()).toContain('继续同步病历文书')
+    expect(wrapper.text()).toContain('表 2/3')
+    expect(wrapper.text()).toContain('病历 2/2')
+    expect(wrapper.text()).toContain('病历已进入样本池，文书整理中')
+    const primaryVisiblePoolCalls = listManualSamplePools.mock.calls.length
+    const primaryVisibleRecordCalls = getManualSamplePoolRecords.mock.calls.length
+    expect(primaryVisiblePoolCalls).toBeGreaterThan(initialPoolCalls)
+    expect(primaryVisibleRecordCalls).toBeGreaterThan(initialRecordCalls)
 
     await vi.advanceTimersByTimeAsync(3000)
     await flushPromises()
 
     expect(getManualSamplePoolSyncJob).toHaveBeenCalledTimes(3)
+    expect(listManualSamplePools.mock.calls.length).toBe(primaryVisiblePoolCalls)
+    expect(getManualSamplePoolRecords.mock.calls.length).toBe(primaryVisibleRecordCalls)
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(getManualSamplePoolSyncJob).toHaveBeenCalledTimes(4)
     expect(listManualSamplePools.mock.calls.length).toBeGreaterThan(initialPoolCalls)
     expect(getManualSamplePoolRecords.mock.calls.length).toBeGreaterThan(initialRecordCalls)
+  })
+
+  it('主记录可见后刷新一次并在后续失败时保留病例列表', async () => {
+    vi.useFakeTimers()
+    getManualSamplePoolSyncJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-primary-failed',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              phase: 'primary_visibility',
+              primary_visible: false,
+              total_candidates: 1,
+              eligible_visits: 1,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-primary-failed',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              phase: 'primary_visible',
+              primary_visible: true,
+              total_candidates: 1,
+              eligible_visits: 1,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-primary-failed',
+          pool_id: 'pool-1',
+          status: 'failed',
+          error_message:
+            'relation "mr" does not exist; SQLSTATE 42P01; PG source 192.168.140.160:16016',
+          summary: {
+            progress: {
+              phase: 'detail_sync',
+              primary_visible: true,
+              total_candidates: 1,
+              eligible_visits: 1,
+            },
+          },
+        },
+      })
+
+    const wrapper = await mountView()
+    const recordCountBeforeSync = wrapper.findAll('input.record-checkbox').length
+    const syncButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('同步样本病历'))
+    expect(syncButton).toBeTruthy()
+    await syncButton!.trigger('click')
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    const recordCallsAfterPrimaryVisible = getManualSamplePoolRecords.mock.calls.length
+    expect(wrapper.text()).toContain('病历已进入样本池，文书整理中')
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(getManualSamplePoolRecords.mock.calls.length).toBe(recordCallsAfterPrimaryVisible)
+    expect(wrapper.findAll('input.record-checkbox')).toHaveLength(recordCountBeforeSync)
+    expect(wrapper.text()).toContain('医院数据源缺少本次同步所需的病历资料')
+    expect(wrapper.text()).not.toContain('192.168.140.160')
+    expect(wrapper.text()).not.toContain('16016')
+    expect(wrapper.text()).not.toContain('relation "mr"')
+    expect(wrapper.text()).not.toContain('SQLSTATE')
+    expect(wrapper.text()).not.toContain('PG source')
   })
 
   it('最近同步任务完成但未匹配源库病历时保留诊断提示', async () => {
@@ -2066,11 +2111,58 @@ describe('CustomerSampleValidationView', () => {
     const wrapper = await mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('样本病历同步进度')
-    expect(wrapper.text()).toContain('源库未匹配到可同步病历')
-    expect(wrapper.text()).toContain('0 份匹配')
-    expect(wrapper.text()).toContain('待确认 1 份，未找到 2 份')
-    expect(wrapper.text()).toContain('已同步 0 / 0 份')
+    expect(wrapper.text()).toContain('未匹配到可同步病历')
+    const detailButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('查看详情'))
+    expect(detailButton).toBeTruthy()
+    await detailButton!.trigger('click')
+    await flushPromises()
+
+    const drawerText = wrapper.find('.a-drawer-stub').text()
+    expect(drawerText).toContain('未匹配到可同步病历')
+    expect(drawerText).toContain('0 份')
+    expect(drawerText).toContain('待确认 1 份，未找到 2 份')
+    expect(drawerText).toContain('0/0')
+  })
+
+  it('同步连接失败时不向客户展示源库地址和端口', async () => {
+    getLatestManualSamplePoolSyncJob.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'sync-job-failed',
+        pool_id: 'pool-1',
+        status: 'failed',
+        error_message:
+          'connection to server at "192.168.140.160", port 16016 failed: timeout expired',
+        summary: {
+          progress: {
+            processed_tables: 0,
+            total_tables: 50,
+          },
+        },
+      },
+    })
+
+    const wrapper = await mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('暂时无法连接医院数据源')
+    expect(wrapper.text()).toContain('重试')
+    expect(wrapper.text()).not.toContain('192.168.140.160')
+    expect(wrapper.text()).not.toContain('16016')
+
+    const detailButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('查看详情'))
+    expect(detailButton).toBeTruthy()
+    await detailButton!.trigger('click')
+    await flushPromises()
+
+    const drawerText = wrapper.find('.a-drawer-stub').text()
+    expect(drawerText).toContain('暂时无法连接医院数据源')
+    expect(drawerText).not.toContain('192.168.140.160')
+    expect(drawerText).not.toContain('16016')
   })
 
   it('支持下载以就诊ID为主的客户样本导入模板', async () => {
@@ -2293,9 +2385,8 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(message.warning).toHaveBeenCalledWith(
-      '匹配 0 份，待人工确认 0 份，未找到 2 份。没有匹配到病历，请检查 ID 类型或源库配置。',
+      '匹配 0 份，待人工确认 0 份，未找到 2 份。未匹配到病历，请检查 ID 类型或医院数据源配置。',
     )
-    expect(wrapper.text()).toContain('没有匹配到病历，请检查 ID 类型或源库配置')
     const syncButton = wrapper
       .findAll('button')
       .find((node) => node.text().includes('开始同步匹配到的病历'))
@@ -2366,7 +2457,7 @@ describe('CustomerSampleValidationView', () => {
   })
 
   it('单病历查看结果只把当前病历坐标交给对照页，不在父页面回退到样本池任务', async () => {
-    listSichuanWorkspaceBatchJobs.mockResolvedValueOnce({
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
       success: true,
       data: {
         items: [],
@@ -2393,6 +2484,8 @@ describe('CustomerSampleValidationView', () => {
       },
     })
     const wrapper = await mountView()
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('pool-latest-other-record')
+    getSichuanWorkspaceBatchJob.mockClear()
 
     const resultLink = wrapper
       .findAll('.customer-sample-secondary-link')
@@ -2411,7 +2504,7 @@ describe('CustomerSampleValidationView', () => {
   })
 
   it('打开泸县0609任务详情时保留 scoped run 计数和映射字段', async () => {
-    getSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: {
         id: 'job-0609',
@@ -2444,21 +2537,13 @@ describe('CustomerSampleValidationView', () => {
     })
     const wrapper = await mountView()
 
-    const historyButton = wrapper
-      .findAll('button')
-      .find((button) => button.text().includes('质控记录'))
-    expect(historyButton).toBeTruthy()
-    await historyButton!.trigger('click')
-    await flushPromises()
-
-    const resultLink = wrapper
-      .findAll('.customer-sample-task-history-item button')
-      .find((node) => node.text().includes('查看结果'))
-    expect(resultLink).toBeTruthy()
-    await resultLink!.trigger('click')
+    const resultLink = wrapper.find('[data-testid="qc-task-view-result"]')
+    expect(resultLink.exists()).toBe(true)
+    await resultLink.trigger('click')
     await flushPromises()
     await nextTick()
 
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenLastCalledWith('job-0609')
     const detail = latestBatchResultDrawerProps?.batchJobDetail as {
       customer_rule_count?: number
       execution_rule_count?: number
@@ -3240,12 +3325,14 @@ describe('CustomerSampleValidationView', () => {
     expect(submittedPayload.max_parallel_records).toBe(2)
     expect(submittedPayload.group_by_luxian_family).toBe(true)
     expect((submittedPayload.selected_rule_ids || []).sort()).toEqual(allRuleIds)
-    expect(wrapper.text()).toContain('质控任务中心')
-    expect(wrapper.text()).toContain('最近质控记录')
-    expect(wrapper.text()).toContain('基础时限')
-    expect(wrapper.text()).toContain('肿瘤病理')
-    expect(wrapper.text()).toContain('最新任务')
-    expect(wrapper.text()).toContain('查看结果')
+    expect(message.success).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '已创建泸县0609总任务，7 个质控族已并发入队' }),
+    )
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('parent-job-1')
+    const statusBar = wrapper.find('[data-testid="customer-sample-qc-task-status"]')
+    expect(statusBar.exists()).toBe(true)
+    expect(statusBar.text()).toContain('最近质控任务')
+    expect(statusBar.find('[data-testid="qc-task-view-result"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain('child-basic')
     expect(wrapper.text()).not.toContain('child-tumor')
   })
@@ -3690,7 +3777,7 @@ describe('CustomerSampleValidationView', () => {
     )
     expect(message.info).toHaveBeenCalledWith('请求等待较久，正在确认后台任务状态')
     expect(message.success).toHaveBeenCalledWith(
-      expect.objectContaining({ content: '任务已创建，正在打开任务中心' }),
+      expect.objectContaining({ content: '任务已创建，正在执行质控' }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-timeout')
     expect(message.error).not.toHaveBeenCalledWith('创建客户样本验证任务失败')

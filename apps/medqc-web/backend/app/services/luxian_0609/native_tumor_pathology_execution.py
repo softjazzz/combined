@@ -151,6 +151,7 @@ class NativeTumorPathologyExecutionResult:
     results: tuple[dict[str, Any], ...]
     planned_rule_ids: tuple[str, ...]
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -578,6 +579,40 @@ def _result(
     return item
 
 
+def _lx019_missing_sampling_display_facts(
+    *,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    surgery_record: SourceMaterial,
+    daily_course_record: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    """019 只投影已核对的来源状态，不携带病理或病程原文。"""
+
+    pathology_sources = [
+        source_key
+        for source_key, material in (
+            ("pathology_exam_master", pathology_master),
+            ("pathology_exam_report", pathology_report),
+        )
+        if material.state == "present"
+    ]
+    target_sources = [
+        {"source": source_key, "state": material.state}
+        for source_key, material in (
+            ("surgery_record", surgery_record),
+            ("daily_course_record", daily_course_record),
+        )
+        if material.state in {"present", "empty"}
+    ]
+    if not pathology_sources or len(target_sources) != 2:
+        return None
+    return {
+        "failure_kind": "pathology_sampling_not_documented",
+        "pathology_trigger_sources": pathology_sources,
+        "checked_target_sources": target_sources,
+    }
+
+
 async def execute_luxian_0609_native_tumor_pathology_rules(
     *,
     rule_ids: Sequence[str],
@@ -654,6 +689,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
     }
     results: list[dict[str, Any]] = []
     decisions: list[RuleDecision] = []
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
 
     def emit_outcome(
         rule_id: str,
@@ -661,6 +697,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         reason_code: str,
         *,
         executor_type: str,
+        display_facts: Mapping[str, Any] | None = None,
     ) -> None:
         outcome = _TumorRuleOutcome(
             rule_id=rule_id,
@@ -676,6 +713,8 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     snapshot=evidence_snapshot,
                 )
             )
+            if display_facts is not None:
+                customer_display_facts.append((rule_id, display_facts))
         else:
             results.append(
                 _result(
@@ -856,6 +895,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 "non_compliant",
                 "pathology_sampling_not_documented",
                 executor_type="program",
+                display_facts=_lx019_missing_sampling_display_facts(
+                    pathology_master=master,
+                    pathology_report=report,
+                    surgery_record=materials["surgery_record"],
+                    daily_course_record=materials["daily_course_record"],
+                ),
             )
             continue
         if rule_id == "LX0609-019":
@@ -964,6 +1009,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         results=tuple(results),
         planned_rule_ids=selected,
         decisions=tuple(decisions),
+        customer_display_facts=tuple(customer_display_facts),
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

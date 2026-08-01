@@ -1,11 +1,18 @@
 <template>
-  <section class="record-compare-shell" :data-mobile-tab="mobileTab">
+  <section
+    class="record-compare-shell"
+    :data-mobile-tab="mobileTab"
+  >
     <header class="record-compare-head">
       <div>
         <strong>病历原文对照</strong>
         <span>点击质控结果，核对对应文书与证据片段</span>
       </div>
-      <div class="record-compare-mobile-tabs" role="tablist" aria-label="病历与结果切换">
+      <div
+        class="record-compare-mobile-tabs"
+        role="tablist"
+        aria-label="病历与结果切换"
+      >
         <button
           type="button"
           :class="{ 'is-active': mobileTab === 'record' }"
@@ -49,15 +56,28 @@
               <b>{{ formatDocumentTime(resolveDocumentTime(selectedDocument)) }}</b>
             </time>
           </div>
-          <label v-if="documents.length" class="record-document-select">
+          <label
+            v-if="documents.length"
+            class="record-document-select"
+          >
             <span>选择文书</span>
-            <select :value="selectedDocumentKey" @change="handleDocumentSelect">
-              <option v-for="document in documents" :key="document.key" :value="document.key">
+            <select
+              :value="selectedDocumentKey"
+              @change="handleDocumentSelect"
+            >
+              <option
+                v-for="document in documents"
+                :key="document.key"
+                :value="document.key"
+              >
                 {{ resolveDocumentDisplayTitle(document) }}
               </option>
             </select>
           </label>
-          <span class="record-location-chip" :class="`is-${locationState}`">
+          <span
+            class="record-location-chip"
+            :class="`is-${locationState}`"
+          >
             {{ locationMessage }}
           </span>
         </div>
@@ -74,7 +94,10 @@
             :selected-key="selectedDocumentKey"
             @select="selectDocument"
           />
-          <div v-else-if="documentSectionViews.length" class="record-content-sections">
+          <div
+            v-else-if="documentSectionViews.length"
+            class="record-content-sections"
+          >
             <section
               v-for="section in documentSectionViews"
               :key="section.key"
@@ -86,20 +109,21 @@
                 {{ section.label }}
               </h3>
               <p class="record-content-section-text">
-                <span>{{ section.parts.before }}</span
-                ><mark
+                <span>{{ section.parts.before }}</span><mark
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
                   tabindex="0"
                   @click="emitSelectedIssue"
                   @keydown.enter="emitSelectedIssue"
-                  >{{ section.parts.match }}</mark
-                ><span>{{ section.parts.after }}</span>
+                >{{ section.parts.match }}</mark><span>{{ section.parts.after }}</span>
               </p>
             </section>
           </div>
-          <pre v-else class="record-content-text"><span>{{ documentTextParts.before }}</span><mark
+          <pre
+            v-else
+            class="record-content-text"
+          ><span>{{ documentTextParts.before }}</span><mark
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
@@ -108,13 +132,19 @@
                 @keydown.enter="emitSelectedIssue"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
-        <div v-else class="record-content-empty">
+        <div
+          v-else
+          class="record-content-empty"
+        >
           <strong>暂无可对照的病历原文</strong>
           <span>质控结果仍可查看，但当前无法定位到来源文书。</span>
         </div>
       </main>
 
-      <aside class="record-result-column" aria-label="质控结果">
+      <aside
+        class="record-result-column"
+        aria-label="质控结果"
+      >
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
@@ -129,10 +159,16 @@
             </div>
             <span class="record-result-count">{{ sortedIssues.length }} 条</span>
           </div>
-          <div v-if="!sortedIssues.length" class="record-compare-state">
+          <div
+            v-if="!sortedIssues.length"
+            class="record-compare-state"
+          >
             当前没有可展示的质控结果
           </div>
-          <div v-else class="record-result-list">
+          <div
+            v-else
+            class="record-result-list"
+          >
             <article
               v-for="issue in sortedIssues"
               :key="issue.key"
@@ -158,7 +194,10 @@
                     </span>
                     <span class="record-result-code">{{ issue.rule_code }}</span>
                   </span>
-                  <span class="record-result-toggle" aria-hidden="true">
+                  <span
+                    class="record-result-toggle"
+                    aria-hidden="true"
+                  >
                     <ChevronDown
                       :size="15"
                       :class="{ 'is-open': issue.key === expandedIssueKey }"
@@ -166,15 +205,27 @@
                   </span>
                 </span>
                 <strong :title="issue.rule_name">{{ issue.rule_name }}</strong>
-                <small v-if="resolveIssueSummary(issue)" class="record-result-summary-line">
+                <small
+                  v-if="resolveIssueSummary(issue)"
+                  class="record-result-summary-line"
+                >
                   {{ resolveIssueSummary(issue) }}
                 </small>
               </button>
 
-              <div v-if="issue.key === expandedIssueKey" class="record-result-detail">
-                <section v-if="issue.detail" class="record-result-analysis">
+              <div
+                v-if="issue.key === expandedIssueKey"
+                class="record-result-detail"
+              >
+                <section
+                  v-if="issue.detail"
+                  class="record-result-analysis"
+                >
                   <div class="record-result-section-heading">
-                    <ClipboardCheck :size="15" aria-hidden="true" />
+                    <ClipboardCheck
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>完整判定说明</span>
                   </div>
                   <div class="record-result-narrative">
@@ -194,22 +245,34 @@
                 >
                   <section v-if="issue.actual_value">
                     <div class="record-result-section-heading">
-                      <Scale :size="15" aria-hidden="true" />
+                      <Scale
+                        :size="15"
+                        aria-hidden="true"
+                      />
                       <span>实际情况</span>
                     </div>
                     <p>{{ issue.actual_value }}</p>
                   </section>
                   <section v-if="issue.requirement">
                     <div class="record-result-section-heading">
-                      <Target :size="15" aria-hidden="true" />
+                      <Target
+                        :size="15"
+                        aria-hidden="true"
+                      />
                       <span>核对标准</span>
                     </div>
                     <p>{{ issue.requirement }}</p>
                   </section>
                 </div>
-                <section v-if="issue.evidences.length" class="record-result-evidence">
+                <section
+                  v-if="issue.evidences.length"
+                  class="record-result-evidence"
+                >
                   <div class="record-result-section-heading">
-                    <FileSearch :size="15" aria-hidden="true" />
+                    <FileSearch
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>关键证据</span>
                   </div>
                   <button
@@ -225,7 +288,10 @@
                     <time v-if="evidence.record_time">
                       记录时间 {{ formatDocumentTime(evidence.record_time) }}
                     </time>
-                    <small v-if="resolveEvidenceExcerpt(evidence)" class="record-evidence-excerpt">
+                    <small
+                      v-if="resolveEvidenceExcerpt(evidence)"
+                      class="record-evidence-excerpt"
+                    >
                       <span>{{ resolveEvidenceExcerpt(evidence)?.label }}</span>
                       {{ resolveEvidenceExcerpt(evidence)?.text }}
                     </small>
@@ -234,7 +300,10 @@
                 </section>
                 <section class="record-result-guidance">
                   <div class="record-result-section-heading">
-                    <Lightbulb :size="15" aria-hidden="true" />
+                    <Lightbulb
+                      :size="15"
+                      aria-hidden="true"
+                    />
                     <span>处理建议</span>
                   </div>
                   <p>{{ issue.suggestion || '请结合病历原文确认。' }}</p>

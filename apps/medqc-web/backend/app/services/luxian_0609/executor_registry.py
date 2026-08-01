@@ -13,7 +13,10 @@ import re
 from typing import Any, Awaitable, Callable, Iterable, Protocol, TYPE_CHECKING
 
 from .evidence_material import Luxian0609EvidenceMaterialStore
-from .execution_contract import FamilyExecutionEnvelope
+from .execution_contract import (
+    FamilyExecutionEnvelope,
+    build_family_usage_attribution,
+)
 
 if TYPE_CHECKING:
     from .engine import FamilyExecutionContext
@@ -107,6 +110,7 @@ LEGACY_NATIVE_EXECUTION_ORDER = (
     "surgery_gate",
     "surgery_document",
     "surgery_mdt",
+    "extended_document",
 )
 
 # 第一批可由现有 bounded snapshot 投影完整承载的请求内材料来源。
@@ -137,6 +141,25 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
     "transfusion": (
         "mr_bloodtrans",
         "bloodtrans_record",
+    ),
+    "extended_document": (
+        "inpat_registration",
+        "death_record",
+        "death_discussion",
+        "discharge_record",
+        "daily_course_record",
+        "senior_course_record",
+        "postsurg_firstcourse_record",
+        "mr_surgery",
+        "surgery_record",
+        "consultation_record",
+        "handoff_record",
+        "handover_record",
+        "physician_change_event",
+        "transfer_in_record",
+        "transfer_out_record",
+        "inpat_nondrug_order",
+        "diagnosis",
     ),
 }
 
@@ -235,6 +258,7 @@ class LegacyNativeExecutorFunctions:
     surgery_gate: Callable[..., Any]
     surgery_document: Callable[..., Any]
     surgery_mdt: Callable[..., Any]
+    extended_document: Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -255,6 +279,7 @@ async def _resolve_call(value: Any) -> Any:
 def _to_envelope(
     raw: Any,
     *,
+    executor_key: str,
     selected_rule_ids: tuple[str, ...],
     single_result: bool = False,
 ) -> FamilyExecutionEnvelope:
@@ -268,15 +293,35 @@ def _to_envelope(
         if single_result
         else tuple(getattr(raw, "planned_rule_ids"))
     )
+    llm_call_count = getattr(raw, "llm_call_count", 0)
+    prompt_tokens = getattr(raw, "prompt_tokens", 0)
+    completion_tokens = getattr(raw, "completion_tokens", 0)
+    total_tokens = getattr(raw, "total_tokens", 0)
+    api_time = getattr(raw, "api_time", 0.0)
+    llm_call_count = 0 if llm_call_count is None else llm_call_count
+    prompt_tokens = 0 if prompt_tokens is None else prompt_tokens
+    completion_tokens = 0 if completion_tokens is None else completion_tokens
+    total_tokens = 0 if total_tokens is None else total_tokens
+    api_time = 0.0 if api_time is None else api_time
     return FamilyExecutionEnvelope(
         results=results,
         planned_rule_ids=planned_rule_ids,
         decisions=getattr(raw, "decisions", ()),
-        llm_call_count=int(getattr(raw, "llm_call_count", 0) or 0),
-        prompt_tokens=int(getattr(raw, "prompt_tokens", 0) or 0),
-        completion_tokens=int(getattr(raw, "completion_tokens", 0) or 0),
-        total_tokens=int(getattr(raw, "total_tokens", 0) or 0),
-        api_time=float(getattr(raw, "api_time", 0.0) or 0.0),
+        customer_display_facts=getattr(raw, "customer_display_facts", ()),
+        llm_call_count=llm_call_count,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        api_time=api_time,
+        usage_attribution=build_family_usage_attribution(
+            executor_key=executor_key,
+            covered_customer_rule_ids=planned_rule_ids,
+            llm_call_count=llm_call_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            api_time=api_time,
+        ),
     )
 
 
@@ -306,7 +351,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="surgery_presence",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def basic_timeliness(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -326,7 +375,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="basic_timeliness",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def exam_lab(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -344,7 +397,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="exam_lab",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def consultation(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -364,7 +421,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="consultation_quality",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def transfusion(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -386,7 +447,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="transfusion",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def tumor_pathology(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -408,7 +473,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="tumor_pathology",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def course_quality(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -430,7 +499,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="course_quality",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def surgery_gate(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -452,7 +525,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="surgery_gate",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def surgery_document(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -470,7 +547,11 @@ def build_luxian_0609_legacy_executor_registry(
                 ),
             )
         )
-        return _to_envelope(raw, selected_rule_ids=context.selected_rule_ids)
+        return _to_envelope(
+            raw,
+            executor_key="surgery_document",
+            selected_rule_ids=context.selected_rule_ids,
+        )
 
     async def surgery_mdt(context: FamilyExecutionContext) -> FamilyExecutionEnvelope:
         raw = await _resolve_call(
@@ -491,8 +572,30 @@ def build_luxian_0609_legacy_executor_registry(
         )
         return _to_envelope(
             raw,
+            executor_key="surgery_mdt",
             selected_rule_ids=context.selected_rule_ids,
             single_result=True,
+        )
+
+    async def extended_document(
+        context: FamilyExecutionContext,
+    ) -> FamilyExecutionEnvelope:
+        raw = await _resolve_call(
+            functions.extended_document(
+                rule_ids=context.selected_rule_ids,
+                evidence_snapshot=resources.evidence_snapshot,
+                evidence_materials=resources.evidence_materials,
+                decision_rule_ids=tuple(
+                    rule_id
+                    for rule_id in context.selected_rule_ids
+                    if rule_id in resources.decision_rule_ids
+                ),
+            )
+        )
+        return _to_envelope(
+            raw,
+            executor_key="extended_document",
+            selected_rule_ids=context.selected_rule_ids,
         )
 
     callbacks = {
@@ -506,6 +609,7 @@ def build_luxian_0609_legacy_executor_registry(
         "surgery_gate": surgery_gate,
         "surgery_document": surgery_document,
         "surgery_mdt": surgery_mdt,
+        "extended_document": extended_document,
     }
     from .rule_contracts import load_luxian_0609_rule_contracts
 

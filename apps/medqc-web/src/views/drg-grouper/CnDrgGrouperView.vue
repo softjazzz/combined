@@ -29,11 +29,19 @@
             </label>
             <label class="field-card">
               <span>年龄（岁）</span>
-              <input v-model.number="formData.age" type="number" placeholder="岁" />
+              <input
+                v-model.number="formData.age"
+                type="number"
+                placeholder="岁"
+              >
             </label>
             <label class="field-card">
               <span>住院天数（天）</span>
-              <input v-model.number="formData.days" type="number" placeholder="天" />
+              <input
+                v-model.number="formData.days"
+                type="number"
+                placeholder="天"
+              >
             </label>
             <label class="field-card">
               <span>离院方式</span>
@@ -61,7 +69,7 @@
                 type="text"
                 placeholder="输入 ICD-10 编码"
                 @keyup.enter="addDiagnosis"
-              />
+              >
               <span />
             </div>
           </div>
@@ -73,19 +81,31 @@
             <span class="optional-chip">选填</span>
           </div>
           <div class="code-list">
-            <div v-for="(_, index) in otherDiagnosisIndexes" :key="`zd-${index}`" class="code-row">
+            <div
+              v-for="(_, index) in otherDiagnosisIndexes"
+              :key="`zd-${index}`"
+              class="code-row"
+            >
               <span class="code-label">其他 {{ index }}</span>
               <input
                 v-model="formData.zdList[index]"
                 type="text"
                 placeholder="输入 ICD-10 编码"
                 @keyup.enter="addDiagnosis"
-              />
-              <button type="button" class="icon-button" @click="formData.zdList.splice(index, 1)">
+              >
+              <button
+                type="button"
+                class="icon-button"
+                @click="formData.zdList.splice(index, 1)"
+              >
                 <DeleteOutlined />
               </button>
             </div>
-            <button type="button" class="add-button" @click="addDiagnosis">
+            <button
+              type="button"
+              class="add-button"
+              @click="addDiagnosis"
+            >
               <PlusOutlined /> 添加诊断
             </button>
           </div>
@@ -97,14 +117,18 @@
             <span class="optional-chip">选填</span>
           </div>
           <div class="code-list">
-            <div v-for="(_, index) in formData.ssList" :key="`ss-${index}`" class="code-row">
+            <div
+              v-for="(_, index) in formData.ssList"
+              :key="`ss-${index}`"
+              class="code-row"
+            >
               <span class="code-label">{{ index === 0 ? '主手术' : `其他 ${index}` }}</span>
               <input
                 v-model="formData.ssList[index]"
                 type="text"
                 placeholder="输入手术操作编码"
                 @keyup.enter="addProcedure"
-              />
+              >
               <button
                 v-if="formData.ssList.length > 1 || formData.ssList[0]"
                 type="button"
@@ -115,7 +139,11 @@
               </button>
               <span v-else />
             </div>
-            <button type="button" class="add-button" @click="addProcedure">
+            <button
+              type="button"
+              class="add-button"
+              @click="addProcedure"
+            >
               <PlusOutlined /> 添加手术
             </button>
           </div>
@@ -129,29 +157,64 @@
           <div class="field-grid">
             <label class="field-card">
               <span>总费用</span>
-              <input v-model.number="formData.totalFee" type="number" placeholder="0.00" />
+              <input
+                v-model.number="formData.totalFee"
+                type="number"
+                placeholder="0.00"
+              >
             </label>
             <label class="field-card">
               <span>药品费用</span>
-              <input v-model.number="formData.drugFee" type="number" placeholder="0.00" />
+              <input
+                v-model.number="formData.drugFee"
+                type="number"
+                placeholder="0.00"
+              >
             </label>
             <label class="field-card">
               <span>材料费用</span>
-              <input v-model.number="formData.materialFee" type="number" placeholder="0.00" />
+              <input
+                v-model.number="formData.materialFee"
+                type="number"
+                placeholder="0.00"
+              >
             </label>
             <label class="field-card">
               <span>其他费用</span>
-              <input v-model.number="formData.otherFee" type="number" placeholder="0.00" />
+              <input
+                v-model.number="formData.otherFee"
+                type="number"
+                placeholder="0.00"
+              >
             </label>
           </div>
-          <p class="field-help">费用信息用于页面费用摘要，不参与本地 CN-DRG 分组判定。</p>
+          <p class="field-help">
+            费用信息用于页面费用摘要，不参与本地 CN-DRG 分组判定。
+          </p>
         </div>
       </div>
 
       <footer class="action-bar">
-        <button class="secondary-button" type="button" @click="fillTestCase">填入样例</button>
-        <button class="secondary-button" type="button" @click="resetForm">重置</button>
-        <button class="primary-button" type="button" :disabled="grouping" @click="doGrouping">
+        <button
+          class="secondary-button"
+          type="button"
+          @click="fillTestCase"
+        >
+          填入样例
+        </button>
+        <button
+          class="secondary-button"
+          type="button"
+          @click="resetForm"
+        >
+          重置
+        </button>
+        <button
+          class="primary-button"
+          type="button"
+          :disabled="grouping"
+          @click="doGrouping"
+        >
           <LoadingOutlined v-if="grouping" />
           <ThunderboltOutlined v-else />
           {{ grouping ? '分组中...' : '执行分组' }}
@@ -172,19 +235,28 @@
       </header>
 
       <div class="result-body">
-        <div v-if="!result && !grouping" class="empty-state">
+        <div
+          v-if="!result && !grouping"
+          class="empty-state"
+        >
           <FileSearchOutlined />
           <h3>等待分组</h3>
           <p>填写条件后点击执行分组，结果不会写入正式首页或结算清单。</p>
         </div>
 
-        <div v-else-if="grouping" class="empty-state">
+        <div
+          v-else-if="grouping"
+          class="empty-state"
+        >
           <LoadingOutlined class="spin-icon" />
           <h3>正在执行分组</h3>
           <p>系统正在执行 CN-DRG 绩效监测分组。</p>
         </div>
 
-        <div v-else-if="result" class="result-summary">
+        <div
+          v-else-if="result"
+          class="result-summary"
+        >
           <div class="result-block">
             <div class="result-block-header">
               <span :class="['result-icon', result.status === '分组成功' ? 'success' : 'danger']">
@@ -226,8 +298,14 @@
               </div>
             </template>
 
-            <div v-else class="message-list">
-              <p v-for="(msg, idx) in result.messages" :key="idx">
+            <div
+              v-else
+              class="message-list"
+            >
+              <p
+                v-for="(msg, idx) in result.messages"
+                :key="idx"
+              >
                 {{ msg }}
               </p>
             </div>
@@ -240,10 +318,8 @@
             </div>
             <div class="result-row">
               <span>ADRG</span>
-              <strong
-                >{{ result.adrg || '--' }}
-                {{ result.adrgName ? ` / ${result.adrgName}` : '' }}</strong
-              >
+              <strong>{{ result.adrg || '--' }}
+                {{ result.adrgName ? ` / ${result.adrgName}` : '' }}</strong>
             </div>
             <div class="result-row">
               <span>权重来源</span>
@@ -257,8 +333,14 @@
             </div>
           </div>
 
-          <div v-if="result.qcMessages.length > 0" class="message-list">
-            <p v-for="(msg, idx) in result.qcMessages" :key="idx">
+          <div
+            v-if="result.qcMessages.length > 0"
+            class="message-list"
+          >
+            <p
+              v-for="(msg, idx) in result.qcMessages"
+              :key="idx"
+            >
               {{ msg }}
             </p>
           </div>
@@ -279,15 +361,26 @@
 
       <div class="path-body">
         <div class="path-grid">
-          <div v-for="step in pathSteps" :key="step.title" class="path-step">
+          <div
+            v-for="step in pathSteps"
+            :key="step.title"
+            class="path-step"
+          >
             <span class="step-badge">{{ step.index }}</span>
             <h4>{{ step.title }}</h4>
             <p>{{ step.description }}</p>
             <span class="step-status">{{ step.status }}</span>
           </div>
         </div>
-        <div v-if="result?.messages.length" class="timeline">
-          <div v-for="(msg, idx) in result.messages" :key="idx" class="timeline-item">
+        <div
+          v-if="result?.messages.length"
+          class="timeline"
+        >
+          <div
+            v-for="(msg, idx) in result.messages"
+            :key="idx"
+            class="timeline-item"
+          >
             <span class="timeline-dot">{{ idx + 1 }}</span>
             <span>{{ msg }}</span>
           </div>
@@ -317,7 +410,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in mappingRows" :key="`${row.item}-${row.code}`">
+            <tr
+              v-for="row in mappingRows"
+              :key="`${row.item}-${row.code}`"
+            >
               <td>{{ row.item }}</td>
               <td class="mono">
                 {{ row.code }}
@@ -327,7 +423,9 @@
             </tr>
           </tbody>
         </table>
-        <p class="mapping-footnote">查看全部映射记录</p>
+        <p class="mapping-footnote">
+          查看全部映射记录
+        </p>
       </div>
     </section>
   </div>

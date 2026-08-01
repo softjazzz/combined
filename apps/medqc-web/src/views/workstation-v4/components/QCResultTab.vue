@@ -1,6 +1,9 @@
 <template>
   <div class="qc-result-tab">
-    <div v-if="!props.activeTab" class="qc-result-tab__tabs">
+    <div
+      v-if="!props.activeTab"
+      class="qc-result-tab__tabs"
+    >
       <button
         v-for="tab in qcTabs"
         :key="tab.key"
@@ -8,9 +11,15 @@
         :class="['qc-result-tab__tab', { 'qc-result-tab__tab--active': currentTab === tab.key }]"
         @click="internalTab = tab.key"
       >
-        <component :is="tab.icon" class="qc-result-tab__tab-icon" />
+        <component
+          :is="tab.icon"
+          class="qc-result-tab__tab-icon"
+        />
         <span>{{ tab.label }}</span>
-        <span v-if="getTabCount(tab.key) > 0" class="qc-result-tab__tab-badge">{{
+        <span
+          v-if="getTabCount(tab.key) > 0"
+          class="qc-result-tab__tab-badge"
+        >{{
           getTabCount(tab.key)
         }}</span>
       </button>
@@ -19,7 +28,9 @@
     <div class="qc-result-tab__body custom-scrollbar">
       <div class="qc-overview">
         <div>
-          <div class="qc-overview__eyebrow">当前质控</div>
+          <div class="qc-overview__eyebrow">
+            当前质控
+          </div>
           <div class="qc-overview__title">
             {{ currentTabConfig.label }}
           </div>
@@ -27,7 +38,10 @@
             {{ currentTabConfig.desc }}
           </div>
         </div>
-        <div v-if="!isTabEmpty || totalIssueCount > 0" class="qc-overview__status">
+        <div
+          v-if="!isTabEmpty || totalIssueCount > 0"
+          class="qc-overview__status"
+        >
           <span class="qc-overview__status-label">{{
             currentIssues.length > 0 ? '当前问题' : '当前状态'
           }}</span>
@@ -37,7 +51,10 @@
         </div>
       </div>
 
-      <div v-if="currentTab === 'coding' && !isTabEmpty" class="qc-coding-summary">
+      <div
+        v-if="currentTab === 'coding' && !isTabEmpty"
+        class="qc-coding-summary"
+      >
         <div class="qc-coding-summary__item">
           <span>基础编码校验</span>
           <strong>{{ codingBaseIssueCount }}</strong>
@@ -53,9 +70,15 @@
       </div>
 
       <template v-if="isTabEmpty">
-        <div v-if="!isTabLoading" class="qc-start">
+        <div
+          v-if="!isTabLoading"
+          class="qc-start"
+        >
           <div class="qc-start__icon-wrap">
-            <component :is="currentTabConfig.icon" class="qc-start__icon" />
+            <component
+              :is="currentTabConfig.icon"
+              class="qc-start__icon"
+            />
           </div>
           <div class="qc-start__title">
             {{ currentTabConfig.label }}
@@ -63,16 +86,29 @@
           <div class="qc-start__desc">
             {{ currentTabConfig.desc }}
           </div>
-          <a-button type="primary" size="small" class="qc-start__btn" @click="startCurrentTab">
+          <a-button
+            type="primary"
+            size="small"
+            class="qc-start__btn"
+            @click="startCurrentTab"
+          >
             <template #icon>
               <ThunderboltOutlined />
             </template>
             开始分析
           </a-button>
         </div>
-        <div v-else class="qc-start">
+        <div
+          v-else
+          class="qc-start"
+        >
           <a-spin />
-          <div class="qc-start__title" style="margin-top: 16px">正在分析...</div>
+          <div
+            class="qc-start__title"
+            style="margin-top: 16px"
+          >
+            正在分析...
+          </div>
           <div class="qc-start__desc">
             {{ currentTabConfig.loadingHint }}
           </div>
@@ -81,9 +117,16 @@
 
       <template v-else-if="currentIssues.length > 0">
         <div class="qc-issue-list custom-scrollbar">
-          <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
+          <section
+            v-for="(group, gIdx) in groupedIssues"
+            :key="gIdx"
+            class="qc-group"
+          >
             <header class="qc-group__header">
-              <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }" />
+              <span
+                class="qc-group__dot"
+                :style="{ background: severityColor(group.severity) }"
+              />
               <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
             </header>
 
@@ -96,12 +139,19 @@
                 <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
                   severityLabel(issue.severity)
                 }}</span>
-                <p class="qc-issue__desc" title="定位到相关字段" @click="locateIssue(issue)">
+                <p
+                  class="qc-issue__desc"
+                  title="定位到相关字段"
+                  @click="locateIssue(issue)"
+                >
                   {{ issue.description }}
                 </p>
               </div>
 
-              <div v-if="issue.suggestion" class="qc-issue__ai-suggestion">
+              <div
+                v-if="issue.suggestion"
+                class="qc-issue__ai-suggestion"
+              >
                 <div class="qc-issue__ai-label">
                   <ThunderboltOutlined class="qc-issue__ai-icon" />
                   <span>修正建议</span>
@@ -113,7 +163,11 @@
 
               <div class="qc-issue__action-bar">
                 <div class="qc-issue__action-group">
-                  <button type="button" class="qc-issue__ghost-btn" @click="locateIssue(issue)">
+                  <button
+                    type="button"
+                    class="qc-issue__ghost-btn"
+                    @click="locateIssue(issue)"
+                  >
                     <svg
                       class="qc-issue__btn-icon"
                       fill="none"
@@ -155,11 +209,21 @@
                     </svg>
                     文书依据
                   </button>
-                  <a-dropdown v-if="issue.id" :trigger="['click']">
-                    <button type="button" class="qc-issue__ghost-btn">操作 <DownOutlined /></button>
+                  <a-dropdown
+                    v-if="issue.id"
+                    :trigger="['click']"
+                  >
+                    <button
+                      type="button"
+                      class="qc-issue__ghost-btn"
+                    >
+                      操作 <DownOutlined />
+                    </button>
                     <template #overlay>
                       <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                        <a-menu-item key="urge"> <SendOutlined /> 催办 </a-menu-item>
+                        <a-menu-item key="urge">
+                          <SendOutlined /> 催办
+                        </a-menu-item>
                         <a-menu-item key="mark_remediated">
                           <EditOutlined /> 标记已整改
                         </a-menu-item>
@@ -187,24 +251,48 @@
         </div>
       </template>
 
-      <div v-else class="qc-empty">
-        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a" />
-        <div class="qc-empty__title">未发现质控问题</div>
-        <a-button type="link" size="small" style="margin-top: 8px" @click="startCurrentTab">
+      <div
+        v-else
+        class="qc-empty"
+      >
+        <CheckCircleOutlined
+          class="qc-empty__icon"
+          style="color: #52c41a"
+        />
+        <div class="qc-empty__title">
+          未发现质控问题
+        </div>
+        <a-button
+          type="link"
+          size="small"
+          style="margin-top: 8px"
+          @click="startCurrentTab"
+        >
           <ReloadOutlined /> 重新分析
         </a-button>
       </div>
     </div>
 
-    <footer v-if="totalIssueCount > 0" class="qc-result-tab__footer">
-      <span
-        >共 <strong>{{ totalIssueCount }}</strong> 个问题</span
-      >
+    <footer
+      v-if="totalIssueCount > 0"
+      class="qc-result-tab__footer"
+    >
+      <span>共 <strong>{{ totalIssueCount }}</strong> 个问题</span>
       <div class="qc-result-tab__footer-actions">
-        <a-button type="link" size="small" :loading="isTabLoading" @click="startCurrentTab">
+        <a-button
+          type="link"
+          size="small"
+          :loading="isTabLoading"
+          @click="startCurrentTab"
+        >
           <ReloadOutlined /> 刷新
         </a-button>
-        <a-button type="link" size="small" :loading="exporting" @click="handleExportDefects">
+        <a-button
+          type="link"
+          size="small"
+          :loading="exporting"
+          @click="handleExportDefects"
+        >
           <DownloadOutlined /> 导出
         </a-button>
       </div>

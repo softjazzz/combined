@@ -6,6 +6,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -66,6 +67,8 @@ _SAFE_METRIC_KEYS = {
     "completiontokens",
     "totaltokens",
     "llmcallcount",
+    "unattributedprompttokens",
+    "unattributedcompletiontokens",
 }
 _OBSERVED_STATES = {
     "compliant",
@@ -147,6 +150,190 @@ def _evidence_hash(result: Mapping[str, Any]) -> str:
         item.get("evidence_attestation"),
         field="evidence_attestation",
     )
+
+
+def _covered_usage_by_rule(
+    response: Mapping[str, Any],
+    results: list[Any],
+) -> dict[str, tuple[int, int, int]]:
+    """校验族级用量并投影逐规则预算值；病例成本仍只保留一份族级记录。"""
+
+    result_rule_ids: list[str] = []
+    executor_types: dict[str, str] = {}
+    for result in results:
+        if not isinstance(result, Mapping):
+            raise ValueError("invalid API result")
+        rule_id = str(result.get("rule_id") or "").strip().upper()
+        metadata = result.get("metadata")
+        executor_type = (
+            str(metadata.get("executor_type") or "").strip().lower()
+            if isinstance(metadata, Mapping)
+            else ""
+        )
+        if (
+            not _RULE_ID_RE.fullmatch(rule_id)
+            or rule_id in executor_types
+            or executor_type not in {"program", "llm"}
+        ):
+            raise ValueError("invalid usage attribution")
+        result_rule_ids.append(rule_id)
+        executor_types[rule_id] = executor_type
+
+    metrics = response.get("metrics")
+    if not isinstance(metrics, Mapping):
+        raise ValueError("missing usage attribution")
+    metric_fields = (
+        "llm_call_count",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "unattributed_prompt_tokens",
+        "unattributed_completion_tokens",
+        "unattributed_total_tokens",
+    )
+    if any(
+        type(metrics.get(field)) is not int or int(metrics[field]) < 0
+        for field in metric_fields
+    ):
+        raise ValueError("invalid usage attribution")
+    usage_error_reason = metrics.get("usage_error_reason")
+    if (
+        type(metrics.get("usage_complete")) is not bool
+        or not metrics["usage_complete"]
+        or not isinstance(usage_error_reason, str)
+        or usage_error_reason
+        or int(metrics["unattributed_prompt_tokens"]) != 0
+        or int(metrics["unattributed_completion_tokens"]) != 0
+        or int(metrics["unattributed_total_tokens"]) != 0
+    ):
+        raise ValueError("incomplete usage attribution")
+    api_time_seconds = metrics.get("api_time_seconds")
+    if (
+        isinstance(api_time_seconds, bool)
+        or not isinstance(api_time_seconds, (int, float))
+        or not math.isfinite(float(api_time_seconds))
+        or float(api_time_seconds) < 0
+    ):
+        raise ValueError("invalid usage attribution")
+    prompt_tokens = int(metrics["prompt_tokens"])
+    completion_tokens = int(metrics["completion_tokens"])
+    total_tokens = int(metrics["total_tokens"])
+    llm_call_count = int(metrics["llm_call_count"])
+    if (
+        total_tokens != prompt_tokens + completion_tokens
+        or (llm_call_count == 0 and total_tokens != 0)
+        or (llm_call_count > 0 and total_tokens == 0)
+    ):
+        raise ValueError("invalid usage attribution")
+    attributions = metrics.get("usage_attributions")
+    if not isinstance(attributions, list) or not attributions:
+        raise ValueError("missing usage attribution")
+    expected_fields = {
+        "executor_key",
+        "llm_call_count",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "covered_customer_rule_ids",
+        "latency_ms",
+    }
+    positions = {rule_id: index for index, rule_id in enumerate(result_rule_ids)}
+    seen_executors: set[str] = set()
+    covered_usage: dict[str, tuple[int, int, int]] = {}
+    attributed_calls = 0
+    attributed_prompt = 0
+    attributed_completion = 0
+    attributed_total = 0
+    attributed_latency_ms = 0.0
+    for attribution in attributions:
+        if not isinstance(attribution, Mapping) or set(attribution) != expected_fields:
+            raise ValueError("invalid usage attribution")
+        executor_key = attribution.get("executor_key")
+        if (
+            not isinstance(executor_key, str)
+            or not _SAFE_CODE_RE.fullmatch(executor_key)
+            or executor_key in seen_executors
+        ):
+            raise ValueError("invalid usage attribution")
+        seen_executors.add(executor_key)
+        token_fields = (
+            "llm_call_count",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+        )
+        if any(
+            type(attribution.get(field)) is not int
+            or int(attribution[field]) < 0
+            for field in token_fields
+        ):
+            raise ValueError("invalid usage attribution")
+        latency_ms = attribution.get("latency_ms")
+        if (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(float(latency_ms))
+            or latency_ms < 0
+        ):
+            raise ValueError("invalid usage attribution")
+        covered_rule_ids = attribution.get("covered_customer_rule_ids")
+        if (
+            not isinstance(covered_rule_ids, list)
+            or not covered_rule_ids
+            or any(
+                not isinstance(rule_id, str) or rule_id not in positions
+                for rule_id in covered_rule_ids
+            )
+            or len(covered_rule_ids) != len(set(covered_rule_ids))
+            or covered_rule_ids
+            != sorted(covered_rule_ids, key=positions.__getitem__)
+            or any(rule_id in covered_usage for rule_id in covered_rule_ids)
+        ):
+            raise ValueError("invalid usage attribution")
+        calls = int(attribution["llm_call_count"])
+        prompt = int(attribution["prompt_tokens"])
+        completion = int(attribution["completion_tokens"])
+        total = int(attribution["total_tokens"])
+        if (
+            total != prompt + completion
+            or (calls == 0 and total != 0)
+            or (calls > 0 and total == 0)
+            or (
+                total > 0
+                and not any(
+                    executor_types[rule_id] == "llm"
+                    for rule_id in covered_rule_ids
+                )
+            )
+        ):
+            raise ValueError("invalid usage attribution")
+        for rule_id in covered_rule_ids:
+            covered_usage[rule_id] = (
+                (prompt, completion, total)
+                if executor_types[rule_id] == "llm"
+                else (0, 0, 0)
+            )
+        attributed_calls += calls
+        attributed_prompt += prompt
+        attributed_completion += completion
+        attributed_total += total
+        attributed_latency_ms += float(latency_ms)
+    latency_tolerance_ms = 0.001 + len(attributions) * 0.0005
+    if (
+        set(covered_usage) != set(result_rule_ids)
+        or attributed_calls != llm_call_count
+        or attributed_prompt != prompt_tokens
+        or attributed_completion != completion_tokens
+        or attributed_total != total_tokens
+        or not math.isclose(
+            attributed_latency_ms,
+            float(api_time_seconds) * 1000.0,
+            rel_tol=0.0,
+            abs_tol=latency_tolerance_ms,
+        )
+    ):
+        raise ValueError("incomplete usage attribution")
+    return covered_usage
 
 
 def build_candidate_ledger(
@@ -231,6 +418,7 @@ def build_candidate_ledger(
         results = response.get("results")
         if not isinstance(results, list) or not results:
             raise ValueError("API response requires results")
+        covered_usage = _covered_usage_by_rule(response, results) if is_v2 else {}
         for result in results:
             if not isinstance(result, Mapping):
                 raise ValueError("invalid API result")
@@ -277,22 +465,7 @@ def build_candidate_ledger(
             completion_tokens = 0
             total_tokens = 0
             if is_v2:
-                token_fields = (
-                    "prompt_tokens",
-                    "completion_tokens",
-                    "total_tokens",
-                )
-                if not isinstance(metadata, Mapping) or any(
-                    type(metadata.get(field)) is not int
-                    or int(metadata.get(field)) < 0
-                    for field in token_fields
-                ):
-                    raise ValueError("invalid rule token metrics")
-                prompt_tokens = int(metadata["prompt_tokens"])
-                completion_tokens = int(metadata["completion_tokens"])
-                total_tokens = int(metadata["total_tokens"])
-                if total_tokens != prompt_tokens + completion_tokens:
-                    raise ValueError("invalid rule token metrics")
+                prompt_tokens, completion_tokens, total_tokens = covered_usage[rule_id]
             row = {
                 "case_label": case_label,
                 "selector_digest": selector_digest,

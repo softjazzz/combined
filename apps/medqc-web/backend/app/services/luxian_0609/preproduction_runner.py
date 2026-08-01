@@ -11,6 +11,7 @@ from collections import Counter
 from datetime import date
 import hashlib
 import json
+import math
 import re
 from time import perf_counter
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -20,6 +21,7 @@ from .execution import (
     aggregate_luxian_0609_orchestrated_results,
     prepare_luxian_0609_execution,
 )
+from .execution_contract import FamilyUsageAttribution
 from .rule_contracts import load_luxian_0609_rule_contracts
 from .rule_decision_settings import build_full_rule_decision_settings
 
@@ -85,9 +87,6 @@ _METADATA_FIELDS = (
     "reason_code",
     "aggregation_source",
     "customer_rule_id",
-    "prompt_tokens",
-    "completion_tokens",
-    "total_tokens",
     "comparable_document_count",
     "maximum_similarity",
     "similarity_threshold",
@@ -349,6 +348,140 @@ def _technical_results(
     ]
 
 
+class _UsageAccountingError(ValueError):
+    def __init__(self, *, observed_metrics: Mapping[str, Any]) -> None:
+        super().__init__("usage_accounting_mismatch")
+        self.observed_metrics = dict(observed_metrics)
+
+
+def _metric_vector(
+    *,
+    llm_call_count: Any,
+    prompt_tokens: Any,
+    completion_tokens: Any,
+    total_tokens: Any,
+    api_time_seconds: Any,
+) -> dict[str, Any] | None:
+    integer_values = (
+        llm_call_count,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+    )
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in integer_values
+    ):
+        return None
+    if total_tokens != prompt_tokens + completion_tokens:
+        return None
+    if (
+        isinstance(api_time_seconds, bool)
+        or not isinstance(api_time_seconds, (int, float))
+        or not math.isfinite(api_time_seconds)
+        or api_time_seconds < 0
+    ):
+        return None
+    return {
+        "llm_call_count": llm_call_count,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "api_time_seconds": round(float(api_time_seconds), 6),
+    }
+
+
+def _observed_usage_metrics(context: Any, orchestrated: Mapping[str, Any]) -> dict[str, Any]:
+    context_metrics = _metric_vector(
+        llm_call_count=getattr(context, "native_llm_call_count", 0),
+        prompt_tokens=getattr(context, "native_prompt_tokens", 0),
+        completion_tokens=getattr(context, "native_completion_tokens", 0),
+        total_tokens=getattr(context, "native_total_tokens", 0),
+        api_time_seconds=getattr(context, "native_api_time", 0.0),
+    )
+    orchestrated_metrics = _metric_vector(
+        llm_call_count=getattr(context, "native_llm_call_count", 0),
+        prompt_tokens=orchestrated.get("total_prompt_tokens", 0),
+        completion_tokens=orchestrated.get("total_completion_tokens", 0),
+        total_tokens=orchestrated.get("total_tokens", 0),
+        api_time_seconds=orchestrated.get("total_api_time", 0.0),
+    )
+    candidates = [
+        item for item in (context_metrics, orchestrated_metrics) if item is not None
+    ]
+    if not candidates:
+        return {
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "api_time_seconds": 0.0,
+        }
+    return max(
+        candidates,
+        key=lambda item: (item["total_tokens"], item["llm_call_count"]),
+    )
+
+
+def _validate_usage_accounting(
+    *,
+    context: Any,
+    orchestrated: Mapping[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    attributions = getattr(context, "native_usage_attributions", ())
+    if type(attributions) is not tuple or any(
+        not isinstance(item, FamilyUsageAttribution) for item in attributions
+    ):
+        raise _UsageAccountingError(
+            observed_metrics=_observed_usage_metrics(context, orchestrated)
+        )
+    executor_keys = tuple(item.executor_key for item in attributions)
+    covered_rule_ids = tuple(
+        rule_id
+        for item in attributions
+        for rule_id in item.covered_customer_rule_ids
+    )
+    if (
+        len(executor_keys) != len(set(executor_keys))
+        or len(covered_rule_ids) != len(set(covered_rule_ids))
+    ):
+        raise _UsageAccountingError(
+            observed_metrics=_observed_usage_metrics(context, orchestrated)
+        )
+    derived = _metric_vector(
+        llm_call_count=sum(item.llm_call_count for item in attributions),
+        prompt_tokens=sum(item.prompt_tokens for item in attributions),
+        completion_tokens=sum(item.completion_tokens for item in attributions),
+        total_tokens=sum(item.total_tokens for item in attributions),
+        api_time_seconds=sum(item.latency_ms for item in attributions) / 1000.0,
+    )
+    context_metrics = _metric_vector(
+        llm_call_count=getattr(context, "native_llm_call_count", 0),
+        prompt_tokens=getattr(context, "native_prompt_tokens", 0),
+        completion_tokens=getattr(context, "native_completion_tokens", 0),
+        total_tokens=getattr(context, "native_total_tokens", 0),
+        api_time_seconds=getattr(context, "native_api_time", 0.0),
+    )
+    orchestrated_metrics = _metric_vector(
+        llm_call_count=getattr(context, "native_llm_call_count", 0),
+        prompt_tokens=orchestrated.get("total_prompt_tokens", 0),
+        completion_tokens=orchestrated.get("total_completion_tokens", 0),
+        total_tokens=orchestrated.get("total_tokens", 0),
+        api_time_seconds=orchestrated.get("total_api_time", 0.0),
+    )
+    if (
+        derived is None
+        or context_metrics is None
+        or orchestrated_metrics is None
+        or derived != context_metrics
+        or derived != orchestrated_metrics
+    ):
+        raise _UsageAccountingError(
+            observed_metrics=_observed_usage_metrics(context, orchestrated)
+        )
+    return tuple(item.to_safe_dict() for item in attributions)
+
+
 def _canonical_digest(value: Any) -> str:
     material = json.dumps(
         value,
@@ -539,6 +672,10 @@ async def run_luxian_0609_preproduction(
         "total_api_time": 0.0,
         "executor_breakdown": {},
     }
+    usage_attributions: tuple[dict[str, Any], ...] = ()
+    usage_complete = False
+    usage_error_reason = ""
+    observed_usage = _observed_usage_metrics(context, orchestrated)
     failure_reason_code = "prepare_execution_failed"
     try:
         executable_rules, context = await prepare_luxian_0609_execution(
@@ -572,6 +709,13 @@ async def run_luxian_0609_preproduction(
                 else None
             ),
         )
+        failure_reason_code = "usage_accounting_mismatch"
+        usage_attributions = _validate_usage_accounting(
+            context=context,
+            orchestrated=orchestrated,
+        )
+        usage_complete = True
+        observed_usage = _observed_usage_metrics(context, orchestrated)
         raw_results = list(orchestrated.get("results") or [])
         failure_reason_code = "result_scope_validation_failed"
         _validate_result_scope(raw_results, selected_rule_ids=selected)
@@ -590,45 +734,41 @@ async def run_luxian_0609_preproduction(
                 context=context,
             )
             evidence_attestation_sink(evidence_attestations)
-    except Exception:
+    except Exception as exc:
+        observed_usage = (
+            dict(exc.observed_metrics)
+            if isinstance(exc, _UsageAccountingError)
+            else _observed_usage_metrics(context, orchestrated)
+        )
+        usage_error_reason = (
+            "usage_accounting_mismatch"
+            if isinstance(exc, _UsageAccountingError)
+            else failure_reason_code
+        )
+        usage_attributions = ()
+        usage_complete = False
         results = _technical_results(
             selected,
             reason_code=failure_reason_code,
         )
-        orchestrated = {
-            "total_prompt_tokens": 0,
-            "total_completion_tokens": 0,
-            "total_tokens": 0,
-            "total_api_time": 0.0,
-        }
 
     elapsed_ms = round((perf_counter() - started) * 1000.0, 3)
     status_counts = Counter(str(item.get("status") or "technical_error") for item in results)
     maturity = _contract_maturity()
-    context_prompt_tokens = int(getattr(context, "native_prompt_tokens", 0) or 0)
-    context_completion_tokens = int(
-        getattr(context, "native_completion_tokens", 0) or 0
-    )
-    context_total_tokens = int(getattr(context, "native_total_tokens", 0) or 0)
-    context_api_time = float(getattr(context, "native_api_time", 0.0) or 0.0)
     metrics = {
         "wall_time_ms": elapsed_ms,
-        "llm_call_count": int(getattr(context, "native_llm_call_count", 0) or 0),
-        "prompt_tokens": max(
-            context_prompt_tokens,
-            int(orchestrated.get("total_prompt_tokens") or 0),
+        **observed_usage,
+        "usage_complete": usage_complete,
+        "usage_error_reason": usage_error_reason,
+        "usage_attributions": list(usage_attributions),
+        "unattributed_prompt_tokens": (
+            0 if usage_complete else observed_usage["prompt_tokens"]
         ),
-        "completion_tokens": max(
-            context_completion_tokens,
-            int(orchestrated.get("total_completion_tokens") or 0),
+        "unattributed_completion_tokens": (
+            0 if usage_complete else observed_usage["completion_tokens"]
         ),
-        "total_tokens": max(
-            context_total_tokens,
-            int(orchestrated.get("total_tokens") or 0),
-        ),
-        "api_time_seconds": round(
-            max(context_api_time, float(orchestrated.get("total_api_time") or 0.0)),
-            6,
+        "unattributed_total_tokens": (
+            0 if usage_complete else observed_usage["total_tokens"]
         ),
         "customer_rule_count": len(results),
         "status_counts": dict(sorted(status_counts.items())),

@@ -13,7 +13,7 @@
           type="text"
           placeholder="搜索表或字段"
           class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#0066cc] focus:ring-[3px] focus:ring-[#0066cc]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
-        />
+        >
       </div>
     </div>
 
@@ -70,18 +70,37 @@
         </div>
 
         <div class="flex-1 overflow-auto custom-scrollbar bg-white">
-          <div v-if="loading" class="p-6 text-[12px] text-slate-500">正在加载结构...</div>
-          <div v-else-if="!selectedTable" class="p-6 text-[12px] text-slate-500">
+          <div
+            v-if="loading"
+            class="p-6 text-[12px] text-slate-500"
+          >
+            正在加载结构...
+          </div>
+          <div
+            v-else-if="!selectedTable"
+            class="p-6 text-[12px] text-slate-500"
+          >
             暂无可展示表结构。
           </div>
           <template v-else>
-            <table v-if="activeView === 'schema'" class="w-full text-left border-collapse">
+            <table
+              v-if="activeView === 'schema'"
+              class="w-full text-left border-collapse"
+            >
               <thead class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
                 <tr class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">字段名</th>
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">系统类型</th>
-                  <th class="px-5 py-3 text-center font-medium whitespace-nowrap">Null</th>
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">约束</th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
+                    字段名
+                  </th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
+                    系统类型
+                  </th>
+                  <th class="px-5 py-3 text-center font-medium whitespace-nowrap">
+                    Null
+                  </th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">
+                    约束
+                  </th>
                 </tr>
               </thead>
               <tbody class="font-mono text-[13px] text-slate-700">
@@ -103,8 +122,7 @@
                     <span
                       v-if="col.primary_key"
                       class="text-amber-500 font-bold bg-amber-50 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap"
-                      >PK</span
-                    >
+                    >PK</span>
                     <span v-else>-</span>
                   </td>
                 </tr>
@@ -112,13 +130,22 @@
             </table>
 
             <div v-else>
-              <div v-if="sampleLoading" class="p-6 text-[12px] text-slate-500">
+              <div
+                v-if="sampleLoading"
+                class="p-6 text-[12px] text-slate-500"
+              >
                 正在加载样本数据...
               </div>
-              <div v-else-if="sampleRows.length === 0" class="p-6 text-[12px] text-slate-500">
+              <div
+                v-else-if="sampleRows.length === 0"
+                class="p-6 text-[12px] text-slate-500"
+              >
                 暂无样本数据。
               </div>
-              <table v-else class="w-full text-left border-collapse">
+              <table
+                v-else
+                class="w-full text-left border-collapse"
+              >
                 <thead
                   class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]"
                 >

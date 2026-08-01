@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>泸县0609客户样本验证用户使用手册</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --paper: #ffffff;
+      --paper-soft: #f8fafc;
+      --line: #dbe3ef;
+      --line-soft: #edf1f7;
+      --text: #172033;
+      --muted: #667085;
+      --subtle: #8a96a8;
+      --brand: #0b73d9;
+      --brand-soft: #eaf4ff;
+      --ok: #047857;
+      --warn: #b45309;
+      --danger: #b42318;
+      --shadow: 0 12px 32px rgba(22, 34, 51, 0.08);
+      font-family:
+        "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC",
+        Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    a {
+      color: var(--brand);
+      text-decoration: none;
+    }
+
+    .manual-shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 28px 28px 64px;
+    }
+
+    .cover {
+      background: linear-gradient(135deg, #ffffff 0%, #f1f7ff 100%);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: 18px;
+      padding: 34px 38px;
+      display: grid;
+      grid-template-columns: 1.6fr 0.8fr;
+      gap: 28px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      color: #075cab;
+      background: var(--brand-soft);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin-top: 18px;
+      font-size: 34px;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 760px;
+    }
+
+    .meta-grid {
+      display: grid;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .meta-item {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.78);
+      padding: 11px 13px;
+    }
+
+    .meta-item strong {
+      display: block;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 22px;
+      margin-top: 22px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 16px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(22, 34, 51, 0.06);
+      padding: 18px;
+    }
+
+    .toc h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+
+    .toc a {
+      display: block;
+      color: #344054;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .toc a:hover {
+      background: var(--paper-soft);
+      color: var(--brand);
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(22, 34, 51, 0.05);
+      padding: 24px;
+    }
+
+    .section h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 22px;
+    }
+
+    .section h2 .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      color: #075cab;
+      background: var(--brand-soft);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .section h3 {
+      margin-top: 18px;
+      margin-bottom: 8px;
+      font-size: 17px;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+
+    .steps {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      border: 1px solid var(--line-soft);
+      background: var(--paper-soft);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      background: #ffffff;
+      color: var(--brand);
+      border: 1px solid #bfd8f4;
+      font-weight: 800;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .card {
+      border: 1px solid var(--line-soft);
+      border-radius: 14px;
+      background: var(--paper-soft);
+      padding: 16px;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .callout {
+      border: 1px solid #bfd8f4;
+      background: #f0f7ff;
+      border-radius: 14px;
+      padding: 14px 16px;
+      color: #18456f;
+      margin: 14px 0;
+    }
+
+    .warning {
+      border-color: #f5d6a5;
+      background: #fff8ed;
+      color: #70430a;
+    }
+
+    .danger {
+      border-color: #ffd0cc;
+      background: #fff5f5;
+      color: #7a271a;
+    }
+
+    .figure {
+      margin: 18px 0 4px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .figure figcaption {
+      padding: 10px 14px;
+      color: var(--muted);
+      border-top: 1px solid var(--line-soft);
+      background: #fbfcfe;
+      font-size: 13px;
+    }
+
+    .status-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin-top: 12px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .status-table th,
+    .status-table td {
+      text-align: left;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      vertical-align: top;
+    }
+
+    .status-table th {
+      color: #344054;
+      background: #f4f7fb;
+      font-weight: 800;
+    }
+
+    .status-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #eef4ff;
+      color: #175cd3;
+      margin: 2px 4px 2px 0;
+    }
+
+    .tag.warn {
+      background: #fff2d6;
+      color: #9a5b00;
+    }
+
+    .tag.bad {
+      background: #ffe7e4;
+      color: #b42318;
+    }
+
+    .tag.gray {
+      background: #eef0f4;
+      color: #475467;
+    }
+
+    .kbd {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 7px;
+      padding: 1px 7px;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    .footer {
+      margin-top: 20px;
+      color: var(--subtle);
+      text-align: center;
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .cover,
+      .layout,
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .toc {
+        position: static;
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .manual-shell {
+        max-width: none;
+        padding: 0;
+      }
+
+      .toc {
+        display: none;
+      }
+
+      .layout {
+        display: block;
+      }
+
+      .section,
+      .cover {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="manual-shell">
+    <header class="cover">
+      <div>
+        <span class="eyebrow">MedQC 工作站 V4 · 泸县0609专项</span>
+        <h1>客户样本验证用户使用手册</h1>
+        <p class="subtitle">
+          面向演示账号和质控人员，说明如何进入客户样本验证、选择病历和质控点、发起泸县0609质控、查看任务进度、复核结果并导出 HTML 明细。
+        </p>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-item">
+          <strong>适用页面</strong>
+          /workstation-v4/customer-sample-validation
+        </div>
+        <div class="meta-item">
+          <strong>推荐账号</strong>
+          演示账号 admin / admin888
+        </div>
+        <div class="meta-item">
+          <strong>版本说明</strong>
+          基于 2026-07-07 当前 UI 与功能整理
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <a href="#format">推荐交付格式</a>
+        <a href="#login">1. 登录与入口</a>
+        <a href="#overview">2. 客户样本验证页</a>
+        <a href="#scope">3. 选择0609质控范围</a>
+        <a href="#records">4. 选择病历并开始质控</a>
+        <a href="#task-center">5. 查看任务中心</a>
+        <a href="#results">6. 查看质控结果</a>
+        <a href="#export">7. 导出HTML明细</a>
+        <a href="#synthetic">8. 创建测试病历</a>
+        <a href="#sync">9. 同步客户病历</a>
+        <a href="#faq">10. 常见问题</a>
+      </nav>
+
+      <article class="content">
+        <section id="format" class="section">
+          <h2><span class="num">0</span>推荐交付格式</h2>
+          <p class="lead">
+            本手册建议以 <strong>离线 HTML</strong> 作为主格式。HTML 可以包含截图、目录、步骤卡片和提示信息，客户机无需安装 Word，也能直接用浏览器打开。
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <strong>为什么优先用 HTML</strong>
+              <p>便于离线查看、复制链接路径、嵌入截图，也适合随客户包一起交付。后续如需打印，可在浏览器中直接另存为 PDF。</p>
+            </div>
+            <div class="card">
+              <strong>什么时候再做 PDF/DOCX</strong>
+              <p>如果需要盖章、归档、正式培训材料或发给非系统使用者，再从 HTML 内容派生 PDF 或 DOCX。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="login" class="section">
+          <h2><span class="num">1</span>登录与入口</h2>
+          <p class="lead">
+            打开工作站登录页，使用演示账号登录后会默认进入客户样本验证页面，并触发功能导览。
+          </p>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>打开登录页</strong>
+                <div>浏览器访问 <span class="kbd">http://客户机IP:3000/workstation-v4/login</span>。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>输入演示账号</strong>
+                <div>账号 <span class="kbd">admin</span>，密码 <span class="kbd">admin888</span>。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>进入客户样本验证</strong>
+                <div>登录后进入客户样本验证页。也可直接访问 <span class="kbd">/workstation-v4/customer-sample-validation</span>。</div>
+              </div>
+            </li>
+          </ol>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/01-login.png" alt="登录工作台页面截图" />
+            <figcaption>登录工作台：输入账号密码后进入客户样本验证主流程。</figcaption>
+          </figure>
+        </section>
+
+        <section id="overview" class="section">
+          <h2><span class="num">2</span>客户样本验证页</h2>
+          <p class="lead">
+            客户样本验证页用于选择样本池、限定泸县0609质控范围、选择病历、发起质控并查看任务记录。
+          </p>
+          <div class="callout">
+            页面右上方保留高频操作：<strong>功能导览</strong>、<strong>创建测试病历</strong>、<strong>质控记录</strong> 和 <strong>更多操作</strong>。
+            页面下方病历池选中病历后，会出现底部固定操作条，可直接开始质控，不需要回到页面顶部。
+          </div>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/02-customer-validation-tour.png" alt="客户样本验证导览截图" />
+            <figcaption>首次进入时可查看功能导览，了解选择样本池、创建测试病历、发起验证和查看结果的流程。</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/03-customer-validation-main.png" alt="客户样本验证主页面截图" />
+            <figcaption>客户样本验证主页面：上方是规则范围，下面是病历池列表。</figcaption>
+          </figure>
+        </section>
+
+        <section id="scope" class="section">
+          <h2><span class="num">3</span>选择泸县0609质控范围</h2>
+          <p class="lead">
+            泸县0609支持两种运行方式：全量运行全部客户质控点，或只勾选本次要验证的质控族/质控点。
+          </p>
+          <table class="status-table">
+            <thead>
+              <tr>
+                <th>模式</th>
+                <th>适用场景</th>
+                <th>用户应看到</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>全量0609</strong></td>
+                <td>需要一次性检查全部泸县0609质控点。</td>
+                <td>范围显示为全量0609规则集，不显示 scoped run。</td>
+              </tr>
+              <tr>
+                <td><strong>按质控族/质控点运行</strong></td>
+                <td>演示、复核或快速验证某一类问题，例如会诊、输血、手术麻醉。</td>
+                <td>范围显示已选质控族和客户质控点数，结果只出现所选 LX0609 质控点。</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="warning callout">
+            勾选质控点后，只验证选中的 LX0609 客户质控点；不要把底层执行规则数误认为客户质控点数。
+          </div>
+        </section>
+
+        <section id="records" class="section">
+          <h2><span class="num">4</span>选择病历并开始质控</h2>
+          <p class="lead">
+            在病历池中勾选一份或多份病历后，页面底部会出现固定操作条，展示已选病历数和当前质控范围。
+          </p>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>选择样本池</strong>
+                <div>可选择 0426、泸县0609真实结构合成样本 v2、客户自建测试病历等样本池。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>勾选病历</strong>
+                <div>病历列表显示编号、病历、创建日期、科室、验证范围和操作。点击左侧复选框选择。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>点击开始质控</strong>
+                <div>底部操作条出现后，点击 <span class="kbd">开始质控</span>。如果未选择病历，系统会提示先选择病历，不会直接提交空任务。</div>
+              </div>
+            </li>
+          </ol>
+          <div class="callout">
+            多份病历一起质控时，结果会按病历区分展示；任务历史中也会显示病历数、客户质控点数和主要问题摘要。
+          </div>
+        </section>
+
+        <section id="task-center" class="section">
+          <h2><span class="num">5</span>查看任务中心与质控记录</h2>
+          <p class="lead">
+            “质控记录”是查看当前任务和历史任务的高频入口。运行中的任务可以看进度，已完成任务可以直接查看结果或导出 HTML。
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <strong>当前任务</strong>
+              <p>显示排队中、病历准备中、规则执行中、结果汇总中、已完成或失败，并展示已完成病历数、返回结果数和状态分布。</p>
+            </div>
+            <div class="card">
+              <strong>历史任务</strong>
+              <p>按时间倒序展示最近任务，摘要包括病历数、客户质控点数、结果数和主要问题点。</p>
+            </div>
+          </div>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/04-task-center.png" alt="质控任务中心截图" />
+            <figcaption>质控任务中心：统一查看正在运行和历史完成的质控任务。</figcaption>
+          </figure>
+        </section>
+
+        <section id="results" class="section">
+          <h2><span class="num">6</span>查看质控结果</h2>
+          <p class="lead">
+            质控结果以客户质控点为主线展示，重点看状态、质控结论、关键证据和处理建议。
+          </p>
+          <table class="status-table">
+            <thead>
+              <tr>
+                <th>状态</th>
+                <th>含义</th>
+                <th>处理建议</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="tag bad">不合规</span></td>
+                <td>系统根据当前证据判断存在质控问题。</td>
+                <td>优先复核原文证据，确认是否需要整改或补记。</td>
+              </tr>
+              <tr>
+                <td><span class="tag">合规</span></td>
+                <td>当前证据满足质控要求。</td>
+                <td>一般无需处理。</td>
+              </tr>
+              <tr>
+                <td><span class="tag gray">不适用</span></td>
+                <td>该病历没有触发本质控点的适用条件。</td>
+                <td>不进入缺陷判断，也不应混作合规。</td>
+              </tr>
+              <tr>
+                <td><span class="tag warn">数据不足</span></td>
+                <td>发现相关事件，但缺少完成自动判定所需字段或文书。</td>
+                <td>补齐数据或由质控员人工复核。</td>
+              </tr>
+              <tr>
+                <td><span class="tag warn">待复核</span></td>
+                <td>语义判断或证据不稳定，需要人工确认。</td>
+                <td>结合原文和临床语境复核，不作为自动扣分结论。</td>
+              </tr>
+              <tr>
+                <td><span class="tag gray">未执行/技术异常</span></td>
+                <td>规则没有执行或执行过程中出现技术问题。</td>
+                <td>检查任务、模型服务或后端日志后重试。</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            结果页应避免展示内部技术词，例如 prompt、raw_response、embedding、完整病历全文、LLM 原始输出等。用户主要关注“为什么判定”和“下一步怎么处理”。
+          </div>
+        </section>
+
+        <section id="export" class="section">
+          <h2><span class="num">7</span>导出 HTML 明细</h2>
+          <p class="lead">
+            已完成任务支持导出 HTML 明细，适合客户离线查看、留档或转发给科室复核。
+          </p>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>从任务中心导出</strong>
+                <div>在历史任务中点击 <span class="kbd">导出HTML</span>，无需先打开结果。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>从结果页导出</strong>
+                <div>打开任务结果后，在导出菜单选择 <span class="kbd">导出 HTML 明细</span>。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>查看导出文件</strong>
+                <div>HTML 文件按病历分组展示质控点、状态、结论、关键证据和建议，不导出完整病历全文。</div>
+              </div>
+            </li>
+          </ol>
+          <div class="danger callout">
+            导出的 HTML 是质控明细和复核材料，不作为归档、医保结算、绩效扣分或正式质控结论的唯一依据。
+          </div>
+        </section>
+
+        <section id="synthetic" class="section">
+          <h2><span class="num">8</span>创建测试病历</h2>
+          <p class="lead">
+            “创建测试病历”用于按泸县0609质控点生成可编辑的演示病历，并保存到客户自建测试病历池。
+          </p>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>选择质控点</strong>
+                <div>先选规则族，再勾选本次需要验证的 LX0609 质控点。每个规则族支持全选，也支持多组选中。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>生成并编辑病历</strong>
+                <div>系统生成多文书结构病历。用户可以编辑文书内容，新增或删除文书和医嘱。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>保存并验证</strong>
+                <div>保存后进入客户自建测试病历池，验证时只跑用户选中的 LX0609 质控点。</div>
+              </div>
+            </li>
+          </ol>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/06-synthetic-case-builder.png" alt="创建测试病历页面截图" />
+            <figcaption>创建测试病历：按质控族选择质控点，生成并编辑测试病历。</figcaption>
+          </figure>
+          <div class="warning callout">
+            修改质控点选择后，旧草稿会过期，需要重新生成，避免旧病历和新规则范围错配。
+          </div>
+        </section>
+
+        <section id="sync" class="section">
+          <h2><span class="num">9</span>同步客户病历</h2>
+          <p class="lead">
+            客户样本验证支持通过模板导入病历 ID，匹配源库病历后同步文书。系统配置页则用于终末病历按出院日期同步。
+          </p>
+          <h3>客户样本池模板同步</h3>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>下载并填写模板</strong>
+                <div>推荐优先填写就诊 ID 或住院流水号；如没有，再补充病案号、住院号、患者姓名辅助匹配。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>导入样本 ID</strong>
+                <div>导入成功后页面应显示已导入数量，并进入匹配源库病历步骤。</div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>匹配并同步文书</strong>
+                <div>匹配到病历后点击开始同步，查看同步进度和失败原因。</div>
+              </div>
+            </li>
+          </ol>
+          <h3>系统配置中的终末病历同步</h3>
+          <p>
+            该页面用于按出院日期、科室同步终末病历，不是“全域源库同步”入口。同步前应先检查病历范围，确认找到可同步病历后再开始同步。
+          </p>
+          <figure class="figure">
+            <img src="luxian0609-user-manual-assets/07-system-config-sync.png" alt="系统配置数据同步页面截图" />
+            <figcaption>系统配置：简化同步向导用于终末病历按出院日期同步；高级诊断仅供实施人员使用。</figcaption>
+          </figure>
+        </section>
+
+        <section id="faq" class="section">
+          <h2><span class="num">10</span>常见问题与处理建议</h2>
+          <h3>1. 点击开始质控后看不到进度怎么办？</h3>
+          <p>打开右上方 <span class="kbd">质控记录</span>，查看当前任务状态。如果任务长时间停留在执行中，联系实施人员检查后端、模型服务或任务队列。</p>
+
+          <h3>2. 为什么有些结果是“数据不足”？</h3>
+          <p>说明系统发现了相关事件，但缺少自动判定需要的字段、时间或文书。这不是正式缺陷结论，需要补齐数据或人工复核。</p>
+
+          <h3>3. 为什么有些质控点“不适用”？</h3>
+          <p>说明病历没有触发该质控点的适用条件，例如没有输血事实时，输血类规则应显示不适用。</p>
+
+          <h3>4. 多病历一起质控怎么区分结果？</h3>
+          <p>结果会按病历分组，并在任务摘要中展示病历数、客户质控点数和主要问题点。导出 HTML 明细时也会按病历分组。</p>
+
+          <h3>5. 可以把合成样本通过率当成真实样本准确率吗？</h3>
+          <p>不可以。合成或自建测试病历只代表演示和回归链路通过，不能替代真实客户病历的人工标注 Golden Set。</p>
+
+          <h3>6. 哪些内容不应该展示或导出？</h3>
+          <p>不得展示或导出 prompt、raw_response、embedding、medical_text、record_content、documents、bundle、完整病历全文等敏感或内部字段。</p>
+        </section>
+
+        <p class="footer">
+          本手册用于泸县0609客户样本验证功能培训和演示辅助。系统输出需结合医院质控口径和人工复核使用。
+        </p>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

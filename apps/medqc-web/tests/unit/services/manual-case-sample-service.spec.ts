@@ -12,7 +12,9 @@ vi.mock('@/services/apiService', () => ({
 
 import {
   getEditableMedicalRecordDocuments,
+  previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
+  syncManualSamplePoolRecordsByHospitalization,
 } from '@/services/manual-case-sample-service'
 
 describe('editable medical-record document normalization', () => {
@@ -90,6 +92,53 @@ describe('editable medical-record document normalization', () => {
     })
   })
 
+  it('preserves grouped report metadata and items for structured rendering', async () => {
+    mocks.requestRaw.mockResolvedValue({
+      data: {
+        documents: [
+          {
+            doc_key: 'labtest_item_report::LAB-1',
+            document_type: 'labtest_item_report',
+            document_title: '血常规检验报告',
+            record_time: '2026-02-21 07:45:30',
+            content: '检验结果',
+            report_metadata: {
+              specimen: '外周血',
+              report_datetime: '2026-02-21 07:45:30',
+            },
+            report_items: [
+              {
+                item_no: '1',
+                item_name: '白细胞计数',
+                result: '4.95',
+                unit: '*10^9/L',
+                reference_range: '3.5-9.5',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    const result = await getEditableMedicalRecordDocuments('visit-1')
+
+    expect(result.data?.documents[0]).toMatchObject({
+      title: '血常规检验报告',
+      report_metadata: {
+        specimen: '外周血',
+        report_datetime: '2026-02-21 07:45:30',
+      },
+      report_items: [
+        {
+          item_name: '白细胞计数',
+          result: '4.95',
+          unit: '*10^9/L',
+          reference_range: '3.5-9.5',
+        },
+      ],
+    })
+  })
+
   it('forwards the exact selected validation scope and preserves safe dedupe metadata', async () => {
     mocks.requestRaw.mockResolvedValue({
       data: {
@@ -131,6 +180,44 @@ describe('editable medical-record document normalization', () => {
       operation_ref: 'sample-op-safe',
       execution_scope_hash: 'a'.repeat(64),
       deduplicated: true,
+    })
+  })
+
+  it('previews the selected hospitalization scope through the dedicated API', async () => {
+    mocks.requestRaw.mockResolvedValue({ data: { counts: { deduplicated: 3 } } })
+    const payload = {
+      scope_mode: 'active_and_discharged' as const,
+      as_of_date: '2026-07-30',
+      discharge_start_date: '2026-07-01',
+      discharge_end_date: '2026-07-30',
+      departments: ['重症医学科（ICU）'],
+    }
+
+    await previewManualSamplePoolHospitalizationScope('pool / 1', payload)
+
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/pool%20%2F%201/hospitalization-scope/preview',
+      data: payload,
+      timeout: undefined,
+    })
+  })
+
+  it('starts synchronization with the exact previewed hospitalization scope', async () => {
+    mocks.requestRaw.mockResolvedValue({ data: { job_id: 'job-1' } })
+    const payload = {
+      scope_mode: 'active' as const,
+      as_of_date: '2026-07-30',
+      departments: [],
+    }
+
+    await syncManualSamplePoolRecordsByHospitalization('pool-1', payload)
+
+    expect(mocks.requestRaw).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/pool-1/sync-by-hospitalization',
+      data: payload,
+      timeout: undefined,
     })
   })
 })

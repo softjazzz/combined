@@ -96,6 +96,7 @@ def _typed_029_session(
     surgery_mode: str = "exact",
     mr_surgery_mode: str = "empty",
     summary_mode: str = "available",
+    selected_rule_ids: tuple[str, ...] = ("LX0609-029",),
 ):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -115,7 +116,16 @@ def _typed_029_session(
                 raise SourceEvidenceQueryError()
             if mr_surgery_mode == "unavailable":
                 raise SourceEvidenceUnavailable()
-            rows = ()
+            rows = (
+                (
+                    {
+                        "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                        "surgery_name": "连续性肾脏替代治疗",
+                    },
+                )
+                if mr_surgery_mode == "nontraditional"
+                else ()
+            )
         elif source_key == "presurg_summary":
             if summary_mode == "error":
                 raise SourceEvidenceQueryError()
@@ -132,7 +142,7 @@ def _typed_029_session(
         )
 
     return build_luxian_0609_evidence_read_session(
-        selected_rule_ids=("LX0609-029",),
+        selected_rule_ids=selected_rule_ids,
         institute_id="safe-institute",
         patient_id="safe-patient",
         visit_id="safe-visit",
@@ -140,6 +150,34 @@ def _typed_029_session(
         created_at="2026-07-21T06:00:00+08:00",
         row_reader=reader,
     )
+
+
+@pytest.mark.asyncio
+async def test_typed_029_ungraded_mr_operation_is_not_applicable_without_llm():
+    session = _typed_029_session(
+        surgery_mode="empty",
+        mr_surgery_mode="nontraditional",
+        selected_rule_ids=("LX0609-029", "LX0609-039"),
+    )
+    client = _Client([])
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state == "not_applicable"
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -476,6 +514,15 @@ def test_typed_detail_rules_are_not_applicable_when_parent_document_is_absent(
 
     assert outcome.status == "not_applicable"
     assert outcome.reason_code == reason_code
+    if rule_id == "LX0609-037":
+        assert outcome.customer_display_facts == {
+            "failure_kind": "anesthesia_visit_missing",
+            "performed_anesthesia_confirmed": True,
+            "missing_visit_sources": [
+                "preane_surveil_record",
+                "postane_surveil_record",
+            ],
+        }
 
 
 def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record(
@@ -559,6 +606,170 @@ class _RowsOnlyMaterials:
 
     def rows(self, source_key: str) -> tuple[dict, ...]:
         return self._rows_by_source.get(source_key, ())
+
+
+def test_typed_anesthesia_trigger_uses_qualified_surgery_material(monkeypatch):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda *_args, **_kwargs: ("absent", ""),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: (
+            "available" if source_key == "anesthesia_record" else "empty"
+        ),
+    )
+    materials = _RowsOnlyMaterials(
+        {
+            "mr_surgery": (
+                {
+                    "surgical_level": "3",
+                    "anesthesia_method": "静吸复合全麻",
+                },
+            ),
+            "anesthesia_record": (
+                {
+                    "document_title": "麻醉记录",
+                    "submit_datetime": datetime(2026, 7, 7, 18, 33, 26),
+                },
+            ),
+        }
+    )
+
+    assert surgery_doc._typed_anesthesia_trigger(object(), materials) == (
+        "present",
+        "静吸复合全麻",
+        "mr_surgery",
+    )
+
+
+def test_typed_anesthesia_trigger_ignores_ungraded_non_surgical_operations(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda *_args, **_kwargs: ("absent", ""),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda *_args, **_kwargs: "empty",
+    )
+    materials = _RowsOnlyMaterials(
+        {
+            "mr_surgery": (
+                {
+                    "surgery_name": "中心静脉置管术",
+                    "surgical_level": None,
+                    "anesthesia_method": "局部浸润麻醉",
+                },
+            ),
+        }
+    )
+
+    assert surgery_doc._typed_anesthesia_trigger(object(), materials) == (
+        "absent",
+        "",
+        "",
+    )
+
+
+def _patch_typed_039_present_sources(monkeypatch) -> None:
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda _rule_id: frozenset(
+            {
+                "surgery_record",
+                "mr_surgery",
+                "rescue_record",
+                "presurg_discussion",
+            }
+        ),
+    )
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "") if source_key == "surgery_record" else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "available",
+    )
+
+
+def test_typed_039_is_compliant_when_surgeon_is_in_discussion_staff(monkeypatch):
+    _patch_typed_039_present_sources(monkeypatch)
+    materials = _RowsOnlyMaterials(
+        {
+            "surgery_record": (
+                {"document_id": "surgery-1", "surgeon": "韩平"},
+            ),
+            "presurg_discussion": (
+                {
+                    "document_id": "discussion-1",
+                    "host_name": "刘娟",
+                    "discuss_staff": "韩平、刘娟、曾亚丽",
+                },
+            ),
+        }
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=materials,
+    )
+
+    assert outcome.status == "compliant"
+    assert outcome.reason_code == "surgeon_participation_confirmed"
+    assert outcome.customer_display_facts == {
+        "surgeons": ["韩平"],
+        "discussion_participants": ["刘娟", "曾亚丽", "韩平"],
+        "matched_surgeons": ["韩平"],
+    }
+
+
+def test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion(monkeypatch):
+    _patch_typed_039_present_sources(monkeypatch)
+    materials = _RowsOnlyMaterials(
+        {
+            "surgery_record": (
+                {"document_id": "surgery-1", "surgeon": "韩平"},
+            ),
+            "presurg_discussion": (
+                {
+                    "document_id": "discussion-1",
+                    "host_name": "刘娟",
+                    "discuss_staff": "刘娟、曾亚丽",
+                },
+            ),
+        }
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-039",
+        snapshot=object(),
+        materials=materials,
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.reason_code == "surgeon_not_in_preop_discussion"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "surgeon_not_in_preop_discussion",
+        "surgeons": ["韩平"],
+        "discussion_participants": ["刘娟", "曾亚丽"],
+        "matched_surgeons": [],
+        "source_document_id": "surgery-1",
+        "source_document_type": "surgery_record",
+    }
 
 
 def test_typed_missing_document_facts_keep_only_unique_trigger_document_id(monkeypatch):
@@ -832,6 +1043,7 @@ async def test_missing_visits_are_owned_by_036_and_037_is_not_applicable():
         "data_gap",
         "not_applicable",
     ]
+    assert result.results[1]["metadata"]["reason_code"] == "anesthesia_visit_absent"
     assert result.llm_call_count == 0
 
 

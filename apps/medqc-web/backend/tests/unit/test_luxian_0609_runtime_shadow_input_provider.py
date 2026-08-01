@@ -74,13 +74,18 @@ def test_provider_queries_exact_sorted_scope_and_emits_safe_rows(monkeypatch):
     assert signal_outcome.positive_signals and signal_outcome.positive_signals[0].event_status == "performed"
 
 
-def test_provider_emits_performed_signal_from_typed_mr_surgery_when_surgery_record_is_empty(monkeypatch):
+def test_provider_does_not_use_qualified_mr_surgery_without_formal_surgery_record(monkeypatch):
     seen: list[str] = []
 
     def _reader(**kwargs):
         seen.append(kwargs["source_key"])
         if kwargs["source_key"] == "mr_surgery":
-            return [{"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)}]
+            return [
+                {
+                    "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                    "surgical_level": "三级",
+                }
+            ]
         return []
 
     monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
@@ -93,10 +98,33 @@ def test_provider_emits_performed_signal_from_typed_mr_surgery_when_surgery_reco
 
     assert seen == sorted(seen)
     mr_outcome = next(item for item in result.extraction_inputs if item.source_key == "mr_surgery")
-    assert len(mr_outcome.positive_signals) == 1
-    assert mr_outcome.positive_signals[0].source_key == "mr_surgery"
-    assert mr_outcome.positive_signals[0].event_status == "performed"
+    assert mr_outcome.positive_signals == ()
     assert "2026-01-01" not in repr(result)
+
+
+def test_provider_does_not_treat_ungraded_mr_operation_as_surgery_trigger(monkeypatch):
+    def _reader(**kwargs):
+        if kwargs["source_key"] == "mr_surgery":
+            return [
+                {
+                    "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+                    "surgery_name": "连续性肾脏替代治疗",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(provider, "read_luxian_0609_runtime_source_rows", _reader)
+    result = provider.provide_luxian_0609_runtime_shadow_inputs(
+        plan=_plan("LX0609-029", "LX0609-030", "LX0609-032"),
+        institute_id="i",
+        patient_id="p",
+        visit_id=VISIT,
+    )
+
+    mr_outcome = next(
+        item for item in result.extraction_inputs if item.source_key == "mr_surgery"
+    )
+    assert mr_outcome.positive_signals == ()
 
 
 @pytest.mark.parametrize(
@@ -412,9 +440,18 @@ def test_row_refs_are_order_independent_duplicate_safe_and_visit_scoped(monkeypa
 
 def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeypatch):
     rows = [
-        {"surgery_begin_datetime": datetime(2026, 1, 2, 8, 0)},
-        {"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},
-        {"surgery_begin_datetime": datetime(2026, 1, 1, 8, 0)},
+        {
+            "surgery_begin_datetime": datetime(2026, 1, 2, 8, 0),
+            "surgical_level": "三级",
+        },
+        {
+            "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+            "surgical_level": "三级",
+        },
+        {
+            "surgery_begin_datetime": datetime(2026, 1, 1, 8, 0),
+            "surgical_level": "三级",
+        },
     ]
 
     def _reader_reversed(**kwargs):
@@ -435,10 +472,10 @@ def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeyp
     assert first.evidence_payload == second.evidence_payload
     assert first.extraction_inputs == second.extraction_inputs
     refs = [
-        item.signal_ref
-        for item in next(
-            item for item in first.extraction_inputs if item.source_key == "mr_surgery"
-        ).positive_signals
+        row["row_ref"]
+        for row in first.evidence_payload["programmatic_timeline"]["documents"][
+            "mr_surgery"
+        ]
     ]
     assert len(refs) == len(set(refs)) == 3
 
@@ -452,7 +489,7 @@ def test_mr_surgery_rows_are_order_independent_and_time_changes_identity(monkeyp
         plan=_plan("LX0609-030"), institute_id="i", patient_id="p", visit_id=VISIT,
     )
     assert first.evidence_payload != changed.evidence_payload
-    assert first.extraction_inputs != changed.extraction_inputs
+    assert first.extraction_inputs == changed.extraction_inputs
     assert "2026-01-0" not in repr(first)
 
 

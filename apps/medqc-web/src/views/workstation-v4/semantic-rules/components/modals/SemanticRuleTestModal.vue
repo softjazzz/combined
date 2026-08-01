@@ -9,14 +9,21 @@
     class="semantic-test-modal"
     @update:open="emit('update:open', $event)"
   >
-    <div v-if="rule" class="test-wrap">
+    <div
+      v-if="rule"
+      class="test-wrap"
+    >
       <div class="test-head">
         <div>
-          <div class="test-kicker">规则评估</div>
+          <div class="test-kicker">
+            规则评估
+          </div>
           <div class="test-rule-title">
             {{ rule.name }}
           </div>
-          <div class="test-rule-subtitle">选择示例或输入病历文本，验证该规则识别结果。</div>
+          <div class="test-rule-subtitle">
+            选择示例或输入病历文本，验证该规则识别结果。
+          </div>
         </div>
         <div class="test-example-switch">
           <button
@@ -56,7 +63,10 @@
         </a-button>
       </div>
 
-      <div v-if="result" class="test-result">
+      <div
+        v-if="result"
+        class="test-result"
+      >
         <div class="test-result-head">
           <div>
             <span class="test-result-kicker">评估输出</span>
@@ -77,22 +87,42 @@
             "
             class="test-result-block"
           >
-            <div class="test-result-block-title">调试信息</div>
+            <div class="test-result-block-title">
+              调试信息
+            </div>
             <div class="test-result-block-content test-result-debug">
-              <p v-if="result.error_category">错误分类：{{ result.error_category }}</p>
-              <p v-if="result.status_code">状态码：{{ result.status_code }}</p>
-              <p v-if="result.trace_id">Trace ID：{{ result.trace_id }}</p>
-              <p v-if="result.error_detail">错误详情：{{ result.error_detail }}</p>
+              <p v-if="result.error_category">
+                错误分类：{{ result.error_category }}
+              </p>
+              <p v-if="result.status_code">
+                状态码：{{ result.status_code }}
+              </p>
+              <p v-if="result.trace_id">
+                Trace ID：{{ result.trace_id }}
+              </p>
+              <p v-if="result.error_detail">
+                错误详情：{{ result.error_detail }}
+              </p>
             </div>
           </div>
-          <div v-if="result.evidence" class="test-result-block">
-            <div class="test-result-block-title">证据引用</div>
+          <div
+            v-if="result.evidence"
+            class="test-result-block"
+          >
+            <div class="test-result-block-title">
+              证据引用
+            </div>
             <div class="test-result-block-content">
               {{ result.evidence }}
             </div>
           </div>
-          <div v-if="result.suggestion" class="test-result-block">
-            <div class="test-result-block-title">建议</div>
+          <div
+            v-if="result.suggestion"
+            class="test-result-block"
+          >
+            <div class="test-result-block-title">
+              建议
+            </div>
             <div class="test-result-block-content">
               {{ result.suggestion }}
             </div>

@@ -24,6 +24,23 @@
 - Do not bypass type errors by broad `any` changes in shared types.
 - Prefer fixing type boundaries (`api dto`, `store state`, `component props/emits`) over local casts.
 
+## CodeGraph 调用链定位工具
+
+- 本仓库已安装并初始化 CodeGraph，本地索引目录为 `.codegraph/`，该目录只用于本机分析，不得提交。
+- 项目代码量大、历史技术债多；遇到“入口不生效、页面回退、调用链不清、前后端结果投影不一致、LX0609 新旧链路混杂”等问题时，应优先用 CodeGraph 做只读调用链定位，再决定修改点。
+- PowerShell 中优先使用绝对路径调用：
+  - `$CodeGraph = 'C:\Users\Coldplay\AppData\Roaming\npm\codegraph.cmd'`
+  - `& $CodeGraph status .`
+  - `& $CodeGraph query CustomerSampleValidation`
+  - `& $CodeGraph explore CustomerSampleValidationView`
+  - `& $CodeGraph node src/views/workstation-v4/CustomerSampleValidationView.vue`
+- 常用场景：
+  - 查前端结果查看入口：`SemanticRulesBatchResultDrawer`、`CustomerSampleValidationView`、`QCRecordCompareWorkbench`。
+  - 查 LX0609 后端链路：`prepare_luxian_0609_execution`、`execute_luxian_0609_native_*`、`aggregate_luxian_0609_orchestrated_results`、`build_documents_from_domain_bundles`。
+  - 查影响范围：`& $CodeGraph impact luxian_0609_result_aggregator`，或使用 `callers` / `callees` 查看调用关系。
+- 修改代码后，如需要继续依赖索引判断影响范围，应执行 `& $CodeGraph sync .` 同步索引；索引异常时才执行 `& $CodeGraph index .` 重建。
+- CodeGraph 只用于快速定位源码结构和调用关系，不能替代真实病例 trace、pytest/vitest、浏览器验证、性能数据和业务验收判断。
+
 ## Frontend UI/UX Rules
 
 - `workstation-v4` 页面必须优先遵循 `apps/medqc-web/docs/gap/WorkstationV4-医疗浅色-DESIGN.md`。
@@ -84,4 +101,8 @@ If full checks are too heavy locally, run at least:
 
 ## 开发习惯
 
+- 默认将边界明确的实现、只读排查、测试和真实数据复核优先委派给子代理；主协调 Agent 负责先行定位根因、定义最小方案与验收标准，并亲自审查关键 diff、真实结果和最终结论。只有涉及同一文件的顺序性修改、跨任务架构取舍或无法安全拆分的短小修复，才由主协调 Agent 直接实现。
+- 开发或测试任务中，如果可以将读取、验证、浏览器检查、接口回归等工作拆给子代理并发执行，应优先并发调用子代理，以节约开发和验收时间；涉及同一文件写入或需要严格顺序的修改除外。
+- 验证按风险分层：小范围修改先运行对应的聚焦单测、接口或浏览器检查；完整 `npm run type-check` 只在一个功能闭环完成、准备提交或改动共享类型/API 边界时运行。不得每次微小补丁后都重复完整类型检查，避免以低价值等待替代有效验证。
+- 质控规则优先用 Python 处理结构化字段、确定性时间计算、精确存在性和可验证正则；若缺少可靠结构化字段，或判定依赖语义理解、跨文书角色/关联关系，且一个小闭环内无法稳定达到验收标准，应立即切换为“裁剪后的最小必要上下文 + 单次受控 LLM 事实提取 + Python 严格校验与状态映射”，不得无限堆叠关键词、正则和状态机。切换前必须明确 LLM 输入边界、输出枚举、失败语义、调用/token 上限及真实病例验收集。
 - 每完成一个功能修改或 bug 修复后，主动使用 /commit workflow 提交代码。

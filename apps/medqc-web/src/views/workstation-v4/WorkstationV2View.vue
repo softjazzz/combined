@@ -1,13 +1,23 @@
 <template>
   <div :class="['ws-v2', { 'ws-v2-embedded': embedded }]">
     <!-- 侧边栏（仅独立模式） -->
-    <aside v-if="!embedded" :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]">
+    <aside
+      v-if="!embedded"
+      :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]"
+    >
       <div class="sidebar-header">
-        <div v-if="!sidebarCollapsed" class="sidebar-title">
+        <div
+          v-if="!sidebarCollapsed"
+          class="sidebar-title"
+        >
           <ThunderboltOutlined style="color: #0066cc" />
           <span>AI 质控工作站</span>
         </div>
-        <a-button type="text" size="small" @click="sidebarCollapsed = !sidebarCollapsed">
+        <a-button
+          type="text"
+          size="small"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+        >
           <MenuFoldOutlined v-if="!sidebarCollapsed" />
           <MenuUnfoldOutlined v-else />
         </a-button>
@@ -32,7 +42,9 @@
           <template #icon>
             <ClusterOutlined />
           </template>
-          <template #title> DRG/DIP </template>
+          <template #title>
+            DRG/DIP
+          </template>
           <a-menu-item key="pre-analysis">
             <template #icon>
               <FileSearchOutlined />
@@ -86,7 +98,10 @@
     <!-- 主内容区 -->
     <main class="ws-v2-main">
       <!-- 工作台视图 -->
-      <div v-if="currentView === 'workbench'" class="workbench-layout">
+      <div
+        v-if="currentView === 'workbench'"
+        class="workbench-layout"
+      >
         <header class="workbench-hero">
           <div>
             <span class="workbench-eyebrow">工作台</span>
@@ -94,7 +109,9 @@
             <p>集中查看病案原文、首页抽取、质控结果和 DRG/DIP 预分组。</p>
           </div>
           <div class="workbench-hero-actions">
-            <a-tag color="blue"> {{ testCases.length }} 份病历 </a-tag>
+            <a-tag color="blue">
+              {{ testCases.length }} 份病历
+            </a-tag>
             <a-button
               v-if="demoCase"
               type="primary"
@@ -125,9 +142,15 @@
         </section>
 
         <!-- 上方双栏区 -->
-        <div ref="panelsRef" class="workbench-panels">
+        <div
+          ref="panelsRef"
+          class="workbench-panels"
+        >
           <!-- 左栏：病历原文 -->
-          <div class="panel-left" :style="{ width: leftPanelWidth + '%' }">
+          <div
+            class="panel-left"
+            :style="{ width: leftPanelWidth + '%' }"
+          >
             <div class="panel-header">
               <span class="panel-title"> <FileTextOutlined /> 病历原文 </span>
               <a-space>
@@ -153,12 +176,22 @@
           </div>
 
           <!-- 可拖拽分隔线 -->
-          <div class="resize-handle" @mousedown="startResize" />
+          <div
+            class="resize-handle"
+            @mousedown="startResize"
+          />
 
           <!-- 右栏：分析面板 -->
-          <div class="panel-right" :style="{ width: 100 - leftPanelWidth + '%' }">
+          <div
+            class="panel-right"
+            :style="{ width: 100 - leftPanelWidth + '%' }"
+          >
             <div class="panel-header">
-              <a-segmented v-model:value="activeTab" :options="analysisTabs" size="small" />
+              <a-segmented
+                v-model:value="activeTab"
+                :options="analysisTabs"
+                size="small"
+              />
             </div>
             <div class="panel-body custom-scrollbar">
               <!-- Tab1: 首页结果 (M1) -->
@@ -173,11 +206,16 @@
               />
 
               <!-- Tab2: 质控结果 (M2 + M3-A) -->
-              <div v-else-if="activeTab === 'qc'" class="tab-placeholder">
+              <div
+                v-else-if="activeTab === 'qc'"
+                class="tab-placeholder"
+              >
                 <SafetyCertificateOutlined style="font-size: 48px; color: #0066cc" />
                 <h3>首页质控</h3>
                 <p>形式质控（M2）+ 内涵质控（M3-A）</p>
-                <p class="hint">规则引擎接入后展示结构化问题与复核入口</p>
+                <p class="hint">
+                  规则引擎接入后展示结构化问题与复核入口
+                </p>
               </div>
 
               <!-- Tab3: DRG 分组 (M6) -->
@@ -188,13 +226,13 @@
                 :has-frontpage="!!frontpage"
                 :main-diagnosis-code="
                   frontpage?.primary_diagnosis_code ||
-                  frontpage?.diagnoses?.discharge_main_icd ||
-                  ''
+                    frontpage?.diagnoses?.discharge_main_icd ||
+                    ''
                 "
                 :main-diagnosis-text="
                   frontpage?.primary_diagnosis_name ||
-                  frontpage?.diagnoses?.discharge_main_diagnosis_text ||
-                  ''
+                    frontpage?.diagnoses?.discharge_main_diagnosis_text ||
+                    ''
                 "
                 :main-procedure-code="
                   frontpage?.main_procedure_code || frontpage?.procedures?.main?.code || ''
@@ -207,7 +245,10 @@
               />
 
               <!-- Tab4: AI 画像 (M3-B) -->
-              <AIProfileDashboard v-else-if="activeTab === 'profile'" :frontpage="frontpage" />
+              <AIProfileDashboard
+                v-else-if="activeTab === 'profile'"
+                :frontpage="frontpage"
+              />
 
               <!-- Tab5: ICD 查询 (M4) -->
               <ICDSearchPanel v-else-if="activeTab === 'icd'" />
@@ -220,7 +261,9 @@
           <div class="footer-header">
             <span class="panel-title"> <ProfileOutlined /> 病历队列 </span>
             <a-space>
-              <a-tag color="blue"> {{ testCases.length }} 份 </a-tag>
+              <a-tag color="blue">
+                {{ testCases.length }} 份
+              </a-tag>
             </a-space>
           </div>
           <div class="test-case-bar">
@@ -262,14 +305,20 @@
       />
 
       <!-- 质控消息 -->
-      <div v-else-if="currentView === 'messages'" class="qc-message-page">
+      <div
+        v-else-if="currentView === 'messages'"
+        class="qc-message-page"
+      >
         <header class="qc-message-header">
           <div>
             <span class="qc-message-eyebrow">质控消息</span>
             <h2>病案问题概览</h2>
             <p>集中推送当天高频病案问题，辅助质控人员快速定位科室和病历。</p>
           </div>
-          <button type="button" class="qc-message-primary">
+          <button
+            type="button"
+            class="qc-message-primary"
+          >
             <RefreshCw class="qc-message-button-icon" />
             刷新消息
           </button>
@@ -327,7 +376,9 @@
                   <p>普通外科 12 份病历集中出现，建议优先核对首页诊断和出院记录诊断。</p>
                   <small>最近更新 09:42 · 12 份病历</small>
                 </div>
-                <button type="button">查看</button>
+                <button type="button">
+                  查看
+                </button>
               </article>
               <article class="qc-message-item">
                 <span class="qc-message-item-dot" />
@@ -336,7 +387,9 @@
                   <p>骨科、普外科存在时限风险，需核对手术时间和文书记录时间。</p>
                   <small>最近更新 09:18 · 8 份病历</small>
                 </div>
-                <button type="button">查看</button>
+                <button type="button">
+                  查看
+                </button>
               </article>
               <article class="qc-message-item">
                 <span class="qc-message-item-dot" />
@@ -345,7 +398,9 @@
                   <p>影像报告已出具，但病程记录未见对应分析，建议补充诊疗依据。</p>
                   <small>最近更新 08:56 · 6 份病历</small>
                 </div>
-                <button type="button">查看</button>
+                <button type="button">
+                  查看
+                </button>
               </article>
             </div>
           </div>
@@ -396,7 +451,10 @@
       </div>
 
       <!-- ICD 编码查询（独立全屏视图） -->
-      <div v-else-if="currentView === 'icd-search'" class="icd-fullpage">
+      <div
+        v-else-if="currentView === 'icd-search'"
+        class="icd-fullpage"
+      >
         <ICDSearchPanel />
       </div>
     </main>
@@ -412,7 +470,11 @@
     />
 
     <!-- 质控提醒浮动窗口 -->
-    <QCAlertPanel :frontpage="frontpage" :analyzing="extracting" @refresh="extractStructuredData" />
+    <QCAlertPanel
+      :frontpage="frontpage"
+      :analyzing="extracting"
+      @refresh="extractStructuredData"
+    />
   </div>
 </template>
 

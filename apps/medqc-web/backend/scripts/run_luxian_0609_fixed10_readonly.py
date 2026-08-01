@@ -746,7 +746,7 @@ async def _evaluate_runtime_flag_ab_case(
     from app.services.luxian_0609 import execution as luxian_execution
     from app.services.luxian_0609 import (
         native_basic_timeliness,
-        native_consultation_execution,
+        native_consultation_episode_execution,
         native_course_quality_execution,
         native_mdt_execution,
         native_surgery_gate_execution,
@@ -788,7 +788,7 @@ async def _evaluate_runtime_flag_ab_case(
     }
     typed_decision_audits: list[dict[str, Any]] = []
     original_consultation_reader = (
-        native_consultation_execution.read_luxian_0609_native_source_rows
+        native_consultation_episode_execution.read_luxian_0609_native_source_rows
     )
     original_mdt_reader = native_mdt_execution.read_luxian_0609_native_source_rows
     original_basic_reader = (
@@ -913,7 +913,7 @@ async def _evaluate_runtime_flag_ab_case(
         for name in managed_flags:
             setattr(settings, name, False)
         if mode_label == "unified_engine":
-            native_consultation_execution.read_luxian_0609_native_source_rows = (
+            native_consultation_episode_execution.read_luxian_0609_native_source_rows = (
                 counted_consultation_reader
             )
             native_mdt_execution.read_luxian_0609_native_source_rows = (
@@ -986,7 +986,7 @@ async def _evaluate_runtime_flag_ab_case(
             else:
                 setattr(settings, name, value)
         service.adjudicator_client.generate = original_generate
-        native_consultation_execution.read_luxian_0609_native_source_rows = (
+        native_consultation_episode_execution.read_luxian_0609_native_source_rows = (
             original_consultation_reader
         )
         native_mdt_execution.read_luxian_0609_native_source_rows = original_mdt_reader

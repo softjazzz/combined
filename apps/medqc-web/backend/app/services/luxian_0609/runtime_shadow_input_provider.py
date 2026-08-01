@@ -229,7 +229,15 @@ def provide_luxian_0609_runtime_shadow_inputs(
             qualification_material_hash = _target_qualification_material_hash(source_key, row)
             if qualification_material_hash is not None:
                 material["qualification_material_hash"] = qualification_material_hash
-            materials.append((material, has_trusted_performed_surgery(source_key=source_key, row=row)))
+            has_performed_time = has_trusted_performed_surgery(
+                source_key=source_key, row=row
+            )
+            if source_key == "mr_surgery":
+                # 029/030/032 的适用性不能由首页“手术及操作”清单触发。
+                # 该表同时包含输血、CRRT、置管、穿刺等治疗性操作；032
+                # 必须以正式 surgery_record 为准。
+                has_performed_time = False
+            materials.append((material, has_performed_time))
         materials.sort(key=lambda item: _canonical(item[0]))
         occurrences: dict[str, int] = {}
         for material, has_performed_time in materials:

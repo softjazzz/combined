@@ -8,7 +8,9 @@
       >
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <div class="text-[17px] font-semibold text-slate-950">病案首页工作区</div>
+            <div class="text-[17px] font-semibold text-slate-950">
+              病案首页工作区
+            </div>
             <span
               class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
             >
@@ -69,10 +71,10 @@
       <div
         v-if="
           !frontpageGenerating &&
-          !frontpagePostProcessing &&
-          !draft &&
-          !frontpageSheetLoading &&
-          !frontpageSheetData
+            !frontpagePostProcessing &&
+            !draft &&
+            !frontpageSheetLoading &&
+            !frontpageSheetData
         "
         class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-slate-200/80 bg-white/86 px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_2px_12px_rgba(0,0,0,0.055)]"
       >
@@ -81,7 +83,9 @@
         >
           <FileSearchOutlined class="text-[28px] text-[#0066cc]" />
         </div>
-        <div class="text-[18px] font-semibold text-slate-900">暂无病案首页数据</div>
+        <div class="text-[18px] font-semibold text-slate-900">
+          暂无病案首页数据
+        </div>
         <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
           当前病历还没有可展示的病案首页正式数据，可使用上方工具栏生成首页草稿或重新加载系统首页。
         </div>
@@ -112,12 +116,8 @@
             <span>生成场景：{{ sceneLabel(reportResult.scene) }}</span>
             <span>{{ textCoverageLabel(reportResult) }}</span>
             <span>{{ settlementDraftLabel(reportResult) }}</span>
-            <span
-              >总覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span
-            >
-            <span v-if="reportResult.coverage.missing"
-              >缺失 {{ reportResult.coverage.missing }} 项</span
-            >
+            <span>总覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span>
+            <span v-if="reportResult.coverage.missing">缺失 {{ reportResult.coverage.missing }} 项</span>
           </div>
         </template>
         <template #description>
@@ -136,7 +136,9 @@
       >
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="text-[14px] font-semibold text-slate-900">字段覆盖报告</div>
+            <div class="text-[14px] font-semibold text-slate-900">
+              字段覆盖报告
+            </div>
             <div class="mt-0.5 text-[12px] font-medium text-slate-500">
               按首页生成条款分组展示抽取完成度，缺失字段需复核后再进入正式首页。
             </div>
@@ -173,9 +175,15 @@
                 {{ item.present }}/{{ item.total }}
               </div>
               <div class="text-right text-[11px] leading-4 text-slate-500">
-                <div v-if="item.missing">缺失 {{ item.missing }}</div>
-                <div v-if="item.partial">需复核 {{ item.partial }}</div>
-                <div v-if="!item.missing && !item.partial">字段完整</div>
+                <div v-if="item.missing">
+                  缺失 {{ item.missing }}
+                </div>
+                <div v-if="item.partial">
+                  需复核 {{ item.partial }}
+                </div>
+                <div v-if="!item.missing && !item.partial">
+                  字段完整
+                </div>
               </div>
             </div>
           </article>
@@ -184,7 +192,9 @@
           v-if="topMissingFields.length"
           class="mt-3 rounded-[12px] border border-rose-100 bg-rose-50/55 px-3 py-2"
         >
-          <div class="mb-1 text-[12px] font-bold text-rose-700">优先补全字段</div>
+          <div class="mb-1 text-[12px] font-bold text-rose-700">
+            优先补全字段
+          </div>
           <div class="flex flex-wrap gap-1.5">
             <span
               v-for="field in topMissingFields"

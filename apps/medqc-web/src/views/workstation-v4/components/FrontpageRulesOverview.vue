@@ -7,7 +7,11 @@
           <span class="summary-pill">核心字段</span>
         </div>
         <div class="coverage-list">
-          <div v-for="item in coverageRows" :key="item.label" class="coverage-row">
+          <div
+            v-for="item in coverageRows"
+            :key="item.label"
+            class="coverage-row"
+          >
             <div>
               <strong>{{ item.label }}</strong>
               <p>{{ item.desc }}</p>
@@ -23,7 +27,11 @@
           <span class="summary-pill summary-pill-neutral">统一口径</span>
         </div>
         <ol class="flow-list">
-          <li v-for="step in flowSteps" :key="step.index" class="flow-row">
+          <li
+            v-for="step in flowSteps"
+            :key="step.index"
+            class="flow-row"
+          >
             <span class="flow-index">{{ step.index }}</span>
             <div>
               <strong>{{ step.title }}</strong>
@@ -39,7 +47,11 @@
           <span class="summary-pill">高优先级</span>
         </div>
         <div class="watch-list">
-          <div v-for="watch in watchItems" :key="watch.label" class="watch-row">
+          <div
+            v-for="watch in watchItems"
+            :key="watch.label"
+            class="watch-row"
+          >
             <div>
               <strong>{{ watch.label }}</strong>
               <p>{{ watch.desc }}</p>
@@ -56,7 +68,9 @@
           <h3>首页规则明细</h3>
           <span class="table-chip">按业务影响排序</span>
         </div>
-        <div class="table-meta">字段、约束、风险和处理建议统一放在同一张工作表中。</div>
+        <div class="table-meta">
+          字段、约束、风险和处理建议统一放在同一张工作表中。
+        </div>
       </div>
 
       <div class="table-scroll">
@@ -72,7 +86,10 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="rule in rules" :key="rule.code">
+            <tr
+              v-for="rule in rules"
+              :key="rule.code"
+            >
               <td>
                 <span class="rule-code">{{ rule.code }}</span>
               </td>
@@ -111,7 +128,11 @@
       </div>
 
       <div class="action-grid">
-        <article v-for="item in actions" :key="item.title" class="action-card">
+        <article
+          v-for="item in actions"
+          :key="item.title"
+          class="action-card"
+        >
           <div class="action-top">
             <div>
               <h4>{{ item.title }}</h4>
@@ -120,7 +141,10 @@
             <span class="action-status">{{ item.status }}</span>
           </div>
           <div class="action-tags">
-            <span v-for="tag in item.tags" :key="tag">{{ tag }}</span>
+            <span
+              v-for="tag in item.tags"
+              :key="tag"
+            >{{ tag }}</span>
           </div>
         </article>
       </div>

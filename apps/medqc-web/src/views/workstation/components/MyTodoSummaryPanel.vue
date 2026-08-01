@@ -4,7 +4,9 @@
   >
     <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
       <div>
-        <h3 class="text-[15px] font-bold text-slate-900">我的待办汇总</h3>
+        <h3 class="text-[15px] font-bold text-slate-900">
+          我的待办汇总
+        </h3>
       </div>
       <div class="rounded-md bg-[#eaf2ff] px-2 py-0.5 text-[11px] font-semibold text-[#0066cc]">
         个人执行项
@@ -17,7 +19,10 @@
         class="rounded-[12px] border border-slate-100 p-3.5 bg-slate-50/50"
       >
         <div class="flex items-center gap-2">
-          <span class="h-2 w-2 rounded-full" :class="card.dotColor" />
+          <span
+            class="h-2 w-2 rounded-full"
+            :class="card.dotColor"
+          />
           <span class="text-[12px] font-medium text-slate-600">{{ card.label }}</span>
         </div>
         <div

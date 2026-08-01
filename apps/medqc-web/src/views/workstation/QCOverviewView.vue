@@ -65,8 +65,12 @@
                 <h3>质控态势趋势</h3>
               </div>
               <div class="qc-home-range-switch">
-                <button type="button">近7天</button>
-                <button type="button">近30天</button>
+                <button type="button">
+                  近7天
+                </button>
+                <button type="button">
+                  近30天
+                </button>
               </div>
             </div>
 
@@ -77,11 +81,29 @@
                 <span><i class="qc-home-dot--amber" />已超时</span>
                 <span><i class="qc-home-dot--cyan" />处理中</span>
               </div>
-              <svg viewBox="0 0 760 250" role="img" aria-label="质控态势趋势">
+              <svg
+                viewBox="0 0 760 250"
+                role="img"
+                aria-label="质控态势趋势"
+              >
                 <defs>
-                  <linearGradient id="qcLineFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#0066cc" stop-opacity="0.12" />
-                    <stop offset="100%" stop-color="#0066cc" stop-opacity="0" />
+                  <linearGradient
+                    id="qcLineFill"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stop-color="#0066cc"
+                      stop-opacity="0.12"
+                    />
+                    <stop
+                      offset="100%"
+                      stop-color="#0066cc"
+                      stop-opacity="0"
+                    />
                   </linearGradient>
                 </defs>
                 <g class="qc-home-grid-lines">
@@ -125,18 +147,54 @@
                   </text>
                 </g>
                 <g class="qc-home-chart-values">
-                  <circle cx="722" cy="56" r="5" fill="#0066cc" />
-                  <text x="738" y="61" fill="#0066cc">
+                  <circle
+                    cx="722"
+                    cy="56"
+                    r="5"
+                    fill="#0066cc"
+                  />
+                  <text
+                    x="738"
+                    y="61"
+                    fill="#0066cc"
+                  >
                     {{ Number(homeData.kpis.my_pending_total || 0) }}
                   </text>
-                  <circle cx="722" cy="132" r="5" fill="#ef4444" />
-                  <text x="738" y="137" fill="#ef4444">{{ highRiskTaskCount }}</text>
-                  <circle cx="722" cy="166" r="5" fill="#f59e0b" />
-                  <text x="738" y="171" fill="#f59e0b">
+                  <circle
+                    cx="722"
+                    cy="132"
+                    r="5"
+                    fill="#ef4444"
+                  />
+                  <text
+                    x="738"
+                    y="137"
+                    fill="#ef4444"
+                  >{{ highRiskTaskCount }}</text>
+                  <circle
+                    cx="722"
+                    cy="166"
+                    r="5"
+                    fill="#f59e0b"
+                  />
+                  <text
+                    x="738"
+                    y="171"
+                    fill="#f59e0b"
+                  >
                     {{ Number(homeData.kpis.my_overdue_total || 0) }}
                   </text>
-                  <circle cx="722" cy="180" r="5" fill="#06b6d4" />
-                  <text x="738" y="185" fill="#06b6d4">{{ inProgressTaskCount }}</text>
+                  <circle
+                    cx="722"
+                    cy="180"
+                    r="5"
+                    fill="#06b6d4"
+                  />
+                  <text
+                    x="738"
+                    y="185"
+                    fill="#06b6d4"
+                  >{{ inProgressTaskCount }}</text>
                 </g>
               </svg>
             </div>
@@ -147,7 +205,9 @@
               <div>
                 <h3>风险洞察</h3>
               </div>
-              <a-tag color="processing"> AI </a-tag>
+              <a-tag color="processing">
+                AI
+              </a-tag>
             </div>
 
             <div class="qc-home-insight-layout">

@@ -2257,7 +2257,7 @@ async def test_044_transfusion_purpose_without_preassessment_is_non_compliant_wi
 
 
 @pytest.mark.asyncio
-async def test_048_dedicated_postop_course_omits_surgical_transfusion_is_defect(
+async def test_048_does_not_claim_three_document_mismatch_before_comparison_contract(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
@@ -2280,16 +2280,18 @@ async def test_048_dedicated_postop_course_omits_surgical_transfusion_is_defect(
         llm_client=_Client([]),
     )
 
-    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["status"] == "data_gap"
     assert result.results[0]["metadata"]["reason_code"] == (
-        "postop_first_course_transfusion_omitted"
+        "transfusion_comparison_fields_unavailable"
     )
     assert result.customer_display_facts == ((
         "LX0609-048",
         {
-            "failure_kind": "transfusion_requirement_not_documented",
-            "requirement": "postop_first_course_transfusion",
-            "checked_sources": ["surgery_record", "postsurg_firstcourse_record"],
+            "failure_kind": "system_data_contract_gap",
+            "system_gap_reason": "transfusion_comparison_fields_unavailable",
+            "gap_owner": "system_integration",
+            "conclusion": "已确认存在术中输血，但暂无法完成三份文书的一致性核对。",
+            "handling_suggestion": "请确认手术记录、麻醉记录和术后首次病程中的输血成分、剂量及时间均已完整同步后重新评估。",
         },
     ),)
     assert result.llm_call_count == result.total_tokens == 0

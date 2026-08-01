@@ -440,6 +440,7 @@ def test_rule_decision_fingerprint_is_stable_and_dimension_bound():
     assert set(first.to_safe_dict()) == {
         "applicability",
         "confidence",
+        "criterion_results",
         "evaluator_version",
         "evidence_state",
         "fact_refs",

@@ -434,10 +434,16 @@ def _has_exact_time(rows: Sequence[Mapping[str, Any]]) -> bool:
 
 
 def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
-    return any(
-        _clean(row.get("surgeon")) and _clean(row.get("signer") or row.get("recorder"))
-        for row in rows
-    )
+    for row in rows:
+        surgeon = _clean(row.get("surgeon"))
+        signer = _clean(
+            row.get("surgeon_sign")
+            or row.get("physician_sign")
+            or row.get("signer")
+        )
+        if surgeon and signer and surgeon == signer:
+            return True
+    return False
 
 
 def _authoritative_record_time(value: Any) -> datetime | None:

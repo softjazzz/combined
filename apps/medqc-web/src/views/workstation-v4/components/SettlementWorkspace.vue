@@ -8,7 +8,9 @@
       >
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <div class="text-[17px] font-semibold text-slate-950">结算清单工作区</div>
+            <div class="text-[17px] font-semibold text-slate-950">
+              结算清单工作区
+            </div>
             <span
               class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
             >
@@ -39,9 +41,9 @@
             class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
             :disabled="
               settlementLoading ||
-              !canGenerateSettlement ||
-              !selectedRecord?.patientId ||
-              !selectedRecord?.visitId
+                !canGenerateSettlement ||
+                !selectedRecord?.patientId ||
+                !selectedRecord?.visitId
             "
             @click="emit('generate-settlement-draft')"
           >
@@ -75,9 +77,14 @@
         </div>
       </div>
 
-      <div v-if="settlementLoading" class="flex flex-col items-center py-20">
+      <div
+        v-if="settlementLoading"
+        class="flex flex-col items-center py-20"
+      >
         <a-spin size="large" />
-        <div class="text-sm text-slate-400 mt-4">加载结算清单...</div>
+        <div class="text-sm text-slate-400 mt-4">
+          加载结算清单...
+        </div>
       </div>
       <div v-else-if="settlementData">
         <div
@@ -86,12 +93,19 @@
         >
           <span class="text-base text-blue-500">☑</span>
           <div class="min-w-0">
-            <div class="text-sm font-semibold text-[#0057b8]">AI 生成草稿</div>
+            <div class="text-sm font-semibold text-[#0057b8]">
+              AI 生成草稿
+            </div>
             <div class="text-xs text-slate-500">
               本清单由病案首页 AI 抽取结果和 CDM 数据自动组装，需人工审核后方可上传医保系统。
             </div>
           </div>
-          <a-tag color="blue" class="ml-auto flex-shrink-0 !rounded-full"> Draft </a-tag>
+          <a-tag
+            color="blue"
+            class="ml-auto flex-shrink-0 !rounded-full"
+          >
+            Draft
+          </a-tag>
         </div>
         <section
           v-if="settlementCoverageGroupSummaries.length"
@@ -99,7 +113,9 @@
         >
           <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div class="text-[13px] font-semibold text-slate-900">清单字段覆盖</div>
+              <div class="text-[13px] font-semibold text-slate-900">
+                清单字段覆盖
+              </div>
               <div class="mt-0.5 text-[12px] font-medium text-slate-500">
                 展示由首页草稿映射到医保结算清单的字段覆盖情况。
               </div>
@@ -163,7 +179,10 @@
 
         <SettlementSheet :data="settlementData" />
 
-        <div v-if="settlementQcReport" class="mb-6">
+        <div
+          v-if="settlementQcReport"
+          class="mb-6"
+        >
           <h4
             class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"
           >
@@ -174,25 +193,33 @@
               <div class="text-2xl font-semibold text-[#0066cc]">
                 {{ settlementQcReport.summary.total }}
               </div>
-              <div class="text-[10px] text-slate-400 mt-1">总规则数</div>
+              <div class="text-[10px] text-slate-400 mt-1">
+                总规则数
+              </div>
             </div>
             <div class="rounded-[14px] border border-slate-200/80 bg-slate-50/88 p-3 text-center">
               <div class="text-2xl font-semibold text-slate-700">
                 {{ settlementQcReport.summary.passed }}
               </div>
-              <div class="text-[10px] text-slate-400 mt-1">通过</div>
+              <div class="text-[10px] text-slate-400 mt-1">
+                通过
+              </div>
             </div>
             <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/50 p-3 text-center">
               <div class="text-2xl font-semibold text-[#0057b8]">
                 {{ settlementQcReport.summary.failed }}
               </div>
-              <div class="text-[10px] text-slate-400 mt-1">未通过</div>
+              <div class="text-[10px] text-slate-400 mt-1">
+                未通过
+              </div>
             </div>
             <div class="rounded-[14px] border border-slate-200/80 bg-white/88 p-3 text-center">
               <div class="text-2xl font-semibold text-slate-700">
                 {{ settlementQcReport.summary.pass_rate }}
               </div>
-              <div class="text-[10px] text-slate-400 mt-1">通过率</div>
+              <div class="text-[10px] text-slate-400 mt-1">
+                通过率
+              </div>
             </div>
           </div>
           <div class="space-y-2">
@@ -204,7 +231,10 @@
                 r.severity === 'error' ? 'border-blue-200 bg-blue-50/35' : 'border-slate-200/80'
               "
             >
-              <a-tag color="blue" class="mt-0.5 flex-shrink-0">
+              <a-tag
+                color="blue"
+                class="mt-0.5 flex-shrink-0"
+              >
                 {{ r.rule_id }}
               </a-tag>
               <div class="min-w-0">
@@ -228,7 +258,9 @@
         >
           <MedicineBoxOutlined class="text-[28px] text-[#0066cc]" />
         </div>
-        <div class="text-[18px] font-semibold text-slate-900">暂无结算清单数据</div>
+        <div class="text-[18px] font-semibold text-slate-900">
+          暂无结算清单数据
+        </div>
         <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
           当前病历还没有正式结算清单，可根据首页草稿和 CDM 数据生成一份结算草稿后继续质控。
         </div>

@@ -314,25 +314,22 @@ def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypa
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED is False
 
 
-def test_luxian_native_consultation_defaults_off_and_parses_boolean_env(monkeypatch):
+def test_luxian_native_consultation_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
 
     monkeypatch.setenv("LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", "false")
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is False
 
 
-def test_luxian_consultation_execution_link_defaults_off_and_parses_boolean_env(monkeypatch):
+def test_luxian_consultation_execution_link_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is False
 
 
 def test_preproduction_overlay_can_explicitly_enable_native_consultation(monkeypatch):
@@ -345,11 +342,11 @@ def test_preproduction_overlay_can_explicitly_enable_native_consultation(monkeyp
 
     assert resolved.LUXIAN_0609_NATIVE_CONSULTATION_ENABLED is True
     assert resolved.LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED is True
-    assert resolved.LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED", "true")
-    resolved = build_full_rule_decision_settings(Settings(_env_file=None), preproduction=True)
     assert resolved.LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is True
+
+    monkeypatch.setenv("LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED", "false")
+    resolved = build_full_rule_decision_settings(Settings(_env_file=None), preproduction=True)
+    assert resolved.LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED is False
 
 
 def test_luxian_native_exam_lab_defaults_on_and_can_be_disabled(monkeypatch):

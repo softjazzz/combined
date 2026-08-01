@@ -70,7 +70,7 @@ _PR_NO_MODEL_GATES = (
         args=(
             *_PYTEST_PREFIX,
             "tests/unit/test_luxian_0609_native_basic_timeliness.py",
-            "tests/unit/test_luxian_0609_native_consultation_execution.py",
+            "tests/unit/test_luxian_0609_native_consultation_episode_execution.py",
             "tests/unit/test_luxian_0609_native_course_quality_execution.py",
             "tests/unit/test_luxian_0609_native_exam_lab_execution.py",
             "tests/unit/test_luxian_0609_native_execution.py",

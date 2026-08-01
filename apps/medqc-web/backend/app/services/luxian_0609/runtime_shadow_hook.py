@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from ...core.settings import get_settings
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
-from .native_execution import execute_luxian_0609_native_rules
+from .native_execution import NATIVE_RULE_IDS, execute_luxian_0609_native_rules
 
 
 _PLAN_SCHEMA = "planner-v1"
@@ -128,19 +128,31 @@ def run_luxian_0609_runtime_shadow(
         if not planned:
             return _summary("skipped_no_effective_rules", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)
         if source_query_observations is None and extraction_inputs is None and institute_id and patient_id and visit_ref:
-            native = execute_luxian_0609_native_rules(
-                rule_ids=planned,
-                visit_id=visit_ref,
+            if set(planned).issubset(set(NATIVE_RULE_IDS)):
+                native = execute_luxian_0609_native_rules(
+                    rule_ids=planned,
+                    visit_id=visit_ref,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    source_schema=source_schema,
+                )
+                return _native_summary(
+                    planned_rule_ids=planned,
+                    planner_fingerprint=plan_fingerprint,
+                    native=native,
+                    elapsed_ms=(time.perf_counter() - started) * 1000,
+                )
+            provided = runtime_shadow_input_provider.provide_luxian_0609_runtime_shadow_inputs(
+                plan=plan,
                 institute_id=institute_id,
                 patient_id=patient_id,
+                visit_id=visit_ref,
                 source_schema=source_schema,
             )
-            return _native_summary(
-                planned_rule_ids=planned,
-                planner_fingerprint=plan_fingerprint,
-                native=native,
-                elapsed_ms=(time.perf_counter() - started) * 1000,
-            )
+            source_query_observations = provided.source_query_observations
+            extraction_inputs = provided.extraction_inputs
+            target_qualifications = provided.target_qualifications
+            evidence_payload = provided.evidence_payload
         qualification_required = any(rule_id in ("LX0609-029", "LX0609-032") for rule_id in planned)
         if source_query_observations is None or extraction_inputs is None or (qualification_required and target_qualifications is None):
             return _summary("inputs_unavailable", planned_rule_ids=planned, planner_fingerprint=plan_fingerprint, elapsed_ms=(time.perf_counter() - started) * 1000)

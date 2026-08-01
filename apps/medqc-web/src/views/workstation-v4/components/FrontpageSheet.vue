@@ -1,12 +1,21 @@
 <template>
   <div class="fp-sheet-wrap">
-    <div v-if="diagnosisGenerationPending" class="fp-pending" role="status" aria-live="polite">
+    <div
+      v-if="diagnosisGenerationPending"
+      class="fp-pending"
+      role="status"
+      aria-live="polite"
+    >
       <div class="fp-pending__top">
         <div class="fp-pending__title-wrap">
           <span class="fp-pending__icon">⚕</span>
           <div>
-            <div class="fp-pending__title">正在生成诊断编码</div>
-            <div class="fp-pending__sub">系统正在匹配 ICD 编码，诊断内容已先行展示</div>
+            <div class="fp-pending__title">
+              正在生成诊断编码
+            </div>
+            <div class="fp-pending__sub">
+              系统正在匹配 ICD 编码，诊断内容已先行展示
+            </div>
           </div>
         </div>
         <span class="fp-pending__badge">编码中</span>
@@ -19,17 +28,21 @@
     <!-- ===== 原生表格渲染的病案首页 ===== -->
     <div class="fp-wrapper">
       <!-- 标题 -->
-      <h1 class="fp-title">住 院 病 案 首 页</h1>
+      <h1 class="fp-title">
+        住 院 病 案 首 页
+      </h1>
 
       <!-- 顶部：医疗机构、付费方式、病案号 -->
-      <table class="fp-tbl" style="border-top: none">
+      <table
+        class="fp-tbl"
+        style="border-top: none"
+      >
         <tr>
           <td style="width: 50%; border-top: none">
             医疗机构:<u class="fill">{{ d.hospitalization.hospital_name }}</u>
           </td>
           <td style="width: 50%; border-top: none">
-            （组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u
-            >）
+            （组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u>）
           </td>
         </tr>
         <tr>
@@ -42,14 +55,15 @@
             病案号:<u class="fill">{{ d.hospitalization.medical_record_no }}</u>
           </td>
           <td>
-            第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u
-            >次住院
+            第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u>次住院
           </td>
         </tr>
       </table>
 
       <!-- ===== 基本信息 ===== -->
-      <div class="fp-sec-hd">基本信息</div>
+      <div class="fp-sec-hd">
+        基本信息
+      </div>
       <table class="fp-tbl">
         <tr>
           <td style="width: 14%">
@@ -62,8 +76,7 @@
             出生日期<u class="fill">{{ d.basic_info.birth_date }}</u>
           </td>
           <td style="width: 14%">
-            年龄<u class="fill">{{ d.basic_info.age_years }}</u
-            >岁
+            年龄<u class="fill">{{ d.basic_info.age_years }}</u>岁
           </td>
           <td style="width: 12%">
             国籍<u class="fill">{{ d.basic_info.nationality }}</u>
@@ -113,7 +126,9 @@
       </table>
 
       <!-- ===== 住院信息 ===== -->
-      <div class="fp-sec-hd">住院诊疗信息</div>
+      <div class="fp-sec-hd">
+        住院诊疗信息
+      </div>
       <table class="fp-tbl">
         <tr>
           <td colspan="6">
@@ -147,8 +162,7 @@
             病房<u class="fill">{{ d.hospitalization.discharge_ward }}</u>
           </td>
           <td>
-            实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u
-            >天
+            实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u>天
           </td>
           <td>&nbsp;</td>
         </tr>
@@ -181,14 +195,30 @@
       <!-- ===== 出院诊断（双列布局） ===== -->
       <table class="fp-tbl">
         <tr class="hd-row">
-          <td style="width: 25%">出院诊断</td>
-          <td style="width: 10%">疾病编码</td>
-          <td style="width: 8%">入院<br />病情</td>
-          <td style="width: 25%">出院诊断</td>
-          <td style="width: 10%">疾病编码</td>
-          <td style="width: 8%">入院<br />病情</td>
+          <td style="width: 25%">
+            出院诊断
+          </td>
+          <td style="width: 10%">
+            疾病编码
+          </td>
+          <td style="width: 8%">
+            入院<br>病情
+          </td>
+          <td style="width: 25%">
+            出院诊断
+          </td>
+          <td style="width: 10%">
+            疾病编码
+          </td>
+          <td style="width: 8%">
+            入院<br>病情
+          </td>
         </tr>
-        <tr v-for="(row, i) in diagnosisPairedRows" :key="'d' + i" class="data-row">
+        <tr
+          v-for="(row, i) in diagnosisPairedRows"
+          :key="'d' + i"
+          class="data-row"
+        >
           <!-- 左列 -->
           <td>
             <div class="fp-diag-cell">
@@ -279,7 +309,9 @@
           </td>
         </tr>
         <tr>
-          <td colspan="3">入院病情：1.有，2.临床未确定，3.情况不明，4.无</td>
+          <td colspan="3">
+            入院病情：1.有，2.临床未确定，3.情况不明，4.无
+          </td>
           <td colspan="3" />
         </tr>
       </table>
@@ -313,21 +345,68 @@
       <!-- ===== 手术信息 ===== -->
       <table class="fp-tbl">
         <tr class="hd-row">
-          <td rowspan="2" style="width: 20%">手术及操作名称</td>
-          <td rowspan="2" style="width: 12%">手术及操作编码</td>
-          <td rowspan="2" style="width: 12%">手术操作日期</td>
-          <td rowspan="2" style="width: 8%">手术级别</td>
-          <td colspan="3">手术及操作医师</td>
-          <td rowspan="2" style="width: 8%">切口愈合<br />等级</td>
-          <td rowspan="2" style="width: 8%">麻醉方式</td>
-          <td rowspan="2" style="width: 8%">麻醉医师</td>
+          <td
+            rowspan="2"
+            style="width: 20%"
+          >
+            手术及操作名称
+          </td>
+          <td
+            rowspan="2"
+            style="width: 12%"
+          >
+            手术及操作编码
+          </td>
+          <td
+            rowspan="2"
+            style="width: 12%"
+          >
+            手术操作日期
+          </td>
+          <td
+            rowspan="2"
+            style="width: 8%"
+          >
+            手术级别
+          </td>
+          <td colspan="3">
+            手术及操作医师
+          </td>
+          <td
+            rowspan="2"
+            style="width: 8%"
+          >
+            切口愈合<br>等级
+          </td>
+          <td
+            rowspan="2"
+            style="width: 8%"
+          >
+            麻醉方式
+          </td>
+          <td
+            rowspan="2"
+            style="width: 8%"
+          >
+            麻醉医师
+          </td>
         </tr>
         <tr class="hd-row">
-          <td style="width: 8%">术者</td>
-          <td style="width: 8%">I助</td>
-          <td style="width: 8%">II助</td>
+          <td style="width: 8%">
+            术者
+          </td>
+          <td style="width: 8%">
+            I助
+          </td>
+          <td style="width: 8%">
+            II助
+          </td>
         </tr>
-        <tr v-for="(s, i) in paddedSurgeries" :key="'s' + i" class="data-row">
+        <tr
+          v-for="(s, i) in paddedSurgeries"
+          :key="'s' + i"
+          class="data-row"
+        >
           <td>{{ s.text || '' }}</td>
           <td class="center mono">
             {{ s.code || '' }}
@@ -360,14 +439,18 @@
       </table>
 
       <!-- ===== 其他医学信息 ===== -->
-      <div class="fp-sec-hd">其他信息</div>
+      <div class="fp-sec-hd">
+        其他信息
+      </div>
       <table class="fp-tbl">
         <tr>
           <td colspan="3">
             药物过敏<u class="fill">{{ d.other_medical_info.drug_allergy_flag }}</u> □ 1.无 &nbsp;
             2.有
           </td>
-          <td colspan="3">死亡患者尸检 □ 1.是 2.否</td>
+          <td colspan="3">
+            死亡患者尸检 □ 1.是 2.否
+          </td>
         </tr>
         <tr>
           <td colspan="3">
@@ -396,7 +479,9 @@
       </table>
 
       <!-- ===== 费用信息（CDM mr_cost） ===== -->
-      <div class="fp-sec-hd">费用信息</div>
+      <div class="fp-sec-hd">
+        费用信息
+      </div>
       <table class="fp-tbl">
         <tr>
           <td style="width: 50%">
@@ -409,7 +494,9 @@
       </table>
 
       <!-- ===== 签名区 ===== -->
-      <div class="fp-sec-hd">签名</div>
+      <div class="fp-sec-hd">
+        签名
+      </div>
       <table class="fp-tbl">
         <tr>
           <td>
@@ -440,13 +527,23 @@
         </tr>
       </table>
 
-      <div class="fp-footer">（注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）</div>
+      <div class="fp-footer">
+        （注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）
+      </div>
     </div>
 
     <!-- ===== 诊断证据区域（LLM 主导） ===== -->
-    <section v-if="mainDiagnosisName" class="fp-evidence-section">
-      <div class="fp-evidence-title">诊断证据</div>
-      <div v-if="riskChipItems.length" class="fp-risk-chip-row">
+    <section
+      v-if="mainDiagnosisName"
+      class="fp-evidence-section"
+    >
+      <div class="fp-evidence-title">
+        诊断证据
+      </div>
+      <div
+        v-if="riskChipItems.length"
+        class="fp-risk-chip-row"
+      >
         <span
           v-for="chip in riskChipItems"
           :key="chip.key"
@@ -471,7 +568,10 @@
           @click="openDiagnosisEvidence(mainDiagnosisName)"
         >
           <span class="fp-evidence-btn-name">{{ mainDiagnosisName }}</span>
-          <span class="fp-evidence-btn-tag" :class="{ pending: evidenceGenerationPending }">
+          <span
+            class="fp-evidence-btn-tag"
+            :class="{ pending: evidenceGenerationPending }"
+          >
             {{ evidenceGenerationPending ? '证据生成中' : 'LLM证据' }}
           </span>
           <span

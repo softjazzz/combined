@@ -1,7 +1,9 @@
 <template>
   <div class="connection-studio flex flex-col h-full bg-white">
     <div class="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
-      <h2 class="text-[14px] font-semibold text-slate-800 tracking-tight">连接配置</h2>
+      <h2 class="text-[14px] font-semibold text-slate-800 tracking-tight">
+        连接配置
+      </h2>
       <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '测试当前标签连接'">
         <button
           class="text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
@@ -15,15 +17,26 @@
 
     <div class="px-5 py-3 shrink-0 relative">
       <div class="flex p-1 rounded-[8px] bg-slate-100/80 border border-slate-200/50 relative">
-        <button :class="tabClass('pg_local')" @click="state.activeTab = 'pg_local'">本地库</button>
-        <button :class="tabClass('pg_remote')" @click="state.activeTab = 'pg_remote'">
+        <button
+          :class="tabClass('pg_local')"
+          @click="state.activeTab = 'pg_local'"
+        >
+          本地库
+        </button>
+        <button
+          :class="tabClass('pg_remote')"
+          @click="state.activeTab = 'pg_remote'"
+        >
           源库 PG
         </button>
       </div>
     </div>
 
     <div class="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5">
-      <div v-if="state.activeTab === 'pg_remote'" class="space-y-4">
+      <div
+        v-if="state.activeTab === 'pg_remote'"
+        class="space-y-4"
+      >
         <a-alert
           v-if="state.loadErrors.connection"
           type="warning"
@@ -39,7 +52,9 @@
             <div class="text-[11px] text-slate-500 mt-1">
               对接病案平台入 ES 前的融合库；客户样本优先用 visit_id 匹配，可辅以 inpat_no / mr_no。
             </div>
-            <div class="text-[11px] text-slate-500 mt-1">仅 admin 可修改，qc_manager 只读。</div>
+            <div class="text-[11px] text-slate-500 mt-1">
+              仅 admin 可修改，qc_manager 只读。
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -50,7 +65,7 @@
                 type="text"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
             </div>
 
             <div>
@@ -62,7 +77,7 @@
                 :max="65535"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
             </div>
 
             <div>
@@ -72,7 +87,7 @@
                 type="text"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
             </div>
 
             <div>
@@ -82,7 +97,7 @@
                 type="text"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
             </div>
 
             <div>
@@ -92,7 +107,7 @@
                 type="text"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
             </div>
 
             <div class="col-span-2">
@@ -113,7 +128,7 @@
                 type="password"
                 :disabled="isReadonly"
                 class="studio-input"
-              />
+              >
               <div class="text-[11px] text-slate-400 mt-1">
                 当前密码状态：{{ state.pgConnectionForm.remote_password_set ? '已设置' : '未设置' }}
               </div>
@@ -147,13 +162,19 @@
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="text-[13px] font-semibold text-slate-800">PG 抽取模板</div>
+              <div class="text-[13px] font-semibold text-slate-800">
+                PG 抽取模板
+              </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 用模板快速下发场景、时间窗口、调度和夜间策略，再进入预检。
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <a-button size="small" :disabled="isReadonly" @click="expertMode = !expertMode">
+              <a-button
+                size="small"
+                :disabled="isReadonly"
+                @click="expertMode = !expertMode"
+              >
                 {{ expertMode ? '切换新手模式' : '切换专业模式' }}
               </a-button>
               <a-button
@@ -198,7 +219,9 @@
               v-if="!expertMode"
               class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2"
             >
-              <div class="text-[11px] text-slate-500">映射场景</div>
+              <div class="text-[11px] text-slate-500">
+                映射场景
+              </div>
               <div class="text-[13px] font-semibold text-slate-800 mt-0.5">
                 {{ sceneLabel }}
               </div>
@@ -254,7 +277,9 @@
                   style="width: 100%"
                   placeholder="请选择模板科室"
                 />
-                <div class="text-[11px] text-slate-500 mt-1">未选择时沿用全院</div>
+                <div class="text-[11px] text-slate-500 mt-1">
+                  未选择时沿用全院
+                </div>
               </div>
               <div>
                 <label class="studio-label">时间窗口 / 调度</label>
@@ -262,7 +287,9 @@
                   :value="`${state.policyForm.start_date || '未设'} ~ ${state.policyForm.end_date || '未设'}`"
                   readonly
                 />
-                <div class="text-[11px] text-slate-500 mt-1">应用到 PG 策略</div>
+                <div class="text-[11px] text-slate-500 mt-1">
+                  应用到 PG 策略
+                </div>
               </div>
             </template>
           </div>
@@ -298,7 +325,9 @@
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="text-[13px] font-semibold text-slate-800">抽取策略配置</div>
+              <div class="text-[13px] font-semibold text-slate-800">
+                抽取策略配置
+              </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 新手模式下建议沿用模板默认策略，仅在需要时展开高级配置。
               </div>
@@ -317,25 +346,33 @@
 
           <div class="grid grid-cols-4 gap-3">
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">当前场景</div>
+              <div class="studio-summary-card__label">
+                当前场景
+              </div>
               <div class="studio-summary-card__value">
                 {{ sceneLabel }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">策略版本</div>
+              <div class="studio-summary-card__label">
+                策略版本
+              </div>
               <div class="studio-summary-card__value font-mono">
                 {{ state.policyForm.policy_version || '未生成' }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">时间窗口</div>
+              <div class="studio-summary-card__label">
+                时间窗口
+              </div>
               <div class="studio-summary-card__value font-mono">
                 {{ policyDateRangeLabel }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">夜间窗口</div>
+              <div class="studio-summary-card__label">
+                夜间窗口
+              </div>
               <div class="studio-summary-card__value font-mono">
                 {{ nightWindowLabel }}
               </div>
@@ -355,7 +392,10 @@
               </div>
               <div>
                 <label class="studio-label">策略版本</label>
-                <a-input :value="state.policyForm.policy_version || '未生成'" readonly />
+                <a-input
+                  :value="state.policyForm.policy_version || '未生成'"
+                  readonly
+                />
               </div>
               <div class="col-span-2">
                 <label class="studio-label">目标科室</label>
@@ -454,7 +494,9 @@
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="text-[13px] font-semibold text-slate-800">同步目标表配置</div>
+              <div class="text-[13px] font-semibold text-slate-800">
+                同步目标表配置
+              </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 控制当前阶段参与预检与执行的目标表，已启用 {{ enabledTableCount }}/{{
                   state.pgSyncTables.length
@@ -476,25 +518,33 @@
 
           <div class="grid grid-cols-4 gap-3">
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">当前模式</div>
+              <div class="studio-summary-card__label">
+                当前模式
+              </div>
               <div class="studio-summary-card__value">
                 {{ state.pgConnectionForm.sync_mode === 'procedure' ? '存储过程回退' : '表直连' }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">启用表</div>
+              <div class="studio-summary-card__label">
+                启用表
+              </div>
               <div class="studio-summary-card__value">
                 {{ enabledTableCount }} / {{ state.pgSyncTables.length }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">Schema</div>
+              <div class="studio-summary-card__label">
+                Schema
+              </div>
               <div class="studio-summary-card__value font-mono">
                 {{ state.pgConnectionForm.remote_schema || 'public' }}
               </div>
             </div>
             <div class="studio-summary-card">
-              <div class="studio-summary-card__label">分组选择</div>
+              <div class="studio-summary-card__label">
+                分组选择
+              </div>
               <div class="studio-summary-card__value">
                 {{ selectedTableGroupSummary }}
               </div>
@@ -512,7 +562,9 @@
               style="width: 100%"
               placeholder="默认核心8表，可按分组扩展"
             />
-            <div class="text-[11px] text-slate-500">当前：{{ selectedTableGroupSummary }}</div>
+            <div class="text-[11px] text-slate-500">
+              当前：{{ selectedTableGroupSummary }}
+            </div>
             <div class="flex items-center gap-2">
               <a-button
                 size="small"
@@ -539,7 +591,11 @@
           </div>
 
           <div class="flex items-center justify-end gap-2">
-            <a-button size="small" :loading="state.isLoadingPgTables" @click="handleReloadPgTables">
+            <a-button
+              size="small"
+              :loading="state.isLoadingPgTables"
+              @click="handleReloadPgTables"
+            >
               刷新
             </a-button>
             <a-button
@@ -578,13 +634,22 @@
               />
             </div>
 
-            <div v-if="state.isLoadingPgTables" class="text-[12px] text-slate-500 py-3">
+            <div
+              v-if="state.isLoadingPgTables"
+              class="text-[12px] text-slate-500 py-3"
+            >
               正在加载表配置...
             </div>
-            <div v-else-if="filteredPgTables.length === 0" class="text-[12px] text-slate-500 py-3">
+            <div
+              v-else-if="filteredPgTables.length === 0"
+              class="text-[12px] text-slate-500 py-3"
+            >
               暂无匹配表，请调整搜索条件或关闭“仅看启用”。
             </div>
-            <div v-else class="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+            <div
+              v-else
+              class="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar pr-1"
+            >
               <div
                 v-for="item in filteredPgTables"
                 :key="item.name"
@@ -594,7 +659,11 @@
                   <div class="text-[12px] font-semibold text-slate-800 font-mono truncate">
                     {{ item.name }}
                   </div>
-                  <a-switch v-model:checked="item.enabled" size="small" :disabled="isReadonly" />
+                  <a-switch
+                    v-model:checked="item.enabled"
+                    size="small"
+                    :disabled="isReadonly"
+                  />
                 </div>
                 <div class="grid grid-cols-3 gap-2">
                   <input
@@ -603,21 +672,21 @@
                     :disabled="isReadonly"
                     placeholder="source_table"
                     class="studio-input"
-                  />
+                  >
                   <input
                     v-model="item.date_field"
                     type="text"
                     :disabled="isReadonly"
                     placeholder="date_field"
                     class="studio-input"
-                  />
+                  >
                   <input
                     v-model="item.fallback_date_field"
                     type="text"
                     :disabled="isReadonly"
                     placeholder="fallback_date_field（可选）"
                     class="studio-input"
-                  />
+                  >
                 </div>
               </div>
             </div>
@@ -627,12 +696,17 @@
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <div class="text-[13px] font-semibold text-slate-800">PG 预检摘要</div>
+              <div class="text-[13px] font-semibold text-slate-800">
+                PG 预检摘要
+              </div>
               <div class="text-[11px] text-slate-500 mt-1">
                 执行前检查连接、关键字段与表配置，避免“可触发但不可执行”。
               </div>
             </div>
-            <span class="studio-pill" :class="preflightToneClass">
+            <span
+              class="studio-pill"
+              :class="preflightToneClass"
+            >
               {{ preflightStatusText }}
             </span>
           </div>
@@ -647,25 +721,33 @@
           <template v-else>
             <div class="grid grid-cols-4 gap-3">
               <div class="studio-summary-card">
-                <div class="studio-summary-card__label">执行状态</div>
+                <div class="studio-summary-card__label">
+                  执行状态
+                </div>
                 <div class="studio-summary-card__value">
                   {{ state.preflightResult.executable ? '可执行' : '阻断' }}
                 </div>
               </div>
               <div class="studio-summary-card">
-                <div class="studio-summary-card__label">阻断项</div>
+                <div class="studio-summary-card__label">
+                  阻断项
+                </div>
                 <div class="studio-summary-card__value">
                   {{ state.preflightResult.blockers?.length || 0 }}
                 </div>
               </div>
               <div class="studio-summary-card">
-                <div class="studio-summary-card__label">警告项</div>
+                <div class="studio-summary-card__label">
+                  警告项
+                </div>
                 <div class="studio-summary-card__value">
                   {{ state.preflightResult.warnings?.length || 0 }}
                 </div>
               </div>
               <div class="studio-summary-card">
-                <div class="studio-summary-card__label">预计影响</div>
+                <div class="studio-summary-card__label">
+                  预计影响
+                </div>
                 <div class="studio-summary-card__value font-mono">
                   {{ Number(state.preflightResult.estimated_impact || 0).toLocaleString() }}
                 </div>
@@ -676,7 +758,9 @@
               v-if="state.preflightResult.blockers?.length"
               class="rounded-lg border border-rose-200/80 bg-rose-50/80 px-3 py-2"
             >
-              <div class="text-[11px] font-semibold text-rose-700">阻断原因</div>
+              <div class="text-[11px] font-semibold text-rose-700">
+                阻断原因
+              </div>
               <ul class="mt-1 space-y-1">
                 <li
                   v-for="(item, idx) in state.preflightResult.blockers"
@@ -692,7 +776,9 @@
               v-if="state.preflightResult.warnings?.length"
               class="rounded-lg border border-amber-200/80 bg-amber-50/80 px-3 py-2"
             >
-              <div class="text-[11px] font-semibold text-amber-700">预警提示</div>
+              <div class="text-[11px] font-semibold text-amber-700">
+                预警提示
+              </div>
               <ul class="mt-1 space-y-1">
                 <li
                   v-for="(item, idx) in state.preflightResult.warnings"
@@ -723,9 +809,17 @@
                   </thead>
                   <tbody>
                     <tr v-if="preflightTableRows.length === 0">
-                      <td colspan="5" class="text-center text-slate-400">暂无表校验明细</td>
+                      <td
+                        colspan="5"
+                        class="text-center text-slate-400"
+                      >
+                        暂无表校验明细
+                      </td>
                     </tr>
-                    <tr v-for="item in preflightTableRows" :key="item.table">
+                    <tr
+                      v-for="item in preflightTableRows"
+                      :key="item.table"
+                    >
                       <td class="font-mono">
                         {{ item.table }}
                       </td>
@@ -759,13 +853,24 @@
         </section>
       </div>
 
-      <div v-else class="space-y-4">
+      <div
+        v-else
+        class="space-y-4"
+      >
         <div class="pt-2 pb-3 border-b border-slate-100">
-          <div class="text-[13px] font-semibold text-slate-800">本地核心仓 (PG 本地)</div>
-          <div class="text-[11px] text-slate-500 mt-1">本地连接只读，支持检测连通性。</div>
+          <div class="text-[13px] font-semibold text-slate-800">
+            本地核心仓 (PG 本地)
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            本地连接只读，支持检测连通性。
+          </div>
         </div>
 
-        <a-alert type="info" show-icon message="本地库配置由部署环境管理，不在控制台中修改。" />
+        <a-alert
+          type="info"
+          show-icon
+          message="本地库配置由部署环境管理，不在控制台中修改。"
+        />
       </div>
     </div>
   </div>

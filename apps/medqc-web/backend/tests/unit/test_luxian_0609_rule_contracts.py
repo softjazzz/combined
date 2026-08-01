@@ -23,12 +23,12 @@ _CONTRACT_PATH = (
 
 
 @pytest.mark.unit
-def test_rule_contracts_cover_all_49_customer_rules_in_catalog_order() -> None:
+def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 49
+    assert len(contracts) == 63
     assert tuple(contract.rule_id for contract in contracts) == tuple(
-        f"LX0609-{number:03d}" for number in range(1, 50)
+        str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
 
 
@@ -55,7 +55,9 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-006",
         "LX0609-007",
         "LX0609-008",
+        "LX0609-009",
         "LX0609-017",
+        "LX0609-018",
         "LX0609-026",
         "LX0609-031",
         "LX0609-034",
@@ -73,6 +75,20 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-029",
         "LX0609-030",
         "LX0609-032",
+        "LX0609-051",
+        "LX0609-060",
+        "LX0609-061",
+        "LX0609-062",
+        "LX0609-064",
+        "LX0609-065",
+        "LX0609-066",
+        "LX0609-067",
+        "LX0609-068",
+        "LX0609-069",
+        "LX0609-071",
+        "LX0609-072",
+        "LX0609-073",
+        "LX0609-074",
     }
     assert typed_shadow == {
         "LX0609-001",
@@ -124,6 +140,20 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-047",
         "LX0609-048",
         "LX0609-049",
+        "LX0609-051",
+        "LX0609-060",
+        "LX0609-061",
+        "LX0609-062",
+        "LX0609-064",
+        "LX0609-065",
+        "LX0609-066",
+        "LX0609-067",
+        "LX0609-068",
+        "LX0609-069",
+        "LX0609-071",
+        "LX0609-072",
+        "LX0609-073",
+        "LX0609-074",
     }
     assert all(contract.golden_gate_state == "pending" for contract in contracts)
     assert all(contract.data_dependencies for contract in contracts)
@@ -152,3 +182,25 @@ def test_rule_contract_compiler_rejects_executor_registry_drift() -> None:
             rules=load_luxian_0609_rules(),
             family_definitions=RULE_FAMILY_DEFINITIONS,
         )
+
+
+@pytest.mark.unit
+def test_018_compiles_two_independent_criteria_from_catalog() -> None:
+    contract = next(
+        item
+        for item in load_luxian_0609_rule_contracts()
+        if item.rule_id == "LX0609-018"
+    )
+
+    assert [
+        (item.criterion_id, item.kind)
+        for item in contract.criteria
+    ] == [
+        ("chief_complaint_length", "text_length"),
+        ("diagnostic_direction", "semantic_relation"),
+    ]
+    length = contract.criteria[0]
+    assert length.source_fact == "admission_record.chief_complaint"
+    assert length.operator == "lte"
+    assert length.expected == 20
+    assert length.unit == "character"

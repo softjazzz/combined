@@ -663,6 +663,7 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
     assert calls == [
         "anesthesia_record",
         "mr_surgery",
+        "postsurg_firstcourse_record",
         "presurg_discussion",
         "presurg_summary",
         "surgery_record",
@@ -685,11 +686,10 @@ def test_provider_queries_selected_rule_source_union_once_in_stable_order() -> N
         if item.query_state is SourceQueryState.UNAVAILABLE
     }
     assert unavailable == {
-        "postsurg_firstcourse_record",
         "surgery_risk_assessment",
     }
     assert all(item.completeness is SourceCompleteness.UNPROVEN for item in snapshot.observations if item.source_key in unavailable)
-    assert len(snapshot.document_refs) == 6
+    assert len(snapshot.document_refs) == 7
     assert snapshot.facts == ()
 
 
@@ -877,7 +877,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
     assert "discharge_record" not in calls
 
 
-def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_legacy() -> None:
+def test_all_63_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -895,7 +895,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             for source_key in entry.physical_source_keys
         }
     )
-    assert len(selected) == 49
+    assert len(selected) == 63
     assert calls == sorted(
         {
             *expected_bounded,
@@ -912,6 +912,7 @@ def test_all_49_rules_query_each_bounded_physical_source_once_and_never_query_le
             "labtest_master",
             "pathology_exam_master",
             "pathology_exam_report",
+            "physician_change_event",
             "postane_surveil_record",
             "preane_surveil_record",
             "surgery_application",
@@ -946,6 +947,7 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         "admission_record_diagnosis",
         "pathology_exam_master",
         "pathology_exam_report",
+        "physician_change_event",
         "postane_surveil_record",
         "preane_surveil_record",
         "diagnosis",

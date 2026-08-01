@@ -45,7 +45,7 @@
             class="search-input"
             @keydown.enter="$emit('search', localQuery)"
             @input="onQueryChange"
-          />
+          >
           <div class="search-hint">
             <span v-if="localQuery.length > 0">Enter 搜索</span>
             <template v-else>

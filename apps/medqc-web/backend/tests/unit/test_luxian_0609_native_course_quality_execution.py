@@ -914,8 +914,8 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
         ),
         (
             "critical_daily_complete",
-            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.DATA_GAP),
-            ("trigger_absent_complete", "required_field_missing"),
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.COMPLIANT),
+            ("trigger_absent_complete", "requirement_satisfied"),
         ),
         (
             "critical_missing_day",
@@ -1082,9 +1082,34 @@ async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 45
-    assert len(client.prompts) == 1
+    assert result.llm_call_count == 0
+    assert dict(result.customer_display_facts)["LX0609-009"] == {
+        "failure_kind": "critical_daily_record_coverage_satisfied",
+        "severity": "critical",
+        "anchor_date": "2026-07-07",
+        "horizon_date": "2026-07-13",
+        "required_dates": [
+            "2026-07-07",
+            "2026-07-08",
+            "2026-07-09",
+            "2026-07-10",
+            "2026-07-11",
+            "2026-07-12",
+            "2026-07-13",
+        ],
+        "covered_dates": [
+            "2026-07-07",
+            "2026-07-08",
+            "2026-07-09",
+            "2026-07-10",
+            "2026-07-11",
+            "2026-07-12",
+            "2026-07-13",
+        ],
+        "missing_count": 0,
+    }
+    assert result.total_tokens == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
@@ -1256,8 +1281,8 @@ async def test_course_008_discharge_query_error_is_technical_error_even_with_as_
                 "2026-01-02 08:00:00",
                 "2026-01-03 08:00:00",
             ],
-            CustomerFinalState.DATA_GAP,
-            "required_field_missing",
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
         ),
         (
             None,
@@ -1357,7 +1382,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_without_llm_client_stays_data_gap() -> None:
+async def test_course_009_daily_complete_without_llm_client_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1392,23 +1417,22 @@ async def test_course_009_daily_complete_without_llm_client_stays_data_gap() -> 
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("semantic_state", "expected_state"),
+    "semantic_state",
     [
-        ("satisfied", CustomerFinalState.COMPLIANT),
-        ("defect", CustomerFinalState.NON_COMPLIANT),
-        ("unknown", CustomerFinalState.DATA_GAP),
+        "satisfied",
+        "defect",
+        "unknown",
     ],
 )
-async def test_course_009_daily_complete_uses_one_cropped_semantic_call(
+async def test_course_009_daily_complete_ignores_pending_semantic_state(
     semantic_state: str,
-    expected_state: CustomerFinalState,
 ) -> None:
     session = _severity_session(
         rows=[
@@ -1429,12 +1453,10 @@ async def test_course_009_daily_complete_uses_one_cropped_semantic_call(
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is expected_state
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 45
-    assert len(client.prompts) == 1
-    assert "first_course_record" not in client.prompts[0]
-    assert "rescue_record" not in client.prompts[0]
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
     assert "PRIVATE_009_BODY" not in repr(result)
 
 
@@ -1469,20 +1491,14 @@ async def test_course_009_semantic_call_binds_same_snapshot_external_event() -> 
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert result.llm_call_count == 1
-    assert external_marker in client.prompts[0]
-    event_observation = next(
-        item
-        for item in session.snapshot.observations
-        if item.source_key == "exam_item_report"
-    )
-    assert event_observation.snapshot_ref.removeprefix("sha256:") in result.decisions[0].fact_refs
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 0
+    assert client.prompts == []
     assert external_marker not in repr(result)
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_model_failure_is_data_gap_not_na() -> None:
+async def test_course_009_daily_complete_model_failure_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1501,14 +1517,14 @@ async def test_course_009_daily_complete_model_failure_is_data_gap_not_na() -> N
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
-    assert result.llm_call_count == 1
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
     assert "MODEL_ERROR_MUST_NOT_LEAK" not in repr(result)
 
 
 @pytest.mark.asyncio
-async def test_course_009_daily_complete_invalid_json_is_data_gap() -> None:
+async def test_course_009_daily_complete_invalid_json_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1525,9 +1541,9 @@ async def test_course_009_daily_complete_invalid_json_is_data_gap() -> None:
     )
     result, reduced = await _run_typed_009(session, _Client(["not-json"]))
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
-    assert result.llm_call_count == 1
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio
@@ -1576,14 +1592,12 @@ async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
     assert reduced[0].reason_code == "requirement_satisfied"
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    assert "OUTSIDE_WINDOW_MUST_NOT_LEAK" not in client.prompts[0]
-    assert all(marker not in client.prompts[0] for marker in forbidden.values())
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
-async def test_course_009_external_event_without_authoritative_date_is_data_gap() -> None:
+async def test_course_009_external_event_without_authoritative_date_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1605,14 +1619,14 @@ async def test_course_009_external_event_without_authoritative_date_is_data_gap(
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
 
 @pytest.mark.asyncio
-async def test_course_009_external_query_error_is_technical_error_without_model() -> None:
+async def test_course_009_external_query_error_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[
             {
@@ -1632,8 +1646,8 @@ async def test_course_009_external_query_error_is_technical_error_without_model(
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
-    assert reduced[0].reason_code == "source_query_error"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -1646,7 +1660,7 @@ async def test_course_009_external_query_error_is_technical_error_without_model(
         ({}, frozenset({"exam_item_report"}), "source_truncated"),
     ],
 )
-async def test_course_009_external_unavailable_or_truncated_is_data_gap_without_model(
+async def test_course_009_external_unavailable_or_truncated_keeps_frequency_pass(
     external_failures: dict[str, Exception],
     external_truncated: frozenset[str],
     expected_reason: str,
@@ -1671,8 +1685,8 @@ async def test_course_009_external_unavailable_or_truncated_is_data_gap_without_
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == expected_reason
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -1804,7 +1818,7 @@ async def test_course_009_time_only_phase_does_not_project_text_to_llm() -> None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("shell_content", ["", "[]", "空模板"])
-async def test_course_009_timed_shell_only_day_is_data_gap_without_model(
+async def test_course_009_timed_shell_only_day_is_a_missing_daily_record(
     shell_content: str,
 ) -> None:
     session = _severity_session(
@@ -1826,15 +1840,15 @@ async def test_course_009_timed_shell_only_day_is_data_gap_without_model(
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("overflow_kind", ["ninth_row", "long_row", "total_context"])
-async def test_course_009_semantic_projection_overflow_is_data_gap_without_model(
+async def test_course_009_semantic_projection_overflow_keeps_frequency_pass(
     overflow_kind: str,
 ) -> None:
     daily_rows = [_row("第一日病程。", "2026-01-01 08:00:00")]
@@ -1871,8 +1885,8 @@ async def test_course_009_semantic_projection_overflow_is_data_gap_without_model
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "required_field_missing"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
 

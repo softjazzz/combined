@@ -9,7 +9,10 @@
       :display-source="systemSheetData"
       :post-processing="postProcessing"
     />
-    <div v-else class="frontpage-preview-sheet__empty">
+    <div
+      v-else
+      class="frontpage-preview-sheet__empty"
+    >
       尚未生成病案首页，请点击右上角"AI 生成首页"
     </div>
   </div>

@@ -61,8 +61,6 @@ _RULE_009_EXTERNAL_EVENT_SOURCES = (
     "exam_item_report",
     "labtest_master",
     "labtest_item_report",
-    "surgery_record",
-    "mr_surgery",
 )
 _ROUND_SOURCES = (
     "daily_course_record",
@@ -257,7 +255,9 @@ def _lx018_length_criterion_result(
             unit=criterion.unit,
             expected_value=criterion.expected,
         )
-    actual = len(re.sub(r"\s+", "", complaint))
+    # 客户已确认“≤20字”为长度合规边界；诊断指向由独立子判定负责。
+    # 标点和内部空白均计入，避免长度计算与前端原文显示不一致。
+    actual = len(complaint)
     passed = actual <= int(criterion.expected)
     return CriterionResult(
         criterion_id=criterion.criterion_id,
@@ -1320,6 +1320,9 @@ def _rule_008_009_decision(
                 )
             if parsed_date >= anchor_date and (
                 horizon_date is None or parsed_date <= horizon_date
+            ) and (
+                rule_id != "LX0609-009"
+                or bool(_rule_009_substantive_text(row))
             ):
                 timed_record_dates.add(parsed_date)
 
@@ -1414,14 +1417,28 @@ def _rule_008_009_decision(
             refs=refs,
             confidence=None,
         )
-    # 逐日记录已满足；外部事件存在时仍需语义核对是否及时记录。
+    # 逐日记录已满足即完成本规则的确定性主判定。后续语义核对只允许在
+    # 同一快照内发现明确反证时升级为缺陷，不能因模型未知或可选来源不足
+    # 把已经通过的每日频次检查降成“数据不足”。
     return decision(
         applicability=ApplicabilityState.APPLICABLE,
-        evidence_state=EvidenceState.DATA_GAP,
-        qc_direction=QcDirection.UNKNOWN,
-        reason_code="required_field_missing",
+        evidence_state=EvidenceState.SUFFICIENT,
+        qc_direction=QcDirection.SATISFIED,
+        reason_code="requirement_satisfied",
         refs=refs,
-        confidence=None,
+        confidence=1.0,
+        display_facts={
+            "failure_kind": "critical_daily_record_coverage_satisfied",
+            "severity": "critical",
+            "anchor_date": anchor_date.isoformat(),
+            "horizon_date": horizon_date.isoformat(),
+            "required_dates": [item.isoformat() for item in sorted(expected_dates)],
+            "covered_dates": [
+                item.isoformat()
+                for item in sorted(expected_dates.intersection(timed_record_dates))
+            ],
+            "missing_count": 0,
+        },
     )
 
 
@@ -1689,11 +1706,11 @@ def _rule_009_semantic_decision(
         )
     else:
         dimensions = (
-            ApplicabilityState.APPLICABLE,
-            EvidenceState.DATA_GAP,
-            QcDirection.UNKNOWN,
-            data_gap_reason,
-            None,
+            base_decision.applicability,
+            base_decision.evidence_state,
+            base_decision.qc_direction,
+            base_decision.reason_code,
+            base_decision.confidence,
         )
     applicability, evidence_state, qc_direction, reason_code, confidence = dimensions
     return RuleDecision(
@@ -2265,7 +2282,7 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
     maximum = metadata.get("maximum_similarity")
     threshold = metadata.get("similarity_threshold")
     if (
-        outcome.status != "non_compliant"
+        outcome.status not in {"compliant", "non_compliant"}
         or not isinstance(source_types, list)
         or len(source_types) != 2
         or any(value not in _COPY_SOURCES for value in source_types)
@@ -2277,7 +2294,11 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
     ):
         return None
     return {
-        "failure_kind": "copy_similarity_threshold_exceeded",
+        "failure_kind": (
+            "copy_similarity_threshold_exceeded"
+            if outcome.status == "non_compliant"
+            else "copy_similarity_within_threshold"
+        ),
         "copy_similarity": round(float(maximum), 4),
         "copy_similarity_threshold": round(float(threshold), 4),
         "copy_document_sources": list(source_types),
@@ -2750,57 +2771,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                 materials=evidence_materials,
                 customer_display_facts=customer_display_facts,
             )
-            # 008 是纯日期规则。009 也先由 Python 判定每日频次；仅频次完整
-            # 且具有权威终点时，才允许一次受控语义调用补“病情变化是否及时记录”。
-            if (
-                rule_id != "LX0609-009"
-                or base_decision.reason_code != "required_field_missing"
-            ):
-                decisions.append(base_decision)
-                continue
-            terminal_decision = _rule_009_external_source_terminal_decision(
-                base_decision=base_decision,
-                snapshot=evidence_snapshot,
-            )
-            if terminal_decision is not None:
-                decisions.append(terminal_decision)
-                continue
-            context, overflow, ready = _rule_009_semantic_context(
-                snapshot=evidence_snapshot,
-                materials=evidence_materials,
-            )
-            if overflow or not ready:
-                decisions.append(
-                    _rule_009_semantic_decision(base_decision=base_decision)
-                )
-                continue
-            if llm_client is None:
-                decisions.append(
-                    _rule_009_semantic_decision(base_decision=base_decision)
-                )
-                continue
-            llm_call_count += 1
-            try:
-                response = await llm_client.generate(
-                    _rule_009_semantic_prompt(context=context)
-                )
-            except Exception:
-                # 语义调用失败不是“无病危医嘱”；频次事实仍在，但语义无法确认。
-                decisions.append(
-                    _rule_009_semantic_decision(base_decision=base_decision)
-                )
-                continue
-            prompt, completion, total, elapsed = _usage(response)
-            prompt_tokens += prompt
-            completion_tokens += completion
-            total_tokens += total
-            api_time += elapsed
-            decisions.append(
-                _rule_009_semantic_decision(
-                    base_decision=base_decision,
-                    semantic_state=_parse_rule_009_semantic_state(response),
-                )
-            )
+            # 第一阶段只执行已确认的每日病危查房覆盖。病情变化事件尚无受控
+            # 定义，不能再通过模型语义扩展或改变 Python 主判定。
+            decisions.append(base_decision)
             continue
         if rule_id in {"LX0609-016", "LX0609-018"} and rule_id in typed_requested:
             assert evidence_snapshot is not None

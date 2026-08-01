@@ -18,14 +18,20 @@
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="detail-workspace-tabs-bar border-b px-4 py-2.5">
         <div class="flex flex-wrap items-center gap-2">
-          <button :class="tabClass('records')" @click="emit('update:detailMainTab', 'records')">
+          <button
+            :class="tabClass('records')"
+            @click="emit('update:detailMainTab', 'records')"
+          >
             <span class="detail-workspace-tab__icon"><FileTextOutlined /></span>
             <span class="detail-workspace-tab__main">
               <span class="detail-workspace-tab__title">病历详情</span>
               <span class="detail-workspace-tab__desc">文书阅读与证据定位</span>
             </span>
           </button>
-          <button :class="tabClass('frontpage')" @click="emit('update:detailMainTab', 'frontpage')">
+          <button
+            :class="tabClass('frontpage')"
+            @click="emit('update:detailMainTab', 'frontpage')"
+          >
             <span class="detail-workspace-tab__icon"><FileSearchOutlined /></span>
             <span class="detail-workspace-tab__main">
               <span class="detail-workspace-tab__title">病案首页</span>
@@ -52,7 +58,10 @@
             <span class="detail-workspace-tab__main">
               <span class="detail-workspace-tab__title">
                 结算清单
-                <span v-if="settlementQcFailed > 0" class="detail-workspace-tab__badge">{{
+                <span
+                  v-if="settlementQcFailed > 0"
+                  class="detail-workspace-tab__badge"
+                >{{
                   settlementQcFailed
                 }}</span>
               </span>
@@ -86,9 +95,18 @@
 
         <main class="detail-workspace-main relative flex flex-1 flex-col overflow-hidden">
           <div class="flex-1 overflow-y-auto custom-scrollbar">
-            <slot v-if="detailMainTab === 'records'" name="records" />
-            <slot v-else-if="detailMainTab === 'frontpage'" name="frontpage" />
-            <slot v-else-if="detailMainTab === 'settlement'" name="settlement" />
+            <slot
+              v-if="detailMainTab === 'records'"
+              name="records"
+            />
+            <slot
+              v-else-if="detailMainTab === 'frontpage'"
+              name="frontpage"
+            />
+            <slot
+              v-else-if="detailMainTab === 'settlement'"
+              name="settlement"
+            />
             <ClinicalCompletenessPanel
               v-else-if="detailMainTab === 'completeness'"
               :record="selectedRecord"

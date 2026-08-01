@@ -8,7 +8,10 @@
     class="semantic-modal"
     @update:open="emit('update:open', $event)"
   >
-    <div v-if="rule" class="detail-wrap">
+    <div
+      v-if="rule"
+      class="detail-wrap"
+    >
       <div class="detail-summary">
         <div class="detail-summary-head">
           <div class="detail-title-block">
@@ -24,7 +27,11 @@
         </p>
       </div>
 
-      <a-descriptions :column="2" size="small" class="detail-descriptions">
+      <a-descriptions
+        :column="2"
+        size="small"
+        class="detail-descriptions"
+      >
         <a-descriptions-item label="分类">
           {{ getCategoryZh(rule.category) }}
         </a-descriptions-item>
@@ -34,17 +41,26 @@
         <a-descriptions-item label="缺陷级别">
           <span class="tag tag-danger">{{ getSeverityZh(rule.defect_level) }}</span>
         </a-descriptions-item>
-        <a-descriptions-item label="扣分"> {{ rule.score_deduction }} 分 </a-descriptions-item>
+        <a-descriptions-item label="扣分">
+          {{ rule.score_deduction }} 分
+        </a-descriptions-item>
         <a-descriptions-item label="适用文书">
           <div class="doc-list">
-            <span v-for="doc in rule.applicable_documents" :key="doc" class="doc-pill">
+            <span
+              v-for="doc in rule.applicable_documents"
+              :key="doc"
+              class="doc-pill"
+            >
               {{ getDocTypeZh(doc) }}
             </span>
           </div>
         </a-descriptions-item>
       </a-descriptions>
 
-      <div v-if="isLuxianRule" class="luxian-panel">
+      <div
+        v-if="isLuxianRule"
+        class="luxian-panel"
+      >
         <div class="luxian-section">
           <h4>客户质控点口径</h4>
           <p>{{ rule.customer_text || rule.description || '暂无客户原文' }}</p>
@@ -93,22 +109,34 @@
         </div>
 
         <div class="example-grid">
-          <div v-if="rule.negative_example" class="example-card danger">
+          <div
+            v-if="rule.negative_example"
+            class="example-card danger"
+          >
             <h4>反例</h4>
             <strong>{{ rule.negative_example.title }}</strong>
             <p>{{ rule.negative_example.summary }}</p>
             <ul>
-              <li v-for="item in rule.negative_example.focusPoints || []" :key="item">
+              <li
+                v-for="item in rule.negative_example.focusPoints || []"
+                :key="item"
+              >
                 {{ item }}
               </li>
             </ul>
           </div>
-          <div v-if="rule.positive_example" class="example-card safe">
+          <div
+            v-if="rule.positive_example"
+            class="example-card safe"
+          >
             <h4>正例</h4>
             <strong>{{ rule.positive_example.title }}</strong>
             <p>{{ rule.positive_example.summary }}</p>
             <ul>
-              <li v-for="item in rule.positive_example.focusPoints || []" :key="item">
+              <li
+                v-for="item in rule.positive_example.focusPoints || []"
+                :key="item"
+              >
                 {{ item }}
               </li>
             </ul>
@@ -116,11 +144,19 @@
         </div>
       </div>
 
-      <div v-if="isAdmin || isLuxianRule" class="prompt-panel">
+      <div
+        v-if="isAdmin || isLuxianRule"
+        class="prompt-panel"
+      >
         <div class="prompt-header">
           <div>
-            <h4 class="prompt-title">检查模板管理</h4>
-            <p v-if="isLuxianRule" class="prompt-subtitle">
+            <h4 class="prompt-title">
+              检查模板管理
+            </h4>
+            <p
+              v-if="isLuxianRule"
+              class="prompt-subtitle"
+            >
               泸县0609客户专项规则包使用只读模板；如需调整执行逻辑，请修改映射的底层规则或规则包配置。
             </p>
           </div>
@@ -133,9 +169,17 @@
             >
               编辑
             </a-button>
-            <span v-else-if="isLuxianRule" class="readonly-badge"> 只读模板 </span>
+            <span
+              v-else-if="isLuxianRule"
+              class="readonly-badge"
+            > 只读模板 </span>
             <template v-else>
-              <a-button size="small" @click="emit('cancelEditPrompt')"> 取消 </a-button>
+              <a-button
+                size="small"
+                @click="emit('cancelEditPrompt')"
+              >
+                取消
+              </a-button>
               <a-button
                 type="primary"
                 size="small"
@@ -148,7 +192,10 @@
           </div>
         </div>
 
-        <div v-if="!isEditingPrompt" class="prompt-content">
+        <div
+          v-if="!isEditingPrompt"
+          class="prompt-content"
+        >
           {{ currentPrompt || '// 暂无检查模板，使用系统默认逻辑' }}
         </div>
         <a-textarea
@@ -162,8 +209,17 @@
       </div>
 
       <div class="detail-footer">
-        <a-button class="detail-secondary-btn" @click="emit('update:open', false)"> 关闭 </a-button>
-        <a-button type="primary" class="detail-primary-btn" @click="emit('startTest')">
+        <a-button
+          class="detail-secondary-btn"
+          @click="emit('update:open', false)"
+        >
+          关闭
+        </a-button>
+        <a-button
+          type="primary"
+          class="detail-primary-btn"
+          @click="emit('startTest')"
+        >
           开始测试
         </a-button>
       </div>

@@ -42,7 +42,9 @@
           class="flex flex-col items-center justify-center py-20 text-slate-400"
         >
           <a-spin />
-          <p class="mt-3 text-sm">搜索中...</p>
+          <p class="mt-3 text-sm">
+            搜索中...
+          </p>
         </div>
 
         <div
@@ -71,8 +73,7 @@
                       'font-mono text-[13px] font-semibold',
                       selectedCode?.code === item.code ? 'text-[#0057b8]' : 'text-slate-500',
                     ]"
-                    >{{ item.code }}</span
-                  >
+                  >{{ item.code }}</span>
                   <span
                     class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500"
                   >
@@ -86,8 +87,17 @@
               </div>
             </div>
           </div>
-          <div v-if="searchTotal > searchResults.length" class="py-3 text-center">
-            <a-button type="link" size="small" @click="loadMoreResults"> 加载更多 </a-button>
+          <div
+            v-if="searchTotal > searchResults.length"
+            class="py-3 text-center"
+          >
+            <a-button
+              type="link"
+              size="small"
+              @click="loadMoreResults"
+            >
+              加载更多
+            </a-button>
           </div>
         </div>
 
@@ -96,10 +106,15 @@
           class="flex flex-col items-center justify-center py-20 text-slate-400"
         >
           <SearchOutlined style="font-size: 40px; opacity: 0.3" />
-          <p class="mt-3 text-sm">未找到匹配 "{{ searchQuery }}" 的编码</p>
+          <p class="mt-3 text-sm">
+            未找到匹配 "{{ searchQuery }}" 的编码
+          </p>
         </div>
 
-        <div v-else class="flex-1 p-3">
+        <div
+          v-else
+          class="flex-1 p-3"
+        >
           <a-spin :spinning="treeLoading">
             <div
               v-if="treeData.length > 0"
@@ -107,7 +122,9 @@
             >
               <div class="mb-3 flex items-center justify-between px-1">
                 <div>
-                  <div class="text-[12px] font-semibold text-slate-500">编码目录</div>
+                  <div class="text-[12px] font-semibold text-slate-500">
+                    编码目录
+                  </div>
                   <div class="mt-0.5 text-[11px] text-slate-400">
                     支持逐级展开定位章节、类目与叶子编码
                   </div>
@@ -158,20 +175,21 @@
                         'min-w-[70px] shrink-0 font-mono text-[13px]',
                         data.isLeaf ? 'font-medium text-slate-500' : 'font-semibold text-slate-600',
                       ]"
-                      >{{ data.code_range || data.code }}</span
-                    >
+                    >{{ data.code_range || data.code }}</span>
                     <span
                       :class="[
                         'truncate text-[14px]',
                         data.isLeaf ? 'text-slate-600' : 'font-semibold text-slate-800',
                       ]"
-                      >{{ title }}</span
-                    >
+                    >{{ title }}</span>
                   </div>
                 </template>
               </a-tree>
             </div>
-            <div v-else class="flex flex-col items-center justify-center py-20 text-slate-400">
+            <div
+              v-else
+              class="flex flex-col items-center justify-center py-20 text-slate-400"
+            >
               <svg
                 class="h-10 w-10 opacity-30"
                 fill="none"
@@ -185,7 +203,9 @@
                   d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                 />
               </svg>
-              <p class="mt-3 text-sm">暂无编码数据</p>
+              <p class="mt-3 text-sm">
+                暂无编码数据
+              </p>
             </div>
           </a-spin>
         </div>
@@ -202,7 +222,11 @@
       </div>
     </div>
 
-    <ICDRecentBar :recent-codes="recentCodes" @select="selectCode" @clear="recentCodes = []" />
+    <ICDRecentBar
+      :recent-codes="recentCodes"
+      @select="selectCode"
+      @clear="recentCodes = []"
+    />
   </div>
 </template>
 

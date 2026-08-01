@@ -185,6 +185,26 @@ def test_envelope_rejects_invalid_metrics_and_planned_scope():
         replace(envelope, total_tokens=-1)
     with pytest.raises(ValueError, match="token metrics"):
         replace(envelope, llm_call_count=-1)
-    assert replace(envelope, total_tokens=16).total_tokens == 16
+    with pytest.raises(ValueError, match="token metrics"):
+        replace(envelope, llm_call_count=True)
+    with pytest.raises(ValueError, match="token arithmetic"):
+        replace(envelope, total_tokens=16)
+    with pytest.raises(ValueError, match="zero-call"):
+        replace(
+            envelope,
+            llm_call_count=0,
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+        )
+    usage_missing = replace(
+        envelope,
+        llm_call_count=1,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+    )
+    assert usage_missing.llm_call_count == 1
+    assert usage_missing.total_tokens == 0
     with pytest.raises(ValueError, match="api_time"):
         replace(envelope, api_time=-0.1)

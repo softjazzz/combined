@@ -12,7 +12,11 @@
           {{ dimensionLabel }} 视图
         </span>
       </h3>
-      <a-button size="small" type="link" @click="handleExportReport">
+      <a-button
+        size="small"
+        type="link"
+        @click="handleExportReport"
+      >
         <DownloadOutlined /> 导出分析报告
       </a-button>
     </div>
@@ -29,25 +33,33 @@
         <div class="text-[20px] font-semibold text-red-600 leading-7">
           {{ lossCount }}
         </div>
-        <div class="text-xs text-red-500/85">超费病例</div>
+        <div class="text-xs text-red-500/85">
+          超费病例
+        </div>
       </div>
       <div class="rounded-lg border border-orange-100/70 bg-orange-50/55 p-3 text-center">
         <div class="text-[20px] font-semibold text-orange-600 leading-7">
           ¥{{ totalLossAmount.toLocaleString() }}
         </div>
-        <div class="text-xs text-orange-500/85">超费金额</div>
+        <div class="text-xs text-orange-500/85">
+          超费金额
+        </div>
       </div>
       <div class="rounded-lg border border-amber-100/70 bg-amber-50/55 p-3 text-center">
         <div class="text-[20px] font-semibold text-amber-600 leading-7">
           {{ avgLossRate.toFixed(1) }}%
         </div>
-        <div class="text-xs text-amber-500/85">平均超费率</div>
+        <div class="text-xs text-amber-500/85">
+          平均超费率
+        </div>
       </div>
     </div>
 
     <!-- Reason Distribution -->
     <div class="mb-4">
-      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">超费原因分布</div>
+      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">
+        超费原因分布
+      </div>
       <div class="space-y-2">
         <div
           v-for="reason in reasonDistribution"
@@ -63,14 +75,18 @@
               :style="{ width: `${reason.percentage}%` }"
             />
           </div>
-          <div class="w-12 text-xs text-[rgba(29,29,31,0.56)] text-right">{{ reason.count }}例</div>
+          <div class="w-12 text-xs text-[rgba(29,29,31,0.56)] text-right">
+            {{ reason.count }}例
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Top Loss Cases -->
     <div>
-      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">亏损TOP5病例</div>
+      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">
+        亏损TOP5病例
+      </div>
       <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
         <div
           v-for="item in topLossCases"
@@ -91,9 +107,16 @@
 
     <!-- Recommendations -->
     <div class="mt-4 p-3 bg-[rgba(0,102,204,0.06)] rounded-lg border border-[rgba(0,102,204,0.12)]">
-      <div class="text-xs font-medium text-[#0057b8] mb-1">瓶颈报告</div>
+      <div class="text-xs font-medium text-[#0057b8] mb-1">
+        瓶颈报告
+      </div>
       <ul class="text-xs text-[#0066cc]/80 space-y-1">
-        <li v-for="item in recommendations" :key="item">• {{ item }}</li>
+        <li
+          v-for="item in recommendations"
+          :key="item"
+        >
+          • {{ item }}
+        </li>
       </ul>
     </div>
   </div>

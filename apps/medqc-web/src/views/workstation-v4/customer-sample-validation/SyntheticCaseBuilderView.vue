@@ -2,11 +2,17 @@
   <main class="synthetic-case-page">
     <header class="synthetic-case-header">
       <div class="synthetic-case-header-copy">
-        <button class="synthetic-case-back" type="button" @click="goBack">
+        <button
+          class="synthetic-case-back"
+          type="button"
+          @click="goBack"
+        >
           <ArrowLeft :size="16" />
           返回样本验证
         </button>
-        <div class="synthetic-case-eyebrow">客户样本验证 / 测试病历构建</div>
+        <div class="synthetic-case-eyebrow">
+          客户样本验证 / 测试病历构建
+        </div>
         <h1>创建测试病历</h1>
         <p>选择已配置模板的主要质控点后生成可编辑病历，用于验证规则效果。</p>
         <div class="synthetic-case-summary">
@@ -18,7 +24,10 @@
         </div>
       </div>
       <div class="synthetic-case-header-actions">
-        <a-button class="synthetic-case-ghost-button" @click="openSyntheticCaseGuide">
+        <a-button
+          class="synthetic-case-ghost-button"
+          @click="openSyntheticCaseGuide"
+        >
           <template #icon>
             <Compass :size="15" />
           </template>
@@ -135,11 +144,17 @@
           </div>
         </template>
 
-        <div v-if="wizardStep > 1" class="synthetic-case-panel-title synthetic-case-doc-title">
+        <div
+          v-if="wizardStep > 1"
+          class="synthetic-case-panel-title synthetic-case-doc-title"
+        >
           <FileText :size="16" />
           文书目录
         </div>
-        <div v-if="wizardStep > 1" class="synthetic-case-doc-nav">
+        <div
+          v-if="wizardStep > 1"
+          class="synthetic-case-doc-nav"
+        >
           <button
             v-for="(document, index) in form.documents"
             :key="document.key"
@@ -173,7 +188,10 @@
           </button>
         </div>
 
-        <section v-if="wizardStep === 1" class="synthetic-case-card synthetic-case-selection-card">
+        <section
+          v-if="wizardStep === 1"
+          class="synthetic-case-card synthetic-case-selection-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>选择要验证的质控点</h2>
@@ -183,7 +201,10 @@
               已选 {{ selectedRuleSelection.length }} 条
             </span>
           </div>
-          <div v-if="isDraftStale" class="synthetic-case-warning-banner">
+          <div
+            v-if="isDraftStale"
+            class="synthetic-case-warning-banner"
+          >
             质控点选择已变更，当前病历草稿仍是旧范围。请重新生成病历草稿后再保存或验证。
           </div>
 
@@ -198,12 +219,13 @@
                 <div class="synthetic-case-rule-grid-head">
                   <div>
                     <strong>{{ selectedRuleFamily.name }}</strong>
-                    <small
-                      >本组 {{ selectedRuleFamily.rules.length }} 条，已选
-                      {{ selectedFamilyRuleSelectionCount }} 条</small
-                    >
+                    <small>本组 {{ selectedRuleFamily.rules.length }} 条，已选
+                      {{ selectedFamilyRuleSelectionCount }} 条</small>
                   </div>
-                  <button type="button" @click="toggleSelectedRuleFamily">
+                  <button
+                    type="button"
+                    @click="toggleSelectedRuleFamily"
+                  >
                     {{ isSelectedRuleFamilyFullySelected ? '取消本组' : '全选本组' }}
                   </button>
                 </div>
@@ -219,7 +241,7 @@
                     @change="
                       toggleRuleSelection(rule.ruleId, ($event.target as HTMLInputElement).checked)
                     "
-                  />
+                  >
                   <div>
                     <strong>{{ rule.ruleId }}</strong>
                     <span>{{ rule.name }}</span>
@@ -238,28 +260,42 @@
                 <span>本轮期望结果</span>
                 <div class="synthetic-case-fixed-status">
                   <strong>有缺陷</strong>
-                  <small
-                    >当前版本提供缺陷验证模板；无缺陷、不适用和数据不足需专用模板后开放。</small
-                  >
+                  <small>当前版本提供缺陷验证模板；无缺陷、不适用和数据不足需专用模板后开放。</small>
                 </div>
               </div>
               <div>
                 <span>关键材料</span>
-                <ul v-if="selectedRequiredMaterials.length" class="synthetic-case-material-list">
-                  <li v-for="material in selectedRequiredMaterials" :key="material">
+                <ul
+                  v-if="selectedRequiredMaterials.length"
+                  class="synthetic-case-material-list"
+                >
+                  <li
+                    v-for="material in selectedRequiredMaterials"
+                    :key="material"
+                  >
                     {{ material }}
                   </li>
                 </ul>
-                <p v-else>请选择质控点后查看需要准备的文书和结构化材料。</p>
+                <p v-else>
+                  请选择质控点后查看需要准备的文书和结构化材料。
+                </p>
               </div>
               <div>
                 <span>已选质控点</span>
-                <div v-if="selectedRules.length" class="synthetic-case-selected-rules">
-                  <em v-for="rule in selectedRules" :key="rule.ruleId">
+                <div
+                  v-if="selectedRules.length"
+                  class="synthetic-case-selected-rules"
+                >
+                  <em
+                    v-for="rule in selectedRules"
+                    :key="rule.ruleId"
+                  >
                     {{ rule.ruleId }} · {{ rule.familyName }}
                   </em>
                 </div>
-                <p v-else>尚未选择质控点。</p>
+                <p v-else>
+                  尚未选择质控点。
+                </p>
               </div>
               <a-button
                 type="primary"
@@ -299,39 +335,68 @@
           <div class="synthetic-case-form-grid">
             <label>
               <span>测试病历名称</span>
-              <a-input v-model:value="form.caseTitle" placeholder="例如：术后记录超时测试" />
+              <a-input
+                v-model:value="form.caseTitle"
+                placeholder="例如：术后记录超时测试"
+              />
             </label>
             <label>
               <span>患者姓名</span>
-              <a-input v-model:value="form.patientName" placeholder="脱敏姓名" />
+              <a-input
+                v-model:value="form.patientName"
+                placeholder="脱敏姓名"
+              />
             </label>
             <label>
               <span>性别</span>
-              <a-select v-model:value="form.sex" :options="sexOptions" />
+              <a-select
+                v-model:value="form.sex"
+                :options="sexOptions"
+              />
             </label>
             <label>
               <span>年龄</span>
-              <a-input-number v-model:value="form.age" class="w-full" :min="0" :max="120" />
+              <a-input-number
+                v-model:value="form.age"
+                class="w-full"
+                :min="0"
+                :max="120"
+              />
             </label>
             <label>
               <span>住院号</span>
-              <a-input v-model:value="form.mrNo" placeholder="可选，留空自动生成" />
+              <a-input
+                v-model:value="form.mrNo"
+                placeholder="可选，留空自动生成"
+              />
             </label>
             <label>
               <span>科室</span>
-              <a-input v-model:value="form.department" placeholder="例如：普通外科" />
+              <a-input
+                v-model:value="form.department"
+                placeholder="例如：普通外科"
+              />
             </label>
             <label>
               <span>入院时间</span>
-              <a-input v-model:value="form.admissionTime" type="datetime-local" />
+              <a-input
+                v-model:value="form.admissionTime"
+                type="datetime-local"
+              />
             </label>
             <label>
               <span>出院时间</span>
-              <a-input v-model:value="form.dischargeTime" type="datetime-local" />
+              <a-input
+                v-model:value="form.dischargeTime"
+                type="datetime-local"
+              />
             </label>
             <label class="is-wide">
               <span>主要诊断</span>
-              <a-input v-model:value="form.mainDiagnosis" placeholder="可选，用于质控上下文" />
+              <a-input
+                v-model:value="form.mainDiagnosis"
+                placeholder="可选，用于质控上下文"
+              />
             </label>
             <label class="is-wide">
               <span>其他诊断</span>
@@ -361,7 +426,9 @@
                 popup-class-name="synthetic-case-doc-type-dropdown"
                 :options="testRecordDocumentTypeOptions"
               />
-              <a-button @click="addDocument"> 添加文书 </a-button>
+              <a-button @click="addDocument">
+                添加文书
+              </a-button>
             </div>
           </div>
 
@@ -384,7 +451,10 @@
                   >
                     {{ document.enabled ? '已纳入' : '已停用' }}
                   </span>
-                  <a-switch v-model:checked="document.enabled" size="small" />
+                  <a-switch
+                    v-model:checked="document.enabled"
+                    size="small"
+                  />
                   <a-button
                     size="small"
                     danger
@@ -411,15 +481,24 @@
                 </label>
                 <label>
                   <span>记录/报告时间</span>
-                  <a-input v-model:value="document.record_time" type="datetime-local" />
+                  <a-input
+                    v-model:value="document.record_time"
+                    type="datetime-local"
+                  />
                 </label>
                 <label>
                   <span>提交时间</span>
-                  <a-input v-model:value="document.submit_time" type="datetime-local" />
+                  <a-input
+                    v-model:value="document.submit_time"
+                    type="datetime-local"
+                  />
                 </label>
                 <label>
                   <span>记录医师</span>
-                  <a-input v-model:value="document.doctor_name" placeholder="可选" />
+                  <a-input
+                    v-model:value="document.doctor_name"
+                    placeholder="可选"
+                  />
                 </label>
               </div>
               <a-textarea
@@ -455,7 +534,10 @@
           </div>
         </section>
 
-        <section v-if="wizardStep === 2 && editorTab === 'orders'" class="synthetic-case-card">
+        <section
+          v-if="wizardStep === 2 && editorTab === 'orders'"
+          class="synthetic-case-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>医嘱费用</h2>
@@ -481,7 +563,10 @@
           </div>
         </section>
 
-        <section v-if="wizardStep === 2 && editorTab === 'exams'" class="synthetic-case-card">
+        <section
+          v-if="wizardStep === 2 && editorTab === 'exams'"
+          class="synthetic-case-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>检查检验</h2>
@@ -507,7 +592,10 @@
           </div>
         </section>
 
-        <section v-if="wizardStep === 2 && editorTab === 'preview'" class="synthetic-case-card">
+        <section
+          v-if="wizardStep === 2 && editorTab === 'preview'"
+          class="synthetic-case-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>预览</h2>
@@ -552,7 +640,10 @@
           </div>
 
           <div class="synthetic-case-confirm-list">
-            <div v-for="rule in generatedRules" :key="rule.ruleId">
+            <div
+              v-for="rule in generatedRules"
+              :key="rule.ruleId"
+            >
               <strong>{{ rule.ruleId }}</strong>
               <span>{{ rule.name }}</span>
               <small>{{ rule.familyName }} · {{ rule.requiredDocumentsLabel }}</small>
@@ -560,8 +651,14 @@
           </div>
 
           <div class="synthetic-case-confirm-actions">
-            <a-button @click="goWizardStep(2)"> 返回编辑 </a-button>
-            <a-button type="primary" :loading="saving" @click="handleSave(false)">
+            <a-button @click="goWizardStep(2)">
+              返回编辑
+            </a-button>
+            <a-button
+              type="primary"
+              :loading="saving"
+              @click="handleSave(false)"
+            >
               仅保存测试病历
             </a-button>
             <a-button
@@ -596,10 +693,18 @@
       </div>
     </a-modal>
 
-    <div v-if="syntheticCaseGuideOpen" class="synthetic-case-tour-layer">
+    <div
+      v-if="syntheticCaseGuideOpen"
+      class="synthetic-case-tour-layer"
+    >
       <div class="synthetic-case-tour-scrim" />
-      <div class="synthetic-case-tour-card" :style="syntheticCaseTourCardStyle">
-        <div class="synthetic-case-tour-kicker">创建测试病历导览</div>
+      <div
+        class="synthetic-case-tour-card"
+        :style="syntheticCaseTourCardStyle"
+      >
+        <div class="synthetic-case-tour-kicker">
+          创建测试病历导览
+        </div>
         <div class="synthetic-case-tour-count">
           {{ syntheticCaseGuideStepIndex + 1 }} / {{ syntheticCaseGuideSteps.length }}
         </div>
@@ -616,7 +721,12 @@
           />
         </div>
         <div class="synthetic-case-tour-actions">
-          <a-button class="!rounded-lg" @click="closeSyntheticCaseGuide"> 跳过 </a-button>
+          <a-button
+            class="!rounded-lg"
+            @click="closeSyntheticCaseGuide"
+          >
+            跳过
+          </a-button>
           <a-button
             v-if="syntheticCaseGuideStepIndex > 0"
             class="!rounded-lg"
@@ -624,7 +734,11 @@
           >
             上一步
           </a-button>
-          <a-button type="primary" class="!rounded-lg" @click="goToNextSyntheticCaseGuideStep">
+          <a-button
+            type="primary"
+            class="!rounded-lg"
+            @click="goToNextSyntheticCaseGuideStep"
+          >
             {{ isLastSyntheticCaseGuideStep ? '完成导览' : '下一步' }}
           </a-button>
         </div>

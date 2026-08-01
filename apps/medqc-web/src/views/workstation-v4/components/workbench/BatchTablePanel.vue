@@ -82,7 +82,7 @@
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
-            />
+            >
             <span class="batch-table-panel__patient-meta">
               <span class="batch-table-panel__patient-name">
                 {{ record.patientName }}

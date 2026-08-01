@@ -105,6 +105,7 @@ def _session(
     consent_rows: tuple[dict[str, object], ...] | None = None,
     consent_source_error: bool = False,
     consent_source_unavailable: bool = False,
+    surgery_source_unavailable: bool = False,
 ):
     rows = {
         "surgery_record": ({
@@ -138,6 +139,8 @@ def _session(
         if consent_source_error and source_key == "surgery_inform_consent":
             raise SourceEvidenceQueryError("RAW_CONSENT_QUERY_MARKER")
         if consent_source_unavailable and source_key == "surgery_inform_consent":
+            raise SourceEvidenceUnavailable()
+        if surgery_source_unavailable and source_key == "surgery_record":
             raise SourceEvidenceUnavailable()
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -307,6 +310,73 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
     assert "输出不得超过512个token" in client.prompts[0]
     assert "正文标记-A" not in repr(result)
     assert "2026-01-01" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event", "expected_state"),
+    (
+        # 已实施手术且模型明确本次未使用植入物，025 不适用。
+        (_event(implant_use="explicit_no_implant"), "not_applicable"),
+        # 已确认实际植入物，字段明确缺失才可以输出确定性不合规。
+        (_event(implant_barcode="missing"), "non_compliant"),
+    ),
+)
+async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
+    event: dict[str, object],
+    expected_state: str,
+) -> None:
+    session = _session()
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({"schema_version": SCHEMA_VERSION, "events": [event]}),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == [expected_state]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_025_unavailable_surgery_source_is_data_gap_without_llm_call() -> None:
+    """手术文书来源不可读时，不能由其他来源沉默推断为未植入。"""
+    session = _session(surgery_source_unavailable=True)
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
+    result = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["data_gap"]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
@@ -768,6 +838,69 @@ def test_028_time_boundaries_are_python_owned(
         rule_id="LX0609-028", facts=(fact,), projection=projection
     )
     assert outcome.status == expected
+
+
+def test_024_non_compliant_emits_controlled_customer_display_facts() -> None:
+    projection = SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01"}),
+        document_source_keys={"S01-01": "surgery_record"},
+    )
+    outcome = _surgery_text_outcome(
+        rule_id="LX0609-024",
+        facts=(SurgeryEventFact(**_event(
+            evidence_refs=["S01-01"],
+            surgery_occurrence="performed",
+            malignant_relation="qualifying",
+            lymph_node_documentation="not_documented",
+        )),),
+        projection=projection,
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "lymph_node_dissection_not_documented",
+        "performed_surgery_confirmed": True,
+        "malignant_surgery_confirmed": True,
+        "checked_sources": ["surgery_record"],
+    }
+
+
+def test_028_non_compliant_emits_actual_duration_customer_display_facts() -> None:
+    start = datetime(2026, 1, 1, 8)
+    projection = SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={
+            "T001": SurgeryTimeCandidate(start, "daily_course_record", "text_datetime_candidate", "S07-01"),
+            "T002": SurgeryTimeCandidate(start + timedelta(hours=30), "daily_course_record", "text_datetime_candidate", "S07-01"),
+        },
+        document_refs=frozenset({"S07-01"}),
+    )
+    outcome = _surgery_text_outcome(
+        rule_id="LX0609-028",
+        facts=(SurgeryEventFact(**_event(
+            evidence_refs=["S07-01"],
+            antimicrobial_intent="prophylactic",
+            start_time_ref="T001",
+            start_time_role="actual_administration",
+            end_time_ref="T002",
+            end_time_role="actual_stop",
+            interval_scope="prophylactic_segment",
+            special_extension_reason="not_documented",
+        )),),
+        projection=projection,
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "prophylaxis_extension_reason_missing",
+        "incision_class": "I",
+        "start_time": "2026-01-01 08:00:00",
+        "end_time": "2026-01-02 14:00:00",
+        "duration_hours": 30.0,
+        "threshold_hours": 24,
+    }
 
 
 def test_028_accepts_cross_document_times_when_both_bind_to_same_event() -> None:

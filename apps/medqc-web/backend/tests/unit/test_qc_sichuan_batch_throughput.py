@@ -9,9 +9,11 @@ from types import SimpleNamespace
 import pytest
 
 from app.routers import qc_sichuan
+import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
+from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
 
 
@@ -2068,6 +2070,72 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
         assert hidden_native_fields.isdisjoint(item)
         assert hidden_native_fields.isdisjoint(dict(item.get("metadata") or {}))
         assert hidden_native_fields.isdisjoint(dict(item.get("audit") or {}))
+
+
+@pytest.mark.asyncio
+async def test_native_criterion_result_persists_top_level_rule_version_for_single_record_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """018 的当前契约版本必须从原生 eval 顶层保存，而非只读 metadata。"""
+
+    rule = get_luxian_0609_rule("LX0609-018")
+    assert rule is not None
+    rule_version = str(rule["rule_version"])
+    workspace = _WorkspaceStub()
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-018"],
+        "selected_rule_ids": ["LX0609-018"],
+        "scoped_customer_rule_ids": ["LX0609-018"],
+        "record_rule_map": {"visit-001": ["LX0609-018"]},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "LX0609-018",
+                    "rule_version": rule_version,
+                    "status": "non_compliant",
+                    "is_compliant": False,
+                    "criterion_results": [
+                        {
+                            "criterion_id": "chief_complaint_length",
+                            "status": "non_compliant",
+                        }
+                    ],
+                    "metadata": {
+                        "rule_version": "obsolete-version",
+                        "executor_type": "program",
+                    },
+                }
+            ],
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [rule])
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-018")
+    assert persisted["rule_version"] == rule_version
+    assert persisted["rule_version"] != persisted["metadata"]["rule_version"]
+    assert workspace_module._is_current_rule_contract_result(persisted) is True
 
 
 @pytest.mark.asyncio

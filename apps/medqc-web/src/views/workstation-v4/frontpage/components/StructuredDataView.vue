@@ -23,13 +23,18 @@
       </div>
 
       <!-- 提取说明 -->
-      <h2 class="text-2xl font-bold text-slate-800 mb-4 tracking-tight">首页结构化提取中...</h2>
+      <h2 class="text-2xl font-bold text-slate-800 mb-4 tracking-tight">
+        首页结构化提取中...
+      </h2>
       <p class="text-slate-500 text-sm max-w-[320px] text-center mb-12 leading-relaxed">
-        正在阅读病历记录并提取诊断、手术等<br />首页数据结构
+        正在阅读病历记录并提取诊断、手术等<br>首页数据结构
       </p>
 
       <!-- 提取阶段 -->
-      <div v-if="extractionProgress" class="w-full max-w-md">
+      <div
+        v-if="extractionProgress"
+        class="w-full max-w-md"
+      >
         <div class="flex justify-between text-xs font-bold text-slate-500 mb-3">
           <span>{{ extractionProgress.currentModule ? '正在解析...' : '正在初始化...' }}</span>
           <span class="font-mono text-[#0066cc]">{{ extractionProgress.percent }}%</span>
@@ -73,13 +78,11 @@
           <span
             class="text-[11px] font-bold text-slate-700 opacity-60 transition-opacity"
             :style="{ opacity: extractionProgress.percent >= 40 ? 1 : 0.6 }"
-            >实体识别</span
-          >
+          >实体识别</span>
           <span
             class="text-[11px] font-bold text-slate-700 opacity-60 transition-opacity"
             :style="{ opacity: extractionProgress.percent >= 80 ? 1 : 0.6 }"
-            >结构生成</span
-          >
+          >结构生成</span>
         </div>
       </div>
     </div>
@@ -95,7 +98,9 @@
         <p class="font-bold mb-1 opacity-50 flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-slate-300" /> 提取进度
         </p>
-        <p class="opacity-40 filter blur-[0.3px]">正在分段读取病历原文...</p>
+        <p class="opacity-40 filter blur-[0.3px]">
+          正在分段读取病历原文...
+        </p>
         <p class="opacity-60 transition-all">
           正在提取 {{ extractionProgress?.currentModule || '首页字段' }}...
         </p>
@@ -120,17 +125,21 @@
     </div>
   </div>
   <!-- 已有首页数据：提取过程中也渐进展示 -->
-  <div v-else-if="frontpage || hasAnyData" class="structured-data-view space-y-6 pb-10">
+  <div
+    v-else-if="frontpage || hasAnyData"
+    class="structured-data-view space-y-6 pb-10"
+  >
     <!-- 渐进式提取提示 -->
-    <div v-if="extracting" class="bg-blue-50 px-4 py-3 rounded-lg border border-blue-100">
+    <div
+      v-if="extracting"
+      class="bg-blue-50 px-4 py-3 rounded-lg border border-blue-100"
+    >
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2 text-sm text-[#0066cc]">
           <a-spin size="small" />
           <span>正在提取：{{ extractionProgress?.currentModule || '首页字段' }}</span>
         </div>
-        <span class="text-xs font-medium text-[#0066cc]"
-          >{{ extractionProgress?.percent || 0 }}%</span
-        >
+        <span class="text-xs font-medium text-[#0066cc]">{{ extractionProgress?.percent || 0 }}%</span>
       </div>
       <div class="w-full h-1.5 bg-[#d7e8ff] rounded-full overflow-hidden">
         <div
@@ -158,18 +167,14 @@
       v-if="!extracting && extractionStatus === 'completed'"
       class="flex items-center gap-2.5 px-4 py-3 rounded-lg bg-[#f0fdf4] border border-[#bbf7d0] shadow-[0_2px_10px_rgba(22,163,74,0.05)]"
     >
-      <span class="text-[#16a34a] text-sm font-bold tracking-wide flex items-center gap-2"
-        ><CheckCircleFilled v-if="false" />结构化提取完成，共提取
-        {{ extractionProgress?.completed?.length || 0 }} 个模块</span
-      >
+      <span class="text-[#16a34a] text-sm font-bold tracking-wide flex items-center gap-2"><CheckCircleFilled v-if="false" />结构化提取完成，共提取
+        {{ extractionProgress?.completed?.length || 0 }} 个模块</span>
     </div>
     <div
       v-else-if="!extracting && extractionStatus === 'mock_fallback'"
       class="flex items-center gap-2.5 px-4 py-3 rounded-lg bg-[#fffbeb] border border-[#fde68a] shadow-sm"
     >
-      <span class="text-[#d97706] text-sm font-bold tracking-wide"
-        >提取服务连接失败，当前显示备用示例数据（非真实提取结果）</span
-      >
+      <span class="text-[#d97706] text-sm font-bold tracking-wide">提取服务连接失败，当前显示备用示例数据（非真实提取结果）</span>
     </div>
     <!-- 1. Basic Info & Hospitalization (Grid) -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -182,67 +187,89 @@
         </h4>
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">姓名</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              姓名
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.patient_name || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">性别</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              性别
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.gender_text || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">年龄</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              年龄
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.age_years ? frontpage.basic_info.age_years + ' 岁' : '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">出生日期</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              出生日期
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.birth_date || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">国籍</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              国籍
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.nationality || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">民族</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              民族
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.ethnicity || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">婚姻状况</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              婚姻状况
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.marital_status_text || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">职业</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              职业
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.occupation || frontpage.basic_info?.job || '-' }}
             </div>
           </div>
           <div class="col-span-2 lg:col-span-1">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">身份证号</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              身份证号
+            </div>
             <div class="font-medium font-mono">
               {{ frontpage.basic_info?.id_number || '-' }}
             </div>
           </div>
           <div class="col-span-2 lg:col-span-3">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">现住址</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              现住址
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.current_address || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">联系人</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              联系人
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.basic_info?.contact_name || '-' }}
             </div>
@@ -275,19 +302,25 @@
         </h4>
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
           <div class="col-span-2 lg:col-span-3">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">医疗机构</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              医疗机构
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.hospitalization?.hospital_name || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">病案号</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              病案号
+            </div>
             <div class="font-medium font-mono">
               {{ frontpage.hospitalization?.medical_record_no || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">住院次数</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              住院次数
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.admission_times_in_hospital
@@ -305,77 +338,95 @@
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">入院途径</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              入院途径
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.hospitalization?.admission_way_text || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">入院日期</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              入院日期
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.admission_datetime ||
-                frontpage.hospitalization?.admission_date ||
-                '-'
+                  frontpage.hospitalization?.admission_date ||
+                  '-'
               }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">出院日期</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              出院日期
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.discharge_datetime ||
-                frontpage.hospitalization?.discharge_date ||
-                '-'
+                  frontpage.hospitalization?.discharge_date ||
+                  '-'
               }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">入院科室</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              入院科室
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.admission_dept ||
-                frontpage.hospitalization?.admitted_dept ||
-                '-'
+                  frontpage.hospitalization?.admitted_dept ||
+                  '-'
               }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">出院科室</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              出院科室
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.discharge_dept ||
-                frontpage.hospitalization?.discharged_dept ||
-                '-'
+                  frontpage.hospitalization?.discharged_dept ||
+                  '-'
               }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">入院病房</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              入院病房
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.hospitalization?.admission_ward || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">出院病房</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              出院病房
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.hospitalization?.discharge_ward || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">住院天数</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              住院天数
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{
                 frontpage.hospitalization?.actual_hospital_days ||
-                frontpage.hospitalization?.hospital_days
+                  frontpage.hospitalization?.hospital_days
                   ? (frontpage.hospitalization?.actual_hospital_days ||
-                      frontpage.hospitalization?.hospital_days) + ' 天'
+                    frontpage.hospitalization?.hospital_days) + ' 天'
                   : '-'
               }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">离院方式</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              离院方式
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.hospitalization?.leaving_hospital_way || '-' }}
             </div>
@@ -388,7 +439,10 @@
               {{ frontpage.hospitalization?.rehospital_within_month || '-' }}
             </div>
           </div>
-          <div v-if="frontpage.hospitalization?.rehospital_purpose" class="col-span-2">
+          <div
+            v-if="frontpage.hospitalization?.rehospital_purpose"
+            class="col-span-2"
+          >
             <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
               再住院目的
             </div>
@@ -412,27 +466,37 @@
         </h4>
         <span
           class="text-[11px] font-bold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0] px-2 py-0.5 rounded"
-          >ICD-10</span
-        >
+        >ICD-10</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
           <thead class="bg-slate-50/50 text-slate-400 font-bold text-[12px]">
             <tr>
-              <th class="px-4 py-3 w-20">类型</th>
-              <th class="px-4 py-3 w-32">ICD编码</th>
-              <th class="px-4 py-3">诊断名称</th>
-              <th class="px-4 py-3 w-24">入院病情</th>
-              <th class="px-4 py-3 w-24 text-center">提取可信度</th>
+              <th class="px-4 py-3 w-20">
+                类型
+              </th>
+              <th class="px-4 py-3 w-32">
+                ICD编码
+              </th>
+              <th class="px-4 py-3">
+                诊断名称
+              </th>
+              <th class="px-4 py-3 w-24">
+                入院病情
+              </th>
+              <th class="px-4 py-3 w-24 text-center">
+                提取可信度
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white">
             <!-- Admission Main Diagnosis -->
-            <tr v-if="frontpage.diagnoses.admission_main_diagnosis_text" class="hover:bg-slate-50">
+            <tr
+              v-if="frontpage.diagnoses.admission_main_diagnosis_text"
+              class="hover:bg-slate-50"
+            >
               <td class="px-4 py-3">
-                <span class="bg-blue-100 text-[#0057b8] px-1.5 py-0.5 rounded text-xs font-medium"
-                  >主要</span
-                >
+                <span class="bg-blue-100 text-[#0057b8] px-1.5 py-0.5 rounded text-xs font-medium">主要</span>
               </td>
               <td class="px-4 py-3">
                 <input
@@ -444,7 +508,7 @@
                     (e) =>
                       handleCodeChange('admission_main_icd', (e.target as HTMLInputElement).value)
                   "
-                />
+                >
               </td>
               <td class="px-4 py-3 font-medium text-slate-900">
                 {{ frontpage.diagnoses.admission_main_diagnosis_text }}
@@ -505,27 +569,37 @@
         </h4>
         <span
           class="text-[11px] font-bold bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0] px-2 py-0.5 rounded"
-          >ICD-10</span
-        >
+        >ICD-10</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
           <thead class="bg-slate-50/50 text-slate-400 font-bold text-[12px]">
             <tr>
-              <th class="px-4 py-3 w-20">类型</th>
-              <th class="px-4 py-3 w-32">ICD编码</th>
-              <th class="px-4 py-3">诊断名称</th>
-              <th class="px-4 py-3 w-24">入院病情</th>
-              <th class="px-4 py-3 w-24 text-center">提取可信度</th>
+              <th class="px-4 py-3 w-20">
+                类型
+              </th>
+              <th class="px-4 py-3 w-32">
+                ICD编码
+              </th>
+              <th class="px-4 py-3">
+                诊断名称
+              </th>
+              <th class="px-4 py-3 w-24">
+                入院病情
+              </th>
+              <th class="px-4 py-3 w-24 text-center">
+                提取可信度
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white">
             <!-- Discharge Main Diagnosis -->
-            <tr v-if="frontpage.diagnoses.discharge_main_diagnosis_text" class="hover:bg-slate-50">
+            <tr
+              v-if="frontpage.diagnoses.discharge_main_diagnosis_text"
+              class="hover:bg-slate-50"
+            >
               <td class="px-4 py-3">
-                <span class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-medium"
-                  >主要</span
-                >
+                <span class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-medium">主要</span>
               </td>
               <td class="px-4 py-3">
                 <input
@@ -537,7 +611,7 @@
                     (e) =>
                       handleCodeChange('discharge_main_icd', (e.target as HTMLInputElement).value)
                   "
-                />
+                >
               </td>
               <td class="px-4 py-3 font-medium text-slate-900">
                 {{ frontpage.diagnoses.discharge_main_diagnosis_text }}
@@ -597,22 +671,39 @@
         </h4>
         <span
           class="text-[11px] font-bold bg-[#fffbeb] text-[#d97706] border border-[#fde68a] px-2 py-0.5 rounded"
-          >ICD-9-CM-3</span
-        >
+        >ICD-9-CM-3</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm text-left">
           <thead class="bg-slate-50/50 text-slate-400 font-bold text-[12px]">
             <tr>
-              <th class="px-4 py-3 w-32">手术编码</th>
-              <th class="px-4 py-3">手术名称</th>
-              <th class="px-4 py-3 w-32">手术日期</th>
-              <th class="px-4 py-3 w-24">术者</th>
-              <th class="px-4 py-3 w-24">I助/II助</th>
-              <th class="px-4 py-3 w-24">麻醉方式</th>
-              <th class="px-4 py-3 w-20">切口等级</th>
-              <th class="px-4 py-3 w-20">愈合等级</th>
-              <th class="px-4 py-3 w-20">ASA分级</th>
+              <th class="px-4 py-3 w-32">
+                手术编码
+              </th>
+              <th class="px-4 py-3">
+                手术名称
+              </th>
+              <th class="px-4 py-3 w-32">
+                手术日期
+              </th>
+              <th class="px-4 py-3 w-24">
+                术者
+              </th>
+              <th class="px-4 py-3 w-24">
+                I助/II助
+              </th>
+              <th class="px-4 py-3 w-24">
+                麻醉方式
+              </th>
+              <th class="px-4 py-3 w-20">
+                切口等级
+              </th>
+              <th class="px-4 py-3 w-20">
+                愈合等级
+              </th>
+              <th class="px-4 py-3 w-20">
+                ASA分级
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 bg-white">
@@ -620,22 +711,22 @@
               <td class="px-4 py-3 font-mono text-slate-600">
                 {{
                   frontpage.procedures.main?.code ||
-                  frontpage.procedures?.main_procedure_code ||
-                  '-'
+                    frontpage.procedures?.main_procedure_code ||
+                    '-'
                 }}
               </td>
               <td class="px-4 py-3 font-medium text-slate-900">
                 {{
                   frontpage.procedures.main?.name ||
-                  frontpage.procedures?.main_procedure_text ||
-                  '-'
+                    frontpage.procedures?.main_procedure_text ||
+                    '-'
                 }}
               </td>
               <td class="px-4 py-3 text-slate-600">
                 {{
                   frontpage.procedures.main?.date ||
-                  frontpage.procedures?.main_procedure_date ||
-                  '-'
+                    frontpage.procedures?.main_procedure_date ||
+                    '-'
                 }}
               </td>
               <td class="px-4 py-3 text-slate-600">
@@ -650,8 +741,8 @@
               <td class="px-4 py-3 text-slate-600">
                 {{
                   frontpage.procedures.main?.anesthesia ||
-                  frontpage.procedures?.anesthesia_method ||
-                  '-'
+                    frontpage.procedures?.anesthesia_method ||
+                    '-'
                 }}
               </td>
               <td class="px-4 py-3 text-slate-600">
@@ -668,7 +759,7 @@
             <tr
               v-if="
                 frontpage.procedures?.main_procedure_start_time ||
-                frontpage.procedures?.unplanned_reoperation
+                  frontpage.procedures?.unplanned_reoperation
               "
               class="bg-slate-50/50"
             >
@@ -676,30 +767,32 @@
                 colspan="3"
                 class="px-4 py-2 text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide"
               >
-                <span v-if="frontpage.procedures?.main_procedure_start_time"
-                  >开始: {{ frontpage.procedures.main_procedure_start_time }}</span
-                >
-                <span v-if="frontpage.procedures?.main_procedure_end_time" class="ml-3"
-                  >结束: {{ frontpage.procedures.main_procedure_end_time }}</span
-                >
+                <span v-if="frontpage.procedures?.main_procedure_start_time">开始: {{ frontpage.procedures.main_procedure_start_time }}</span>
+                <span
+                  v-if="frontpage.procedures?.main_procedure_end_time"
+                  class="ml-3"
+                >结束: {{ frontpage.procedures.main_procedure_end_time }}</span>
               </td>
               <td
                 colspan="3"
                 class="px-4 py-2 text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide"
               >
-                <span v-if="frontpage.procedures?.anesthetist_name"
-                  >麻醉医师: {{ frontpage.procedures.anesthetist_name }}</span
-                >
+                <span v-if="frontpage.procedures?.anesthetist_name">麻醉医师: {{ frontpage.procedures.anesthetist_name }}</span>
               </td>
-              <td colspan="3" class="px-4 py-2 text-xs">
+              <td
+                colspan="3"
+                class="px-4 py-2 text-xs"
+              >
                 <span
                   v-if="frontpage.procedures?.unplanned_reoperation === '是'"
                   class="text-red-600 font-medium"
-                  >⚠ 非计划再手术</span
-                >
+                >⚠ 非计划再手术</span>
               </td>
             </tr>
-            <tr v-for="(proc, idx) in frontpage.procedures.others" :key="idx">
+            <tr
+              v-for="(proc, idx) in frontpage.procedures.others"
+              :key="idx"
+            >
               <td class="px-4 py-3 font-mono text-slate-600">
                 {{ proc.code }}
               </td>
@@ -712,20 +805,35 @@
               <td class="px-4 py-3 text-slate-600">
                 {{ proc.surgeon }}
               </td>
-              <td class="px-4 py-3 text-slate-600">-</td>
-              <td class="px-4 py-3 text-slate-600">-</td>
-              <td class="px-4 py-3 text-slate-600">-</td>
-              <td class="px-4 py-3 text-slate-600">-</td>
-              <td class="px-4 py-3 text-slate-600">-</td>
+              <td class="px-4 py-3 text-slate-600">
+                -
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                -
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                -
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                -
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                -
+              </td>
             </tr>
             <tr
               v-if="
                 !frontpage.procedures.main?.code &&
-                !frontpage.procedures?.main_procedure_text &&
-                (!frontpage.procedures.others || frontpage.procedures.others.length === 0)
+                  !frontpage.procedures?.main_procedure_text &&
+                  (!frontpage.procedures.others || frontpage.procedures.others.length === 0)
               "
             >
-              <td colspan="9" class="px-4 py-8 text-center text-slate-400">无手术操作</td>
+              <td
+                colspan="9"
+                class="px-4 py-8 text-center text-slate-400"
+              >
+                无手术操作
+              </td>
             </tr>
           </tbody>
         </table>
@@ -743,20 +851,21 @@
         </h4>
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-4 text-sm">
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">药物过敏</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              药物过敏
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               <span
                 v-if="
                   frontpage.other_medical_info?.drug_allergy_flag === '1' ||
-                  frontpage.other_medical_info?.drug_allergy_flag === 1
+                    frontpage.other_medical_info?.drug_allergy_flag === 1
                 "
                 class="text-green-600"
-                >无</span
-              >
+              >无</span>
               <span
                 v-else-if="
                   frontpage.other_medical_info?.drug_allergy_flag === '2' ||
-                  frontpage.other_medical_info?.drug_allergy_flag === 2
+                    frontpage.other_medical_info?.drug_allergy_flag === 2
                 "
                 class="text-red-600"
               >
@@ -766,25 +875,36 @@
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">ABO 血型</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              ABO 血型
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.other_medical_info?.abo_blood_type || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">Rh 血型</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              Rh 血型
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.other_medical_info?.rh_blood_type_text || '-' }}
             </div>
           </div>
-          <div v-if="frontpage.other_medical_info?.pathology_text" class="col-span-2 lg:col-span-3">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">病理诊断</div>
+          <div
+            v-if="frontpage.other_medical_info?.pathology_text"
+            class="col-span-2 lg:col-span-3"
+          >
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              病理诊断
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.other_medical_info.pathology_text }}
             </div>
           </div>
           <div v-if="frontpage.other_medical_info?.pathology_no">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">病理号</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              病理号
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.other_medical_info.pathology_no }}
             </div>
@@ -798,7 +918,9 @@
             </div>
           </div>
           <div v-if="frontpage.other_medical_info?.icu_type">
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">ICU 类型</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              ICU 类型
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.other_medical_info.icu_type }}
             </div>
@@ -831,7 +953,9 @@
         </h4>
         <div class="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">科主任</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              科主任
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.staff?.dept_director || '-' }}
             </div>
@@ -845,49 +969,65 @@
             </div>
           </div>
           <div>
-            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">主治医师</div>
+            <div class="text-[11px] font-medium text-slate-400 mb-0.5 tracking-wide">
+              主治医师
+            </div>
             <div class="text-[13px] font-bold text-slate-800">
               {{ frontpage.staff?.attending_physician || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">住院医师</div>
+            <div class="text-xs text-slate-500">
+              住院医师
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.resident_physician || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">责任护士</div>
+            <div class="text-xs text-slate-500">
+              责任护士
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.responsible_nurse || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">编码员</div>
+            <div class="text-xs text-slate-500">
+              编码员
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.coder || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">质控医师</div>
+            <div class="text-xs text-slate-500">
+              质控医师
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.qc_physician || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">质控护士</div>
+            <div class="text-xs text-slate-500">
+              质控护士
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.qc_nurse || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">质控日期</div>
+            <div class="text-xs text-slate-500">
+              质控日期
+            </div>
             <div class="font-medium">
               {{ frontpage.staff?.qc_date || '-' }}
             </div>
           </div>
           <div>
-            <div class="text-xs text-slate-500">病案质量等级</div>
+            <div class="text-xs text-slate-500">
+              病案质量等级
+            </div>
             <div class="font-medium">
               <span
                 v-if="frontpage.staff?.medical_record_quality"
@@ -896,8 +1036,7 @@
                   'text-yellow-600': frontpage.staff.medical_record_quality === '乙',
                   'text-red-600': frontpage.staff.medical_record_quality === '丙',
                 }"
-                >{{ frontpage.staff.medical_record_quality }}</span
-              >
+              >{{ frontpage.staff.medical_record_quality }}</span>
               <span v-else>-</span>
             </div>
           </div>
@@ -915,13 +1054,20 @@
       </h4>
       <div class="flex flex-wrap gap-6">
         <div class="bg-white rounded-lg px-4 py-3 shadow-sm">
-          <div class="text-xs text-slate-500">住院总费用</div>
+          <div class="text-xs text-slate-500">
+            住院总费用
+          </div>
           <div class="text-xl font-bold text-emerald-600">
             ¥ {{ formatNumber(frontpage.costs?.total_cost) }}
           </div>
         </div>
-        <div v-if="frontpage.costs?.self_paid" class="bg-white rounded-lg px-4 py-3 shadow-sm">
-          <div class="text-xs text-slate-500">自付金额</div>
+        <div
+          v-if="frontpage.costs?.self_paid"
+          class="bg-white rounded-lg px-4 py-3 shadow-sm"
+        >
+          <div class="text-xs text-slate-500">
+            自付金额
+          </div>
           <div class="text-xl font-bold text-orange-600">
             ¥ {{ formatNumber(frontpage.costs?.self_paid) }}
           </div>
@@ -930,7 +1076,9 @@
           v-if="frontpage.costs?.total_cost && frontpage.costs?.self_paid"
           class="bg-white rounded-lg px-4 py-3 shadow-sm"
         >
-          <div class="text-xs text-slate-500">医保支付</div>
+          <div class="text-xs text-slate-500">
+            医保支付
+          </div>
           <div class="text-xl font-bold text-[#0066cc]">
             ¥ {{ formatNumber(frontpage.costs?.total_cost - frontpage.costs?.self_paid) }}
           </div>
@@ -974,23 +1122,33 @@
           <div class="text-lg font-bold text-green-600">
             {{ extractionStats.extracted }}
           </div>
-          <div class="text-xs text-slate-500">已提取字段</div>
+          <div class="text-xs text-slate-500">
+            已提取字段
+          </div>
         </div>
         <div class="bg-slate-50 rounded-lg px-3 py-2 text-center">
           <div class="text-lg font-bold text-slate-400">
             {{ extractionStats.missing }}
           </div>
-          <div class="text-xs text-slate-500">未识别字段</div>
+          <div class="text-xs text-slate-500">
+            未识别字段
+          </div>
         </div>
         <div class="bg-slate-50 rounded-lg px-3 py-2 text-center">
           <div class="text-lg font-bold text-[#0066cc]">
             {{ extractionStats.total }}
           </div>
-          <div class="text-xs text-slate-500">总字段数</div>
+          <div class="text-xs text-slate-500">
+            总字段数
+          </div>
         </div>
         <div class="bg-slate-50 rounded-lg px-3 py-2 text-center">
-          <div class="text-lg font-bold text-purple-600">{{ extractionStats.confidence }}%</div>
-          <div class="text-xs text-slate-500">可信度</div>
+          <div class="text-lg font-bold text-purple-600">
+            {{ extractionStats.confidence }}%
+          </div>
+          <div class="text-xs text-slate-500">
+            可信度
+          </div>
         </div>
       </div>
 
@@ -999,14 +1157,25 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-slate-200">
-              <th class="text-left py-2 px-3 text-slate-500 font-medium w-28">类别</th>
-              <th class="text-left py-2 px-3 text-slate-500 font-medium">字段名称</th>
-              <th class="text-left py-2 px-3 text-slate-500 font-medium">提取值</th>
-              <th class="text-center py-2 px-3 text-slate-500 font-medium w-20">状态</th>
+              <th class="text-left py-2 px-3 text-slate-500 font-medium w-28">
+                类别
+              </th>
+              <th class="text-left py-2 px-3 text-slate-500 font-medium">
+                字段名称
+              </th>
+              <th class="text-left py-2 px-3 text-slate-500 font-medium">
+                提取值
+              </th>
+              <th class="text-center py-2 px-3 text-slate-500 font-medium w-20">
+                状态
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <template v-for="(fields, category) in fieldCategories" :key="category">
+            <template
+              v-for="(fields, category) in fieldCategories"
+              :key="category"
+            >
               <tr
                 v-for="(field, idx) in fields"
                 :key="`${category}-${idx}`"
@@ -1027,9 +1196,11 @@
                     v-if="field.value"
                     class="truncate block max-w-xs"
                     :title="String(field.value)"
-                    >{{ truncateValue(field.value) }}</span
-                  >
-                  <span v-else class="text-slate-400 italic">-</span>
+                  >{{ truncateValue(field.value) }}</span>
+                  <span
+                    v-else
+                    class="text-slate-400 italic"
+                  >-</span>
                 </td>
                 <td class="py-2 px-3 text-center whitespace-nowrap">
                   <span
@@ -1064,7 +1235,9 @@
     >
       <RobotOutlined class="text-4xl text-blue-500" />
     </div>
-    <h3 class="text-lg font-semibold text-slate-800 mb-2">首页结构化提取</h3>
+    <h3 class="text-lg font-semibold text-slate-800 mb-2">
+      首页结构化提取
+    </h3>
     <p class="text-sm text-slate-500 mb-6 max-w-xs">
       从病历原文中自动识别患者信息、诊断、手术操作，并映射到 ICD 标准编码。
     </p>
@@ -1076,7 +1249,12 @@
       <ThunderboltOutlined />
       开始提取
     </button>
-    <p v-if="!hasMedicalText" class="text-xs text-orange-500 mt-3">请先在左侧加载病历原文</p>
+    <p
+      v-if="!hasMedicalText"
+      class="text-xs text-orange-500 mt-3"
+    >
+      请先在左侧加载病历原文
+    </p>
   </div>
 </template>
 

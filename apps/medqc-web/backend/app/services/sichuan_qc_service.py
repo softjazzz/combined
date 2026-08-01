@@ -1523,6 +1523,18 @@ class SichuanQCService:
                 # LX0609 原生 RuleDecision 已把原因码收敛为受控枚举；正式服务
                 # 投影必须保留该安全字段，不能只停留在内部聚合对象。
                 "reason_code": item.get("reason_code"),
+                # 客户结果页依赖此受控事实解释“为什么判定”。这里不能在
+                # document-result 投影时丢弃，否则原生执行虽已产出明细，
+                # 保存和前端只能看到泛化的“发现问题”文案。
+                "customer_display_facts": item.get("customer_display_facts"),
+                # 单病历结果 Envelope 的原生解释载荷。最终状态仍由聚合器给出；
+                # 这里只透传规则已生成的子结论、医学分析与证据引用，禁止在
+                # document-result 边界重新推断或拼接医学结论。
+                "criterion_results": item.get("criterion_results"),
+                "customer_evidence": item.get("customer_evidence"),
+                # 原生 LLM 已产出的医学分析是客户复核的重要上下文。单病历
+                # Envelope 负责原样保存；安全读取端仅做长度与身份引用处理。
+                "model_analysis": item.get("model_analysis") or item.get("medical_analysis"),
                 "applicability": item.get("applicability"),
                 "evidence_verified": item.get("evidence_verified"),
                 "metadata": item.get("metadata"),

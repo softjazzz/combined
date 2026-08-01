@@ -6,7 +6,9 @@
       <section class="wv4-analysis-overview mb-4">
         <div class="wv4-analysis-overview__header">
           <div>
-            <div class="wv4-analysis-overview__eyebrow">规则工作台</div>
+            <div class="wv4-analysis-overview__eyebrow">
+              规则工作台
+            </div>
             <h2 class="wv4-analysis-overview__title">
               {{ rulesSubTabTitle }}
             </h2>
@@ -15,7 +17,10 @@
             </p>
           </div>
           <div class="wv4-analysis-overview__actions">
-            <button class="rules-sub-back-btn" @click="emit('back')">
+            <button
+              class="rules-sub-back-btn"
+              @click="emit('back')"
+            >
               <LeftOutlined />
               返回病历列表
             </button>

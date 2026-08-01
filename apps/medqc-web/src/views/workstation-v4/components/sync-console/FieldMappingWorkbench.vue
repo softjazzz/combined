@@ -11,23 +11,49 @@
           来源：后端映射配置 `/api/v1/sync/mappings`
         </div>
       </div>
-      <a-button size="small" :loading="loading" @click="loadMappings"> 刷新 </a-button>
+      <a-button
+        size="small"
+        :loading="loading"
+        @click="loadMappings"
+      >
+        刷新
+      </a-button>
     </div>
 
     <div class="flex-1 overflow-auto custom-scrollbar p-6 bg-[#f5f5f7]">
-      <div v-if="loading" class="text-[12px] text-slate-500">正在加载映射配置...</div>
-      <div v-else-if="mappings.length === 0" class="text-[12px] text-slate-500">暂无映射数据。</div>
+      <div
+        v-if="loading"
+        class="text-[12px] text-slate-500"
+      >
+        正在加载映射配置...
+      </div>
+      <div
+        v-else-if="mappings.length === 0"
+        class="text-[12px] text-slate-500"
+      >
+        暂无映射数据。
+      </div>
       <table
         v-else
         class="w-full text-left border-collapse bg-white border border-slate-200 rounded overflow-hidden"
       >
         <thead class="bg-slate-50">
           <tr class="text-slate-500 text-[11px] uppercase tracking-wider">
-            <th class="px-4 py-3 font-medium">源集合</th>
-            <th class="px-4 py-3 font-medium">目标表</th>
-            <th class="px-4 py-3 font-medium">主键字段</th>
-            <th class="px-4 py-3 font-medium">Tier</th>
-            <th class="px-4 py-3 font-medium">状态</th>
+            <th class="px-4 py-3 font-medium">
+              源集合
+            </th>
+            <th class="px-4 py-3 font-medium">
+              目标表
+            </th>
+            <th class="px-4 py-3 font-medium">
+              主键字段
+            </th>
+            <th class="px-4 py-3 font-medium">
+              Tier
+            </th>
+            <th class="px-4 py-3 font-medium">
+              状态
+            </th>
           </tr>
         </thead>
         <tbody class="text-[12px] text-slate-700 font-mono">

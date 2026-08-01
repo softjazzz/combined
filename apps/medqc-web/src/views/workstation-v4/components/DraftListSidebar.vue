@@ -22,7 +22,7 @@
           type="text"
           placeholder="搜索姓名、科室或病案号..."
           class="draft-list-sidebar__search w-full rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none transition-all"
-        />
+        >
       </div>
 
       <!-- Tags filter -->
@@ -121,7 +121,9 @@
         >
           <InboxOutlined class="text-slate-400 text-xl" />
         </div>
-        <p class="text-sm text-slate-500">无匹配病案</p>
+        <p class="text-sm text-slate-500">
+          无匹配病案
+        </p>
       </div>
     </div>
   </div>

@@ -529,7 +529,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).not.toContain('累计模型处理耗时')
     expect(wrapper.text()).not.toContain('底层执行规则')
     expect(wrapper.text()).not.toContain('映射到')
-    expect(wrapper.text()).toContain('本次执行质控点数')
+    expect(wrapper.text()).toContain('客户质控点')
   })
 
   it('应展示当前任务摘要中的病历级与规则级统计口径', () => {
@@ -1242,6 +1242,108 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('会诊记录 · doc-3fa891')
     expect(wrapper.text()).not.toContain('未返回结论')
     expect(wrapper.text()).not.toContain('RAW-INTERNAL-FINDINGS-021')
+  })
+
+  it('单病历聚焦时应按 record_ref 过滤顶层结果，不能串用其他病历结果', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.items = [
+      {
+        rule_job_id: 'rule-job-a',
+        rule_id: 'LX0609-025',
+        rule_code: 'LX0609-025',
+        rule_name: '植入物信息完整性',
+        record_ref: 'case-A',
+        status: 'non_compliant',
+        canonical_status: 'non_compliant',
+        is_compliant: false,
+        conclusion: 'case-A 的植入物信息缺失。',
+        findings: 'case-A 不应显示',
+      },
+      {
+        rule_job_id: 'rule-job-b',
+        rule_id: 'LX0609-018',
+        rule_code: 'LX0609-018',
+        rule_name: '主诉能导出第一诊断',
+        record_ref: 'case-B',
+        status: 'non_compliant',
+        canonical_status: 'non_compliant',
+        is_compliant: false,
+        conclusion: 'case-B 的主诉长度不足。',
+        findings: 'case-B 应显示',
+      },
+    ]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: {
+        ...props,
+        focusRecordRef: 'case-B',
+        focusRecordLabel: '病历 case-B',
+      },
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('case-B')
+    expect(text).toContain('LX0609-018')
+    expect(text).toContain('case-B 的主诉长度不足')
+    expect(text).not.toContain('LX0609-025')
+    expect(text).not.toContain('case-A 的植入物信息缺失')
+    expect(text).not.toContain('case-A 不应显示')
+  })
+
+  it('LX0609-018 已提供受控展示事实时，应展示可读判定明细而非通用话术', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.rule_results = [
+      {
+        id: 'rule-job-lx-018',
+        rule_code: 'LX0609-018',
+        rule_name: '主诉能导出第一诊断',
+        status: 'completed',
+        items: [
+          {
+            rule_job_id: 'rule-job-lx-018',
+            rule_id: 'LX0609-018',
+            rule_code: 'LX0609-018',
+            rule_name: '主诉能导出第一诊断',
+            record_id: 'record-018',
+            status: 'non_compliant',
+            result_status: 'non_compliant',
+            is_compliant: false,
+            findings: '规则要求未满足。',
+            reason_code: 'threshold_exceeded',
+            customer_display_facts: {
+              complaint_length: 21,
+              length_state: 'violated',
+              primary_diagnosis_available: true,
+              diagnostic_relation_state: 'supported',
+              diagnostic_reason_dimensions: ['anatomic_site', 'symptom_pattern'],
+              source_label: '入院记录—主诉',
+            },
+          },
+        ],
+      },
+    ]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: {
+        ...props,
+        focusRecordId: 'record-018',
+      },
+      global: { stubs: drawerStubs },
+    })
+
+    expect(wrapper.text()).toContain('主诉超过20字上限；诊断指向子项通过。')
+    expect(wrapper.text()).toContain('主诉共21字，超过20字上限。')
+    expect(wrapper.text()).toContain('诊断指向子项通过')
+    expect(wrapper.text()).toContain('实际值：21字')
+    expect(wrapper.text()).toContain('入院记录—主诉')
+    expect(wrapper.text()).not.toContain('规则要求未满足。')
   })
 
   it('复制病历结果应展示左右对比证据', () => {

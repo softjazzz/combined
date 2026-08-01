@@ -19,7 +19,11 @@
           >
             {{ extracting ? '抽取中...' : '执行抽取' }}
           </button>
-          <div class="segmented" role="tablist" aria-label="分组类型">
+          <div
+            class="segmented"
+            role="tablist"
+            aria-label="分组类型"
+          >
             <button
               type="button"
               class="segmented-item"
@@ -96,7 +100,11 @@
           </div>
         </div>
 
-        <div class="case-list" role="tablist" aria-label="病例切换">
+        <div
+          class="case-list"
+          role="tablist"
+          aria-label="病例切换"
+        >
           <button
             v-for="(item, index) in testCases"
             :key="item.name"
@@ -130,25 +138,46 @@
 
         <div class="workflow-block">
           <h3>分析流程</h3>
-          <div class="workflow-node" :class="{ active: !!medicalText }">
+          <div
+            class="workflow-node"
+            :class="{ active: !!medicalText }"
+          >
             <span class="workflow-node__index">01</span>
             <div>
-              <div class="workflow-node__title">病历阅读</div>
-              <div class="workflow-node__desc">确认原始文本与临床场景</div>
+              <div class="workflow-node__title">
+                病历阅读
+              </div>
+              <div class="workflow-node__desc">
+                确认原始文本与临床场景
+              </div>
             </div>
           </div>
-          <div class="workflow-node" :class="{ active: hasExtractedData }">
+          <div
+            class="workflow-node"
+            :class="{ active: hasExtractedData }"
+          >
             <span class="workflow-node__index">02</span>
             <div>
-              <div class="workflow-node__title">结构化抽取</div>
-              <div class="workflow-node__desc">沉淀主诊断、手术与费用字段</div>
+              <div class="workflow-node__title">
+                结构化抽取
+              </div>
+              <div class="workflow-node__desc">
+                沉淀主诊断、手术与费用字段
+              </div>
             </div>
           </div>
-          <div class="workflow-node" :class="{ active: !!drgResult }">
+          <div
+            class="workflow-node"
+            :class="{ active: !!drgResult }"
+          >
             <span class="workflow-node__index">03</span>
             <div>
-              <div class="workflow-node__title">分组预判</div>
-              <div class="workflow-node__desc">输出模拟结果与费用判断</div>
+              <div class="workflow-node__title">
+                分组预判
+              </div>
+              <div class="workflow-node__desc">
+                输出模拟结果与费用判断
+              </div>
             </div>
           </div>
         </div>
@@ -192,7 +221,10 @@
               }}</em>
             </div>
             <div class="reader-scroll">
-              <div class="medical-text" v-html="highlightedMedicalText" />
+              <div
+                class="medical-text"
+                v-html="highlightedMedicalText"
+              />
             </div>
           </div>
         </div>
@@ -227,7 +259,10 @@
             </div>
           </div>
 
-          <div v-if="secondaryDiagnoses.length" class="tag-block">
+          <div
+            v-if="secondaryDiagnoses.length"
+            class="tag-block"
+          >
             <span class="tag-block__label">次诊断</span>
             <div class="tag-list">
               <span
@@ -256,8 +291,14 @@
                   ? '检测到输入变化'
                   : '关键输入未变化'
               }}</span>
-              <div v-if="preGroupingChangedFields.length" class="simulation-version__changes">
-                <span v-for="item in preGroupingChangedFields.slice(0, 4)" :key="item.field">
+              <div
+                v-if="preGroupingChangedFields.length"
+                class="simulation-version__changes"
+              >
+                <span
+                  v-for="item in preGroupingChangedFields.slice(0, 4)"
+                  :key="item.field"
+                >
                   {{ preGroupingFieldLabel(item.field) }}
                 </span>
               </div>
@@ -271,7 +312,11 @@
               <h2>预判结果</h2>
               <p>模拟入组，不写正式结果</p>
             </div>
-            <div class="segmented segmented--compact" role="tablist" aria-label="分组类型">
+            <div
+              class="segmented segmented--compact"
+              role="tablist"
+              aria-label="分组类型"
+            >
               <button
                 type="button"
                 class="segmented-item"
@@ -293,7 +338,10 @@
             </div>
           </div>
 
-          <div v-if="drgResult" class="group-result">
+          <div
+            v-if="drgResult"
+            class="group-result"
+          >
             <div class="group-result__top">
               <span class="group-badge">{{ drgResult.groupingType || groupingType }}</span>
               <h3>{{ drgResult.groupName || drgResult.name || '未返回分组' }}</h3>
@@ -351,12 +399,18 @@
               </template>
             </div>
 
-            <div v-if="groupingCorrections" class="correction-panel">
+            <div
+              v-if="groupingCorrections"
+              class="correction-panel"
+            >
               <div class="correction-panel__head">
                 <span>修正建议</span>
                 <em>{{ groupingCorrections.suggestions.length }} 条</em>
               </div>
-              <div v-if="groupingCorrections.suggestions.length" class="correction-list">
+              <div
+                v-if="groupingCorrections.suggestions.length"
+                class="correction-list"
+              >
                 <div
                   v-for="item in groupingCorrections.suggestions.slice(0, 3)"
                   :key="`${item.suggestion_type}-${item.title}`"
@@ -364,7 +418,10 @@
                 >
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.reason }}</p>
-                  <div v-if="item.candidates?.length" class="correction-candidates">
+                  <div
+                    v-if="item.candidates?.length"
+                    class="correction-candidates"
+                  >
                     <span
                       v-for="candidate in item.candidates.slice(0, 3)"
                       :key="candidate.code || candidate.name"
@@ -374,23 +431,38 @@
                   </div>
                 </div>
               </div>
-              <div v-else class="correction-empty">当前分组未返回需要调整的编码建议。</div>
+              <div
+                v-else
+                class="correction-empty"
+              >
+                当前分组未返回需要调整的编码建议。
+              </div>
               <p class="correction-warning">
                 {{ groupingCorrections.safety_warning }}
               </p>
             </div>
 
-            <div v-if="correctionsLoading && !groupingCorrections" class="correction-empty">
+            <div
+              v-if="correctionsLoading && !groupingCorrections"
+              class="correction-empty"
+            >
               正在生成预入组修正建议...
             </div>
           </div>
 
-          <div v-else class="empty-state">
+          <div
+            v-else
+            class="empty-state"
+          >
             <div class="empty-state__icon">
               {{ groupingType }}
             </div>
-            <div class="empty-state__title">等待分组结果</div>
-            <div class="empty-state__desc">完成抽取后可生成 DRG / DIP 结果与费用建议。</div>
+            <div class="empty-state__title">
+              等待分组结果
+            </div>
+            <div class="empty-state__desc">
+              完成抽取后可生成 DRG / DIP 结果与费用建议。
+            </div>
           </div>
         </article>
 
@@ -401,13 +473,30 @@
               <p>保留可复核的分组路径</p>
             </div>
           </div>
-          <div v-if="drgResult && (drgResult.messages || []).length" class="trace-list">
-            <div v-for="(item, idx) in drgResult.messages || []" :key="idx" class="trace-item">
-              <div class="trace-item__title">步骤 {{ idx + 1 }}</div>
-              <div class="trace-item__value" v-html="highlightCodes(item)" />
+          <div
+            v-if="drgResult && (drgResult.messages || []).length"
+            class="trace-list"
+          >
+            <div
+              v-for="(item, idx) in drgResult.messages || []"
+              :key="idx"
+              class="trace-item"
+            >
+              <div class="trace-item__title">
+                步骤 {{ idx + 1 }}
+              </div>
+              <div
+                class="trace-item__value"
+                v-html="highlightCodes(item)"
+              />
             </div>
           </div>
-          <div v-else class="trace-empty">暂无轨迹，执行 DRG/DIP 后自动记录。</div>
+          <div
+            v-else
+            class="trace-empty"
+          >
+            暂无轨迹，执行 DRG/DIP 后自动记录。
+          </div>
         </article>
       </aside>
     </section>

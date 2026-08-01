@@ -2,7 +2,11 @@
   <div class="post-event-analysis-page">
     <header class="analysis-header">
       <div class="analysis-title-block">
-        <button class="back-icon-button" type="button" aria-label="返回">
+        <button
+          class="back-icon-button"
+          type="button"
+          aria-label="返回"
+        >
           <ArrowLeftOutlined />
         </button>
         <div>
@@ -12,19 +16,31 @@
       </div>
 
       <div class="header-actions">
-        <span v-if="useDemoData || hasUploadedDataset" class="mode-chip">
+        <span
+          v-if="useDemoData || hasUploadedDataset"
+          class="mode-chip"
+        >
           <WarningOutlined />
           {{ drgModeHintText }}
         </span>
         <a-dropdown>
           <template #overlay>
             <a-menu @click="handleExportMenuClick">
-              <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
-              <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
-              <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
+              <a-menu-item key="excel">
+                <FileExcelOutlined /> 导出 Excel
+              </a-menu-item>
+              <a-menu-item key="pdf">
+                <FilePdfOutlined /> 导出 PDF
+              </a-menu-item>
+              <a-menu-item key="word">
+                <FileWordOutlined /> 导出 Word
+              </a-menu-item>
             </a-menu>
           </template>
-          <a-button type="primary" class="export-button">
+          <a-button
+            type="primary"
+            class="export-button"
+          >
             <template #icon>
               <DownloadOutlined />
             </template>
@@ -43,11 +59,21 @@
           size="small"
           @change="handleDimensionChange"
         >
-          <a-radio-button value="hospital"> 全院 </a-radio-button>
-          <a-radio-button value="department"> 科室 </a-radio-button>
-          <a-radio-button value="ward"> 病区 </a-radio-button>
-          <a-radio-button value="chief_group"> 主诊组 </a-radio-button>
-          <a-radio-button value="person"> 个人 </a-radio-button>
+          <a-radio-button value="hospital">
+            全院
+          </a-radio-button>
+          <a-radio-button value="department">
+            科室
+          </a-radio-button>
+          <a-radio-button value="ward">
+            病区
+          </a-radio-button>
+          <a-radio-button value="chief_group">
+            主诊组
+          </a-radio-button>
+          <a-radio-button value="person">
+            个人
+          </a-radio-button>
         </a-radio-group>
       </div>
 
@@ -57,15 +83,27 @@
           v-model:value="dateRange"
           class="date-range-picker"
         />
-        <a-select v-model:value="analysisType" class="analysis-type-select">
-          <a-select-option value="quality"> 质量分析 </a-select-option>
-          <a-select-option value="cost"> 费用分析 </a-select-option>
-          <a-select-option value="drg"> DRG分析 </a-select-option>
+        <a-select
+          v-model:value="analysisType"
+          class="analysis-type-select"
+        >
+          <a-select-option value="quality">
+            质量分析
+          </a-select-option>
+          <a-select-option value="cost">
+            费用分析
+          </a-select-option>
+          <a-select-option value="drg">
+            DRG分析
+          </a-select-option>
         </a-select>
       </div>
     </section>
 
-    <DatasetUploadPanel class="dataset-upload-compact" @data-changed="handleDatasetChanged" />
+    <DatasetUploadPanel
+      class="dataset-upload-compact"
+      @data-changed="handleDatasetChanged"
+    />
 
     <section class="kpi-strip">
       <article
@@ -115,8 +153,13 @@
             </button>
           </div>
         </div>
-        <div ref="qualityTrendRef" class="trend-chart" />
-        <p class="chart-note">注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。</p>
+        <div
+          ref="qualityTrendRef"
+          class="trend-chart"
+        />
+        <p class="chart-note">
+          注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。
+        </p>
       </article>
 
       <aside class="analysis-panel insight-panel">
@@ -167,7 +210,10 @@
           </div>
           <InfoCircleOutlined class="panel-info-icon" />
         </div>
-        <div ref="deptComparisonRef" class="department-chart" />
+        <div
+          ref="deptComparisonRef"
+          class="department-chart"
+        />
         <div class="rank-table">
           <div class="rank-head">
             <span>排名</span>
@@ -176,7 +222,11 @@
             <span>CMI</span>
             <span>费用指数</span>
           </div>
-          <div v-for="row in departmentRows" :key="row.name" class="rank-row">
+          <div
+            v-for="row in departmentRows"
+            :key="row.name"
+            class="rank-row"
+          >
             <span class="rank-no">{{ row.rank }}</span>
             <span class="rank-name">
               {{ row.name }}
@@ -198,14 +248,21 @@
           <InfoCircleOutlined class="panel-info-icon" />
         </div>
         <div class="drg-structure-content">
-          <div ref="drgPieRef" class="drg-chart" />
+          <div
+            ref="drgPieRef"
+            class="drg-chart"
+          />
           <div class="drg-legend-table">
             <div class="drg-legend-head">
               <span>DRG 权重区间</span>
               <span>病例数</span>
               <span>占比</span>
             </div>
-            <div v-for="row in drgStructureRows" :key="row.name" class="drg-legend-row">
+            <div
+              v-for="row in drgStructureRows"
+              :key="row.name"
+              class="drg-legend-row"
+            >
               <span>
                 <i :class="row.dotClass" />
                 {{ row.name }}
@@ -224,7 +281,12 @@
           <h3>改进任务清单</h3>
           <p>根据当前分析结果生成可跟踪的科室改进动作</p>
         </div>
-        <a-button type="link" size="small"> 查看全部任务 </a-button>
+        <a-button
+          type="link"
+          size="small"
+        >
+          查看全部任务
+        </a-button>
       </div>
       <div class="task-table">
         <div class="task-head">
@@ -236,7 +298,11 @@
           <span>状态</span>
           <span>截止</span>
         </div>
-        <div v-for="task in improvementTasks" :key="`${task.owner}-${task.issue}`" class="task-row">
+        <div
+          v-for="task in improvementTasks"
+          :key="`${task.owner}-${task.issue}`"
+          class="task-row"
+        >
           <span>{{ task.owner }}</span>
           <span>
             <a-tag :color="task.tagColor">{{ task.issue }}</a-tag>
@@ -267,37 +333,61 @@
             <p>按药品、耗材、检查、治疗拆解费用构成</p>
           </div>
         </div>
-        <div ref="costStructureRef" class="cost-chart" />
+        <div
+          ref="costStructureRef"
+          class="cost-chart"
+        />
       </article>
     </section>
 
-    <section v-if="advancedChartsAvailable" class="advanced-chart-grid">
-      <article v-show="stats.charts.profit_waterfall" class="analysis-panel">
+    <section
+      v-if="advancedChartsAvailable"
+      class="advanced-chart-grid"
+    >
+      <article
+        v-show="stats.charts.profit_waterfall"
+        class="analysis-panel"
+      >
         <div class="panel-header">
           <div>
             <h3>支付差额瀑布</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div ref="waterfallRef" class="advanced-chart" />
+        <div
+          ref="waterfallRef"
+          class="advanced-chart"
+        />
       </article>
-      <article v-show="stats.charts.dept_profit_ranking" class="analysis-panel">
+      <article
+        v-show="stats.charts.dept_profit_ranking"
+        class="analysis-panel"
+      >
         <div class="panel-header">
           <div>
             <h3>科室盈亏排行</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div ref="deptRankingRef" class="advanced-chart" />
+        <div
+          ref="deptRankingRef"
+          class="advanced-chart"
+        />
       </article>
-      <article v-show="stats.charts.drg_scatter" class="analysis-panel wide">
+      <article
+        v-show="stats.charts.drg_scatter"
+        class="analysis-panel wide"
+      >
         <div class="panel-header">
           <div>
             <h3>DRG 风险散点</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div ref="drgScatterRef" class="advanced-chart large" />
+        <div
+          ref="drgScatterRef"
+          class="advanced-chart large"
+        />
       </article>
     </section>
   </div>

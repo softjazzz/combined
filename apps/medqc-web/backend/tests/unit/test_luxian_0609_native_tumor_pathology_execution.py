@@ -468,6 +468,17 @@ async def test_typed_019_complete_empty_targets_are_programmatic_defect():
     decision = result.decisions[0]
     assert reduce_luxian_0609_rule_decision(decision).final_state.value == "non_compliant"
     assert decision.reason_code == "requirement_violated"
+    assert result.customer_display_facts == (("LX0609-019", {
+        "failure_kind": "pathology_sampling_not_documented",
+        "pathology_trigger_sources": [
+            "pathology_exam_master",
+            "pathology_exam_report",
+        ],
+        "checked_target_sources": [
+            {"source": "surgery_record", "state": "empty"},
+            {"source": "daily_course_record", "state": "empty"},
+        ],
+    }),)
     assert result.llm_call_count == 0
     assert client.prompts == []
 

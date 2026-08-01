@@ -4,22 +4,35 @@
       <div>
         <p>完整性分析</p>
         <h2>诊断与手术画像辅助</h2>
-        <span
-          >基于全病历形成疾病诊断画像、手术操作画像、诊断时间轴和执行验证，作为首页书写辅助对照。</span
-        >
+        <span>基于全病历形成疾病诊断画像、手术操作画像、诊断时间轴和执行验证，作为首页书写辅助对照。</span>
       </div>
-      <button type="button" :disabled="loading || !visitId" @click="loadCompleteness(true)">
+      <button
+        type="button"
+        :disabled="loading || !visitId"
+        @click="loadCompleteness(true)"
+      >
         {{ loading ? '分析中' : '重新分析' }}
       </button>
     </header>
 
-    <div v-if="error" class="clinical-state clinical-state--error">
+    <div
+      v-if="error"
+      class="clinical-state clinical-state--error"
+    >
       {{ error }}
     </div>
-    <div v-else-if="loading" class="clinical-state">
+    <div
+      v-else-if="loading"
+      class="clinical-state"
+    >
       正在读取全病历文书并生成诊断/手术完整性分析...
     </div>
-    <div v-else-if="!result" class="clinical-state">请选择病历后查看诊疗完整性分析。</div>
+    <div
+      v-else-if="!result"
+      class="clinical-state"
+    >
+      请选择病历后查看诊疗完整性分析。
+    </div>
 
     <template v-else>
       <div class="clinical-summary-grid">
@@ -61,12 +74,15 @@
                 <strong>{{ item.diagnosis_name }}</strong>
                 <span>{{ item.icd_code || '未编码' }} · {{ statusText(item.status) }}</span>
               </div>
-              <small
-                >{{ item.first_mention_time || '-' }} ·
-                {{ item.first_mention_source || '-' }}</small
-              >
+              <small>{{ item.first_mention_time || '-' }} ·
+                {{ item.first_mention_source || '-' }}</small>
             </div>
-            <div v-if="!result.diagnoses.length" class="clinical-empty">暂未形成疾病诊断画像。</div>
+            <div
+              v-if="!result.diagnoses.length"
+              class="clinical-empty"
+            >
+              暂未形成疾病诊断画像。
+            </div>
           </div>
         </section>
 
@@ -83,15 +99,16 @@
             >
               <div>
                 <strong>{{ item.procedure_name }}</strong>
-                <span
-                  >{{ item.icd9_code || '未编码' }} · {{ procedureStatusText(item.status) }}</span
-                >
+                <span>{{ item.icd9_code || '未编码' }} · {{ procedureStatusText(item.status) }}</span>
               </div>
               <small>
                 计划 {{ item.plan_time || '-' }} / 执行 {{ item.execution_time || '-' }}
               </small>
             </div>
-            <div v-if="!result.procedures.length" class="clinical-empty">
+            <div
+              v-if="!result.procedures.length"
+              class="clinical-empty"
+            >
               暂未形成手术操作画像。
             </div>
           </div>
@@ -110,12 +127,13 @@
             >
               <small>{{ item.first_mention_time || '时间待确认' }}</small>
               <strong>{{ item.diagnosis_name }}</strong>
-              <span
-                >{{ item.first_mention_source || '来源待确认' }} ·
-                {{ statusText(item.status) }}</span
-              >
+              <span>{{ item.first_mention_source || '来源待确认' }} ·
+                {{ statusText(item.status) }}</span>
             </div>
-            <div v-if="!result.diagnoses.length" class="clinical-empty">
+            <div
+              v-if="!result.diagnoses.length"
+              class="clinical-empty"
+            >
               暂未形成诊断发生发展时间轴。
             </div>
           </div>
@@ -140,7 +158,10 @@
                 计划来源 {{ item.plan_time || '-' }} / 执行来源 {{ item.execution_time || '-' }}
               </small>
             </div>
-            <div v-if="!result.procedures.length" class="clinical-empty">
+            <div
+              v-if="!result.procedures.length"
+              class="clinical-empty"
+            >
               暂未形成手术操作执行验证。
             </div>
           </div>
@@ -162,7 +183,10 @@
             <span>{{ issue.suggestion || issue.evidence_summary || issue.issue_type }}</span>
             <i>{{ issueCategoryText(issue.item_category) }} · {{ issue.severity }}</i>
           </div>
-          <div v-if="!result.issues.length" class="clinical-empty">
+          <div
+            v-if="!result.issues.length"
+            class="clinical-empty"
+          >
             当前未发现诊断或手术操作漏填、错填风险。
           </div>
         </div>

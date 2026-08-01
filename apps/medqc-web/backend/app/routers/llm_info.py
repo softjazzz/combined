@@ -30,6 +30,7 @@ def _normalize_provider_code(provider_code: str | None) -> str:
 def _base_models() -> list[dict[str, Any]]:
     return [
         {"provider": "alibaba", "id": "qwen-plus", "model_code": "qwen-plus", "model_name": "Qwen-Plus", "is_custom": False},
+        {"provider": "alibaba", "id": "qwen3.7-flash", "model_code": "qwen3.7-flash", "model_name": "Qwen3.7 Flash", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.5-35b-a3b", "model_code": "qwen3.5-35b-a3b", "model_name": "Qwen3.5-35B-A3B", "is_custom": False},
         {"provider": "deepseek", "id": "deepseek-chat", "model_code": "deepseek-chat", "model_name": "DeepSeek Chat", "is_custom": False},
         {"provider": "deepseek", "id": "deepseek-reasoner", "model_code": "deepseek-reasoner", "model_name": "DeepSeek Reasoner", "is_custom": False},

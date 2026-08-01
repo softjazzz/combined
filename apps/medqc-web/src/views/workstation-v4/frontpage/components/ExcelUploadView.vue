@@ -1,10 +1,17 @@
 <template>
   <div class="upload-workstation">
     <!-- Step 1: 上传 -->
-    <div v-if="currentStep === 'upload'" class="upload-page">
+    <div
+      v-if="currentStep === 'upload'"
+      class="upload-page"
+    >
       <header class="upload-header">
         <div class="upload-title-block">
-          <button class="upload-back-btn" type="button" @click="$emit('back')">
+          <button
+            class="upload-back-btn"
+            type="button"
+            @click="$emit('back')"
+          >
             <ArrowLeft class="upload-back-icon" />
           </button>
           <div>
@@ -36,9 +43,12 @@
               accept=".xlsx,.xls,.csv,.zip"
               class="hidden"
               @change="handleFileSelect"
-            />
+            >
 
-            <div v-if="!selectedFile && !uploading" class="upload-empty">
+            <div
+              v-if="!selectedFile && !uploading"
+              class="upload-empty"
+            >
               <div class="upload-icon-orb">
                 <UploadCloud class="upload-state-icon" />
               </div>
@@ -52,7 +62,10 @@
             </div>
 
             <!-- Selected File Preview -->
-            <div v-else-if="selectedFile && !uploading" class="upload-selected">
+            <div
+              v-else-if="selectedFile && !uploading"
+              class="upload-selected"
+            >
               <div class="upload-icon-orb upload-icon-orb--success">
                 <FileSpreadsheet class="upload-state-icon" />
               </div>
@@ -63,10 +76,18 @@
                 {{ formatFileSize(selectedFile.size) }}
               </p>
               <div class="upload-action-row">
-                <button class="upload-secondary-btn" type="button" @click.stop="clearFile">
+                <button
+                  class="upload-secondary-btn"
+                  type="button"
+                  @click.stop="clearFile"
+                >
                   重新选择
                 </button>
-                <button class="upload-primary-btn" type="button" @click.stop="smartUploadFile">
+                <button
+                  class="upload-primary-btn"
+                  type="button"
+                  @click.stop="smartUploadFile"
+                >
                   <UploadCloud class="upload-button-icon" />
                   开始上传分析
                 </button>
@@ -74,7 +95,10 @@
             </div>
 
             <!-- Uploading State -->
-            <div v-else class="upload-loading">
+            <div
+              v-else
+              class="upload-loading"
+            >
               <div class="upload-icon-orb">
                 <LoaderCircle class="upload-state-icon upload-spin" />
               </div>
@@ -88,13 +112,20 @@
         <aside class="upload-history-card">
           <div class="upload-history-head">
             <h3>历史批次</h3>
-            <button class="upload-refresh-btn" type="button" @click="() => loadBatches()">
+            <button
+              class="upload-refresh-btn"
+              type="button"
+              @click="() => loadBatches()"
+            >
               <RefreshCw :class="['upload-refresh-icon', { 'upload-spin': loadingBatches }]" />
             </button>
           </div>
 
           <div class="upload-history-list">
-            <div v-if="batches.length === 0" class="upload-history-empty">
+            <div
+              v-if="batches.length === 0"
+              class="upload-history-empty"
+            >
               <Inbox class="upload-history-empty-icon" />
               暂无上传记录
             </div>
@@ -112,7 +143,9 @@
                 <span>{{ batch.batch_id.substring(6, 21) }}</span>
                 <em>{{ batch.count }} 条</em>
               </div>
-              <div class="upload-history-cost">费用: ¥{{ formatNumber(batch.total_cost) }}</div>
+              <div class="upload-history-cost">
+                费用: ¥{{ formatNumber(batch.total_cost) }}
+              </div>
               <div class="upload-history-time">
                 {{ formatDate(batch.created_at) }}
               </div>
@@ -135,7 +168,10 @@
     />
 
     <!-- Step 3: 报表生成完成 → 跳转事后分析 -->
-    <div v-else-if="currentStep === 'complete'" class="upload-complete">
+    <div
+      v-else-if="currentStep === 'complete'"
+      class="upload-complete"
+    >
       <div class="upload-complete-icon">
         <CircleCheck class="upload-complete-symbol" />
       </div>
@@ -144,10 +180,18 @@
         已处理 {{ analysisResult?.row_count || 0 }} 条病例数据，生成 {{ chartCount }} 个分析图表
       </p>
       <div class="upload-complete-actions">
-        <a-button class="upload-complete-secondary" @click="currentStep = 'upload'">
+        <a-button
+          class="upload-complete-secondary"
+          @click="currentStep = 'upload'"
+        >
           继续上传
         </a-button>
-        <a-button type="primary" size="large" class="upload-complete-primary" @click="goToAnalysis">
+        <a-button
+          type="primary"
+          size="large"
+          class="upload-complete-primary"
+          @click="goToAnalysis"
+        >
           查看分析报表 →
         </a-button>
       </div>

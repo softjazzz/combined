@@ -36,7 +36,10 @@
         @click="emit('select', item.key)"
       >
         <div class="flex items-center gap-1.5">
-          <span class="h-2 w-2 rounded-full" :class="item.dotBgClass" />
+          <span
+            class="h-2 w-2 rounded-full"
+            :class="item.dotBgClass"
+          />
           <span class="text-[12.5px] font-bold">
             {{ item.label }}
           </span>

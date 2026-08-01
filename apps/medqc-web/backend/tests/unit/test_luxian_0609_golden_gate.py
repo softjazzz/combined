@@ -199,9 +199,31 @@ def _v2_batch(
     result["metadata"].update(
         {
             "executor_type": "program",
+        }
+    )
+    case["response"]["metrics"].update(
+        {
+            "llm_call_count": 1 if total_tokens else 0,
             "prompt_tokens": total_tokens,
             "completion_tokens": 0,
             "total_tokens": total_tokens,
+            "usage_complete": True,
+            "usage_error_reason": "",
+            "unattributed_prompt_tokens": 0,
+            "unattributed_completion_tokens": 0,
+            "unattributed_total_tokens": 0,
+            "api_time_seconds": 0.001 if total_tokens else 0.0,
+            "usage_attributions": [
+                {
+                    "executor_key": "semantic" if total_tokens else "programmatic",
+                    "llm_call_count": 1 if total_tokens else 0,
+                    "prompt_tokens": total_tokens,
+                    "completion_tokens": 0,
+                    "total_tokens": total_tokens,
+                    "covered_customer_rule_ids": ["LX0609-001"],
+                    "latency_ms": 1.0 if total_tokens else 0.0,
+                }
+            ],
         }
     )
     result["evidence_source_types"] = ["daily_course_record"]
@@ -277,19 +299,8 @@ def test_v2_gate_rejects_runtime_identity_drift_and_program_model_usage() -> Non
     assert exit_code == golden_gate.EXIT_CONFIGURATION_ERROR
     assert summary["failures"][0]["failure_kind"] == "runtime_identity_mismatch"
 
-    token_batch, token_candidate, token_ledger = _v2_candidate_and_ledger(
-        total_tokens=1
-    )
-    summary, exit_code = _run_v2_gate(
-        ledger=token_ledger,
-        candidate=token_candidate,
-        run_batches=[token_batch],
-    )
-    assert exit_code == golden_gate.EXIT_QUALITY_FAILURE
-    assert any(
-        item["failure_kind"] == "program_rule_used_model"
-        for item in summary["failures"]
-    )
+    with pytest.raises(ValueError, match="usage attribution"):
+        _v2_candidate_and_ledger(total_tokens=1)
 
 
 def test_v2_release_gate_requires_current_runtime_identity() -> None:
@@ -411,6 +422,66 @@ def test_v2_gate_excludes_synthetic_rows_from_real_accuracy_denominator() -> Non
     assert summary["quality"]["real_accuracy_denominator"] == 1
     assert summary["quality"]["synthetic_count"] == 1
     assert summary["quality"]["synthetic_exact_count"] == 1
+
+
+def test_v2_gate_budgets_one_family_call_per_covered_rule_without_summing_case_cost():
+    batch = _v2_batch(total_tokens=100)
+    response = batch["cases"][0]["response"]
+    first_result = response["results"][0]
+    first_result["rule_id"] = "LX0609-009"
+    first_result["metadata"]["executor_type"] = "llm"
+    for index, rule_id in enumerate(("LX0609-010", "LX0609-011"), start=1):
+        result = copy.deepcopy(first_result)
+        result["rule_id"] = rule_id
+        result["evidence_items"][0]["evidence_attestation"] = str(index) * 64
+        response["results"].append(result)
+    response["metrics"]["usage_attributions"][0][
+        "covered_customer_rule_ids"
+    ] = ["LX0609-009", "LX0609-010", "LX0609-011"]
+
+    candidate = build_candidate_ledger(
+        batch,
+        candidate_version="covered-family-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+    assert {row["total_tokens"] for row in candidate["rows"]} == {100}
+    assert response["metrics"]["total_tokens"] == 100
+    reviews = [
+        {
+            "candidate_digest": candidate["candidate_digest"],
+            "case_label": row["case_label"],
+            "selector_digest": row["selector_digest"],
+            "rule_id": row["rule_id"],
+            "decision_kind": row["decision_kind"],
+            "expected_state": row["observed_state"],
+            "expected_reason_code": row["observed_reason_code"],
+            "evidence_ref_hashes": ";".join(row["evidence_ref_hashes"]),
+            "reviewer_code": "REVIEWER-01",
+            "accepted_at": "2026-07-24T00:05:00Z",
+            "review_revision": "1",
+            "review_status": "accepted",
+        }
+        for row in candidate["rows"]
+    ]
+    ledger = promote_candidate_ledger(
+        candidate,
+        reviews,
+        ledger_version="covered-family-v2",
+        generated_at="2026-07-24T00:06:00Z",
+    )
+
+    summary, exit_code = _run_v2_gate(
+        ledger=ledger,
+        candidate=candidate,
+        run_batches=[batch, copy.deepcopy(batch), copy.deepcopy(batch)],
+        semantic_token_budget_per_rule=100,
+    )
+
+    assert exit_code == golden_gate.EXIT_BLOCKED
+    assert all(
+        item["failure_kind"] != "semantic_rule_token_budget_exceeded"
+        for item in summary["failures"]
+    )
 
 
 def test_v2_gate_reports_semantic_per_rule_token_budget_excess() -> None:

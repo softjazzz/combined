@@ -3,12 +3,20 @@
     <div
       class="flex-1 p-5 lg:p-6 overflow-hidden flex flex-col min-h-0 container mx-auto max-w-[1680px] w-full"
     >
-      <a-tabs v-model:active-key="activeTab" class="system-config-tabs flex-1 min-h-0">
-        <a-tab-pane key="dataSync" tab="数据同步配置">
+      <a-tabs
+        v-model:active-key="activeTab"
+        class="system-config-tabs flex-1 min-h-0"
+      >
+        <a-tab-pane
+          key="dataSync"
+          tab="数据同步配置"
+        >
           <div class="system-config-tab-shell flex flex-col h-full min-h-0 gap-4">
             <section class="system-config-hero">
               <div class="system-config-hero__main">
-                <div class="system-config-breadcrumb">系统配置 / 数据同步设置</div>
+                <div class="system-config-breadcrumb">
+                  系统配置 / 数据同步设置
+                </div>
                 <h2>终末病历同步设置</h2>
                 <p>
                   {{ pageSubtitle }}
@@ -62,7 +70,9 @@
             </section>
 
             <section class="system-config-safe-banner">
-              <div class="system-config-safe-shield">只读</div>
+              <div class="system-config-safe-shield">
+                只读
+              </div>
               <div>
                 <strong>{{ safeBannerTitle }}</strong>
                 <p>
@@ -90,14 +100,19 @@
 
             <section class="system-config-safe-workbench flex-1 min-h-0">
               <aside class="system-config-config-summary">
-                <div class="system-config-side-kicker">同步配置概览</div>
+                <div class="system-config-side-kicker">
+                  同步配置概览
+                </div>
                 <h3>配置摘要</h3>
                 <p>
                   {{ summaryDescription }}
                 </p>
 
                 <div class="system-config-summary-list">
-                  <div v-for="item in summaryItems" :key="item.label">
+                  <div
+                    v-for="item in summaryItems"
+                    :key="item.label"
+                  >
                     <span>{{ item.label }}</span>
                     <strong>{{ item.value }}</strong>
                     <em>{{ item.description }}</em>
@@ -149,7 +164,9 @@
                       <h4>终末同步范围</h4>
                       <p>按出院日期和科室筛选候选病历；修改后需要重新预检。</p>
                     </div>
-                    <a-tag class="wv4-status-chip wv4-status-chip--neutral"> 不支持在院病历 </a-tag>
+                    <a-tag class="wv4-status-chip wv4-status-chip--neutral">
+                      不支持在院病历
+                    </a-tag>
                   </div>
 
                   <div class="system-config-scope-grid">
@@ -202,13 +219,19 @@
                   </div>
                 </div>
 
-                <div v-if="showSyncProgress" class="system-config-sync-progress">
+                <div
+                  v-if="showSyncProgress"
+                  class="system-config-sync-progress"
+                >
                   <div class="system-config-sync-progress__head">
                     <div>
                       <h4>同步执行进度</h4>
                       <p>{{ syncProgressStageText }}</p>
                     </div>
-                    <a-tag class="wv4-status-chip" :class="syncProgressStatusClass">
+                    <a-tag
+                      class="wv4-status-chip"
+                      :class="syncProgressStatusClass"
+                    >
                       {{ state.isSyncing ? '执行中' : syncProgressStatusText }}
                     </a-tag>
                   </div>
@@ -226,9 +249,7 @@
                     </div>
                     <div>
                       <span>病历进度</span>
-                      <strong
-                        >{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong
-                      >
+                      <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
                     </div>
                     <div v-if="isSyncAdvancedUser">
                       <span>表进度</span>
@@ -244,7 +265,10 @@
                     </div>
                   </div>
 
-                  <div v-if="isSyncAdvancedUser" class="system-config-progress-meta">
+                  <div
+                    v-if="isSyncAdvancedUser"
+                    class="system-config-progress-meta"
+                  >
                     <span>当前表：{{ syncProgressCurrentTable }}</span>
                     <span>剩余表：{{ syncProgressTablesRemaining }}</span>
                     <span>预计剩余：{{ syncProgressEtaText }}</span>
@@ -255,7 +279,10 @@
                   </p>
                 </div>
 
-                <div v-if="isSyncAdvancedUser" class="system-config-preflight-table">
+                <div
+                  v-if="isSyncAdvancedUser"
+                  class="system-config-preflight-table"
+                >
                   <div class="system-config-section-head system-config-section-head--compact">
                     <div>
                       <h4>表组预检表</h4>
@@ -274,7 +301,10 @@
                     </a-button>
                   </div>
 
-                  <div v-if="preflightTableRows.length === 0" class="system-config-empty-table">
+                  <div
+                    v-if="preflightTableRows.length === 0"
+                    class="system-config-empty-table"
+                  >
                     尚未生成表组预检结果。请先执行只读检测或试运行预检。
                   </div>
                   <table v-else>
@@ -288,7 +318,10 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="row in preflightTableRows" :key="row.table">
+                      <tr
+                        v-for="row in preflightTableRows"
+                        :key="row.table"
+                      >
                         <td>{{ row.table }}</td>
                         <td>{{ row.source }}</td>
                         <td>{{ row.dateField }}</td>
@@ -304,7 +337,10 @@
                 </div>
               </main>
 
-              <aside v-if="isSyncAdvancedUser" class="system-config-risk-panel">
+              <aside
+                v-if="isSyncAdvancedUser"
+                class="system-config-risk-panel"
+              >
                 <div class="system-config-section-head">
                   <div>
                     <h3>风险与回滚建议</h3>
@@ -327,7 +363,10 @@
               </aside>
             </section>
 
-            <section v-if="isSyncAdvancedUser" class="system-config-advanced-section">
+            <section
+              v-if="isSyncAdvancedUser"
+              class="system-config-advanced-section"
+            >
               <div class="system-config-advanced-head">
                 <div>
                   <h3>实施诊断模式</h3>
@@ -341,7 +380,10 @@
                 </a-button>
               </div>
 
-              <div v-if="detailWorkbenchOpen" class="system-config-detail-workbench">
+              <div
+                v-if="detailWorkbenchOpen"
+                class="system-config-detail-workbench"
+              >
                 <article
                   class="system-config-execution-card system-config-execution-card--connection"
                 >
@@ -384,7 +426,7 @@
                     v-model="syncScopeConfirmed"
                     type="checkbox"
                     :disabled="isReadonly || !hasPreflightPass"
-                  />
+                  >
                   <span>我已确认同步范围</span>
                 </label>
                 <a-tooltip
@@ -417,13 +459,21 @@
           </div>
         </a-tab-pane>
 
-        <a-tab-pane v-if="isSyncAdvancedUser" key="frontpageExtraction" tab="首页抽取设置">
+        <a-tab-pane
+          v-if="isSyncAdvancedUser"
+          key="frontpageExtraction"
+          tab="首页抽取设置"
+        >
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <FrontpageExtractionSettingsPanel />
           </div>
         </a-tab-pane>
 
-        <a-tab-pane v-if="isSyncAdvancedUser" key="llmConfig" tab="模型配置">
+        <a-tab-pane
+          v-if="isSyncAdvancedUser"
+          key="llmConfig"
+          tab="模型配置"
+        >
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <LLMApiConfig />
           </div>

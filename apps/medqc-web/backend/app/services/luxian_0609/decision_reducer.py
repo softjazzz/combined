@@ -8,6 +8,7 @@ from enum import Enum
 from .decision_model import (
     ALLOWED_REASON_CODES_BY_FINAL_STATE,
     ApplicabilityState,
+    CriterionResult,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -35,6 +36,7 @@ class ReducedRuleDecision:
     fact_refs: tuple[str, ...]
     evaluator_version: str
     confidence: float | None
+    criterion_results: tuple[CriterionResult, ...]
     decision_fingerprint: str
 
     def __init__(
@@ -48,6 +50,7 @@ class ReducedRuleDecision:
         evaluator_version: str,
         confidence: float | None,
         decision_fingerprint: str,
+        criterion_results: tuple[CriterionResult, ...] = (),
         _attestation: object | None = None,
     ) -> None:
         if _attestation is not _REDUCER_ATTESTATION:
@@ -62,6 +65,7 @@ class ReducedRuleDecision:
             ("fact_refs", fact_refs),
             ("evaluator_version", evaluator_version),
             ("confidence", confidence),
+            ("criterion_results", criterion_results),
             ("decision_fingerprint", decision_fingerprint),
         ):
             object.__setattr__(self, name, value)
@@ -75,6 +79,9 @@ class ReducedRuleDecision:
             "fact_refs": list(self.fact_refs),
             "evaluator_version": self.evaluator_version,
             "confidence": self.confidence,
+            "criterion_results": [
+                item.to_safe_dict() for item in self.criterion_results
+            ],
             "decision_fingerprint": self.decision_fingerprint,
         }
 
@@ -120,6 +127,7 @@ def reduce_luxian_0609_rule_decision(
         fact_refs=decision.fact_refs,
         evaluator_version=decision.evaluator_version,
         confidence=decision.confidence,
+        criterion_results=decision.criterion_results,
         decision_fingerprint=decision.fingerprint(),
         _attestation=_REDUCER_ATTESTATION,
     )

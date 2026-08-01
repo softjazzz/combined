@@ -4,7 +4,9 @@
     class="bg-white/90 rounded-2xl p-6 border border-black/[0.08] shadow-[0_1px_4px_rgba(0,0,0,0.045),0_2px_8px_rgba(0,0,0,0.035)]"
   >
     <div class="text-center mb-6">
-      <p class="text-xs text-[rgba(29,29,31,0.56)] mb-1">总费用</p>
+      <p class="text-xs text-[rgba(29,29,31,0.56)] mb-1">
+        总费用
+      </p>
       <div class="text-[24px] font-semibold text-[#1d1d1f] leading-8">
         ¥ {{ insuranceClaim.total_cost.toFixed(2) }}
       </div>
@@ -16,9 +18,7 @@
       </div>
       <div class="flex justify-between text-sm py-2 border-b border-black/[0.08]">
         <span class="text-[rgba(29,29,31,0.56)]">个人自付</span>
-        <span class="font-medium text-orange-600"
-          >¥ {{ insuranceClaim.patient_pay.toFixed(2) }}</span
-        >
+        <span class="font-medium text-orange-600">¥ {{ insuranceClaim.patient_pay.toFixed(2) }}</span>
       </div>
       <div class="flex justify-between text-sm py-2">
         <span class="text-[rgba(29,29,31,0.56)]">医保类型</span>
@@ -26,7 +26,10 @@
       </div>
     </div>
   </div>
-  <div v-else class="flex items-center justify-center h-48 text-[rgba(29,29,31,0.38)]">
+  <div
+    v-else
+    class="flex items-center justify-center h-48 text-[rgba(29,29,31,0.38)]"
+  >
     暂无医保数据
   </div>
 </template>

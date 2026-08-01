@@ -332,13 +332,14 @@ async def test_formal_source_audit_captures_one_snapshot_and_safe_rule_sources(
         SourceObservation,
     )
     from app.services.luxian_0609.source_manifest import QueryStatus
+    from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
     snapshot = Luxian0609EvidenceSnapshot.create(
         institute_id="unit-institute",
         patient_id="unit-patient",
         visit_id="unit-visit",
         snapshot_schema_version="lx0609-evidence-snapshot-v1",
-        source_registry_version="lx0609-source-registry-v12",
+        source_registry_version=SOURCE_REGISTRY_VERSION,
         observations=(
             SourceObservation.create(
                 source_key="presurg_summary",

@@ -4,7 +4,9 @@
     <div class="apple-hero-panel mb-5 p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-[11px] font-semibold tracking-normal text-slate-500">终末队列</div>
+          <div class="text-[11px] font-semibold tracking-normal text-slate-500">
+            终末队列
+          </div>
           <h1 class="mt-1 text-[28px] font-bold leading-8 tracking-normal text-slate-900">
             终末病历质控
           </h1>
@@ -13,7 +15,10 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <a-button class="apple-secondary-button !h-9 !rounded-lg" @click="handleRefresh">
+          <a-button
+            class="apple-secondary-button !h-9 !rounded-lg"
+            @click="handleRefresh"
+          >
             <ReloadOutlined :spin="loading" />
             刷新
           </a-button>
@@ -34,11 +39,15 @@
             <FileTextOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">总病历数</div>
+            <div class="queue-kpi-label">
+              总病历数
+            </div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.total_records) }}
             </div>
-            <div class="queue-kpi-desc">当前筛选范围</div>
+            <div class="queue-kpi-desc">
+              当前筛选范围
+            </div>
           </div>
         </div>
 
@@ -47,11 +56,15 @@
             <CheckCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">已归档</div>
+            <div class="queue-kpi-label">
+              已归档
+            </div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.archived_count) }}
             </div>
-            <div class="queue-kpi-desc">已完成质控闭环</div>
+            <div class="queue-kpi-desc">
+              已完成质控闭环
+            </div>
           </div>
         </div>
 
@@ -60,11 +73,15 @@
             <ClockCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">待处理</div>
+            <div class="queue-kpi-label">
+              待处理
+            </div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.pending_count) }}
             </div>
-            <div class="queue-kpi-desc">等待人工复核</div>
+            <div class="queue-kpi-desc">
+              等待人工复核
+            </div>
           </div>
         </div>
 
@@ -73,9 +90,15 @@
             <TrophyOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">质控通过率</div>
-            <div class="queue-kpi-value">{{ formatRate(overviewStats.pass_rate) }}%</div>
-            <div class="queue-kpi-desc">终末质控结果</div>
+            <div class="queue-kpi-label">
+              质控通过率
+            </div>
+            <div class="queue-kpi-value">
+              {{ formatRate(overviewStats.pass_rate) }}%
+            </div>
+            <div class="queue-kpi-desc">
+              终末质控结果
+            </div>
           </div>
         </div>
       </div>
@@ -95,10 +118,19 @@
               />
               <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
-            <a-button type="primary" class="!h-9 !rounded-lg" @click="handleSearch">
+            <a-button
+              type="primary"
+              class="!h-9 !rounded-lg"
+              @click="handleSearch"
+            >
               查询
             </a-button>
-            <a-button class="!h-9 !rounded-lg" @click="handleResetFilters"> 重置 </a-button>
+            <a-button
+              class="!h-9 !rounded-lg"
+              @click="handleResetFilters"
+            >
+              重置
+            </a-button>
           </div>
 
           <a-select
@@ -187,7 +219,10 @@
           </ProTableToolbar>
         </template>
 
-        <template v-if="stageHint" #hint>
+        <template
+          v-if="stageHint"
+          #hint
+        >
           {{ stageHint }}
         </template>
       </ProQueryBar>
@@ -202,7 +237,12 @@
           class="mt-6"
         >
           <template #extra>
-            <a-button type="primary" @click="fetchRecords"> 重试 </a-button>
+            <a-button
+              type="primary"
+              @click="fetchRecords"
+            >
+              重试
+            </a-button>
           </template>
         </a-result>
         <ProStandardTable
@@ -233,7 +273,7 @@
                   :src="patientAvatarSrc(record as AdminRecordItem)"
                   alt=""
                   class="record-patient-avatar"
-                />
+                >
                 <div class="min-w-0">
                   <div class="truncate text-sm font-semibold text-slate-800">
                     {{ record.patient_name || '-' }}
@@ -368,7 +408,10 @@
                     <FileSearchOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip v-if="record.status === 'pending'" title="归档能力待后端路由接入">
+                <a-tooltip
+                  v-if="record.status === 'pending'"
+                  title="归档能力待后端路由接入"
+                >
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 transition-all cursor-not-allowed"
                     :disabled="!archiveFeatureEnabled"
@@ -389,10 +432,8 @@
           v-if="selectedRowKeys.length > 0"
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-semibold"
-            >已选择
-            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span
-          >
+          <span class="text-sm font-semibold">已选择
+            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span>
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
@@ -417,7 +458,10 @@
       class="apple-collapse mt-4 overflow-hidden"
       ghost
     >
-      <a-collapse-panel key="final-batch-jobs" header="终末病历批量任务">
+      <a-collapse-panel
+        key="final-batch-jobs"
+        header="终末病历批量任务"
+      >
         <SemanticRulesBatchPanel
           :loading="batchJobLoading"
           :batch-jobs="batchJobs"
@@ -457,9 +501,15 @@
       @cancel="launchModalOpen = false"
     >
       <div class="space-y-4">
-        <a-alert type="info" show-icon message="流程：选择规则集 → 确认病历范围 → 创建任务" />
+        <a-alert
+          type="info"
+          show-icon
+          message="流程：选择规则集 → 确认病历范围 → 创建任务"
+        />
         <div class="rounded-2xl border border-[rgba(0,102,204,0.14)] bg-[rgba(0,102,204,0.06)] p-3">
-          <div class="mb-2 text-sm font-semibold text-slate-800">规则集选择</div>
+          <div class="mb-2 text-sm font-semibold text-slate-800">
+            规则集选择
+          </div>
           <a-radio-group
             v-model:value="launchRuleMode"
             class="flex flex-wrap gap-2"
@@ -471,10 +521,16 @@
               :value="option.value"
             >
               {{ option.label
-              }}<template v-if="option.ruleCount"> （{{ option.ruleCount }}） </template>
+              }}<template v-if="option.ruleCount">
+                （{{ option.ruleCount }}）
+              </template>
             </a-radio-button>
-            <a-radio-button value="manual"> 手工选择规则 </a-radio-button>
-            <a-radio-button value="all"> 全部四川规则（高级/调试） </a-radio-button>
+            <a-radio-button value="manual">
+              手工选择规则
+            </a-radio-button>
+            <a-radio-button value="all">
+              全部四川规则（高级/调试）
+            </a-radio-button>
           </a-radio-group>
           <div class="mt-2 text-xs leading-5 text-slate-600">
             {{ launchRuleModeDescription }}
@@ -482,19 +538,25 @@
         </div>
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">已选规则</div>
+            <div class="text-xs text-slate-500">
+              已选规则
+            </div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRuleCount }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">当前筛选病历</div>
+            <div class="text-xs text-slate-500">
+              当前筛选病历
+            </div>
             <div class="text-lg font-semibold text-slate-800">
               {{ pagination.total }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">已勾选病历</div>
+            <div class="text-xs text-slate-500">
+              已勾选病历
+            </div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRecordIds.length }}
             </div>
@@ -509,10 +571,16 @@
             placeholder="搜索规则编码/名称/文书域"
           />
           <div class="flex items-center gap-2">
-            <a-button :disabled="launchRuleMode !== 'manual'" @click="selectAllFilteredRules">
+            <a-button
+              :disabled="launchRuleMode !== 'manual'"
+              @click="selectAllFilteredRules"
+            >
               全选当前过滤
             </a-button>
-            <a-button :disabled="launchRuleMode !== 'manual'" @click="clearSelectedRules">
+            <a-button
+              :disabled="launchRuleMode !== 'manual'"
+              @click="clearSelectedRules"
+            >
               清空
             </a-button>
           </div>
@@ -532,10 +600,17 @@
         <a-divider class="!my-2" />
 
         <div class="space-y-2">
-          <div class="text-sm font-medium text-slate-700">病历范围</div>
+          <div class="text-sm font-medium text-slate-700">
+            病历范围
+          </div>
           <a-radio-group v-model:value="launchOnlySelectedRecords">
-            <a-radio :value="false"> 当前筛选结果（科室/状态/日期/关键词） </a-radio>
-            <a-radio :value="true" :disabled="selectedRecordIds.length === 0">
+            <a-radio :value="false">
+              当前筛选结果（科室/状态/日期/关键词）
+            </a-radio>
+            <a-radio
+              :value="true"
+              :disabled="selectedRecordIds.length === 0"
+            >
               仅当前勾选病历（{{ selectedRecordIds.length }}）
             </a-radio>
           </a-radio-group>

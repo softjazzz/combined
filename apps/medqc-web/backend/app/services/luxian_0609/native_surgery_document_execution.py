@@ -22,6 +22,7 @@ from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
 from .source_manifest import QueryStatus
+from .source_evidence_reader import has_qualified_traditional_surgery_row
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_decision_support_source_keys,
@@ -202,7 +203,11 @@ def _typed_decision_from_outcome(
             ApplicabilityState.NOT_APPLICABLE,
             EvidenceState.SUFFICIENT,
             QcDirection.UNKNOWN,
-            "performed_event_absent",
+            (
+                "eligibility_not_met"
+                if outcome.reason_code == "anesthesia_visit_absent"
+                else "performed_event_absent"
+            ),
         )
     elif outcome.status == "data_gap":
         dimensions = (
@@ -474,8 +479,9 @@ def _typed_observation_state(
 
 def _typed_anesthesia_trigger(
     snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore | None,
 ) -> tuple[str, str, str]:
-    """优先使用独立手术源的麻醉事实，避免目标文书缺失时自证不适用。"""
+    """以同一快照材料确认麻醉事实，避免目标文书缺失时自证不适用。"""
 
     candidates: list[tuple[str, str, str]] = []
     for source_key in ("mr_surgery", "anesthesia_record"):
@@ -486,6 +492,23 @@ def _typed_anesthesia_trigger(
         )
         if state == "present":
             candidates.append((state, method, source_key))
+    if materials is not None:
+        try:
+            surgery_rows = materials.rows("mr_surgery")
+        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+            surgery_rows = ()
+        qualified_methods = {
+            _clean(row.get("anesthesia_method"))
+            for row in surgery_rows
+            if has_qualified_traditional_surgery_row(row)
+            and _clean(row.get("anesthesia_method"))
+        }
+        if len(qualified_methods) == 1:
+            candidates.append(("present", next(iter(qualified_methods)), "mr_surgery"))
+
+        # 麻醉记录本身存在即可证明实施过麻醉；麻醉方式仍优先取结构化手术源。
+        if _typed_observation_state(snapshot, "anesthesia_record") == "available":
+            candidates.append(("present", "", "anesthesia_record"))
     if not candidates:
         return "absent", "", ""
     methods = {method for _, method, _ in candidates if method}
@@ -524,6 +547,84 @@ def _qualified_traditional_surgery_present(
         in known_incisions
         for row in rows
     )
+
+
+_PERSON_SPLIT_PATTERN = re.compile(r"[\s、,，;；/|]+")
+_PERSON_ROLE_PATTERN = re.compile(
+    r"^(?:术者|主刀|主持人|记录人|参加人员|讨论人员|医师|医生)\s*[:：]?\s*"
+)
+_PERSON_ROLE_SUFFIX_PATTERN = re.compile(
+    r"[（(]\s*(?:术者|主刀|主持人|记录人|医师|医生|主任|副主任)\s*[)）]$"
+)
+_NON_PERSON_VALUES = frozenset(
+    {"有", "无", "是", "否", "已签名", "签名", "已参加", "参加", "未知", "暂无"}
+)
+
+
+def _person_names(value: Any) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, Mapping):
+        names: set[str] = set()
+        for key in ("name", "doctor_name", "physician_name", "staff_name"):
+            names.update(_person_names(value.get(key)))
+        if names:
+            return names
+        for nested in value.values():
+            names.update(_person_names(nested))
+        return names
+    if isinstance(value, (list, tuple, set)):
+        names: set[str] = set()
+        for nested in value:
+            names.update(_person_names(nested))
+        return names
+
+    text = _clean(value)
+    if not text:
+        return set()
+    if text[:1] in {"[", "{"}:
+        try:
+            return _person_names(json.loads(text))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    names: set[str] = set()
+    for raw_name in _PERSON_SPLIT_PATTERN.split(text):
+        name = _PERSON_ROLE_PATTERN.sub("", raw_name).strip(" :：()（）[]【】")
+        name = _PERSON_ROLE_SUFFIX_PATTERN.sub("", name).strip()
+        if name and name not in _NON_PERSON_VALUES:
+            names.add(name)
+    return names
+
+
+def _surgery_and_discussion_people(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> tuple[set[str], set[str]] | None:
+    if materials is None:
+        return None
+    try:
+        surgery_rows = (
+            *materials.rows("surgery_record"),
+            *materials.rows("mr_surgery"),
+        )
+        discussion_rows = materials.rows("presurg_discussion")
+    except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+        return None
+
+    surgeons: set[str] = set()
+    for row in surgery_rows:
+        surgeons.update(_person_names(row.get("surgeon")))
+
+    participants: set[str] = set()
+    for row in discussion_rows:
+        for field_name in (
+            "discuss_staff",
+            "host_name",
+            "submitter",
+            "physician_sign",
+        ):
+            participants.update(_person_names(row.get(field_name)))
+    return surgeons, participants
 
 
 def _unique_material_document_id(
@@ -688,9 +789,47 @@ def _typed_terminal_outcome(
                 "program",
                 facts,
             )
-        # “术者是否参与”尚无受控身份关联，不能用姓名/正文关键词强判。
+        people = _surgery_and_discussion_people(materials)
+        if people is None:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "surgeon_participation_unresolved", "program"
+            )
+        surgeons, discussion_participants = people
+        if not surgeons or not discussion_participants:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "surgeon_participation_unresolved", "program"
+            )
+        matched_surgeons = surgeons & discussion_participants
+        identity_facts = {
+            "surgeons": sorted(surgeons),
+            "discussion_participants": sorted(discussion_participants),
+            "matched_surgeons": sorted(matched_surgeons),
+        }
+        if matched_surgeons:
+            return _SurgeryDocumentOutcome(
+                rule_id,
+                "compliant",
+                "surgeon_participation_confirmed",
+                "program",
+                identity_facts,
+            )
         return _SurgeryDocumentOutcome(
-            rule_id, "data_gap", "surgeon_participation_unresolved", "program"
+            rule_id,
+            "non_compliant",
+            "surgeon_not_in_preop_discussion",
+            "program",
+            _with_trigger_document_id(
+                {
+                    "failure_kind": "surgeon_not_in_preop_discussion",
+                    **identity_facts,
+                },
+                materials=materials,
+                source_keys=tuple(
+                    source_key
+                    for source_key in performed_sources
+                    if source_state_by_key.get(source_key) == "present"
+                ),
+            ),
         )
 
     blocker = _typed_source_gate(
@@ -701,7 +840,7 @@ def _typed_terminal_outcome(
     if blocker is not None:
         return blocker
     anesthesia_state, anesthesia_method, anesthesia_trigger_source = (
-        _typed_anesthesia_trigger(snapshot)
+        _typed_anesthesia_trigger(snapshot, materials)
     )
     if anesthesia_state == "absent":
         return _SurgeryDocumentOutcome(
@@ -770,10 +909,6 @@ def _typed_terminal_outcome(
             if _typed_observation_state(snapshot, source_key) == "empty"
         )
         if missing_visit_sources:
-            if rule_id == "LX0609-037":
-                return _SurgeryDocumentOutcome(
-                    rule_id, "not_applicable", "anesthesia_visit_absent", "program"
-                )
             facts = _with_trigger_document_id(
                 {
                     "failure_kind": "anesthesia_visit_missing",
@@ -783,6 +918,14 @@ def _typed_terminal_outcome(
                 materials=materials,
                 source_keys=(anesthesia_trigger_source,),
             )
+            if rule_id == "LX0609-037":
+                return _SurgeryDocumentOutcome(
+                    rule_id,
+                    "not_applicable",
+                    "anesthesia_visit_absent",
+                    "program",
+                    facts,
+                )
             return _SurgeryDocumentOutcome(
                 rule_id,
                 "non_compliant",
@@ -853,6 +996,16 @@ async def _typed_029_outcome(
             fact_types=_SURGERY_FACT_TYPES,
             source_key=source_key,
         )
+        if source_key == "mr_surgery" and state == "present":
+            try:
+                mr_rows = materials.rows("mr_surgery")
+            except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+                pass
+            else:
+                if not any(
+                    has_qualified_traditional_surgery_row(row) for row in mr_rows
+                ):
+                    state = "absent"
         source_states.append(state)
     # 任一批准来源已经给出当前就诊已实施手术的 FactV2 时，不能让另一
     # 来源的不可用/异常覆盖这项肯定事实；后续只判术前小结正文。
@@ -869,9 +1022,18 @@ async def _typed_029_outcome(
                 ),
                 0, 0, 0, 0, 0.0,
             )
-        source_is_explicitly_absent = all(
-            _typed_observation_state(snapshot, source_key) == "empty"
-            for source_key in ("surgery_record", "mr_surgery")
+        source_is_explicitly_absent = (
+            _typed_observation_state(snapshot, "surgery_record") == "empty"
+            and (
+                _typed_observation_state(snapshot, "mr_surgery") == "empty"
+                or (
+                    _typed_observation_state(snapshot, "mr_surgery") == "available"
+                    and all(
+                        not has_qualified_traditional_surgery_row(row)
+                        for row in materials.rows("mr_surgery")
+                    )
+                )
+            )
         )
         if source_is_explicitly_absent:
             return (

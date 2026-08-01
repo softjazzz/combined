@@ -78,11 +78,28 @@ def _v2_api_batch(
     case["coordinate_hash"] = "f" * 64
     result = case["response"]["results"][0]
     result["evidence_source_types"] = ["daily_course_record"]
-    result["metadata"].update(
+    case["response"]["metrics"].update(
         {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
+            "usage_complete": True,
+            "usage_error_reason": "",
+            "unattributed_prompt_tokens": 0,
+            "unattributed_completion_tokens": 0,
+            "unattributed_total_tokens": 0,
+            "api_time_seconds": 0.0,
+            "usage_attributions": [
+                {
+                    "executor_key": "programmatic",
+                    "llm_call_count": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "covered_customer_rule_ids": ["LX0609-001"],
+                    "latency_ms": 0.0,
+                }
+            ],
         }
     )
     return batch
@@ -142,6 +159,66 @@ def test_v2_candidate_and_accepted_ledger_bind_safe_runtime_identity() -> None:
         jsonschema.validate(unsafe, schema)
 
 
+def test_v2_candidate_uses_family_coverage_once_and_ignores_result_token_metadata():
+    batch = _v2_api_batch()
+    response = batch["cases"][0]["response"]
+    response["results"][0]["metadata"].update(
+        {
+            "prompt_tokens": 999,
+            "completion_tokens": 999,
+            "total_tokens": 1998,
+        }
+    )
+    response["results"].append(
+        {
+            "rule_id": "LX0609-009",
+            "status": "compliant",
+            "metadata": {
+                "reason_code": "daily_record_complete",
+                "executor_type": "llm",
+            },
+            "evidence_items": [{"evidence_attestation": "1" * 64}],
+            "evidence_source_types": ["daily_course_record"],
+        }
+    )
+    response["metrics"].update(
+        {
+            "llm_call_count": 1,
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "api_time_seconds": 0.008,
+            "usage_attributions": [
+                {
+                    "executor_key": "course_quality",
+                    "llm_call_count": 1,
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                    "covered_customer_rule_ids": [
+                        "LX0609-001",
+                        "LX0609-009",
+                    ],
+                    "latency_ms": 8.0,
+                }
+            ],
+        }
+    )
+
+    candidate = ledger_builder.build_candidate_ledger(
+        batch,
+        candidate_version="family-coverage-v2",
+        generated_at="2026-07-24T00:00:00Z",
+    )
+
+    by_rule = {row["rule_id"]: row for row in candidate["rows"]}
+    assert by_rule["LX0609-001"]["total_tokens"] == 0
+    assert by_rule["LX0609-009"]["prompt_tokens"] == 100
+    assert by_rule["LX0609-009"]["completion_tokens"] == 20
+    assert by_rule["LX0609-009"]["total_tokens"] == 120
+    assert response["metrics"]["total_tokens"] == 120
+
+
 @pytest.mark.parametrize(
     "mutation",
     ("patient_name", "record_content", "missing_runtime", "bad_manifest"),
@@ -166,23 +243,41 @@ def test_v2_candidate_fails_closed_for_phi_or_incomplete_identity(
 
 @pytest.mark.parametrize(
     "mutation",
-    ("missing", "boolean", "negative", "arithmetic_mismatch"),
+    (
+        "missing",
+        "boolean",
+        "negative",
+        "arithmetic_mismatch",
+        "nan_latency",
+        "unattributed_prompt_boolean",
+        "unattributed_completion_nonzero",
+        "latency_mismatch",
+    ),
 )
 def test_v2_candidate_fails_closed_for_incomplete_rule_token_usage(
     mutation: str,
 ) -> None:
     batch = _v2_api_batch()
-    metadata = batch["cases"][0]["response"]["results"][0]["metadata"]
+    metrics = batch["cases"][0]["response"]["metrics"]
+    attribution = metrics["usage_attributions"][0]
     if mutation == "missing":
-        metadata.pop("total_tokens")
+        metrics.pop("usage_attributions")
     elif mutation == "boolean":
-        metadata["prompt_tokens"] = False
+        attribution["prompt_tokens"] = False
     elif mutation == "negative":
-        metadata["completion_tokens"] = -1
+        attribution["completion_tokens"] = -1
+    elif mutation == "nan_latency":
+        attribution["latency_ms"] = float("nan")
+    elif mutation == "unattributed_prompt_boolean":
+        metrics["unattributed_prompt_tokens"] = False
+    elif mutation == "unattributed_completion_nonzero":
+        metrics["unattributed_completion_tokens"] = 1
+    elif mutation == "latency_mismatch":
+        metrics["api_time_seconds"] = 1.0
     else:
-        metadata["total_tokens"] = 1
+        attribution["total_tokens"] = 1
 
-    with pytest.raises(ValueError, match="rule token metrics"):
+    with pytest.raises(ValueError, match="usage attribution"):
         ledger_builder.build_candidate_ledger(
             batch,
             candidate_version="candidate20-v2",

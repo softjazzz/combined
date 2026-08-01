@@ -112,3 +112,84 @@ async def test_snapshot_build_failure_is_distinct_from_missing_snapshot(
         == "evidence_snapshot_build_failed"
     )
     assert "private failure" not in repr(context.native_results)
+
+
+@pytest.mark.asyncio
+async def test_extended_rules_require_evidence_session_without_unified_engine(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-060",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("extended_document", selected),),
+    )
+    executor_calls = 0
+
+    async def extended_executor(**_kwargs):
+        nonlocal executor_calls
+        executor_calls += 1
+        raise AssertionError("Evidence Session 构建失败后不得调用新增规则执行器")
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("private failure")),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            {
+                "rule_id": "LX0609-060",
+                "name": "死亡患者无死亡记录",
+                "mapped_rule_ids": ["LX0609-060"],
+                "primary_execution_rule_id": "LX0609-060",
+                "trigger_condition": "test",
+                "dependency_type": "单文书",
+                "data_dependencies": [],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "execute_luxian_0609_native_extended_document_rules",
+        extended_executor,
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload={},
+        llm_client=object(),
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+            LUXIAN_0609_NATIVE_MDT_040_ENABLED=True,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        source_schema="cdm",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert executor_calls == 0
+    assert context.unified_engine_used is False
+    assert [item["rule_id"] for item in context.native_results] == ["LX0609-060"]
+    assert context.native_results[0]["status"] == "technical_error"
+    assert (
+        context.native_results[0]["metadata"]["reason_code"]
+        == "evidence_snapshot_build_failed"
+    )
+    assert "private failure" not in repr(context.native_results)

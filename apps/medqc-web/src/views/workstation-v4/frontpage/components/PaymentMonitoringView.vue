@@ -3,12 +3,21 @@
     <div class="payment-monitoring-shell">
       <header class="payment-header">
         <div class="payment-title-block">
-          <button type="button" class="back-button" aria-label="返回" @click="$router.back()">
+          <button
+            type="button"
+            class="back-button"
+            aria-label="返回"
+            @click="$router.back()"
+          >
             <ArrowLeftOutlined />
           </button>
           <div>
-            <div class="payment-eyebrow">DRG/DIP · PAYMENT</div>
-            <h2 class="payment-title">付费监测</h2>
+            <div class="payment-eyebrow">
+              DRG/DIP · PAYMENT
+            </div>
+            <h2 class="payment-title">
+              付费监测
+            </h2>
             <p class="payment-subtitle">
               按分组支付、实际费用、盈亏风险和控费边界复核病例付费表现。
             </p>
@@ -20,7 +29,11 @@
             <span>数据口径</span>
             <strong>{{ dataScopeLabel }}</strong>
           </div>
-          <button type="button" class="standard-config-button" @click="configDrawerOpen = true">
+          <button
+            type="button"
+            class="standard-config-button"
+            @click="configDrawerOpen = true"
+          >
             <SettingOutlined />
             付费标准配置
           </button>
@@ -32,7 +45,11 @@
           >
             {{ backendLoading ? '测算中' : '后端测算' }}
           </button>
-          <a-select v-model:value="deptFilter" class="filter-control" size="middle">
+          <a-select
+            v-model:value="deptFilter"
+            class="filter-control"
+            size="middle"
+          >
             <a-select-option
               v-for="option in activeDeptOptions"
               :key="option.value"
@@ -48,12 +65,21 @@
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
-                <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
-                <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
+                <a-menu-item key="excel">
+                  <FileExcelOutlined /> 导出 Excel
+                </a-menu-item>
+                <a-menu-item key="pdf">
+                  <FilePdfOutlined /> 导出 PDF
+                </a-menu-item>
+                <a-menu-item key="word">
+                  <FileWordOutlined /> 导出 Word
+                </a-menu-item>
               </a-menu>
             </template>
-            <button type="button" class="export-button">
+            <button
+              type="button"
+              class="export-button"
+            >
               <DownloadOutlined />
               导出报告
             </button>
@@ -61,14 +87,15 @@
         </div>
       </header>
 
-      <DatasetUploadPanel class="dataset-upload-surface" @data-changed="handleDatasetChanged" />
+      <DatasetUploadPanel
+        class="dataset-upload-surface"
+        @data-changed="handleDatasetChanged"
+      />
 
       <section class="standard-summary-panel">
         <div class="standard-summary-main">
           <span class="standard-status">地方付费标准库</span>
-          <strong
-            >{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong
-          >
+          <strong>{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong>
           <p>
             DIP 点值 {{ paymentStandardForm.dipPointValue }} 元/分，DRG 基准费率
             {{ paymentStandardForm.baseRate }} 元，医院系数
@@ -98,7 +125,10 @@
           <div class="config-form-grid">
             <label class="config-field config-field-wide">
               <span>地区名称</span>
-              <a-input v-model:value="paymentStandardForm.regionName" placeholder="例如：泸州" />
+              <a-input
+                v-model:value="paymentStandardForm.regionName"
+                placeholder="例如：泸州"
+              />
             </label>
 
             <label class="config-field config-field-wide">
@@ -181,7 +211,11 @@
           </div>
 
           <div class="drawer-actions">
-            <button type="button" class="secondary-action" @click="resetPaymentStandardConfig">
+            <button
+              type="button"
+              class="secondary-action"
+              @click="resetPaymentStandardConfig"
+            >
               恢复默认
             </button>
             <button
@@ -196,7 +230,10 @@
         </div>
       </a-drawer>
 
-      <div v-if="!drgMockEnabled && !hasUploadedData" class="data-warning">
+      <div
+        v-if="!drgMockEnabled && !hasUploadedData"
+        class="data-warning"
+      >
         {{ backendStatusText }}
       </div>
 
@@ -232,7 +269,10 @@
         <article class="kpi-card kpi-card-red">
           <div class="kpi-content">
             <span class="kpi-label">预计盈亏</span>
-            <div class="kpi-value-row" :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'">
+            <div
+              class="kpi-value-row"
+              :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'"
+            >
               <strong>{{ formatWanSigned(overview.profit) }}</strong>
               <span>万元</span>
             </div>
@@ -266,9 +306,16 @@
               <h3>费用与支付趋势</h3>
               <p>实际费用、预计医保支付与支付率同屏观察</p>
             </div>
-            <a-segmented v-model:value="trendScope" :options="trendScopeOptions" size="small" />
+            <a-segmented
+              v-model:value="trendScope"
+              :options="trendScopeOptions"
+              size="small"
+            />
           </div>
-          <div ref="paymentTrendRef" class="trend-chart" />
+          <div
+            ref="paymentTrendRef"
+            class="trend-chart"
+          />
         </div>
 
         <div class="analysis-panel risk-panel">
@@ -277,7 +324,13 @@
               <h3>亏损风险洞察</h3>
               <p>按当前科室筛选汇总亏损金额 Top4</p>
             </div>
-            <button type="button" class="text-action" @click="statusFilter = 'loss'">详情</button>
+            <button
+              type="button"
+              class="text-action"
+              @click="statusFilter = 'loss'"
+            >
+              详情
+            </button>
           </div>
 
           <div class="risk-table">
@@ -288,7 +341,11 @@
               <span>亏损金额</span>
               <span>占比</span>
             </div>
-            <div v-for="item in lossRiskInsights" :key="item.caseNo" class="risk-row">
+            <div
+              v-for="item in lossRiskInsights"
+              :key="item.caseNo"
+              class="risk-row"
+            >
               <span class="risk-rank">{{ item.rank }}</span>
               <div class="risk-reason">
                 <strong>{{ item.reason }}</strong>
@@ -300,7 +357,12 @@
               <span class="risk-amount">{{ formatWan(item.lossAmount) }}</span>
               <span class="risk-percent">{{ item.percent.toFixed(1) }}%</span>
             </div>
-            <div v-if="!lossRiskInsights.length" class="risk-empty">当前筛选下暂无亏损病例。</div>
+            <div
+              v-if="!lossRiskInsights.length"
+              class="risk-empty"
+            >
+              当前筛选下暂无亏损病例。
+            </div>
           </div>
         </div>
       </section>
@@ -313,11 +375,24 @@
               <p>{{ tableSummaryLabel }}</p>
             </div>
             <div class="detail-filters">
-              <a-segmented v-model:value="groupFilter" :options="paymentMonitoringGroupOptions" />
-              <a-select v-model:value="statusFilter" class="status-filter" size="small">
-                <a-select-option value="all"> 全部状态 </a-select-option>
-                <a-select-option value="profit"> 盈余 </a-select-option>
-                <a-select-option value="loss"> 亏损 </a-select-option>
+              <a-segmented
+                v-model:value="groupFilter"
+                :options="paymentMonitoringGroupOptions"
+              />
+              <a-select
+                v-model:value="statusFilter"
+                class="status-filter"
+                size="small"
+              >
+                <a-select-option value="all">
+                  全部状态
+                </a-select-option>
+                <a-select-option value="profit">
+                  盈余
+                </a-select-option>
+                <a-select-option value="loss">
+                  亏损
+                </a-select-option>
               </a-select>
             </div>
           </div>
@@ -337,7 +412,10 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredRows" :key="item.id">
+                <tr
+                  v-for="item in filteredRows"
+                  :key="item.id"
+                >
                   <td>
                     <div class="case-cell">
                       <span>{{ item.caseNo }}</span>
@@ -372,7 +450,12 @@
                   </td>
                 </tr>
                 <tr v-if="!filteredRows.length">
-                  <td colspan="8" class="empty-cell">当前筛选下暂无数据</td>
+                  <td
+                    colspan="8"
+                    class="empty-cell"
+                  >
+                    当前筛选下暂无数据
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -402,7 +485,9 @@
               </span>
             </button>
           </div>
-          <div class="advice-footnote">数据截至：{{ trendDateRangeLabel }}</div>
+          <div class="advice-footnote">
+            数据截至：{{ trendDateRangeLabel }}
+          </div>
         </aside>
       </section>
     </div>

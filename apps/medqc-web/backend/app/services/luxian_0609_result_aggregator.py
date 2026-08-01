@@ -66,6 +66,10 @@ _SAFE_SOURCE_TYPE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 # 不得因通用事实反查而出现在该规则的客户证据中。
 _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     "LX0609-001": frozenset({"admission_record"}),
+    # 005/006 的入院、出院来源仅用于确定入院锚点；实际被核对的首次查房
+    # 均来自上级医师查房记录，不能把锚点文书投影成客户证据。
+    "LX0609-005": frozenset({"senior_course_record"}),
+    "LX0609-006": frozenset({"senior_course_record"}),
 }
 
 
@@ -1979,6 +1983,17 @@ def safe_luxian_0609_customer_display_facts(
     """旧原生分支只保留尚未迁移到通用子结论合同的受控展示事实。"""
     if not isinstance(raw, Mapping):
         return None
+    if rule_id == "LX0609-048" and (
+        raw.get("failure_kind") == "system_data_contract_gap"
+        and raw.get("system_gap_reason")
+        == "transfusion_comparison_fields_unavailable"
+        and raw.get("gap_owner") == "system_integration"
+    ):
+        return {
+            "failure_kind": "system_data_contract_gap",
+            "system_gap_reason": "transfusion_comparison_fields_unavailable",
+            "gap_owner": "system_integration",
+        }
     if rule_id in {"LX0609-044", "LX0609-046", "LX0609-047", "LX0609-048"}:
         allowed = {
             "LX0609-044": (
@@ -2297,6 +2312,38 @@ def safe_luxian_0609_customer_display_facts(
             return None
         return {**allowed, **dates, "gap_days": gap_days}
     if rule_id == "LX0609-009":
+        if raw.get("failure_kind") == "critical_daily_record_coverage_satisfied":
+            required_dates = raw.get("required_dates")
+            covered_dates = raw.get("covered_dates")
+            anchor_date = raw.get("anchor_date")
+            horizon_date = raw.get("horizon_date")
+            if (
+                raw.get("severity") != "critical"
+                or raw.get("missing_count") != 0
+                or not isinstance(required_dates, list)
+                or not required_dates
+                or not isinstance(covered_dates, list)
+                or required_dates != covered_dates
+                or not all(
+                    isinstance(value, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                    for value in required_dates
+                )
+                or not isinstance(anchor_date, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", anchor_date)
+                or not isinstance(horizon_date, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", horizon_date)
+            ):
+                return None
+            return {
+                "failure_kind": "critical_daily_record_coverage_satisfied",
+                "severity": "critical",
+                "anchor_date": anchor_date,
+                "horizon_date": horizon_date,
+                "required_dates": list(required_dates),
+                "covered_dates": list(covered_dates),
+                "missing_count": 0,
+            }
         missing_dates = raw.get("missing_dates")
         missing_count = raw.get("missing_count")
         first_date = raw.get("missing_first_date")
@@ -2360,12 +2407,18 @@ def safe_luxian_0609_customer_display_facts(
             "performed_surgery_confirmed": True,
         }
     if rule_id == "LX0609-017":
+        failure_kind = raw.get("failure_kind")
         source_types = raw.get("copy_document_sources")
         record_times = raw.get("copy_document_record_times")
         similarity = raw.get("copy_similarity")
         threshold = raw.get("copy_similarity_threshold")
         if (
-            not isinstance(source_types, list)
+            failure_kind
+            not in {
+                "copy_similarity_threshold_exceeded",
+                "copy_similarity_within_threshold",
+            }
+            or not isinstance(source_types, list)
             or len(source_types) != 2
             or any(value not in {"daily_course_record", "senior_course_record"} for value in source_types)
             or not isinstance(record_times, list)
@@ -2373,14 +2426,54 @@ def safe_luxian_0609_customer_display_facts(
             or not all(isinstance(value, str) and value for value in record_times)
             or not isinstance(similarity, (int, float))
             or not isinstance(threshold, (int, float))
+            or (
+                failure_kind == "copy_similarity_threshold_exceeded"
+                and float(similarity) <= float(threshold)
+            )
+            or (
+                failure_kind == "copy_similarity_within_threshold"
+                and float(similarity) > float(threshold)
+            )
         ):
             return None
         return {
-            "failure_kind": "copy_similarity_threshold_exceeded",
+            "failure_kind": failure_kind,
             "copy_similarity": round(float(similarity), 4),
             "copy_similarity_threshold": round(float(threshold), 4),
             "copy_document_sources": list(source_types),
             "copy_document_record_times": list(record_times),
+        }
+    if rule_id == "LX0609-068":
+        failure_kind = raw.get("failure_kind")
+        checked_dates = raw.get("checked_dates")
+        approval_present = raw.get("approval_present")
+        discharge_date = raw.get("discharge_date")
+        if (
+            failure_kind
+            not in {
+                "senior_discharge_approval_present",
+                "senior_discharge_approval_missing",
+            }
+            or raw.get("checked_source") != "senior_course_record"
+            or not isinstance(checked_dates, (list, tuple))
+            or len(checked_dates) != 2
+            or not all(
+                isinstance(value, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                for value in checked_dates
+            )
+            or not isinstance(discharge_date, str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", discharge_date)
+            or approval_present
+            != (failure_kind == "senior_discharge_approval_present")
+        ):
+            return None
+        return {
+            "failure_kind": failure_kind,
+            "discharge_date": discharge_date,
+            "checked_dates": list(checked_dates),
+            "checked_source": "senior_course_record",
+            "approval_present": approval_present,
         }
     if rule_id == "LX0609-016":
         similarity = raw.get("copy_similarity")
@@ -2436,13 +2529,23 @@ def safe_luxian_0609_customer_display_facts(
     }
     target_document = basic_timeliness_targets.get(rule_id)
     if target_document is not None:
+        failure_kind = raw.get("failure_kind")
         state = raw.get("timeliness_state")
         threshold = raw.get("threshold_hours")
         source_label = raw.get("source_label")
+        valid_state = (
+            state in {"missing", "late"}
+            if failure_kind == "timeliness_requirement_not_met"
+            else state == "within"
+        )
         if (
-            raw.get("failure_kind") != "timeliness_requirement_not_met"
+            failure_kind
+            not in {
+                "timeliness_requirement_not_met",
+                "timeliness_requirement_satisfied",
+            }
             or raw.get("target_document") != target_document
-            or state not in {"missing", "late"}
+            or not valid_state
             or not isinstance(threshold, int)
             or threshold <= 0
             or not isinstance(source_label, str)
@@ -2450,7 +2553,7 @@ def safe_luxian_0609_customer_display_facts(
         ):
             return None
         facts: dict[str, Any] = {
-            "failure_kind": "timeliness_requirement_not_met",
+            "failure_kind": failure_kind,
             "target_document": target_document,
             "timeliness_state": state,
             "threshold_hours": threshold,
@@ -2543,6 +2646,8 @@ def _customer_evidence_from_display_facts(
     source_document_id = valid_document_id(raw.get("source_document_id"))
     single_source_types = {
         "LX0609-004": "rescue_record",
+        "LX0609-005": "senior_course_record",
+        "LX0609-006": "senior_course_record",
         "LX0609-025": "surgery_record",
         "LX0609-034": "anesthesia_record",
         "LX0609-036": "anesthesia_record",
@@ -2583,17 +2688,50 @@ def _guard_customer_explanation_result(result: dict[str, Any]) -> dict[str, Any]
 
     if str(result.get("status") or "") != "non_compliant":
         return result
-    if result.get("criterion_results") or result.get("customer_display_facts"):
+    evidence_items = result.get("evidence_items")
+    has_locatable_evidence = isinstance(evidence_items, list) and any(
+        isinstance(item, Mapping)
+        and bool(str(item.get("quote") or "").strip())
+        and bool(
+            str(
+                item.get("source_table")
+                or item.get("source_document_id")
+                or item.get("evidence_ref")
+                or ""
+            ).strip()
+        )
+        for item in evidence_items
+    )
+    if (
+        result.get("criterion_results")
+        or result.get("customer_display_facts")
+        or has_locatable_evidence
+    ):
         return result
+    guarded_messages = {
+        "LX0609-040": (
+            "暂无法确认是否需要进行四级手术术前多学科讨论",
+            "当前缺少明确的手术级别或可核对的多学科讨论资料，不能将本项作为确定问题展示。",
+            "请确认手术级别、术前讨论记录及参加科室信息后重新评估。",
+        ),
+    }
+    findings, evidence, suggestion = guarded_messages.get(
+        str(result.get("rule_id") or ""),
+        (
+            "本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。",
+            "未返回可展示的具体原因、核对标准或证据定位。",
+            "请重新质控；如仍出现该提示，请补齐对应规则的受控事实和证据引用后再确认。",
+        ),
+    )
     guarded = dict(result)
     guarded.update(
         {
             "status": "uncertain",
             "result_status": "uncertain",
             "is_compliant": None,
-            "findings": "本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。",
-            "evidence": "未返回可展示的具体原因、核对标准或证据定位。",
-            "suggestion": "请重新质控；如仍出现该提示，请补齐对应规则的受控事实和证据引用后再确认。",
+            "findings": findings,
+            "evidence": evidence,
+            "suggestion": suggestion,
             "reason_code": "customer_explanation_incomplete",
         }
     )
@@ -2858,7 +2996,6 @@ def aggregate_luxian_0609_results(
         if (
             rule_id in display_facts_by_rule
             or rule_id not in wrapper_rule_ids
-            or rule_id not in reduced_by_rule
             or not isinstance(facts, Mapping)
         ):
             raise ValueError("invalid customer display facts scope")
@@ -2961,6 +3098,16 @@ def aggregate_luxian_0609_results(
             selected = direct_results[0]
             if str((selected.get("metadata") or {}).get("execution_source") or "") == "lx0609_native":
                 result = _copy_native_customer_fields(wrapper=wrapper, selected=selected)
+                if wrapper_id in display_facts_by_rule:
+                    result["customer_display_facts"] = display_facts_by_rule[wrapper_id]
+                    precise_findings = _timeliness_customer_findings(
+                        rule_id=wrapper_id,
+                        facts=display_facts_by_rule[wrapper_id],
+                    )
+                    if precise_findings:
+                        result["findings"] = precise_findings
+                if wrapper_id in customer_evidence_by_rule:
+                    result["customer_evidence"] = customer_evidence_by_rule[wrapper_id]
                 native_audit_context = {
                     key: value
                     for key, value in dict(audit_context or {}).items()

@@ -86,11 +86,26 @@
             v-model:active-key="statusFilter"
             :tab-bar-style="{ marginBottom: 0, borderBottom: 'none' }"
           >
-            <a-tab-pane key="all" tab="全部病历" />
-            <a-tab-pane key="pending" tab="未处理" />
-            <a-tab-pane key="processing" tab="提取中" />
-            <a-tab-pane key="completed" tab="提取完成" />
-            <a-tab-pane key="warning" tab="重度缺陷" />
+            <a-tab-pane
+              key="all"
+              tab="全部病历"
+            />
+            <a-tab-pane
+              key="pending"
+              tab="未处理"
+            />
+            <a-tab-pane
+              key="processing"
+              tab="提取中"
+            />
+            <a-tab-pane
+              key="completed"
+              tab="提取完成"
+            />
+            <a-tab-pane
+              key="warning"
+              tab="重度缺陷"
+            />
             <template #rightExtra>
               <a-button
                 type="primary"
@@ -161,22 +176,20 @@
               <div
                 class="flex justify-between items-center text-[10px] text-[rgba(29,29,31,0.45)] mb-1"
               >
-                <span
-                  >入院:
+                <span>入院:
                   <span class="text-[rgba(29,29,31,0.72)] font-mono ml-1">{{
                     record.admissionDate.substring(5)
-                  }}</span></span
-                >
+                  }}</span></span>
                 <!-- 天数指示器在右侧对齐 -->
-                <div class="font-bold text-[#1d1d1f] text-[11px]">{{ record.days }} 天</div>
+                <div class="font-bold text-[#1d1d1f] text-[11px]">
+                  {{ record.days }} 天
+                </div>
               </div>
               <div class="flex items-center text-[10px] text-[rgba(29,29,31,0.45)]">
-                <span
-                  >出院:
+                <span>出院:
                   <span class="text-[rgba(29,29,31,0.72)] font-mono ml-1">{{
                     record.dischargeDate.substring(5)
-                  }}</span></span
-                >
+                  }}</span></span>
               </div>
             </div>
 
@@ -188,8 +201,7 @@
               <span
                 class="truncate font-medium text-[rgba(29,29,31,0.72)]"
                 :title="record.mainDiagnosis"
-                >{{ record.mainDiagnosis }}</span
-              >
+              >{{ record.mainDiagnosis }}</span>
             </div>
 
             <!-- 底部状态图标 -->
@@ -234,7 +246,10 @@
       class="emr-workspace-drawer"
       :body-style="{ padding: 0 }"
     >
-      <div v-if="selectedRecord" class="h-full flex flex-col bg-slate-50 dark:bg-slate-900">
+      <div
+        v-if="selectedRecord"
+        class="h-full flex flex-col bg-slate-50 dark:bg-slate-900"
+      >
         <!-- Drawer Header -->
         <header
           class="h-14 bg-white border-b border-slate-100 dark:bg-slate-800 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 z-10 transition-colors duration-300"
@@ -252,24 +267,17 @@
                 }}</span>
                 <span
                   class="text-[11px] text-slate-400 font-mono tracking-wider bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-100 dark:border-slate-700"
-                  >NO: {{ selectedRecord.id }}</span
-                >
+                >NO: {{ selectedRecord.id }}</span>
               </div>
             </div>
             <div class="h-5 w-[1px] bg-slate-200 dark:bg-slate-700" />
             <div
               class="flex items-center gap-5 text-xs text-slate-500 dark:text-slate-400 font-medium"
             >
-              <span class="flex items-center gap-1.5"
-                ><BankOutlined class="text-slate-400" /> {{ selectedRecord.department }}</span
-              >
-              <span class="flex items-center gap-1.5"
-                ><CalendarOutlined class="text-slate-400" /> 入院:
-                {{ selectedRecord.admissionDate }}</span
-              >
-              <span class="flex items-center gap-1.5"
-                ><ClockCircleOutlined class="text-slate-400" /> {{ selectedRecord.days }}天</span
-              >
+              <span class="flex items-center gap-1.5"><BankOutlined class="text-slate-400" /> {{ selectedRecord.department }}</span>
+              <span class="flex items-center gap-1.5"><CalendarOutlined class="text-slate-400" /> 入院:
+                {{ selectedRecord.admissionDate }}</span>
+              <span class="flex items-center gap-1.5"><ClockCircleOutlined class="text-slate-400" /> {{ selectedRecord.days }}天</span>
             </div>
           </div>
 
@@ -279,7 +287,10 @@
               class="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-5 py-1.5 rounded-md text-sm font-bold transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2"
               @click="extractStructuredData"
             >
-              <SyncOutlined v-if="isExtracting" spin />
+              <SyncOutlined
+                v-if="isExtracting"
+                spin
+              />
               <ThunderboltOutlined v-else />
               {{
                 isExtracting
@@ -308,16 +319,13 @@
               class="h-12 border-b border-slate-100 dark:border-slate-800 flex items-center px-6 bg-white dark:bg-slate-900 flex-shrink-0"
             >
               <FileTextOutlined class="text-blue-500 mr-2 text-lg" />
-              <span class="font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap"
-                >病历原文</span
-              >
+              <span class="font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">病历原文</span>
             </div>
             <div class="flex-1 overflow-y-auto px-8 py-6 custom-scrollbar">
               <div class="max-w-3xl mx-auto">
                 <pre
                   class="font-sans text-[13px] leading-[1.8] text-slate-700 dark:text-slate-300 whitespace-pre-wrap word-break-all"
-                  >{{ medicalText }}</pre
-                >
+                >{{ medicalText }}</pre>
               </div>
             </div>
           </div>
@@ -334,8 +342,7 @@
               <span
                 class="text-[11px] font-bold transition-transform duration-300"
                 :class="leftCollapsed ? 'rotate-0' : 'rotate-180'"
-                >❯</span
-              >
+              >❯</span>
             </button>
           </div>
 
@@ -359,7 +366,10 @@
                 @click="activeTab = tab.key"
               >
                 <!-- Badge dot if needed -->
-                <span v-if="tab.badge" class="absolute top-0 right-0 flex h-2 w-2">
+                <span
+                  v-if="tab.badge"
+                  class="absolute top-0 right-0 flex h-2 w-2"
+                >
                   <span
                     :class="`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${tab.badgeColor || 'bg-blue-400'}`"
                   />
@@ -367,7 +377,10 @@
                     :class="`relative inline-flex rounded-full h-2 w-2 ${tab.badgeColor || 'bg-blue-500'}`"
                   />
                 </span>
-                <component :is="tab.icon" class="mr-1.5" />
+                <component
+                  :is="tab.icon"
+                  class="mr-1.5"
+                />
                 {{ tab.label }}
               </button>
             </div>
@@ -375,7 +388,10 @@
             <!-- Tab Content Area -->
             <div class="flex-1 overflow-y-auto custom-scrollbar relative">
               <!-- 1. 首页装配 Tab -->
-              <div v-show="activeTab === 'frontpage'" class="h-full relative">
+              <div
+                v-show="activeTab === 'frontpage'"
+                class="h-full relative"
+              >
                 <!-- Loading Overlay for extraction -->
                 <div
                   v-if="isExtracting"
@@ -387,7 +403,13 @@
                       viewBox="0 0 100 100"
                       fill="none"
                     >
-                      <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="8" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        stroke="currentColor"
+                        stroke-width="8"
+                      />
                       <path
                         d="M50 5 a45 45 0 0 1 45 45"
                         stroke="currentColor"
@@ -417,9 +439,7 @@
                       class="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-2"
                     >
                       <span>{{ extractionStatusText }}</span>
-                      <span class="font-mono"
-                        >{{ Math.round(extractionProgress?.percent || 0) }}%</span
-                      >
+                      <span class="font-mono">{{ Math.round(extractionProgress?.percent || 0) }}%</span>
                     </div>
                     <div
                       class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"
@@ -449,11 +469,17 @@
                 v-if="activeTab === 'profile'"
                 class="h-full flex-1 overflow-y-auto w-full custom-scrollbar"
               >
-                <AIProfileDashboard :medical-text="medicalText" :frontpage="parsedData" />
+                <AIProfileDashboard
+                  :medical-text="medicalText"
+                  :frontpage="parsedData"
+                />
               </div>
 
               <!-- 3. AI 质控 Tab (Placeholder) -->
-              <div v-show="activeTab === 'qc'" class="p-6">
+              <div
+                v-show="activeTab === 'qc'"
+                class="p-6"
+              >
                 <div
                   class="border border-red-100 bg-red-50/50 rounded-xl p-5 mb-5 dark:border-red-900/30 dark:bg-red-900/10"
                 >

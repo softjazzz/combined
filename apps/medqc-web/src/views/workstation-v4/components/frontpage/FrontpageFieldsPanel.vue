@@ -10,7 +10,9 @@
           <CheckCircleOutlined class="text-base text-white" />
         </div>
         <div class="min-w-0">
-          <div class="text-[16px] font-semibold text-slate-950">病案首页提取结果</div>
+          <div class="text-[16px] font-semibold text-slate-950">
+            病案首页提取结果
+          </div>
           <div class="mt-1 text-[12px] leading-5 text-slate-500">
             按首页模块归并结构化字段，用于复核后预览、导出或保存。
           </div>
@@ -55,7 +57,10 @@
           <span class="text-[22px] font-semibold leading-none text-slate-950">{{
             metric.value
           }}</span>
-          <span v-if="metric.suffix" class="pb-0.5 text-[11px] font-semibold text-slate-400">{{
+          <span
+            v-if="metric.suffix"
+            class="pb-0.5 text-[11px] font-semibold text-slate-400"
+          >{{
             metric.suffix
           }}</span>
         </div>
@@ -68,10 +73,18 @@
       class="self-start rounded-[18px] border border-slate-200/80 bg-white/88 p-2 shadow-[0_6px_16px_rgba(15,23,42,0.025)] lg:sticky lg:top-3"
     >
       <div class="px-2 pb-2 pt-1">
-        <div class="text-[12px] font-semibold text-slate-900">提取模块</div>
-        <div class="mt-0.5 text-[11px] text-slate-400">点击定位到对应字段组</div>
+        <div class="text-[12px] font-semibold text-slate-900">
+          提取模块
+        </div>
+        <div class="mt-0.5 text-[11px] text-slate-400">
+          点击定位到对应字段组
+        </div>
       </div>
-      <div v-for="module in moduleCards" :key="module.key" class="mb-1 last:mb-0">
+      <div
+        v-for="module in moduleCards"
+        :key="module.key"
+        class="mb-1 last:mb-0"
+      >
         <button
           type="button"
           class="flex w-full items-center gap-2 rounded-[12px] px-2.5 py-2 text-left transition hover:bg-blue-50/60"
@@ -81,8 +94,14 @@
             class="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px]"
             :class="moduleIconClass(module)"
           >
-            <CheckCircleOutlined v-if="module.entry?.preview?.length" class="text-[12px]" />
-            <span v-else class="h-2 w-2 rounded-full bg-current" />
+            <CheckCircleOutlined
+              v-if="module.entry?.preview?.length"
+              class="text-[12px]"
+            />
+            <span
+              v-else
+              class="h-2 w-2 rounded-full bg-current"
+            />
           </span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-[13px] font-bold text-slate-700">{{
@@ -118,8 +137,14 @@
                 class="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px]"
                 :class="moduleIconClass(module)"
               >
-                <CheckCircleOutlined v-if="module.entry?.preview?.length" class="text-[13px]" />
-                <span v-else class="h-2 w-2 rounded-full bg-current" />
+                <CheckCircleOutlined
+                  v-if="module.entry?.preview?.length"
+                  class="text-[13px]"
+                />
+                <span
+                  v-else
+                  class="h-2 w-2 rounded-full bg-current"
+                />
               </span>
               <span class="text-[15px] font-semibold text-slate-950">{{ module.label }}</span>
               <span
@@ -163,7 +188,9 @@
           v-else
           class="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center"
         >
-          <div class="text-[13px] font-bold text-slate-500">未提取到结构化字段</div>
+          <div class="text-[13px] font-bold text-slate-500">
+            未提取到结构化字段
+          </div>
           <div class="mt-1 text-[12px] text-slate-400">
             可在病历文书中复核该模块来源，必要时重新生成首页草稿。
           </div>

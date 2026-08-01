@@ -9,7 +9,12 @@
       <div
         class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-100 bg-[linear-gradient(180deg,#f0f6ff,#dbeafe)] shadow-[0_10px_24px_rgba(148,163,184,0.12)]"
       >
-        <svg class="h-8 w-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg
+          class="h-8 w-8 text-blue-300"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -18,9 +23,11 @@
           />
         </svg>
       </div>
-      <h4 class="mb-2 text-[15px] font-semibold text-slate-700">选择编码查看详情</h4>
+      <h4 class="mb-2 text-[15px] font-semibold text-slate-700">
+        选择编码查看详情
+      </h4>
       <p class="text-[13px] leading-relaxed text-slate-400">
-        从左侧搜索结果或树形目录中选择任意编码，<br />即可在这里查看完整信息。
+        从左侧搜索结果或树形目录中选择任意编码，<br>即可在这里查看完整信息。
       </p>
     </div>
 
@@ -33,7 +40,9 @@
             <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
               知识侧栏
             </div>
-            <div class="mt-1 text-[12px] text-slate-500">版本映射、层级归属、包含项与排除项</div>
+            <div class="mt-1 text-[12px] text-slate-500">
+              版本映射、层级归属、包含项与排除项
+            </div>
           </div>
           <span
             class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0057b8]"
@@ -94,8 +103,7 @@
                 :class="
                   i === selectedCode.category_path.length - 1 ? 'font-medium text-slate-700' : ''
                 "
-                >{{ item }}</span
-              >
+              >{{ item }}</span>
             </div>
           </div>
         </div>
@@ -135,7 +143,10 @@
             <span class="mr-1 text-blue-500">●</span> 包含
           </h4>
           <ul class="list-disc space-y-1 pl-4 text-[13px] text-slate-600 marker:text-blue-400">
-            <li v-for="(item, i) in selectedCode.inclusions" :key="i">
+            <li
+              v-for="(item, i) in selectedCode.inclusions"
+              :key="i"
+            >
               {{ item }}
             </li>
           </ul>
@@ -147,7 +158,10 @@
             <span class="mr-1 text-blue-500">●</span> 排除
           </h4>
           <ul class="list-disc space-y-1 pl-4 text-[13px] text-slate-600 marker:text-blue-300">
-            <li v-for="(item, i) in selectedCode.exclusions" :key="i">
+            <li
+              v-for="(item, i) in selectedCode.exclusions"
+              :key="i"
+            >
               {{ item }}
             </li>
           </ul>
@@ -156,8 +170,8 @@
         <div
           v-if="
             !selectedCode.category_path?.length &&
-            !selectedCode.mapped_code &&
-            !selectedCode.inclusions?.length
+              !selectedCode.mapped_code &&
+              !selectedCode.inclusions?.length
           "
         >
           <div class="mb-5 h-px w-full bg-slate-100" />

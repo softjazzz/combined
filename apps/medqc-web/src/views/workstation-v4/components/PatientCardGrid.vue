@@ -13,7 +13,10 @@
       </div>
     </div>
 
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+    <div
+      v-else
+      class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5"
+    >
       <article
         v-for="record in records"
         :key="record.id"
@@ -50,7 +53,10 @@
             record.department || '\u672a\u5206\u79d1\u5ba4'
           }}</span>
           <span class="h-1 w-1 rounded-full bg-slate-300" />
-          <span :class="stayTone(record.days)" class="font-semibold">{{
+          <span
+            :class="stayTone(record.days)"
+            class="font-semibold"
+          >{{
             stayLabel(record.days)
           }}</span>
         </div>
@@ -66,7 +72,10 @@
       </article>
     </div>
 
-    <div v-if="totalPages > 1" class="flex justify-center py-5">
+    <div
+      v-if="totalPages > 1"
+      class="flex justify-center py-5"
+    >
       <a-pagination
         v-model:current="currentPageModel"
         :total="total"

@@ -139,6 +139,19 @@ async def test_native_040_enabled_bypasses_legacy_dispatch_and_accounts_tokens(m
     assert executable == []
     assert context.legacy_wrapper_rules == []
     assert [item["rule_id"] for item in context.native_results] == ["LX0609-040"]
+    assert [
+        item.to_safe_dict() for item in context.native_usage_attributions
+    ] == [
+        {
+            "executor_key": "surgery_mdt",
+            "llm_call_count": 1,
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "total_tokens": 110,
+            "covered_customer_rule_ids": ["LX0609-040"],
+            "latency_ms": 400.0,
+        }
+    ]
     orchestrated = {"results": [], "total_tokens": 0, "total_prompt_tokens": 0, "total_completion_tokens": 0}
     luxian_execution.aggregate_luxian_0609_orchestrated_results(
         orchestrated=orchestrated,
@@ -525,6 +538,17 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
     async def _surgery_document(**kwargs):
         rule_ids = tuple(kwargs["rule_ids"])
         calls.append(("surgery_document", rule_ids))
+        unexpected_non_typed_decision = RuleDecision(
+            # 回归：当前选择范围外的合法 RuleDecision 不得污染 typed 绑定。
+            rule_id="LX0609-004",
+            snapshot_hash=snapshot.snapshot_hash,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.SATISFIED,
+            reason_code="requirement_satisfied",
+            fact_refs=("a" * 64,),
+            evaluator_version="test-ruledecision-v1",
+        )
         return SimpleNamespace(
             results=(),
             planned_rule_ids=rule_ids,
@@ -540,7 +564,7 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
                     evaluator_version="test-ruledecision-v1",
                 )
                 for rule_id in rule_ids
-            ),
+            ) + (unexpected_non_typed_decision,),
             llm_call_count=0,
             prompt_tokens=0,
             completion_tokens=0,
@@ -620,9 +644,41 @@ async def test_unified_engine_uses_registry_order_once_and_keeps_customer_order(
         "LX0609-010",
     ]
     assert [item.rule_id for item in context.reduced_decisions] == ["LX0609-029"]
-    assert context.reduced_decisions[0].final_state.value == "compliant"
+    assert context.reduced_decisions[0].final_state.value == "technical_error"
+    assert context.reduced_decisions[0].reason_code == "decision_contract_violation"
     assert context.native_llm_call_count == 1
     assert context.native_total_tokens == 15
+    assert [
+        item.to_safe_dict() for item in context.native_usage_attributions
+    ] == [
+        {
+            "executor_key": "basic_timeliness",
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "covered_customer_rule_ids": ["LX0609-001"],
+            "latency_ms": 0.0,
+        },
+        {
+            "executor_key": "exam_lab",
+            "llm_call_count": 1,
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "covered_customer_rule_ids": ["LX0609-010"],
+            "latency_ms": 200.0,
+        },
+        {
+            "executor_key": "surgery_document",
+            "llm_call_count": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "covered_customer_rule_ids": ["LX0609-029"],
+            "latency_ms": 0.0,
+        },
+    ]
     assert context.unified_engine_used is True
     assert context.evidence_snapshot is snapshot
 
@@ -976,7 +1032,7 @@ async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_d
     assert context.native_results == []
     assert [item.rule_id for item in context.reduced_decisions] == list(selected)
     assert [item.final_state.value for item in context.reduced_decisions] == [
-        "compliant",
+        "non_compliant",
         "compliant",
         "compliant",
         "compliant",
@@ -1229,11 +1285,89 @@ async def test_tumor_and_course_admission_typed_flags_reach_unified_reducer(
     ]
     assert decision_summary == [
         ("not_applicable", "trigger_absent_complete"),
-        ("data_gap", "required_field_missing"),
+        ("not_applicable", "trigger_absent_complete"),
         ("data_gap", "required_field_missing"),
         ("not_applicable", "trigger_absent_complete"),
         ("not_applicable", "trigger_absent_complete"),
     ]
+    assert context.native_llm_call_count == 0
+    assert context.native_total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_lx018_typed_reaches_unified_reducer_when_shared_course_flag_off(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-018",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=(),
+        native_async_rule_ids=selected,
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("course_quality", selected),),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+
+    def read(**kwargs):
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"],
+            rows=(),
+            truncated=False,
+            limit_rows=50,
+        )
+
+    def build_session(**kwargs):
+        return build_luxian_0609_evidence_read_session(
+            **kwargs,
+            row_reader=read,
+        )
+
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        build_session,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-018",
+                name="LX0609-018",
+                mapped_rule_ids=["RAW-LX0609-018"],
+                trigger_condition="test",
+            )
+        ],
+    )
+
+    executable, context = await luxian_execution.prepare_luxian_0609_execution(
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        prepared_rules=[],
+        visit_id="private-visit",
+        medical_text="",
+        evidence_payload=None,
+        llm_client=None,
+        settings=_all_native_settings(
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+            LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED=False,
+        ),
+        institute_id="private-institute",
+        patient_id="private-patient",
+        selected_customer_rule_ids=selected,
+    )
+
+    assert executable == []
+    assert context.native_results == []
+    assert [
+        (item.rule_id, item.final_state.value, item.reason_code)
+        for item in context.reduced_decisions
+    ] == [("LX0609-018", "data_gap", "required_field_missing")]
     assert context.native_llm_call_count == 0
     assert context.native_total_tokens == 0
 
@@ -2560,8 +2694,8 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     assert dispatched == []
     assert reader_calls == []
     # 041/042 缺同意书、043 缺版本化九项及时序契约，045/047 已由专用记录
-    # 确定性完成；046 的专用记录明确缺少输血目的/指征，也必须零模型。
-    assert len(client.prompts) == 3
+    # 确定性完成；仅 044 的输血前评估语义需要一次受控模型判断。
+    assert len(client.prompts) == 1
     assert [item["rule_id"] for item in result["evaluation_results"]] == selected
     assert [item["status"] for item in result["evaluation_results"][:2]] == [
         "data_gap",
@@ -2573,7 +2707,7 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     assert rule_043["status"] == "data_gap"
     assert (
         rule_043["metadata"]["reason_code"]
-        == "pretransfusion_test_contract_unavailable"
+        == "pretransfusion_item_contract_unavailable"
     )
     rule_045 = next(
         item for item in result["evaluation_results"] if item["rule_id"] == "LX0609-045"
@@ -2597,11 +2731,11 @@ async def test_native_transfusion_public_entry_bypasses_legacy_rules_and_keeps_o
     assert rule_047["status"] == "compliant"
     assert rule_047["metadata"]["reason_code"] == "posttransfusion_evaluation_complete"
     assert result["token_usage"] == {
-        "total_tokens": 330,
-        "prompt_tokens": 300,
-        "completion_tokens": 30,
+        "total_tokens": 110,
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
     }
-    assert result["executor_breakdown"]["llm"] == 3
+    assert result["executor_breakdown"]["llm"] == 1
     assert all(raw_id not in repr(result["evaluation_results"]) for ids in mappings.values() for raw_id in ids)
     assert raw_body_marker not in repr(result)
 
@@ -2947,6 +3081,8 @@ async def test_remaining_native_families_bypass_all_legacy_rules_and_keep_custom
         return SimpleNamespace(
             results=tuple(_result(rule_id) for rule_id in rule_ids),
             planned_rule_ids=rule_ids,
+            decisions=(),
+            customer_display_facts=(),
             llm_call_count=0, prompt_tokens=0, completion_tokens=0,
             total_tokens=0, api_time=0.0,
         )
@@ -3811,7 +3947,8 @@ async def test_lx0609_033_available_consent_preserves_semantic_dispatch_without_
     customer_metadata = dict(customer_results[0].get("metadata") or {})
     assert reader_calls == []
     assert dispatch_calls == [["SC-087", "LXE-31"]]
-    assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", raw_status)]
+    expected_status = "compliant" if raw_status == "compliant" else "uncertain"
+    assert [(item["rule_id"], item["status"]) for item in customer_results] == [("LX0609-033", expected_status)]
     assert customer_metadata["live_source_state"] == "consent_document_present"
     assert raw_body_marker not in repr(customer_metadata)
     assert result["token_usage"]["total_tokens"] == 0
@@ -4111,6 +4248,7 @@ def test_aggregator_should_prioritize_non_compliant_over_primary_compliant():
             "suggestion": "及时补写",
             "confidence": 0.91,
             "metadata": {},
+            "criterion_results": [{"criterion_id": "timeliness", "status": "non_compliant"}],
         },
     ]
 
@@ -4303,6 +4441,7 @@ def test_aggregator_should_keep_specimen_detail_absence_as_non_compliant():
                 "findings": "手术记录仅笼统描述送检组织，未详细记录取材部位、切缘及淋巴结分组。",
                 "evidence": "执行证据：【手术记录】标本处理：远端胃及胃周组织送病理检查。",
                 "suggestion": "补充记录各切缘及淋巴结分组的取材详情。",
+                "criterion_results": [{"criterion_id": "specimen_detail", "status": "non_compliant"}],
                 "confidence": 0.92,
                 "metadata": {},
             }
@@ -5245,6 +5384,7 @@ def test_aggregator_should_strip_sensitive_raw_fields():
             "prompt": "sensitive",
             "llm_raw_output": "sensitive",
             "embedding": [1, 2, 3],
+            "criterion_results": [{"criterion_id": "timeliness", "status": "non_compliant"}],
         }
     ]
 
@@ -5328,6 +5468,7 @@ def test_aggregator_should_add_schema_fields_for_non_compliant_result():
             "suggestion": "请补充每日病情变化分析。",
             "confidence": 0.93,
             "metadata": {"executor_type": "cross_document", "document_type": "日常病程记录"},
+            "criterion_results": [{"criterion_id": "similarity", "status": "non_compliant"}],
         }
     ]
 
@@ -5590,6 +5731,7 @@ def test_aggregator_should_prioritize_direct_customer_programmatic_result():
             "suggestion": "请核对首次病程记录完成时间。",
             "confidence": 0.94,
             "metadata": {"executor_type": "program"},
+            "criterion_results": [{"criterion_id": "timeliness", "status": "non_compliant"}],
         },
     ]
 
@@ -5893,6 +6035,24 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
                 "status": "compliant",
                 "is_compliant": True,
                 "reason_code": "requirement_satisfied",
+                "customer_display_facts": {"timeliness_state": "within_threshold"},
+                "criterion_results": [
+                    {
+                        "criterion_id": "chief_complaint_length",
+                        "kind": "text_length",
+                        "status": "passed",
+                        "reason_code": "within_limit",
+                        "actual_value": 14,
+                        "expected_value": 20,
+                    }
+                ],
+                "customer_evidence": [
+                    {
+                        "source_type": "admission_record",
+                        "source_document_id": "admission-document-1",
+                    }
+                ],
+                "model_analysis": "模型已完成该规则的医学关系分析。",
                 "metadata": {},
             },
             {
@@ -5932,6 +6092,17 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
     assert result["evaluation_summary"]["compliance_rate"] == 100.0
     assert result["evaluation_summary"]["luxian_0609_summary"]["data_gap_count"] == 1
     assert result["evaluation_results"][0]["reason_code"] == "requirement_satisfied"
+    assert result["evaluation_results"][0]["customer_display_facts"] == {
+        "timeliness_state": "within_threshold"
+    }
+    assert result["evaluation_results"][0]["criterion_results"][0]["criterion_id"] == "chief_complaint_length"
+    assert result["evaluation_results"][0]["customer_evidence"] == [
+        {
+            "source_type": "admission_record",
+            "source_document_id": "admission-document-1",
+        }
+    ]
+    assert result["evaluation_results"][0]["model_analysis"] == "模型已完成该规则的医学关系分析。"
 
 
 def test_trigger_gate_should_ignore_clear_negated_trigger_phrases():
@@ -7731,7 +7902,7 @@ def test_lx0609_024_should_require_current_malignant_tumor_surgery_fact():
     assert aggregated[0]["metadata"]["customer_display_guard"] == "malignant_tumor_surgery_requires_current_surgery_fact"
 
 
-def test_lx0609_018_semantic_result_should_be_review_needed():
+def test_lx0609_018_semantic_result_with_controlled_criterion_is_non_compliant():
     rules = [
         _wrapper(
             "LX0609-018",
@@ -7751,14 +7922,14 @@ def test_lx0609_018_semantic_result_should_be_review_needed():
                 "findings": "主诉与第一诊断逻辑链条不充分。",
                 "evidence": "入院记录：纳差3天，腹泻1天。",
                 "suggestion": "建议复核主诉与诊断排序。",
+                "criterion_results": [{"criterion_id": "diagnosis_relation", "status": "non_compliant"}],
             }
         ],
         gate_decisions={},
     )
 
-    assert aggregated[0]["status"] == "ai_suggested_non_compliant"
-    assert aggregated[0]["metadata"]["customer_display_guard"] == "semantic_primary_diagnosis_requires_review"
-    assert "疑点" in aggregated[0]["findings"]
+    assert aggregated[0]["status"] == "non_compliant"
+    assert "逻辑链条不充分" in aggregated[0]["findings"]
 
 
 def test_lx0609_027_bottom_rule_without_result_should_be_review_needed():

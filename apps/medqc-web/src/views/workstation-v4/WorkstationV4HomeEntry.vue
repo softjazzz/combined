@@ -1,5 +1,8 @@
 <template>
-  <div v-if="showHome" class="wv4-home-entry">
+  <div
+    v-if="showHome"
+    class="wv4-home-entry"
+  >
     <QCOverviewView />
     <button
       type="button"
@@ -9,7 +12,10 @@
     >
       <span class="wv4-home-entry__agent-icon"> AI </span>
       <span class="wv4-home-entry__agent-text">智能助手</span>
-      <span class="wv4-home-entry__agent-status" aria-hidden="true" />
+      <span
+        class="wv4-home-entry__agent-status"
+        aria-hidden="true"
+      />
     </button>
     <QCAgentChatDrawer
       v-model:open="qcAgentOpen"

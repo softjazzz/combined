@@ -2,7 +2,9 @@
   <main class="tender-acceptance-page">
     <section class="acceptance-hero">
       <div>
-        <p class="eyebrow">功能验收</p>
+        <p class="eyebrow">
+          功能验收
+        </p>
         <h1>投标功能验收看板</h1>
         <p>按条款汇总功能入口、实现状态和仍需生产联调的缺口，所有演示均为只读或草稿/模拟结果。</p>
       </div>
@@ -14,14 +16,23 @@
     </section>
 
     <section class="clause-grid">
-      <article v-for="clause in clauses" :key="clause.id" class="clause-card">
+      <article
+        v-for="clause in clauses"
+        :key="clause.id"
+        class="clause-card"
+      >
         <div class="clause-topline">
           <span>{{ clause.id }}</span>
           <i :class="`status-${clause.status}`">{{ statusLabel[clause.status] }}</i>
         </div>
         <h2>{{ clause.title }}</h2>
         <p>{{ clause.summary }}</p>
-        <RouterLink :to="clause.entry" class="entry-link"> 查看入口 </RouterLink>
+        <RouterLink
+          :to="clause.entry"
+          class="entry-link"
+        >
+          查看入口
+        </RouterLink>
       </article>
     </section>
   </main>

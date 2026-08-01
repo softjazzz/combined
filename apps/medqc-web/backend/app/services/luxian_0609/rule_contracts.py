@@ -18,6 +18,11 @@ _CONTRACT_PATH = (
     / "data"
     / "luxian_0609_rule_contracts_v1.json"
 )
+_PHASE1_EXTENSION_CONTRACT_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "data"
+    / "luxian_0609_phase1_rule_contracts_extension_v1.json"
+)
 
 RULE_CONTRACT_SCHEMA_VERSION = "lx0609-rule-contracts-v1"
 ALLOWED_FINAL_STATES = (
@@ -31,10 +36,55 @@ ALLOWED_FINAL_STATES = (
 _DECISION_AUTHORITIES = frozenset({"program_only", "program_then_optional_llm"})
 _SOURCE_CONTRACT_STATES = frozenset({"legacy_projection_v1", "typed_shadow_v1"})
 _GOLDEN_GATE_STATES = frozenset({"pending", "accepted"})
+_CRITERION_KINDS = frozenset({"text_length", "semantic_relation"})
+_CRITERION_OPERATORS = frozenset({"lte"})
+_CRITERION_UNITS = frozenset({"character"})
 
 
 def _clean(value: Any) -> str:
     return str(value or "").strip()
+
+
+@dataclass(frozen=True)
+class RuleCriterionContract:
+    """从客户规则目录编译出的单个、不可变判定子项。"""
+
+    criterion_id: str
+    kind: str
+    failure_reason_code: str
+    source_fact: str = ""
+    operator: str = ""
+    expected: int | None = None
+    unit: str = ""
+    left_fact: str = ""
+    right_fact: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.criterion_id or not self.failure_reason_code:
+            raise ValueError("incomplete LX0609 criterion")
+        if self.kind not in _CRITERION_KINDS:
+            raise ValueError("invalid LX0609 criterion kind")
+        if self.kind == "text_length":
+            if (
+                not self.source_fact
+                or self.operator not in _CRITERION_OPERATORS
+                or not isinstance(self.expected, int)
+                or isinstance(self.expected, bool)
+                or self.expected < 0
+                or self.unit not in _CRITERION_UNITS
+                or self.left_fact
+                or self.right_fact
+            ):
+                raise ValueError("invalid LX0609 text-length criterion")
+        elif (
+            not self.left_fact
+            or not self.right_fact
+            or self.source_fact
+            or self.operator
+            or self.expected is not None
+            or self.unit
+        ):
+            raise ValueError("invalid LX0609 semantic-relation criterion")
 
 
 @dataclass(frozen=True)
@@ -57,6 +107,7 @@ class Luxian0609RuleContract:
     data_dependencies: tuple[str, ...]
     rule_version: str
     prompt_version: str
+    criteria: tuple[RuleCriterionContract, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.rule_id.startswith("LX0609-"):
@@ -92,6 +143,39 @@ class Luxian0609RuleContract:
             raise ValueError("invalid LX0609 LLM call budget")
         if not self.applicable_documents:
             raise ValueError("LX0609 contract is missing applicable documents")
+        if (
+            not isinstance(self.criteria, tuple)
+            or len({item.criterion_id for item in self.criteria}) != len(self.criteria)
+            or any(not isinstance(item, RuleCriterionContract) for item in self.criteria)
+        ):
+            raise ValueError("invalid LX0609 criteria contract")
+
+
+def _compile_criteria(rule: Mapping[str, Any]) -> tuple[RuleCriterionContract, ...]:
+    raw_criteria = rule.get("criteria")
+    if raw_criteria is None:
+        return ()
+    if not isinstance(raw_criteria, list):
+        raise ValueError("LX0609 criteria must be a list")
+    criteria: list[RuleCriterionContract] = []
+    for raw in raw_criteria:
+        if not isinstance(raw, Mapping):
+            raise ValueError("invalid LX0609 criterion entry")
+        expected = raw.get("expected")
+        criteria.append(
+            RuleCriterionContract(
+                criterion_id=_clean(raw.get("criterion_id")),
+                kind=_clean(raw.get("kind")),
+                failure_reason_code=_clean(raw.get("failure_reason_code")),
+                source_fact=_clean(raw.get("source_fact")),
+                operator=_clean(raw.get("operator")),
+                expected=expected if isinstance(expected, int) and not isinstance(expected, bool) else None,
+                unit=_clean(raw.get("unit")),
+                left_fact=_clean(raw.get("left_fact")),
+                right_fact=_clean(raw.get("right_fact")),
+            )
+        )
+    return tuple(criteria)
 
 
 def _load_payload() -> Mapping[str, Any]:
@@ -101,7 +185,14 @@ def _load_payload() -> Mapping[str, Any]:
         raise ValueError("LX0609 rule contracts must be an object")
     if _clean(payload.get("schema_version")) != RULE_CONTRACT_SCHEMA_VERSION:
         raise ValueError("unsupported LX0609 rule contract schema")
-    return payload
+    with _PHASE1_EXTENSION_CONTRACT_PATH.open("r", encoding="utf-8") as file:
+        extension = json.load(file)
+    if not isinstance(extension, list):
+        raise ValueError("invalid LX0609 phase-1 rule contract extension")
+    return {
+        **payload,
+        "rules": [*(payload.get("rules") or []), *extension],
+    }
 
 
 def compile_luxian_0609_rule_contracts(
@@ -162,6 +253,7 @@ def compile_luxian_0609_rule_contracts(
                 data_dependencies=dependency.data_dependencies,
                 rule_version=dependency.rule_version,
                 prompt_version=_clean(rule.get("prompt_version")),
+                criteria=_compile_criteria(rule),
             )
         )
         seen.add(rule_id)

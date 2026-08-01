@@ -16,15 +16,15 @@ from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
 @pytest.mark.unit
-def test_dependency_inventory_covers_all_49_rules_and_seven_families():
+def test_dependency_inventory_covers_all_63_registered_rules_and_eight_families():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
     )
 
-    assert len(inventory) == 49
+    assert len(inventory) == 63
     assert tuple(item.rule_id for item in inventory) == tuple(
-        f"LX0609-{number:03d}" for number in range(1, 50)
+        str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
     assert {item.family_key for item in inventory} == {
         "basic_timeliness",
@@ -34,8 +34,9 @@ def test_dependency_inventory_covers_all_49_rules_and_seven_families():
         "surgery_anesthesia",
         "transfusion",
         "tumor_pathology",
+        "extended_document",
     }
-    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 90
+    assert sum(len(item.compatibility_rule_ids) for item in inventory) == 104
     assert all(item.applicable_documents for item in inventory)
     assert all(item.dependency_type for item in inventory)
 
@@ -100,6 +101,20 @@ def test_dependency_inventory_exposes_current_native_and_compatibility_boundary(
         "LX0609-037",
         "LX0609-038",
         "LX0609-039",
+        "LX0609-051",
+        "LX0609-060",
+        "LX0609-061",
+        "LX0609-062",
+        "LX0609-064",
+        "LX0609-065",
+        "LX0609-066",
+        "LX0609-067",
+        "LX0609-068",
+        "LX0609-069",
+        "LX0609-071",
+        "LX0609-072",
+        "LX0609-073",
+        "LX0609-074",
     }
     # 023 仍保留会诊执行器归属；是否派发由包计划的第一阶段白名单决定，
     # 不能通过把它降为 compatibility 来破坏规则契约。
@@ -242,7 +257,7 @@ def test_remaining_family_flags_partition_only_their_customer_rules(
 
 
 @pytest.mark.unit
-def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
+def test_stage_one_consultation_flags_keep_execution_rules_on_compatibility_path():
     inventory = build_luxian_0609_dependency_inventory(
         rules=load_luxian_0609_rules(),
         family_definitions=RULE_FAMILY_DEFINITIONS,
@@ -255,6 +270,7 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         native_async_enabled=True,
         native_basic_timeliness_enabled=True,
         native_consultation_enabled=True,
+        native_consultation_execution_link_enabled=False,
         native_exam_lab_enabled=True,
         native_transfusion_enabled=True,
         native_tumor_pathology_enabled=True,
@@ -264,7 +280,7 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         native_surgery_document_029_enabled=True,
     )
 
-    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 47
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 61
     assert plan.compatibility_rule_ids == ("LX0609-020", "LX0609-023")
     assert plan.compatibility_execution_rule_ids == (
         "LX-017",
@@ -272,6 +288,35 @@ def test_all_native_family_flags_eliminate_runtime_compatibility_dispatch():
         "CL-248",
         "CL-071",
     )
+
+
+@pytest.mark.unit
+def test_all_enabled_native_families_leave_only_029_as_explicit_compatibility_exception():
+    inventory = build_luxian_0609_dependency_inventory(
+        rules=load_luxian_0609_rules(),
+        family_definitions=RULE_FAMILY_DEFINITIONS,
+    )
+
+    plan = build_luxian_0609_package_plan(
+        inventory=inventory,
+        selected_rule_ids=[item.rule_id for item in inventory],
+        native_sync_enabled=True,
+        native_async_enabled=True,
+        native_basic_timeliness_enabled=True,
+        native_consultation_enabled=True,
+        native_consultation_execution_link_enabled=True,
+        native_exam_lab_enabled=True,
+        native_transfusion_enabled=True,
+        native_tumor_pathology_enabled=True,
+        native_course_quality_enabled=True,
+        native_surgery_gate_enabled=True,
+        native_surgery_document_enabled=True,
+        native_surgery_document_029_enabled=False,
+    )
+
+    assert len(plan.native_sync_rule_ids) + len(plan.native_async_rule_ids) == 62
+    assert plan.compatibility_rule_ids == ("LX0609-029",)
+    assert plan.compatibility_execution_rule_ids == ("CL-181", "SC-081")
 
 
 @pytest.mark.unit

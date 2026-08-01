@@ -2,7 +2,9 @@
   <section class="table-shell">
     <div class="table-shell-head">
       <div>
-        <h3 class="table-shell-title">规则执行工作台</h3>
+        <h3 class="table-shell-title">
+          规则执行工作台
+        </h3>
       </div>
       <div class="table-shell-right">
         <label class="rule-set-picker">
@@ -29,11 +31,18 @@
           <span class="table-shell-label">当前结果</span>
         </div>
         <div class="table-shell-actions">
-          <a-button type="primary" class="table-primary-btn" @click="emit('openQcEvaluation')">
+          <a-button
+            type="primary"
+            class="table-primary-btn"
+            @click="emit('openQcEvaluation')"
+          >
             <Play class="button-icon" />
             开始质控评估
           </a-button>
-          <a-button class="table-secondary-btn" @click="emit('openCustomWorkspace')">
+          <a-button
+            class="table-secondary-btn"
+            @click="emit('openCustomWorkspace')"
+          >
             <SlidersHorizontal class="button-icon" />
             自定义规则工作台
           </a-button>
@@ -63,7 +72,11 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:defectLevel', String($event || ''))"
         >
-          <a-select-option v-for="item in defectOptions" :key="item" :value="item">
+          <a-select-option
+            v-for="item in defectOptions"
+            :key="item"
+            :value="item"
+          >
             {{ item }}
           </a-select-option>
         </a-select>
@@ -76,7 +89,11 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:complexity', String($event || ''))"
         >
-          <a-select-option v-for="item in complexityOptions" :key="item" :value="item">
+          <a-select-option
+            v-for="item in complexityOptions"
+            :key="item"
+            :value="item"
+          >
             {{ item }}
           </a-select-option>
         </a-select>
@@ -89,7 +106,11 @@
           popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:documentType', String($event || ''))"
         >
-          <a-select-option v-for="item in documentOptions" :key="item" :value="item">
+          <a-select-option
+            v-for="item in documentOptions"
+            :key="item"
+            :value="item"
+          >
             {{ getDocTypeZh(item) }}
           </a-select-option>
         </a-select>
@@ -134,21 +155,33 @@
                 >
                   {{ record.name }}
                 </button>
-                <div v-if="isLuxianWrapper(record as SemanticRuleItem)" class="rule-main-tags">
+                <div
+                  v-if="isLuxianWrapper(record as SemanticRuleItem)"
+                  class="rule-main-tags"
+                >
                   <span class="mini-tag mini-tag-blue">
                     {{ formatImplementationStatus(record.implementation_status) }}
                   </span>
                   <span class="mini-tag">
                     {{ formatDependencyType(record.dependency_type) }}
                   </span>
-                  <span v-if="record.data_status" class="mini-tag mini-tag-amber">
+                  <span
+                    v-if="record.data_status"
+                    class="mini-tag mini-tag-amber"
+                  >
                     {{ formatDataStatus(record.data_status) }}
                   </span>
-                  <span v-if="record.primary_execution_rule_id" class="mini-tag mini-tag-green">
+                  <span
+                    v-if="record.primary_execution_rule_id"
+                    class="mini-tag mini-tag-green"
+                  >
                     主执行 {{ record.primary_execution_rule_id }}
                   </span>
                 </div>
-                <div v-if="record.mapped_rule_ids?.length" class="mapped-rules">
+                <div
+                  v-if="record.mapped_rule_ids?.length"
+                  class="mapped-rules"
+                >
                   映射规则：{{ record.mapped_rule_ids.join('、') }}
                 </div>
               </div>

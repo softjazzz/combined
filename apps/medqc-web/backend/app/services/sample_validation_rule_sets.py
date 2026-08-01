@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from .customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY, get_customer_luxian_rule_set
+from .luxian_0609_rule_catalog import (
+    LUXIAN_0609_RULE_SET_KEY as CATALOG_LUXIAN_0609_RULE_SET_KEY,
+    LUXIAN_0609_RULE_SET_NAME,
+    load_luxian_0609_rules,
+)
 from .qc_rule_sets import QCRuleSet, get_sichuan_rule_set
 
 
@@ -289,8 +294,35 @@ def get_sample_programmatic_rule_set() -> QCRuleSet:
     )
 
 
+@lru_cache(maxsize=1)
+def get_luxian_0609_sample_validation_rule_set() -> QCRuleSet:
+    """返回客户样本验证实际可执行的完整 LX0609 规则集。"""
+    if CATALOG_LUXIAN_0609_RULE_SET_KEY != LUXIAN_0609_QC_RULE_SET_KEY:
+        raise RuntimeError("LX0609 规则集 key 不一致")
+    rule_ids = tuple(
+        str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        for item in load_luxian_0609_rules()
+        if str(item.get("rule_id") or item.get("rule_code") or "").strip()
+    )
+    return QCRuleSet(
+        key=LUXIAN_0609_QC_RULE_SET_KEY,
+        name=LUXIAN_0609_RULE_SET_NAME,
+        version="2026-06-09",
+        scope="running",
+        rule_ids=rule_ids,
+        execution_strategy="fast_screen",
+        quality_profile="throughput_v1",
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.0,
+        batch_output_mode="minimal",
+        max_refine_candidates=0,
+        description="泸县0609客户质控点完整执行规则集。",
+    )
+
+
 def list_sample_validation_rule_sets() -> list[dict[str, Any]]:
-    luxian_rule_set = get_sichuan_rule_set(LUXIAN_0609_QC_RULE_SET_KEY)
+    luxian_rule_set = get_luxian_0609_sample_validation_rule_set()
     formal_rule_set = get_sichuan_rule_set(FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY)
     legacy_rule_set = get_customer_luxian_rule_set()
     programmatic_rule_set = get_sample_programmatic_rule_set()
@@ -384,9 +416,7 @@ def resolve_sample_validation_rule_set_by_key(rule_set_key: Any) -> dict[str, An
         raise ValueError("rule_set_key 不能为空")
 
     if normalized_key == LUXIAN_0609_QC_RULE_SET_KEY:
-        rule_set = get_sichuan_rule_set(normalized_key)
-        if not rule_set:
-            raise ValueError(f"未知规则集: {normalized_key}")
+        rule_set = get_luxian_0609_sample_validation_rule_set()
         return {"validation_mode": "customer", "rule_set": rule_set}
 
     if normalized_key == FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY:

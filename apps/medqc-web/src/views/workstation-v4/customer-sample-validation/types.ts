@@ -63,6 +63,8 @@ export type ManualSamplePoolRecord = {
   patient_age?: string | number
   mr_no: string
   department: string
+  hospitalization_status?: 'active' | 'discharged' | ''
+  discharge_time?: string
   match_status: string
   sync_status: string
   bundle_status: string
@@ -190,6 +192,51 @@ export type ManualSamplePoolRecordsResult = {
   page_size: number
 }
 
+export type HospitalizationScopeMode = 'active' | 'discharged' | 'active_and_discharged'
+export type SyncPhase =
+  | 'resolving'
+  | 'primary_sync'
+  | 'primary_visibility'
+  | 'primary_visible'
+  | 'detail_sync'
+  | 'bundle_refresh'
+  | 'completed'
+
+export type HospitalizationScopePayload = {
+  scope_mode: HospitalizationScopeMode
+  as_of_date: string
+  discharge_start_date?: string | null
+  discharge_end_date?: string | null
+  departments?: string[]
+}
+
+export type HospitalizationScopePreview = {
+  scope: {
+    mode: HospitalizationScopeMode
+    as_of_date: string
+    discharge_start_date?: string | null
+    discharge_end_date?: string | null
+    departments?: string[]
+  }
+  counts: {
+    active: number
+    discharged: number
+    deduplicated: number
+    existing_in_pool: number
+    new_to_pool: number
+  }
+  departments: Array<{
+    name: string
+    active_count: number
+    discharged_count: number
+    total_count: number
+    basis: string[]
+  }>
+  sources_used: string[]
+  source_status: 'ready' | 'degraded'
+  warnings: string[]
+}
+
 export type ManualSamplePoolSyncJob = {
   id: string
   pool_id: string
@@ -208,6 +255,9 @@ export type ManualSamplePoolSyncJob = {
     progress?: {
       step_key?: string
       step_label?: string
+      phase?: SyncPhase
+      primary_visible?: boolean
+      primary_completed_at?: string
       total_candidates?: number
       eligible_visits?: number
       record_progress?: {
@@ -243,6 +293,22 @@ export type ManualSamplePoolSyncJob = {
       filter?: {
         start_date?: string
         end_date?: string
+        departments?: string[]
+      }
+    }
+    hospitalization_scope?: {
+      matched_source_count?: number
+      new_count?: number
+      existing_count?: number
+      repaired_count?: number
+      failed_count?: number
+      source_status?: 'ready' | 'degraded'
+      warnings?: string[]
+      scope?: {
+        mode?: HospitalizationScopeMode
+        as_of_date?: string
+        discharge_start_date?: string | null
+        discharge_end_date?: string | null
         departments?: string[]
       }
     }
@@ -305,6 +371,21 @@ export type EditableMedicalRecordSection = {
   order_index?: number
 }
 
+export type EditableMedicalReportItem = {
+  item_no?: string
+  item_id?: string
+  item_code?: string
+  item_name?: string
+  result?: string
+  abnormal_indicator?: string
+  reference_range?: string
+  referencevalue_min?: string
+  referencevalue_max?: string
+  unit?: string
+  findings?: string
+  impression?: string
+}
+
 export type ManualTestRecordSourceMeta = {
   type: 'customer_source_editable_copy' | string
   source_pool_id?: string
@@ -324,6 +405,8 @@ export type EditableMedicalRecordDocument = ManualTestRecordDocument & {
   source_document_id?: string
   source_table?: string
   sections?: EditableMedicalRecordSection[]
+  report_items?: EditableMedicalReportItem[]
+  report_metadata?: Record<string, string>
   order_start_time?: string
   order_stop_time?: string
   order_category?: string

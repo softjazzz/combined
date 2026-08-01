@@ -55,6 +55,7 @@ _CUSTOMER_APPROVED_ADMISSION_TIME_BASES = frozenset(
     }
 )
 _FIRST_COURSE_BODY_FIELDS = (
+    "case_characteristic",
     "record_content",
     "content",
     "assembled_text",
@@ -99,6 +100,12 @@ _ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主
 _SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
 _AUTHORITATIVE_DATETIME_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$"
+)
+_INLINE_RESCUE_END_TIME_PATTERN = re.compile(
+    r"(?<![\w\u4e00-\u9fff])抢救结束时间\s*[:：]\s*(?P<value>"
+    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
+    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
+    r")"
 )
 
 
@@ -228,6 +235,29 @@ def _authoritative_time(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is None else None
 
 
+def _rescue_end_time(value: Any) -> datetime | None:
+    """兼容开始、结束时间写在同一行，同时拒绝“拟抢救结束时间”。"""
+
+    parsed = parse_luxian_0609_rescue_end_time(value)
+    if parsed is not None or not isinstance(value, str):
+        return parsed
+    match = _INLINE_RESCUE_END_TIME_PATTERN.search(value)
+    if match is None:
+        return None
+    normalized = match.group("value").strip()
+    for date_format in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y年%m月%d日 %H:%M:%S",
+        "%Y年%m月%d日 %H:%M",
+    ):
+        try:
+            return datetime.strptime(normalized, date_format)
+        except ValueError:
+            continue
+    return None
+
+
 def _authoritative_date(value: Any) -> date | None:
     """仅接受权威日期字段整值；日期不能伪装成精确入院时刻。"""
 
@@ -269,6 +299,7 @@ def _typed_basic_decisions(
     rule_ids: tuple[str, ...],
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] | None = None,
 ) -> tuple[RuleDecision, ...]:
     """001/005/006 共用一次入院锚点，只做权威字段时间计算。"""
 
@@ -449,18 +480,28 @@ def _typed_basic_decisions(
             discharge_issue = ("snapshot_mismatch", True)
             discharge_rows = ()
 
-    admission_record_times = tuple(
+    # 001 的合规解释必须能回到实际被选中的入院记录。时间计算仍只使用
+    # 权威 record time；这里额外保留同一行的内部文书 ID，供安全聚合层生成
+    # 不可逆引用。没有可靠 ID 时只展示时间事实，不猜测文书。
+    admission_record_events = tuple(
         sorted(
-            parsed
-            for row in admission_rows
-            if (
-                parsed := _authoritative_time(
-                    authoritative_document_time_value(row)
+            (
+                (
+                    parsed,
+                    str(row.get("document_id") or "").strip() or None,
                 )
-            )
-            is not None
+                for row in admission_rows
+                if (
+                    parsed := _authoritative_time(
+                        authoritative_document_time_value(row)
+                    )
+                )
+                is not None
+            ),
+            key=lambda item: (item[0], item[1] or ""),
         )
     )
+    admission_record_times = tuple(event[0] for event in admission_record_events)
     admission_record_admission_times = tuple(
         sorted(
             parsed
@@ -544,6 +585,58 @@ def _typed_basic_decisions(
             applicability=ApplicabilityState.NOT_APPLICABLE,
         )
 
+    def add_customer_fact(rule_id: str, facts: Mapping[str, Any]) -> None:
+        """仅保留时限解释需要的标量事实；原始文书仍留在证据材料仓。"""
+
+        if customer_display_facts is not None:
+            customer_display_facts.append((rule_id, dict(facts)))
+
+    def format_time(value: datetime | None) -> str:
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value is not None else ""
+
+    def timeliness_fact(
+        *,
+        rule_id: str,
+        target_document: str,
+        source_label: str,
+        state: str,
+        threshold_hours: int,
+        anchor: datetime | None,
+        anchor_date: date | None = None,
+        observed: datetime | None = None,
+        source_document_id: str | None = None,
+        failure_kind: str = "timeliness_requirement_not_met",
+    ) -> dict[str, Any]:
+        facts: dict[str, Any] = {
+            "failure_kind": failure_kind,
+            "target_document": target_document,
+            "source_label": source_label,
+            "timeliness_state": state,
+            "threshold_hours": threshold_hours,
+        }
+        if anchor is not None:
+            facts["anchor_time"] = format_time(anchor)
+        elif anchor_date is not None:
+            facts["anchor_date"] = anchor_date.isoformat()
+        if observed is not None:
+            facts["observed_time"] = format_time(observed)
+        if anchor is not None and observed is not None:
+            elapsed_hours = (observed - anchor).total_seconds() / 3600
+            facts["elapsed_hours"] = round(elapsed_hours, 2)
+            if (
+                rule_id == "LX0609-002"
+                and state == "late"
+                and elapsed_hours > threshold_hours
+            ):
+                facts["overdue_hours"] = round(
+                    elapsed_hours - threshold_hours,
+                    2,
+                )
+        if source_document_id:
+            # 仅供聚合层生成不可逆文书引用；安全投影不得回传该内部 ID。
+            facts["source_document_id"] = source_document_id
+        return facts
+
     decisions: list[RuleDecision] = []
     for rule_id in rule_ids:
         if rule_id == "LX0609-002":
@@ -574,19 +667,26 @@ def _typed_basic_decisions(
             if not first_course_rows:
                 decisions.append(gap(rule_id, "source_readiness_unproven"))
                 continue
-            complete_times: list[datetime] = []
+            complete_events: list[tuple[datetime, str | None]] = []
             incomplete = False
             for row in first_course_rows:
                 record_time = _authoritative_time(
                     authoritative_document_time_value(row)
                 )
-                substantive = _is_substantive_first_course_text(
-                    row.get("record_content")
+                substantive = any(
+                    _is_substantive_first_course_text(row.get(field))
+                    for field in _FIRST_COURSE_BODY_FIELDS
                 )
                 if record_time is None or not substantive:
                     incomplete = True
                 else:
-                    complete_times.append(record_time)
+                    complete_events.append(
+                        (
+                            record_time,
+                            str(row.get("document_id") or "").strip() or None,
+                        )
+                    )
+            complete_times = [value for value, _document_id in complete_events]
             deltas = sorted(value - anchor for value in complete_times)
             if any(timedelta(0) <= delta <= timedelta(hours=8) for delta in deltas):
                 decisions.append(
@@ -595,6 +695,28 @@ def _typed_basic_decisions(
                         QcDirection.SATISFIED,
                         "requirement_within_threshold",
                     )
+                )
+                observed, source_document_id = min(
+                    (
+                        item
+                        for item in complete_events
+                        if timedelta(0) <= item[0] - anchor <= timedelta(hours=8)
+                    ),
+                    key=lambda item: item[0],
+                )
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="first_course_record",
+                        source_label="首次病程记录",
+                        state="within",
+                        threshold_hours=8,
+                        anchor=anchor,
+                        observed=observed,
+                        source_document_id=source_document_id,
+                        failure_kind="timeliness_requirement_satisfied",
+                    ),
                 )
             elif incomplete:
                 decisions.append(gap(rule_id, "required_field_missing"))
@@ -609,8 +731,21 @@ def _typed_basic_decisions(
                     )
                 )
             elif deltas:
-                decisions.append(
-                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+                decision = conclusive(
+                    rule_id, QcDirection.DEFECT, "threshold_exceeded"
+                )
+                decisions.append(decision)
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="first_course_record",
+                        source_label="首次病程记录",
+                        state="late",
+                        threshold_hours=8,
+                        anchor=anchor,
+                        observed=min(complete_times),
+                    ),
                 )
             else:
                 decisions.append(gap(rule_id, "required_field_missing"))
@@ -638,13 +773,11 @@ def _typed_basic_decisions(
             if not rescue_rows:
                 decisions.append(not_applicable(rule_id, "trigger_absent_complete"))
                 continue
-            rescue_deltas: list[timedelta] = []
+            rescue_timeline: list[tuple[timedelta, datetime, datetime, str]] = []
             incomplete = False
             for row in rescue_rows:
                 record_time = _authoritative_time(row.get("record_time"))
-                rescue_end = parse_luxian_0609_rescue_end_time(
-                    row.get("record_content")
-                )
+                rescue_end = _rescue_end_time(row.get("record_content"))
                 if record_time is None or rescue_end is None:
                     incomplete = True
                     continue
@@ -652,20 +785,67 @@ def _typed_basic_decisions(
                 if delta < timedelta(0):
                     incomplete = True
                 else:
-                    rescue_deltas.append(delta)
-            if any(delta > timedelta(hours=6) for delta in rescue_deltas):
+                    rescue_timeline.append(
+                        (
+                            delta,
+                            rescue_end,
+                            record_time,
+                            str(row.get("document_id") or "").strip(),
+                        )
+                    )
+            overdue = next(
+                (
+                    item
+                    for item in sorted(rescue_timeline, key=lambda item: item[0])
+                    if item[0] > timedelta(hours=6)
+                ),
+                None,
+            )
+            if overdue is not None:
+                _delta, rescue_end, record_time, document_id = overdue
                 decisions.append(
                     conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
                 )
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="rescue_record",
+                        source_label="抢救记录",
+                        state="late",
+                        threshold_hours=6,
+                        anchor=rescue_end,
+                        observed=record_time,
+                        source_document_id=document_id or None,
+                    ),
+                )
             elif incomplete:
                 decisions.append(gap(rule_id, "required_field_missing"))
-            elif rescue_deltas:
+            elif rescue_timeline:
                 decisions.append(
                     conclusive(
                         rule_id,
                         QcDirection.SATISFIED,
                         "requirement_within_threshold",
                     )
+                )
+                _delta, rescue_end, record_time, document_id = max(
+                    rescue_timeline,
+                    key=lambda item: item[0],
+                )
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="rescue_record",
+                        source_label="抢救记录",
+                        state="within",
+                        threshold_hours=6,
+                        anchor=rescue_end,
+                        observed=record_time,
+                        source_document_id=document_id or None,
+                        failure_kind="timeliness_requirement_satisfied",
+                    ),
                 )
             else:
                 decisions.append(gap(rule_id, "required_field_missing"))
@@ -677,12 +857,22 @@ def _typed_basic_decisions(
                 decisions.append(gap(rule_id, reason, technical=technical))
                 continue
             if not admission_rows:
-                decisions.append(
-                    conclusive(
-                        rule_id,
-                        QcDirection.DEFECT,
-                        "required_document_missing",
-                    )
+                decision = conclusive(
+                    rule_id,
+                    QcDirection.DEFECT,
+                    "required_document_missing",
+                )
+                decisions.append(decision)
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="admission_record",
+                        source_label="入院记录",
+                        state="missing",
+                        threshold_hours=24,
+                        anchor=None,
+                    ),
                 )
                 continue
             if not admission_record_times:
@@ -724,19 +914,46 @@ def _typed_basic_decisions(
                 )
             elif delta_state == "within":
                 decisions.append(
-                    conclusive(
-                        rule_id,
-                        QcDirection.SATISFIED,
-                        "requirement_within_threshold",
-                    )
+                    conclusive(rule_id, QcDirection.SATISFIED, "requirement_within_threshold")
+                )
+                observed, source_document_id = admission_record_events[0]
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="admission_record",
+                        source_label="入院记录",
+                        state="within",
+                        threshold_hours=24,
+                        anchor=anchor,
+                        anchor_date=anchor_date,
+                        observed=observed,
+                        source_document_id=source_document_id,
+                        failure_kind="timeliness_requirement_satisfied",
+                    ),
                 )
             elif len(admission_record_times) < len(admission_rows):
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
             elif delta_state == "ambiguous":
                 decisions.append(gap(rule_id, "authoritative_time_missing"))
             else:
-                decisions.append(
-                    conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+                decision = conclusive(
+                    rule_id, QcDirection.DEFECT, "threshold_exceeded"
+                )
+                decisions.append(decision)
+                add_customer_fact(
+                    rule_id,
+                    timeliness_fact(
+                        rule_id=rule_id,
+                        target_document="admission_record",
+                        source_label="入院记录",
+                        state="late",
+                        threshold_hours=24,
+                        anchor=anchor,
+                        anchor_date=anchor_date,
+                        observed=admission_record_events[0][0],
+                        source_document_id=admission_record_events[0][1],
+                    ),
                 )
             continue
 
@@ -765,12 +982,13 @@ def _typed_basic_decisions(
 
         def qualifies(title: str) -> bool:
             if rule_id == "LX0609-005":
-                return not any(marker in title for marker in _SENIOR_MARKERS) and any(
-                    marker in title for marker in _ATTENDING_MARKERS
+                return any(
+                    marker in title
+                    for marker in (*_ATTENDING_MARKERS, *_SENIOR_MARKERS)
                 )
             return any(marker in title for marker in _SENIOR_MARKERS)
 
-        qualifying_times: list[datetime] = []
+        qualifying_events: list[tuple[datetime, str | None]] = []
         qualifying_missing_time = False
         ambiguous_round = False
         for row in course_rows:
@@ -782,7 +1000,8 @@ def _typed_basic_decisions(
                 if parsed is None:
                     qualifying_missing_time = True
                 else:
-                    qualifying_times.append(parsed)
+                    document_id = str(row.get("document_id") or "").strip() or None
+                    qualifying_events.append((parsed, document_id))
             elif not title or (
                 "查房" in title
                 and not any(
@@ -793,6 +1012,7 @@ def _typed_basic_decisions(
                 ambiguous_round = True
 
         threshold = timedelta(hours=48 if rule_id == "LX0609-005" else 72)
+        qualifying_times = tuple(value for value, _document_id in qualifying_events)
         if anchor is not None:
             elapsed_states = tuple(
                 "before"
@@ -818,6 +1038,37 @@ def _typed_basic_decisions(
                     "requirement_within_threshold",
                 )
             )
+            observed, source_document_id = min(
+                (
+                    event
+                    for event, state in zip(qualifying_events, elapsed_states)
+                    if state == "within"
+                ),
+                key=lambda item: item[0],
+            )
+            add_customer_fact(
+                rule_id,
+                timeliness_fact(
+                    rule_id=rule_id,
+                    target_document=(
+                        "attending_course_record"
+                        if rule_id == "LX0609-005"
+                        else "senior_course_record"
+                    ),
+                    source_label=(
+                        "主治医师及以上首次查房记录"
+                        if rule_id == "LX0609-005"
+                        else "副主任医师或主任医师首次查房记录"
+                    ),
+                    state="within",
+                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    anchor=anchor,
+                    anchor_date=anchor_date,
+                    observed=observed,
+                    source_document_id=source_document_id,
+                    failure_kind="timeliness_requirement_satisfied",
+                ),
+            )
         elif qualifying_missing_time:
             decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif course_issue is not None:
@@ -836,18 +1087,64 @@ def _typed_basic_decisions(
         elif "ambiguous" in elapsed_states:
             decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif elapsed_states:
-            decisions.append(
-                conclusive(rule_id, QcDirection.DEFECT, "threshold_exceeded")
+            observed = min(
+                value
+                for value, state in zip(qualifying_times, elapsed_states)
+                if state == "over"
+            )
+            decision = conclusive(
+                rule_id, QcDirection.DEFECT, "threshold_exceeded"
+            )
+            decisions.append(decision)
+            add_customer_fact(
+                rule_id,
+                timeliness_fact(
+                    rule_id=rule_id,
+                    target_document=(
+                        "attending_course_record"
+                        if rule_id == "LX0609-005"
+                        else "senior_course_record"
+                    ),
+                    source_label=(
+                        "主治医师及以上首次查房记录"
+                        if rule_id == "LX0609-005"
+                        else "副主任医师或主任医师首次查房记录"
+                    ),
+                    state="late",
+                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    anchor=anchor,
+                    anchor_date=anchor_date,
+                    observed=observed,
+                ),
             )
         elif ambiguous_round:
             decisions.append(gap(rule_id, "required_field_missing"))
         else:
-            decisions.append(
-                conclusive(
-                    rule_id,
-                    QcDirection.DEFECT,
-                    "required_document_missing",
-                )
+            decision = conclusive(
+                rule_id,
+                QcDirection.DEFECT,
+                "required_document_missing",
+            )
+            decisions.append(decision)
+            add_customer_fact(
+                rule_id,
+                timeliness_fact(
+                    rule_id=rule_id,
+                    target_document=(
+                        "attending_course_record"
+                        if rule_id == "LX0609-005"
+                        else "senior_course_record"
+                    ),
+                    source_label=(
+                        "主治医师及以上首次查房记录"
+                        if rule_id == "LX0609-005"
+                        else "副主任医师或主任医师首次查房记录"
+                    ),
+                    state="missing",
+                    threshold_hours=48 if rule_id == "LX0609-005" else 72,
+                    anchor=anchor,
+                    anchor_date=anchor_date,
+                ),
             )
     return tuple(decisions)
 
@@ -896,11 +1193,13 @@ def execute_luxian_0609_native_basic_timeliness(
     try:
         selected_set = set(selected)
         typed_set = set(typed_selected)
+        typed_customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
         decisions = (
             _typed_basic_decisions(
                 rule_ids=typed_selected,
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
+                customer_display_facts=typed_customer_display_facts,
             )
             if typed_selected
             and evidence_snapshot is not None
@@ -1036,4 +1335,5 @@ def execute_luxian_0609_native_basic_timeliness(
         results=tuple(results),
         planned_rule_ids=selected,
         decisions=decisions,
+        customer_display_facts=tuple(typed_customer_display_facts),
     )

@@ -178,7 +178,9 @@ describe('SingleRecordQcResultPanel', () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
 
     expect(wrapper.find('[data-testid="single-record-result-toolbar"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="single-record-result-summary"]').text()).toContain('3 条结果')
+    expect(wrapper.get('[data-testid="single-record-result-summary"]').text()).toContain(
+      '3 个质控点 · 已执行 3',
+    )
     const rows = wrapper.findAll('[data-testid="single-record-result-row"]')
     expect(rows).toHaveLength(3)
     expect(rows[0]!.get('[data-testid="single-record-result-row-header"]').text()).toContain(
@@ -195,6 +197,26 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('待处理')
     expect(wrapper.text()).toContain('不适用')
     expect(wrapper.text()).toContain('合规')
+  })
+
+  it('占位结果单独计为未执行，不把质控点总数冒充执行完成数', () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          ...items,
+          {
+            rule_id: 'LX0609-051',
+            rule_name: '死亡病历讨论记录',
+            status: 'not_executed',
+            conclusion: '本次未执行',
+          },
+        ],
+      },
+    })
+
+    expect(wrapper.get('[data-testid="single-record-result-summary"]').text()).toBe(
+      '4 个质控点 · 已执行 3 · 未执行 1',
+    )
   })
 
   it('按唯一状态分组筛选，所有Tab数量之和等于全部且不影响展开与定位', async () => {

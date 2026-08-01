@@ -10,8 +10,12 @@
     <template #title>
       <div class="qc-agent-drawer__title">
         <div>
-          <div class="qc-agent-drawer__heading">质控助手</div>
-          <div class="qc-agent-drawer__subtitle">单病历只读分析，支持质控、编码、入组模拟</div>
+          <div class="qc-agent-drawer__heading">
+            质控助手
+          </div>
+          <div class="qc-agent-drawer__subtitle">
+            单病历只读分析，支持质控、编码、入组模拟
+          </div>
         </div>
         <SafetyCertificateOutlined class="qc-agent-drawer__title-icon" />
         <span class="qc-agent-drawer__safe">只读模式</span>
@@ -21,7 +25,9 @@
     <div class="qc-agent-panel">
       <section class="qc-agent-context">
         <div class="qc-agent-context__main">
-          <div class="qc-agent-context__label">当前上下文</div>
+          <div class="qc-agent-context__label">
+            当前上下文
+          </div>
           <div class="qc-agent-context__value">
             {{ contextSummary }}
           </div>
@@ -42,11 +48,19 @@
         </div>
       </section>
 
-      <section v-if="showSqlbotPanel" class="qc-agent-sqlbot" data-testid="qc-agent-sqlbot-panel">
+      <section
+        v-if="showSqlbotPanel"
+        class="qc-agent-sqlbot"
+        data-testid="qc-agent-sqlbot-panel"
+      >
         <div class="qc-agent-sqlbot__head">
           <div>
-            <div class="qc-agent-sqlbot__eyebrow">SQLBot 问数</div>
-            <div class="qc-agent-sqlbot__title">病案数据分析入口</div>
+            <div class="qc-agent-sqlbot__eyebrow">
+              SQLBot 问数
+            </div>
+            <div class="qc-agent-sqlbot__title">
+              病案数据分析入口
+            </div>
           </div>
           <div class="qc-agent-sqlbot__actions">
             <span
@@ -67,30 +81,43 @@
             </button>
           </div>
         </div>
-        <div v-if="sqlbotLoading" class="qc-agent-sqlbot__placeholder">正在读取 SQLBot 配置...</div>
+        <div
+          v-if="sqlbotLoading"
+          class="qc-agent-sqlbot__placeholder"
+        >
+          正在读取 SQLBot 配置...
+        </div>
         <iframe
           v-else-if="sqlbotEnabled && sqlbotConfig?.embed_url"
           class="qc-agent-sqlbot__iframe"
           :src="sqlbotConfig.embed_url"
           title="SQLBot 问数"
         />
-        <div v-else class="qc-agent-sqlbot__placeholder">
+        <div
+          v-else
+          class="qc-agent-sqlbot__placeholder"
+        >
           <strong>SQLBot 未配置</strong>
           <span>{{ sqlbotConfig?.message || sqlbotError || sqlbotFallbackMessage }}</span>
-          <small
-            >配置完成后，这里会以独立嵌入面板打开问数能力；现有质控、编码和入组流程不受影响。</small
-          >
+          <small>配置完成后，这里会以独立嵌入面板打开问数能力；现有质控、编码和入组流程不受影响。</small>
         </div>
       </section>
 
-      <section class="qc-agent-workspace" data-testid="qc-agent-chat-messages">
+      <section
+        class="qc-agent-workspace"
+        data-testid="qc-agent-chat-messages"
+      >
         <div
           v-if="!hasMessages"
           class="qc-agent-message qc-agent-message--assistant qc-agent-message--welcome"
         >
-          <div class="qc-agent-message__avatar">AI</div>
+          <div class="qc-agent-message__avatar">
+            AI
+          </div>
           <div class="qc-agent-message__bubble">
-            <div class="qc-agent-welcome__title">我可以帮你做单病历只读分析。</div>
+            <div class="qc-agent-welcome__title">
+              我可以帮你做单病历只读分析。
+            </div>
             <div class="qc-agent-welcome__desc">
               你可以直接输入质控、编码或入组请求，系统会调用受控工具并返回结构化结果。
             </div>
@@ -113,7 +140,10 @@
           :key="message.id"
           :class="['qc-agent-message', `qc-agent-message--${message.role}`]"
         >
-          <div v-if="message.role !== 'user'" class="qc-agent-message__avatar">
+          <div
+            v-if="message.role !== 'user'"
+            class="qc-agent-message__avatar"
+          >
             {{ message.role === 'system' ? '!' : 'AI' }}
           </div>
           <div class="qc-agent-message__bubble">
@@ -144,7 +174,10 @@
         </article>
       </section>
 
-      <section v-if="error" class="qc-agent-error">
+      <section
+        v-if="error"
+        class="qc-agent-error"
+      >
         {{ error }}
       </section>
 

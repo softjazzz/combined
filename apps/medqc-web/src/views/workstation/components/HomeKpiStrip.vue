@@ -38,7 +38,11 @@
           class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
           :class="card.iconTint"
         >
-          <component :is="card.icon" class="text-[16px]" :class="card.iconColor" />
+          <component
+            :is="card.icon"
+            class="text-[16px]"
+            :class="card.iconColor"
+          />
         </div>
       </div>
     </button>

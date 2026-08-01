@@ -36,6 +36,9 @@ class SurgeryTextProjection:
     # 联合规则提取时，033 必须能验证其事实至少引用手术知情同意书；
     # 只保存安全文书引用到来源类型的映射，不携带正文或三坐标。
     document_source_keys: Mapping[str, str] = field(default_factory=dict)
+    # 仅供服务端把已验证的临时 Sxx 引用绑定回实际文书；绝不进入提示词、
+    # 客户展示事实或 repr。客户接口会将它转换为不可逆 source_ref。
+    document_source_ids: Mapping[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (
@@ -216,6 +219,7 @@ def build_surgery_text_projection(
     parts: list[str] = []
     refs: set[str] = set()
     source_keys_by_ref: dict[str, str] = {}
+    source_ids_by_ref: dict[str, str] = {}
     times: dict[str, SurgeryTimeCandidate] = {}
     time_index = 0
     for source_position, source_key in enumerate(source_order, start=1):
@@ -235,6 +239,9 @@ def build_surgery_text_projection(
             doc_ref = f"S{source_position:02d}-{row_index:02d}"
             refs.add(doc_ref)
             source_keys_by_ref[doc_ref] = source_key
+            source_document_id = _clean(row.get("document_id") or row.get("id"))
+            if source_document_id:
+                source_ids_by_ref[doc_ref] = source_document_id
             raw_times: list[tuple[Any, str]] = [
                 (row.get(field), field)
                 for field in (
@@ -277,6 +284,7 @@ def build_surgery_text_projection(
         dict(times),
         frozenset(refs),
         source_keys_by_ref,
+        source_ids_by_ref,
     )
 
 

@@ -3,11 +3,17 @@
     <div class="mx-auto flex max-w-[1600px] flex-col gap-4">
       <header class="page-header">
         <div class="header-title">
-          <button type="button" class="back-button" @click="$router.back()">
+          <button
+            type="button"
+            class="back-button"
+            @click="$router.back()"
+          >
             <ArrowLeftOutlined />
           </button>
           <div>
-            <div class="breadcrumb">工作台 / 事中监控</div>
+            <div class="breadcrumb">
+              工作台 / 事中监控
+            </div>
             <h2>事中监控</h2>
             <p>跟踪在院病例费用消耗、分组变化和干预优先级。</p>
           </div>
@@ -16,36 +22,55 @@
         <div class="header-actions">
           <span class="filter-chip">近 7 日</span>
           <span class="filter-chip">全部科室</span>
-          <span class="filter-chip threshold-chip"
-            >阈值 {{ stats.control_threshold.toFixed(2) }}</span
-          >
+          <span class="filter-chip threshold-chip">阈值 {{ stats.control_threshold.toFixed(2) }}</span>
           <span :class="dataModeClass">
             {{ dataModeLabel }}
           </span>
-          <button type="button" class="secondary-button" :disabled="loading" @click="loadData">
-            <LoadingOutlined v-if="loading" class="animate-spin" />
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="loading"
+            @click="loadData"
+          >
+            <LoadingOutlined
+              v-if="loading"
+              class="animate-spin"
+            />
             <span v-else>刷新</span>
           </button>
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
-                <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
-                <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
+                <a-menu-item key="excel">
+                  <FileExcelOutlined /> 导出 Excel
+                </a-menu-item>
+                <a-menu-item key="pdf">
+                  <FilePdfOutlined /> 导出 PDF
+                </a-menu-item>
+                <a-menu-item key="word">
+                  <FileWordOutlined /> 导出 Word
+                </a-menu-item>
               </a-menu>
             </template>
-            <button class="primary-button"><DownloadOutlined /> 导出</button>
+            <button class="primary-button">
+              <DownloadOutlined /> 导出
+            </button>
           </a-dropdown>
         </div>
       </header>
 
-      <DatasetUploadPanel class="dataset-upload-surface" @data-changed="handleDatasetChanged" />
+      <DatasetUploadPanel
+        class="dataset-upload-surface"
+        @data-changed="handleDatasetChanged"
+      />
 
       <section class="kpi-strip">
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--blue"><InfoCircleOutlined /></span>
           <div>
-            <div class="kpi-label">监测病例</div>
+            <div class="kpi-label">
+              监测病例
+            </div>
             <div class="kpi-value">
               {{ stats.total_alerts }}
             </div>
@@ -56,7 +81,9 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--red"><CloseCircleOutlined /></span>
           <div>
-            <div class="kpi-label">重点预警</div>
+            <div class="kpi-label">
+              重点预警
+            </div>
             <div class="kpi-value">
               {{ stats.severe_alerts }}
             </div>
@@ -67,7 +94,9 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--amber"><WarningOutlined /></span>
           <div>
-            <div class="kpi-label">待处理建议</div>
+            <div class="kpi-label">
+              待处理建议
+            </div>
             <div class="kpi-value">
               {{ stats.pending_suggestions }}
             </div>
@@ -78,7 +107,9 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--green"><RiseOutlined /></span>
           <div>
-            <div class="kpi-label">今日干预</div>
+            <div class="kpi-label">
+              今日干预
+            </div>
             <div class="kpi-value">
               {{ stats.today_new }}
             </div>
@@ -95,10 +126,20 @@
               <p>{{ mockScopeNote }}</p>
             </div>
             <div class="panel-tools">
-              <a-select v-model:value="filterType" class="status-select" size="small">
-                <a-select-option value="all"> 全部病例 </a-select-option>
-                <a-select-option value="warning"> 仅看预警 </a-select-option>
-                <a-select-option value="normal"> 仅看正常 </a-select-option>
+              <a-select
+                v-model:value="filterType"
+                class="status-select"
+                size="small"
+              >
+                <a-select-option value="all">
+                  全部病例
+                </a-select-option>
+                <a-select-option value="warning">
+                  仅看预警
+                </a-select-option>
+                <a-select-option value="normal">
+                  仅看正常
+                </a-select-option>
               </a-select>
             </div>
           </div>
@@ -108,7 +149,10 @@
             <span>消耗比均值</span>
             <span>阈值 {{ stats.control_threshold.toFixed(2) }}</span>
           </div>
-          <div ref="cmiChartRef" class="trend-chart" />
+          <div
+            ref="cmiChartRef"
+            class="trend-chart"
+          />
 
           <div class="case-list">
             <table>
@@ -123,7 +167,10 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredAlerts" :key="item.id">
+                <tr
+                  v-for="item in filteredAlerts"
+                  :key="item.id"
+                >
                   <td>
                     <div class="patient-cell">
                       <strong>{{ item.diagnosis }}</strong>
@@ -145,12 +192,19 @@
                     <span class="reason-text">{{ item.control_tip }}</span>
                   </td>
                   <td>
-                    <span :class="levelClass(item.monitor_level)" class="status-pill">
+                    <span
+                      :class="levelClass(item.monitor_level)"
+                      class="status-pill"
+                    >
                       {{ levelLabel(item.monitor_level) }}
                     </span>
                   </td>
                   <td>
-                    <button type="button" class="link-button" @click="openDetail(item)">
+                    <button
+                      type="button"
+                      class="link-button"
+                      @click="openDetail(item)"
+                    >
                       查看建议
                     </button>
                   </td>
@@ -166,7 +220,11 @@
               <h3>干预优先级</h3>
               <p>按费用比和监测等级排序处理</p>
             </div>
-            <button type="button" class="text-link" @click="filterType = 'warning'">
+            <button
+              type="button"
+              class="text-link"
+              @click="filterType = 'warning'"
+            >
               查看全部
             </button>
           </div>
@@ -179,7 +237,10 @@
               class="priority-row"
               @click="openDetail(item)"
             >
-              <span class="rank" :class="index < 3 ? 'rank--hot' : ''">
+              <span
+                class="rank"
+                :class="index < 3 ? 'rank--hot' : ''"
+              >
                 {{ index + 1 }}
               </span>
               <span class="priority-main">
@@ -194,8 +255,15 @@
           </div>
 
           <div class="suggestion-block">
-            <div v-for="tip in controlTips" :key="tip.title" class="suggestion-row">
-              <span class="suggestion-dot" :class="`suggestion-dot--${tip.level}`" />
+            <div
+              v-for="tip in controlTips"
+              :key="tip.title"
+              class="suggestion-row"
+            >
+              <span
+                class="suggestion-dot"
+                :class="`suggestion-dot--${tip.level}`"
+              />
               <div>
                 <strong>{{ tip.title }}</strong>
                 <p>{{ tip.suggestion }}</p>
@@ -214,7 +282,10 @@
             </div>
             <span class="panel-meta">模拟分组 {{ stats.simulated_groups }} 组</span>
           </div>
-          <div ref="costChartRef" class="cost-chart" />
+          <div
+            ref="costChartRef"
+            class="cost-chart"
+          />
         </div>
 
         <div class="panel">
@@ -263,7 +334,12 @@
       </section>
     </div>
 
-    <a-modal v-model:open="detailOpen" title="模拟分组详情" :footer="null" width="760px">
+    <a-modal
+      v-model:open="detailOpen"
+      title="模拟分组详情"
+      :footer="null"
+      width="760px"
+    >
       <template v-if="selectedAlert">
         <a-alert
           :type="
@@ -278,7 +354,11 @@
           class="mb-4"
         />
 
-        <a-descriptions bordered size="small" :column="2">
+        <a-descriptions
+          bordered
+          size="small"
+          :column="2"
+        >
           <a-descriptions-item label="病例号">
             {{ selectedAlert.case_no }}
           </a-descriptions-item>
@@ -303,7 +383,9 @@
           <a-descriptions-item label="费用比">
             {{ formatRatio(selectedAlert.ratio) }}
           </a-descriptions-item>
-          <a-descriptions-item label="住院天数"> {{ selectedAlert.los }} 天 </a-descriptions-item>
+          <a-descriptions-item label="住院天数">
+            {{ selectedAlert.los }} 天
+          </a-descriptions-item>
           <a-descriptions-item label="监测等级">
             {{ levelLabel(selectedAlert.monitor_level) }}
           </a-descriptions-item>

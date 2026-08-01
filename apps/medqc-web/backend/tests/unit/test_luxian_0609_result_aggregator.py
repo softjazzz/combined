@@ -983,6 +983,24 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
             },
             [{"source_type": "mr_surgery", "source_document_id": "private-surgery-document-id"}],
         ),
+        (
+            "LX0609-005",
+            {
+                "failure_kind": "timeliness_requirement_satisfied",
+                "target_document": "attending_course_record",
+                "source_label": "主治医师及以上首次查房记录",
+                "timeliness_state": "within",
+                "threshold_hours": 48,
+                "anchor_time": "2026-07-07 13:55:30",
+                "observed_time": "2026-07-07 15:10:30",
+                "elapsed_hours": 1.25,
+                "source_document_id": "private-senior-course-document-id",
+            },
+            [{
+                "source_type": "senior_course_record",
+                "source_document_id": "private-senior-course-document-id",
+            }],
+        ),
     ],
 )
 def test_native_display_facts_create_only_whitelisted_internal_evidence_refs(
@@ -1094,13 +1112,13 @@ def test_transfusion_native_result_preserves_only_safe_explanation_facts():
         wrapper_rules=[{"rule_id": "LX0609-048", "name": "术中输血记录"}],
         execution_results=[{
             "rule_id": "LX0609-048",
-            "status": "non_compliant",
+            "status": "data_gap",
             "metadata": {
                 "execution_source": "lx0609_native",
                 "customer_display_facts": {
-                    "failure_kind": "transfusion_requirement_not_documented",
-                    "requirement": "postop_first_course_transfusion",
-                    "checked_sources": ["surgery_record", "postsurg_firstcourse_record"],
+                    "failure_kind": "system_data_contract_gap",
+                    "system_gap_reason": "transfusion_comparison_fields_unavailable",
+                    "gap_owner": "system_integration",
                     "private_text": "PRIVATE_TRANSFUSION_TEXT",
                 },
             },
@@ -1108,9 +1126,9 @@ def test_transfusion_native_result_preserves_only_safe_explanation_facts():
     )[0]
 
     assert result["customer_display_facts"] == {
-        "failure_kind": "transfusion_requirement_not_documented",
-        "requirement": "postop_first_course_transfusion",
-        "checked_sources": ["surgery_record", "postsurg_firstcourse_record"],
+        "failure_kind": "system_data_contract_gap",
+        "system_gap_reason": "transfusion_comparison_fields_unavailable",
+        "gap_owner": "system_integration",
     }
     assert "PRIVATE_TRANSFUSION_TEXT" not in repr(result)
 

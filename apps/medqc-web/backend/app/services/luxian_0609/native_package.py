@@ -45,6 +45,10 @@ from .native_surgery_document_execution import (
     SURGERY_DOCUMENT_RULE_IDS,
 )
 from .native_mdt_execution import RULE_ID as NATIVE_ASYNC_RULE_ID
+from .native_extended_document_execution import (
+    EXECUTOR_KEY as EXTENDED_DOCUMENT_EXECUTOR_KEY,
+    EXTENDED_DOCUMENT_RULE_IDS,
+)
 
 
 EXECUTION_MODE_NATIVE_SYNC = "native_sync"
@@ -205,6 +209,9 @@ def build_luxian_0609_dependency_inventory(
         elif rule_id in SURGERY_DOCUMENT_RULE_IDS:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = SURGERY_DOCUMENT_EXECUTOR_KEY
+        elif rule_id in EXTENDED_DOCUMENT_RULE_IDS:
+            execution_mode = EXECUTION_MODE_NATIVE_ASYNC
+            executor_key = EXTENDED_DOCUMENT_EXECUTOR_KEY
         elif rule_id == NATIVE_ASYNC_RULE_ID:
             execution_mode = EXECUTION_MODE_NATIVE_ASYNC
             executor_key = EXECUTOR_SURGERY_MDT

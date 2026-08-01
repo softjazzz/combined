@@ -21,7 +21,9 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="text-sm font-semibold text-slate-900">预置病历示例</div>
+            <div class="text-sm font-semibold text-slate-900">
+              预置病历示例
+            </div>
             <div class="mt-1 text-xs text-slate-600">
               从本机候选 visit_id 加载演示输入，虚拟费用仅参与本次草稿生成。
             </div>
@@ -83,9 +85,15 @@
         />
 
         <a-spin :spinning="previewLoading">
-          <div v-if="selectedPreset" class="mt-3 space-y-3" data-testid="preset-source-summary">
+          <div
+            v-if="selectedPreset"
+            class="mt-3 space-y-3"
+            data-testid="preset-source-summary"
+          >
             <div class="rounded border border-slate-200 bg-white p-3">
-              <div class="mb-2 text-xs font-semibold text-slate-700">病历来源摘要</div>
+              <div class="mb-2 text-xs font-semibold text-slate-700">
+                病历来源摘要
+              </div>
               <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 md:grid-cols-3">
                 <div>
                   <span class="text-slate-400">visit_id</span>
@@ -151,12 +159,14 @@
             </div>
 
             <a-collapse>
-              <a-collapse-panel key="preview" header="脱敏病历预览">
+              <a-collapse-panel
+                key="preview"
+                header="脱敏病历预览"
+              >
                 <pre
                   class="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs leading-5 text-slate-700"
                   data-testid="preset-text-preview"
-                  >{{ presetPreview?.text_preview || previewFallbackText }}</pre
-                >
+                >{{ presetPreview?.text_preview || previewFallbackText }}</pre>
               </a-collapse-panel>
             </a-collapse>
 
@@ -164,7 +174,9 @@
               class="rounded border border-amber-100 bg-amber-50 p-3"
               data-testid="preset-synthetic-settlement"
             >
-              <div class="mb-2 text-xs font-semibold text-amber-900">演示用医保费用补充</div>
+              <div class="mb-2 text-xs font-semibold text-amber-900">
+                演示用医保费用补充
+              </div>
               <pre class="m-0 whitespace-pre-wrap text-xs leading-5 text-amber-900">{{
                 selectedPreset.synthetic_settlement_text
               }}</pre>
@@ -175,10 +187,19 @@
 
       <a-form layout="vertical">
         <a-form-item label="场景选择">
-          <a-radio-group v-model:value="scene" button-style="solid">
-            <a-radio-button value="combined"> 联合草稿 </a-radio-button>
-            <a-radio-button value="nhc_frontpage"> 病案首页 </a-radio-button>
-            <a-radio-button value="insurance_settlement"> 医保结算清单 </a-radio-button>
+          <a-radio-group
+            v-model:value="scene"
+            button-style="solid"
+          >
+            <a-radio-button value="combined">
+              联合草稿
+            </a-radio-button>
+            <a-radio-button value="nhc_frontpage">
+              病案首页
+            </a-radio-button>
+            <a-radio-button value="insurance_settlement">
+              医保结算清单
+            </a-radio-button>
           </a-radio-group>
         </a-form-item>
 
@@ -206,15 +227,27 @@
         </a-form-item>
 
         <div class="flex items-center gap-2">
-          <a-button type="primary" :loading="validating" @click="startValidation">
+          <a-button
+            type="primary"
+            :loading="validating"
+            @click="startValidation"
+          >
             开始验证
           </a-button>
-          <a-button :disabled="validating" @click="clearValidation"> 清空 </a-button>
+          <a-button
+            :disabled="validating"
+            @click="clearValidation"
+          >
+            清空
+          </a-button>
         </div>
       </a-form>
 
       <a-spin :spinning="validating">
-        <div v-if="result" class="space-y-4">
+        <div
+          v-if="result"
+          class="space-y-4"
+        >
           <a-alert
             v-if="resultUsedSynthetic"
             type="warning"
@@ -267,7 +300,9 @@
             class="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 px-3 py-2"
           >
             <div>
-              <div class="text-sm font-semibold text-slate-900">格式化生成结果</div>
+              <div class="text-sm font-semibold text-slate-900">
+                格式化生成结果
+              </div>
               <div class="mt-0.5 text-xs text-slate-600">
                 使用现有病案首页和医保结算清单官方表格样式预览本次草稿。
               </div>
@@ -284,7 +319,9 @@
 
           <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div class="rounded border border-slate-200 bg-white p-3">
-              <div class="text-xs font-medium text-slate-500">文本抽取覆盖率</div>
+              <div class="text-xs font-medium text-slate-500">
+                文本抽取覆盖率
+              </div>
               <div class="mt-1 text-xl font-semibold text-slate-900">
                 {{ textExtractionLabel }}
               </div>
@@ -293,25 +330,41 @@
               </div>
             </div>
             <div class="rounded border border-slate-200 bg-white p-3">
-              <div class="text-xs font-medium text-slate-500">结算草稿映射</div>
+              <div class="text-xs font-medium text-slate-500">
+                结算草稿映射
+              </div>
               <div class="mt-1 text-xl font-semibold text-slate-900">
                 {{ settlementLabel }}
               </div>
-              <div class="mt-1 text-xs text-slate-500">settlement_from_frontpage_success</div>
+              <div class="mt-1 text-xs text-slate-500">
+                settlement_from_frontpage_success
+              </div>
             </div>
             <div class="rounded border border-slate-200 bg-white p-3">
-              <div class="text-xs font-medium text-slate-500">缺失字段</div>
+              <div class="text-xs font-medium text-slate-500">
+                缺失字段
+              </div>
               <div class="mt-1 text-xl font-semibold text-slate-900">
                 {{ missingFields.length }}
               </div>
-              <div class="mt-1 text-xs text-slate-500">coverage 字段状态为 missing</div>
+              <div class="mt-1 text-xs text-slate-500">
+                coverage 字段状态为 missing
+              </div>
             </div>
           </div>
 
-          <a-alert v-if="warnings.length" type="warning" show-icon message="warnings">
+          <a-alert
+            v-if="warnings.length"
+            type="warning"
+            show-icon
+            message="warnings"
+          >
             <template #description>
               <ul class="m-0 list-disc pl-4 text-xs leading-5">
-                <li v-for="warning in warnings" :key="warning">
+                <li
+                  v-for="warning in warnings"
+                  :key="warning"
+                >
                   {{ warning }}
                 </li>
               </ul>
@@ -319,15 +372,25 @@
           </a-alert>
 
           <div class="rounded border border-slate-200 bg-white p-3">
-            <div class="mb-2 text-sm font-semibold text-slate-800">失败 / 缺失字段</div>
-            <a-empty v-if="!missingFields.length" description="当前 coverage 未返回缺失字段" />
-            <div v-else class="space-y-2">
+            <div class="mb-2 text-sm font-semibold text-slate-800">
+              失败 / 缺失字段
+            </div>
+            <a-empty
+              v-if="!missingFields.length"
+              description="当前 coverage 未返回缺失字段"
+            />
+            <div
+              v-else
+              class="space-y-2"
+            >
               <div
                 v-for="field in missingFields"
                 :key="field.path"
                 class="rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900"
               >
-                <div class="font-semibold">{{ field.group }} / {{ field.field }}</div>
+                <div class="font-semibold">
+                  {{ field.group }} / {{ field.field }}
+                </div>
                 <div class="mt-1 text-amber-800">
                   {{ field.path }}{{ field.message ? `：${field.message}` : '' }}
                 </div>
@@ -336,17 +399,26 @@
           </div>
 
           <a-collapse>
-            <a-collapse-panel key="frontpage" header="病案首页草稿">
+            <a-collapse-panel
+              key="frontpage"
+              header="病案首页草稿"
+            >
               <pre class="max-h-72 overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700">{{
                 stringifyJson(result.frontpage)
               }}</pre>
             </a-collapse-panel>
-            <a-collapse-panel key="settlement" header="医保结算清单草稿">
+            <a-collapse-panel
+              key="settlement"
+              header="医保结算清单草稿"
+            >
               <pre class="max-h-72 overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700">{{
                 stringifyJson(result.settlement)
               }}</pre>
             </a-collapse-panel>
-            <a-collapse-panel key="coverage" header="coverage 明细">
+            <a-collapse-panel
+              key="coverage"
+              header="coverage 明细"
+            >
               <pre class="max-h-72 overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700">{{
                 stringifyJson(result.coverage)
               }}</pre>
@@ -380,7 +452,10 @@
       description="该数据仅用于本次生成草稿验证，不写入正式首页表、结算表或业务库。"
     />
     <a-tabs v-model:active-key="formattedPreviewTab">
-      <a-tab-pane key="frontpage" tab="病案首页">
+      <a-tab-pane
+        key="frontpage"
+        tab="病案首页"
+      >
         <div
           class="rounded border border-slate-200 bg-white p-3"
           data-testid="formatted-frontpage-preview"
@@ -390,33 +465,53 @@
             :data="formattedFrontpageData"
             :post-processing="false"
           />
-          <a-empty v-else description="暂无病案首页草稿" />
+          <a-empty
+            v-else
+            description="暂无病案首页草稿"
+          />
         </div>
       </a-tab-pane>
-      <a-tab-pane key="settlement" tab="医保结算清单">
+      <a-tab-pane
+        key="settlement"
+        tab="医保结算清单"
+      >
         <div
           class="rounded border border-slate-200 bg-white p-3"
           data-testid="formatted-settlement-preview"
         >
-          <SettlementSheet v-if="formattedSettlementData" :data="formattedSettlementData" />
-          <a-empty v-else description="当前场景未返回医保结算清单草稿" />
+          <SettlementSheet
+            v-if="formattedSettlementData"
+            :data="formattedSettlementData"
+          />
+          <a-empty
+            v-else
+            description="当前场景未返回医保结算清单草稿"
+          />
         </div>
       </a-tab-pane>
-      <a-tab-pane key="json" tab="原始 JSON">
-        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2" data-testid="formatted-json-preview">
+      <a-tab-pane
+        key="json"
+        tab="原始 JSON"
+      >
+        <div
+          class="grid grid-cols-1 gap-3 lg:grid-cols-2"
+          data-testid="formatted-json-preview"
+        >
           <div class="rounded border border-slate-200 bg-white p-3">
-            <div class="mb-2 text-sm font-semibold text-slate-800">病案首页草稿</div>
+            <div class="mb-2 text-sm font-semibold text-slate-800">
+              病案首页草稿
+            </div>
             <pre
               class="max-h-[60vh] overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700"
-              >{{ stringifyJson(result?.frontpage) }}</pre
-            >
+            >{{ stringifyJson(result?.frontpage) }}</pre>
           </div>
           <div class="rounded border border-slate-200 bg-white p-3">
-            <div class="mb-2 text-sm font-semibold text-slate-800">医保结算清单草稿</div>
+            <div class="mb-2 text-sm font-semibold text-slate-800">
+              医保结算清单草稿
+            </div>
             <pre
               class="max-h-[60vh] overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700"
-              >{{ stringifyJson(result?.settlement) }}</pre
-            >
+            >{{ stringifyJson(result?.settlement) }}</pre>
           </div>
         </div>
       </a-tab-pane>

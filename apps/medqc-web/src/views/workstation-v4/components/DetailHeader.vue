@@ -13,7 +13,10 @@
     </div>
 
     <div class="min-w-0">
-      <div v-if="record" class="flex min-w-0 items-center px-2 py-1">
+      <div
+        v-if="record"
+        class="flex min-w-0 items-center px-2 py-1"
+      >
         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           <h1 class="m-0 truncate text-[19px] font-semibold leading-none text-slate-950">
             {{ record.name }}
@@ -63,9 +66,7 @@
         class="rounded-full border border-slate-200/80 bg-white/92 px-3 py-1.5 text-[12px] font-semibold text-slate-400"
       >
         &#x5F53;&#x524D;&#x75C5;&#x6848;
-        <span class="ml-1 font-mono font-bold text-slate-700"
-          >{{ currentIndex + 1 }} / {{ totalCount }}</span
-        >
+        <span class="ml-1 font-mono font-bold text-slate-700">{{ currentIndex + 1 }} / {{ totalCount }}</span>
       </div>
 
       <div
@@ -111,7 +112,10 @@
         ICD &#x67E5;&#x8BE2;
       </a-button>
 
-      <a-tooltip :title="disabledReason" :open="!canGenerate && !hasDraft ? undefined : false">
+      <a-tooltip
+        :title="disabledReason"
+        :open="!canGenerate && !hasDraft ? undefined : false"
+      >
         <a-button
           type="primary"
           :loading="generating"

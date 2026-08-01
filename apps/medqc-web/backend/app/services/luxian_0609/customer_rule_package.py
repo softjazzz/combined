@@ -85,6 +85,26 @@ RULE_FAMILY_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "name": "肿瘤病理",
         "rule_ids": ("LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"),
     },
+    {
+        "key": "extended_document",
+        "name": "死亡出院与连续医疗记录",
+        "rule_ids": (
+            "LX0609-051",
+            "LX0609-060",
+            "LX0609-061",
+            "LX0609-062",
+            "LX0609-064",
+            "LX0609-065",
+            "LX0609-066",
+            "LX0609-067",
+            "LX0609-068",
+            "LX0609-069",
+            "LX0609-071",
+            "LX0609-072",
+            "LX0609-073",
+            "LX0609-074",
+        ),
+    },
 )
 
 
@@ -146,29 +166,25 @@ def resolve_execution_scope(
     *,
     allowed_rule_ids: set[str],
 ) -> tuple[list[str], list[str], list[str]]:
-    """Resolve selected LX0609 ids and keep gate-only customer points runnable."""
+    """校验并保留客户规则 ID，执行层再统一完成 Native/兼容分区。
+
+    ``allowed_rule_ids`` 与入参均是客户侧 LX0609 ID。这里若提前展开为旧
+    SC/LX 执行 ID，再用客户 ID 白名单过滤，会把显式勾选的规则全部误判为
+    gate-only，绕过 Native 主链。
+    """
 
     normalized_customer_ids = normalize_customer_rule_ids(customer_rule_ids)
+    wrappers_by_id = _wrappers_by_id()
     execution_rule_ids: list[str] = []
-    gate_only_customer_rule_ids: list[str] = []
     invalid_rule_ids: list[str] = []
     for customer_rule_id in normalized_customer_ids:
-        mapped_rule_ids, invalid_ids = resolve_execution_rule_ids([customer_rule_id])
-        if invalid_ids:
-            invalid_rule_ids.extend(invalid_ids)
+        if customer_rule_id not in wrappers_by_id or (
+            allowed_rule_ids and customer_rule_id not in allowed_rule_ids
+        ):
+            invalid_rule_ids.append(customer_rule_id)
             continue
-        filtered_rule_ids = [
-            rule_id
-            for rule_id in mapped_rule_ids
-            if not allowed_rule_ids or rule_id in allowed_rule_ids
-        ]
-        if not filtered_rule_ids:
-            gate_only_customer_rule_ids.append(customer_rule_id)
-            continue
-        for rule_id in filtered_rule_ids:
-            if rule_id not in execution_rule_ids:
-                execution_rule_ids.append(rule_id)
-    return execution_rule_ids, normalize_customer_rule_ids(invalid_rule_ids), gate_only_customer_rule_ids
+        execution_rule_ids.append(customer_rule_id)
+    return execution_rule_ids, normalize_customer_rule_ids(invalid_rule_ids), []
 
 
 def build_family_scopes(customer_rule_ids: Iterable[str] | None) -> list[dict[str, Any]]:

@@ -2,7 +2,9 @@
   <section class="priority-lane p-4">
     <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div class="min-w-0 xl:max-w-[520px]">
-        <h3 class="priority-lane__title">优先处理池</h3>
+        <h3 class="priority-lane__title">
+          优先处理池
+        </h3>
       </div>
 
       <div class="priority-lane__segments">
@@ -31,7 +33,10 @@
       暂无高优病历，建议切换科室或放宽筛选条件。
     </div>
 
-    <div v-else class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+    <div
+      v-else
+      class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"
+    >
       <article
         v-for="card in cards"
         :key="card.id"
@@ -60,11 +65,16 @@
             </div>
           </div>
 
-          <div class="priority-lane__risk text-right" :class="riskBadgeClass(card.riskType)">
+          <div
+            class="priority-lane__risk text-right"
+            :class="riskBadgeClass(card.riskType)"
+          >
             <div class="text-[11px] font-bold">
               {{ riskLabel(card.riskType) }}
             </div>
-            <div class="mt-1 text-[16px] font-extrabold">{{ card.hospitalDays }} 天</div>
+            <div class="mt-1 text-[16px] font-extrabold">
+              {{ card.hospitalDays }} 天
+            </div>
             <div class="mt-0.5 text-[10px] font-semibold opacity-70">
               {{ riskHint(card.riskType) }}
             </div>
