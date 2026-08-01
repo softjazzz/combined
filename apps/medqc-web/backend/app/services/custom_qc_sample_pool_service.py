@@ -4950,7 +4950,27 @@ class CustomQCSamplePoolService:
             total = len(grouped_rows)
             start = max(page - 1, 0) * page_size
             paged_rows = grouped_rows[start : start + page_size]
+            legacy_items = [
+                item
+                for row in paged_rows
+                if not _safe_text(row.get("hospitalization_status"))
+                for item in row.get("sample_items") or []
+            ]
+            legacy_states = _load_previous_hospitalization_states(legacy_items)
             for row in paged_rows:
+                if not _safe_text(row.get("hospitalization_status")):
+                    identity = (
+                        _safe_text(row.get("matched_institute_id")),
+                        _safe_text(row.get("matched_patient_id")),
+                        _safe_text(row.get("matched_visit_id")),
+                    )
+                    legacy_state = legacy_states.get(identity) or {}
+                    row["hospitalization_status"] = _safe_text(
+                        legacy_state.get("hospitalization_status")
+                    )
+                    row["discharge_time"] = _safe_text(
+                        legacy_state.get("discharge_time")
+                    )
                 row["issue_preview_text"] = "；".join(row["issue_preview"][:2]) or "-"
             return SamplePoolListResult(
                 items=paged_rows,

@@ -3474,6 +3474,49 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
     assert "首次病程记录鉴别诊断不全面" in record["issue_preview_text"]
 
 
+def test_list_pool_records_should_resolve_legacy_hospitalization_state(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-legacy",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "冯丽平",
+            "mr_no": "208790",
+            "department": "重症医学科（ICU）",
+            "manual_issue_text": "",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": "[]",
+            "include_in_batch_1": True,
+            "matched_visit_id": "2496813",
+            "matched_patient_id": "0000225510",
+            "matched_institute_id": "泸县人民医院",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": '{"visit_id":"2496813"}',
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(service, "_load_record_display_map", lambda **kwargs: {})
+    monkeypatch.setattr(
+        sample_pool_module,
+        "_load_previous_hospitalization_states",
+        lambda _items: {
+            ("泸县人民医院", "0000225510", "2496813"): {
+                "hospitalization_status": "discharged",
+                "discharge_time": "2026-07-13T18:22:50",
+                "status_source": "legacy_local",
+            }
+        },
+    )
+
+    result = service.list_pool_records(pool_id="pool-1", include_in_batch_1=True)
+
+    assert result.items[0]["hospitalization_status"] == "discharged"
+    assert result.items[0]["discharge_time"] == "2026-07-13T18:22:50"
+
+
 def test_list_pool_records_should_backfill_patient_name_and_department_from_matched_record(monkeypatch):
     service = CustomQCSamplePoolService()
     rows = [
