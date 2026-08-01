@@ -1,7 +1,4 @@
-import type {
-  CustomerQcDecisionStatus,
-  CustomerQcEvidenceAvailability,
-} from './result-model'
+import type { CustomerQcDecisionStatus, CustomerQcEvidenceAvailability } from './result-model'
 
 export interface CustomerQcStatusPresentation {
   label: string

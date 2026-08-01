@@ -47,9 +47,7 @@ const stubs = {
   },
 }
 
-function mountPanel(
-  overrides: Partial<InstanceType<typeof LuxianRuleScopePanel>['$props']> = {},
-) {
+function mountPanel(overrides: Partial<InstanceType<typeof LuxianRuleScopePanel>['$props']> = {}) {
   return mount(LuxianRuleScopePanel, {
     attrs: {
       id: 'customer-sample-luxian-scope',
@@ -99,9 +97,18 @@ describe('LuxianRuleScopePanel', () => {
       .findAll('.customer-sample-luxian-rule-group')
       .find((node) => node.text().includes('会诊质量'))!
 
-    await wrapper.findAll('button').find((node) => node.text() === '全选2个质控族')!.trigger('click')
-    await wrapper.findAll('button').find((node) => node.text() === '清空勾选')!.trigger('click')
-    await basicFamily.findAll('button').find((node) => node.text() === '选择本组')!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '全选2个质控族')!
+      .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((node) => node.text() === '清空勾选')!
+      .trigger('click')
+    await basicFamily
+      .findAll('button')
+      .find((node) => node.text() === '选择本组')!
+      .trigger('click')
     await consultationFamily
       .findAll('button')
       .find((node) => node.text() === '查看质控点')!

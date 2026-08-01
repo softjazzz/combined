@@ -136,9 +136,7 @@ function resolveStatusCounts(job: SichuanBatchJob): Record<string, number> {
 
 function normalizeRuleIds(value: unknown): string[] {
   return Array.isArray(value)
-    ? value
-        .map((item) => String(item).trim())
-        .filter((item) => /^LX0609-\d+/u.test(item))
+    ? value.map((item) => String(item).trim()).filter((item) => /^LX0609-\d+/u.test(item))
     : []
 }
 
@@ -323,7 +321,8 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   let overviewText = '暂无结果摘要'
   if (normalizedStatus === 'failed') overviewText = job.error_message || '任务失败'
   else if (isRunning) {
-    overviewText = progressPercent > 0 ? `任务执行中，已完成 ${progressPercent}%` : '任务执行中，等待结果回写'
+    overviewText =
+      progressPercent > 0 ? `任务执行中，已完成 ${progressPercent}%` : '任务执行中，等待结果回写'
   } else if (attentionChips.length) {
     overviewText = `发现需关注结果：${attentionChips.map((chip) => `${chip.label} ${chip.value}`).join('，')}`
   } else {

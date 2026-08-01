@@ -162,9 +162,7 @@ describe('CustomerSampleTaskHistoryView', () => {
       success: true,
       data: new Blob(['report'], { type: 'text/html' }),
     })
-    normalizeBatchExportBlob.mockResolvedValue(
-      new Blob(['report'], { type: 'text/html' }),
-    )
+    normalizeBatchExportBlob.mockResolvedValue(new Blob(['report'], { type: 'text/html' }))
   })
 
   it('进入页面后加载并展示质控任务列表', async () => {
@@ -196,9 +194,9 @@ describe('CustomerSampleTaskHistoryView', () => {
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
     expect(latestResultDrawerProps?.open).toBe(true)
-    expect(
-      (latestResultDrawerProps?.batchJobDetail as { id?: string } | null)?.id,
-    ).toBe('job-history-1')
+    expect((latestResultDrawerProps?.batchJobDetail as { id?: string } | null)?.id).toBe(
+      'job-history-1',
+    )
   })
 
   it('已完成任务提供复核与HTML导出入口', async () => {

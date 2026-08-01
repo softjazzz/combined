@@ -2112,9 +2112,7 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('未匹配到可同步病历')
-    const detailButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('查看详情'))
+    const detailButton = wrapper.findAll('button').find((node) => node.text().includes('查看详情'))
     expect(detailButton).toBeTruthy()
     await detailButton!.trigger('click')
     await flushPromises()
@@ -2152,9 +2150,7 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).not.toContain('192.168.140.160')
     expect(wrapper.text()).not.toContain('16016')
 
-    const detailButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('查看详情'))
+    const detailButton = wrapper.findAll('button').find((node) => node.text().includes('查看详情'))
     expect(detailButton).toBeTruthy()
     await detailButton!.trigger('click')
     await flushPromises()

@@ -36,7 +36,9 @@
             role="progressbar"
             aria-valuemin="0"
             aria-valuemax="100"
-            :aria-valuenow="presentation.progressPercent > 0 ? presentation.progressPercent : undefined"
+            :aria-valuenow="
+              presentation.progressPercent > 0 ? presentation.progressPercent : undefined
+            "
             :aria-label="
               presentation.progressPercent > 0
                 ? `质控执行进度 ${presentation.progressPercent}%`
@@ -146,9 +148,7 @@ const emit = defineEmits<{
   'open-history': []
 }>()
 
-const presentation = computed(() =>
-  props.task ? buildBatchJobPresentation(props.task) : null,
-)
+const presentation = computed(() => (props.task ? buildBatchJobPresentation(props.task) : null))
 </script>
 
 <style scoped>

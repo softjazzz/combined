@@ -242,7 +242,9 @@ function normalizeEditableDocumentsResponse(value: unknown): EditableMedicalReco
       const submitTime = readStringField(row, ['submit_time', 'submit_datetime'])
       const reportItems = Array.isArray(row.report_items)
         ? row.report_items
-            .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
+            .filter((entry): entry is Record<string, unknown> =>
+              Boolean(entry && typeof entry === 'object'),
+            )
             .map((entry) => ({
               item_no: readStringField(entry, ['item_no']),
               item_id: readStringField(entry, ['item_id']),

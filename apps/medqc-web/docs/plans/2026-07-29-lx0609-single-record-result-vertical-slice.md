@@ -308,10 +308,13 @@ return success_response(data=dto, ...)
 
 ```ts
 export async function getLatestLuxian0609RecordResult(recordId: string) {
-  return requestEnvelope<SingleRecordQcResultDTO>({
-    method: 'GET',
-    url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(recordId)}/latest-result`,
-  }, '获取该病历最近一次质控结果失败')
+  return requestEnvelope<SingleRecordQcResultDTO>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sichuan/workspace/records/${encodeURIComponent(recordId)}/latest-result`,
+    },
+    '获取该病历最近一次质控结果失败',
+  )
 }
 ```
 

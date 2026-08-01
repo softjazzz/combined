@@ -4,80 +4,467 @@
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 才进入当前执行目录；其余规则不得生成占位结果。",
   "rules": [
-    {"rule_id": "LX0609-001", "source_document": "入院记录", "qc_point": "入院后24小时内是否完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-002", "source_document": "首次病程", "qc_point": "入院后8小时内无首次病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-003", "source_document": "手术记录", "qc_point": "手术后24小时内是否完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-004", "source_document": "抢救记录", "qc_point": "抢救结束后6小时内是否完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-005", "source_document": "上级医生查房记录", "qc_point": "入院后48小时内无主治医师首次查房记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-006", "source_document": "上级医生查房记录", "qc_point": "入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-007", "source_document": "查房记录", "qc_point": "病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-008", "source_document": "查房记录", "qc_point": "病重（下了病重医嘱）患者2天内无查房病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-009", "source_document": "查房记录", "qc_point": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程", "implementation_status": "active"},
-    {"rule_id": "LX0609-010", "source_document": "CT/MRI检查记录", "qc_point": "CT/MRI检查前无说明检查原因的病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-011", "source_document": "CT/MRI检查记录", "qc_point": "CT/MRI影像报告结果出具后24小时内未在病程中记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-012", "source_document": "CT/MRI检查记录", "qc_point": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析", "implementation_status": "active"},
-    {"rule_id": "LX0609-013", "source_document": "病理检查", "qc_point": "病理检查结果在手术记录、病程中未记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-014", "source_document": "细菌培养记录", "qc_point": "细菌培养结果在报告出具后24小时内未在病程中记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-015", "source_document": "细菌培养结果无分析", "qc_point": "细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析", "implementation_status": "active"},
-    {"rule_id": "LX0609-016", "source_document": "不合理复制病历", "qc_point": "首次病程记录病例特点与入院记录、现病史完全相同", "implementation_status": "active"},
-    {"rule_id": "LX0609-017", "source_document": "不合理复制病历", "qc_point": "2次以上病程记录完全相同（相似度大于70%）", "implementation_status": "active"},
-    {"rule_id": "LX0609-018", "source_document": "入院记录", "qc_point": "主诉只写症状不写诊断、超过20字，或不能导出第一诊断", "implementation_status": "active"},
-    {"rule_id": "LX0609-019", "source_document": "病理检查", "qc_point": "取材情况未在病程记录或手术记录中记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-020", "source_document": "会诊记录", "qc_point": "有会诊记录单无请会诊执行记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-021", "source_document": "会诊记录", "qc_point": "会诊申请单会诊目的不明确", "implementation_status": "active"},
-    {"rule_id": "LX0609-022", "source_document": "会诊记录", "qc_point": "会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）", "implementation_status": "active"},
-    {"rule_id": "LX0609-023", "source_document": "会诊记录", "qc_point": "请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况", "implementation_status": "active"},
-    {"rule_id": "LX0609-024", "source_document": "手术记录", "qc_point": "恶性肿瘤手术记录未书写淋巴结清扫情况", "implementation_status": "active"},
-    {"rule_id": "LX0609-025", "source_document": "手术记录", "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息", "implementation_status": "active"},
-    {"rule_id": "LX0609-026", "source_document": "恶性肿瘤化学治疗记录", "qc_point": "病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致", "implementation_status": "active"},
-    {"rule_id": "LX0609-027", "source_document": "出院记录", "qc_point": "恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划", "implementation_status": "active"},
-    {"rule_id": "LX0609-028", "source_document": "抗菌药物使用记录", "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时", "implementation_status": "active"},
-    {"rule_id": "LX0609-029", "source_document": "术前小结", "qc_point": "有手术医嘱但无术前小结", "implementation_status": "active"},
-    {"rule_id": "LX0609-030", "source_document": "手术记录", "qc_point": "有手术医嘱但无手术记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-031", "source_document": "手术记录", "qc_point": "手术记录非手术者签字（核对术者及签名医生）", "implementation_status": "active"},
-    {"rule_id": "LX0609-032", "source_document": "手术安全核查表", "qc_point": "有手术记录但无手术安全核查表", "implementation_status": "active"},
-    {"rule_id": "LX0609-033", "source_document": "手术知情同意书", "qc_point": "有手术记录但无手术知情同意书", "implementation_status": "active"},
-    {"rule_id": "LX0609-034", "source_document": "麻醉知情同意书", "qc_point": "有麻醉记录但无麻醉知情同意书", "implementation_status": "active"},
-    {"rule_id": "LX0609-035", "source_document": "麻醉知情同意书", "qc_point": "填写不规范（无患者或医生签名、签名时间未精确到分钟）", "implementation_status": "active"},
-    {"rule_id": "LX0609-036", "source_document": "麻醉访视", "qc_point": "无麻醉术前或麻醉术后访视记录（局麻除外）", "implementation_status": "active"},
-    {"rule_id": "LX0609-037", "source_document": "麻醉访视", "qc_point": "麻醉术前和术后访视记录填写不规范（局麻除外）", "implementation_status": "active"},
-    {"rule_id": "LX0609-038", "source_document": "麻醉记录单", "qc_point": "无麻醉记录单（局麻除外）", "implementation_status": "active"},
-    {"rule_id": "LX0609-039", "source_document": "术前讨论记录", "qc_point": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加", "implementation_status": "active"},
-    {"rule_id": "LX0609-040", "source_document": "术前多学科讨论记录", "qc_point": "四级手术术前讨论未开展多学科讨论", "implementation_status": "active"},
-    {"rule_id": "LX0609-041", "source_document": "输血知情同意书", "qc_point": "无输血知情同意书", "implementation_status": "active"},
-    {"rule_id": "LX0609-042", "source_document": "输血知情同意书", "qc_point": "输血知情同意书填写或签名不完整", "implementation_status": "active"},
-    {"rule_id": "LX0609-043", "source_document": "输血前辅助检查", "qc_point": "输血前常规检查不完整", "implementation_status": "active"},
-    {"rule_id": "LX0609-044", "source_document": "输血前评估", "qc_point": "无输血前评估记录或记录不完整", "implementation_status": "active"},
-    {"rule_id": "LX0609-045", "source_document": "输血记录", "qc_point": "无输血病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-046", "source_document": "输血记录", "qc_point": "输血病程记录不完整或不规范", "implementation_status": "active"},
-    {"rule_id": "LX0609-047", "source_document": "输血后评价", "qc_point": "无输血后评价", "implementation_status": "active"},
-    {"rule_id": "LX0609-048", "source_document": "输血记录", "qc_point": "有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致", "implementation_status": "active"},
-    {"rule_id": "LX0609-049", "source_document": "输血医嘱", "qc_point": "输血医嘱与收费不一致", "implementation_status": "active"},
-    {"rule_id": "LX0609-050", "source_document": "疑难病历讨论记录", "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论", "implementation_status": "pending_definition", "definition_note": "需明确“诊断不明确”的受控触发标准"},
-    {"rule_id": "LX0609-051", "source_document": "死亡病历讨论记录", "qc_point": "患者死亡后7天未书写死亡病历讨论记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-052", "source_document": "危急值记录", "qc_point": "6小时内未书写危急值处置记录", "implementation_status": "contract_ready", "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"},
-    {"rule_id": "LX0609-053", "source_document": "危急值记录", "qc_point": "检验检查危急值报告后无危急值处置记录", "implementation_status": "contract_ready", "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"},
-    {"rule_id": "LX0609-054", "source_document": "抗菌药物使用记录", "qc_point": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分", "implementation_status": "pending_definition", "definition_note": "需明确“理由充分”的最小记录要素和受控判定标准"},
-    {"rule_id": "LX0609-055", "source_document": "抗菌药物使用记录", "qc_point": "48至72小时内无效果评价", "implementation_status": "pending_definition", "definition_note": "需明确效果评价必需字段及合格口径"},
-    {"rule_id": "LX0609-056", "source_document": "抗菌药物使用记录", "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查", "implementation_status": "pending_definition", "definition_note": "需提供“重点抗菌药物”目录或受控定义"},
-    {"rule_id": "LX0609-057", "source_document": "抗菌药物使用记录", "qc_point": "经验用药时未说明理由，无样可采时未注明原因", "implementation_status": "pending_definition", "definition_note": "需明确经验用药和无样可采的受控识别证据"},
-    {"rule_id": "LX0609-058", "source_document": "抗菌药物使用记录", "qc_point": "使用特殊级抗菌药物缺少专家查房或会诊记录", "implementation_status": "contract_ready", "definition_note": "特殊级药物按《2025年泸县人民医院抗菌药物分级目录》识别"},
-    {"rule_id": "LX0609-059", "source_document": "医嘱", "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致", "implementation_status": "pending_definition", "definition_note": "需限定诊疗医嘱与病程记录的一致性比较范围"},
-    {"rule_id": "LX0609-060", "source_document": "死亡记录", "qc_point": "死亡患者无死亡记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-061", "source_document": "出院记录", "qc_point": "出院记录未在出院后24小时内完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-062", "source_document": "出院记录", "qc_point": "出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）", "implementation_status": "active"},
-    {"rule_id": "LX0609-063", "source_document": "出院记录", "qc_point": "出院诊断或死亡诊断错填、漏填、顺序错误", "implementation_status": "pending_definition", "definition_note": "需明确错填、漏填、顺序错误的权威对照来源"},
-    {"rule_id": "LX0609-064", "source_document": "术后连续三天查房记录", "qc_point": "术后三天无连续病程记录（包含术后术者查房记录）", "implementation_status": "active"},
-    {"rule_id": "LX0609-065", "source_document": "术后三天内上级医师查房记录", "qc_point": "无术后三天内上级医师查看病人记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-066", "source_document": "术后首次病程记录", "qc_point": "无术后首次病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-067", "source_document": "出院前病程记录", "qc_point": "无出院前一天或当天的病程记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-068", "source_document": "出院前病程记录", "qc_point": "无上级医师同意出院的意见", "implementation_status": "active"},
-    {"rule_id": "LX0609-069", "source_document": "会诊记录", "qc_point": "会诊记录单未在会诊申请发出后24小时内完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-070", "source_document": "输血前评估", "qc_point": "未做输血前相关九项检查", "implementation_status": "contract_ready", "definition_note": "九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶"},
-    {"rule_id": "LX0609-071", "source_document": "交接班记录", "qc_point": "经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成", "implementation_status": "active"},
-    {"rule_id": "LX0609-072", "source_document": "转科记录", "qc_point": "转科病人24小时内未完成转入、转出记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-073", "source_document": "转科记录", "qc_point": "有转科医嘱但无转入、转出记录", "implementation_status": "active"},
-    {"rule_id": "LX0609-074", "source_document": "病程记录", "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据", "implementation_status": "active"},
-    {"rule_id": "LX0609-075", "source_document": "有创操作记录", "qc_point": "有创操作医嘱但无有创操作记录", "implementation_status": "pending_definition", "definition_note": "需提供有创操作目录及医嘱到操作记录的映射规则"}
+    {
+      "rule_id": "LX0609-001",
+      "source_document": "入院记录",
+      "qc_point": "入院后24小时内是否完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-002",
+      "source_document": "首次病程",
+      "qc_point": "入院后8小时内无首次病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-003",
+      "source_document": "手术记录",
+      "qc_point": "手术后24小时内是否完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-004",
+      "source_document": "抢救记录",
+      "qc_point": "抢救结束后6小时内是否完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-005",
+      "source_document": "上级医生查房记录",
+      "qc_point": "入院后48小时内无主治医师首次查房记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-006",
+      "source_document": "上级医生查房记录",
+      "qc_point": "入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-007",
+      "source_document": "查房记录",
+      "qc_point": "病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-008",
+      "source_document": "查房记录",
+      "qc_point": "病重（下了病重医嘱）患者2天内无查房病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-009",
+      "source_document": "查房记录",
+      "qc_point": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-010",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "CT/MRI检查前无说明检查原因的病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-011",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "CT/MRI影像报告结果出具后24小时内未在病程中记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-012",
+      "source_document": "CT/MRI检查记录",
+      "qc_point": "CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-013",
+      "source_document": "病理检查",
+      "qc_point": "病理检查结果在手术记录、病程中未记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-014",
+      "source_document": "细菌培养记录",
+      "qc_point": "细菌培养结果在报告出具后24小时内未在病程中记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-015",
+      "source_document": "细菌培养结果无分析",
+      "qc_point": "细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-016",
+      "source_document": "不合理复制病历",
+      "qc_point": "首次病程记录病例特点与入院记录、现病史完全相同",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-017",
+      "source_document": "不合理复制病历",
+      "qc_point": "2次以上病程记录完全相同（相似度大于70%）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-018",
+      "source_document": "入院记录",
+      "qc_point": "主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-019",
+      "source_document": "病理检查",
+      "qc_point": "取材情况未在病程记录或手术记录中记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-020",
+      "source_document": "会诊记录",
+      "qc_point": "有会诊记录单无请会诊执行记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-021",
+      "source_document": "会诊记录",
+      "qc_point": "会诊申请单会诊目的不明确",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-022",
+      "source_document": "会诊记录",
+      "qc_point": "会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-023",
+      "source_document": "会诊记录",
+      "qc_point": "请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-024",
+      "source_document": "手术记录",
+      "qc_point": "恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-025",
+      "source_document": "手术记录",
+      "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-026",
+      "source_document": "恶性肿瘤化学治疗记录",
+      "qc_point": "病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-027",
+      "source_document": "出院记录",
+      "qc_point": "恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-028",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-029",
+      "source_document": "术前小结",
+      "qc_point": "有手术医嘱但无术前小结",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-030",
+      "source_document": "手术记录",
+      "qc_point": "有手术医嘱但无手术记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-031",
+      "source_document": "手术记录",
+      "qc_point": "手术记录非手术者签字（核对术者及签名医生）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-032",
+      "source_document": "手术安全核查表",
+      "qc_point": "有手术记录但无手术安全核查表",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-033",
+      "source_document": "手术知情同意书",
+      "qc_point": "有手术记录但无手术知情同意书",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-034",
+      "source_document": "麻醉知情同意书",
+      "qc_point": "有麻醉记录但无麻醉知情同意书",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-035",
+      "source_document": "麻醉知情同意书",
+      "qc_point": "填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-036",
+      "source_document": "麻醉访视",
+      "qc_point": "无麻醉术前或麻醉术后访视记录（局麻除外）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-037",
+      "source_document": "麻醉访视",
+      "qc_point": "麻醉术前和术后访视记录填写不规范（局麻除外）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-038",
+      "source_document": "麻醉记录单",
+      "qc_point": "无麻醉记录单（局麻除外）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-039",
+      "source_document": "术前讨论记录",
+      "qc_point": "除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-040",
+      "source_document": "术前多学科讨论记录",
+      "qc_point": "四级手术术前讨论未开展多学科讨论",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-041",
+      "source_document": "输血知情同意书",
+      "qc_point": "无输血知情同意书",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-042",
+      "source_document": "输血知情同意书",
+      "qc_point": "输血知情同意书填写或签名不完整",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-043",
+      "source_document": "输血前辅助检查",
+      "qc_point": "输血前常规检查不完整",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-044",
+      "source_document": "输血前评估",
+      "qc_point": "无输血前评估记录或记录不完整",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-045",
+      "source_document": "输血记录",
+      "qc_point": "无输血病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-046",
+      "source_document": "输血记录",
+      "qc_point": "输血病程记录不完整或不规范",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-047",
+      "source_document": "输血后评价",
+      "qc_point": "无输血后评价",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-048",
+      "source_document": "输血记录",
+      "qc_point": "有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-049",
+      "source_document": "输血医嘱",
+      "qc_point": "输血医嘱与收费不一致",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-050",
+      "source_document": "疑难病历讨论记录",
+      "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论",
+      "implementation_status": "pending_definition",
+      "definition_note": "需明确“诊断不明确”的受控触发标准"
+    },
+    {
+      "rule_id": "LX0609-051",
+      "source_document": "死亡病历讨论记录",
+      "qc_point": "患者死亡后7天未书写死亡病历讨论记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-052",
+      "source_document": "危急值记录",
+      "qc_point": "6小时内未书写危急值处置记录",
+      "implementation_status": "contract_ready",
+      "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"
+    },
+    {
+      "rule_id": "LX0609-053",
+      "source_document": "危急值记录",
+      "qc_point": "检验检查危急值报告后无危急值处置记录",
+      "implementation_status": "contract_ready",
+      "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"
+    },
+    {
+      "rule_id": "LX0609-054",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
+      "implementation_status": "pending_definition",
+      "definition_note": "需明确“理由充分”的最小记录要素和受控判定标准"
+    },
+    {
+      "rule_id": "LX0609-055",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "48至72小时内无效果评价",
+      "implementation_status": "pending_definition",
+      "definition_note": "需明确效果评价必需字段及合格口径"
+    },
+    {
+      "rule_id": "LX0609-056",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
+      "implementation_status": "pending_definition",
+      "definition_note": "需提供“重点抗菌药物”目录或受控定义"
+    },
+    {
+      "rule_id": "LX0609-057",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "经验用药时未说明理由，无样可采时未注明原因",
+      "implementation_status": "pending_definition",
+      "definition_note": "需明确经验用药和无样可采的受控识别证据"
+    },
+    {
+      "rule_id": "LX0609-058",
+      "source_document": "抗菌药物使用记录",
+      "qc_point": "使用特殊级抗菌药物缺少专家查房或会诊记录",
+      "implementation_status": "contract_ready",
+      "definition_note": "特殊级药物按《2025年泸县人民医院抗菌药物分级目录》识别"
+    },
+    {
+      "rule_id": "LX0609-059",
+      "source_document": "医嘱",
+      "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "implementation_status": "pending_definition",
+      "definition_note": "需限定诊疗医嘱与病程记录的一致性比较范围"
+    },
+    {
+      "rule_id": "LX0609-060",
+      "source_document": "死亡记录",
+      "qc_point": "死亡患者无死亡记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-061",
+      "source_document": "出院记录",
+      "qc_point": "出院记录未在出院后24小时内完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-062",
+      "source_document": "出院记录",
+      "qc_point": "出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-063",
+      "source_document": "出院记录",
+      "qc_point": "出院诊断或死亡诊断错填、漏填、顺序错误",
+      "implementation_status": "pending_definition",
+      "definition_note": "需明确错填、漏填、顺序错误的权威对照来源"
+    },
+    {
+      "rule_id": "LX0609-064",
+      "source_document": "术后连续三天查房记录",
+      "qc_point": "术后三天无连续病程记录（包含术后术者查房记录）",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-065",
+      "source_document": "术后三天内上级医师查房记录",
+      "qc_point": "无术后三天内上级医师查看病人记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-066",
+      "source_document": "术后首次病程记录",
+      "qc_point": "无术后首次病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-067",
+      "source_document": "出院前病程记录",
+      "qc_point": "无出院前一天或当天的病程记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-068",
+      "source_document": "出院前病程记录",
+      "qc_point": "无上级医师同意出院的意见",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-069",
+      "source_document": "会诊记录",
+      "qc_point": "会诊记录单未在会诊申请发出后24小时内完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-070",
+      "source_document": "输血前评估",
+      "qc_point": "未做输血前相关九项检查",
+      "implementation_status": "contract_ready",
+      "definition_note": "九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶"
+    },
+    {
+      "rule_id": "LX0609-071",
+      "source_document": "交接班记录",
+      "qc_point": "经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-072",
+      "source_document": "转科记录",
+      "qc_point": "转科病人24小时内未完成转入、转出记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-073",
+      "source_document": "转科记录",
+      "qc_point": "有转科医嘱但无转入、转出记录",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-074",
+      "source_document": "病程记录",
+      "qc_point": "修正或补充诊断时，未记录修改或补充理由及诊断依据",
+      "implementation_status": "active"
+    },
+    {
+      "rule_id": "LX0609-075",
+      "source_document": "有创操作记录",
+      "qc_point": "有创操作医嘱但无有创操作记录",
+      "implementation_status": "pending_definition",
+      "definition_note": "需提供有创操作目录及医嘱到操作记录的映射规则"
+    }
   ]
 }

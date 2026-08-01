@@ -15,7 +15,9 @@ export interface RecordComparisonScope {
 }
 
 function normalizeStatus(value?: string): string {
-  const status = String(value || '').trim().toLowerCase()
+  const status = String(value || '')
+    .trim()
+    .toLowerCase()
   if (status === 'technical_error_internal' || status === 'error') return 'technical_error'
   if (status === 'unsupported' || status === 'not_run') return 'not_executed'
   if (status === 'data_quality_gap') return 'data_gap'
@@ -24,7 +26,9 @@ function normalizeStatus(value?: string): string {
 }
 
 function resolveStatus(item: SichuanBatchIssueItem): string {
-  const isLuxian = String(item.rule_id || item.rule_code || '').toUpperCase().startsWith('LX0609-')
+  const isLuxian = String(item.rule_id || item.rule_code || '')
+    .toUpperCase()
+    .startsWith('LX0609-')
   return normalizeStatus(
     isLuxian
       ? item.status || item.canonical_status || item.result_status || item.display_status
@@ -66,10 +70,10 @@ function isSafeEvidenceRef(value: unknown): value is SichuanBatchSafeEvidenceRef
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const evidence = value as Record<string, unknown>
   return (
-    typeof evidence.source_type === 'string'
-    && evidence.source_type.trim().length > 0
-    && typeof evidence.source_ref === 'string'
-    && /^[a-z0-9][a-z0-9:_-]{1,127}$/i.test(evidence.source_ref.trim())
+    typeof evidence.source_type === 'string' &&
+    evidence.source_type.trim().length > 0 &&
+    typeof evidence.source_ref === 'string' &&
+    /^[a-z0-9][a-z0-9:_-]{1,127}$/i.test(evidence.source_ref.trim())
   )
 }
 
@@ -112,15 +116,16 @@ function buildEvidence(item: SichuanBatchIssueItem, key: string): QCRecordCompar
   const normalized = normalizeCustomerQcResult(item as unknown as RawCustomerQcResult)
   const ruleId = String(item.rule_id || item.rule_code || '')
   const seenRefs = new Set<string>()
-  const refs = (Array.isArray(item.evidence) ? item.evidence.filter(isSafeEvidenceRef) : [])
-    .filter((evidence) => {
+  const refs = (Array.isArray(item.evidence) ? item.evidence.filter(isSafeEvidenceRef) : []).filter(
+    (evidence) => {
       // 同一受控文书引用可能在聚合后重复出现；只合并完全相同的
       // “来源类型 + 安全引用”，不能按标题合并不同文书。
       const identity = `${evidence.source_type.trim().toLowerCase()}|${evidence.source_ref.trim()}`
       if (seenRefs.has(identity)) return false
       seenRefs.add(identity)
       return true
-    })
+    },
+  )
   if (refs.length) {
     return refs.slice(0, 6).map((evidence, index) => ({
       key: `${key}-evidence-${index}`,
@@ -133,7 +138,8 @@ function buildEvidence(item: SichuanBatchIssueItem, key: string): QCRecordCompar
         ruleId,
         evidence.source_type,
         normalized.display.evidenceSources.find(
-          (source) => source.kind.trim().toLowerCase() === evidence.source_type.trim().toLowerCase(),
+          (source) =>
+            source.kind.trim().toLowerCase() === evidence.source_type.trim().toLowerCase(),
         )?.fieldPath,
       ),
       quote: '',
