@@ -82,6 +82,54 @@ def test_build_documents_should_preserve_grouped_report_payload():
     assert len(documents[0]["report_items"]) == 2
 
 
+def test_build_documents_should_collapse_unmatched_lab_applications_into_one_summary():
+    documents = build_documents_from_domain_bundles(
+        {
+            "course": {
+                "source_documents": [
+                    {
+                        "document_type": "labtest_master",
+                        "document_id": "LAB-M-1",
+                        "document_title": "检验申请单",
+                        "display_time": "2026-04-03 17:43:59",
+                        "content": "检验项目：血常规",
+                        "source_fields": [
+                            {
+                                "source_field": "labtest_subject",
+                                "raw_value_preview": "临检实验室",
+                                "used": True,
+                            }
+                        ],
+                    },
+                    {
+                        "document_type": "labtest_master",
+                        "document_id": "LAB-M-2",
+                        "document_title": "检验申请单",
+                        "display_time": "2026-04-03 18:06:47",
+                        "content": "检验项目：肝功能",
+                        "source_fields": [
+                            {
+                                "source_field": "labtest_subject",
+                                "raw_value_preview": "生化实验室",
+                                "used": True,
+                            }
+                        ],
+                    },
+                ]
+            }
+        }
+    )
+
+    lab_applications = [doc for doc in documents if doc["doc_type"] == "labtest_master"]
+    assert len(lab_applications) == 1
+    assert lab_applications[0]["doc_name"] == "检验申请汇总（2）"
+    assert lab_applications[0]["content"].startswith(
+        "当前仅同步到检验申请，检验结果明细尚未同步。"
+    )
+    assert "2026-04-03 17:43:59 · 临检实验室 · 血常规" in lab_applications[0]["content"]
+    assert "2026-04-03 18:06:47 · 生化实验室 · 肝功能" in lab_applications[0]["content"]
+
+
 def test_build_documents_tree_from_domain_bundles():
     domain_bundles = {
         "admission": {

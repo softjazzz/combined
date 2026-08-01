@@ -382,6 +382,74 @@ def _normalize_source_document(
     }
 
 
+def _lab_application_subject(document: dict[str, Any]) -> str:
+    return _source_field_preview(
+        document,
+        ("labtest_subject", "specimen", "request_dept"),
+    )
+
+
+def _lab_application_item_name(document: dict[str, Any]) -> str:
+    content = _safe_text(document.get("content"))
+    for label in ("检验项目", "检验名称", "项目名称"):
+        matched = re.search(rf"(?:^|\n){label}\s*[:：]\s*([^\n]+)", content)
+        if matched:
+            return matched.group(1).strip()
+    return "未返回检验项目"
+
+
+def _collapse_labtest_master_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    applications = [item for item in documents if item.get("doc_type") == "labtest_master"]
+    if len(applications) <= 1:
+        return documents
+
+    ordered = sorted(
+        applications,
+        key=lambda item: (
+            _parse_sort_time(_safe_text(item.get("sort_time") or item.get("record_time"))),
+            _safe_text(item.get("document_id")),
+        ),
+    )
+    lines = [
+        " · ".join(
+            filter(
+                None,
+                (
+                    _safe_text(item.get("sort_time") or item.get("record_time")) or "时间未返回",
+                    _lab_application_subject(item),
+                    _lab_application_item_name(item),
+                ),
+            )
+        )
+        for item in ordered
+    ]
+    content = "当前仅同步到检验申请，检验结果明细尚未同步。\n" + "\n".join(lines)
+    latest_time = _safe_text(ordered[-1].get("sort_time") or ordered[-1].get("record_time"))
+    summary = {
+        **ordered[-1],
+        "id": "labtest-master-summary",
+        "doc_id": "labtest-master-summary",
+        "doc_key": "labtest_master::summary",
+        "doc_name": f"检验申请汇总（{len(ordered)}）",
+        "document_id": "labtest-master-summary",
+        "document_title": f"检验申请汇总（{len(ordered)}）",
+        "sort_time": latest_time,
+        "record_time": latest_time,
+        "has_content": True,
+        "content": content,
+        "length": len(content),
+        "sections": [],
+        "source_fields": [
+            {
+                "source_field": "application_count",
+                "raw_value_preview": str(len(ordered)),
+                "used": True,
+            }
+        ],
+    }
+    return [item for item in documents if item.get("doc_type") != "labtest_master"] + [summary]
+
+
 def build_documents_from_domain_bundles(
     domain_bundles: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -405,6 +473,7 @@ def build_documents_from_domain_bundles(
     documents = _merge_admission_diagnosis_documents(documents)
     documents = _merge_first_course_diagnosis_documents(documents)
     documents = _merge_discharge_diagnosis_documents(documents)
+    documents = _collapse_labtest_master_documents(documents)
     documents.sort(
         key=lambda item: (
             _parse_sort_time(_safe_text(item.get("sort_time"))),
