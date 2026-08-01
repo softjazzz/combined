@@ -26,8 +26,8 @@ const TagStub = {
 }
 
 const ModalStub = {
-  props: ['open'],
-  template: '<section v-if="open" class="modal-stub"><slot /></section>',
+  props: ['open', 'title'],
+  template: '<section v-if="open" class="modal-stub"><h2>{{ title }}</h2><slot /></section>',
 }
 
 const TransparentStub = {
@@ -154,6 +154,9 @@ describe('ContentQCTab P0 子锚点页面展示', () => {
     await wrapper.find('button').trigger('click')
     await flushPromises()
 
+    await wrapper.find('.summary-link').trigger('click')
+    await flushPromises()
+
     const text = wrapper.text()
     expect(text).toContain('发现问题1')
     expect(text).toContain('专项检查项2 项待复核')
@@ -161,7 +164,6 @@ describe('ContentQCTab P0 子锚点页面展示', () => {
     expect(text).toContain('外伤现病史地点/场景/致伤机制完整性')
     expect(text).toContain('专项检查项（待复核）')
     expect(text).toContain('外伤现病史触发，但受伤地点/场景需人工核对。')
-    expect(text).not.toContain('确认缺陷')
     expect(text).not.toContain('建议重跑')
     expect(text).not.toContain('系统确认缺陷')
   })

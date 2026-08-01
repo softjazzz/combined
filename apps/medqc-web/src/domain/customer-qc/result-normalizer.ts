@@ -115,6 +115,7 @@ function extractTimeliness(facts: Record<string, unknown>): CustomerDisplayFacts
       target !== 'attending_course_record' &&
       target !== 'senior_course_record') ||
     (state !== 'missing' && state !== 'late') ||
+    typeof thresholdHours !== 'number' ||
     !Number.isInteger(thresholdHours) ||
     thresholdHours <= 0 ||
     !sourceLabel
@@ -215,6 +216,7 @@ function extractSeverityCourseGap(
     !horizonDate ||
     !gapStartDate ||
     !gapEndDate ||
+    typeof gapDays !== 'number' ||
     !Number.isInteger(gapDays) ||
     gapDays <= 2
   )
@@ -244,6 +246,7 @@ function extractCriticalDailyCoverage(
     facts.severity !== 'critical' ||
     !missingDates.length ||
     missingDates.length > 7 ||
+    typeof missingCount !== 'number' ||
     !Number.isInteger(missingCount) ||
     missingCount < missingDates.length ||
     !missingFirstDate ||
@@ -322,16 +325,18 @@ function extractPathologySampling(
     (source): source is 'pathology_exam_master' | 'pathology_exam_report' =>
       source === 'pathology_exam_master' || source === 'pathology_exam_report',
   )
-  const checkedSources = checked.flatMap((candidate) => {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
-    const row = candidate as Record<string, unknown>
-    if (
-      (row.source !== 'surgery_record' && row.source !== 'daily_course_record') ||
-      (row.state !== 'present' && row.state !== 'empty')
-    )
-      return []
-    return [{ source: row.source, state: row.state }]
-  })
+  const checkedSources = checked.flatMap(
+    (candidate): NonNullable<CustomerDisplayFacts['pathologySampling']>['checkedSources'] => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+      const row = candidate as Record<string, unknown>
+      if (
+        (row.source !== 'surgery_record' && row.source !== 'daily_course_record') ||
+        (row.state !== 'present' && row.state !== 'empty')
+      )
+        return []
+      return [{ source: row.source, state: row.state }]
+    },
+  )
   if (!triggerSources.length || checkedSources.length !== 2) return undefined
   return { triggerSources, checkedSources }
 }
