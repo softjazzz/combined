@@ -33,7 +33,7 @@ _GROUP_DEFS: tuple[dict[str, str], ...] = (
     {"key": "admission", "label": "入院记录"},
     {"key": "course", "label": "病程记录"},
     {"key": "exam_attention", "label": "检查检验摘要"},
-    {"key": "lab_results", "label": "检验明细"},
+    {"key": "lab_results", "label": "检验报告"},
     {"key": "exam_results", "label": "检查结果"},
     {"key": "surgery", "label": "手术相关单据"},
     {"key": "terminal", "label": "出院记录"},
@@ -67,7 +67,7 @@ _DOC_TYPE_LABELS: dict[str, str] = {
     "exam_master": "检查结果",
     "exam_item_report": "检查结果",
     "labtest_master": "检验申请单",
-    "labtest_item_report": "检验明细",
+    "labtest_item_report": "检验报告",
     "inpat_drug_order": "长期医嘱",
     "inpat_nondrug_order": "临时医嘱",
 }

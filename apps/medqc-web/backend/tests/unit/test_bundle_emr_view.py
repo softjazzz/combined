@@ -48,7 +48,7 @@ def test_course_bundle_with_previous_schema_requires_report_grouping_refresh():
 
     assert _course_bundle_needs_exam_lab_refresh(
         {
-            "bundle_schema_version": "bundle-v2",
+            "bundle_schema_version": "bundle-v4",
             "structured_context": {"source_table_coverage": coverage},
         }
     ) is True
@@ -800,4 +800,5 @@ def test_build_documents_tree_should_group_exam_and_lab_documents():
 
     assert by_key["exam_attention"]["count"] == 1
     assert by_key["lab_results"]["count"] == 1
+    assert by_key["lab_results"]["label"] == "检验报告"
     assert by_key["exam_results"]["count"] == 1

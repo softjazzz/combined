@@ -573,7 +573,7 @@ _DOC_TYPE_LABELS: dict[str, str] = {
     "pathology_exam_master": "病理检查申请单",
     "pathology_exam_report": "病理检查报告",
     "labtest_master": "检验申请单",
-    "labtest_item_report": "检验明细",
+    "labtest_item_report": "检验报告",
     "inpat_drug_order": "长期医嘱",
     "inpat_nondrug_order": "临时医嘱",
     "inpat_bill_item": "住院费用/执行明细",

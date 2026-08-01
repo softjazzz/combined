@@ -45,12 +45,74 @@ def test_document_inventory_should_group_lab_items_into_one_report(monkeypatch):
     assert len(inventory) == 1
     report = inventory[0]
     assert report["document_type"] == "labtest_item_report"
-    assert report["document_id"] == "LAB-1"
+    assert report["document_id"] == "T-001"
     assert report["document_title"] == "血常规检验报告"
     assert report["display_time"] == "2026-02-21 07:45:30"
     assert [item["item_name"] for item in report["report_items"]] == ["白细胞计数", "血小板计数"]
     assert "白细胞计数：4.95" in report["content"]
     assert "血小板计数：254" in report["content"]
+
+
+def test_document_inventory_should_group_lab_items_by_report_number_before_item_test_id(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    inventory = assembly_module._build_document_inventory(
+        {
+            "labtest_item_report": [
+                {
+                    "test_no": "REPORT-001",
+                    "test_id": "ITEM-TEST-001",
+                    "item_no": "1",
+                    "item_name": "白细胞计数",
+                    "result": "4.95",
+                    "report_time": "2026-02-21 07:45:30",
+                },
+                {
+                    "test_no": "REPORT-001",
+                    "test_id": "ITEM-TEST-002",
+                    "item_no": "2",
+                    "item_name": "血小板计数",
+                    "result": "254",
+                    "report_time": "2026-02-21 07:45:30",
+                },
+            ],
+        },
+        "cdm",
+    )
+
+    assert len(inventory) == 1
+    assert inventory[0]["document_id"] == "REPORT-001"
+    assert [item["item_name"] for item in inventory[0]["report_items"]] == [
+        "白细胞计数",
+        "血小板计数",
+    ]
+
+
+def test_document_inventory_should_not_merge_different_lab_report_numbers(monkeypatch):
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    inventory = assembly_module._build_document_inventory(
+        {
+            "labtest_item_report": [
+                {
+                    "test_no": "REPORT-001",
+                    "test_id": "SHARED-TEST-ID",
+                    "item_no": "1",
+                    "item_name": "白细胞计数",
+                    "result": "4.95",
+                },
+                {
+                    "test_no": "REPORT-002",
+                    "test_id": "SHARED-TEST-ID",
+                    "item_no": "1",
+                    "item_name": "尿蛋白",
+                    "result": "阴性",
+                },
+            ],
+        },
+        "cdm",
+    )
+
+    assert len(inventory) == 2
+    assert {item["document_id"] for item in inventory} == {"REPORT-001", "REPORT-002"}
 
 
 def test_document_inventory_should_group_exam_items_into_one_report(monkeypatch):
@@ -93,7 +155,7 @@ def test_document_inventory_should_group_exam_items_into_one_report(monkeypatch)
     assert len(inventory) == 1
     report = inventory[0]
     assert report["document_type"] == "exam_item_report"
-    assert report["document_id"] == "EXAM-1"
+    assert report["document_id"] == "E-001"
     assert report["document_title"] == "胸部CT平扫检查报告"
     assert len(report["report_items"]) == 2
     assert "双肺纹理增多" in report["content"]

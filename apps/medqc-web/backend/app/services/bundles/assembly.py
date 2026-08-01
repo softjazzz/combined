@@ -1746,7 +1746,9 @@ def _build_grouped_lab_reports(
     for row_index, row in enumerate(item_rows):
         group_key, report_id = _report_row_group_key(
             row,
-            id_fields=("test_id", "test_no"),
+            # 同步契约以 test_no + item_no 唯一标识明细。test_no 是报告单号，
+            # test_id 在部分客户源中可能落到项目级，不能优先用于报告聚合。
+            id_fields=("test_no", "test_id"),
             fallback_title_fields=("document_title", "labtest_subject"),
             row_index=row_index,
         )
@@ -1868,7 +1870,8 @@ def _build_grouped_exam_reports(
     for row_index, row in enumerate(item_rows):
         group_key, report_id = _report_row_group_key(
             row,
-            id_fields=("exam_id", "exam_no"),
+            # 与检验相同，exam_no 是报告级编号；exam_id 仅作为缺号回退。
+            id_fields=("exam_no", "exam_id"),
             fallback_title_fields=("document_title", "exam_name", "exam_item_name"),
             row_index=row_index,
         )

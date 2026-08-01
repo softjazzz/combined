@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 
-BUNDLE_SCHEMA_VERSION_CURRENT = "bundle-v4"
-BUNDLE_SCHEMA_VERSION_PREVIOUS = "bundle-v3"
+BUNDLE_SCHEMA_VERSION_CURRENT = "bundle-v5"
+BUNDLE_SCHEMA_VERSION_PREVIOUS = "bundle-v4"
 BUNDLE_SCHEMA_COMPAT_READABLE_VERSIONS = {
     BUNDLE_SCHEMA_VERSION_CURRENT,
     BUNDLE_SCHEMA_VERSION_PREVIOUS,
+    "bundle-v3",
     "bundle-v2",
     "bundle-v1",
     "bundle-v0",
