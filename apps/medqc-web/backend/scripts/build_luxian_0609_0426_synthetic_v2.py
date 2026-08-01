@@ -43,6 +43,7 @@ TARGET_SOURCE_FILE = "derived://0426/luxian_0609_0426_synthetic_v2"
 TARGET_SOURCE_SHEET = "0426-derived"
 TARGET_INSTITUTE_ID = "LX0609_0426_SYN"
 TARGET_VISIT_PREFIX = "LX0609_0426_SYN_"
+TARGET_MR_PREFIX = "LX0609V2-"
 DEID_VERSION = "local-rule-deid-v1"
 DEFAULT_OUTPUT_DIR = ROOT / "tmp-lx0609-0426-synthetic-v2"
 
@@ -106,6 +107,16 @@ FAMILY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "输血": ("输血", "红细胞", "血浆", "配血", "输血同意", "血型"),
     "肿瘤病理/化疗": ("肿瘤", "病理", "化疗", "癌", "恶性", "取材"),
 }
+
+FAMILY_KEYWORD_ORDER: tuple[str, ...] = (
+    "输血",
+    "肿瘤病理/化疗",
+    "手术麻醉",
+    "会诊",
+    "查房/病重病危",
+    "检查检验",
+    "时限",
+)
 
 EXTENDED_SOURCE_TABLES: tuple[str, ...] = (
     "mr",
@@ -312,16 +323,7 @@ def classify_family(*, rule_ids: Sequence[str], text: str) -> str:
         if rule_id_set.intersection(family_rule_ids):
             return family
     upper_text = text.upper()
-    keyword_order = (
-        "输血",
-        "肿瘤病理/化疗",
-        "手术麻醉",
-        "会诊",
-        "查房/病重病危",
-        "检查检验",
-        "时限",
-    )
-    for family in keyword_order:
+    for family in FAMILY_KEYWORD_ORDER:
         keywords = FAMILY_KEYWORDS[family]
         if any(keyword.upper() in upper_text for keyword in keywords):
             return family
@@ -489,7 +491,7 @@ def build_selection(
                     source_status="candidate_ready" if hints else "keyword_discovered",
                     target_visit_id=f"{TARGET_VISIT_PREFIX}{target_index:03d}",
                     target_patient_id=f"P-{TARGET_VISIT_PREFIX}{target_index:03d}",
-                    target_mr_no=f"LX0609V2-{target_index:03d}",
+                    target_mr_no=f"{TARGET_MR_PREFIX}{target_index:03d}",
                     target_patient_name=patient_name,
                 )
             )
@@ -538,7 +540,7 @@ def build_selection(
                     source_status="quota_backfill_due_source_gap",
                     target_visit_id=f"{TARGET_VISIT_PREFIX}{target_index:03d}",
                     target_patient_id=f"P-{TARGET_VISIT_PREFIX}{target_index:03d}",
-                    target_mr_no=f"LX0609V2-{target_index:03d}",
+                    target_mr_no=f"{TARGET_MR_PREFIX}{target_index:03d}",
                     target_patient_name=patient_name,
                 )
             )
