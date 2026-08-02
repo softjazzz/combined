@@ -727,6 +727,13 @@ def _build_transfer(
 ) -> list[str]:
     _clear_visit_rows(rows, case, "inpat_nondrug_order", "handoff_record", "handover_record", "transfer_out_record", "transfer_in_record", "daily_course_record", "diagnosis")
     refs = [_append_registration(rows, case, v2)]
+    refs.append(_append_order(
+        rows, case, v2, table_name="inpat_nondrug_order",
+        suffix="physician-change", prescribed_time=v2._dt_for_case(case, 2, 8),
+        content="经治医师变更，由陈某医师交班给李某医师。",
+        order_type="人员变更", order_name="经治医师变更",
+        old_physician_name="陈某医师", new_physician_name="李某医师",
+    ))
     refs.append(_append_document(rows, case, v2, table_name="handoff_record", suffix="handoff", title="交班记录", record_time=v2._dt_for_case(case, 2, 8), content="交班前完成交班记录，说明当前诊断、治疗和注意事项。"))
     refs.append(_append_document(rows, case, v2, table_name="handover_record", suffix="handover", title="接班记录", record_time=v2._dt_for_case(case, 2, 14), content="接班后6小时完成接班记录，复核诊断及后续计划。"))
     refs.append(_append_order(rows, case, v2, table_name="inpat_nondrug_order", suffix="transfer-order", prescribed_time=v2._dt_for_case(case, 3, 8), content="转入呼吸内科", order_type="转科", order_name="转科医嘱"))

@@ -520,3 +520,21 @@ def test_tumor_antimicrobial_and_transfer_issue_variants_change_source_facts() -
         for table_name in ("transfer_out_record", "transfer_in_record")
         for row in rows_by_table.get(table_name, [])
     )
+
+
+def test_transfer_complete_case_has_explicit_physician_change_trigger() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    visit_id = next(case.target_visit_id for case in cases if case.target_index == 36)
+
+    change_order = next(
+        row
+        for row in rows_by_table["inpat_nondrug_order"]
+        if row.get("visit_id") == visit_id
+        and row.get("order_name") == "经治医师变更"
+    )
+    assert change_order["prescribed_datetime"]
+    assert "陈某医师" in change_order["record_content"]
+    assert "李某医师" in change_order["record_content"]

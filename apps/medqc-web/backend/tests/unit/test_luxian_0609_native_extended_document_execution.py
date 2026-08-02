@@ -33,7 +33,7 @@ from app.services.luxian_0609.source_registry import (
 )
 
 
-def _session(rows_by_source):
+def _session(rows_by_source, *, unavailable_sources=frozenset()):
     query_versions = {
         "inpat_registration": "snapshot-provider-inpat_registration-v1",
         "death_record": "snapshot-provider-death_record-v1",
@@ -67,26 +67,36 @@ def _session(rows_by_source):
         rows = tuple(rows_by_source.get(source_key, ()))
         document_refs = build_material_document_refs(source_key, rows)
         all_refs.extend(document_refs)
-        query_state = QueryStatus.AVAILABLE if rows else QueryStatus.EMPTY
-        material = SnapshotSourceRows(
-            source_key=source_key,
-            rows=rows,
-            truncated=False,
-            limit_rows=50,
+        is_unavailable = source_key in unavailable_sources
+        query_state = (
+            QueryStatus.UNAVAILABLE
+            if is_unavailable
+            else QueryStatus.AVAILABLE if rows else QueryStatus.EMPTY
         )
-        sources[source_key] = material
+        completeness = (
+            SourceCompleteness.UNPROVEN
+            if is_unavailable
+            else SourceCompleteness.COMPLETE
+        )
+        if not is_unavailable:
+            sources[source_key] = SnapshotSourceRows(
+                source_key=source_key,
+                rows=rows,
+                truncated=False,
+                limit_rows=50,
+            )
         observations.append(
             SourceObservation.create(
                 source_key=source_key,
                 query_state=query_state,
-                completeness=SourceCompleteness.COMPLETE,
-                record_count=len(rows),
+                completeness=completeness,
+                record_count=None if is_unavailable else len(rows),
                 query_version=query_version,
                 snapshot_ref=build_material_snapshot_ref(
                     source_key=source_key,
                     query_version=query_version,
                     query_state=query_state,
-                    completeness=SourceCompleteness.COMPLETE,
+                    completeness=completeness,
                     document_refs=document_refs,
                 ),
             )
@@ -108,8 +118,10 @@ def _session(rows_by_source):
     )
 
 
-async def _evaluate(rule_id, rows_by_source):
-    snapshot, materials = _session(rows_by_source)
+async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset()):
+    snapshot, materials = _session(
+        rows_by_source, unavailable_sources=unavailable_sources
+    )
     result = await execute_luxian_0609_native_extended_document_rules(
         rule_ids=(rule_id,),
         evidence_snapshot=snapshot,
@@ -131,6 +143,13 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
 
     assert "mr_surgery" in sources
     assert "mr_bloodtrans" in sources
+
+
+def test_071_binds_authoritative_and_explicit_order_change_sources() -> None:
+    sources = resolve_luxian_0609_decision_support_source_keys(("LX0609-071",))
+
+    assert "physician_change_event" in sources
+    assert "inpat_nondrug_order" in sources
 
 
 @pytest.mark.asyncio
@@ -416,6 +435,41 @@ async def test_071_physician_change_requires_handoff_and_handover() -> None:
     )
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_071_uses_explicit_physician_change_order_when_event_table_is_empty() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-071",
+        {
+            "inpat_nondrug_order": (
+                {
+                    "order_name": "经治医师变更",
+                    "prescribed_datetime": "2026-07-01 08:00:00",
+                },
+            ),
+            "handoff_record": ({"record_time": "2026-07-01 07:50:00"},),
+            "handover_record": ({"record_time": "2026-07-01 14:00:00"},),
+        },
+        unavailable_sources={"physician_change_event"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-071"]
+    assert facts["change_time"] == "2026-07-01 08:00:00"
+    assert facts["handover_threshold_hours"] == 24
+
+
+@pytest.mark.asyncio
+async def test_071_missing_event_table_and_explicit_order_remains_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-071",
+        {},
+        unavailable_sources={"physician_change_event"},
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "source_unavailable"
 
 
 @pytest.mark.asyncio

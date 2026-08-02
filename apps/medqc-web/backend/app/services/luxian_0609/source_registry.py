@@ -496,7 +496,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-062": ("inpat_registration",),
     "LX0609-067": ("inpat_registration",),
     "LX0609-068": ("inpat_registration",),
-    "LX0609-071": ("physician_change_event",),
+    # 优先使用权威经治医师变更事件；部分院端尚未提供独立事件表，允许
+    # 明确的“经治医师变更/交接班”医嘱作为受控替代触发。
+    "LX0609-071": ("physician_change_event", "inpat_nondrug_order"),
     "LX0609-072": ("inpat_nondrug_order",),
     "LX0609-073": ("inpat_nondrug_order",),
     "LX0609-074": ("diagnosis",),

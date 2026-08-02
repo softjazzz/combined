@@ -109,6 +109,9 @@ _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
 )
+_PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
+    r"经治医师(?:发生)?变更|更换经治医师|交接班医嘱"
+)
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -1632,21 +1635,39 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-071":
-            source_error = (
-                physician_change_error or handoff_error or handover_error
+            explicit_change_orders = tuple(
+                row
+                for row in nondrug_order_rows
+                if _PHYSICIAN_CHANGE_ORDER_PATTERN.search(
+                    " ".join(
+                        _clean(row.get(field))
+                        for field in ("order_name", "order_type", "record_content")
+                    )
+                )
             )
+            change_source_key = "physician_change_event"
+            effective_change_rows = physician_change_rows
+            if not effective_change_rows and explicit_change_orders:
+                change_source_key = "inpat_nondrug_order"
+                effective_change_rows = explicit_change_orders
+
+            source_error = handoff_error or handover_error
+            if not effective_change_rows:
+                source_error = source_error or physician_change_error or nondrug_order_error
             if source_error:
                 final_state, reason_code = "data_gap", source_error
-            elif not physician_change_rows:
+            elif not effective_change_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
                 change_times = tuple(
                     parsed
-                    for row in physician_change_rows
+                    for row in effective_change_rows
                     if (
                         parsed := _parse_datetime(
                             row.get("change_datetime")
                             or row.get("handoff_datetime")
+                            or row.get("prescribed_datetime")
+                            or row.get("order_datetime")
                         )
                     )
                     is not None
@@ -1661,7 +1682,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     for row in handover_rows
                     if (parsed := _row_time(row)) is not None
                 )
-                if len(change_times) != len(physician_change_rows):
+                if len(change_times) != len(effective_change_rows):
                     final_state, reason_code = (
                         "data_gap",
                         "authoritative_time_missing",
@@ -1695,7 +1716,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     rule_id=rule_id,
                     snapshot=evidence_snapshot,
                     source_keys=(
-                        "physician_change_event",
+                        change_source_key,
                         "handoff_record",
                         "handover_record",
                     ),
