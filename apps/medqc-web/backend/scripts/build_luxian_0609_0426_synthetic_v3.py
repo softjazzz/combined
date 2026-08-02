@@ -22,6 +22,9 @@ from app.services.luxian_0609_rule_master import (  # noqa: E402
     Luxian0609RuleMasterEntry,
     load_luxian_0609_rule_master,
 )
+from app.services.luxian_0609.rule_contracts import (  # noqa: E402
+    load_luxian_0609_rule_contracts,
+)
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
     RULE_NUMBERS_BY_CASE,
     apply_controlled_evidence,
@@ -922,10 +925,28 @@ def _render_report(
     clone_audit: dict[str, Any],
     forbidden_hits: dict[str, int],
     ledger: Sequence[dict[str, Any]],
+    validation_matrix: Sequence[dict[str, Any]],
     write_summary: dict[str, Any] | None,
 ) -> str:
     coverage_counts = Counter(row["coverage_status"] for row in ledger)
     implementation_counts = Counter(row["implementation_status"] for row in ledger)
+    definition_phase_by_rule = {
+        contract.rule_id: contract.phase_status
+        for contract in load_luxian_0609_rule_contracts()
+    }
+    definition_counts = Counter(definition_phase_by_rule.values())
+    acceptance_tier_by_rule = {
+        row["rule_id"]: row["acceptance_tier"] for row in validation_matrix
+    }
+    acceptance_counts = Counter(acceptance_tier_by_rule.values())
+    defined_rule_ids = {
+        rule_id
+        for rule_id, phase_status in definition_phase_by_rule.items()
+        if phase_status != "pending_definition"
+    }
+    defined_assertion_count = sum(
+        row["rule_id"] in defined_rule_ids for row in validation_matrix
+    )
     lines = [
         "# LX0609 0426 派生合成验证集 v3 构建报告",
         "",
@@ -933,14 +954,26 @@ def _render_report(
         f"- 源样本池：`{source_pool.get('id')}` / {source_pool.get('name')}",
         f"- 候选病历：{len(cases)} 份",
         f"- 写库状态：{'已写入' if write_summary else 'dry-run，未写数据库'}",
-        "- 黄金答案：75条均已绑定唯一受控病例；67条正式口径、8条临时口径",
+        (
+            f"- 黄金答案：75条规则共 {len(validation_matrix)} 个多状态受控断言；"
+            f"标准层级为 {acceptance_counts['formal']} 条正式、"
+            f"{acceptance_counts['provisional']} 条临时"
+        ),
+        (
+            f"- 本阶段收敛范围：{len(defined_rule_ids)} 条规则、"
+            f"{defined_assertion_count} 个断言；"
+            f"另有 {definition_counts['pending_definition']} 条待确认规则不计入本轮验收"
+        ),
         "",
         "## 唯一规则总表口径",
         "",
         f"- 总规则：{len(ledger)}",
         f"- 当前启用：{implementation_counts['active']}",
         f"- 合同就绪、执行器未启用：{implementation_counts['contract_ready']}",
-        f"- 待定义：{implementation_counts['pending_definition']}",
+        f"- 执行器尚未实现：{implementation_counts['pending_definition']}",
+        f"- 定义完整：{definition_counts['phase_1_target']}",
+        f"- 部分定义：{definition_counts['phase_1_partial']}",
+        f"- 待客户确认：{definition_counts['pending_definition']}",
         f"- 已分配候选、待黄金复核：{coverage_counts['assigned_pending_golden_review']}",
         f"- 当前启用规则覆盖缺口：{coverage_counts['coverage_gap']}",
         "",
@@ -963,7 +996,7 @@ def _render_report(
             f"- 检查报告：{int((clone_audit.get('exam_lab_upgrade') or {}).get('exam_report_count') or 0)} 份",
             f"- 检验报告组：{int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_master_count') or 0)} 组，明细 {int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_item_count') or 0)} 项",
             f"- 危急值场景：{int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_value_count') or 0)} 个，其中已处置 {int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_disposition_count') or 0)} 个",
-            f"- 唯一验收映射：{int((clone_audit.get('full_validation_upgrade') or {}).get('rule_count') or 0)} 条",
+            f"- 已覆盖规则：{int((clone_audit.get('full_validation_upgrade') or {}).get('rule_count') or 0)} 条",
             f"- 验收口径：`{json.dumps((clone_audit.get('full_validation_upgrade') or {}).get('tier_counts') or {}, ensure_ascii=False)}`",
             f"- 来源配额缺口：`{json.dumps(selection_summary.get('source_gaps') or {}, ensure_ascii=False)}`",
             "",
@@ -1051,6 +1084,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             clone_audit=clone_audit,
             forbidden_hits=forbidden_hits,
             ledger=ledger,
+            validation_matrix=validation_matrix,
             write_summary=write_summary,
         ),
     )

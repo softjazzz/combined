@@ -82,3 +82,25 @@ def test_defined_only_matrix_excludes_nine_pending_rules(tmp_path: Path) -> None
             "LX0609-075",
         }
     )
+
+
+def test_validation_matrix_summary_separates_rules_from_assertions() -> None:
+    module = _load_script()
+
+    summary = module.summarize_validation_matrix(
+        {
+            "LX0609_0426_SYN_V3_001": {
+                "LX0609-001": "compliant",
+                "LX0609-002": "non_compliant",
+            },
+            "LX0609_0426_SYN_V3_002": {
+                "LX0609-001": "non_compliant",
+            },
+        }
+    )
+
+    assert summary == {
+        "visit_count": 2,
+        "unique_rule_count": 2,
+        "assertion_count": 3,
+    }

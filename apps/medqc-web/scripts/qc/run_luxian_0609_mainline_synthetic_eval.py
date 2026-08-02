@@ -175,7 +175,7 @@ def resolve_synthetic_institute_id(visit_id: str, configured: str = "") -> str:
 def load_validation_matrix(
     path: Path, *, defined_only: bool = False
 ) -> dict[str, dict[str, str]]:
-    """读取“每个规则只绑定一个病例”的 v3 黄金验收矩阵。"""
+    """读取 v3 黄金验收矩阵；同一规则可绑定多个受控状态病例。"""
     grouped: dict[str, dict[str, str]] = {}
     allowed_rule_ids = defined_rule_ids() if defined_only else None
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -192,6 +192,21 @@ def load_validation_matrix(
                 raise ValueError(f"validation matrix duplicates {rule_id}")
             visit_rules[rule_id] = expected_status
     return grouped
+
+
+def summarize_validation_matrix(
+    validation_matrix: dict[str, dict[str, str]],
+) -> dict[str, int]:
+    unique_rule_ids = {
+        rule_id
+        for visit_rules in validation_matrix.values()
+        for rule_id in visit_rules
+    }
+    return {
+        "visit_count": len(validation_matrix),
+        "unique_rule_count": len(unique_rule_ids),
+        "assertion_count": sum(len(visit_rules) for visit_rules in validation_matrix.values()),
+    }
 
 
 def inspect_pg_synthetic_cases() -> dict[str, Any]:
@@ -398,6 +413,7 @@ async def run_all(args: argparse.Namespace) -> int:
         if args.validation_matrix
         else {}
     )
+    matrix_scope = summarize_validation_matrix(validation_matrix)
     if validation_matrix:
         all_visit_ids = sorted(validation_matrix)
     else:
@@ -408,7 +424,11 @@ async def run_all(args: argparse.Namespace) -> int:
         raise RuntimeError("没有选中任何 LX0609_SYN_* 样本")
 
     output_dir = Path(args.output_dir)
-    print(f"[mainline] selected_visits={len(visit_ids)} output_dir={output_dir}")
+    print(
+        f"[mainline] selected_visits={len(visit_ids)} "
+        f"unique_rules={matrix_scope['unique_rule_count']} "
+        f"assertions={matrix_scope['assertion_count']} output_dir={output_dir}"
+    )
     rows: list[dict[str, Any]] = []
     for index, visit_id in enumerate(visit_ids, start=1):
         print(f"[mainline] {index}/{len(visit_ids)} running {visit_id}")
@@ -452,6 +472,8 @@ async def run_all(args: argparse.Namespace) -> int:
                 "generated_at": datetime.now().isoformat(timespec="seconds"),
                 "selected_count": len(visit_ids),
                 "failed_count": len(failed),
+                "unique_rule_count": matrix_scope["unique_rule_count"],
+                "assertion_count": matrix_scope["assertion_count"],
                 "expected_count": sum(int(row.get("expected_count") or 0) for row in rows),
                 "matched_count": sum(int(row.get("matched_count") or 0) for row in rows),
                 "rows": rows,
