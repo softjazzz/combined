@@ -41,7 +41,7 @@ SURGERY_DOCUMENT_RULE_IDS = (
 )
 EXECUTOR_KEY = "surgery_document"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_DOCUMENT_RULE_IDS)
-_TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "surgery-document-ruledecision-shadow-v2"
 _TYPED_RULE_SOURCE_KEYS = {
     "LX0609-029": ("presurg_summary", "surgery_record", "mr_surgery"),
     "LX0609-034": ("anesthesia_record", "mr_surgery", "consent_form"),
@@ -526,7 +526,7 @@ def _typed_anesthesia_trigger(
 def _qualified_traditional_surgery_present(
     materials: Luxian0609EvidenceMaterialStore | None,
 ) -> bool | None:
-    """仅以手术等级或切口等级等结构化字段确认传统手术，不读名称关键词。"""
+    """复用院内目录口径，目录未命中时才回退结构化等级。"""
 
     if materials is None:
         return None
@@ -534,19 +534,7 @@ def _qualified_traditional_surgery_present(
         rows = materials.rows("mr_surgery")
     except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
         return None
-    known_levels = {
-        "一级", "二级", "三级", "四级", "1", "2", "3", "4",
-        "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "I", "II", "III", "IV",
-    }
-    known_incisions = {"I", "II", "III", "IV", "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ"}
-    return any(
-        _clean(row.get("surgical_level")).upper() in known_levels
-        or _clean(
-            row.get("surgical_incision_level") or row.get("surgial_incision_level")
-        ).upper()
-        in known_incisions
-        for row in rows
-    )
+    return any(has_qualified_traditional_surgery_row(row) for row in rows)
 
 
 _PERSON_SPLIT_PATTERN = re.compile(r"[\s、,，;；/|]+")

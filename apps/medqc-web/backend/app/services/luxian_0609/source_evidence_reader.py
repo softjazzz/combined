@@ -11,6 +11,8 @@ from typing import Any, Mapping
 
 from app.services.bundles import assembly as bundle_assembly
 
+from .surgery_procedure_catalog import catalog_surgery_state
+
 
 PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 SURGERY_TIME_FIELDS = (
@@ -846,7 +848,11 @@ def has_trusted_performed_surgery(*, source_key: str, row: Mapping[str, Any]) ->
 
 
 def has_qualified_traditional_surgery_row(row: Mapping[str, Any]) -> bool:
-    """用结构化手术/切口等级确认传统手术，治疗性操作不能触发手术专属规则。"""
+    """院内目录优先确认手术；未命中目录时才保留原结构化等级回退。"""
+
+    catalog_state = catalog_surgery_state(row)
+    if catalog_state is not None:
+        return catalog_state
 
     known_levels = {
         "一级",

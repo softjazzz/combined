@@ -14,6 +14,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .source_manifest import QueryStatus
+from .surgery_procedure_catalog import catalog_surgery_state
 from .source_evidence_reader import (
     SURGERY_TIME_FIELDS,
     SourceEvidenceUnavailable,
@@ -28,7 +29,7 @@ from .source_evidence_reader import (
 
 _QUERY_VERSION = "runtime_source_v1"
 _EXTRACTOR_VERSION = "rts-v1"
-_MAPPING_POLICY_VERSION = "rtm-v1"
+_MAPPING_POLICY_VERSION = "rtm-v2"
 _MAX_SOURCES = 6
 _PERFORMED_TIME_FORMAT = "%Y-%m-%d %H:%M:%S+08"
 _PRESURG_RECORD_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -288,6 +289,7 @@ def provide_luxian_0609_runtime_shadow_inputs(
     mr_surgery_times = tuple(
         parsed
         for row in rows_by_source.get("mr_surgery", ())
+        if catalog_surgery_state(row) is not False
         for parsed in trusted_performed_surgery_times(source_key="mr_surgery", row=row)
     )
     # 保留已验收的 surgery_record 时序语义；仅在其没有严格时间时回退 typed mr_surgery。

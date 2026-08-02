@@ -27,6 +27,7 @@ from .source_evidence_reader import (
     authoritative_document_time_value,
     trusted_performed_surgery_times,
 )
+from .surgery_procedure_catalog import catalog_surgery_state
 
 
 EXECUTOR_KEY = "extended_document"
@@ -209,7 +210,7 @@ def _decision(
         qc_direction=direction,
         reason_code=reason_code,
         fact_refs=_fact_refs(snapshot, source_keys),
-        evaluator_version="extended-document-v1",
+        evaluator_version="extended-document-v2",
         confidence=None,
     )
 
@@ -401,14 +402,35 @@ def _course_dates(
     }
 
 
+def _qualified_surgery_rows(
+    mr_surgery_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[Mapping[str, Any], ...], tuple[Mapping[str, Any], ...]]:
+    return (
+        tuple(
+            row
+            for row in mr_surgery_rows
+            if catalog_surgery_state(row) is not False
+        ),
+        tuple(
+            row
+            for row in surgery_record_rows
+            if catalog_surgery_state(row) is not False
+        ),
+    )
+
+
 def _performed_surgery_times(
     mr_surgery_rows: Sequence[Mapping[str, Any]],
     surgery_record_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[datetime, ...]:
     values: list[datetime] = []
+    qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
+        mr_surgery_rows, surgery_record_rows
+    )
     for source_key, rows in (
-        ("mr_surgery", mr_surgery_rows),
-        ("surgery_record", surgery_record_rows),
+        ("mr_surgery", qualified_mr_rows),
+        ("surgery_record", qualified_record_rows),
     ):
         for row in rows:
             values.extend(
@@ -1110,9 +1132,12 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-066":
             surgery_error = mr_surgery_error or surgery_record_error
+            qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
+                mr_surgery_rows, surgery_record_rows
+            )
             if surgery_error:
                 final_state, reason_code = "data_gap", surgery_error
-            elif not mr_surgery_rows and not surgery_record_rows:
+            elif not qualified_mr_rows and not qualified_record_rows:
                 final_state, reason_code = "not_applicable", "performed_event_absent"
             elif postop_first_error:
                 final_state, reason_code = "data_gap", postop_first_error
@@ -1140,12 +1165,15 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id in {"LX0609-064", "LX0609-065"}:
             surgery_error = mr_surgery_error or surgery_record_error
+            qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
+                mr_surgery_rows, surgery_record_rows
+            )
             surgery_times = _performed_surgery_times(
                 mr_surgery_rows, surgery_record_rows
             )
             if surgery_error:
                 final_state, reason_code = "data_gap", surgery_error
-            elif not mr_surgery_rows and not surgery_record_rows:
+            elif not qualified_mr_rows and not qualified_record_rows:
                 final_state, reason_code = "not_applicable", "performed_event_absent"
             elif not surgery_times:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
@@ -1187,7 +1215,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     surgeon_tokens = set().union(
                         *(
                             _person_tokens(row)
-                            for row in (*mr_surgery_rows, *surgery_record_rows)
+                            for row in (*qualified_mr_rows, *qualified_record_rows)
                         )
                     )
                     if not surgeon_tokens:

@@ -17,12 +17,14 @@ from .decision_model import (
 from .evidence_material import Luxian0609EvidenceMaterialStore
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
-from .source_evidence_reader import read_luxian_0609_native_source_rows
+from .source_evidence_reader import (
+    read_luxian_0609_native_source_rows,
+)
+from .surgery_procedure_catalog import catalog_surgery_state, effective_surgery_level
 
 
 RULE_ID = "LX0609-040"
 LEGACY_RULE_IDS = ("SC-083", "CL-108")
-_LEVEL4_VALUES = frozenset({"四级", "4", "Ⅳ", "IV"})
 _COMPLETED_MDT_PATTERN = re.compile(
     r"多学科会诊记录|经多学科(?:讨论|会诊)[^。；]{0,160}(?:一致认为|讨论后|会诊后)|"
     r"MDT讨论[^。；]{0,160}(?:一致认为|可手术|结论)",
@@ -67,7 +69,7 @@ _PROJECTION_PATTERN = re.compile(
 )
 _MAX_DOCUMENT_CHARS = 3000
 _MAX_CONTEXT_CHARS = 6200
-_TYPED_EVALUATOR_VERSION = "mdt-ruledecision-shadow-v1"
+_TYPED_EVALUATOR_VERSION = "mdt-ruledecision-shadow-v2"
 _DECISION_SOURCE_KEYS = frozenset(
     {"mr_surgery", "presurg_discussion", "consultation_record"}
 )
@@ -565,6 +567,7 @@ async def execute_luxian_0609_native_mdt_rule(
         row
         for row in surgeries
         if _parse_datetime(row.get("surgery_begin_datetime")) is not None
+        and catalog_surgery_state(row) is not False
     ]
     if not performed:
         return finish(
@@ -575,7 +578,7 @@ async def execute_luxian_0609_native_mdt_rule(
     level4 = [
         row
         for row in performed
-        if _clean(row.get("surgical_level")).upper() in _LEVEL4_VALUES
+        if effective_surgery_level(row) == "四级"
     ]
     if not level4:
         # 040只由“四级手术”积极事实触发。等级空缺不等于四级手术，

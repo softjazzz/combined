@@ -154,6 +154,75 @@ async def test_typed_mdt_builds_bound_decision_from_same_session_without_custome
 
 
 @pytest.mark.asyncio
+async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgery_code": "01.2408",
+                    "surgery_name": "颅内血肿清除术",
+                    "surgical_level": "三级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [
+                {
+                    "record_time": "2026-01-01T09:00:00",
+                    "record_content": "经多学科讨论后一致认为可实施手术。",
+                }
+            ],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+    assert execution.decisions[0].reason_code == "requirement_satisfied"
+
+
+@pytest.mark.asyncio
+async def test_catalog_operation_never_triggers_level_four_mdt():
+    session = _session(
+        {
+            "mr_surgery": [
+                {
+                    "surgery_code": "00.5901",
+                    "surgery_name": "冠脉瞬时无波形比值检查[iFR检查]",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-01-02T09:00:00",
+                }
+            ],
+            "presurg_discussion": [],
+            "consultation_record": [],
+        }
+    )
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_LLM(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
+    assert execution.decisions[0].reason_code == "trigger_absent_complete"
+
+
+@pytest.mark.asyncio
 async def test_typed_mdt_complete_empty_trigger_is_bound_not_applicable():
     session = _session(
         {

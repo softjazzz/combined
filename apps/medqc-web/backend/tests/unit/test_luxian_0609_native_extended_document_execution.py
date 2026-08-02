@@ -345,6 +345,25 @@ async def test_066_without_performed_surgery_is_not_applicable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_066_catalog_operation_is_not_a_performed_surgery() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "mr_surgery": (
+                {
+                    "surgery_code": "00.5901",
+                    "surgery_name": "冠脉瞬时无波形比值检查[iFR检查]",
+                    "surgical_level": "四级",
+                    "surgery_begin_datetime": "2026-07-01 08:00:00",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
 async def test_069_consultation_over_24_hours_is_non_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-069",

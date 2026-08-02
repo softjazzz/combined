@@ -25,6 +25,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
+    has_qualified_traditional_surgery_row,
     has_strict_performed_time,
     parse_strict_performed_time,
     read_luxian_0609_native_source_rows,
@@ -56,7 +57,7 @@ _MAX_ROWS_PER_SOURCE = 6
 _MAX_ROW_CHARS = 1000
 _MAX_CONTEXT_CHARS = 12000
 _TYPED_003_EVALUATOR_VERSION = "surgery-timeliness-003-ruledecision-v1"
-_TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v1"
+_TYPED_SURGERY_GATE_EVALUATOR_VERSION = "surgery-gate-ruledecision-shadow-v2"
 _TYPED_DECISION_RULE_IDS = frozenset(SURGERY_GATE_RULE_IDS)
 _TEXT_FACT_RULE_IDS = frozenset(
     {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033"}
@@ -296,21 +297,9 @@ def _structured_028_not_applicable(
 def _qualified_traditional_surgery_present(
     rows: Sequence[Mapping[str, Any]],
 ) -> bool:
-    """只以手术等级或切口等级确认传统手术，治疗性操作不触发手术专属规则。"""
+    """复用院内目录口径，目录未命中时才回退结构化等级。"""
 
-    known_levels = {
-        "一级", "二级", "三级", "四级", "1", "2", "3", "4",
-        "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "I", "II", "III", "IV",
-    }
-    known_incisions = {"I", "II", "III", "IV", "Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ"}
-    return any(
-        _clean(row.get("surgical_level")).upper() in known_levels
-        or _clean(
-            row.get("surgical_incision_level") or row.get("surgial_incision_level")
-        ).upper()
-        in known_incisions
-        for row in rows
-    )
+    return any(has_qualified_traditional_surgery_row(row) for row in rows)
 
 
 def _context(rule_id: str, documents: Mapping[str, Any]) -> str:
