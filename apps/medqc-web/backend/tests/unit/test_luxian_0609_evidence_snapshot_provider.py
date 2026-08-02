@@ -877,7 +877,7 @@ def test_001_005_006_read_private_discharge_admission_date_once_without_affectin
     assert "discharge_record" not in calls
 
 
-def test_all_63_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
+def test_all_75_registered_rules_query_each_bounded_source_once_and_never_query_legacy() -> None:
     calls: list[str] = []
 
     def reader(**kwargs):
@@ -904,8 +904,10 @@ def test_all_63_registered_rules_query_each_bounded_source_once_and_never_query_
             CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
             CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
             "admission_record_diagnosis",
+            "blood_application",
             "diagnosis",
             "exam_master",
+            "inpat_bill_item",
             "inpat_drug_order",
             "inpat_nondrug_order",
             "inpat_registration",
@@ -945,6 +947,8 @@ def test_snapshot_reader_whitelist_exactly_matches_bounded_registry_physical_sou
         CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
         "admission_record_diagnosis",
+        "blood_application",
+        "inpat_bill_item",
         "pathology_exam_master",
         "pathology_exam_report",
         "physician_change_event",

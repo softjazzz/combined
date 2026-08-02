@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v17"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v18"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -161,7 +161,6 @@ _REGISTRY_ENTRIES = (
         "bloodtrans_record",
         "bloodtrans_record",
         "mr_bloodtrans",
-        "inpat_bill_item",
         access_mode=_BOUNDED,
     ),
     _entry(
@@ -227,6 +226,10 @@ _REGISTRY_ENTRIES = (
 
 _INTERNAL_SOURCE_ENTRIES = (
     # 第一阶段扩展规则在目录整体切换前先作为内部受控来源注册。
+    # 输血记录、申请与收费是三个不同的资料合同，不能继续把收费行合并到
+    # bloodtrans_record 后再由规则猜测来源。
+    _entry("blood_application", access_mode=_BOUNDED),
+    _entry("inpat_bill_item", access_mode=_BOUNDED),
     _entry("physician_change_event", access_mode=_BOUNDED),
     _entry("evaluation_context.horizon", access_mode=_BOUNDED),
     _entry("inpat_registration", access_mode=_BOUNDED),
@@ -425,15 +428,36 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     # 040 先由结构化手术等级确认四级手术，再核对同次就诊会诊记录。
     "LX0609-040": ("mr_surgery", "consultation_record"),
     # 输血规则的客户文书范围并非都含输血记录；统一决策仍必须先绑定
-    # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。
-    "LX0609-042": ("bloodtrans_record",),
+    # mr_bloodtrans/bloodtrans_record 这一实际输血锚点。申请、同意书、检验和
+    # 围术期文书均保持独立来源，禁止再借用输血记录或收费行伪装。
+    "LX0609-041": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
+    "LX0609-042": ("bloodtrans_record", "mr_bloodtrans", "consent_form"),
     "LX0609-043": (
         "bloodtrans_record",
+        "mr_bloodtrans",
+        "blood_application",
         "exam_master",
         "labtest_master",
         "labtest_item_report",
     ),
-    "LX0609-049": ("bloodtrans_record",),
+    "LX0609-044": ("bloodtrans_record", "mr_bloodtrans", "blood_application", "daily_course_record"),
+    "LX0609-045": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-046": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-047": ("bloodtrans_record", "mr_bloodtrans", "daily_course_record"),
+    "LX0609-048": (
+        "bloodtrans_record",
+        "mr_bloodtrans",
+        "surgery_record",
+        "anesthesia_record",
+        "postsurg_firstcourse_record",
+    ),
+    "LX0609-049": (
+        "bloodtrans_record",
+        "mr_bloodtrans",
+        "blood_application",
+        "inpat_nondrug_order",
+        "inpat_bill_item",
+    ),
     "LX0609-050": ("inpat_registration",),
     "LX0609-054": (
         "senior_course_record", "consultation_record", "labtest_master",

@@ -385,3 +385,15 @@ def test_consultation_execution_rules_bind_evaluation_horizon() -> None:
     )
 
     assert "evaluation_context.horizon" in resolved
+
+
+def test_transfusion_rules_bind_both_event_sources_and_keep_billing_isolated() -> None:
+    clinical = resolve_luxian_0609_decision_support_source_keys(
+        tuple(f"LX0609-{index:03d}" for index in range(41, 49))
+    )
+    billing = resolve_luxian_0609_decision_support_source_keys(("LX0609-049",))
+
+    assert "bloodtrans_record" in clinical
+    assert "mr_bloodtrans" in clinical
+    assert "inpat_bill_item" not in clinical
+    assert "inpat_bill_item" in billing

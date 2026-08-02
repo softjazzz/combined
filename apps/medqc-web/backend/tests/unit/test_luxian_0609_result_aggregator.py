@@ -523,6 +523,35 @@ def test_002_late_result_renders_actual_interval_and_overdue_duration():
     assert result["customer_display_facts"]["overdue_hours"] == 440.6
 
 
+def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-043", "name": "输血前九项"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-043", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=((
+            "LX0609-043",
+            {
+                "failure_kind": "pretransfusion_items_incomplete",
+                "performed_transfusion_confirmed": True,
+                "missing_items": ["hiv", "syphilis", "alt"],
+                "required_items": [
+                    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
+                    "hcv", "hiv", "syphilis", "alt",
+                ],
+            },
+        ),),
+    )[0]
+
+    assert result["findings"] == "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。"
+    assert result["status"] == "non_compliant"
+
+
 def test_reduced_decision_preserves_surgery_record_present_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -1377,6 +1406,107 @@ def test_transfusion_native_result_preserves_only_safe_explanation_facts():
         "gap_owner": "system_integration",
     }
     assert "PRIVATE_TRANSFUSION_TEXT" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "raw", "expected"),
+    [
+        (
+            "LX0609-041",
+            {
+                "verification_kind": "transfusion_consent_present",
+                "performed_transfusion_confirmed": True,
+                "consent_count": 1,
+                "private_text": "PRIVATE_CONSENT_TEXT",
+            },
+            {
+                "verification_kind": "transfusion_consent_present",
+                "performed_transfusion_confirmed": True,
+                "consent_count": 1,
+            },
+        ),
+        (
+            "LX0609-042",
+            {
+                "failure_kind": "transfusion_consent_incomplete",
+                "performed_transfusion_confirmed": True,
+                "missing_fields": ["patient_or_agent_signature", "signed_time"],
+                "raw_consent_text": "PRIVATE_CONSENT_TEXT",
+            },
+            {
+                "failure_kind": "transfusion_consent_incomplete",
+                "performed_transfusion_confirmed": True,
+                "missing_fields": ["patient_or_agent_signature", "signed_time"],
+            },
+        ),
+        (
+            "LX0609-043",
+            {
+                "verification_kind": "pretransfusion_items_complete",
+                "performed_transfusion_confirmed": True,
+                "checked_items": [
+                    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
+                    "hcv", "hiv", "syphilis", "alt",
+                ],
+                "latest_test_time": "2026-06-05 08:00:00",
+                "transfusion_time": "2026-06-05 14:20:00",
+                "abo_present": True,
+                "rh_present": True,
+                "antibody_screen_present": True,
+                "raw_lab_rows": "PRIVATE_LAB_ROWS",
+            },
+            {
+                "verification_kind": "pretransfusion_items_complete",
+                "performed_transfusion_confirmed": True,
+                "checked_items": [
+                    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
+                    "hcv", "hiv", "syphilis", "alt",
+                ],
+                "latest_test_time": "2026-06-05 08:00:00",
+                "transfusion_time": "2026-06-05 14:20:00",
+                "abo_present": True,
+                "rh_present": True,
+                "antibody_screen_present": True,
+            },
+        ),
+        (
+            "LX0609-048",
+            {
+                "failure_kind": "transfusion_records_inconsistent",
+                "performed_intraoperative_transfusion_confirmed": True,
+                "comparison_matrix": {
+                    "surgery_record": {"components": ["红细胞"], "doses": ["2U"]},
+                    "anesthesia_record": {"components": ["红细胞"], "doses": ["2U"]},
+                    "postsurg_firstcourse_record": {"components": ["血浆"], "doses": ["200ml"]},
+                },
+                "differing_fields": ["components", "doses"],
+                "raw_document_text": "PRIVATE_DOCUMENT_TEXT",
+            },
+            {
+                "failure_kind": "transfusion_records_inconsistent",
+                "performed_intraoperative_transfusion_confirmed": True,
+                "comparison_matrix": {
+                    "surgery_record": {"components": ["红细胞"], "doses": ["2U"]},
+                    "anesthesia_record": {"components": ["红细胞"], "doses": ["2U"]},
+                    "postsurg_firstcourse_record": {"components": ["血浆"], "doses": ["200ml"]},
+                },
+                "differing_fields": ["components", "doses"],
+            },
+        ),
+    ],
+)
+def test_transfusion_controlled_facts_are_whitelisted_without_raw_text(
+    rule_id, raw, expected
+):
+    safe = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["safe_luxian_0609_customer_display_facts"],
+    ).safe_luxian_0609_customer_display_facts
+
+    result = safe(rule_id=rule_id, raw=raw)
+
+    assert result == expected
+    assert "PRIVATE_" not in repr(result)
 
 
 @pytest.mark.parametrize(

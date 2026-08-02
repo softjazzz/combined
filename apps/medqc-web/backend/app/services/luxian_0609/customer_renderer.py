@@ -119,6 +119,14 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-037": ("麻醉术前、术后访视记录的必填内容",),
     "LX0609-038": ("非局部麻醉事实或麻醉记录单",),
     "LX0609-040": ("手术编码、有效手术等级或多学科讨论参加信息",),
+    "LX0609-041": ("输血事实与同次住院输血知情同意书的关联信息",),
+    "LX0609-042": ("输血知情同意书告知内容、签名或签署时间",),
+    "LX0609-043": ("输血前九项检查结果、报告时间或输血开始时间",),
+    "LX0609-044": ("输血前评估的指征、检验指标、患者情况、拟输成分或预期效果",),
+    "LX0609-045": ("输血事实与对应输血病程记录",),
+    "LX0609-046": ("输血病程的原因、起止时间、成分、剂量、过程观察、反应处理或效果",),
+    "LX0609-047": ("输血结束时间、输血后评价时间或评价内容",),
+    "LX0609-048": ("手术记录、麻醉记录和术后首次病程中的输血成分与剂量",),
 }
 _RULE_DATA_GAP_MESSAGES = {
     "LX0609-016": (
@@ -222,14 +230,34 @@ _RULE_DATA_GAP_MESSAGES = {
         "请确认输血知情同意书已归档并同步后重新评估。",
     ),
     "LX0609-042": (
-        "输血知情同意书的签名信息不完整",
-        "当前资料不足以核对患者、家属或医师签名及签署时间是否完整。",
-        "请补充完整的签名和签署时间后重新评估。",
+        "暂无法完整核对输血知情同意书",
+        "当前缺少可核对的告知内容、患者或代理人签名、医师签名，或精确到分钟的签署时间。",
+        "请确认输血知情同意书全部必填内容已同步后重新评估。",
     ),
     "LX0609-043": (
-        "输血前检查资料不完整",
-        "当前未读取到可完整核对的输血前常规检查项目、结果和检查时间。",
-        "请补充输血前检查结果及检查时间后重新评估。",
+        "暂无法完整核对输血前九项检查",
+        "当前缺少乙肝五项、丙肝、艾滋、梅毒、谷丙转氨酶中的检查结果、报告时间，或输血开始时间。",
+        "请补充缺失的输血前检查结果及权威时间后重新评估。",
+    ),
+    "LX0609-044": (
+        "暂无法完整核对输血前评估",
+        "当前缺少输血指征、检验指标、患者情况、拟输成分、预期效果或医师签名中的至少一项。",
+        "请确认输血前评估字段已完整同步后重新评估。",
+    ),
+    "LX0609-045": (
+        "暂无法确认输血病程记录是否对应本次输血",
+        "当前缺少输血事件与输血病程记录之间的时间或关联信息。",
+        "请确认输血事件和对应病程记录已完整同步后重新评估。",
+    ),
+    "LX0609-046": (
+        "暂无法完整核对输血病程记录",
+        "当前缺少输血原因、起止时间、成分、剂量、过程观察、不良反应处理或效果中的至少一项。",
+        "请确认输血病程主要字段已完整同步后重新评估。",
+    ),
+    "LX0609-047": (
+        "暂无法核对输血后24小时评价",
+        "当前缺少输血结束时间、评价时间，或可确认疗效及不良反应的评价内容。",
+        "请确认输血结束时间和输血后评价记录已完整同步后重新评估。",
     ),
     "LX0609-049": (
         "暂时无法核对输血医嘱与收费",
@@ -293,15 +321,45 @@ _RULE_NON_COMPLIANT_MESSAGES = {
         "当前未同时检出麻醉术前访视和麻醉术后访视记录。",
         "请补齐缺失的麻醉访视记录。",
     ),
+    "LX0609-041": (
+        "已确认本次实施输血，但未见输血知情同意书",
+        "专用输血知情同意书来源已完成核对，未检出与本次输血对应的文书。",
+        "请补充并归档本次输血知情同意书。",
+    ),
+    "LX0609-042": (
+        "输血知情同意书填写或签署不完整",
+        "已确认存在输血知情同意书，但告知内容、患者或代理人签名、医师签名或签署时间存在缺项。",
+        "请按结果列出的缺失字段补充输血知情同意书。",
+    ),
+    "LX0609-043": (
+        "输血前九项检查未全部在输血前完成",
+        "已逐项核对乙肝五项、丙肝、艾滋、梅毒和谷丙转氨酶的结果及报告时间。",
+        "请按结果列出的缺失或超时项目完善输血前检查。",
+    ),
     "LX0609-044": (
         "本次输血未见输血前评估记录",
         "已核对输血相关记录，未检出可确认适应证、风险或用血必要性的输血前评估。",
         "请在输血前补充完整的评估记录。",
     ),
+    "LX0609-045": (
+        "已确认本次实施输血，但未见输血病程记录",
+        "已核对输血事件及同次住院病程资料，未检出对应输血病程记录。",
+        "请补充本次输血病程记录。",
+    ),
+    "LX0609-046": (
+        "输血病程记录主要内容不完整",
+        "输血原因、起止时间、成分、剂量、过程观察、不良反应处理或效果存在缺项。",
+        "请按结果列出的缺失字段补充输血病程记录。",
+    ),
     "LX0609-047": (
         "本次输血后未见输血效果评价",
         "已核对输血病程及相关病程资料，未检出输血后效果或不良反应评价。",
         "请补充输血后的疗效和不良反应评价。",
+    ),
+    "LX0609-048": (
+        "术中输血在三份文书中的记录不一致",
+        "已对照手术记录、麻醉记录单和术后首次病程记录中的输血成分及剂量，发现差异。",
+        "请核对实际输血情况并统一修正文书记录。",
     ),
     "LX0609-050": (
         "入院 7 天后诊断仍不明确，未见疑难病例讨论记录",
@@ -527,6 +585,168 @@ def _missing_item_labels(decision: ReducedRuleDecision) -> tuple[str, ...]:
         decision.rule_id,
         (),
     )
+
+
+_TRANSFUSION_FIELD_LABELS = {
+    "patient_information": "患者基本信息",
+    "diagnosis": "诊断",
+    "indication": "输血指征",
+    "component": "拟输血成分",
+    "risks": "输血风险",
+    "alternatives": "替代方案",
+    "patient_or_agent_signature": "患者或代理人签名",
+    "physician_signature": "医师签名",
+    "signed_time": "精确到分钟的签署时间",
+    "laboratory_indicator": "输血前检验指标",
+    "transfusion_history_or_reaction": "既往输血史或输血反应史",
+    "patient_status": "患者当前情况",
+    "planned_component": "拟输注血液成分",
+    "expected_effect": "预期效果",
+    "reason_or_indication": "输血原因或指征",
+    "start_and_end_time": "输血开始及结束时间",
+    "dose": "输注量",
+    "process_observation": "输血过程观察",
+    "reaction_and_handling": "输血反应及处理",
+    "effect": "输血效果",
+    "components": "血液成分",
+    "doses": "输注量",
+}
+_TRANSFUSION_ITEM_LABELS = {
+    "hbsag": "乙肝表面抗原",
+    "hbsab": "乙肝表面抗体",
+    "hbeag": "乙肝e抗原",
+    "hbeab": "乙肝e抗体",
+    "hbcab": "乙肝核心抗体",
+    "hcv": "丙肝抗体",
+    "hiv": "艾滋病病毒抗体",
+    "syphilis": "梅毒筛查",
+    "alt": "谷丙转氨酶",
+}
+_TRANSFUSION_SOURCE_LABELS = {
+    "bloodtrans_record": "输血记录",
+    "daily_course_record": "病程记录",
+    "surgery_record": "手术记录",
+    "anesthesia_record": "麻醉记录",
+    "postsurg_firstcourse_record": "术后首次病程记录",
+}
+
+
+def customer_finding_from_controlled_facts(
+    *, rule_id: str, facts: Mapping[str, Any] | None
+) -> str:
+    """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
+
+    if rule_id not in {f"LX0609-{index:03d}" for index in range(41, 49)}:
+        return ""
+    if not isinstance(facts, Mapping):
+        return ""
+
+    kind = str(facts.get("verification_kind") or facts.get("failure_kind") or "")
+
+    def labels(key: str, mapping: Mapping[str, str]) -> str:
+        values = facts.get(key)
+        if not isinstance(values, list):
+            return ""
+        return "、".join(mapping[value] for value in values if value in mapping)
+
+    if rule_id == "LX0609-041":
+        if kind == "transfusion_consent_present":
+            return f"已确认本次输血具备输血知情同意书（{facts.get('consent_count', 0)} 份）。"
+        if kind == "transfusion_consent_missing":
+            return "已确认实施输血，但未找到对应的输血知情同意书。"
+
+    if rule_id == "LX0609-042":
+        if kind == "transfusion_consent_complete":
+            return "输血知情同意书的必要内容、双方签名及分钟级签署时间均完整。"
+        if kind == "transfusion_consent_incomplete":
+            missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
+            return f"输血知情同意书缺少：{missing}。" if missing else ""
+
+    if rule_id == "LX0609-043":
+        if kind == "pretransfusion_items_complete":
+            return (
+                "输血前九项均已完成，最晚检验时间为 "
+                f"{facts.get('latest_test_time')}，早于输血时间 {facts.get('transfusion_time')}。"
+            )
+        key = {
+            "pretransfusion_items_incomplete": "missing_items",
+            "pretransfusion_tests_after_transfusion": "late_items",
+            "pretransfusion_test_time_missing": "missing_time_items",
+        }.get(kind)
+        if key:
+            items = labels(key, _TRANSFUSION_ITEM_LABELS)
+            prefix = {
+                "pretransfusion_items_incomplete": "输血前九项缺少",
+                "pretransfusion_tests_after_transfusion": "以下检验晚于输血时间",
+                "pretransfusion_test_time_missing": "以下检验缺少可核对的报告时间",
+            }[kind]
+            return f"{prefix}：{items}。" if items else ""
+
+    if rule_id == "LX0609-044":
+        if kind == "pretransfusion_assessment_complete":
+            return "输血前评估已记录输血指征、相关检验、患者情况、拟输成分、预期效果及医师签名。"
+        if kind == "pretransfusion_assessment_incomplete":
+            missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
+            return f"输血前评估缺少：{missing}。" if missing else ""
+
+    if rule_id == "LX0609-045":
+        if kind == "transfusion_course_record_present":
+            return f"已找到可核对的输血病程记录（{facts.get('record_count', 0)} 份）。"
+        if kind == "transfusion_course_record_missing":
+            checked = labels("checked_sources", _TRANSFUSION_SOURCE_LABELS)
+            return f"已核对{checked}，未找到输血病程记录。" if checked else ""
+
+    if rule_id == "LX0609-046":
+        if kind == "transfusion_course_record_complete":
+            return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察、反应处理及效果。"
+        if kind == "transfusion_course_record_incomplete":
+            missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
+            return f"输血病程记录缺少：{missing}。" if missing else ""
+
+    if rule_id == "LX0609-047":
+        if kind == "posttransfusion_evaluation_complete":
+            elapsed = facts.get("elapsed_hours")
+            interval = f"，间隔 {elapsed:g} 小时" if isinstance(elapsed, (int, float)) else ""
+            return (
+                f"已在输血结束后 24 小时内完成效果评价{interval}"
+                f"（结束时间 {facts.get('transfusion_end_time')}；评价时间 {facts.get('evaluation_time')}）。"
+            )
+        if kind == "posttransfusion_evaluation_missing":
+            checked = labels("checked_sources", _TRANSFUSION_SOURCE_LABELS)
+            return f"已核对{checked}，未找到输血结束后 24 小时内的效果评价。" if checked else ""
+
+    if rule_id == "LX0609-048":
+        if kind == "intraoperative_transfusion_absent":
+            return "手术记录和麻醉记录均未提示术中输血，本质控点不适用。"
+        if kind == "transfusion_comparison_material_missing":
+            missing = labels("missing_sources", _TRANSFUSION_SOURCE_LABELS)
+            return f"暂缺{missing}，无法完成术中输血三方一致性核对。" if missing else ""
+        if kind == "transfusion_comparison_fields_missing":
+            raw_missing = facts.get("missing_fields_by_source")
+            if not isinstance(raw_missing, Mapping):
+                return ""
+            details = []
+            for source, fields in raw_missing.items():
+                if source not in _TRANSFUSION_SOURCE_LABELS or not isinstance(fields, list):
+                    continue
+                field_labels = "、".join(
+                    _TRANSFUSION_FIELD_LABELS[field]
+                    for field in fields
+                    if field in _TRANSFUSION_FIELD_LABELS
+                )
+                if field_labels:
+                    details.append(f"{_TRANSFUSION_SOURCE_LABELS[source]}缺少{field_labels}")
+            return f"{'；'.join(details)}，无法完成三方一致性核对。" if details else ""
+        fields_key = (
+            "checked_fields" if kind == "transfusion_records_consistent" else "differing_fields"
+        )
+        fields = labels(fields_key, _TRANSFUSION_FIELD_LABELS)
+        if kind == "transfusion_records_consistent" and fields:
+            return f"手术记录、麻醉记录和术后首次病程记录中的{fields}一致。"
+        if kind == "transfusion_records_inconsistent" and fields:
+            return f"手术记录、麻醉记录和术后首次病程记录中的{fields}不一致。"
+    return ""
+
 
 SafeTraceSink = Callable[[Mapping[str, Any]], None]
 

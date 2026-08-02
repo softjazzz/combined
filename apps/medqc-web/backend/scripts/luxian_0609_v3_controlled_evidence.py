@@ -377,7 +377,7 @@ def _build_transfusion(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any
     refs.append(_append_document(
         rows, case, v2, table_name="consent_form", suffix="blood-consent",
         title="输血知情同意书", record_time=consent_time,
-        content="输血指征为重度贫血，拟输注悬浮红细胞2U；已说明输血目的、风险、可能不良反应和替代方案，患者同意输血。",
+        content="诊断：重度贫血；输血指征为重度贫血，拟输注悬浮红细胞2U；已说明输血目的、风险、可能不良反应和替代方案，患者同意输血。",
         consent_type="blood_transfusion", patient_sign="患者已签名",
         physician_sign="陈某医师", patient_sign_datetime=consent_time,
         physician_sign_datetime=consent_time,

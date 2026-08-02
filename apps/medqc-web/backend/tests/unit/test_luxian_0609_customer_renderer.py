@@ -6,6 +6,7 @@ import pytest
 
 from app.services.luxian_0609.customer_renderer import (
     CUSTOMER_RESULT_KEYS,
+    customer_finding_from_controlled_facts,
     render_luxian_0609_customer_result,
 )
 from app.services.luxian_0609.decision_model import (
@@ -25,6 +26,70 @@ from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts", "expected"),
+    [
+        (
+            "LX0609-042",
+            {
+                "failure_kind": "transfusion_consent_incomplete",
+                "missing_fields": ["patient_or_agent_signature", "signed_time"],
+            },
+            "输血知情同意书缺少：患者或代理人签名、精确到分钟的签署时间。",
+        ),
+        (
+            "LX0609-043",
+            {
+                "failure_kind": "pretransfusion_items_incomplete",
+                "missing_items": ["hiv", "syphilis", "alt"],
+            },
+            "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。",
+        ),
+        (
+            "LX0609-047",
+            {
+                "verification_kind": "posttransfusion_evaluation_complete",
+                "transfusion_end_time": "2026-06-05 16:00:00",
+                "evaluation_time": "2026-06-06 08:00:00",
+                "elapsed_hours": 16.0,
+            },
+            "已在输血结束后 24 小时内完成效果评价，间隔 16 小时（结束时间 2026-06-05 16:00:00；评价时间 2026-06-06 08:00:00）。",
+        ),
+        (
+            "LX0609-048",
+            {
+                "failure_kind": "transfusion_comparison_fields_missing",
+                "missing_fields_by_source": {
+                    "surgery_record": ["doses"],
+                    "postsurg_firstcourse_record": ["components", "doses"],
+                },
+            },
+            "手术记录缺少输注量；术后首次病程记录缺少血液成分、输注量，无法完成三方一致性核对。",
+        ),
+    ],
+)
+def test_transfusion_controlled_facts_render_customer_readable_finding(
+    rule_id, facts, expected
+):
+    assert customer_finding_from_controlled_facts(rule_id=rule_id, facts=facts) == expected
+
+
+def test_controlled_finding_does_not_render_untrusted_matrix_values():
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-048",
+        facts={
+            "failure_kind": "transfusion_records_inconsistent",
+            "differing_fields": ["components"],
+            "comparison_matrix": {
+                "surgery_record": {"components": ["PRIVATE_CHART_BODY"], "doses": []},
+            },
+        },
+    )
+
+    assert finding == "手术记录、麻醉记录和术后首次病程记录中的血液成分不一致。"
+    assert "PRIVATE_CHART_BODY" not in finding
 
 
 def _reduced(final_state: CustomerFinalState):
@@ -209,6 +274,26 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
             "暂无法核对恶性肿瘤出院治疗计划",
             "恶性肿瘤诊断依据",
         ),
+        (
+            "LX0609-042",
+            "暂无法完整核对输血知情同意书",
+            "患者或代理人签名",
+        ),
+        (
+            "LX0609-043",
+            "暂无法完整核对输血前九项检查",
+            "乙肝五项",
+        ),
+        (
+            "LX0609-046",
+            "暂无法完整核对输血病程记录",
+            "输血原因、起止时间",
+        ),
+        (
+            "LX0609-047",
+            "暂无法核对输血后24小时评价",
+            "输血结束时间",
+        ),
     ],
 )
 def test_task3_data_gap_names_the_customer_visible_missing_material(
@@ -255,6 +340,8 @@ def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
         ("LX0609-001", "已确认入院记录在入院后 24 小时内完成。"),
         ("LX0609-009", "已核对病危期间的查房记录，未发现应记录日期缺失。"),
         ("LX0609-032", "已确认本次手术具备手术安全核查表。"),
+        ("LX0609-043", "已核对输血前常规检查，所需项目完整。"),
+        ("LX0609-048", "已核对术中输血相关记录，未发现文书间内容不一致。"),
         ("LX0609-049", "已核对输血医嘱与收费记录，未发现不一致。"),
     ],
 )

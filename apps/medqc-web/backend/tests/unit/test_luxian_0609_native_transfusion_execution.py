@@ -394,7 +394,7 @@ async def test_typed_044_dedicated_fact_precedes_auxiliary_source_four_states(
                 "daily_course_record": [
                     {"record_content": "输血后继续观察，生命体征平稳。"}
                 ],
-            }[source_key]
+            }.get(source_key, [])
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows,
@@ -570,9 +570,9 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         for item in result.decisions
     }
     assert states == {
-        "LX0609-041": "data_gap",
-        "LX0609-042": "data_gap",
-        "LX0609-043": "data_gap",
+        "LX0609-041": "non_compliant",
+        "LX0609-042": "not_applicable",
+        "LX0609-043": "non_compliant",
         "LX0609-044": "non_compliant",
         "LX0609-048": "not_applicable",
         "LX0609-049": "data_gap",
@@ -669,7 +669,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["data_gap", "data_gap", "data_gap", "not_applicable", "data_gap"]
+    ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "data_gap"]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert private_marker not in repr(result)
@@ -817,7 +817,7 @@ async def test_typed_transfusion_material_failures_do_not_fallback_to_payload(
         }
         return SnapshotSourceRows.create(
             source_key=source_key,
-            rows=rows_by_source[source_key],
+            rows=rows_by_source.get(source_key, []),
             truncated=(
                 failure_mode == "truncated" and source_key == "bloodtrans_record"
             ),
@@ -1620,21 +1620,45 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     )
     assert dict(result.customer_display_facts) == {
         "LX0609-044": {
-            "failure_kind": "transfusion_requirement_not_documented",
-            "requirement": "pretransfusion_assessment",
-            "checked_sources": [
-                "bloodtrans_record", "blood_application", "course_record",
+            "failure_kind": "pretransfusion_assessment_incomplete",
+            "performed_transfusion_confirmed": True,
+            "checked_fields": [
+                "expected_effect",
+                "indication",
+                "laboratory_indicator",
+                "patient_status",
+                "physician_signature",
+                "planned_component",
+                "transfusion_history_or_reaction",
+            ],
+            "missing_fields": [
+                "expected_effect",
+                "indication",
+                "laboratory_indicator",
+                "physician_signature",
             ],
         },
         "LX0609-046": {
-            "failure_kind": "transfusion_requirement_not_documented",
-            "requirement": "purpose_or_indication",
-            "checked_sources": ["bloodtrans_record"],
+            "failure_kind": "transfusion_course_record_incomplete",
+            "performed_transfusion_confirmed": True,
+            "record_count": 1,
+            "checked_fields": [
+                "component",
+                "dose",
+                "effect",
+                "process_observation",
+                "reaction_and_handling",
+                "reason_or_indication",
+                "start_and_end_time",
+            ],
+            "missing_fields": ["effect", "reason_or_indication"],
         },
         "LX0609-047": {
-            "failure_kind": "transfusion_requirement_not_documented",
-            "requirement": "posttransfusion_evaluation",
-            "checked_sources": ["bloodtrans_record", "course_record"],
+            "failure_kind": "posttransfusion_evaluation_missing",
+            "performed_transfusion_confirmed": True,
+            "threshold_hours": 24,
+            "checked_sources": ["bloodtrans_record", "daily_course_record"],
+            "transfusion_end_time": "2026-06-05 16:10:00",
         },
     }
     assert result.llm_call_count == 0
@@ -2287,11 +2311,11 @@ async def test_048_does_not_claim_three_document_mismatch_before_comparison_cont
     assert result.customer_display_facts == ((
         "LX0609-048",
         {
-            "failure_kind": "system_data_contract_gap",
-            "system_gap_reason": "transfusion_comparison_fields_unavailable",
-            "gap_owner": "system_integration",
-            "conclusion": "已确认存在术中输血，但暂无法完成三份文书的一致性核对。",
-            "handling_suggestion": "请确认手术记录、麻醉记录和术后首次病程中的输血成分、剂量及时间均已完整同步后重新评估。",
+            "failure_kind": "transfusion_comparison_fields_missing",
+            "missing_fields_by_source": {
+                "anesthesia_record": ["components", "doses"],
+                "postsurg_firstcourse_record": ["components", "doses"],
+            },
         },
     ),)
     assert result.llm_call_count == result.total_tokens == 0
@@ -2323,6 +2347,225 @@ async def test_048_without_credible_intraoperative_transfusion_is_not_applicable
     )
     assert result.results[0]["findings"] == "未发现可信的术中输血事实，本规则不适用。"
     assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_041_042_use_dedicated_consent_and_return_controlled_facts() -> None:
+    selected = ("LX0609-041", "LX0609-042")
+
+    def read(**kwargs):
+        rows = {
+            "mr_bloodtrans": [
+                {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
+            ],
+            "bloodtrans_record": [
+                {"record_content": "输注红细胞2U，过程平稳。"}
+            ],
+            "consent_form": [
+                {
+                    "document_title": "输血知情同意书",
+                    "consent_type": "blood_transfusion",
+                    "patient_name": "测试患者",
+                    "diagnosis": "贫血",
+                    "transfusion_reason": "纠正贫血",
+                    "blood_component": "红细胞",
+                    "risk_description": "已告知输血风险",
+                    "alternative_plan": "已告知替代方案",
+                    "patient_sign": "患者签名",
+                    "physician_sign": "医师签名",
+                    "sign_datetime": "2026-06-05 13:00:00",
+                }
+            ],
+        }.get(kwargs["source_key"], [])
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"], rows=rows, truncated=False, limit_rows=50
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in selected],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert [
+        reduce_luxian_0609_rule_decision(item).final_state.value
+        for item in result.decisions
+    ] == ["compliant", "compliant"]
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-041"]["consent_count"] == 1
+    assert facts["LX0609-042"]["checked_fields"] == [
+        "patient_information",
+        "diagnosis",
+        "indication",
+        "component",
+        "risks",
+        "alternatives",
+        "patient_or_agent_signature",
+        "physician_signature",
+        "signed_time",
+    ]
+
+
+def test_042_requires_signature_time_precise_to_minute() -> None:
+    status, reason, facts = transfusion._programmatic_042_status(
+        {
+            "consent_form": [
+                {
+                    "document_title": "输血知情同意书",
+                    "consent_type": "blood_transfusion",
+                    "patient_name": "测试患者",
+                    "diagnosis": "贫血",
+                    "transfusion_reason": "纠正贫血",
+                    "blood_component": "红细胞",
+                    "risk_description": "已告知风险",
+                    "alternative_plan": "已告知替代方案",
+                    "patient_sign": "患者签名",
+                    "physician_sign": "医师签名",
+                    "patient_sign_datetime": "2026-06-05",
+                }
+            ],
+            "__logical_source_states__": {"consent_form": "available"},
+        }
+    )
+
+    assert (status, reason) == (
+        "non_compliant",
+        "transfusion_consent_incomplete",
+    )
+    assert facts is not None
+    assert facts["missing_fields"] == ["signed_time"]
+
+
+def test_043_short_lab_codes_require_token_boundaries() -> None:
+    assert transfusion._lab_item_alias_matches("梅毒螺旋体抗体(tp)", "tp")
+    assert not transfusion._lab_item_alias_matches("tpo antibody", "tp")
+
+
+@pytest.mark.asyncio
+async def test_043_checks_nine_items_before_transfusion_and_returns_times() -> None:
+    selected = ("LX0609-043",)
+    names = [
+        "乙肝表面抗原",
+        "乙肝表面抗体",
+        "乙肝e抗原",
+        "乙肝e抗体",
+        "乙肝核心抗体",
+        "丙肝抗体",
+        "HIV抗体",
+        "梅毒抗体",
+        "谷丙转氨酶",
+        "不规则抗体筛查",
+    ]
+
+    def read(**kwargs):
+        rows = {
+            "mr_bloodtrans": [
+                {"transfution_datetime": datetime(2026, 6, 5, 14, 20)}
+            ],
+            "bloodtrans_record": [
+                {"record_content": "输注红细胞2U，过程平稳。"}
+            ],
+            "blood_application": [
+                {"patient_bloodtype_abo": "O", "patient_bloodtype_rhd": "阳性"}
+            ],
+            "labtest_item_report": [
+                {
+                    "item_name": name,
+                    "result": "阴性" if name != "谷丙转氨酶" else "12",
+                    "report_datetime": "2026-06-05 10:00:00",
+                }
+                for name in names
+            ],
+        }.get(kwargs["source_key"], [])
+        return SnapshotSourceRows.create(
+            source_key=kwargs["source_key"], rows=rows, truncated=False, limit_rows=50
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=selected,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=selected,
+        wrapper_rules=[_wrapper("LX0609-043")],
+        evidence_payload=_documents(),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=selected,
+    )
+
+    assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
+    facts = dict(result.customer_display_facts)["LX0609-043"]
+    assert len(facts["checked_items"]) == 9
+    assert facts["latest_test_time"] == "2026-06-05 10:00:00"
+    assert facts["transfusion_time"] == "2026-06-05 14:20:00"
+    assert facts["abo_present"] is True
+    assert facts["rh_present"] is True
+    assert facts["antibody_screen_present"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("postop_text", "expected_status", "expected_kind"),
+    [
+        ("术后记录术中输注红细胞2U。", "compliant", "transfusion_records_consistent"),
+        ("术后记录术中输注血浆200ml。", "non_compliant", "transfusion_records_inconsistent"),
+    ],
+)
+async def test_048_compares_component_and_dose_across_three_documents(
+    monkeypatch, postop_text: str, expected_status: str, expected_kind: str
+) -> None:
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-048",),
+        wrapper_rules=[_wrapper("LX0609-048")],
+        evidence_payload=_documents(
+            surgery_record=[{"record_content": "术中输注红细胞2U。"}],
+            anesthesia_record=[{"record_content": "术中输注红细胞2U。"}],
+            postsurg_firstcourse_record=[{"record_content": postop_text}],
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+    )
+
+    assert result.results[0]["status"] == expected_status
+    facts = dict(result.customer_display_facts)["LX0609-048"]
+    assert (facts.get("verification_kind") or facts.get("failure_kind")) == expected_kind
+    assert set(facts["comparison_matrix"]) == {
+        "surgery_record",
+        "anesthesia_record",
+        "postsurg_firstcourse_record",
+    }
 
 
 @pytest.mark.asyncio
@@ -2407,3 +2650,22 @@ def test_transfusion_consent_sources_never_alias_surgery_consent() -> None:
         assert "surgery_inform_consent" not in transfusion._typed_rule_source_keys(
             rule_id
         )
+
+    rows = transfusion._transfusion_consent_rows(
+        {
+            "consent_form": [
+                {
+                    "document_title": "麻醉知情同意书",
+                    "consent_type": "anesthesia",
+                    "record_content": "患者已签名。",
+                },
+                {
+                    "document_title": "输血知情同意书",
+                    "consent_type": "blood_transfusion",
+                    "record_content": "患者已签名。",
+                },
+            ]
+        }
+    )
+    assert len(rows) == 1
+    assert rows[0]["consent_type"] == "blood_transfusion"
