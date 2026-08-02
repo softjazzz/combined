@@ -11,6 +11,7 @@ from ..luxian_0609_rule_catalog import (
 )
 from .decision_reducer import CustomerFinalState, ReducedRuleDecision
 from .rule_contracts import load_luxian_0609_rule_contracts
+from .source_gap_contract import customer_gap_message
 
 
 CUSTOMER_SCHEMA_VERSION = "lx0609-customer-result-v2"
@@ -80,30 +81,10 @@ _CUSTOMER_MESSAGES = {
     ),
 }
 _DATA_GAP_MESSAGES = {
-    "source_unavailable": (
-        "本次未读取到判断所需资料",
-        "当前可查看的病历资料不足以完成本项判断。",
-        "请确认相关资料已同步完整后重新评估。",
-    ),
-    "source_truncated": (
-        "本次读取的相关资料不完整",
-        "当前结果仅依据部分病历资料，暂时不能形成确定结论。",
-        "请确认全部相关资料已同步后重新评估。",
-    ),
     "source_readiness_unproven": (
         "相关资料是否完整尚待确认",
         "目前无法确认本项判断所需资料是否已经全部读取。",
         "请确认相关资料完整后重新评估。",
-    ),
-    "required_field_missing": (
-        "相关记录缺少判断所需信息",
-        "当前读取到的记录中缺少完成本项判断的关键信息。",
-        "请核对相关记录内容是否完整后重新评估。",
-    ),
-    "authoritative_time_missing": (
-        "相关记录缺少明确时间",
-        "目前缺少本项判断所需的起始、完成或评估时间。",
-        "请核对相关记录时间后重新评估。",
     ),
     "linkage_unresolved": (
         "暂未找到可相互核对的对应记录",
@@ -528,13 +509,24 @@ def render_luxian_0609_customer_result(
             criterion_results=decision.criterion_results,
         )
     elif decision.final_state is CustomerFinalState.DATA_GAP:
-        findings, evidence, suggestion = _RULE_DATA_GAP_MESSAGES.get(
-            decision.rule_id,
-            _DATA_GAP_MESSAGES.get(
+        controlled_gap = customer_gap_message(decision.reason_code)
+        rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
+        if controlled_gap is not None:
+            findings, evidence, suggestion = (
+                controlled_gap.findings,
+                controlled_gap.evidence,
+                controlled_gap.suggestion,
+            )
+            if rule_gap is not None:
+                rule_finding, evidence, suggestion = rule_gap
+                findings = f"{findings}；{rule_finding}"
+        elif rule_gap is not None:
+            findings, evidence, suggestion = rule_gap
+        else:
+            findings, evidence, suggestion = _DATA_GAP_MESSAGES.get(
                 decision.reason_code,
                 (findings, evidence, suggestion),
-            ),
-        )
+            )
     elif decision.final_state is CustomerFinalState.NON_COMPLIANT:
         findings, evidence, suggestion = _RULE_NON_COMPLIANT_MESSAGES.get(
             decision.rule_id,

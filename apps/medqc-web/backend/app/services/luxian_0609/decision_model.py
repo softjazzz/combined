@@ -101,10 +101,12 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
     "data_gap": frozenset(
         {
             "source_unavailable",
+            "source_empty",
             "source_truncated",
             "source_readiness_unproven",
             "required_field_missing",
             "authoritative_time_missing",
+            "association_failed",
             "linkage_unresolved",
             "applicability_source_gap",
         }
