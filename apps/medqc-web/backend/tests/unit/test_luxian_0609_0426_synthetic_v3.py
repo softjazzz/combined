@@ -289,6 +289,52 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         } == {"compliant", "non_compliant", "not_applicable"}
 
 
+def test_v3_full_validation_upgrade_supplies_course_gate_facts_for_every_case() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    registration_counts = Counter(
+        row.get("visit_id") for row in rows_by_table.get("inpat_registration", [])
+    )
+    assert registration_counts == Counter(
+        {case.target_visit_id: 1 for case in cases}
+    )
+
+    severe_case = next(case for case in cases if case.target_index == 6)
+    severe_registration = next(
+        row
+        for row in rows_by_table["inpat_registration"]
+        if row.get("visit_id") == severe_case.target_visit_id
+    )
+    assert severe_registration["discharge_datetime"] is not None
+
+    critical_case = next(case for case in cases if case.target_index == 7)
+    critical_order = next(
+        row
+        for row in rows_by_table["inpat_nondrug_order"]
+        if row.get("visit_id") == critical_case.target_visit_id
+    )
+    critical_day_zero = next(
+        row
+        for row in rows_by_table["daily_course_record"]
+        if row.get("visit_id") == critical_case.target_visit_id
+        and row.get("document_id") == f"{critical_case.target_visit_id}-course-0"
+    )
+    assert critical_day_zero["record_time"] > critical_order["prescribed_datetime"]
+
+    stable_case = next(case for case in cases if case.target_index == 5)
+    primary_diagnosis = next(
+        row
+        for row in rows_by_table["admission_record_diagnosis"]
+        if row.get("visit_id") == stable_case.target_visit_id
+        and row.get("diagnosis_main") == "1"
+    )
+    assert primary_diagnosis["diagnosis_type"] == "入院诊断"
+
+
 def test_transfusion_case_uses_typed_consent_form() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()

@@ -203,6 +203,17 @@ def _append_registration(
     return ref
 
 
+def _ensure_registration(
+    rows_by_table: dict[str, list[dict[str, Any]]], case: Any, v2: Any,
+) -> None:
+    if any(
+        str(row.get("visit_id") or "") == case.target_visit_id
+        for row in rows_by_table.get("inpat_registration", [])
+    ):
+        return
+    _append_registration(rows_by_table, case, v2)
+
+
 def _build_timeliness(
     rows: dict[str, list[dict[str, Any]]],
     case: Any,
@@ -271,7 +282,8 @@ def _build_timeliness(
 
 def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, mode: str) -> list[str]:
     _clear_visit_rows(rows, case, "admission_record", "admission_record_diagnosis", "first_course_record", "daily_course_record", "senior_course_record", "inpat_nondrug_order")
-    refs = [_append_registration(rows, case, v2)]
+    evaluation_end = v2._dt_for_case(case, 7, 23) if mode in {"severe", "critical"} else None
+    refs = [_append_registration(rows, case, v2, discharge_time=evaluation_end)]
     refs.append(_append_document(
         rows, case, v2, table_name="admission_record", suffix="admission-course",
         title="入院记录", record_time=v2._dt_for_case(case, 0, 10),
@@ -283,6 +295,7 @@ def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, 
         **v2._case_base_row(case), "document_id": f"{case.target_visit_id}-admission-course",
         "diagnosis_id": diagnosis_id, "diagnosis_main": "1", "diagnosis_no": 1,
         "diagnosis_name": "重症肺炎", "diagnosis_code": "J18.900",
+        "diagnosis_type": "入院诊断",
         "diagnosis_time": v2._dt_for_case(case, 0, 10),
     })
     refs.append(diagnosis_id)
@@ -307,11 +320,12 @@ def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, 
             prescribed_time=v2._dt_for_case(case, 0, 11), content="下达病危医嘱",
             order_type="病情", order_name="病危护理", frequency="持续",
         )
-        days = (1, 2, 3, 4, 5, 6, 7)
+        days = (0, 1, 2, 3, 4, 5, 6, 7)
     for day in days:
+        record_hour = 15 if mode == "critical" and day == 0 else 9
         refs.append(_append_document(
             rows, case, v2, table_name="daily_course_record", suffix=f"course-{day}",
-            title="日常病程记录", record_time=v2._dt_for_case(case, day, 9),
+            title="日常病程记录", record_time=v2._dt_for_case(case, day, record_hour),
             content=f"住院第{day}日查房：症状、生命体征、检查结果及治疗计划均已记录，内容与前次记录不同。",
         ))
     return refs
@@ -771,6 +785,11 @@ def apply_controlled_evidence(
     }
     for case_index, builder in builders.items():
         refs_by_case[case_index] = builder(case_by_index[case_index])
+
+    # 每份验收病例都必须有住院主记录。部分病例只由检查检验升级器加工，
+    # 若源病例缺少登记记录，Native 会在门控阶段直接退化为“资料不足”。
+    for case in cases:
+        _ensure_registration(rows_by_table, case, v2)
 
     # 检查检验四份病例由主构建器先完成；这里绑定其稳定文书/报告 ID。
     refs_by_case.update(
