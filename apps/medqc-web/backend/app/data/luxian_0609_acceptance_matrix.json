@@ -24,12 +24,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"],
+          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -47,16 +48,16 @@
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"]
         },
         "at_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-004"]
         },
         "after_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"]
         }
       }
     },
@@ -70,12 +71,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"],
+          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -93,16 +95,16 @@
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"]
         },
         "at_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-004"]
         },
         "after_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"]
         }
       }
     },
@@ -162,12 +164,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"],
+          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -185,16 +188,16 @@
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"]
         },
         "at_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-004"]
         },
         "after_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"]
         }
       }
     },
@@ -208,12 +211,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"],
+          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -231,16 +235,16 @@
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"]
         },
         "at_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-004"]
         },
         "after_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"]
         }
       }
     },
@@ -254,12 +258,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-001"],
+          "fixture_refs": ["0426-v3:case-001", "0426-v3:case-004"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -277,16 +282,16 @@
       "max_llm_calls_per_rule": 0,
       "time_boundaries": {
         "before_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"]
         },
         "at_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-004"]
         },
         "after_threshold": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-002"]
         }
       }
     },

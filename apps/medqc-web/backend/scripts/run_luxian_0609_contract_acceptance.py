@@ -204,6 +204,18 @@ def build_acceptance_matrix(
             "max_llm_calls_per_rule": runtime_rule["max_llm_calls_per_rule"],
         }
         if time_boundaries is not None:
+            for binding in rule_bindings:
+                boundary = binding.get("time_boundary")
+                if boundary in time_boundaries:
+                    existing_refs = list(
+                        time_boundaries[boundary].get("fixture_refs") or []
+                    )
+                    time_boundaries[boundary] = {
+                        "coverage": "covered",
+                        "fixture_refs": list(
+                            dict.fromkeys([*existing_refs, binding["fixture_ref"]])
+                        ),
+                    }
             rule["time_boundaries"] = time_boundaries
         if semantic_contract is not None:
             rule["semantic_contract"] = semantic_contract

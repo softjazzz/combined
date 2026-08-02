@@ -213,15 +213,15 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         for answer in case.source_item.get("synthetic_golden_answers") or []
     ]
     assert audit["rule_count"] == 75
-    assert len(answers) == 96
+    assert len(answers) == 106
     assert len({answer["qc_point_id"] for answer in answers}) == 75
     assert all(answer["expected_status"] != "pending" for answer in answers)
     assert all(answer["evidence_refs"] for answer in answers)
     assert {answer["acceptance_tier"] for answer in answers} == {"formal", "provisional"}
     matrix = module.build_validation_matrix(cases)
-    assert len(matrix) == 96
+    assert len(matrix) == 106
     assert Counter(row["acceptance_tier"] for row in matrix) == {
-        "formal": 88,
+        "formal": 98,
         "provisional": 8,
     }
     statuses_by_rule = {
@@ -231,6 +231,22 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
     }
     assert all(statuses == {"compliant", "non_compliant"} for statuses in statuses_by_rule.values())
+    timeliness_statuses = {
+        rule_id: {
+            row["expected_status"] for row in matrix if row["rule_id"] == rule_id
+        }
+        for rule_id in (
+            "LX0609-001",
+            "LX0609-002",
+            "LX0609-004",
+            "LX0609-005",
+            "LX0609-006",
+        )
+    }
+    assert all(
+        statuses == {"compliant", "non_compliant"}
+        for statuses in timeliness_statuses.values()
+    )
 
 
 def test_transfusion_case_uses_typed_consent_form() -> None:

@@ -23,9 +23,9 @@ from app.services.luxian_0609_rule_master import (  # noqa: E402
     load_luxian_0609_rule_master,
 )
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
-    NON_COMPLIANT_RULE_IDS,
     RULE_NUMBERS_BY_CASE,
     apply_controlled_evidence,
+    expected_status_for_case,
 )
 
 
@@ -216,17 +216,18 @@ def build_acceptance_fixture_bindings() -> list[dict[str, str]]:
     for case_index, rule_numbers in RULE_NUMBERS_BY_CASE.items():
         for number in rule_numbers:
             rule_id = f"LX0609-{number:03d}"
-            bindings.append(
-                {
+            binding = {
                     "rule_id": rule_id,
                     "fixture_ref": f"0426-v3:case-{case_index:03d}",
-                    "expected_status": (
-                        "non_compliant"
-                        if rule_id in NON_COMPLIANT_RULE_IDS
-                        else "compliant"
-                    ),
+                    "expected_status": expected_status_for_case(case_index, rule_id),
                 }
-            )
+            if number in {1, 2, 4, 5, 6} and case_index in {1, 2, 4}:
+                binding["time_boundary"] = {
+                    1: "before_threshold",
+                    2: "after_threshold",
+                    4: "at_threshold",
+                }[case_index]
+            bindings.append(binding)
     for case_index, scenario in _EXAM_LAB_SCENARIO_BY_INDEX.items():
         for rule_id, expected_status in _exam_lab_expected_statuses(scenario).items():
             bindings.append(

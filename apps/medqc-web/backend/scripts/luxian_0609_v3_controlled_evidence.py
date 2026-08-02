@@ -22,6 +22,8 @@ PROVISIONAL_RULE_IDS = frozenset(
 # 自动生成 pending 黄金答案。
 RULE_NUMBERS_BY_CASE: dict[int, tuple[int, ...]] = {
     1: (1, 2, 4, 5, 6),
+    2: (1, 2, 4, 5, 6),
+    4: (1, 2, 4, 5, 6),
     5: (7, 16, 18),
     6: (8, 17),
     7: (9,),
@@ -54,6 +56,18 @@ NON_COMPLIANT_RULE_IDS = frozenset(
         "LX0609-053",
     }
 )
+
+_NON_COMPLIANT_RULE_IDS_BY_CASE = {
+    2: frozenset(
+        {"LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"}
+    ),
+}
+
+
+def expected_status_for_case(case_index: int, rule_id: str) -> str:
+    if rule_id in _NON_COMPLIANT_RULE_IDS_BY_CASE.get(case_index, frozenset()):
+        return "non_compliant"
+    return "non_compliant" if rule_id in NON_COMPLIANT_RULE_IDS else "compliant"
 
 
 def _rule_id(number: int) -> str:
@@ -158,20 +172,44 @@ def _append_registration(
     return ref
 
 
-def _build_timeliness(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_timeliness(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "before_threshold",
+) -> list[str]:
     _clear_visit_rows(
         rows, case, "admission_record", "first_course_record", "rescue_record", "senior_course_record"
     )
     refs = [_append_registration(rows, case, v2)]
+    if mode == "after_threshold":
+        admission_record_time = v2._dt_for_case(case, 1, 10)
+        first_course_time = v2._dt_for_case(case, 0, 18)
+        rescue_record_time = v2._dt_for_case(case, 1, 17)
+        attending_round_time = v2._dt_for_case(case, 2, 9)
+        chief_round_time = v2._dt_for_case(case, 3, 9)
+    elif mode == "at_threshold":
+        admission_record_time = v2._dt_for_case(case, 1, 8)
+        first_course_time = v2._dt_for_case(case, 0, 16)
+        rescue_record_time = v2._dt_for_case(case, 1, 16)
+        attending_round_time = v2._dt_for_case(case, 2, 8)
+        chief_round_time = v2._dt_for_case(case, 3, 8)
+    else:
+        admission_record_time = v2._dt_for_case(case, 0, 10)
+        first_course_time = v2._dt_for_case(case, 0, 12)
+        rescue_record_time = v2._dt_for_case(case, 1, 12)
+        attending_round_time = v2._dt_for_case(case, 1, 9)
+        chief_round_time = v2._dt_for_case(case, 2, 9)
     refs.append(_append_document(
         rows, case, v2, table_name="admission_record", suffix="admission-record",
-        title="入院记录", record_time=v2._dt_for_case(case, 0, 10),
-        content="患者入院后2小时完成入院记录。主诉发热伴咳嗽3天，初步诊断社区获得性肺炎。",
+        title="入院记录", record_time=admission_record_time,
+        content="入院记录已完成。主诉发热伴咳嗽3天，初步诊断社区获得性肺炎。",
         admission_datetime=v2._dt_for_case(case, 0, 8), chief_complaint="发热伴咳嗽3天",
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="first_course_record", suffix="first-course",
-        title="首次病程记录", record_time=v2._dt_for_case(case, 0, 12),
+        title="首次病程记录", record_time=first_course_time,
         content="病例特点、诊断依据、鉴别诊断及诊疗计划记录完整。",
         case_characteristic="发热、咳嗽，肺部湿啰音。", diagnosis_discussion="考虑社区获得性肺炎。",
         treatment_plan="完善检查并抗感染治疗。", physician_sign="陈某医师",
@@ -180,21 +218,21 @@ def _build_timeliness(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any)
     rescue_end_time = v2._dt_for_case(case, 1, 10)
     refs.append(_append_document(
         rows, case, v2, table_name="rescue_record", suffix="rescue",
-        title="抢救记录", record_time=v2._dt_for_case(case, 1, 12),
+        title="抢救记录", record_time=rescue_record_time,
         content=(
             f"抢救开始时间：{v2._dt_for_case(case, 1, 9):%Y-%m-%d %H:%M:%S}；"
             f"抢救结束时间：{rescue_end_time:%Y-%m-%d %H:%M:%S}；"
-            "记录于抢救结束后2小时完成。"
+            f"记录时间：{rescue_record_time:%Y-%m-%d %H:%M:%S}。"
         ),
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="senior_course_record", suffix="attending-round",
-        title="主治医师首次查房记录", record_time=v2._dt_for_case(case, 1, 9),
+        title="主治医师首次查房记录", record_time=attending_round_time,
         content="主治医师首次查房，核对诊断并调整诊疗计划。主治医师陈某签名。",
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="senior_course_record", suffix="chief-round",
-        title="主任医师首次查房记录", record_time=v2._dt_for_case(case, 2, 9),
+        title="主任医师首次查房记录", record_time=chief_round_time,
         content="主任医师首次查房，复核病情并明确后续治疗方案。主任医师李某签名。",
     ))
     return refs
@@ -482,6 +520,12 @@ def apply_controlled_evidence(
     refs_by_case: dict[int, list[str]] = {}
     builders = {
         1: lambda case: _build_timeliness(rows_by_table, case, v2),
+        2: lambda case: _build_timeliness(
+            rows_by_table, case, v2, mode="after_threshold"
+        ),
+        4: lambda case: _build_timeliness(
+            rows_by_table, case, v2, mode="at_threshold"
+        ),
         5: lambda case: _build_course(rows_by_table, case, v2, mode="stable"),
         6: lambda case: _build_course(rows_by_table, case, v2, mode="severe"),
         7: lambda case: _build_course(rows_by_table, case, v2, mode="critical"),
@@ -530,7 +574,7 @@ def apply_controlled_evidence(
         for number in numbers:
             rule_id = _rule_id(number)
             tier = "provisional" if rule_id in PROVISIONAL_RULE_IDS else "formal"
-            status = "non_compliant" if rule_id in NON_COMPLIANT_RULE_IDS else "compliant"
+            status = expected_status_for_case(case_index, rule_id)
             answers.append(
                 {
                     "qc_point_id": rule_id,

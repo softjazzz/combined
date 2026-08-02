@@ -29,8 +29,8 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
     assert summary["rule_count"] == 75
     assert summary["definition_tiers"] == {"formal": 67, "temporary": 8}
     assert summary["pending_definition_rule_count"] == 9
-    assert summary["bound_fixture_count"] == 84
-    assert summary["case_slots"]["covered"] == 74
+    assert summary["bound_fixture_count"] == 94
+    assert summary["case_slots"]["covered"] == 79
     assert summary["case_slots"]["missing"] > 0
 
 
@@ -42,11 +42,11 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
             if slot["coverage"] == "covered":
                 covered_slots.append((rule["rule_id"], slot_name, slot["fixture_refs"]))
 
-    assert len(covered_slots) == 74
+    assert len(covered_slots) == 79
     assert all(refs and refs[0].startswith("0426-v3:case-") for _, _, refs in covered_slots)
     assert Counter(slot_name for _, slot_name, _ in covered_slots) == {
         "compliant": 65,
-        "confirmed_issue": 7,
+        "confirmed_issue": 12,
         "not_applicable": 2,
     }
 
@@ -97,11 +97,23 @@ def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
         == {"before_threshold", "at_threshold", "after_threshold"}
         for rule in time_rules
     )
-    assert all(
-        boundary["coverage"] != "covered"
+    covered_boundaries = {
+        (rule["rule_id"], boundary_name)
         for rule in time_rules
-        for boundary in rule["time_boundaries"].values()
-    )
+        for boundary_name, boundary in rule["time_boundaries"].items()
+        if boundary["coverage"] == "covered"
+    }
+    assert covered_boundaries == {
+        (rule_id, boundary_name)
+        for rule_id in (
+            "LX0609-001",
+            "LX0609-002",
+            "LX0609-004",
+            "LX0609-005",
+            "LX0609-006",
+        )
+        for boundary_name in ("before_threshold", "at_threshold", "after_threshold")
+    }
     assert {rule["rule_id"] for rule in semantic_rules} == expected_semantic_rule_ids
     assert all(
         rule["semantic_contract"]["max_llm_calls_per_rule"]
