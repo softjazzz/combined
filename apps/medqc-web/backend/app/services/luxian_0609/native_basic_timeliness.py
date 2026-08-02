@@ -6,6 +6,15 @@ from datetime import date, datetime, timedelta
 import re
 from typing import Any, Mapping, Sequence
 
+from .basic_timeliness_facts import (
+    AdmissionAnchorState,
+    CourseRoundRole,
+    associate_timeliness_event,
+    classify_course_round_role,
+    extract_admission_anchor,
+    extract_document_events,
+    extract_rescue_events,
+)
 from .decision_model import (
     ApplicabilityState,
     EvidenceState,
@@ -19,9 +28,7 @@ from .evidence_material import (
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .native_execution import NativeExecutionResult, build_luxian_0609_native_result
 from .source_evidence_reader import (
-    authoritative_document_time_value,
     build_luxian_0609_course_round_timeline_from_rows,
-    parse_luxian_0609_rescue_end_time,
     read_luxian_0609_course_round_timeline,
 )
 from ..luxian_0609_rule_catalog import load_luxian_0609_rules
@@ -96,19 +103,6 @@ _TYPED_SOURCE_KEYS_BY_RULE = {
         "senior_course_record",
     ),
 }
-_ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主治查房")
-_SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
-_AUTHORITATIVE_DATETIME_PATTERN = re.compile(
-    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$"
-)
-_INLINE_RESCUE_END_TIME_PATTERN = re.compile(
-    r"(?<![\w\u4e00-\u9fff])抢救结束时间\s*[:：]\s*(?P<value>"
-    r"\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?"
-    r"|\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}(?::\d{2})?"
-    r")"
-)
-
-
 def _is_substantive_first_course_text(value: Any) -> bool:
     if not isinstance(value, str):
         return False
@@ -216,63 +210,6 @@ def _course_source_data_gap_result(rule_id: str) -> dict[str, Any]:
         finding_kind="source_data_gap",
         reason_code="course_source_read_unavailable",
     )
-
-
-def _authoritative_time(value: Any) -> datetime | None:
-    """仅接受权威字段整值，不从标题或正文提取时间。"""
-
-    if isinstance(value, datetime):
-        return value if value.tzinfo is None else None
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip()
-    if not _AUTHORITATIVE_DATETIME_PATTERN.fullmatch(normalized):
-        return None
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is None else None
-
-
-def _rescue_end_time(value: Any) -> datetime | None:
-    """兼容开始、结束时间写在同一行，同时拒绝“拟抢救结束时间”。"""
-
-    parsed = parse_luxian_0609_rescue_end_time(value)
-    if parsed is not None or not isinstance(value, str):
-        return parsed
-    match = _INLINE_RESCUE_END_TIME_PATTERN.search(value)
-    if match is None:
-        return None
-    normalized = match.group("value").strip()
-    for date_format in (
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y年%m月%d日 %H:%M:%S",
-        "%Y年%m月%d日 %H:%M",
-    ):
-        try:
-            return datetime.strptime(normalized, date_format)
-        except ValueError:
-            continue
-    return None
-
-
-def _authoritative_date(value: Any) -> date | None:
-    """仅接受权威日期字段整值；日期不能伪装成精确入院时刻。"""
-
-    if isinstance(value, datetime):
-        return None
-    if isinstance(value, date):
-        return value
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip()
-    try:
-        parsed = date.fromisoformat(normalized)
-    except ValueError:
-        return None
-    return parsed if parsed.isoformat() == normalized else None
 
 
 def _elapsed_state_from_date_range(
@@ -395,6 +332,15 @@ def _typed_basic_decisions(
             confidence=None,
         )
 
+    def conflict(rule_id: str) -> RuleDecision:
+        return make(
+            rule_id,
+            evidence_state=EvidenceState.CONFLICT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="evidence_conflict",
+            confidence=None,
+        )
+
     required_source_keys = {
         source_key
         for rule_id in rule_ids
@@ -486,57 +432,14 @@ def _typed_basic_decisions(
     admission_record_events = tuple(
         sorted(
             (
-                (
-                    parsed,
-                    str(row.get("document_id") or "").strip() or None,
-                )
-                for row in admission_rows
-                if (
-                    parsed := _authoritative_time(
-                        authoritative_document_time_value(row)
-                    )
-                )
-                is not None
+                (event.observed_time, event.document_id)
+                for event in extract_document_events(admission_rows)
+                if event.observed_time is not None
             ),
             key=lambda item: (item[0], item[1] or ""),
         )
     )
     admission_record_times = tuple(event[0] for event in admission_record_events)
-    admission_record_admission_times = tuple(
-        sorted(
-            parsed
-            for row in admission_rows
-            if (
-                parsed := _authoritative_time(row.get("admission_datetime"))
-            )
-            is not None
-        )
-    )
-    registration_times = tuple(
-        sorted(
-            parsed
-            for row in registration_rows
-            if (
-                parsed := _authoritative_time(
-                    row.get("admission_datetime") or row.get("admission_time")
-                )
-            )
-            is not None
-        )
-    )
-    discharge_admission_dates = tuple(
-        sorted(
-            {
-                parsed
-                for row in discharge_rows
-                if (
-                    parsed := _authoritative_date(row.get("admission_date"))
-                )
-                is not None
-            }
-        )
-    )
-
     def admission_anchor(
         rule_id: str,
     ) -> tuple[datetime | None, date | None, RuleDecision | None]:
@@ -546,21 +449,22 @@ def _typed_basic_decisions(
         if registration_issue is not None:
             reason, technical = registration_issue
             return None, None, gap(rule_id, reason, technical=technical)
-        registration_state = observation_by_source[
-            "inpat_registration"
-        ].query_state.value
-        if registration_state == "available" and registration_times:
-            return registration_times[0], None, None
-        if admission_record_admission_times:
-            return admission_record_admission_times[0], None, None
-        if rule_id not in _ADMISSION_ANCHOR_RULE_IDS:
-            return None, None, gap(rule_id, "authoritative_time_missing")
         if discharge_issue is not None:
             reason, technical = discharge_issue
             return None, None, gap(rule_id, reason, technical=technical)
-        if len(discharge_admission_dates) != 1:
-            return None, None, gap(rule_id, "authoritative_time_missing")
-        return None, discharge_admission_dates[0], None
+        anchor_fact = extract_admission_anchor(
+            registration_rows=registration_rows,
+            admission_rows=admission_rows,
+            discharge_rows=discharge_rows,
+            allow_date_fallback=rule_id in _ADMISSION_ANCHOR_RULE_IDS,
+        )
+        if anchor_fact.state is AdmissionAnchorState.CONFLICT:
+            return None, None, conflict(rule_id)
+        if anchor_fact.state is AdmissionAnchorState.EXACT:
+            return anchor_fact.anchor_time, None, None
+        if anchor_fact.state is AdmissionAnchorState.DATE_ONLY:
+            return None, anchor_fact.anchor_date, None
+        return None, None, gap(rule_id, "authoritative_time_missing")
 
     def conclusive(
         rule_id: str,
@@ -623,11 +527,7 @@ def _typed_basic_decisions(
         if anchor is not None and observed is not None:
             elapsed_hours = (observed - anchor).total_seconds() / 3600
             facts["elapsed_hours"] = round(elapsed_hours, 2)
-            if (
-                rule_id == "LX0609-002"
-                and state == "late"
-                and elapsed_hours > threshold_hours
-            ):
+            if state == "late" and elapsed_hours > threshold_hours:
                 facts["overdue_hours"] = round(
                     elapsed_hours - threshold_hours,
                     2,
@@ -669,10 +569,9 @@ def _typed_basic_decisions(
                 continue
             complete_events: list[tuple[datetime, str | None]] = []
             incomplete = False
-            for row in first_course_rows:
-                record_time = _authoritative_time(
-                    authoritative_document_time_value(row)
-                )
+            for event in extract_document_events(first_course_rows):
+                row = event.row
+                record_time = event.observed_time
                 substantive = any(
                     _is_substantive_first_course_text(row.get(field))
                     for field in _FIRST_COURSE_BODY_FIELDS
@@ -683,7 +582,7 @@ def _typed_basic_decisions(
                     complete_events.append(
                         (
                             record_time,
-                            str(row.get("document_id") or "").strip() or None,
+                            event.document_id,
                         )
                     )
             complete_times = [value for value, _document_id in complete_events]
@@ -735,6 +634,10 @@ def _typed_basic_decisions(
                     rule_id, QcDirection.DEFECT, "threshold_exceeded"
                 )
                 decisions.append(decision)
+                observed, source_document_id = min(
+                    complete_events,
+                    key=lambda item: item[0],
+                )
                 add_customer_fact(
                     rule_id,
                     timeliness_fact(
@@ -744,7 +647,8 @@ def _typed_basic_decisions(
                         state="late",
                         threshold_hours=8,
                         anchor=anchor,
-                        observed=min(complete_times),
+                        observed=observed,
+                        source_document_id=source_document_id,
                     ),
                 )
             else:
@@ -775,22 +679,26 @@ def _typed_basic_decisions(
                 continue
             rescue_timeline: list[tuple[timedelta, datetime, datetime, str]] = []
             incomplete = False
-            for row in rescue_rows:
-                record_time = _authoritative_time(row.get("record_time"))
-                rescue_end = _rescue_end_time(row.get("record_content"))
+            for event in extract_rescue_events(rescue_rows):
+                record_time = event.document.observed_time
+                rescue_end = event.rescue_end_time
                 if record_time is None or rescue_end is None:
                     incomplete = True
                     continue
-                delta = record_time - rescue_end
-                if delta < timedelta(0):
+                association = associate_timeliness_event(
+                    anchor_time=rescue_end,
+                    observed_event=event.document,
+                    threshold_hours=6,
+                )
+                if association is None or association.state == "before":
                     incomplete = True
                 else:
                     rescue_timeline.append(
                         (
-                            delta,
+                            record_time - rescue_end,
                             rescue_end,
                             record_time,
-                            str(row.get("document_id") or "").strip(),
+                            event.document.document_id or "",
                         )
                     )
             overdue = next(
@@ -980,35 +888,26 @@ def _typed_basic_decisions(
             course_issue = ("snapshot_mismatch", True)
             course_rows = ()
 
-        def qualifies(title: str) -> bool:
+        def qualifies(role: CourseRoundRole) -> bool:
             if rule_id == "LX0609-005":
-                return any(
-                    marker in title
-                    for marker in (*_ATTENDING_MARKERS, *_SENIOR_MARKERS)
-                )
-            return any(marker in title for marker in _SENIOR_MARKERS)
+                return role in {
+                    CourseRoundRole.ATTENDING_OR_ABOVE,
+                    CourseRoundRole.SENIOR,
+                }
+            return role is CourseRoundRole.SENIOR
 
         qualifying_events: list[tuple[datetime, str | None]] = []
         qualifying_missing_time = False
         ambiguous_round = False
-        for row in course_rows:
-            title = str(row.get("document_title") or row.get("title") or "").strip()
-            if qualifies(title):
-                parsed = _authoritative_time(
-                    authoritative_document_time_value(row)
-                )
+        for event in extract_document_events(course_rows):
+            role = classify_course_round_role(event.row)
+            if qualifies(role):
+                parsed = event.observed_time
                 if parsed is None:
                     qualifying_missing_time = True
                 else:
-                    document_id = str(row.get("document_id") or "").strip() or None
-                    qualifying_events.append((parsed, document_id))
-            elif not title or (
-                "查房" in title
-                and not any(
-                    marker in title
-                    for marker in (*_ATTENDING_MARKERS, *_SENIOR_MARKERS)
-                )
-            ):
+                    qualifying_events.append((parsed, event.document_id))
+            elif role is CourseRoundRole.AMBIGUOUS:
                 ambiguous_round = True
 
         threshold = timedelta(hours=48 if rule_id == "LX0609-005" else 72)
@@ -1087,10 +986,13 @@ def _typed_basic_decisions(
         elif "ambiguous" in elapsed_states:
             decisions.append(gap(rule_id, "authoritative_time_missing"))
         elif elapsed_states:
-            observed = min(
-                value
-                for value, state in zip(qualifying_times, elapsed_states)
-                if state == "over"
+            observed, source_document_id = min(
+                (
+                    event
+                    for event, state in zip(qualifying_events, elapsed_states)
+                    if state == "over"
+                ),
+                key=lambda item: item[0],
             )
             decision = conclusive(
                 rule_id, QcDirection.DEFECT, "threshold_exceeded"
@@ -1115,6 +1017,7 @@ def _typed_basic_decisions(
                     anchor=anchor,
                     anchor_date=anchor_date,
                     observed=observed,
+                    source_document_id=source_document_id,
                 ),
             )
         elif ambiguous_round:

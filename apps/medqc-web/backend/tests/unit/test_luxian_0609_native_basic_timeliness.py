@@ -297,6 +297,7 @@ def test_typed_basic_timeliness_projects_only_safe_late_or_missing_explanation_f
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-02 10:00:00",
                 "elapsed_hours": 26.0,
+                "overdue_hours": 2.0,
                 "source_document_id": "admission-private-id",
             },
         ),
@@ -761,6 +762,7 @@ def test_004_projects_safe_late_rescue_timeline_facts() -> None:
                 "anchor_time": "2026-06-01 09:00:00",
                 "observed_time": "2026-06-01 16:15:00",
                 "elapsed_hours": 7.25,
+                "overdue_hours": 1.25,
                 "source_document_id": "rescue-private-id",
             },
         ),
@@ -801,6 +803,82 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
         "elapsed_hours": 5.5,
         "source_document_id": "rescue-worst",
     }
+
+
+@pytest.mark.unit
+def test_004_uses_submit_datetime_and_keeps_late_evidence_ref() -> None:
+    session = _typed_basic_session(
+        {
+            "rescue_record": [
+                {
+                    "document_id": "rescue-submit-ref",
+                    "submit_datetime": "2026-06-01 15:00:01",
+                    "record_content": "抢救结束时间：2026-06-01 09:00:00",
+                }
+            ]
+        },
+        selected_rule_ids=("LX0609-004",),
+    )
+
+    execution, reduced = _reduce_typed_basic(session, ("LX0609-004",))
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(execution.customer_display_facts)["LX0609-004"]
+    assert facts["source_document_id"] == "rescue-submit-ref"
+    assert facts["elapsed_hours"] == pytest.approx(6.0, abs=0.01)
+    assert facts["overdue_hours"] == pytest.approx(0.0, abs=0.01)
+
+
+@pytest.mark.unit
+def test_conflicting_admission_anchors_fail_closed_for_all_anchor_rules() -> None:
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-06-01 08:00:00"},
+                {"admission_datetime": "2026-06-01 09:00:00"},
+            ],
+            "admission_record": [
+                {
+                    "document_id": "admission-1",
+                    "record_time": "2026-06-01 10:00:00",
+                }
+            ],
+            **_private_course_rows(
+                "2026-06-02 10:00:00",
+                "2026-06-03 10:00:00",
+            ),
+        }
+    )
+
+    _execution, reduced = _reduce_typed_basic(session)
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.EVALUATION_UNKNOWN,
+        CustomerFinalState.EVALUATION_UNKNOWN,
+        CustomerFinalState.EVALUATION_UNKNOWN,
+    ]
+    assert {item.reason_code for item in reduced} == {"evidence_conflict"}
+
+
+@pytest.mark.unit
+def test_complete_empty_and_unavailable_rescue_sources_are_distinct() -> None:
+    complete = _typed_basic_session({}, selected_rule_ids=("LX0609-004",))
+    unavailable = _typed_basic_session(
+        {},
+        selected_rule_ids=("LX0609-004",),
+        failures={"rescue_record": SourceEvidenceUnavailable()},
+    )
+
+    _complete_execution, complete_reduced = _reduce_typed_basic(
+        complete, ("LX0609-004",)
+    )
+    _unavailable_execution, unavailable_reduced = _reduce_typed_basic(
+        unavailable, ("LX0609-004",)
+    )
+
+    assert complete_reduced[0].final_state is CustomerFinalState.NOT_APPLICABLE
+    assert unavailable_reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert unavailable_reduced[0].reason_code == "source_unavailable"
 
 
 @pytest.mark.unit
