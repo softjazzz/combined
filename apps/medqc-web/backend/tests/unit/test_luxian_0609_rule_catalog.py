@@ -110,3 +110,40 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     assert rules[0]["negative_example"]
     assert rules[0]["mapped_rule_ids"]
     assert rules[0]["primary_execution_rule_id"] == rules[0]["mapped_rule_ids"][0]
+
+
+@pytest.mark.unit
+@pytest.mark.api
+def test_surgery_procedure_catalog_endpoint_exposes_customer_visible_policy(client):
+    access_token = _login(client)
+    resp = client.get(
+        "/api/v1/qc/sichuan/surgery-procedure-catalog"
+        "?keyword=01.2408&category=手术&effective_level=四级",
+        headers=_headers(access_token),
+    )
+    assert resp.status_code == 200, resp.text
+
+    payload = _assert_success_shell(resp.json())
+    assert payload["version"] == "luxian-surgery-procedure-2025-v1"
+    assert payload["policy"]["level_priority"].startswith("院内绩效分配优先")
+    assert payload["policy"]["conditional_level_four"] == "条件四级按四级手术执行"
+    assert payload["total"] == 1
+    assert payload["items"] == [
+        {
+            "code": "01.2408",
+            "name": "颅内血肿清除术",
+            "category": "手术",
+            "effective_level": "四级",
+            "raw_level": "院内四级",
+            "source": "hospital_performance",
+            "source_label": "院内绩效分配",
+        }
+    ]
+
+    operation_resp = client.get(
+        "/api/v1/qc/sichuan/surgery-procedure-catalog?category=operation&page_size=100",
+        headers=_headers(access_token),
+    )
+    operation_payload = _assert_success_shell(operation_resp.json())
+    assert operation_payload["total"] == operation_payload["summary"]["operation"]
+    assert all(item["category"] != "手术" for item in operation_payload["items"])

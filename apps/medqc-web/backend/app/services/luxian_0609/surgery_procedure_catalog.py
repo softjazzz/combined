@@ -75,6 +75,13 @@ def _catalog_indexes() -> tuple[
     return by_code, by_name
 
 
+def load_surgery_procedure_catalog() -> tuple[SurgeryProcedureClassification, ...]:
+    """返回与质控引擎共用的只读目录，供配置查询和审计展示使用。"""
+
+    by_code, _ = _catalog_indexes()
+    return tuple(by_code.values())
+
+
 def _matched(
     item: SurgeryProcedureClassification, match_mode: str
 ) -> SurgeryProcedureClassification:

@@ -49,6 +49,12 @@ from ..services.custom_qc_workspace_service import (
 )
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
+from ..services.luxian_0609.surgery_procedure_catalog import (
+    CATALOG_VERSION as SURGERY_PROCEDURE_CATALOG_VERSION,
+    OPERATION_CATEGORIES,
+    SURGERY_CATEGORY,
+    load_surgery_procedure_catalog,
+)
 from ..services.luxian_0609.rule_decision_settings import (
     resolve_mainline_rule_decision_settings,
 )
@@ -77,6 +83,107 @@ from ..services.customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qc/sichuan", tags=["qc-sichuan"])
+
+
+@router.get("/surgery-procedure-catalog")
+async def surgery_procedure_catalog(
+    request: Request,
+    keyword: str = Query(default="", max_length=100, description="手术操作编码或名称"),
+    category: str = Query(default="", description="手术或操作分类"),
+    effective_level: str = Query(default="", description="生效手术等级"),
+    source: str = Query(default="", description="等级口径来源"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    """分页查询质控引擎正在使用的手术/操作分级目录。"""
+
+    catalog = load_surgery_procedure_catalog()
+    normalized_keyword = str(keyword or "").strip().casefold()
+    normalized_category = str(category or "").strip()
+    normalized_level = str(effective_level or "").strip()
+    normalized_source = str(source or "").strip()
+
+    filtered = [
+        item
+        for item in catalog
+        if (
+            not normalized_keyword
+            or normalized_keyword in item.code.casefold()
+            or normalized_keyword in item.name.casefold()
+        )
+        and (
+            not normalized_category
+            or item.category == normalized_category
+            or (
+                normalized_category == "operation"
+                and item.category in OPERATION_CATEGORIES
+            )
+        )
+        and (not normalized_level or item.effective_level == normalized_level)
+        and (not normalized_source or item.source == normalized_source)
+    ]
+    level_rank = {"四级": 4, "三级": 3, "二级": 2, "一级": 1}
+    filtered.sort(
+        key=lambda item: (
+            item.category != SURGERY_CATEGORY,
+            -level_rank.get(item.effective_level, 0),
+            item.code,
+        )
+    )
+    start = (page - 1) * page_size
+    page_items = filtered[start : start + page_size]
+
+    surgery_count = sum(item.category == SURGERY_CATEGORY for item in catalog)
+    level_four_count = sum(
+        item.category == SURGERY_CATEGORY and item.effective_level == "四级"
+        for item in catalog
+    )
+    source_labels = {
+        "hospital_performance": "院内绩效分配",
+        "national_catalog": "2025年国家临床版目录",
+    }
+    return success_response(
+        data={
+            "version": SURGERY_PROCEDURE_CATALOG_VERSION,
+            "policy": {
+                "level_priority": "院内绩效分配优先于2025年国家临床版手术分级目录",
+                "conditional_level_four": "条件四级按四级手术执行",
+                "category_boundary": "治疗性操作、诊断性操作和介入治疗不按手术触发",
+            },
+            "summary": {
+                "total": len(catalog),
+                "surgery": surgery_count,
+                "operation": len(catalog) - surgery_count,
+                "level_four_surgery": level_four_count,
+            },
+            "filter_options": {
+                "categories": [SURGERY_CATEGORY, *sorted(OPERATION_CATEGORIES)],
+                "levels": ["四级", "三级", "二级", "一级"],
+                "sources": [
+                    {"value": key, "label": label}
+                    for key, label in source_labels.items()
+                ],
+            },
+            "items": [
+                {
+                    "code": item.code,
+                    "name": item.name,
+                    "category": item.category,
+                    "effective_level": item.effective_level,
+                    "raw_level": item.raw_level,
+                    "source": item.source,
+                    "source_label": source_labels.get(item.source, "国家目录"),
+                }
+                for item in page_items
+            ],
+            "total": len(filtered),
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (len(filtered) + page_size - 1) // page_size,
+        },
+        message="获取手术操作分级目录成功",
+        trace_id=get_trace_id(request),
+    )
 
 
 def _ordered_luxian_0609_customer_rule_ids(

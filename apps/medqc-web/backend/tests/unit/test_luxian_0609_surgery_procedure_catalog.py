@@ -2,6 +2,7 @@ from app.services.luxian_0609.surgery_procedure_catalog import (
     catalog_surgery_state,
     classify_surgery_procedure,
     effective_surgery_level,
+    load_surgery_procedure_catalog,
 )
 from app.services.luxian_0609.source_evidence_reader import (
     has_qualified_traditional_surgery_row,
@@ -50,3 +51,10 @@ def test_composite_exact_names_choose_highest_surgery_level() -> None:
     assert item.name == "颅内血肿清除术"
     assert item.effective_level == "四级"
     assert item.match_mode == "composite_name"
+
+
+def test_catalog_exposes_same_read_only_items_used_by_classifier() -> None:
+    catalog = load_surgery_procedure_catalog()
+
+    assert len(catalog) == 6509
+    assert next(item for item in catalog if item.code == "01.2408").effective_level == "四级"

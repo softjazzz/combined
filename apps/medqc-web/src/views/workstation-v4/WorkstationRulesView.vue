@@ -12,7 +12,7 @@
               :key="tab.key"
               class="rules-tab"
               :class="{ active: activeTab === tab.key }"
-              @click="activeTab = tab.key"
+              @click="selectTab(tab.key)"
             >
               <span>{{ tab.label }}</span>
               <strong>{{ tab.count }}</strong>
@@ -26,6 +26,7 @@
           <CodingRulesTab v-if="activeTab === 'coding'" />
           <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
           <WorkstationSemanticRulesView v-else-if="activeTab === 'semantic'" />
+          <SurgeryProcedureCatalogView v-else-if="activeTab === 'surgery-catalog'" />
           <SettlementRulesTab v-else />
         </div>
       </div>
@@ -35,16 +36,24 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import FrontpageRulesTab from '@/components/rules/FrontpageRulesTab.vue'
 import SettlementRulesTab from '@/components/rules/SettlementRulesTab.vue'
 import WorkstationSemanticRulesView from '@/views/workstation-v4/WorkstationSemanticRulesView.vue'
+import SurgeryProcedureCatalogView from '@/views/workstation-v4/components/SurgeryProcedureCatalogView.vue'
 
 const route = useRoute()
+const router = useRouter()
 
-type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic'
-const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement', 'semantic']
+type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic' | 'surgery-catalog'
+const SUPPORTED_TABS: TabKey[] = [
+  'coding',
+  'frontpage',
+  'settlement',
+  'semantic',
+  'surgery-catalog',
+]
 
 const activeTab = ref<TabKey>('coding')
 
@@ -53,6 +62,7 @@ const tabs: Array<{ key: TabKey; label: string; count: string }> = [
   { key: 'frontpage', label: '首页规则', count: '首页' },
   { key: 'settlement', label: '结算规则', count: '清单' },
   { key: 'semantic', label: '语义规则', count: '语义' },
+  { key: 'surgery-catalog', label: '手术分级', count: '配置' },
 ]
 
 const resolveTab = (tab: string | undefined): TabKey => {
@@ -60,6 +70,11 @@ const resolveTab = (tab: string | undefined): TabKey => {
     return tab as TabKey
   }
   return 'coding'
+}
+
+const selectTab = (tab: TabKey) => {
+  activeTab.value = tab
+  void router.replace({ query: { ...route.query, tab } })
 }
 
 onMounted(() => {
@@ -150,7 +165,7 @@ watch(
   align-items: center;
   display: flex;
   justify-content: flex-end;
-  max-width: 620px;
+  max-width: 780px;
 }
 
 .rules-tab-group {
