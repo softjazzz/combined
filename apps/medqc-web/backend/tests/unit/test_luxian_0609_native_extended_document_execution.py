@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from app.services.luxian_0609 import native_extended_document_execution as module
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
@@ -48,6 +49,13 @@ def _session(rows_by_source):
         "transfer_out_record": "snapshot-provider-transfer_out_record-v1",
         "inpat_nondrug_order": "snapshot-provider-inpat_nondrug_order-v1",
         "diagnosis": "snapshot-provider-diagnosis-v1",
+        "diffcase_discussion_record": "snapshot-provider-diffcase_discussion_record-v1",
+        "crisis_value_record": "snapshot-provider-crisis_value_record-v1",
+        "labtest_item_report": "snapshot-provider-labtest_item_report-v1",
+        "labtest_master": "snapshot-provider-labtest_master-v1",
+        "inpat_drug_order": "snapshot-provider-inpat_drug_order-v1",
+        "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
+        "bloodtrans_record": "snapshot-provider-bloodtrans_record-v1",
     }
     observations = []
     sources = {}
@@ -444,3 +452,144 @@ async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> Non
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-050",
+        {
+            "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": "入院第7天，发热原因待查，目前诊断仍不明确。",
+            },),
+        },
+    )
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "required_document_missing"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+async def test_critical_value_without_disposition_is_non_compliant(rule_id: str) -> None:
+    _, reduced = await _evaluate(
+        rule_id,
+        {"labtest_item_report": ({
+            "item_name": "血钾", "result": "6.8", "result_flag": "PH",
+            "report_time": "2026-06-01 14:00:00",
+        },)},
+    )
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_critical_value_accepts_customer_abnormal_indicator() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-052",
+        {"labtest_item_report": ({
+            "item_name": "白细胞计数",
+            "result": "1.0",
+            "abnormal_indicator": "PL",
+            "report_time": "2026-06-01 14:00:00",
+        },)},
+    )
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+def test_discharge_medication_labels_form_a_structured_contract() -> None:
+    medications, error = module._structured_discharge_medications(({
+        "discharge_order": (
+            "药品名称：阿莫西林胶囊；用药剂量：0.5g；"
+            "给药途径：口服；用药时间：每日3次，共5天"
+        ),
+    },))
+
+    assert error == ""
+    assert medications == [{
+        "drug_name": "阿莫西林胶囊",
+        "dose": "0.5g",
+        "route": "口服",
+        "duration": "每日3次，共5天",
+    }]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rule_id",
+    ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-057", "LX0609-058", "LX0609-059"],
+)
+async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
+    _, reduced = await _evaluate(
+        rule_id,
+        {
+            "inpat_drug_order": (
+                {"generic_name": "美罗培南", "prescribed_datetime": "2026-06-01 10:00:00", "record_content": "经验性启用美罗培南"},
+                {"generic_name": "万古霉素", "prescribed_datetime": "2026-06-01 11:00:00", "record_content": "经验性联合万古霉素"},
+            ),
+            "labtest_master": ({
+                "labtest_subject": "血培养及药敏", "specimen": "静脉血",
+                "request_datetime": "2026-06-01 09:00:00",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-06-01 12:00:00", "record_content": "患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"},
+                {"record_time": "2026-06-04 09:00:00", "record_content": "用药72小时效果评价：体温下降、白细胞和CRP降低，停用万古霉素并继续美罗培南。"},
+            ),
+            "consultation_record": ({
+                "record_time": "2026-06-01 15:00:00",
+                "record_content": "感染专家会诊同意特殊级抗菌药物方案。",
+            },),
+        },
+    )
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-063",
+        {
+            "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+            "diagnosis": ({"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},),
+            "discharge_record_diagnosis": ({"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},),
+        },
+    )
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    _, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "bloodtrans_record": ({"record_time": "2026-06-02 14:00:00", "record_content": "输注红细胞2U"},),
+            "labtest_item_report": tuple(
+                {"item_code": code, "item_name": name, "result": "阴性"}
+                for code, name in names
+            ),
+        },
+    )
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-075",
+        {
+            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 10:00:00",
+                "document_title": "中心静脉置管操作记录",
+                "record_content": "在无菌操作下完成右颈内静脉中心静脉置管。",
+            },),
+        },
+    )
+    assert reduced.final_state is CustomerFinalState.COMPLIANT

@@ -123,7 +123,7 @@ def _append_order(
         {
             **v2._case_base_row(case),
             "order_id": order_id,
-            "order_status": "执行",
+            "order_status": "执行中",
             "prescribed_datetime": prescribed_time,
             "prescribed_doctor": "陈某医师",
             "record_content": content,
@@ -177,10 +177,15 @@ def _build_timeliness(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any)
         treatment_plan="完善检查并抗感染治疗。", physician_sign="陈某医师",
         physician_sign_datetime=v2._dt_for_case(case, 0, 12),
     ))
+    rescue_end_time = v2._dt_for_case(case, 1, 10)
     refs.append(_append_document(
         rows, case, v2, table_name="rescue_record", suffix="rescue",
         title="抢救记录", record_time=v2._dt_for_case(case, 1, 12),
-        content="抢救开始时间2026-06-02 09:00:00，抢救结束时间2026-06-02 10:00:00；记录于抢救结束后2小时完成。",
+        content=(
+            f"抢救开始时间：{v2._dt_for_case(case, 1, 9):%Y-%m-%d %H:%M:%S}；"
+            f"抢救结束时间：{rescue_end_time:%Y-%m-%d %H:%M:%S}；"
+            "记录于抢救结束后2小时完成。"
+        ),
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="senior_course_record", suffix="attending-round",
@@ -244,22 +249,38 @@ def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, 
 
 
 def _build_consultation(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
-    _clear_visit_rows(rows, case, "consultation_record", "daily_course_record")
+    _clear_visit_rows(
+        rows, case, "consultation_record", "daily_course_record",
+        "inpat_drug_order", "inpat_nondrug_order", "exam_master",
+        "labtest_master", "surgery_record",
+    )
     refs = [_append_registration(rows, case, v2)]
+    consultation_id = f"{case.target_visit_id}-consultation"
+    request_time = v2._dt_for_case(case, 1, 8)
     refs.append(_append_document(
         rows, case, v2, table_name="consultation_record", suffix="consult-request",
-        title="会诊申请单", record_time=v2._dt_for_case(case, 1, 8),
+        title="会诊申请单", record_time=request_time,
         content="会诊目的：患者胆管炎伴梗阻，申请消化内科评估ERCP适应证并提出明确抗感染和引流方案。",
+        consultation_id=consultation_id, application_id=consultation_id,
+        request_time=request_time, request_datetime=request_time,
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="consultation_record", suffix="consult-opinion",
         title="会诊记录单", record_time=v2._dt_for_case(case, 1, 14),
         content="会诊意见：诊断胆总管结石伴胆管炎，建议今日完善凝血后行ERCP取石引流，继续头孢曲松治疗。",
+        consultation_id=consultation_id, application_id=consultation_id,
+        request_time=request_time, request_datetime=request_time,
     ))
     refs.append(_append_document(
         rows, case, v2, table_name="daily_course_record", suffix="consult-execution",
         title="请会诊执行记录", record_time=v2._dt_for_case(case, 1, 17),
         content="已归纳消化内科会诊意见，完善凝血检查并预约ERCP，按建议继续头孢曲松，已向患者说明。",
+    ))
+    refs.append(_append_order(
+        rows, case, v2, table_name="inpat_nondrug_order", suffix="consult-execution-order",
+        prescribed_time=v2._dt_for_case(case, 1, 16),
+        content="执行会诊意见：完善凝血检查并预约ERCP取石引流。",
+        order_type="治疗", order_name="ERCP取石引流术前准备",
     ))
     return refs
 
@@ -269,6 +290,7 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
         "surgery_application", "inpat_nondrug_order", "surgery_record", "presurg_summary",
         "inpat_drug_order",
         "surgery_safecheck_record", "surgery_inform_consent", "anesthesia_record",
+        "consent_form",
         "preane_surveil_record", "postane_surveil_record", "presurg_discussion",
         "postsurg_firstcourse_record", "daily_course_record", "senior_course_record",
     )
@@ -293,8 +315,10 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
             rows, case, v2, table_name="surgery_record", suffix="surgery-record",
             title="手术记录", record_time=v2._dt_for_case(case, 2, 15),
             content="实施四级胃癌根治术，II类切口，完成D2淋巴结清扫；植入可吸收止血材料1片，规格5cm×8cm。术者陈某，签名医生陈某。",
-            surgery_name="胃癌根治术", surgeon="陈某医师", surgery_begin_time=surgery_time,
-            surgery_end_time=v2._dt_for_case(case, 2, 14), anesthesia_method="全身麻醉",
+            surgery_name="胃癌根治术", surgeon="陈某医师",
+            surgery_begin_time=f"{surgery_time:%Y-%m-%d %H:%M:%S}+08",
+            surgery_end_time=f"{v2._dt_for_case(case, 2, 14):%Y-%m-%d %H:%M:%S}+08",
+            anesthesia_method="全身麻醉",
             surgery_process="完成D2淋巴结清扫，植入可吸收止血材料1片，规格5cm×8cm。",
         ))
     if mode == "record":
@@ -319,7 +343,7 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
     elif mode == "anesthesia":
         refs.extend([
             _append_document(rows, case, v2, table_name="anesthesia_record", suffix="anesthesia", title="麻醉记录单", record_time=v2._dt_for_case(case, 2, 9), content="静吸复合全麻，麻醉开始09:30，结束14:30，生命体征平稳。"),
-            _append_document(rows, case, v2, table_name="surgery_inform_consent", suffix="anesthesia-consent", title="麻醉知情同意书", record_time=v2._dt_for_case(case, 1, 15), content="患者和麻醉医生均已签名，签署时间2026-06-02 15:00。", patient_sign="已签名", surgeon_sign="麻醉医师已签名"),
+            _append_document(rows, case, v2, table_name="consent_form", suffix="anesthesia-consent", title="麻醉知情同意书", record_time=v2._dt_for_case(case, 1, 15), content="患者和麻醉医生均已签名，签署时间精确到分钟。", consent_type="anesthesia", patient_sign="患者已签名", physician_sign="麻醉医师已签名", patient_sign_datetime=v2._dt_for_case(case, 1, 15), physician_sign_datetime=v2._dt_for_case(case, 1, 15)),
             _append_document(rows, case, v2, table_name="preane_surveil_record", suffix="preane", title="麻醉术前访视记录", record_time=v2._dt_for_case(case, 1, 16), content="术前评估、ASA分级、气道及麻醉计划记录完整。", anesthetist_sign="麻醉医师陈某"),
             _append_document(rows, case, v2, table_name="postane_surveil_record", suffix="postane", title="麻醉术后访视记录", record_time=v2._dt_for_case(case, 3, 9), content="术后清醒，呼吸循环稳定，无麻醉并发症。", anesthetist_sign="麻醉医师陈某"),
         ])
@@ -333,7 +357,7 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
     elif mode == "postop":
         refs.append(_append_document(rows, case, v2, table_name="postsurg_firstcourse_record", suffix="postop-first", title="术后首次病程记录", record_time=v2._dt_for_case(case, 2, 16), content="术后患者返回病房，记录手术经过、输血、引流及后续计划。"))
         for day in (3, 4, 5):
-            refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix=f"postop-course-{day}", title="术后查房记录", record_time=v2._dt_for_case(case, day, 9), content=f"术后第{day-2}日连续查房，切口、引流、饮食及治疗计划记录完整。术者陈某查房。"))
+            refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix=f"postop-course-{day}", title="术后查房记录", record_time=v2._dt_for_case(case, day, 9), content=f"术后第{day-2}日连续查房，切口、引流、饮食及治疗计划记录完整。术者陈某医师查房。", physician_sign="陈某医师"))
         refs.append(_append_document(rows, case, v2, table_name="senior_course_record", suffix="postop-senior", title="术后三天内上级医师查房记录", record_time=v2._dt_for_case(case, 4, 10), content="上级医师术后三天内查看患者并明确后续方案。"))
     elif mode == "procedure":
         refs.append(_append_order(rows, case, v2, table_name="inpat_nondrug_order", suffix="central-line-order", prescribed_time=v2._dt_for_case(case, 1, 8), content="中心静脉置管术医嘱", order_type="有创操作", order_name="中心静脉置管术"))
@@ -376,7 +400,7 @@ def _build_transfusion(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any
 
 
 def _build_tumor(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
-    _clear_visit_rows(rows, case, "pathology_exam_master", "pathology_exam_report", "surgery_record", "daily_course_record", "inpat_drug_order", "discharge_record")
+    _clear_visit_rows(rows, case, "pathology_exam_master", "pathology_exam_report", "surgery_record", "daily_course_record", "inpat_drug_order", "discharge_record", "diagnosis", "discharge_record_diagnosis")
     refs = [_append_registration(rows, case, v2, discharge_time=v2._dt_for_case(case, 8, 10))]
     pathology_id = f"{case.target_visit_id}-pathology"
     v2._append_row(rows, "pathology_exam_master", {**v2._case_base_row(case), "pathology_exam_id": pathology_id, "pathology_id": pathology_id, "specimen_name": "胃大部切除标本及淋巴结", "request_datetime": v2._dt_for_case(case, 2, 14), "record_content": "胃癌手术标本送病理"})
@@ -387,6 +411,10 @@ def _build_tumor(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> l
     refs.append(_append_order(rows, case, v2, table_name="inpat_drug_order", suffix="oxaliplatin", prescribed_time=v2._dt_for_case(case, 6, 9), content="奥沙利铂130mg/m²静滴，第1天", generic_name="奥沙利铂", single_dose=130, single_dose_unit="mg/m²", drug_apply_method="静脉滴注"))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="chemo-course", title="化疗病程记录", record_time=v2._dt_for_case(case, 6, 10), content="今日给予奥沙利铂130mg/m²静脉滴注，第1天，与医嘱一致，观察不良反应。"))
     refs.append(_append_document(rows, case, v2, table_name="discharge_record", suffix="tumor-discharge", title="出院记录", record_time=v2._dt_for_case(case, 8, 9), content="出院诊断胃腺癌。出院后肿瘤治疗计划：三周后返院继续奥沙利铂联合卡培他滨方案并复查血常规、肝肾功能。", discharge_date=v2._dt_for_case(case, 8, 10), discharge_time=v2._dt_for_case(case, 8, 10)))
+    diagnosis_id = f"{case.target_visit_id}-tumor-diagnosis"
+    v2._append_row(rows, "diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-frontpage", "diagnosis_id": diagnosis_id, "diagnosis_type": "出院诊断", "diagnosis_no": 1, "diagnosis_name": "胃腺癌", "diagnosis_code": "C16.900", "diagnosis_datetime": v2._dt_for_case(case, 8, 9), "diagnosis_source": "病案首页"})
+    v2._append_row(rows, "discharge_record_diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-tumor-discharge", "diagnosis_id": f"{diagnosis_id}-record", "diagnosis_main": "1", "diagnosis_no": 1, "diagnosis_name": "胃腺癌", "diagnosis_code": "C16.900", "diagnosis_time": v2._dt_for_case(case, 8, 9)})
+    refs.extend((diagnosis_id, f"{diagnosis_id}-record"))
     return refs
 
 
@@ -403,7 +431,7 @@ def _build_discharge(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, 
         return refs
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="predischarge-course", title="出院前病程记录", record_time=v2._dt_for_case(case, 7, 9), content="患者病情稳定，今日复查无明显异常，拟明日出院。"))
     refs.append(_append_document(rows, case, v2, table_name="senior_course_record", suffix="discharge-approval", title="上级医师查房记录", record_time=v2._dt_for_case(case, 7, 10), content="上级医师查看患者，同意明日出院。"))
-    refs.append(_append_document(rows, case, v2, table_name="discharge_record", suffix="discharge-record", title="出院记录", record_time=v2._dt_for_case(case, 8, 9), content="出院诊断：社区获得性肺炎。出院带药：阿莫西林胶囊0.5g，口服，每日3次，共5天。", discharge_date=discharge_time, discharge_time=discharge_time, discharge_order="阿莫西林胶囊0.5g，口服，每日3次，共5天。"))
+    refs.append(_append_document(rows, case, v2, table_name="discharge_record", suffix="discharge-record", title="出院记录", record_time=v2._dt_for_case(case, 8, 9), content="出院诊断：社区获得性肺炎。出院带药：药品名称阿莫西林胶囊；用药剂量0.5g；给药途径口服；用药时间每日3次，共5天。", discharge_date=discharge_time, discharge_time=discharge_time, discharge_order="药品名称：阿莫西林胶囊；用药剂量：0.5g；给药途径：口服；用药时间：每日3次，共5天"))
     diagnosis_id = f"{case.target_visit_id}-discharge-diagnosis"
     v2._append_row(rows, "discharge_record_diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-discharge-record", "diagnosis_id": diagnosis_id, "diagnosis_main": "1", "diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎", "diagnosis_code": "J18.900", "diagnosis_time": v2._dt_for_case(case, 8, 9)})
     refs.append(diagnosis_id)
@@ -428,7 +456,7 @@ def _build_antimicrobial(rows: dict[str, list[dict[str, Any]]], case: Any, v2: A
 
 
 def _build_transfer(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
-    _clear_visit_rows(rows, case, "inpat_nondrug_order", "handoff_record", "handover_record", "transfer_out_record", "transfer_in_record", "daily_course_record")
+    _clear_visit_rows(rows, case, "inpat_nondrug_order", "handoff_record", "handover_record", "transfer_out_record", "transfer_in_record", "daily_course_record", "diagnosis")
     refs = [_append_registration(rows, case, v2)]
     refs.append(_append_document(rows, case, v2, table_name="handoff_record", suffix="handoff", title="交班记录", record_time=v2._dt_for_case(case, 2, 8), content="交班前完成交班记录，说明当前诊断、治疗和注意事项。"))
     refs.append(_append_document(rows, case, v2, table_name="handover_record", suffix="handover", title="接班记录", record_time=v2._dt_for_case(case, 2, 14), content="接班后6小时完成接班记录，复核诊断及后续计划。"))
@@ -436,6 +464,10 @@ def _build_transfer(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -
     refs.append(_append_document(rows, case, v2, table_name="transfer_out_record", suffix="transfer-out", title="转出记录", record_time=v2._dt_for_case(case, 3, 9), content="转出前完成记录，说明病情、诊疗经过和转科目的。", transferout_department="普通外科", transferin_department="呼吸内科", transfer_date=v2._dt_for_case(case, 3, 10)))
     refs.append(_append_document(rows, case, v2, table_name="transfer_in_record", suffix="transfer-in", title="转入记录", record_time=v2._dt_for_case(case, 3, 16), content="转入后6小时完成记录，复核患者情况并制定治疗计划。", transferout_department="普通外科", transferin_department="呼吸内科", transfer_date=v2._dt_for_case(case, 3, 10)))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="diagnosis-revision", title="病程记录", record_time=v2._dt_for_case(case, 4, 9), content="根据培养结果补充诊断细菌性肺炎，记录修改理由及诊断依据。"))
+    for index, (name, when) in enumerate((("肺部感染", v2._dt_for_case(case, 0, 10)), ("细菌性肺炎", v2._dt_for_case(case, 4, 8))), start=1):
+        diagnosis_id = f"{case.target_visit_id}-diagnosis-{index}"
+        v2._append_row(rows, "diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-course-diagnosis-revision", "diagnosis_id": diagnosis_id, "diagnosis_type": "住院诊断", "diagnosis_no": index, "diagnosis_name": name, "diagnosis_code": "J18.900", "diagnosis_datetime": when, "diagnosis_source": "病程记录"})
+        refs.append(diagnosis_id)
     return refs
 
 

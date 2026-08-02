@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Mapping, Sequence
@@ -30,20 +31,32 @@ from .source_evidence_reader import (
 
 EXECUTOR_KEY = "extended_document"
 EXTENDED_DOCUMENT_RULE_IDS = (
+    "LX0609-050",
     "LX0609-051",
+    "LX0609-052",
+    "LX0609-053",
+    "LX0609-054",
+    "LX0609-055",
+    "LX0609-056",
+    "LX0609-057",
+    "LX0609-058",
+    "LX0609-059",
     "LX0609-060",
     "LX0609-061",
     "LX0609-062",
+    "LX0609-063",
     "LX0609-064",
     "LX0609-065",
     "LX0609-066",
     "LX0609-067",
     "LX0609-068",
     "LX0609-069",
+    "LX0609-070",
     "LX0609-071",
     "LX0609-072",
     "LX0609-073",
     "LX0609-074",
+    "LX0609-075",
 )
 
 EXTENDED_DOCUMENT_SOURCE_KEYS = (
@@ -64,10 +77,43 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "transfer_out_record",
     "inpat_nondrug_order",
     "diagnosis",
+    "diffcase_discussion_record",
+    "crisis_value_record",
+    "labtest_item_report",
+    "labtest_master",
+    "inpat_drug_order",
+    "discharge_record_diagnosis",
+    "bloodtrans_record",
 )
 
 _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
+_UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确", "原因待查", "性质待定")
+_SPECIAL_ANTIMICROBIALS = (
+    "头孢他啶/阿维巴坦", "头孢吡肟", "氨曲南", "美罗培南",
+    "亚胺培南", "万古霉素", "伏立康唑",
+)
+_ANTIMICROBIALS = _SPECIAL_ANTIMICROBIALS + (
+    "阿莫西林", "舒他西林", "青霉素", "苯唑西林", "哌拉西林",
+    "头孢唑林", "头孢曲松", "头孢他啶", "头孢西丁", "厄他培南",
+    "阿米卡星", "阿奇霉素", "莫西沙星", "左氧氟沙星", "环丙沙星",
+    "甲硝唑", "替硝唑", "奥硝唑", "克林霉素", "氟康唑",
+)
+_INVASIVE_PROCEDURES = (
+    "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
+    "气管插管", "支气管镜", "动脉置管",
+)
+_PRETRANSFUSION_NINE_GROUPS = (
+    ("hbsag", "乙肝表面抗原"),
+    ("hbsab", "乙肝表面抗体"),
+    ("hbeag", "乙肝e抗原"),
+    ("hbeab", "乙肝e抗体"),
+    ("hbcab", "乙肝核心抗体"),
+    ("hiv", "艾滋"),
+    ("hcv", "丙肝"),
+    ("tp", "梅毒"),
+    ("alt", "谷丙转氨酶"),
+)
 
 
 def _clean(value: Any) -> str:
@@ -263,6 +309,58 @@ def _row_text(row: Mapping[str, Any]) -> str:
     )
 
 
+def _material_text(row: Mapping[str, Any]) -> str:
+    return "\n".join(
+        _clean(row.get(key))
+        for key in (
+            "record_content", "document_title", "order_name", "generic_name",
+            "item_code", "item_name", "item_abbreviation", "result",
+            "result_flag", "abnormal_flag", "diagnosis_name", "labtest_subject",
+            "specimen",
+        )
+        if _clean(row.get(key))
+    )
+
+
+def _critical_rows(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(
+        row
+        for row in rows
+        if any(
+            marker == _clean(row.get(key)).upper()
+            or marker in _clean(row.get(key)).upper().split()
+            for key in (
+                "result_flag", "abnormal_flag", "abnormal_indicator",
+                "result_status", "result_hint",
+            )
+            for marker in ("PL", "PH")
+        )
+        or any(marker in _material_text(row).upper() for marker in ("（PL）", "（PH）", "(PL)", "(PH)"))
+    )
+
+
+def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(
+        row for row in rows if any(name in _material_text(row) for name in _ANTIMICROBIALS)
+    )
+
+
+def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> bool:
+    return any(any(marker in _material_text(row) for marker in markers) for row in rows)
+
+
+def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    ordered = sorted(
+        (
+            int(row.get("diagnosis_no") or 9999),
+            _clean(row.get("diagnosis_name") or row.get("diagnosis")),
+        )
+        for row in rows
+        if _clean(row.get("diagnosis_name") or row.get("diagnosis"))
+    )
+    return tuple(name for _position, name in ordered)
+
+
 def _structured_discharge_medications(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[list[Mapping[str, Any]] | None, str]:
@@ -273,6 +371,23 @@ def _structured_discharge_medications(
         if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
             return list(value), ""
         return None, "required_field_missing"
+    for row in rows:
+        value = _clean(row.get("discharge_order"))
+        if not value:
+            continue
+        labels = {
+            "drug_name": "药品名称",
+            "dose": "用药剂量",
+            "route": "给药途径",
+            "duration": "用药时间",
+        }
+        parsed: dict[str, str] = {}
+        for key, marker in labels.items():
+            match = re.search(rf"{marker}\s*[:：]\s*([^；;]+)", value)
+            if match:
+                parsed[key] = match.group(1).strip()
+        if parsed:
+            return [parsed], ""
     return None, "required_field_missing"
 
 
@@ -413,6 +528,27 @@ async def execute_luxian_0609_native_extended_document_rules(
         evidence_materials, "inpat_nondrug_order"
     )
     diagnosis_rows, diagnosis_error = _source_rows(evidence_materials, "diagnosis")
+    diffcase_rows, diffcase_error = _source_rows(
+        evidence_materials, "diffcase_discussion_record"
+    )
+    crisis_rows, crisis_error = _source_rows(
+        evidence_materials, "crisis_value_record"
+    )
+    lab_item_rows, lab_item_error = _source_rows(
+        evidence_materials, "labtest_item_report"
+    )
+    lab_master_rows, lab_master_error = _source_rows(
+        evidence_materials, "labtest_master"
+    )
+    drug_order_rows, drug_order_error = _source_rows(
+        evidence_materials, "inpat_drug_order"
+    )
+    discharge_diagnosis_rows, discharge_diagnosis_error = _source_rows(
+        evidence_materials, "discharge_record_diagnosis"
+    )
+    bloodtrans_rows, bloodtrans_error = _source_rows(
+        evidence_materials, "bloodtrans_record"
+    )
     death_state, death_time = _death_context(
         registration_rows=registration_rows,
         death_rows=death_rows,
@@ -421,6 +557,293 @@ async def execute_luxian_0609_native_extended_document_rules(
     display: list[tuple[str, Mapping[str, Any]]] = []
 
     for rule_id in selected:
+        if rule_id == "LX0609-050":
+            source_error = registration_error or daily_error or diffcase_error
+            admission_time = next(
+                (
+                    _parse_datetime(row.get("admission_datetime") or row.get("admission_time"))
+                    for row in registration_rows
+                    if _parse_datetime(row.get("admission_datetime") or row.get("admission_time"))
+                    is not None
+                ),
+                None,
+            )
+            uncertain_rows = tuple(
+                row
+                for row in daily_rows
+                if any(marker in _material_text(row) for marker in _UNCERTAIN_DIAGNOSIS_MARKERS)
+                and admission_time is not None
+                and (row_time := _row_time(row)) is not None
+                and row_time >= admission_time + timedelta(days=7)
+            )
+            if source_error:
+                final_state, reason_code = "data_gap", source_error
+            elif admission_time is None:
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif not uncertain_rows:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif diffcase_rows:
+                final_state, reason_code = "compliant", "requirement_satisfied"
+            else:
+                final_state, reason_code = "non_compliant", "required_document_missing"
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("inpat_registration", "daily_course_record", "diffcase_discussion_record"),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id in {"LX0609-052", "LX0609-053"}:
+            critical = _critical_rows(lab_item_rows)
+            if lab_item_error:
+                final_state, reason_code = "data_gap", lab_item_error
+            elif not critical:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif crisis_error:
+                final_state, reason_code = "data_gap", crisis_error
+            else:
+                report_times = tuple(
+                    _parse_datetime(
+                        row.get("report_time")
+                        or row.get("report_datetime")
+                        or row.get("record_time")
+                    )
+                    for row in critical
+                )
+                disposition_times = tuple(
+                    value for row in crisis_rows if (value := _row_time(row)) is not None
+                )
+                if any(value is None for value in report_times):
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                elif rule_id == "LX0609-053":
+                    handled = all(
+                        any(item >= report_time for item in disposition_times)
+                        for report_time in report_times
+                        if report_time is not None
+                    )
+                    final_state = "compliant" if handled else "non_compliant"
+                    reason_code = "requirement_satisfied" if handled else "required_document_missing"
+                else:
+                    intervals = tuple(
+                        min(
+                            (
+                                (item - report_time).total_seconds() / 3600
+                                for item in disposition_times
+                                if item >= report_time
+                            ),
+                            default=None,
+                        )
+                        for report_time in report_times
+                        if report_time is not None
+                    )
+                    handled = bool(intervals) and all(
+                        value is not None and value <= 6 for value in intervals
+                    )
+                    final_state = "compliant" if handled else "non_compliant"
+                    reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
+                    display.append((rule_id, {"threshold_hours": 6, "actual_interval_hours": intervals}))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("labtest_item_report", "crisis_value_record"),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id in {
+            "LX0609-054", "LX0609-055", "LX0609-056",
+            "LX0609-057", "LX0609-058", "LX0609-059",
+        }:
+            antimicrobial_orders = _antimicrobial_orders(drug_order_rows)
+            course_rows = (*daily_rows, *senior_rows)
+            source_error = drug_order_error or daily_error or senior_error
+            if source_error:
+                final_state, reason_code = "data_gap", source_error
+            elif not antimicrobial_orders:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif rule_id == "LX0609-054":
+                complete = _has_any_text(
+                    course_rows,
+                    ("启用", "停用", "更换", "联合", "用药理由", "重症感染", "覆盖耐药菌"),
+                )
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = "requirement_satisfied" if complete else "requirement_violated"
+            elif rule_id == "LX0609-055":
+                order_times = tuple(
+                    value for row in antimicrobial_orders if (value := _parse_datetime(
+                        row.get("prescribed_datetime") or row.get("order_datetime")
+                    )) is not None
+                )
+                evaluation_times = tuple(
+                    value
+                    for row in course_rows
+                    if _has_any_text((row,), ("效果评价", "体温下降", "白细胞", "CRP", "降阶梯"))
+                    and (value := _row_time(row)) is not None
+                )
+                if not order_times:
+                    final_state, reason_code = "data_gap", "authoritative_time_missing"
+                else:
+                    first_order = min(order_times)
+                    intervals = tuple(
+                        (value - first_order).total_seconds() / 3600 for value in evaluation_times
+                    )
+                    complete = any(48 <= value <= 72 for value in intervals)
+                    final_state = "compliant" if complete else "non_compliant"
+                    reason_code = "requirement_within_threshold" if complete else "threshold_exceeded"
+                    display.append((rule_id, {"window_hours": (48, 72), "evaluation_intervals": intervals}))
+            elif rule_id == "LX0609-056":
+                special_orders = tuple(
+                    row for row in antimicrobial_orders
+                    if any(name in _material_text(row) for name in _SPECIAL_ANTIMICROBIALS)
+                )
+                if len(special_orders) < 2:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                elif lab_master_error or lab_item_error:
+                    final_state, reason_code = "data_gap", lab_master_error or lab_item_error
+                else:
+                    special_order_times = tuple(
+                        value
+                        for row in special_orders
+                        if (value := _parse_datetime(row.get("prescribed_datetime")))
+                        is not None
+                    )
+                    first_order = min(special_order_times, default=None)
+                    specimen_times = tuple(
+                        value
+                        for row in lab_master_rows
+                        if _has_any_text((row,), ("培养", "药敏", "病原"))
+                        and (value := _parse_datetime(row.get("request_datetime") or row.get("sample_datetime")))
+                        is not None
+                    )
+                    if first_order is None:
+                        final_state, reason_code = "data_gap", "authoritative_time_missing"
+                    else:
+                        complete = any(value <= first_order for value in specimen_times)
+                        final_state = "compliant" if complete else "non_compliant"
+                        reason_code = "requirement_satisfied" if complete else "requirement_violated"
+            elif rule_id == "LX0609-057":
+                empiric = _has_any_text((*antimicrobial_orders, *course_rows), ("经验性", "经验用药"))
+                if not empiric:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                else:
+                    complete = _has_any_text(
+                        course_rows,
+                        ("重症感染", "覆盖耐药菌", "已留取", "无样可采，", "无样可采；"),
+                    )
+                    final_state = "compliant" if complete else "non_compliant"
+                    reason_code = "requirement_satisfied" if complete else "requirement_violated"
+            elif rule_id == "LX0609-058":
+                special_used = any(
+                    any(name in _material_text(row) for name in _SPECIAL_ANTIMICROBIALS)
+                    for row in antimicrobial_orders
+                )
+                if not special_used:
+                    final_state, reason_code = "not_applicable", "trigger_absent_complete"
+                elif consultation_error:
+                    final_state, reason_code = "data_gap", consultation_error
+                else:
+                    complete = _has_any_text(
+                        (*consultation_rows, *senior_rows),
+                        ("感染专家", "专家会诊", "专家查房", "同意特殊级"),
+                    )
+                    final_state = "compliant" if complete else "non_compliant"
+                    reason_code = "requirement_satisfied" if complete else "required_document_missing"
+            else:
+                used_names = tuple(
+                    name for name in _ANTIMICROBIALS
+                    if any(name in _material_text(row) for row in antimicrobial_orders)
+                )
+                complete = bool(used_names) and all(
+                    _has_any_text(course_rows, (name,)) for name in used_names
+                )
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                display.append((rule_id, {"checked_antimicrobials": used_names}))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=(
+                    "inpat_drug_order", "daily_course_record", "senior_course_record",
+                    "consultation_record", "labtest_master", "labtest_item_report",
+                ),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id == "LX0609-063":
+            if discharge_error:
+                final_state, reason_code = "data_gap", discharge_error
+            elif not discharge_rows:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif diagnosis_error or discharge_diagnosis_error:
+                final_state, reason_code = "data_gap", diagnosis_error or discharge_diagnosis_error
+            else:
+                authority = _diagnosis_sequence(diagnosis_rows)
+                written = _diagnosis_sequence(discharge_diagnosis_rows)
+                if not authority or not written:
+                    final_state, reason_code = "data_gap", "required_field_missing"
+                else:
+                    complete = authority == written
+                    final_state = "compliant" if complete else "non_compliant"
+                    reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                    display.append((rule_id, {"authoritative_diagnoses": authority, "written_diagnoses": written}))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("discharge_record", "diagnosis", "discharge_record_diagnosis"),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id == "LX0609-070":
+            if bloodtrans_error:
+                final_state, reason_code = "data_gap", bloodtrans_error
+            elif not bloodtrans_rows:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif lab_item_error:
+                final_state, reason_code = "data_gap", lab_item_error
+            else:
+                lab_text = "\n".join(_material_text(row).lower() for row in lab_item_rows)
+                present = tuple(
+                    labels[0]
+                    for labels in _PRETRANSFUSION_NINE_GROUPS
+                    if any(label.lower() in lab_text for label in labels)
+                )
+                complete = len(present) == len(_PRETRANSFUSION_NINE_GROUPS)
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                display.append((rule_id, {"required_test_count": 9, "present_test_count": len(present)}))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("bloodtrans_record", "labtest_item_report"),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
+        if rule_id == "LX0609-075":
+            invasive_orders = tuple(
+                row for row in nondrug_order_rows
+                if any(name in _material_text(row) for name in _INVASIVE_PROCEDURES)
+            )
+            if nondrug_order_error:
+                final_state, reason_code = "data_gap", nondrug_order_error
+            elif not invasive_orders:
+                final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif daily_error:
+                final_state, reason_code = "data_gap", daily_error
+            else:
+                ordered_names = tuple(
+                    name for name in _INVASIVE_PROCEDURES
+                    if any(name in _material_text(row) for row in invasive_orders)
+                )
+                complete = all(_has_any_text(daily_rows, (name,)) for name in ordered_names)
+                final_state = "compliant" if complete else "non_compliant"
+                reason_code = "requirement_satisfied" if complete else "required_document_missing"
+                display.append((rule_id, {"ordered_procedures": ordered_names}))
+            decisions.append(_decision(
+                rule_id=rule_id, snapshot=evidence_snapshot,
+                source_keys=("inpat_nondrug_order", "daily_course_record"),
+                final_state=final_state, reason_code=reason_code,
+            ))
+            continue
+
         if rule_id in {"LX0609-051", "LX0609-060"}:
             source_error = registration_error or death_error
             if source_error and death_state == "unknown":

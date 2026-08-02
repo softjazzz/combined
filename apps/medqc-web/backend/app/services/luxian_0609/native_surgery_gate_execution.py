@@ -440,6 +440,7 @@ def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
             row.get("surgeon_sign")
             or row.get("physician_sign")
             or row.get("signer")
+            or row.get("submitter")
         )
         if surgeon and signer and surgeon == signer:
             return True

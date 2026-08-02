@@ -8,10 +8,10 @@ def test_phase_scope_freezes_all_75_customer_rules() -> None:
     assert tuple(entry.rule_id for entry in entries) == tuple(
         f"LX0609-{index:03d}" for index in range(1, 76)
     )
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 45
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 57
     assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 2
-    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 28
-    assert sum(entry.catalog_registered for entry in entries) == 63
+    assert sum(entry.phase_status == "pending_definition" for entry in entries) == 16
+    assert sum(entry.catalog_registered for entry in entries) == 75
 
 
 def test_phase_scope_splits_rules_009_and_018_without_enabling_pending_semantics() -> None:

@@ -32,7 +32,11 @@ from app.services.custom_qc_sample_pool_service import (  # noqa: E402
     _sample_pool_items_table,
     _sample_pools_table,
 )
-from app.services.bundles.assembly import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows  # noqa: E402
+from app.services.bundles.assembly import (  # noqa: E402
+    _default_source_schema,
+    refresh_domain_bundles_for_rows,
+    refresh_scene_bundles_for_rows,
+)
 from app.services.document_assembly import assemble_document  # noqa: E402
 
 
@@ -993,7 +997,12 @@ def _source_identity(case: CandidateCase) -> dict[str, str]:
 
 def reflect_table(table_name: str, metadata: MetaData) -> Table | None:
     try:
-        return Table(table_name, metadata, autoload_with=engine)
+        return Table(
+            table_name,
+            metadata,
+            schema=_default_source_schema(),
+            autoload_with=engine,
+        )
     except Exception:
         return None
 

@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 
 LUXIAN_0609_RULE_MASTER_SCHEMA_VERSION = "lx0609-rule-master-v1"
-LUXIAN_0609_RULE_MASTER_VERSION = "2026-08-01"
+LUXIAN_0609_RULE_MASTER_VERSION = "2026-08-02"
 
 _MASTER_PATH = (
     Path(__file__).resolve().parent.parent
@@ -25,9 +25,9 @@ _IMPLEMENTATION_STATUSES = frozenset(
     {"active", "contract_ready", "pending_definition"}
 )
 _EXPECTED_STATUS_COUNTS = {
-    "active": 63,
-    "contract_ready": 4,
-    "pending_definition": 8,
+    "active": 75,
+    "contract_ready": 0,
+    "pending_definition": 0,
 }
 
 
@@ -94,7 +94,7 @@ def compile_luxian_0609_rule_master(
         for status in _IMPLEMENTATION_STATUSES
     }
     if status_counts != _EXPECTED_STATUS_COUNTS:
-        raise ValueError("LX0609 rule master status counts must be 63 active, 4 ready, 8 pending")
+        raise ValueError("LX0609 rule master status counts must be 75 active")
     return tuple(entries)
 
 

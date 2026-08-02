@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v16"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v17"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -157,7 +157,13 @@ _DERIVED = SourceAccessMode.DERIVED_PROJECTION_V1
 _REGISTRY_ENTRIES = (
     _entry("admission_record", access_mode=_BOUNDED),
     _entry("anesthesia_record", access_mode=_BOUNDED),
-    _entry("bloodtrans_record", "bloodtrans_record", "mr_bloodtrans", access_mode=_BOUNDED),
+    _entry(
+        "bloodtrans_record",
+        "bloodtrans_record",
+        "mr_bloodtrans",
+        "inpat_bill_item",
+        access_mode=_BOUNDED,
+    ),
     _entry(
         "consent_form",
         "consent_form",
@@ -173,7 +179,10 @@ _REGISTRY_ENTRIES = (
     _entry("daily_course_record", access_mode=_BOUNDED),
     _entry("death_discussion", access_mode=_BOUNDED),
     _entry("death_record", access_mode=_BOUNDED),
+    _entry("diagnosis", access_mode=_BOUNDED),
+    _entry("diffcase_discussion_record", access_mode=_BOUNDED),
     _entry("discharge_record", access_mode=_BOUNDED),
+    _entry("discharge_record_diagnosis", access_mode=_BOUNDED),
     _entry(
         "exam_attention_report",
         access_mode=_DERIVED,
@@ -189,6 +198,10 @@ _REGISTRY_ENTRIES = (
         derived_from_source_keys=("labtest_master", "labtest_item_report"),
     ),
     _entry("labtest_item_report", access_mode=_BOUNDED),
+    _entry("labtest_master", access_mode=_BOUNDED),
+    _entry("crisis_value_record", access_mode=_BOUNDED),
+    _entry("inpat_drug_order", access_mode=_BOUNDED),
+    _entry("inpat_nondrug_order", access_mode=_BOUNDED),
     _entry(
         "medical_order",
         access_mode=_DERIVED,
@@ -231,12 +244,8 @@ _INTERNAL_SOURCE_ENTRIES = (
     _entry("inpat_nondrug_order.unstable_order", access_mode=_CONTROLLED),
     _entry("pathology_exam_master", access_mode=_BOUNDED),
     _entry("pathology_exam_report", access_mode=_BOUNDED),
-    _entry("diagnosis", access_mode=_BOUNDED),
     _entry("admission_record_diagnosis", access_mode=_BOUNDED),
     _entry("exam_master", access_mode=_BOUNDED),
-    _entry("labtest_master", access_mode=_BOUNDED),
-    _entry("inpat_drug_order", access_mode=_BOUNDED),
-    _entry("inpat_nondrug_order", access_mode=_BOUNDED),
     _entry("surgery_application", access_mode=_BOUNDED),
     _entry("preane_surveil_record", access_mode=_BOUNDED),
     _entry("postane_surveil_record", access_mode=_BOUNDED),
@@ -433,6 +442,32 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-049": ("bloodtrans_record",),
+    "LX0609-050": ("inpat_registration",),
+    "LX0609-054": (
+        "senior_course_record", "consultation_record", "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-055": (
+        "senior_course_record", "consultation_record", "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-056": (
+        "daily_course_record", "senior_course_record", "consultation_record",
+        "labtest_item_report",
+    ),
+    "LX0609-057": (
+        "senior_course_record", "consultation_record", "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-058": (
+        "daily_course_record", "senior_course_record", "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-059": (
+        "senior_course_record", "consultation_record", "labtest_master",
+        "labtest_item_report",
+    ),
+    "LX0609-063": ("discharge_record",),
     # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
     # Evidence Session，供适用性、时限和关联判定绑定。
     "LX0609-051": ("inpat_registration",),

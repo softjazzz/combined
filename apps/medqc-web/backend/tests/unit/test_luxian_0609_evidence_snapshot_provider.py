@@ -895,7 +895,7 @@ def test_all_63_registered_rules_query_each_bounded_source_once_and_never_query_
             for source_key in entry.physical_source_keys
         }
     )
-    assert len(selected) == 63
+    assert len(selected) == 75
     assert calls == sorted(
         {
             *expected_bounded,

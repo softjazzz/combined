@@ -57,11 +57,11 @@ def test_v3_family_projection_covers_the_unique_75_rule_master() -> None:
     flattened_all = [rule_id for rules in all_rules.values() for rule_id in rules]
     flattened_active = [rule_id for rules in active_rules.values() for rule_id in rules]
     assert len(flattened_all) == len(set(flattened_all)) == 75
-    assert len(flattened_active) == len(set(flattened_active)) == 63
+    assert len(flattened_active) == len(set(flattened_active)) == 75
     assert "LX0609-052" in all_rules["检查检验"]
-    assert "LX0609-052" not in active_rules["检查检验"]
+    assert "LX0609-052" in active_rules["检查检验"]
     assert "LX0609-075" in all_rules["手术麻醉"]
-    assert "LX0609-075" not in active_rules["手术麻醉"]
+    assert "LX0609-075" in active_rules["手术麻醉"]
 
 
 def test_v3_coverage_ledger_never_activates_ready_or_pending_rules() -> None:
@@ -75,11 +75,7 @@ def test_v3_coverage_ledger_never_activates_ready_or_pending_rules() -> None:
     counts = Counter(row["coverage_status"] for row in ledger)
 
     assert len(ledger) == 75
-    assert counts == {
-        "assigned_pending_golden_review": 63,
-        "candidate_family_available_executor_inactive": 4,
-        "blocked_definition": 8,
-    }
+    assert counts == {"assigned_pending_golden_review": 75}
     assert all(
         row["candidate_visit_ids"]
         for row in ledger
@@ -107,7 +103,7 @@ def test_v3_compatibility_configuration_keeps_v2_logic_but_uses_v3_identity() ->
             for rule_ids in module.V2.FAMILY_RULE_IDS.values()
             for rule_id in rule_ids
         }
-    ) == 63
+    ) == 75
 
 
 def test_v3_exam_lab_upgrade_builds_rich_grouped_reports_with_complete_links() -> None:

@@ -26,7 +26,7 @@ _CONTRACT_PATH = (
 def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> None:
     contracts = load_luxian_0609_rule_contracts()
 
-    assert len(contracts) == 63
+    assert len(contracts) == 75
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
@@ -72,6 +72,18 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-047",
         "LX0609-048",
         "LX0609-049",
+        "LX0609-050",
+        "LX0609-052",
+        "LX0609-053",
+        "LX0609-054",
+        "LX0609-055",
+        "LX0609-056",
+        "LX0609-057",
+        "LX0609-058",
+        "LX0609-059",
+        "LX0609-063",
+        "LX0609-070",
+        "LX0609-075",
         "LX0609-029",
         "LX0609-030",
         "LX0609-032",
@@ -140,6 +152,18 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-047",
         "LX0609-048",
         "LX0609-049",
+        "LX0609-050",
+        "LX0609-052",
+        "LX0609-053",
+        "LX0609-054",
+        "LX0609-055",
+        "LX0609-056",
+        "LX0609-057",
+        "LX0609-058",
+        "LX0609-059",
+        "LX0609-063",
+        "LX0609-070",
+        "LX0609-075",
         "LX0609-051",
         "LX0609-060",
         "LX0609-061",

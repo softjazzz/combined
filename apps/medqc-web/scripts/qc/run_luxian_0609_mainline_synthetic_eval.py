@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import json
 import os
 import re
@@ -137,6 +138,23 @@ def select_visit_ids(all_visit_ids: list[str], args: argparse.Namespace) -> list
     return selected
 
 
+def load_validation_matrix(path: Path) -> dict[str, dict[str, str]]:
+    """读取“每个规则只绑定一个病例”的 v3 黄金验收矩阵。"""
+    grouped: dict[str, dict[str, str]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            visit_id = safe_text(row.get("visit_id"))
+            rule_id = safe_text(row.get("rule_id"))
+            expected_status = safe_text(row.get("expected_status"))
+            if not visit_id or not rule_id or not expected_status:
+                raise ValueError("validation matrix contains an incomplete row")
+            visit_rules = grouped.setdefault(visit_id, {})
+            if rule_id in visit_rules:
+                raise ValueError(f"validation matrix duplicates {rule_id}")
+            visit_rules[rule_id] = expected_status
+    return grouped
+
+
 def inspect_pg_synthetic_cases() -> dict[str, Any]:
     database_url = safe_text(os.environ.get("DATABASE_URL"))
     if not database_url:
@@ -264,6 +282,8 @@ async def run_one_visit(
     output_dir: Path,
     schema: str,
     use_execution_cache: bool,
+    institute_id: str = "LX0609_SYN",
+    rule_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate_running_final_bundle
     from app.services.qc_rule_sets import get_sichuan_rule_set
@@ -281,11 +301,11 @@ async def run_one_visit(
         result = await evaluate_running_final_bundle(
             qc_service=qc_service,
             scene="running",
-            institute_id="LX0609_SYN",
+            institute_id=institute_id,
             patient_id=f"P-{visit_id}",
             visit_id=visit_id,
             schema=schema,
-            rule_ids=list(rule_set.rule_ids),
+            rule_ids=list(rule_ids or rule_set.rule_ids),
             bucket_strategy=rule_set.bucket_strategy,
             quality_profile=rule_set.quality_profile,
             batch_output_mode=rule_set.batch_output_mode,
@@ -305,12 +325,20 @@ async def run_one_visit(
         error=error,
     )
     path = write_report(report, output_dir=output_dir)
+    actual_statuses = {
+        safe_text(item.get("qc_point_id") or item.get("rule_id")): safe_text(
+            item.get("result_status") or item.get("status")
+        )
+        for item in report["execution"]["trigger_gate_customer_results"]
+        if isinstance(item, dict)
+    }
     return {
         "visit_id": visit_id,
         "path": str(path),
         "elapsed_ms": elapsed_ms,
         "error": error,
         "result_count": len(report["execution"]["trigger_gate_customer_results"]),
+        "actual_statuses": actual_statuses,
     }
 
 
@@ -324,8 +352,16 @@ async def run_all(args: argparse.Namespace) -> int:
     if not os.environ.get("DATABASE_URL"):
         raise RuntimeError("DATABASE_URL 未配置，无法读取 PG 合成样本")
     validate_runtime_env()
-    data = load_json(Path(args.synthetic_cases))
-    all_visit_ids = iter_visit_ids(data)
+    validation_matrix = (
+        load_validation_matrix(Path(args.validation_matrix))
+        if args.validation_matrix
+        else {}
+    )
+    if validation_matrix:
+        all_visit_ids = sorted(validation_matrix)
+    else:
+        data = load_json(Path(args.synthetic_cases))
+        all_visit_ids = iter_visit_ids(data)
     visit_ids = select_visit_ids(all_visit_ids, args)
     if not visit_ids:
         raise RuntimeError("没有选中任何 LX0609_SYN_* 样本")
@@ -340,16 +376,32 @@ async def run_all(args: argparse.Namespace) -> int:
             output_dir=output_dir,
             schema=str(args.schema),
             use_execution_cache=not bool(args.no_cache),
+            institute_id=safe_text(args.institute_id),
+            rule_ids=list(validation_matrix.get(visit_id, {})) or None,
         )
+        expected_statuses = validation_matrix.get(visit_id, {})
+        actual_statuses = row.pop("actual_statuses", {})
+        mismatches = [
+            {
+                "rule_id": rule_id,
+                "expected_status": expected_status,
+                "actual_status": actual_statuses.get(rule_id, "missing"),
+            }
+            for rule_id, expected_status in expected_statuses.items()
+            if actual_statuses.get(rule_id) != expected_status
+        ]
+        row["expected_count"] = len(expected_statuses)
+        row["matched_count"] = len(expected_statuses) - len(mismatches)
+        row["mismatches"] = mismatches
         rows.append(row)
-        status = "OK" if not row.get("error") else "ERROR"
+        status = "OK" if not row.get("error") and not mismatches else "ERROR"
         print(
             f"[mainline] {visit_id} {status} "
             f"results={row.get('result_count')} elapsed_ms={row.get('elapsed_ms')} "
             f"path={row.get('path')}"
         )
 
-    failed = [row for row in rows if row.get("error")]
+    failed = [row for row in rows if row.get("error") or row.get("mismatches")]
     summary_path = output_dir / f"luxian_0609_mainline_run_{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
     summary_path.write_text(
         json.dumps(
@@ -357,6 +409,8 @@ async def run_all(args: argparse.Namespace) -> int:
                 "generated_at": datetime.now().isoformat(timespec="seconds"),
                 "selected_count": len(visit_ids),
                 "failed_count": len(failed),
+                "expected_count": sum(int(row.get("expected_count") or 0) for row in rows),
+                "matched_count": sum(int(row.get("matched_count") or 0) for row in rows),
                 "rows": rows,
             },
             ensure_ascii=False,
@@ -373,7 +427,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--visit-id", action="append", default=[], help="只运行指定 synthetic visit，可重复传入")
     parser.add_argument("--limit", type=int, default=0, help="按 visit_id 排序后只运行前 N 份")
     parser.add_argument("--schema", default="public")
+    parser.add_argument("--institute-id", default="LX0609_SYN")
     parser.add_argument("--synthetic-cases", default=str(SYNTHETIC_CASES_PATH))
+    parser.add_argument(
+        "--validation-matrix",
+        default="",
+        help="按 CSV 中 visit_id/rule_id/expected_status 仅运行并核对绑定规则",
+    )
     parser.add_argument("--output-dir", default=str(RUNTIME_DIR))
     parser.add_argument("--env-file", action="append", default=[], help="加载本地 env 文件；不会打印密钥内容")
     parser.add_argument("--preflight", action="store_true", help="只检查样本、PG 和 LLM 前置条件，不调用模型")

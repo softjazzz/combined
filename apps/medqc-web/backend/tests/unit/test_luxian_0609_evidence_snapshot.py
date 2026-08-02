@@ -302,7 +302,7 @@ def test_source_registry_covers_every_document_type_declared_by_registered_rules
         for contract in contracts
         for document_type in contract.applicable_documents
     }
-    assert len(contracts) == 63
+    assert len(contracts) == 75
     assert set(registry) == declared_documents
     assert all(entry.binding_fields == EXACT_VISIT_BINDING_FIELDS for entry in registry.values())
     assert all(entry.default_completeness is SourceCompleteness.UNPROVEN for entry in registry.values())

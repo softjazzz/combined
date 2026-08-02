@@ -542,7 +542,7 @@ def _append_exam_lab_orders(
                 "frequency": "一次",
                 "prescribed_datetime": prescribed_time,
                 "prescribed_doctor": "陈某医师",
-                "order_status": "执行",
+                "order_status": "执行中",
                 "record_content": f"检查检验医嘱：{name}",
                 "last_modified_datetime": prescribed_time,
                 "update_time": prescribed_time,
@@ -644,14 +644,12 @@ def upgrade_exam_lab_evidence(
         ),
         visit_ids=visit_ids,
     )
+    # 受控病例不继承原病例的海量医嘱，避免新增 MRI/培养医嘱在
+    # Evidence Snapshot 的 limit+1 边界之外形成伪数据缺口。
     rows_by_table["inpat_nondrug_order"] = [
         row
         for row in rows_by_table.get("inpat_nondrug_order", [])
         if str(row.get("visit_id") or "") not in visit_ids
-        or not any(
-            marker in str(row.get("order_name") or "").upper()
-            for marker in ("CT", "MRI", "磁共振", "核磁", "培养", "药敏")
-        )
     ]
 
     scenario_counts: Counter[str] = Counter()

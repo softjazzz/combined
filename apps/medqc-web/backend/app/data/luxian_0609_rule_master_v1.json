@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-rule-master-v1",
-  "master_version": "2026-08-01",
+  "master_version": "2026-08-02",
   "rule_set_key": "luxian_0609_qc_v1",
   "description": "泸县0609客户质控点唯一业务总表。active 才进入当前执行目录；其余规则不得生成占位结果。",
   "rules": [
@@ -302,8 +302,7 @@
       "rule_id": "LX0609-050",
       "source_document": "疑难病历讨论记录",
       "qc_point": "诊断不明确（入院后7天）未书写疑难病历讨论",
-      "implementation_status": "pending_definition",
-      "definition_note": "需明确“诊断不明确”的受控触发标准"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-051",
@@ -315,57 +314,49 @@
       "rule_id": "LX0609-052",
       "source_document": "危急值记录",
       "qc_point": "6小时内未书写危急值处置记录",
-      "implementation_status": "contract_ready",
-      "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-053",
       "source_document": "危急值记录",
       "qc_point": "检验检查危急值报告后无危急值处置记录",
-      "implementation_status": "contract_ready",
-      "definition_note": "检验PL（极低）或PH（极高）为危急值，以检验报告时间起算，核对危急值处理记录"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-054",
       "source_document": "抗菌药物使用记录",
       "qc_point": "使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
-      "implementation_status": "pending_definition",
-      "definition_note": "需明确“理由充分”的最小记录要素和受控判定标准"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-055",
       "source_document": "抗菌药物使用记录",
       "qc_point": "48至72小时内无效果评价",
-      "implementation_status": "pending_definition",
-      "definition_note": "需明确效果评价必需字段及合格口径"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-056",
       "source_document": "抗菌药物使用记录",
       "qc_point": "接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
-      "implementation_status": "pending_definition",
-      "definition_note": "需提供“重点抗菌药物”目录或受控定义"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-057",
       "source_document": "抗菌药物使用记录",
       "qc_point": "经验用药时未说明理由，无样可采时未注明原因",
-      "implementation_status": "pending_definition",
-      "definition_note": "需明确经验用药和无样可采的受控识别证据"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-058",
       "source_document": "抗菌药物使用记录",
       "qc_point": "使用特殊级抗菌药物缺少专家查房或会诊记录",
-      "implementation_status": "contract_ready",
-      "definition_note": "特殊级药物按《2025年泸县人民医院抗菌药物分级目录》识别"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-059",
       "source_document": "医嘱",
       "qc_point": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
-      "implementation_status": "pending_definition",
-      "definition_note": "需限定诊疗医嘱与病程记录的一致性比较范围"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-060",
@@ -389,8 +380,7 @@
       "rule_id": "LX0609-063",
       "source_document": "出院记录",
       "qc_point": "出院诊断或死亡诊断错填、漏填、顺序错误",
-      "implementation_status": "pending_definition",
-      "definition_note": "需明确错填、漏填、顺序错误的权威对照来源"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-064",
@@ -432,8 +422,7 @@
       "rule_id": "LX0609-070",
       "source_document": "输血前评估",
       "qc_point": "未做输血前相关九项检查",
-      "implementation_status": "contract_ready",
-      "definition_note": "九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶"
+      "implementation_status": "active"
     },
     {
       "rule_id": "LX0609-071",
@@ -463,8 +452,7 @@
       "rule_id": "LX0609-075",
       "source_document": "有创操作记录",
       "qc_point": "有创操作医嘱但无有创操作记录",
-      "implementation_status": "pending_definition",
-      "definition_note": "需提供有创操作目录及医嘱到操作记录的映射规则"
+      "implementation_status": "active"
     }
   ]
 }

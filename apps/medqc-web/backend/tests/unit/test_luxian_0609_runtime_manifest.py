@@ -59,10 +59,10 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert manifest["schema_version"] == "lx0609-runtime-manifest-v1"
     assert manifest["git_head"] == "a" * 40
     assert manifest["generated_at"] == "2026-07-23T18:00:00Z"
-    assert manifest["rule_set"]["rule_count"] == 63
+    assert manifest["rule_set"]["rule_count"] == 75
     assert manifest["rule_set"]["rule_ids"] == expected_rule_ids
-    assert len(manifest["rules"]) == 63
-    assert len({item["rule_id"] for item in manifest["rules"]}) == 63
+    assert len(manifest["rules"]) == 75
+    assert len({item["rule_id"] for item in manifest["rules"]}) == 75
 
     by_rule = {item["rule_id"]: item for item in manifest["rules"]}
     assert by_rule["LX0609-020"]["active_path"] == "compatibility"

@@ -160,6 +160,13 @@ LEGACY_EXECUTOR_MATERIAL_SOURCE_KEYS = {
         "transfer_out_record",
         "inpat_nondrug_order",
         "diagnosis",
+        "diffcase_discussion_record",
+        "crisis_value_record",
+        "labtest_item_report",
+        "labtest_master",
+        "inpat_drug_order",
+        "discharge_record_diagnosis",
+        "bloodtrans_record",
     ),
 }
 

@@ -1,6 +1,105 @@
 [
   {
+    "rule_id": "LX0609-050",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
     "rule_id": "LX0609-051",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-052",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-053",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-054",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-055",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-056",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-057",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-058",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-059",
     "contract_version": "v1",
     "family_key": "extended_document",
     "executor_key": "extended_document",
@@ -34,6 +133,17 @@
   },
   {
     "rule_id": "LX0609-062",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-063",
     "contract_version": "v1",
     "family_key": "extended_document",
     "executor_key": "extended_document",
@@ -110,6 +220,17 @@
     "golden_gate_state": "pending"
   },
   {
+    "rule_id": "LX0609-070",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
     "rule_id": "LX0609-071",
     "contract_version": "v1",
     "family_key": "extended_document",
@@ -144,6 +265,17 @@
   },
   {
     "rule_id": "LX0609-074",
+    "contract_version": "v1",
+    "family_key": "extended_document",
+    "executor_key": "extended_document",
+    "execution_mode": "native_async",
+    "decision_authority": "program_only",
+    "max_llm_calls_per_rule": 0,
+    "source_contract_state": "typed_shadow_v1",
+    "golden_gate_state": "pending"
+  },
+  {
+    "rule_id": "LX0609-075",
     "contract_version": "v1",
     "family_key": "extended_document",
     "executor_key": "extended_document",
