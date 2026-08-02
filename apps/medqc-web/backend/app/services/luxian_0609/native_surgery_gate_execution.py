@@ -31,6 +31,7 @@ from .source_evidence_reader import (
     read_luxian_0609_native_source_rows,
     read_luxian_0609_runtime_source_rows,
 )
+from .surgery_applicability import resolve_surgery_applicability
 from .surgery_text_fact_contract import (
     SurgeryEventFact,
     SurgeryTextProjection,
@@ -811,28 +812,6 @@ def _typed_conservative_surgery_gate_decision(
             reason_code="snapshot_mismatch",
         )
     surgery_observation = observation_by_source["surgery_record"]
-    mr_observation = observation_by_source["mr_surgery"]
-    if surgery_observation.query_state.value == "error":
-        return decision(
-            applicability=ApplicabilityState.ERROR,
-            evidence_state=EvidenceState.TECHNICAL_ERROR,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="source_query_error",
-        )
-    if surgery_observation.query_state.value == "unavailable":
-        return decision(
-            applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="source_unavailable",
-        )
-    if surgery_observation.completeness.value == "truncated":
-        return decision(
-            applicability=ApplicabilityState.UNKNOWN,
-            evidence_state=EvidenceState.DATA_GAP,
-            qc_direction=QcDirection.UNKNOWN,
-            reason_code="source_truncated",
-        )
 
     # 033只检查“已有手术记录时是否缺手术知情同意书”。手术记录来源已完整
     # 查询且为空时，缺手术记录由030负责，不能把033继续推入同意书缺口。
@@ -848,56 +827,30 @@ def _typed_conservative_surgery_gate_decision(
             reason_code="performed_event_absent",
         )
 
-    if (
-        rule_id in {"LX0609-024", "LX0609-025", "LX0609-028", "LX0609-031"}
-        and surgery_observation.query_state.value == "empty"
-        and surgery_observation.completeness.value == "complete"
-        and mr_observation.query_state.value == "available"
-        and mr_observation.completeness.value == "complete"
-    ):
-        try:
-            mr_rows = tuple(materials.rows("mr_surgery"))
-        except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
-            mr_rows = ()
-        if mr_rows and not _qualified_traditional_surgery_present(mr_rows):
-            return decision(
-                applicability=ApplicabilityState.NOT_APPLICABLE,
-                evidence_state=EvidenceState.SUFFICIENT,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="performed_event_absent",
-            )
-
-    performed_state = _snapshot_performed_surgery_state(snapshot)
-    if performed_state == "negative":
-        if mr_observation.query_state.value == "error":
-            return decision(
-                applicability=ApplicabilityState.ERROR,
-                evidence_state=EvidenceState.TECHNICAL_ERROR,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="source_query_error",
-            )
-        if (
-            mr_observation.query_state.value != "empty"
-            or mr_observation.completeness.value == "truncated"
-        ):
-            return decision(
-                applicability=ApplicabilityState.UNKNOWN,
-                evidence_state=EvidenceState.DATA_GAP,
-                qc_direction=QcDirection.UNKNOWN,
-                reason_code="applicability_source_gap",
-            )
+    surgery_applicability = resolve_surgery_applicability(
+        snapshot=snapshot,
+        materials=materials,
+    )
+    if surgery_applicability.state == "technical_error":
+        return decision(
+            applicability=ApplicabilityState.ERROR,
+            evidence_state=EvidenceState.TECHNICAL_ERROR,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=surgery_applicability.reason_code,
+        )
+    if surgery_applicability.state == "not_applicable":
         return decision(
             applicability=ApplicabilityState.NOT_APPLICABLE,
             evidence_state=EvidenceState.SUFFICIENT,
             qc_direction=QcDirection.UNKNOWN,
             reason_code="performed_event_absent",
         )
-    if performed_state != "present":
+    if surgery_applicability.state != "applicable":
         return decision(
             applicability=ApplicabilityState.UNKNOWN,
             evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
-            reason_code="applicability_source_gap",
+            reason_code=surgery_applicability.reason_code,
         )
 
     # 现库尚无可审计的恶性手术关联、植入物实际使用、预防用药实际区间、
@@ -1280,34 +1233,10 @@ def _resolve_performed_state(
 def _snapshot_performed_surgery_state(
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> str:
-    observations = tuple(
-        item for item in snapshot.observations if item.source_key == "surgery_record"
-    )
-    facts = tuple(
-        item
-        for item in snapshot.facts
-        if item.source_key == "surgery_record"
-        and item.fact_type == "current_visit_surgery_confirmed"
-    )
-    if len(observations) != 1 or len(facts) != 1:
-        return "unknown"
-    observation = observations[0]
-    fact = facts[0]
-    normalized_value = fact.normalized_value
-    if not isinstance(normalized_value, Mapping):
-        return "unknown"
-    performed = normalized_value.get("performed")
-    if (
-        observation.query_state.value == "available"
-        and fact.assertion.value == "affirmed"
-        and performed is True
-    ):
+    applicability = resolve_surgery_applicability(snapshot=snapshot)
+    if applicability.state == "applicable":
         return "present"
-    if (
-        observation.query_state.value == "empty"
-        and fact.assertion.value == "negated"
-        and performed is False
-    ):
+    if applicability.state == "not_applicable":
         return "negative"
     return "unknown"
 

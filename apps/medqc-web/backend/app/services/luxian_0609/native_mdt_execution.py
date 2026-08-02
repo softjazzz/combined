@@ -20,6 +20,7 @@ from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     read_luxian_0609_native_source_rows,
 )
+from .surgery_applicability import resolve_surgery_applicability
 from .surgery_procedure_catalog import catalog_surgery_state, effective_surgery_level
 
 
@@ -533,6 +534,38 @@ async def execute_luxian_0609_native_mdt_rule(
 
     if terminal_blocker is not None:
         return finish(terminal_blocker)
+    if typed_requested:
+        assert evidence_snapshot is not None
+        assert evidence_materials is not None
+        surgery_applicability = resolve_surgery_applicability(
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+            source_keys=("mr_surgery",),
+        )
+        if surgery_applicability.state == "technical_error":
+            return finish(
+                _MdtRuleOutcome(
+                    "technical_error", "technical_failure", "source_query_error"
+                )
+            )
+        if surgery_applicability.state == "data_gap":
+            return finish(
+                _MdtRuleOutcome(
+                    "data_gap", "data_gap", surgery_applicability.reason_code
+                )
+            )
+        if surgery_applicability.state == "not_applicable":
+            return finish(
+                _MdtRuleOutcome(
+                    "not_applicable", "trigger_absent", "performed_surgery_absent"
+                )
+            )
+        if surgery_applicability.effective_level != "四级":
+            return finish(
+                _MdtRuleOutcome(
+                    "not_applicable", "trigger_absent", "level4_surgery_absent"
+                )
+            )
     if not all(
         isinstance(value, str) and value.strip()
         for value in (institute_id, patient_id, visit_id)

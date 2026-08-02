@@ -23,6 +23,7 @@ from .fact_schema import Assertion, EventStatus
 from .native_execution import build_luxian_0609_native_result
 from .source_manifest import QueryStatus
 from .source_evidence_reader import has_qualified_traditional_surgery_row
+from .surgery_applicability import resolve_surgery_applicability
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_decision_support_source_keys,
@@ -210,11 +211,25 @@ def _typed_decision_from_outcome(
             ),
         )
     elif outcome.status == "data_gap":
+        controlled_reason = (
+            outcome.reason_code
+            if outcome.reason_code
+            in {
+                "source_unavailable",
+                "source_empty",
+                "source_truncated",
+                "required_field_missing",
+                "authoritative_time_missing",
+                "association_failed",
+                "applicability_source_gap",
+            }
+            else None
+        )
         dimensions = (
             ApplicabilityState.UNKNOWN,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            (
+            controlled_reason or (
                 "source_unavailable"
                 if "source" in outcome.reason_code
                 else "applicability_source_gap"
@@ -666,62 +681,47 @@ def _typed_terminal_outcome(
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "performed_surgery_source_unavailable", "program"
             )
-        source_states: list[str] = []
         source_state_by_key: dict[str, str] = {}
-        source_blockers: list[_SurgeryDocumentOutcome] = []
         for source_key in performed_sources:
-            blocker = _typed_source_gate(
-                rule_id=rule_id,
-                source_key=source_key,
-                snapshot=snapshot,
-            )
-            if blocker is not None:
-                source_blockers.append(blocker)
             fact_state, _ = _typed_fact_state(
                 snapshot,
                 fact_types=_SURGERY_FACT_TYPES,
                 source_key=source_key,
             )
-            source_states.append(fact_state)
             source_state_by_key[source_key] = fact_state
-
-        # 任一批准来源的可信已实施事实足以进入后续急救/术前讨论判定；
-        # 另一来源的缺口不能覆盖这个肯定事实。
-        if "present" not in source_states:
-            technical_blocker = next(
-                (
-                    item
-                    for item in source_blockers
-                    if item.status == "technical_error"
-                ),
-                None,
-            )
-            if technical_blocker is not None:
-                return technical_blocker
-            if source_blockers:
-                return _SurgeryDocumentOutcome(
-                    rule_id,
-                    "data_gap",
-                    "performed_surgery_source_unavailable",
-                    "program",
-                )
-            if source_states == ["absent", "absent"]:
-                return _SurgeryDocumentOutcome(
-                    rule_id, "not_applicable", "performed_surgery_absent", "program"
-                )
-            return _SurgeryDocumentOutcome(
-                rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
-            )
-
-        # 只有mr_surgery中的操作事实、没有手术记录，且结构化手术/切口等级均
-        # 不能确认传统手术时，不适用术前讨论要求。缺手术记录由030另行负责。
         if (
             source_state_by_key.get("surgery_record") == "absent"
             and source_state_by_key.get("mr_surgery") == "present"
             and _qualified_traditional_surgery_present(materials) is False
         ):
+            source_state_by_key["mr_surgery"] = "absent"
+        if "present" not in source_state_by_key.values():
+            if isinstance(snapshot, Luxian0609EvidenceSnapshot):
+                applicability = resolve_surgery_applicability(
+                    snapshot=snapshot,
+                    materials=(
+                        materials
+                        if isinstance(materials, Luxian0609EvidenceMaterialStore)
+                        else None
+                    ),
+                )
+                if applicability.state == "technical_error":
+                    return _SurgeryDocumentOutcome(
+                        rule_id, "technical_error", "source_query_error", "program"
+                    )
+                if applicability.state == "not_applicable":
+                    return _SurgeryDocumentOutcome(
+                        rule_id, "not_applicable", "performed_surgery_absent", "program"
+                    )
+                return _SurgeryDocumentOutcome(
+                    rule_id, "data_gap", applicability.reason_code, "program"
+                )
+            if set(source_state_by_key.values()) == {"absent"}:
+                return _SurgeryDocumentOutcome(
+                    rule_id, "not_applicable", "performed_surgery_absent", "program"
+                )
             return _SurgeryDocumentOutcome(
-                rule_id, "not_applicable", "qualified_surgery_absent", "program"
+                rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
             )
 
         if "rescue_record" not in _typed_binding_source_keys(rule_id):
@@ -971,69 +971,25 @@ async def _typed_029_outcome(
 
     # 029 的当前口径是纯存在性规则：严格手术 FactV2 触发后，只看术前
     # 小结正文是否为非空、非占位值。模型、标题、时间和长度均不得参与判定。
-    source_states: list[str] = []
-    blockers: list[_SurgeryDocumentOutcome] = []
-    for source_key in ("surgery_record", "mr_surgery"):
-        blocker = _typed_source_gate(
-            rule_id="LX0609-029", source_key=source_key, snapshot=snapshot
-        )
-        if blocker is not None:
-            blockers.append(blocker)
-        state, _ = _typed_fact_state(
-            snapshot,
-            fact_types=_SURGERY_FACT_TYPES,
-            source_key=source_key,
-        )
-        if source_key == "mr_surgery" and state == "present":
-            try:
-                mr_rows = materials.rows("mr_surgery")
-            except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-                pass
-            else:
-                if not any(
-                    has_qualified_traditional_surgery_row(row) for row in mr_rows
-                ):
-                    state = "absent"
-        source_states.append(state)
-    # 任一批准来源已经给出当前就诊已实施手术的 FactV2 时，不能让另一
-    # 来源的不可用/异常覆盖这项肯定事实；后续只判术前小结正文。
-    if "present" not in source_states:
-        technical = next(
-            (item for item in blockers if item.status == "technical_error"), None
-        )
-        if technical is not None:
-            return technical, 0, 0, 0, 0, 0.0
-        if blockers:
-            return (
-                _SurgeryDocumentOutcome(
-                    "LX0609-029", "data_gap", "performed_surgery_source_unavailable", "program"
-                ),
-                0, 0, 0, 0, 0.0,
+    applicability = resolve_surgery_applicability(
+        snapshot=snapshot,
+        materials=materials,
+    )
+    if applicability.state != "applicable":
+        if applicability.state == "technical_error":
+            outcome = _SurgeryDocumentOutcome(
+                "LX0609-029", "technical_error", "source_query_error", "program"
             )
-        source_is_explicitly_absent = (
-            _typed_observation_state(snapshot, "surgery_record") == "empty"
-            and (
-                _typed_observation_state(snapshot, "mr_surgery") == "empty"
-                or (
-                    _typed_observation_state(snapshot, "mr_surgery") == "available"
-                    and all(
-                        not has_qualified_traditional_surgery_row(row)
-                        for row in materials.rows("mr_surgery")
-                    )
-                )
+        elif applicability.state == "not_applicable":
+            outcome = _SurgeryDocumentOutcome(
+                "LX0609-029", "not_applicable", "performed_surgery_absent", "program"
             )
-        )
-        if source_is_explicitly_absent:
-            return (
-                _SurgeryDocumentOutcome(
-                    "LX0609-029", "not_applicable", "performed_surgery_absent", "program"
-                ),
-                0, 0, 0, 0, 0.0,
+        else:
+            outcome = _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", applicability.reason_code, "program"
             )
         return (
-            _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "performed_surgery_fact_unavailable", "program"
-            ),
+            outcome,
             0, 0, 0, 0, 0.0,
         )
     target_gate = _typed_source_gate(
