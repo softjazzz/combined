@@ -8,6 +8,7 @@ from pathlib import Path
 from app.services.luxian_0609.exam_lab_fact_extraction import (
     build_exam_lab_text_projection,
 )
+from app.services.luxian_0609 import native_transfusion_execution as transfusion
 
 
 SCRIPT_PATH = (
@@ -414,6 +415,35 @@ def test_transfusion_case_uses_typed_consent_form() -> None:
         and row.get("document_title") == "输血知情同意书"
     ]
     assert fake_rows == []
+
+
+def test_transfusion_complete_case_has_reviewable_process_and_24h_evaluation() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    visit_id = next(case.target_visit_id for case in cases if case.target_index == 23)
+
+    course = next(
+        row
+        for row in rows_by_table["bloodtrans_record"]
+        if row.get("visit_id") == visit_id
+    )
+    assert transfusion._is_complete_transfusion_course_entry(course["record_content"])
+
+    evaluation = next(
+        row
+        for row in rows_by_table["daily_course_record"]
+        if row.get("visit_id") == visit_id
+        and row.get("document_title") == "输血后评价记录"
+    )
+    assert "输血结束时间" in evaluation["record_content"]
+    assert "输血后评价时间" in evaluation["record_content"]
+    assert "复查Hb 82g/L" in evaluation["record_content"]
+    assert not any(
+        row.get("visit_id") == visit_id
+        for row in rows_by_table.get("mr_bloodtrans", [])
+    )
 
 
 def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:

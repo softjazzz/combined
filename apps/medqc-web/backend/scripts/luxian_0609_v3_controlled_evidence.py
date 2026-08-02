@@ -517,7 +517,7 @@ def _build_transfusion(
     *,
     mode: str = "complete",
 ) -> list[str]:
-    _clear_visit_rows(rows, case, "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
+    _clear_visit_rows(rows, case, "mr_bloodtrans", "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
     refs = [_append_registration(rows, case, v2)]
     request_time = v2._dt_for_case(case, 1, 10)
     transfusion_time = v2._dt_for_case(case, 1, 14)
@@ -543,8 +543,29 @@ def _build_transfusion(
     order_id = _append_order(rows, case, v2, table_name="inpat_nondrug_order", suffix="blood-order", prescribed_time=request_time, content="输注悬浮红细胞2U", order_type="输血", order_name="悬浮红细胞2U", quantity=2, quantity_unit="U")
     refs.append(order_id)
     v2._append_row(rows, "inpat_bill_item", {**v2._case_base_row(case), "bill_item_id": f"{case.target_visit_id}-blood-bill", "order_id": order_id, "medical_catalog_name": "悬浮红细胞", "quantity": 2, "quantity_unit": "U", "billing_datetime": transfusion_time, "record_content": "悬浮红细胞2U收费"})
-    refs.append(_append_document(rows, case, v2, table_name="bloodtrans_record", suffix="blood-course", title="输血病程记录", record_time=transfusion_time, content="输血前评估：Hb 65g/L，有输血指征；核对血型后输注悬浮红细胞2U，过程无不良反应。输血后评价：症状改善，复查Hb 82g/L。"))
-    refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="blood-daily-course", title="输血病程记录", record_time=transfusion_time, content="输血前评估Hb 65g/L且有症状，输注悬浮红细胞2U；输血过程无不良反应，输血后症状改善，复查Hb 82g/L。"))
+    transfusion_end_time = v2._dt_for_case(case, 1, 16)
+    evaluation_time = v2._dt_for_case(case, 2, 9)
+    refs.append(_append_document(
+        rows, case, v2, table_name="bloodtrans_record", suffix="blood-course",
+        title="输血病程记录", record_time=v2._dt_for_case(case, 1, 16, 10),
+        content=(
+            "输血前评估：Hb 65g/L，患者乏力、心悸，有输血指征；"
+            "核对血型后输注悬浮红细胞2U。"
+            f"输血开始时间：{transfusion_time:%Y-%m-%d %H:%M:%S}；"
+            f"输血结束时间：{transfusion_end_time:%Y-%m-%d %H:%M:%S}；"
+            "输血过程中监测体温、脉搏、呼吸、血压均平稳，"
+            "未见输血不良反应，无发热、寒战、皮疹。"
+        ),
+    ))
+    refs.append(_append_document(
+        rows, case, v2, table_name="daily_course_record", suffix="blood-daily-course",
+        title="输血后评价记录", record_time=evaluation_time,
+        content=(
+            f"输血结束时间：{transfusion_end_time:%Y-%m-%d %H:%M:%S}。"
+            f"输血后评价时间：{evaluation_time:%Y-%m-%d %H:%M:%S}；"
+            "患者乏力、心悸较前改善，无输血不良反应，复查Hb 82g/L，输血有效。"
+        ),
+    ))
     for table, suffix, title in (("surgery_record","surgery-blood","手术记录"),("anesthesia_record","anesthesia-blood","麻醉记录单"),("postsurg_firstcourse_record","postop-blood","术后首次病程记录")):
         refs.append(_append_document(rows, case, v2, table_name=table, suffix=suffix, title=title, record_time=v2._dt_for_case(case, 1, 16), content="术中输注悬浮红细胞2U，无输血不良反应。"))
     visit_id = case.target_visit_id
