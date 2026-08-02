@@ -506,12 +506,19 @@ def apply_controlled_evidence(
     # 检查检验四份病例由主构建器先完成；这里绑定其稳定文书/报告 ID。
     refs_by_case.update(
         {
+            9: [f"EX-V3-009-01", f"LAB-V3-009-04"],
             10: [f"EX-V3-010-01", f"LAB-V3-010-04"],
             11: [f"EX-V3-011-01", f"LAB-V3-011-01", f"LAB-V3-011-04"],
             12: [f"EX-V3-012-01", f"LAB-V3-012-04", f"{case_by_index[12].target_visit_id}-critical-value"],
         }
     )
 
+    existing_answers_by_case = {
+        int(case.target_index): list(
+            case.source_item.get("synthetic_golden_answers") or []
+        )
+        for case in cases
+    }
     for case in cases:
         case.source_item["synthetic_golden_answers"] = []
     covered: set[str] = set()
@@ -519,7 +526,7 @@ def apply_controlled_evidence(
     for case_index, numbers in RULE_NUMBERS_BY_CASE.items():
         case = case_by_index[case_index]
         evidence_refs = list(dict.fromkeys(refs_by_case[case_index]))
-        answers = []
+        answers = list(existing_answers_by_case.get(case_index) or [])
         for number in numbers:
             rule_id = _rule_id(number)
             tier = "provisional" if rule_id in PROVISIONAL_RULE_IDS else "formal"
@@ -537,9 +544,63 @@ def apply_controlled_evidence(
                     "evidence_refs": evidence_refs,
                 }
             )
-            covered.add(rule_id)
-            tier_counts[tier] += 1
-        case.source_item["synthetic_golden_answers"] = answers
+        normalized_answers = []
+        seen_answer_keys: set[tuple[str, str]] = set()
+        for answer in answers:
+            rule_id = str(answer.get("qc_point_id") or "")
+            status = str(answer.get("expected_status") or "")
+            key = (rule_id, status)
+            if not rule_id or not status or key in seen_answer_keys:
+                continue
+            seen_answer_keys.add(key)
+            tier = "provisional" if rule_id in PROVISIONAL_RULE_IDS else "formal"
+            normalized_answers.append(
+                {
+                    **answer,
+                    "review_status": "controlled",
+                    "acceptance_tier": tier,
+                    "definition_version": (
+                        "lx0609-v3-formal-2026-08-02"
+                        if tier == "formal"
+                        else "lx0609-v3-provisional-2026-08-02"
+                    ),
+                    "evidence_refs": list(
+                        dict.fromkeys(answer.get("evidence_refs") or evidence_refs)
+                    ),
+                }
+            )
+            if rule_id not in covered:
+                covered.add(rule_id)
+                tier_counts[tier] += 1
+        case.source_item["synthetic_golden_answers"] = normalized_answers
+    for case_index, existing_answers in existing_answers_by_case.items():
+        if case_index in RULE_NUMBERS_BY_CASE or not existing_answers:
+            continue
+        case = case_by_index[case_index]
+        evidence_refs = list(dict.fromkeys(refs_by_case.get(case_index) or []))
+        normalized_answers = []
+        for answer in existing_answers:
+            rule_id = str(answer.get("qc_point_id") or "")
+            tier = "provisional" if rule_id in PROVISIONAL_RULE_IDS else "formal"
+            normalized_answers.append(
+                {
+                    **answer,
+                    "review_status": "controlled",
+                    "acceptance_tier": tier,
+                    "definition_version": (
+                        "lx0609-v3-formal-2026-08-02"
+                        if tier == "formal"
+                        else "lx0609-v3-provisional-2026-08-02"
+                    ),
+                    "evidence_refs": list(
+                        dict.fromkeys(answer.get("evidence_refs") or evidence_refs)
+                    ),
+                }
+            )
+            if rule_id not in covered:
+                covered.add(rule_id)
+                tier_counts[tier] += 1
+        case.source_item["synthetic_golden_answers"] = normalized_answers
     if len(covered) != 75:
         raise ValueError("v3 controlled evidence must cover all 75 rules exactly once")
     return {

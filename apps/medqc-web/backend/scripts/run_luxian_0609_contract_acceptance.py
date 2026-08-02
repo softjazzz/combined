@@ -38,10 +38,11 @@ from scripts.build_luxian_0609_runtime_manifest import (  # noqa: E402
     SCHEMA_VERSION as RUNTIME_MANIFEST_SCHEMA_VERSION,
     build_runtime_manifest,
 )
+from scripts.build_luxian_0609_0426_synthetic_v3 import (  # noqa: E402
+    build_acceptance_fixture_bindings,
+)
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
-    NON_COMPLIANT_RULE_IDS,
     PROVISIONAL_RULE_IDS,
-    RULE_NUMBERS_BY_CASE,
 )
 
 
@@ -101,20 +102,10 @@ def _stable_runtime_contract_hash(rules: Sequence[Mapping[str, Any]]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _fixture_bindings() -> dict[str, dict[str, str]]:
-    bindings: dict[str, dict[str, str]] = {}
-    for case_index, rule_numbers in RULE_NUMBERS_BY_CASE.items():
-        for number in rule_numbers:
-            rule_id = f"LX0609-{number:03d}"
-            expected_status = (
-                "non_compliant" if rule_id in NON_COMPLIANT_RULE_IDS else "compliant"
-            )
-            if rule_id in bindings:
-                raise ValueError(f"duplicate v3 fixture binding: {rule_id}")
-            bindings[rule_id] = {
-                "fixture_ref": f"0426-v3:case-{case_index:03d}",
-                "expected_status": expected_status,
-            }
+def _fixture_bindings() -> dict[str, list[dict[str, str]]]:
+    bindings: dict[str, list[dict[str, str]]] = {}
+    for binding in build_acceptance_fixture_bindings():
+        bindings.setdefault(binding["rule_id"], []).append(binding)
     return bindings
 
 
@@ -158,16 +149,25 @@ def build_acceptance_matrix(
             ),
             "data_insufficient": _slot(required=True, phase_status=contract.phase_status),
         }
-        binding = bindings.get(rule_id)
-        if binding:
+        rule_bindings = (
+            [] if contract.phase_status == "pending_definition" else bindings.get(rule_id, [])
+        )
+        for binding in rule_bindings:
             slot_key = (
                 "confirmed_issue"
                 if binding["expected_status"] == "non_compliant"
-                else "compliant"
+                else (
+                    "not_applicable"
+                    if binding["expected_status"] == "not_applicable"
+                    else "data_insufficient"
+                    if binding["expected_status"] == "data_gap"
+                    else "compliant"
+                )
             )
+            existing_refs = list(cases[slot_key].get("fixture_refs") or [])
             cases[slot_key] = {
                 "coverage": "covered",
-                "fixture_refs": [binding["fixture_ref"]],
+                "fixture_refs": list(dict.fromkeys([*existing_refs, binding["fixture_ref"]])),
                 "expected_status": binding["expected_status"],
             }
 
@@ -334,7 +334,7 @@ def render_report(payload: Mapping[str, Any], summary: Mapping[str, Any]) -> str
         f"- 已绑定 v3 fixture：{summary['bound_fixture_count']} 个规则状态槽位",
         f"- 语义规则：{summary['semantic_rule_count']} 条",
         f"- 当前定义合同仍为 Pending：{summary['pending_definition_rule_count']} 条",
-        "- 当前 v3 每条规则只有一个 Golden 状态，不能据此宣称 75 条已经完整验收。",
+        "- 当前只统计真实生成的 Golden 状态；未绑定槽位继续显示待补，不能据此宣称 75 条已经完整验收。",
         "",
         "## 状态槽位覆盖",
         "",

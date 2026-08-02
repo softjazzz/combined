@@ -29,8 +29,8 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
     assert summary["rule_count"] == 75
     assert summary["definition_tiers"] == {"formal": 67, "temporary": 8}
     assert summary["pending_definition_rule_count"] == 9
-    assert summary["bound_fixture_count"] == 75
-    assert summary["case_slots"]["covered"] == 75
+    assert summary["bound_fixture_count"] == 84
+    assert summary["case_slots"]["covered"] == 74
     assert summary["case_slots"]["missing"] > 0
 
 
@@ -42,12 +42,28 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
             if slot["coverage"] == "covered":
                 covered_slots.append((rule["rule_id"], slot_name, slot["fixture_refs"]))
 
-    assert len(covered_slots) == 75
+    assert len(covered_slots) == 74
     assert all(refs and refs[0].startswith("0426-v3:case-") for _, _, refs in covered_slots)
     assert Counter(slot_name for _, slot_name, _ in covered_slots) == {
-        "compliant": 69,
-        "confirmed_issue": 6,
+        "compliant": 65,
+        "confirmed_issue": 7,
+        "not_applicable": 2,
     }
+
+
+def test_pending_definition_rules_never_receive_fixture_coverage() -> None:
+    payload = _matrix()
+    pending_rules = [
+        rule for rule in payload["rules"] if rule["definition_phase"] == "pending_definition"
+    ]
+
+    assert len(pending_rules) == 9
+    assert all(
+        slot["coverage"] == "pending_definition" and not slot["fixture_refs"]
+        for rule in pending_rules
+        for slot in rule["cases"].values()
+        if slot["coverage"] != "not_required"
+    )
 
 
 def test_matrix_contains_no_patient_identity_and_every_rule_has_contract() -> None:
@@ -66,8 +82,14 @@ def test_matrix_contains_no_patient_identity_and_every_rule_has_contract() -> No
 
 def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
     payload = _matrix()
+    runtime_manifest = acceptance._runtime_manifest()
     time_rules = [rule for rule in payload["rules"] if "time_boundaries" in rule]
     semantic_rules = [rule for rule in payload["rules"] if "semantic_contract" in rule]
+    expected_semantic_rule_ids = {
+        rule["rule_id"]
+        for rule in runtime_manifest["rules"]
+        if rule["decision_authority"] == "program_then_optional_llm"
+    }
 
     assert time_rules
     assert all(
@@ -80,7 +102,7 @@ def test_time_and_semantic_contracts_are_explicit_and_honest() -> None:
         for rule in time_rules
         for boundary in rule["time_boundaries"].values()
     )
-    assert len(semantic_rules) == 21
+    assert {rule["rule_id"] for rule in semantic_rules} == expected_semantic_rule_ids
     assert all(
         rule["semantic_contract"]["max_llm_calls_per_rule"]
         == rule["max_llm_calls_per_rule"]

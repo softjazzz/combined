@@ -4,7 +4,7 @@
   "rule_master_version": "2026-08-02",
   "generated_from": {
     "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
-    "runtime_contract_hash": "18817c8bd10dc86f46656eeaef64e7490d7d2c2c51c56dd0ccff64f4dc487365",
+    "runtime_contract_hash": "62af666aade15ab4af0db3e66cb56c4e63ed1c1b9457f62a17ae3c06906e85a5",
     "synthetic_fixture_set": "0426-derived-v3"
   },
   "coverage_semantics": {
@@ -451,9 +451,8 @@
           "fixture_refs": []
         },
         "confirmed_issue": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-010"],
-          "expected_status": "non_compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "not_applicable": {
           "coverage": "pending_definition",
@@ -506,8 +505,9 @@
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-011", "0426-v3:case-012"],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
@@ -577,12 +577,13 @@
       "family_key": "exam_lab",
       "cases": {
         "compliant": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-012"],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-011"],
+          "fixture_refs": ["0426-v3:case-010", "0426-v3:case-011"],
           "expected_status": "non_compliant"
         },
         "not_applicable": {
@@ -696,12 +697,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-012"],
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-011", "0426-v3:case-012"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-010"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -767,12 +769,13 @@
       "cases": {
         "compliant": {
           "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-012"],
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-012"],
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-010", "0426-v3:case-011"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -859,23 +862,8 @@
       "required_facts": ["无"],
       "required_evidence": ["admission_record", "first_course_record"],
       "expected_executor": "course_quality",
-      "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
-      "semantic_contract": {
-        "minimal_input": {
-          "documents": ["admission_record", "first_course_record"],
-          "facts": ["无"]
-        },
-        "controlled_status_enum": [
-          "compliant",
-          "non_compliant",
-          "not_applicable",
-          "data_gap",
-          "technical_error",
-          "evaluation_unknown"
-        ],
-        "max_llm_calls_per_rule": 1
-      }
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
     },
     {
       "rule_id": "LX0609-017",
@@ -886,9 +874,8 @@
       "family_key": "course_quality",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-006"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -943,8 +930,23 @@
       "required_facts": ["主诊断"],
       "required_evidence": ["admission_record"],
       "expected_executor": "course_quality",
-      "decision_authority": "program_only",
-      "max_llm_calls_per_rule": 0
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["admission_record"],
+          "facts": ["主诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
     },
     {
       "rule_id": "LX0609-019",
@@ -1143,9 +1145,8 @@
       "family_key": "consultation_quality",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-013"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -1190,9 +1191,8 @@
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-017"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -1336,23 +1336,8 @@
       "required_facts": ["恶性肿瘤诊断"],
       "required_evidence": ["discharge_record"],
       "expected_executor": "tumor_pathology",
-      "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
-      "semantic_contract": {
-        "minimal_input": {
-          "documents": ["discharge_record"],
-          "facts": ["恶性肿瘤诊断"]
-        },
-        "controlled_status_enum": [
-          "compliant",
-          "non_compliant",
-          "not_applicable",
-          "data_gap",
-          "technical_error",
-          "evaluation_unknown"
-        ],
-        "max_llm_calls_per_rule": 1
-      }
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
     },
     {
       "rule_id": "LX0609-028",
@@ -1363,9 +1348,8 @@
       "family_key": "surgery_anesthesia",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-017"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -2194,9 +2178,8 @@
       "family_key": "transfusion",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-023"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -2318,8 +2301,9 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-012"],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
@@ -2327,8 +2311,9 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-010"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
@@ -2364,8 +2349,9 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-012"],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
@@ -2373,8 +2359,9 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-009", "0426-v3:case-010"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
@@ -2474,9 +2461,8 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -2570,9 +2556,8 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-034"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",
@@ -3166,9 +3151,8 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "covered",
-          "fixture_refs": ["0426-v3:case-022"],
-          "expected_status": "compliant"
+          "coverage": "pending_definition",
+          "fixture_refs": []
         },
         "confirmed_issue": {
           "coverage": "pending_definition",

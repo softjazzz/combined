@@ -200,7 +200,7 @@ def test_v3_exam_lab_upgrade_attaches_reviewable_expected_results() -> None:
     assert expectations[cases[3].target_visit_id]["LX0609-052"] == "compliant"
 
 
-def test_v3_full_validation_upgrade_assigns_all_75_rules_without_pending_goldens() -> None:
+def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_variants() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()
     rows_by_table: dict[str, list[dict]] = {}
@@ -213,17 +213,24 @@ def test_v3_full_validation_upgrade_assigns_all_75_rules_without_pending_goldens
         for answer in case.source_item.get("synthetic_golden_answers") or []
     ]
     assert audit["rule_count"] == 75
-    assert len(answers) == 75
+    assert len(answers) == 96
     assert len({answer["qc_point_id"] for answer in answers}) == 75
     assert all(answer["expected_status"] != "pending" for answer in answers)
     assert all(answer["evidence_refs"] for answer in answers)
     assert {answer["acceptance_tier"] for answer in answers} == {"formal", "provisional"}
     matrix = module.build_validation_matrix(cases)
-    assert len(matrix) == 75
+    assert len(matrix) == 96
     assert Counter(row["acceptance_tier"] for row in matrix) == {
-        "formal": 67,
+        "formal": 88,
         "provisional": 8,
     }
+    statuses_by_rule = {
+        rule_id: {
+            row["expected_status"] for row in matrix if row["rule_id"] == rule_id
+        }
+        for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+    }
+    assert all(statuses == {"compliant", "non_compliant"} for statuses in statuses_by_rule.values())
 
 
 def test_transfusion_case_uses_typed_consent_form() -> None:

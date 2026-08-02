@@ -23,6 +23,8 @@ from app.services.luxian_0609_rule_master import (  # noqa: E402
     load_luxian_0609_rule_master,
 )
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
+    NON_COMPLIANT_RULE_IDS,
+    RULE_NUMBERS_BY_CASE,
     apply_controlled_evidence,
 )
 
@@ -205,6 +207,50 @@ def _exam_lab_expected_statuses(scenario: str) -> dict[str, str]:
         "LX0609-052": critical_status,
         "LX0609-053": critical_status,
     }
+
+
+def build_acceptance_fixture_bindings() -> list[dict[str, str]]:
+    """返回与 v3 构建器实际生成内容一致的受控状态绑定。"""
+
+    bindings: list[dict[str, str]] = []
+    for case_index, rule_numbers in RULE_NUMBERS_BY_CASE.items():
+        for number in rule_numbers:
+            rule_id = f"LX0609-{number:03d}"
+            bindings.append(
+                {
+                    "rule_id": rule_id,
+                    "fixture_ref": f"0426-v3:case-{case_index:03d}",
+                    "expected_status": (
+                        "non_compliant"
+                        if rule_id in NON_COMPLIANT_RULE_IDS
+                        else "compliant"
+                    ),
+                }
+            )
+    for case_index, scenario in _EXAM_LAB_SCENARIO_BY_INDEX.items():
+        for rule_id, expected_status in _exam_lab_expected_statuses(scenario).items():
+            bindings.append(
+                {
+                    "rule_id": rule_id,
+                    "fixture_ref": f"0426-v3:case-{case_index:03d}",
+                    "expected_status": expected_status,
+                }
+            )
+
+    unique: dict[tuple[str, str, str], dict[str, str]] = {}
+    for binding in bindings:
+        key = (
+            binding["rule_id"],
+            binding["fixture_ref"],
+            binding["expected_status"],
+        )
+        unique[key] = binding
+    return sorted(
+        unique.values(),
+        key=lambda item: (
+            item["rule_id"], item["expected_status"], item["fixture_ref"]
+        ),
+    )
 
 
 def _replace_target_rows(
@@ -847,10 +893,16 @@ def build_validation_matrix(cases: Sequence[Any]) -> list[dict[str, Any]]:
                     "expected_fact": str(answer.get("human_reason") or ""),
                 }
             )
-    matrix.sort(key=lambda row: row["rule_id"])
-    rule_ids = [row["rule_id"] for row in matrix]
-    if len(rule_ids) != 75 or len(rule_ids) != len(set(rule_ids)):
-        raise ValueError("v3 validation matrix must contain every rule exactly once")
+    matrix.sort(key=lambda row: (row["rule_id"], row["expected_status"], row["case_index"]))
+    rule_ids = {row["rule_id"] for row in matrix}
+    if len(rule_ids) != 75:
+        raise ValueError("v3 validation matrix must contain every rule")
+    fixture_keys = {
+        (row["rule_id"], row["expected_status"], row["case_index"])
+        for row in matrix
+    }
+    if len(fixture_keys) != len(matrix):
+        raise ValueError("v3 validation matrix contains duplicate rule/status fixtures")
     return matrix
 
 
