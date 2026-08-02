@@ -99,6 +99,17 @@ export interface CustomerDisplayFacts {
     | 'implant_quantity'
     | 'implant_barcode'
   >
+  implantVerification?: {
+    state: 'complete' | 'not_used'
+    checkedFields?: Array<
+      | 'implant_name'
+      | 'implant_type'
+      | 'implant_specification'
+      | 'implant_material'
+      | 'implant_quantity'
+      | 'implant_barcode'
+    >
+  }
   copySimilarity?: number
   copySimilarityThreshold?: number
   copyDocuments?: Array<{
@@ -132,19 +143,50 @@ export interface CustomerDisplayFacts {
     thresholdHours: 24 | 48
   }
   anesthesiaDocumentation?: {
-    failureKind:
+    failureKind?:
       | 'anesthesia_consent_missing'
+      | 'anesthesia_consent_incomplete'
       | 'anesthesia_visit_missing'
+      | 'anesthesia_record_missing'
       | 'preop_discussion_missing'
+      | 'surgeon_not_in_preop_discussion'
+    verificationKind?:
+      | 'anesthesia_consent_present'
+      | 'anesthesia_consent_complete'
+      | 'anesthesia_visits_present'
+      | 'anesthesia_record_present'
+      | 'preop_discussion_surgeon_participation_confirmed'
     performedEventConfirmed: true
-    missingSources: Array<
-      'consent_form' | 'preane_surveil_record' | 'postane_surveil_record' | 'presurg_discussion'
+    missingSources?: Array<
+      | 'consent_form'
+      | 'preane_surveil_record'
+      | 'postane_surveil_record'
+      | 'anesthesia_record'
+      | 'presurg_discussion'
+    >
+    checkedSources?: Array<
+      | 'consent_form'
+      | 'preane_surveil_record'
+      | 'postane_surveil_record'
+      | 'anesthesia_record'
+      | 'presurg_discussion'
+    >
+    missingFields?: Array<
+      | 'patient_signature'
+      | 'physician_signature'
+      | 'patient_signature_time'
+      | 'physician_signature_time'
     >
     emergencyRescueExceptionAbsent?: true
+    surgeonParticipationState?: 'confirmed' | 'absent'
   }
   surgeryDocument?: {
     target: 'presurg_summary' | 'surgery_record' | 'surgery_safecheck_record'
-    state: 'missing' | 'blank'
+    state: 'present' | 'missing' | 'blank'
+  }
+  surgerySignature?: {
+    state: 'confirmed' | 'not_qualified'
+    firstAssistantExceptionUsed?: boolean
   }
   timeliness?: {
     target:
@@ -162,13 +204,22 @@ export interface CustomerDisplayFacts {
     sourceLabel: string
   }
   surgeryTimeliness?: {
+    state: 'within' | 'late'
     surgeryEndTime: string
     recordTime: string
     elapsedHours: number
     thresholdHours: 24
   }
+  surgeryMdt?: {
+    procedureKind: 'surgery' | 'non_surgical_operation' | 'none' | 'unknown'
+    effectiveLevel?: '一级' | '二级' | '三级' | '四级'
+    levelSource?: 'hospital_performance' | 'national_catalog' | 'structured_field'
+    discussionState?: 'completed' | 'missing' | 'unknown'
+    procedureCode?: string
+    procedureName?: string
+  }
   surgeryConsent?: {
-    state: 'missing' | 'blank' | 'signature_missing' | 'source_unproven'
+    state: 'complete' | 'missing' | 'blank' | 'signature_missing' | 'source_unproven'
     missingSignatureRoles?: Array<'patient' | 'surgeon'>
   }
   severityCourseGap?: {

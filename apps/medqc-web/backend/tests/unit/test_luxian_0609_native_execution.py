@@ -11,6 +11,7 @@ from app.services.luxian_0609.decision_binding import (
 )
 from app.services.luxian_0609.evidence_material import (
     Luxian0609EvidenceMaterialStore,
+    build_material_document_refs,
     build_material_snapshot_ref,
 )
 from app.services.luxian_0609.evidence_snapshot import (
@@ -24,7 +25,11 @@ from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 
 
-def _typed_session(*, visit_id: str = "safe-visit"):
+def _typed_session(
+    *,
+    visit_id: str = "safe-visit",
+    surgery_record_rows: tuple[dict, ...] = (),
+):
     query_versions = {
         "presurg_summary": "snapshot-provider-presurg_summary-v1",
         "surgery_record": "snapshot-provider-surgery_record-v2",
@@ -36,9 +41,11 @@ def _typed_session(*, visit_id: str = "safe-visit"):
     observations = []
     sources = {}
     for source_key, query_version in query_versions.items():
+        rows = surgery_record_rows if source_key == "surgery_record" else ()
+        query_state = QueryStatus.AVAILABLE if rows else QueryStatus.EMPTY
         material = SnapshotSourceRows(
             source_key=source_key,
-            rows=(),
+            rows=rows,
             truncated=False,
             limit_rows=50,
         )
@@ -46,16 +53,16 @@ def _typed_session(*, visit_id: str = "safe-visit"):
         observations.append(
             SourceObservation.create(
                 source_key=source_key,
-                query_state=QueryStatus.EMPTY,
+                query_state=query_state,
                 completeness=SourceCompleteness.COMPLETE,
-                record_count=0,
+                record_count=len(rows),
                 query_version=query_version,
                 snapshot_ref=build_material_snapshot_ref(
                     source_key=source_key,
                     query_version=query_version,
-                    query_state=QueryStatus.EMPTY,
+                    query_state=query_state,
                     completeness=SourceCompleteness.COMPLETE,
-                    document_refs=(),
+                    document_refs=build_material_document_refs(source_key, rows),
                 ),
             )
         )
@@ -230,6 +237,71 @@ def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch)
         "surgery-presence-ruledecision-v2"
     }
     assert result.decisions[0].reason_code == "required_document_missing"
+
+
+def test_native_032_multiple_surgeries_without_event_linkage_is_data_gap(monkeypatch):
+    snapshot, materials = _typed_session(
+        surgery_record_rows=(
+            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+            {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+        )
+    )
+    plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-032")])
+    provided = SimpleNamespace(
+        evidence_payload={"programmatic_timeline": {"documents": {}}},
+        source_query_observations=(),
+        extraction_inputs=(),
+        target_qualifications=(),
+    )
+    assembly = SimpleNamespace(
+        source_query_observations=(), fact_pairs=(), deterministic_coverage_outcomes=()
+    )
+    execution = SimpleNamespace(
+        results=(
+            SimpleNamespace(
+                rule_id="LX0609-032",
+                final_state=SimpleNamespace(value="compliant"),
+                finding_kind=SimpleNamespace(value="requirement_satisfied"),
+            ),
+        ),
+        fingerprint=lambda: "c" * 64,
+    )
+    monkeypatch.setattr(native_execution.planner, "build_luxian_0609_shadow_plan", lambda **_: plan)
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_input_provider,
+        "provide_luxian_0609_runtime_shadow_inputs",
+        lambda **_: provided,
+    )
+    monkeypatch.setattr(
+        native_execution.runtime_shadow_assembler,
+        "assemble_luxian_0609_runtime_shadow_inputs",
+        lambda **_: assembly,
+    )
+    monkeypatch.setattr(
+        native_execution.shadow_execution,
+        "build_luxian_0609_shadow_execution",
+        lambda **_: execution,
+    )
+
+    result = native_execution.execute_luxian_0609_native_rules(
+        rule_ids=("LX0609-032",),
+        visit_id="visit-native-multi",
+        institute_id="inst-native-multi",
+        patient_id="patient-native-multi",
+        source_schema=None,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-032",),
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-032",),
+        snapshot=snapshot,
+    )
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
+    assert result.customer_display_facts == ()
 
 
 def test_native_core_rejects_mismatched_typed_evidence_session():

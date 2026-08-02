@@ -13,7 +13,11 @@ from .decision_model import (
     QcDirection,
     RuleDecision,
 )
-from .evidence_material import Luxian0609EvidenceMaterialStore
+from .evidence_material import (
+    EvidenceMaterialTruncated,
+    EvidenceMaterialUnavailable,
+    Luxian0609EvidenceMaterialStore,
+)
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 
 
@@ -177,6 +181,7 @@ def _typed_rule_decision(
     final_state: str,
     snapshot: Luxian0609EvidenceSnapshot,
     non_compliant_reason: str = "required_document_missing",
+    reason_override: str = "",
 ) -> RuleDecision:
     refs = tuple(
         observation.snapshot_ref.removeprefix("sha256:")
@@ -231,6 +236,8 @@ def _typed_rule_decision(
         raise ValueError("unsupported surgery presence final state") from None
     if reason_code == "required_document_blank":
         reason_code = "defect_proven"
+    if reason_override:
+        reason_code = reason_override
     return RuleDecision(
         rule_id=rule_id,
         snapshot_hash=snapshot.snapshot_hash,
@@ -367,6 +374,19 @@ def execute_luxian_0609_native_rules(
         result.rule_id: result_reason(result.rule_id, result.final_state.value)
         for result in execution.results
     }
+    final_state_by_rule_id = {
+        result.rule_id: result.final_state.value for result in execution.results
+    }
+    if "LX0609-032" in typed_selected and evidence_materials is not None:
+        try:
+            surgery_record_count = len(tuple(evidence_materials.rows("surgery_record")))
+        except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+            surgery_record_count = 0
+        if surgery_record_count > 1:
+            # 手术安全核查表当前没有可审计的单台手术关联键；多台手术时
+            # 不允许用就诊级“存在一张表”替代逐台核对。
+            final_state_by_rule_id["LX0609-032"] = "data_gap"
+            reason_by_rule_id["LX0609-032"] = "association_failed"
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
@@ -379,15 +399,17 @@ def execute_luxian_0609_native_rules(
     if tuple(item["rule_id"] for item in all_results) != planned:
         return _technical_results(planned, reason_code="native_result_incomplete")
     typed_set = set(typed_selected)
-    final_state_by_rule_id = {
-        result.rule_id: result.final_state.value for result in execution.results
-    }
     decisions = tuple(
         _typed_rule_decision(
             rule_id=str(item["rule_id"]),
             final_state=final_state_by_rule_id[str(item["rule_id"])],
             snapshot=evidence_snapshot,
             non_compliant_reason=reason_by_rule_id[str(item["rule_id"])],
+            reason_override=(
+                reason_by_rule_id[str(item["rule_id"])]
+                if final_state_by_rule_id[str(item["rule_id"])] == "data_gap"
+                else ""
+            ),
         )
         for item in all_results
         if item["rule_id"] in typed_set and evidence_snapshot is not None
@@ -403,11 +425,9 @@ def execute_luxian_0609_native_rules(
         target_document = target_documents.get(rule_id)
         if target_document is None:
             continue
-        if (
-            rule_id == "LX0609-030"
-            and result.final_state.value == "compliant"
-        ):
-            # 030 是纯存在性判定。合规时也保存已核对的通过事实，避免客户侧
+        effective_state = final_state_by_rule_id.get(rule_id, result.final_state.value)
+        if effective_state == "compliant":
+            # 030/032 都是纯存在性判定。合规时也保存已核对的通过事实，避免客户侧
             # 只能看到“合规”而不知道检查了什么；原文定位仍由 RuleDecision
             # 在同一 Evidence Session 内反查，不能在这里猜测文书 ID。
             customer_display_facts.append(
@@ -421,7 +441,7 @@ def execute_luxian_0609_native_rules(
                 )
             )
             continue
-        if result.final_state.value != "non_compliant":
+        if effective_state != "non_compliant":
             continue
         customer_display_facts.append(
             (

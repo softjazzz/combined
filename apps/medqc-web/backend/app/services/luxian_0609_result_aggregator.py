@@ -2358,6 +2358,54 @@ def safe_luxian_0609_customer_display_facts(
             "threshold_hours": threshold_hours,
         }
     if rule_id in {"LX0609-034", "LX0609-035"}:
+        if (
+            rule_id == "LX0609-034"
+            and raw.get("verification_kind") == "anesthesia_consent_present"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_sources") == ["consent_form"]
+        ):
+            return {
+                "verification_kind": "anesthesia_consent_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["consent_form"],
+            }
+        required_consent_fields = [
+            "patient_signature",
+            "physician_signature",
+            "patient_signature_time",
+            "physician_signature_time",
+        ]
+        if (
+            rule_id == "LX0609-035"
+            and raw.get("verification_kind") == "anesthesia_consent_complete"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_fields") == required_consent_fields
+        ):
+            return {
+                "verification_kind": "anesthesia_consent_complete",
+                "performed_anesthesia_confirmed": True,
+                "checked_fields": list(required_consent_fields),
+            }
+        if (
+            rule_id == "LX0609-035"
+            and raw.get("failure_kind") == "anesthesia_consent_incomplete"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and isinstance(raw.get("missing_fields"), list)
+        ):
+            missing_fields = list(
+                dict.fromkeys(
+                    value
+                    for value in raw["missing_fields"]
+                    if value in required_consent_fields
+                )
+            )
+            if not missing_fields:
+                return None
+            return {
+                "failure_kind": "anesthesia_consent_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields": missing_fields,
+            }
         checked_sources = raw.get("checked_sources")
         if (
             raw.get("failure_kind") != "anesthesia_consent_missing"
@@ -2373,6 +2421,21 @@ def safe_luxian_0609_customer_display_facts(
             "checked_sources": ["consent_form"],
         }
     if rule_id in {"LX0609-036", "LX0609-037"}:
+        if (
+            rule_id == "LX0609-036"
+            and raw.get("verification_kind") == "anesthesia_visits_present"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_sources")
+            == ["preane_surveil_record", "postane_surveil_record"]
+        ):
+            return {
+                "verification_kind": "anesthesia_visits_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": [
+                    "preane_surveil_record",
+                    "postane_surveil_record",
+                ],
+            }
         missing_sources = raw.get("missing_visit_sources")
         if (
             raw.get("failure_kind") != "anesthesia_visit_missing"
@@ -2395,6 +2458,35 @@ def safe_luxian_0609_customer_display_facts(
             "missing_visit_sources": safe_sources,
         }
     if rule_id == "LX0609-039":
+        if (
+            raw.get("verification_kind")
+            == "preop_discussion_surgeon_participation_confirmed"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("emergency_rescue_exception_absent") is True
+            and raw.get("discussion_state") == "present"
+            and raw.get("surgeon_participation_state") == "confirmed"
+        ):
+            return {
+                "verification_kind": "preop_discussion_surgeon_participation_confirmed",
+                "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True,
+                "discussion_state": "present",
+                "surgeon_participation_state": "confirmed",
+            }
+        if (
+            raw.get("failure_kind") == "surgeon_not_in_preop_discussion"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("emergency_rescue_exception_absent") is True
+            and raw.get("discussion_state") == "present"
+            and raw.get("surgeon_participation_state") == "absent"
+        ):
+            return {
+                "failure_kind": "surgeon_not_in_preop_discussion",
+                "performed_surgery_confirmed": True,
+                "emergency_rescue_exception_absent": True,
+                "discussion_state": "present",
+                "surgeon_participation_state": "absent",
+            }
         checked_sources = raw.get("checked_sources")
         if (
             raw.get("failure_kind") != "preop_discussion_missing"
@@ -2443,8 +2535,42 @@ def safe_luxian_0609_customer_display_facts(
             facts["surgery_level_source"] = level_source
         if discussion_state is not None:
             facts["mdt_discussion_state"] = discussion_state
+        procedure_code = raw.get("procedure_code")
+        procedure_name = raw.get("procedure_name")
+        if isinstance(procedure_code, str) and re.fullmatch(r"[0-9A-Za-z.\-]{1,32}", procedure_code):
+            facts["procedure_code"] = procedure_code
+        if (
+            isinstance(procedure_name, str)
+            and 1 <= len(procedure_name.strip()) <= 100
+            and not any(ord(char) < 32 for char in procedure_name)
+        ):
+            facts["procedure_name"] = procedure_name.strip()
         return facts
     if rule_id == "LX0609-025":
+        checked_implant_fields = [
+            "implant_name", "implant_type", "implant_specification",
+            "implant_material", "implant_quantity", "implant_barcode",
+        ]
+        if (
+            raw.get("verification_kind") == "implant_information_complete"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("checked_fields") == checked_implant_fields
+        ):
+            return {
+                "verification_kind": "implant_information_complete",
+                "performed_surgery_confirmed": True,
+                "checked_fields": list(checked_implant_fields),
+                "source_label": "手术记录",
+            }
+        if (
+            raw.get("verification_kind") == "implant_not_used"
+            and raw.get("performed_surgery_confirmed") is True
+        ):
+            return {
+                "verification_kind": "implant_not_used",
+                "performed_surgery_confirmed": True,
+                "source_label": "手术记录",
+            }
         missing = raw.get("missing_fields")
         if not isinstance(missing, list):
             return None
@@ -2468,17 +2594,20 @@ def safe_luxian_0609_customer_display_facts(
         record_time = raw.get("record_time")
         elapsed_hours = raw.get("elapsed_hours")
         if (
-            raw.get("failure_kind") != "surgery_record_late"
+            raw.get("failure_kind") not in {"surgery_record_late", "surgery_record_within_threshold"}
             or raw.get("performed_surgery_confirmed") is not True
             or not isinstance(surgery_end_time, str)
             or not isinstance(record_time, str)
             or not isinstance(elapsed_hours, (int, float))
-            or elapsed_hours <= 24
             or raw.get("threshold_hours") != 24
         ):
             return None
+        if raw.get("failure_kind") == "surgery_record_late" and elapsed_hours <= 24:
+            return None
+        if raw.get("failure_kind") == "surgery_record_within_threshold" and not (0 <= elapsed_hours <= 24):
+            return None
         return {
-            "failure_kind": "surgery_record_late",
+            "failure_kind": raw.get("failure_kind"),
             "performed_surgery_confirmed": True,
             "surgery_end_time": surgery_end_time,
             "record_time": record_time,
@@ -2487,6 +2616,16 @@ def safe_luxian_0609_customer_display_facts(
             "source_label": "手术记录",
         }
     if rule_id == "LX0609-033":
+        if (
+            raw.get("verification_kind") == "surgery_consent_complete"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("checked_signature_roles") == ["patient", "surgeon"]
+        ):
+            return {
+                "verification_kind": "surgery_consent_complete",
+                "performed_surgery_confirmed": True,
+                "checked_signature_roles": ["patient", "surgeon"],
+            }
         failure_kind = raw.get("failure_kind")
         consent_state = raw.get("consent_state")
         valid_pairs = {
@@ -2735,8 +2874,7 @@ def safe_luxian_0609_customer_display_facts(
     if target_document is not None:
         failure_kind = raw.get("failure_kind")
         if (
-            rule_id == "LX0609-030"
-            and raw.get("verification_kind") == "surgery_document_present"
+            raw.get("verification_kind") == "surgery_document_present"
             and raw.get("target_document") == target_document
             and raw.get("performed_surgery_confirmed") is True
         ):
@@ -2756,6 +2894,52 @@ def safe_luxian_0609_customer_display_facts(
             "target_document": target_document,
             "performed_surgery_confirmed": True,
         }
+    if rule_id == "LX0609-031":
+        if (
+            raw.get("verification_kind") == "surgery_signature_confirmed"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("surgeon_signature_matches") is True
+            and isinstance(raw.get("first_assistant_exception_used"), bool)
+        ):
+            return {
+                "verification_kind": "surgery_signature_confirmed",
+                "performed_surgery_confirmed": True,
+                "surgeon_signature_matches": True,
+                "first_assistant_exception_used": raw.get("first_assistant_exception_used"),
+            }
+        if (
+            raw.get("failure_kind") == "surgery_signer_not_qualified"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("surgeon_signature_matches") is False
+        ):
+            return {
+                "failure_kind": "surgery_signer_not_qualified",
+                "performed_surgery_confirmed": True,
+                "surgeon_signature_matches": False,
+            }
+        return None
+    if rule_id == "LX0609-038":
+        if (
+            raw.get("verification_kind") == "anesthesia_record_present"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_sources") == ["anesthesia_record"]
+        ):
+            return {
+                "verification_kind": "anesthesia_record_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            }
+        if (
+            raw.get("failure_kind") == "anesthesia_record_missing"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_sources") == ["anesthesia_record"]
+        ):
+            return {
+                "failure_kind": "anesthesia_record_missing",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            }
+        return None
     if rule_id == "LX0609-017":
         failure_kind = raw.get("failure_kind")
         source_types = raw.get("copy_document_sources")

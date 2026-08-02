@@ -437,6 +437,74 @@ def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
     return False
 
 
+def _surgery_signature_outcome(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    """031：只按同一手术记录行核对术者、书写者、一助和术者签名。"""
+
+    if not rows:
+        return "data_gap", "required_field_missing", None
+    states: list[str] = []
+    used_first_assistant_exception = False
+
+    def identity(value: Any) -> str:
+        normalized = re.sub(r"[\s,，、;；:：]+", "", _clean(value))
+        if normalized in {"签名", "已签名", "已签", "电子签名"}:
+            return ""
+        return re.sub(r"(?:主任医师|副主任医师|主治医师|住院医师|医师|医生)$", "", normalized)
+
+    for row in rows:
+        surgeon = identity(row.get("surgeon"))
+        recorder = identity(
+            row.get("recorder") or row.get("recorder_sign") or row.get("submitter")
+        )
+        signer = identity(
+            row.get("surgeon_sign")
+            or row.get("main_surgery_sign")
+            or row.get("signer")
+        )
+        first_assistant = identity(row.get("first_assistant"))
+        if not surgeon or not signer:
+            states.append("unknown")
+            continue
+        if signer != surgeon:
+            states.append("defect")
+            continue
+        if not recorder:
+            states.append("unknown")
+            continue
+        if recorder == surgeon:
+            states.append("satisfied")
+            continue
+        if first_assistant and recorder == first_assistant:
+            used_first_assistant_exception = True
+            states.append("satisfied")
+            continue
+        states.append("defect")
+    if "defect" in states:
+        return (
+            "non_compliant",
+            "surgery_signer_not_qualified",
+            {
+                "failure_kind": "surgery_signer_not_qualified",
+                "performed_surgery_confirmed": True,
+                "surgeon_signature_matches": False,
+            },
+        )
+    if not states or "unknown" in states:
+        return "data_gap", "required_field_missing", None
+    return (
+        "compliant",
+        "surgery_signature_confirmed",
+        {
+            "verification_kind": "surgery_signature_confirmed",
+            "performed_surgery_confirmed": True,
+            "surgeon_signature_matches": True,
+            "first_assistant_exception_used": used_first_assistant_exception,
+        },
+    )
+
+
 def _authoritative_record_time(value: Any) -> datetime | None:
     """只接受 record_time 整值；不从正文、标题或局部文本提取时间。"""
 
@@ -763,6 +831,7 @@ def _typed_conservative_surgery_gate_decision(
     rule_id: str,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
+    customer_display_facts: list[tuple[str, Mapping[str, Any]]] | None = None,
 ) -> RuleDecision:
     """迁移高风险手术门控，但不把旧关键词/文书存在提升为临床事实。"""
 
@@ -851,6 +920,51 @@ def _typed_conservative_surgery_gate_decision(
             evidence_state=EvidenceState.DATA_GAP,
             qc_direction=QcDirection.UNKNOWN,
             reason_code=surgery_applicability.reason_code,
+        )
+
+    if rule_id == "LX0609-031":
+        try:
+            signature_rows = tuple(materials.rows("surgery_record"))
+        except EvidenceMaterialTruncated:
+            final_state, reason_code, display_facts = (
+                "data_gap",
+                "source_truncated",
+                None,
+            )
+        except EvidenceMaterialUnavailable:
+            final_state, reason_code, display_facts = (
+                "data_gap",
+                "source_unavailable",
+                None,
+            )
+        else:
+            final_state, reason_code, display_facts = _surgery_signature_outcome(
+                signature_rows
+            )
+        if display_facts is not None and customer_display_facts is not None:
+            customer_display_facts.append((rule_id, display_facts))
+        applicability, evidence_state, qc_direction = {
+            "compliant": (
+                ApplicabilityState.APPLICABLE,
+                EvidenceState.SUFFICIENT,
+                QcDirection.SATISFIED,
+            ),
+            "non_compliant": (
+                ApplicabilityState.APPLICABLE,
+                EvidenceState.SUFFICIENT,
+                QcDirection.DEFECT,
+            ),
+            "data_gap": (
+                ApplicabilityState.APPLICABLE,
+                EvidenceState.DATA_GAP,
+                QcDirection.UNKNOWN,
+            ),
+        }[final_state]
+        return decision(
+            applicability=applicability,
+            evidence_state=evidence_state,
+            qc_direction=qc_direction,
+            reason_code=reason_code,
         )
 
     # 现库尚无可审计的恶性手术关联、植入物实际使用、预防用药实际区间、
@@ -1133,12 +1247,43 @@ def _surgery_text_outcome(
                 and missing_implant_fields
                 else None
             )
+            if rule_id == "LX0609-025" and state == "compliant":
+                display_facts = {
+                    "verification_kind": "implant_information_complete",
+                    "performed_surgery_confirmed": True,
+                    "checked_fields": [
+                        "implant_name",
+                        "implant_type",
+                        "implant_specification",
+                        "implant_material",
+                        "implant_quantity",
+                        "implant_barcode",
+                    ],
+                    "source_label": "手术记录",
+                    **(
+                        {"source_document_id": implant_source_document_id}
+                        if implant_source_document_id
+                        else {}
+                    ),
+                }
+            if rule_id == "LX0609-025" and state == "not_applicable":
+                display_facts = {
+                    "verification_kind": "implant_not_used",
+                    "performed_surgery_confirmed": True,
+                    "source_label": "手术记录",
+                }
             if rule_id == "LX0609-033" and state == "non_compliant":
                 display_facts = {
                     "failure_kind": "surgery_consent_signature_missing",
                     "consent_state": "signature_missing",
                     "performed_surgery_confirmed": True,
                     "missing_signature_roles": sorted(missing_consent_signatures),
+                }
+            if rule_id == "LX0609-033" and state == "compliant":
+                display_facts = {
+                    "verification_kind": "surgery_consent_complete",
+                    "performed_surgery_confirmed": True,
+                    "checked_signature_roles": ["patient", "surgeon"],
                 }
             return _SurgeryTextOutcome(
                 rule_id,
@@ -1420,6 +1565,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             rule_id=rule_id,
             snapshot=evidence_snapshot,
             materials=evidence_materials,
+            customer_display_facts=customer_display_facts,
         )
         performed_state = _snapshot_performed_surgery_state(evidence_snapshot)
         surgery_record_available = any(

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from app.services.custom_qc_workspace_service import (
     _row_to_batch_job,
     flatten_customer_safe_result_items,
@@ -450,6 +452,7 @@ def test_customer_projector_preserves_shared_lx004_timeliness_facts() -> None:
         "anchor_time": "2026-06-01 09:00:00",
         "observed_time": "2026-06-01 16:15:00",
         "elapsed_hours": 7.25,
+        "overdue_hours": 1.25,
     }
     assert "PRIVATE_RESCUE_TEXT" not in json.dumps(projected, ensure_ascii=False)
     assert "PRIVATE_RESCUE_DOCUMENT_ID" not in json.dumps(projected, ensure_ascii=False)
@@ -698,6 +701,63 @@ def test_customer_projector_keeps_only_controlled_surgery_document_gap_facts() -
         "performed_surgery_confirmed": True,
     }
     assert "PRIVATE_SURGERY_TEXT" not in json.dumps(projected, ensure_ascii=False)
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "status", "facts"),
+    [
+        (
+            "LX0609-003",
+            "compliant",
+            {
+                "failure_kind": "surgery_record_within_threshold",
+                "performed_surgery_confirmed": True,
+                "surgery_end_time": "2026-07-30 10:00:00",
+                "record_time": "2026-07-30 12:30:00",
+                "elapsed_hours": 2.5,
+                "threshold_hours": 24,
+                "source_label": "手术记录",
+            },
+        ),
+        (
+            "LX0609-035",
+            "non_compliant",
+            {
+                "failure_kind": "anesthesia_consent_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields": ["physician_signature", "physician_signature_time"],
+            },
+        ),
+        (
+            "LX0609-040",
+            "compliant",
+            {
+                "performed_surgery_confirmed": True,
+                "procedure_kind": "surgery",
+                "effective_surgery_level": "四级",
+                "surgery_level_source": "hospital_performance",
+                "mdt_discussion_state": "completed",
+                "procedure_code": "01.2408",
+                "procedure_name": "颅内血肿清除术",
+            },
+        ),
+    ],
+)
+def test_task5_customer_projector_preserves_controlled_surgery_facts(
+    rule_id, status, facts
+) -> None:
+    projected = project_customer_safe_result_item(
+        {
+            "record_id": "PRIVATE_RECORD",
+            "rule_id": rule_id,
+            "status": status,
+            "customer_display_facts": {**facts, "raw_text": "PRIVATE_MEDICAL_TEXT"},
+        },
+        hmac_key="unit-test-key",
+    )
+
+    assert projected["customer_display_facts"] == facts
+    assert "PRIVATE_MEDICAL_TEXT" not in json.dumps(projected, ensure_ascii=False)
 
 
 def test_customer_projector_is_idempotent_for_safe_identity_and_decision() -> None:

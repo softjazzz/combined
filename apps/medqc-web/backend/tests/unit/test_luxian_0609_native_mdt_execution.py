@@ -193,6 +193,8 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
         "procedure_kind": "surgery",
         "effective_surgery_level": "四级",
         "surgery_level_source": "hospital_performance",
+        "procedure_code": "01.2408",
+        "procedure_name": "颅内血肿清除术",
         "mdt_discussion_state": "completed",
     }
 

@@ -81,6 +81,7 @@ const ANESTHESIA_SOURCE_LABELS = {
   consent_form: '麻醉知情同意书',
   preane_surveil_record: '麻醉术前访视记录',
   postane_surveil_record: '麻醉术后访视记录',
+  anesthesia_record: '麻醉记录单',
   presurg_discussion: '术前讨论记录',
 } as const
 
@@ -156,26 +157,35 @@ function extractSurgeryTimeliness(
   const elapsedHours =
     typeof facts.elapsed_hours === 'number' &&
     Number.isFinite(facts.elapsed_hours) &&
-    facts.elapsed_hours > 24
+    facts.elapsed_hours >= 0
       ? facts.elapsed_hours
       : undefined
+  const state =
+    facts.failure_kind === 'surgery_record_late'
+      ? 'late'
+      : facts.failure_kind === 'surgery_record_within_threshold'
+        ? 'within'
+        : undefined
   if (
-    facts.failure_kind !== 'surgery_record_late' ||
+    !state ||
     facts.performed_surgery_confirmed !== true ||
     !surgeryEndTime ||
     !recordTime ||
     elapsedHours === undefined ||
-    facts.threshold_hours !== 24
+    facts.threshold_hours !== 24 ||
+    (state === 'late' ? elapsedHours <= 24 : elapsedHours > 24)
   )
     return undefined
-  return { surgeryEndTime, recordTime, elapsedHours, thresholdHours: 24 }
+  return { state, surgeryEndTime, recordTime, elapsedHours, thresholdHours: 24 }
 }
 
 function extractSurgeryConsent(
   facts: Record<string, unknown>,
 ): CustomerDisplayFacts['surgeryConsent'] {
-  const state = facts.consent_state
+  const state =
+    facts.verification_kind === 'surgery_consent_complete' ? 'complete' : facts.consent_state
   if (
+    state !== 'complete' &&
     state !== 'missing' &&
     state !== 'blank' &&
     state !== 'signature_missing' &&
@@ -183,6 +193,7 @@ function extractSurgeryConsent(
   )
     return undefined
   const valid =
+    (facts.verification_kind === 'surgery_consent_complete' && state === 'complete') ||
     (facts.failure_kind === 'surgery_consent_document_missing' && state === 'missing') ||
     (facts.failure_kind === 'surgery_consent_body_missing' && state === 'blank') ||
     (facts.failure_kind === 'surgery_consent_signature_missing' && state === 'signature_missing') ||
@@ -453,6 +464,72 @@ function extractAnesthesiaDocumentation(
   facts: Record<string, unknown>,
 ): CustomerDisplayFacts['anesthesiaDocumentation'] {
   const failureKind = facts.failure_kind
+  const verificationKind = facts.verification_kind
+  if (
+    verificationKind === 'anesthesia_consent_present' ||
+    verificationKind === 'anesthesia_consent_complete' ||
+    verificationKind === 'anesthesia_visits_present' ||
+    verificationKind === 'anesthesia_record_present' ||
+    verificationKind === 'preop_discussion_surgeon_participation_confirmed'
+  ) {
+    const checkedSources = Array.isArray(facts.checked_sources)
+      ? facts.checked_sources.filter(
+          (
+            value,
+          ): value is NonNullable<
+            CustomerDisplayFacts['anesthesiaDocumentation']
+          >['checkedSources'][number] =>
+            value === 'consent_form' ||
+            value === 'preane_surveil_record' ||
+            value === 'postane_surveil_record' ||
+            value === 'anesthesia_record' ||
+            value === 'presurg_discussion',
+        )
+      : []
+    return {
+      verificationKind,
+      performedEventConfirmed: true,
+      checkedSources,
+      emergencyRescueExceptionAbsent:
+        facts.emergency_rescue_exception_absent === true ? true : undefined,
+      surgeonParticipationState:
+        facts.surgeon_participation_state === 'confirmed' ? 'confirmed' : undefined,
+    }
+  }
+  if (failureKind === 'anesthesia_consent_incomplete') {
+    const allowed = new Set([
+      'patient_signature',
+      'physician_signature',
+      'patient_signature_time',
+      'physician_signature_time',
+    ])
+    const missingFields = Array.isArray(facts.missing_fields)
+      ? facts.missing_fields.filter(
+          (
+            value,
+          ): value is NonNullable<
+            CustomerDisplayFacts['anesthesiaDocumentation']
+          >['missingFields'][number] => typeof value === 'string' && allowed.has(value),
+        )
+      : []
+    if (!missingFields.length) return undefined
+    return { failureKind, performedEventConfirmed: true, missingFields }
+  }
+  if (failureKind === 'anesthesia_record_missing') {
+    return {
+      failureKind,
+      performedEventConfirmed: true,
+      missingSources: ['anesthesia_record'],
+    }
+  }
+  if (failureKind === 'surgeon_not_in_preop_discussion') {
+    return {
+      failureKind,
+      performedEventConfirmed: true,
+      emergencyRescueExceptionAbsent: true,
+      surgeonParticipationState: 'absent',
+    }
+  }
   if (failureKind === 'anesthesia_consent_missing') {
     if (
       facts.performed_anesthesia_confirmed !== true ||
@@ -533,14 +610,21 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
     : undefined
   const targetDocument = asString(facts.target_document)
   const surgeryDocument =
-    (failureKind === 'surgery_document_missing' || failureKind === 'surgery_document_blank') &&
+    (failureKind === 'surgery_document_missing' ||
+      failureKind === 'surgery_document_blank' ||
+      facts.verification_kind === 'surgery_document_present') &&
     facts.performed_surgery_confirmed === true &&
     (targetDocument === 'presurg_summary' ||
       targetDocument === 'surgery_record' ||
       targetDocument === 'surgery_safecheck_record')
       ? ({
           target: targetDocument,
-          state: failureKind === 'surgery_document_blank' ? 'blank' : 'missing',
+          state:
+            facts.verification_kind === 'surgery_document_present'
+              ? 'present'
+              : failureKind === 'surgery_document_blank'
+                ? 'blank'
+                : 'missing',
         } as const)
       : undefined
   return {
@@ -575,6 +659,24 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
         ? lengthState
         : undefined,
     missingFields,
+    implantVerification:
+      facts.verification_kind === 'implant_information_complete'
+        ? {
+            state: 'complete',
+            checkedFields: Array.isArray(facts.checked_fields)
+              ? facts.checked_fields.filter(
+                  (
+                    value,
+                  ): value is NonNullable<
+                    CustomerDisplayFacts['implantVerification']
+                  >['checkedFields'][number] =>
+                    typeof value === 'string' && value in IMPLANT_FIELD_LABELS,
+                )
+              : [],
+          }
+        : facts.verification_kind === 'implant_not_used'
+          ? { state: 'not_used' }
+          : undefined,
     copySimilarity:
       typeof facts.copy_similarity === 'number' &&
       facts.copy_similarity >= 0 &&
@@ -598,6 +700,47 @@ function extractCustomerDisplayFacts(raw: RawCustomerQcResult): CustomerDisplayF
     timeliness: extractTimeliness(facts),
     surgeryTimeliness: extractSurgeryTimeliness(facts),
     surgeryConsent: extractSurgeryConsent(facts),
+    surgerySignature:
+      facts.verification_kind === 'surgery_signature_confirmed' &&
+      facts.surgeon_signature_matches === true
+        ? {
+            state: 'confirmed',
+            firstAssistantExceptionUsed: facts.first_assistant_exception_used === true,
+          }
+        : failureKind === 'surgery_signer_not_qualified' &&
+            facts.surgeon_signature_matches === false
+          ? { state: 'not_qualified' }
+          : undefined,
+    surgeryMdt:
+      facts.procedure_kind === 'surgery' ||
+      facts.procedure_kind === 'non_surgical_operation' ||
+      facts.procedure_kind === 'none' ||
+      facts.procedure_kind === 'unknown'
+        ? {
+            procedureKind: facts.procedure_kind,
+            effectiveLevel:
+              facts.effective_surgery_level === '一级' ||
+              facts.effective_surgery_level === '二级' ||
+              facts.effective_surgery_level === '三级' ||
+              facts.effective_surgery_level === '四级'
+                ? facts.effective_surgery_level
+                : undefined,
+            levelSource:
+              facts.surgery_level_source === 'hospital_performance' ||
+              facts.surgery_level_source === 'national_catalog' ||
+              facts.surgery_level_source === 'structured_field'
+                ? facts.surgery_level_source
+                : undefined,
+            discussionState:
+              facts.mdt_discussion_state === 'completed' ||
+              facts.mdt_discussion_state === 'missing' ||
+              facts.mdt_discussion_state === 'unknown'
+                ? facts.mdt_discussion_state
+                : undefined,
+            procedureCode: asString(facts.procedure_code),
+            procedureName: asString(facts.procedure_name),
+          }
+        : undefined,
     severityCourseGap: extractSeverityCourseGap(facts),
     criticalDailyCoverage: extractCriticalDailyCoverage(facts),
     standard: asString(facts.standard),
@@ -861,6 +1004,22 @@ function criterionDescriptor(
 }
 
 function lx025Descriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor | undefined {
+  if (facts.implantVerification?.state === 'complete') {
+    return {
+      summary: '已确认本次手术使用植入物；名称、种类、规格/型号、材质、数量及条码/批号均已记录。',
+      detail: '本项已按植入物必填字段逐项核对手术记录，未发现缺项。',
+      requirement: '手术记录应完整记录植入物名称、种类、规格/型号、材质、数量及条码/批号。',
+      suggestion: '继续保持。',
+    }
+  }
+  if (facts.implantVerification?.state === 'not_used') {
+    return {
+      summary: '手术记录明确记载本次手术未使用植入物，本项不适用。',
+      detail: '本项仅在本次手术实际使用植入物时核对植入物字段完整性。',
+      requirement: '使用植入物时，应完整记录名称、种类、规格/型号、材质、数量及条码/批号。',
+      suggestion: '无需按本质控点处理。',
+    }
+  }
   if (!facts.missingFields?.length) return undefined
   const missingLabels = facts.missingFields.map((value) => IMPLANT_FIELD_LABELS[value])
   const missingText = missingLabels.join('、')
@@ -885,7 +1044,19 @@ function surgeryDocumentDescriptor(
   if (!document) return undefined
   const label = SURGERY_DOCUMENT_LABELS[document.target]
   const issue =
-    document.state === 'blank' ? `已找到${label}，但正文为空或仅为占位内容` : `未找到${label}`
+    document.state === 'present'
+      ? `已找到可用的${label}`
+      : document.state === 'blank'
+        ? `已找到${label}，但正文为空或仅为占位内容`
+        : `未找到${label}`
+  if (document.state === 'present') {
+    return {
+      summary: `已确认本次住院存在已实施手术；已找到可用的${label}。`,
+      detail: `本项仅核对${label}是否存在且具有可用正文；本次已满足。`,
+      requirement: `已实施手术时，应形成完整、可用的${label}。`,
+      suggestion: '继续保持。',
+    }
+  }
   return {
     summary: `已确认本次住院存在已实施手术；${issue}。`,
     detail: `本项仅核对${label}是否存在且具有可用正文。${issue}，因此不能满足本质控点的文书要求。`,
@@ -947,12 +1118,15 @@ function surgeryTimelinessDescriptor(
   const elapsed = Number.isInteger(timeliness.elapsedHours)
     ? `${timeliness.elapsedHours}`
     : timeliness.elapsedHours.toFixed(2)
+  const within = timeliness.state === 'within'
   return {
-    summary: `本次手术于${timeliness.surgeryEndTime}结束；手术记录形成于${timeliness.recordTime}，间隔${elapsed}小时，超过术后${timeliness.thresholdHours}小时要求。`,
+    summary: `本次手术于${timeliness.surgeryEndTime}结束；手术记录形成于${timeliness.recordTime}，间隔${elapsed}小时，${within ? '未超过' : '超过'}术后${timeliness.thresholdHours}小时要求。`,
     detail:
       '本项只采用已用于判定的权威手术结束时间与手术记录时间计算间隔；未使用正文、标题或推测时间。',
     requirement: `手术记录应在手术结束后${timeliness.thresholdHours}小时内完成。`,
-    suggestion: '请在规定时限内完成并提交手术记录，并核对手术结束时间与文书记录时间。',
+    suggestion: within
+      ? '继续保持。'
+      : '请在规定时限内完成并提交手术记录，并核对手术结束时间与文书记录时间。',
   }
 }
 
@@ -961,6 +1135,14 @@ function surgeryConsentDescriptor(
 ): CustomerReasonDescriptor | undefined {
   const consent = facts.surgeryConsent
   if (!consent) return undefined
+  if (consent.state === 'complete') {
+    return {
+      summary: '已确认本次住院存在已实施手术；手术知情同意书及患者、术者签字均已取得。',
+      detail: '本项已核对手术知情同意书正文及必要签字角色，未发现缺项。',
+      requirement: '已实施手术应具有完整、可核对并完成必要签字的手术知情同意书。',
+      suggestion: '继续保持。',
+    }
+  }
   if (consent.state === 'missing') {
     return {
       summary: '已确认本次住院存在已实施手术；在已证明完整的手术知情同意书来源中未找到对应文书。',
@@ -1142,10 +1324,73 @@ function anesthesiaDocumentationDescriptor(
   facts: CustomerDisplayFacts,
 ): CustomerReasonDescriptor | undefined {
   const documentation = facts.anesthesiaDocumentation
-  if (!documentation?.missingSources.length) return undefined
-  const missing = documentation.missingSources
+  if (!documentation) return undefined
+  const missing = (documentation.missingSources || [])
     .map((source) => ANESTHESIA_SOURCE_LABELS[source])
     .join('、')
+  const verifiedMessages = {
+    anesthesia_consent_present: [
+      '已确认本次实施麻醉，并找到可用的麻醉知情同意书。',
+      '实施麻醉前应具备麻醉知情同意书。',
+    ],
+    anesthesia_consent_complete: [
+      '麻醉知情同意书的患者签名、医师签名及双方分钟级签署时间均完整。',
+      '麻醉知情同意书应包含患者、医师签名及精确到分钟的签署时间。',
+    ],
+    anesthesia_visits_present: [
+      '已确认本次为非局部麻醉，并找到麻醉术前、术后访视记录。',
+      '非局部麻醉患者应具备麻醉术前及术后访视记录。',
+    ],
+    anesthesia_record_present: [
+      '已确认本次为非局部麻醉，并找到可用的麻醉记录单。',
+      '非局部麻醉患者应具备麻醉记录单。',
+    ],
+    preop_discussion_surgeon_participation_confirmed: [
+      '已确认本次手术不属于急诊抢救例外；术前讨论记录存在，且术者参加。',
+      '非急诊抢救手术应有术前讨论记录，且术者应参加讨论。',
+    ],
+  } as const
+  if (documentation.verificationKind) {
+    const [summary, requirement] = verifiedMessages[documentation.verificationKind]
+    return {
+      summary,
+      detail: '本项依据已完成的受控文书存在性、签名字段或人员关联核对形成合规结论。',
+      requirement,
+      suggestion: '继续保持。',
+    }
+  }
+  if (documentation.failureKind === 'anesthesia_consent_incomplete') {
+    const labels = {
+      patient_signature: '患者签名',
+      physician_signature: '医师签名',
+      patient_signature_time: '患者签署时间（精确到分钟）',
+      physician_signature_time: '医师签署时间（精确到分钟）',
+    }
+    const missingFields = (documentation.missingFields || []).map((field) => labels[field])
+    if (!missingFields.length) return undefined
+    return {
+      summary: `已找到麻醉知情同意书，但缺少：${missingFields.join('、')}。`,
+      detail: '本项逐项核对患者、医师签名及双方分钟级签署时间；上述字段未取得有效值。',
+      requirement: '麻醉知情同意书应具有患者、医师签名，签署时间应精确到分钟。',
+      suggestion: `请补充或同步${missingFields.join('、')}。`,
+    }
+  }
+  if (documentation.failureKind === 'anesthesia_record_missing') {
+    return {
+      summary: '已确认本次为非局部麻醉；未找到麻醉记录单。',
+      detail: '已核对麻醉记录单来源，未返回可用文书。',
+      requirement: '非局部麻醉患者应具备麻醉记录单。',
+      suggestion: '请补充或同步本次麻醉记录单。',
+    }
+  }
+  if (documentation.failureKind === 'surgeon_not_in_preop_discussion') {
+    return {
+      summary: '已找到术前讨论记录，但参加人员中未匹配到本次手术术者。',
+      detail: '已确认本次手术不属于急诊抢救例外，并完成术者与讨论参加人员的关联核对。',
+      requirement: '非急诊抢救手术应有术前讨论记录，且术者应参加讨论。',
+      suggestion: '请核对术前讨论参加人员，并由本次手术术者参加讨论并完成记录。',
+    }
+  }
   if (documentation.failureKind === 'anesthesia_consent_missing') {
     return {
       summary: '已确认本次实施麻醉；未检出麻醉知情同意书。',
@@ -1171,6 +1416,55 @@ function anesthesiaDocumentationDescriptor(
     }
   }
   return undefined
+}
+
+function surgerySignatureDescriptor(
+  facts: CustomerDisplayFacts,
+): CustomerReasonDescriptor | undefined {
+  const signature = facts.surgerySignature
+  if (!signature) return undefined
+  if (signature.state === 'confirmed') {
+    return {
+      summary: signature.firstAssistantExceptionUsed
+        ? '手术记录由第一助手书写，且已由本次手术术者签名确认。'
+        : '手术记录的签名医师与本次手术术者一致。',
+      detail: '本项在同一手术记录内核对术者、书写医师、第一助手及术者签名，未跨手术借用人员信息。',
+      requirement: '手术记录应由术者书写并签名；由第一助手书写时，应由术者审核并签名。',
+      suggestion: '继续保持。',
+    }
+  }
+  return {
+    summary: '手术记录的签名医师与本次手术术者不一致，且不满足第一助手书写、术者签名的例外。',
+    detail: '本项在同一手术记录内核对术者、书写医师、第一助手及术者签名。',
+    requirement: '手术记录应由术者书写并签名；由第一助手书写时，应由术者审核并签名。',
+    suggestion: '请由本次手术术者审核手术记录并完成签名。',
+  }
+}
+
+function surgeryMdtDescriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor | undefined {
+  const mdt = facts.surgeryMdt
+  if (!mdt) return undefined
+  const identity = [mdt.procedureCode, mdt.procedureName].filter(Boolean).join(' ')
+  const sourceLabel = {
+    hospital_performance: '院内绩效分配目录',
+    national_catalog: '2025年国家临床版手术分级目录',
+    structured_field: '病历结构化手术等级字段',
+  }[mdt.levelSource || 'structured_field']
+  if (mdt.procedureKind !== 'surgery' || mdt.effectiveLevel !== '四级') {
+    return {
+      summary: `${identity ? `${identity}：` : ''}本次未触发四级手术术前多学科讨论要求。`,
+      detail: `程序类型：${mdt.procedureKind === 'non_surgical_operation' ? '非手术操作' : mdt.procedureKind === 'surgery' ? '手术' : '未确认手术'}；有效等级：${mdt.effectiveLevel || '未取得'}。`,
+      requirement: '仅四级手术需要按本质控点核对术前多学科讨论。',
+      suggestion: '无需按本质控点处理。',
+    }
+  }
+  const completed = mdt.discussionState === 'completed'
+  return {
+    summary: `${identity ? `${identity}：` : ''}按${sourceLabel}确定为四级手术；术前多学科讨论${completed ? '已完成' : '未完成'}。`,
+    detail: `有效手术等级为四级，分级来源为${sourceLabel}；多学科讨论状态为${completed ? '已完成' : mdt.discussionState === 'missing' ? '缺失' : '待确认'}。`,
+    requirement: '四级手术术前应完成多学科讨论。',
+    suggestion: completed ? '继续保持。' : '请补充本次四级手术的术前多学科讨论记录。',
+  }
 }
 
 function examLabDescriptor(facts: CustomerDisplayFacts): CustomerReasonDescriptor | undefined {
@@ -1291,7 +1585,11 @@ function ruleSpecificDescriptor(
   if (ruleId === 'LX0609-025') return lx025Descriptor(facts)
   if (ruleId === 'LX0609-024') return lx024Descriptor(facts)
   if (ruleId === 'LX0609-028') return lx028Descriptor(facts)
-  if (['LX0609-034', 'LX0609-035', 'LX0609-036', 'LX0609-037', 'LX0609-039'].includes(ruleId)) {
+  if (
+    ['LX0609-034', 'LX0609-035', 'LX0609-036', 'LX0609-037', 'LX0609-038', 'LX0609-039'].includes(
+      ruleId,
+    )
+  ) {
     return anesthesiaDocumentationDescriptor(facts)
   }
   if (['LX0609-029', 'LX0609-030', 'LX0609-032'].includes(ruleId)) {
@@ -1302,6 +1600,8 @@ function ruleSpecificDescriptor(
   }
   if (ruleId === 'LX0609-003') return surgeryTimelinessDescriptor(facts)
   if (ruleId === 'LX0609-033') return surgeryConsentDescriptor(facts)
+  if (ruleId === 'LX0609-031') return surgerySignatureDescriptor(facts)
+  if (ruleId === 'LX0609-040') return surgeryMdtDescriptor(facts)
   if (ruleId === 'LX0609-008') return severityCourseGapDescriptor(facts)
   if (ruleId === 'LX0609-009') return criticalDailyCoverageDescriptor(facts)
   if (ruleId === 'LX0609-017') return lx017Descriptor(facts)

@@ -107,6 +107,11 @@ def _typed_029_session(
                 raise SourceEvidenceUnavailable()
             if surgery_mode == "exact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif surgery_mode == "multi":
+                rows = (
+                    {"surgery_begin_time": "2026-01-01 08:00:00+08"},
+                    {"surgery_begin_time": "2026-01-01 10:00:00+08"},
+                )
             elif surgery_mode == "nonexact":
                 rows = ({"surgery_begin_time": "2026-01-01 08:00"},)
             else:
@@ -211,9 +216,40 @@ async def test_typed_029_nonempty_summary_is_compliant_without_llm():
         snapshot=session.snapshot,
     )
     assert reduced[0].final_state == "compliant"
+    assert dict(result.customer_display_facts)["LX0609-029"] == {
+        "verification_kind": "surgery_document_present",
+        "target_document": "presurg_summary",
+        "performed_surgery_confirmed": True,
+    }
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert secret not in repr(result)
+
+
+@pytest.mark.asyncio
+async def test_typed_029_multiple_surgeries_without_linkage_is_data_gap():
+    session = _typed_029_session(
+        surgery_mode="multi",
+        summary_rows=({"record_content": "术前小结正文完整"},),
+    )
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "data_gap"
+    assert reduced[0].reason_code == "association_failed"
 
 
 @pytest.mark.asyncio
@@ -734,6 +770,11 @@ def test_typed_039_is_compliant_when_surgeon_is_in_discussion_staff(monkeypatch)
         "surgeons": ["韩平"],
         "discussion_participants": ["刘娟", "曾亚丽", "韩平"],
         "matched_surgeons": ["韩平"],
+        "performed_surgery_confirmed": True,
+        "emergency_rescue_exception_absent": True,
+        "discussion_state": "present",
+        "surgeon_participation_state": "confirmed",
+        "verification_kind": "preop_discussion_surgeon_participation_confirmed",
     }
 
 
@@ -767,9 +808,36 @@ def test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion(monk
         "surgeons": ["韩平"],
         "discussion_participants": ["刘娟", "曾亚丽"],
         "matched_surgeons": [],
+        "performed_surgery_confirmed": True,
+        "emergency_rescue_exception_absent": True,
+        "discussion_state": "present",
+        "surgeon_participation_state": "absent",
         "source_document_id": "surgery-1",
         "source_document_type": "surgery_record",
     }
+
+
+def test_035_structured_consent_completeness_lists_exact_missing_fields():
+    state, missing = surgery_doc._anesthesia_consent_completeness(
+        (
+            {
+                "patient_sign": "患者甲",
+                "physician_sign": "",
+                "patient_sign_datetime": "2026-07-30 10:20:00",
+                "physician_sign_datetime": "2026-07-30",
+            },
+        )
+    )
+
+    assert state == "incomplete"
+    assert missing == ["physician_signature", "physician_signature_time"]
+
+
+def test_035_multiple_anesthesia_consents_fail_closed_on_association():
+    state, missing = surgery_doc._anesthesia_consent_completeness(({}, {}))
+
+    assert state == "association_failed"
+    assert missing == []
 
 
 def test_typed_missing_document_facts_keep_only_unique_trigger_document_id(monkeypatch):

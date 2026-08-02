@@ -572,6 +572,10 @@ async def execute_luxian_0609_native_mdt_rule(
             display_facts["surgery_level_source"] = (
                 surgery_applicability.level_source
             )
+        if surgery_applicability.procedure_code:
+            display_facts["procedure_code"] = surgery_applicability.procedure_code
+        if surgery_applicability.procedure_name:
+            display_facts["procedure_name"] = surgery_applicability.procedure_name
         if surgery_applicability.state == "technical_error":
             return finish(
                 _MdtRuleOutcome(

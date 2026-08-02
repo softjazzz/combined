@@ -32,6 +32,8 @@ class SurgeryApplicability:
     procedure_kind: str
     effective_level: str = ""
     level_source: str = ""
+    procedure_code: str = ""
+    procedure_name: str = ""
     evidence_refs: tuple[str, ...] = ()
 
     @property
@@ -182,6 +184,8 @@ def resolve_surgery_applicability(
                 if fallback_level
                 else ""
             ),
+            procedure_code=classification.code if classification else "",
+            procedure_name=classification.name if classification else "",
             evidence_refs=tuple(sorted({*refs, *(fact.fact_id for fact in performed_facts)})),
         )
 

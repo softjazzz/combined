@@ -37,6 +37,48 @@ def test_signature_check_accepts_explicit_surgeon_signature_not_audit_author() -
     )
 
 
+def test_031_accepts_first_assistant_writer_when_surgeon_signs() -> None:
+    state, reason, facts = surgery._surgery_signature_outcome(
+        [
+            {
+                "surgeon": "韩平",
+                "first_assistant": "刘娟",
+                "submitter": "刘娟",
+                "surgeon_sign": "韩平",
+            }
+        ]
+    )
+
+    assert (state, reason) == ("compliant", "surgery_signature_confirmed")
+    assert facts == {
+        "verification_kind": "surgery_signature_confirmed",
+        "performed_surgery_confirmed": True,
+        "surgeon_signature_matches": True,
+        "first_assistant_exception_used": True,
+    }
+
+
+def test_031_rejects_non_surgeon_signature() -> None:
+    state, reason, facts = surgery._surgery_signature_outcome(
+        [{"surgeon": "韩平", "submitter": "刘娟", "surgeon_sign": "刘娟"}]
+    )
+
+    assert (state, reason) == ("non_compliant", "surgery_signer_not_qualified")
+    assert facts == {
+        "failure_kind": "surgery_signer_not_qualified",
+        "performed_surgery_confirmed": True,
+        "surgeon_signature_matches": False,
+    }
+
+
+def test_031_generic_signed_marker_is_data_gap_not_false_defect() -> None:
+    state, reason, facts = surgery._surgery_signature_outcome(
+        [{"surgeon": "韩平主任医师", "submitter": "刘娟", "surgeon_sign": "已签名"}]
+    )
+
+    assert (state, reason, facts) == ("data_gap", "required_field_missing", None)
+
+
 def _fact(
     fact_type: str,
     *,

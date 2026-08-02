@@ -666,6 +666,69 @@ def _with_trigger_document_id(
     return enriched
 
 
+def _anesthesia_consent_rows(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> tuple[Mapping[str, Any], ...] | None:
+    """只保留可明确识别为麻醉知情同意书的结构化行。"""
+
+    if not isinstance(materials, Luxian0609EvidenceMaterialStore):
+        return None
+    try:
+        rows = tuple(materials.rows("consent_form"))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return None
+    matched = []
+    for row in rows:
+        identity = _clean(
+            " ".join(
+                str(row.get(key) or "")
+                for key in ("consent_type", "document_title", "record_content")
+            )
+        )
+        if _ANESTHESIA_CONSENT_PATTERN.search(identity):
+            matched.append(row)
+    return tuple(matched)
+
+
+def _minute_signature_state(value: Any) -> str:
+    text = _clean(value)
+    if not text:
+        return "missing"
+    return "present" if re.search(r"\d{1,2}:\d{2}", text) else "invalid"
+
+
+def _anesthesia_consent_completeness(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, list[str]]:
+    """035 仅核对已确认麻醉同意书的患者/医师签名和分钟级时间。"""
+
+    if len(rows) != 1:
+        return "association_failed", []
+    row = rows[0]
+    missing: list[str] = []
+    if not _clean(row.get("patient_sign")):
+        missing.append("patient_signature")
+    if not _clean(row.get("physician_sign") or row.get("surgeon_sign")):
+        missing.append("physician_signature")
+    if _minute_signature_state(row.get("patient_sign_datetime")) != "present":
+        missing.append("patient_signature_time")
+    if _minute_signature_state(row.get("physician_sign_datetime")) != "present":
+        missing.append("physician_signature_time")
+    return ("incomplete" if missing else "complete"), missing
+
+
+def _source_row_count(
+    materials: Luxian0609EvidenceMaterialStore | None,
+    source_key: str,
+) -> int | None:
+    if not isinstance(materials, Luxian0609EvidenceMaterialStore):
+        return None
+    try:
+        return len(tuple(materials.rows(source_key)))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return None
+
+
 def _typed_terminal_outcome(
     *,
     rule_id: str,
@@ -722,6 +785,11 @@ def _typed_terminal_outcome(
                 )
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
+            )
+        surgery_count = _source_row_count(materials, "surgery_record")
+        if surgery_count is not None and surgery_count > 1:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "association_failed", "program"
             )
 
         if "rescue_record" not in _typed_binding_source_keys(rule_id):
@@ -792,8 +860,17 @@ def _typed_terminal_outcome(
             "surgeons": sorted(surgeons),
             "discussion_participants": sorted(discussion_participants),
             "matched_surgeons": sorted(matched_surgeons),
+            "performed_surgery_confirmed": True,
+            "emergency_rescue_exception_absent": True,
+            "discussion_state": "present",
+            "surgeon_participation_state": (
+                "confirmed" if matched_surgeons else "absent"
+            ),
         }
         if matched_surgeons:
+            identity_facts["verification_kind"] = (
+                "preop_discussion_surgeon_participation_confirmed"
+            )
             return _SurgeryDocumentOutcome(
                 rule_id,
                 "compliant",
@@ -838,6 +915,11 @@ def _typed_terminal_outcome(
         return _SurgeryDocumentOutcome(
             rule_id, "data_gap", "performed_anesthesia_fact_unavailable", "program"
         )
+    anesthesia_count = _source_row_count(materials, "anesthesia_record")
+    if anesthesia_count is not None and anesthesia_count > 1:
+        return _SurgeryDocumentOutcome(
+            rule_id, "data_gap", "association_failed", "program"
+        )
     is_local = anesthesia_method in _LOCAL_ANESTHESIA_VALUES
     if rule_id in {"LX0609-036", "LX0609-037", "LX0609-038"} and is_local:
         return _SurgeryDocumentOutcome(
@@ -874,8 +956,72 @@ def _typed_terminal_outcome(
                 "program",
                 facts,
             )
+        consent_rows = _anesthesia_consent_rows(materials)
+        if consent_rows is None:
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "required_field_missing", "program"
+            )
+        if not consent_rows:
+            if rule_id == "LX0609-035":
+                return _SurgeryDocumentOutcome(
+                    rule_id, "not_applicable", "anesthesia_consent_absent", "program"
+                )
+            return _SurgeryDocumentOutcome(
+                rule_id,
+                "non_compliant",
+                "anesthesia_consent_missing",
+                "program",
+                {
+                    "failure_kind": "anesthesia_consent_missing",
+                    "performed_anesthesia_confirmed": True,
+                    "consent_state": "missing",
+                    "checked_sources": ["consent_form"],
+                },
+            )
+        if rule_id == "LX0609-034":
+            return _SurgeryDocumentOutcome(
+                rule_id,
+                "compliant",
+                "anesthesia_consent_present",
+                "program",
+                {
+                    "verification_kind": "anesthesia_consent_present",
+                    "performed_anesthesia_confirmed": True,
+                    "checked_sources": ["consent_form"],
+                },
+            )
+        completeness, missing_fields = _anesthesia_consent_completeness(consent_rows)
+        if completeness == "association_failed":
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "association_failed", "program"
+            )
+        if completeness == "complete":
+            return _SurgeryDocumentOutcome(
+                rule_id,
+                "compliant",
+                "anesthesia_consent_complete",
+                "program",
+                {
+                    "verification_kind": "anesthesia_consent_complete",
+                    "performed_anesthesia_confirmed": True,
+                    "checked_fields": [
+                        "patient_signature",
+                        "physician_signature",
+                        "patient_signature_time",
+                        "physician_signature_time",
+                    ],
+                },
+            )
         return _SurgeryDocumentOutcome(
-            rule_id, "data_gap", "consent_semantics_unresolved", "program"
+            rule_id,
+            "non_compliant",
+            "anesthesia_consent_incomplete",
+            "program",
+            {
+                "failure_kind": "anesthesia_consent_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields": missing_fields,
+            },
         )
 
     if rule_id in _ANESTHESIA_VISIT_RULE_IDS:
@@ -923,7 +1069,15 @@ def _typed_terminal_outcome(
             )
         if rule_id == "LX0609-036":
             return _SurgeryDocumentOutcome(
-                rule_id, "compliant", "anesthesia_visits_present", "program"
+                rule_id,
+                "compliant",
+                "anesthesia_visits_present",
+                "program",
+                {
+                    "verification_kind": "anesthesia_visits_present",
+                    "performed_anesthesia_confirmed": True,
+                    "checked_sources": list(typed_visit_sources),
+                },
             )
         return _SurgeryDocumentOutcome(
             rule_id, "data_gap", "anesthesia_visit_semantics_unresolved", "program"
@@ -933,7 +1087,15 @@ def _typed_terminal_outcome(
     anesthesia_record_state = _typed_observation_state(snapshot, "anesthesia_record")
     if anesthesia_record_state == "available":
         return _SurgeryDocumentOutcome(
-            rule_id, "compliant", "anesthesia_record_present", "program"
+            rule_id,
+            "compliant",
+            "anesthesia_record_present",
+            "program",
+            {
+                "verification_kind": "anesthesia_record_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            },
         )
     if (
         anesthesia_record_state == "empty"
@@ -942,7 +1104,15 @@ def _typed_terminal_outcome(
         and not is_local
     ):
         return _SurgeryDocumentOutcome(
-            rule_id, "non_compliant", "anesthesia_record_missing", "program"
+            rule_id,
+            "non_compliant",
+            "anesthesia_record_missing",
+            "program",
+            {
+                "failure_kind": "anesthesia_record_missing",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            },
         )
     if anesthesia_record_state == "empty":
         return _SurgeryDocumentOutcome(
@@ -992,6 +1162,14 @@ async def _typed_029_outcome(
             outcome,
             0, 0, 0, 0, 0.0,
         )
+    surgery_count = _source_row_count(materials, "surgery_record")
+    if surgery_count is not None and surgery_count > 1:
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "association_failed", "program"
+            ),
+            0, 0, 0, 0, 0.0,
+        )
     target_gate = _typed_source_gate(
         rule_id="LX0609-029", source_key="presurg_summary", snapshot=snapshot
     )
@@ -1023,7 +1201,15 @@ async def _typed_029_outcome(
     if any(_clean_presurg_body(row.get("record_content")) for row in summary_rows):
         return (
             _SurgeryDocumentOutcome(
-                "LX0609-029", "compliant", "preop_summary_present", "program"
+                "LX0609-029",
+                "compliant",
+                "preop_summary_present",
+                "program",
+                {
+                    "verification_kind": "surgery_document_present",
+                    "target_document": "presurg_summary",
+                    "performed_surgery_confirmed": True,
+                },
             ),
             0, 0, 0, 0, 0.0,
         )
@@ -1312,11 +1498,16 @@ async def execute_luxian_0609_native_surgery_document_rules(
                 completion_tokens += completion
                 total_tokens += total
                 api_time += elapsed
-                if outcome.status == "non_compliant":
+                if (
+                    outcome.status == "non_compliant"
+                    or outcome.customer_display_facts is not None
+                ):
                     customer_display_facts.append(
                         (
                             rule_id,
-                            {
+                            outcome.customer_display_facts
+                            if outcome.status == "compliant"
+                            else {
                                 "failure_kind": (
                                     "surgery_document_blank"
                                     if outcome.reason_code == "preop_summary_blank"
@@ -1334,8 +1525,7 @@ async def execute_luxian_0609_native_surgery_document_rules(
                     materials=evidence_materials,
                 )
                 if (
-                    outcome.status == "non_compliant"
-                    and outcome.customer_display_facts is not None
+                    outcome.customer_display_facts is not None
                 ):
                     customer_display_facts.append(
                         (rule_id, outcome.customer_display_facts)

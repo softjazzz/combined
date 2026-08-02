@@ -750,4 +750,85 @@ describe('normalizeCustomerQcResult', () => {
 
     expect(result.decisionStatus).toBe('evaluation_unknown')
   })
+
+  it('展示手术记录24小时内完成的实际时间事实', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-003',
+      status: 'compliant',
+      customer_display_facts: {
+        failure_kind: 'surgery_record_within_threshold',
+        performed_surgery_confirmed: true,
+        surgery_end_time: '2026-07-30 10:00:00',
+        record_time: '2026-07-30 12:30:00',
+        elapsed_hours: 2.5,
+        threshold_hours: 24,
+        source_label: '手术记录',
+      },
+    })
+
+    expect(result.display.summary).toContain('间隔2.50小时，未超过术后24小时要求')
+  })
+
+  it('为手术安全核查表合规结果说明已找到目标文书', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-032',
+      status: 'compliant',
+      customer_display_facts: {
+        verification_kind: 'surgery_document_present',
+        target_document: 'surgery_safecheck_record',
+        performed_surgery_confirmed: true,
+      },
+    })
+
+    expect(result.display.summary).toContain('已找到可用的手术安全核查记录')
+  })
+
+  it('为麻醉同意书列出具体缺失签名和分钟级时间', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-035',
+      status: 'non_compliant',
+      customer_display_facts: {
+        failure_kind: 'anesthesia_consent_incomplete',
+        performed_anesthesia_confirmed: true,
+        missing_fields: ['physician_signature', 'physician_signature_time'],
+      },
+    })
+
+    expect(result.display.summary).toContain('医师签名、医师签署时间（精确到分钟）')
+  })
+
+  it('说明第一助手书写但术者签名的031例外', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-031',
+      status: 'compliant',
+      customer_display_facts: {
+        verification_kind: 'surgery_signature_confirmed',
+        performed_surgery_confirmed: true,
+        surgeon_signature_matches: true,
+        first_assistant_exception_used: true,
+      },
+    })
+
+    expect(result.display.summary).toBe('手术记录由第一助手书写，且已由本次手术术者签名确认。')
+  })
+
+  it('展示040的手术编码、院内优先分级和MDT结论', () => {
+    const result = normalizeCustomerQcResult({
+      rule_id: 'LX0609-040',
+      status: 'compliant',
+      customer_display_facts: {
+        performed_surgery_confirmed: true,
+        procedure_kind: 'surgery',
+        procedure_code: '01.2408',
+        procedure_name: '颅内血肿清除术',
+        effective_surgery_level: '四级',
+        surgery_level_source: 'hospital_performance',
+        mdt_discussion_state: 'completed',
+      },
+    })
+
+    expect(result.display.summary).toContain('01.2408 颅内血肿清除术')
+    expect(result.display.summary).toContain('院内绩效分配目录')
+    expect(result.display.summary).toContain('术前多学科讨论已完成')
+  })
 })

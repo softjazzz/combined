@@ -132,6 +132,64 @@ def test_task4_consultation_display_fact_contracts_are_preserved(rule_id, facts)
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
+            "LX0609-003",
+            {
+                "failure_kind": "surgery_record_within_threshold",
+                "performed_surgery_confirmed": True,
+                "surgery_end_time": "2026-07-30 10:00:00",
+                "record_time": "2026-07-30 12:30:00",
+                "elapsed_hours": 2.5,
+                "threshold_hours": 24,
+                "source_label": "手术记录",
+            },
+        ),
+        (
+            "LX0609-031",
+            {
+                "verification_kind": "surgery_signature_confirmed",
+                "performed_surgery_confirmed": True,
+                "surgeon_signature_matches": True,
+                "first_assistant_exception_used": True,
+            },
+        ),
+        (
+            "LX0609-035",
+            {
+                "failure_kind": "anesthesia_consent_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields": ["physician_signature", "physician_signature_time"],
+            },
+        ),
+        (
+            "LX0609-038",
+            {
+                "verification_kind": "anesthesia_record_present",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": ["anesthesia_record"],
+            },
+        ),
+        (
+            "LX0609-040",
+            {
+                "performed_surgery_confirmed": True,
+                "procedure_kind": "surgery",
+                "effective_surgery_level": "四级",
+                "surgery_level_source": "hospital_performance",
+                "mdt_discussion_state": "completed",
+                "procedure_code": "01.2408",
+                "procedure_name": "颅内血肿清除术",
+            },
+        ),
+    ],
+)
+def test_task5_surgery_display_fact_contracts_are_preserved(rule_id, facts):
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+
+
 def _reduced_decision(
     rule_id: str,
     *,
