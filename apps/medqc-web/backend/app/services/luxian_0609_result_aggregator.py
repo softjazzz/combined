@@ -2327,33 +2327,144 @@ def safe_luxian_0609_customer_display_facts(
                 return None
             facts["missing_signature_roles"] = safe_roles
         return facts
+    if rule_id == "LX0609-007":
+        failure_kind = raw.get("failure_kind")
+        if failure_kind == "unstable_patient_order_present":
+            return (
+                {
+                    "failure_kind": failure_kind,
+                    "stable_course_rule_applicable": False,
+                }
+                if raw.get("stable_course_rule_applicable") is False
+                else None
+            )
+        recorded_dates = raw.get("recorded_dates")
+        interval_hours = raw.get("interval_hours")
+        if (
+            failure_kind
+            not in {
+                "course_record_interval_over_72h",
+                "course_record_interval_within_72h",
+            }
+            or raw.get("interval_start_source")
+            not in {"daily_course_record", "senior_course_record"}
+            or raw.get("interval_end_source")
+            not in {"daily_course_record", "senior_course_record"}
+            or not all(
+                isinstance(raw.get(key), str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", raw[key])
+                for key in ("interval_start_time", "interval_end_time")
+            )
+            or not isinstance(interval_hours, (int, float))
+            or raw.get("threshold_hours") != 72
+            or not isinstance(recorded_dates, list)
+            or len(recorded_dates) < 2
+            or len(recorded_dates) > 64
+            or not all(
+                isinstance(value, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                for value in recorded_dates
+            )
+            or (
+                failure_kind == "course_record_interval_over_72h"
+                and float(interval_hours) <= 72
+            )
+            or (
+                failure_kind == "course_record_interval_within_72h"
+                and float(interval_hours) > 72
+            )
+        ):
+            return None
+        return {
+            "failure_kind": failure_kind,
+            "interval_start_source": raw["interval_start_source"],
+            "interval_end_source": raw["interval_end_source"],
+            "interval_start_time": raw["interval_start_time"],
+            "interval_end_time": raw["interval_end_time"],
+            "interval_hours": round(float(interval_hours), 2),
+            "threshold_hours": 72,
+            "recorded_dates": list(recorded_dates),
+        }
     if rule_id == "LX0609-008":
+        failure_kind = raw.get("failure_kind")
         allowed = {
-            "failure_kind": "severity_course_gap_exceeded",
+            "failure_kind": failure_kind,
             "severity": "serious",
             "threshold_days": 2,
         }
+        if failure_kind not in {
+            "severity_course_gap_exceeded",
+            "severity_course_interval_satisfied",
+        }:
+            return None
         dates = {
-            key: raw.get(key)
-            for key in ("anchor_date", "horizon_date", "gap_start_date", "gap_end_date")
+            key: raw.get(key) for key in ("anchor_date", "horizon_date")
         }
+        recorded_dates = raw.get("recorded_dates")
         gap_days = raw.get("gap_days")
         if (
             any(raw.get(key) != value for key, value in allowed.items())
             or not all(isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in dates.values())
-            or not isinstance(gap_days, int)
-            or gap_days <= 2
+            or (
+                recorded_dates is not None
+                and (
+                    not isinstance(recorded_dates, list)
+                    or len(recorded_dates) > 64
+                    or not all(
+                        isinstance(value, str)
+                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                        for value in recorded_dates
+                    )
+                )
+            )
         ):
             return None
-        return {**allowed, **dates, "gap_days": gap_days}
+        if failure_kind == "severity_course_gap_exceeded":
+            gap_dates = {
+                key: raw.get(key) for key in ("gap_start_date", "gap_end_date")
+            }
+            if (
+                not all(
+                    isinstance(value, str)
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                    for value in gap_dates.values()
+                )
+                or not isinstance(gap_days, int)
+                or gap_days <= 2
+            ):
+                return None
+            facts = {
+                **allowed,
+                **dates,
+                **gap_dates,
+                "gap_days": gap_days,
+            }
+            if isinstance(recorded_dates, list):
+                facts["recorded_dates"] = list(recorded_dates)
+            return facts
+        maximum_gap_days = raw.get("maximum_gap_days")
+        if not isinstance(maximum_gap_days, int) or not 0 <= maximum_gap_days <= 2:
+            return None
+        return {
+            **allowed,
+            **dates,
+            "maximum_gap_days": maximum_gap_days,
+            "recorded_dates": list(recorded_dates),
+        }
     if rule_id == "LX0609-009":
+        scope_valid = (
+            raw.get("evaluated_scope") == "critical_daily_course_coverage"
+            and raw.get("pending_scope")
+            == ["condition_change_course_documentation"]
+        )
         if raw.get("failure_kind") == "critical_daily_record_coverage_satisfied":
             required_dates = raw.get("required_dates")
             covered_dates = raw.get("covered_dates")
             anchor_date = raw.get("anchor_date")
             horizon_date = raw.get("horizon_date")
             if (
-                raw.get("severity") != "critical"
+                not scope_valid
+                or raw.get("severity") != "critical"
                 or raw.get("missing_count") != 0
                 or not isinstance(required_dates, list)
                 or not required_dates
@@ -2373,6 +2484,8 @@ def safe_luxian_0609_customer_display_facts(
             return {
                 "failure_kind": "critical_daily_record_coverage_satisfied",
                 "severity": "critical",
+                "evaluated_scope": "critical_daily_course_coverage",
+                "pending_scope": ["condition_change_course_documentation"],
                 "anchor_date": anchor_date,
                 "horizon_date": horizon_date,
                 "required_dates": list(required_dates),
@@ -2380,12 +2493,23 @@ def safe_luxian_0609_customer_display_facts(
                 "missing_count": 0,
             }
         missing_dates = raw.get("missing_dates")
+        required_dates = raw.get("required_dates")
+        covered_dates = raw.get("covered_dates")
         missing_count = raw.get("missing_count")
         first_date = raw.get("missing_first_date")
         last_date = raw.get("missing_last_date")
         if (
-            raw.get("failure_kind") != "critical_daily_record_missing"
+            not scope_valid
+            or raw.get("failure_kind") != "critical_daily_record_missing"
             or raw.get("severity") != "critical"
+            or not isinstance(required_dates, list)
+            or not isinstance(covered_dates, list)
+            or not all(
+                isinstance(value, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                for value in (*required_dates, *covered_dates)
+            )
+            or not set(covered_dates).issubset(set(required_dates))
             or not isinstance(missing_dates, list)
             or not missing_dates
             or len(missing_dates) > 7
@@ -2401,6 +2525,10 @@ def safe_luxian_0609_customer_display_facts(
         facts = {
             "failure_kind": "critical_daily_record_missing",
             "severity": "critical",
+            "evaluated_scope": "critical_daily_course_coverage",
+            "pending_scope": ["condition_change_course_documentation"],
+            "required_dates": list(required_dates),
+            "covered_dates": list(covered_dates),
             "missing_dates": list(missing_dates),
             "missing_count": missing_count,
             "missing_first_date": first_date,
@@ -2512,22 +2640,31 @@ def safe_luxian_0609_customer_display_facts(
         }
     if rule_id == "LX0609-016":
         similarity = raw.get("copy_similarity")
-        threshold = raw.get("copy_similarity_threshold")
+        relation = raw.get("copy_relation")
         sections = raw.get("compared_sections")
         source_document_ids = raw.get("source_document_ids")
+        failure_kind = raw.get("failure_kind")
         if (
-            raw.get("failure_kind") != "admission_first_course_copy_detected"
+            failure_kind
+            not in {
+                "admission_first_course_copy_detected",
+                "admission_first_course_not_identical",
+            }
             or not isinstance(similarity, (int, float))
-            or not isinstance(threshold, (int, float))
-            or float(similarity) <= float(threshold)
+            or not 0 <= float(similarity) <= 1
+            or relation
+            not in {"completely_identical", "not_completely_identical"}
+            or (relation == "completely_identical") != (float(similarity) == 1.0)
+            or (failure_kind == "admission_first_course_copy_detected")
+            != (relation == "completely_identical")
             or sections != ["入院记录现病史", "首次病程记录病例特点"]
             or not isinstance(source_document_ids, list)
         ):
             return None
         return {
-            "failure_kind": "admission_first_course_copy_detected",
+            "failure_kind": failure_kind,
             "copy_similarity": round(float(similarity), 4),
-            "copy_similarity_threshold": round(float(threshold), 4),
+            "copy_relation": relation,
             "compared_sections": list(sections),
             "source_document_ids": [
                 value
@@ -2602,13 +2739,14 @@ def safe_luxian_0609_customer_display_facts(
         if isinstance(elapsed_hours, (int, float)) and elapsed_hours >= 0:
             normalized_elapsed = round(float(elapsed_hours), 2)
             facts["elapsed_hours"] = normalized_elapsed
-            if (
-                rule_id == "LX0609-002"
-                and state == "late"
-                and float(elapsed_hours) > threshold
-            ):
+            if state == "late" and float(elapsed_hours) > threshold:
                 facts["overdue_hours"] = round(
                     float(elapsed_hours) - threshold,
+                    2,
+                )
+            elif state == "within":
+                facts["remaining_hours"] = round(
+                    max(0.0, threshold - float(elapsed_hours)),
                     2,
                 )
         return facts

@@ -186,6 +186,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-01 08:00:00",
                 "elapsed_hours": 0.0,
+                "remaining_hours": 24.0,
                 "source_document_id": "safe-admission-ref",
             },
         ),
@@ -200,6 +201,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-02 08:00:00",
                 "elapsed_hours": 24.0,
+                "remaining_hours": 24.0,
                 "source_document_id": "safe-attending-ref",
             },
         ),
@@ -214,6 +216,7 @@ def test_001_005_006_emit_snapshot_bound_python_decisions_from_one_admission_anc
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-03 08:00:00",
                 "elapsed_hours": 48.0,
+                "remaining_hours": 24.0,
                 "source_document_id": "safe-senior-ref",
             },
         ),
@@ -254,6 +257,7 @@ def test_001_compliant_keeps_time_facts_without_guessing_a_missing_document_id()
                 "anchor_time": "2026-06-01 08:00:00",
                 "observed_time": "2026-06-01 10:00:00",
                 "elapsed_hours": 2.0,
+                "remaining_hours": 22.0,
             },
         ),
     )
@@ -673,6 +677,7 @@ def test_002_compliant_result_exposes_actual_interval_and_source_document():
         "anchor_time": "2026-06-01 08:00:00",
         "observed_time": "2026-06-01 10:30:00",
         "elapsed_hours": 2.5,
+        "remaining_hours": 5.5,
         "source_document_id": "first-course-safe-ref",
     }
 
@@ -801,6 +806,7 @@ def test_004_compliant_result_projects_worst_rescue_interval() -> None:
         "anchor_time": "2026-06-02 10:00:00",
         "observed_time": "2026-06-02 15:30:00",
         "elapsed_hours": 5.5,
+        "remaining_hours": 0.5,
         "source_document_id": "rescue-worst",
     }
 

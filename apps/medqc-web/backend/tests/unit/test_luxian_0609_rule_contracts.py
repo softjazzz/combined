@@ -57,8 +57,12 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert complaint_rule.phase_status == "phase_1_target"
     assert complaint_rule.active_criteria == ()
     assert complaint_rule.pending_criteria == ()
-    assert complaint_rule.decision_authority == "program_only"
-    assert complaint_rule.max_llm_calls_per_rule == 0
+    assert complaint_rule.decision_authority == "program_then_optional_llm"
+    assert complaint_rule.max_llm_calls_per_rule == 1
+
+    copy_rule = contracts["LX0609-016"]
+    assert copy_rule.decision_authority == "program_only"
+    assert copy_rule.max_llm_calls_per_rule == 0
 
     exam_course = contracts["LX0609-010"]
     assert exam_course.phase_status == "pending_definition"
@@ -100,8 +104,8 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-007",
         "LX0609-008",
         "LX0609-009",
+        "LX0609-016",
         "LX0609-017",
-        "LX0609-018",
         "LX0609-026",
         "LX0609-031",
         "LX0609-034",

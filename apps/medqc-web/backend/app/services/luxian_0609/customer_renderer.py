@@ -97,7 +97,24 @@ _DATA_GAP_MESSAGES = {
         "请核对相关诊疗记录后重新评估。",
     ),
 }
+_RULE_MISSING_ITEM_LABELS = {
+    "LX0609-001": ("入院时间或入院记录时间",),
+    "LX0609-002": ("入院时间、首次病程记录时间或有效正文",),
+    "LX0609-004": ("抢救结束时间或抢救记录时间",),
+    "LX0609-005": ("入院时间或主治医师首次查房时间",),
+    "LX0609-006": ("入院时间或副主任医师及以上首次查房时间",),
+    "LX0609-007": ("病情稳定期间查房记录时间",),
+    "LX0609-008": ("病重医嘱时间、核对截止日期或查房记录时间",),
+    "LX0609-009": ("病危医嘱时间、核对截止日期或每日病程记录",),
+    "LX0609-016": ("入院记录现病史或首次病程记录病例特点",),
+    "LX0609-018": ("主诉或入院第一诊断",),
+}
 _RULE_DATA_GAP_MESSAGES = {
+    "LX0609-016": (
+        "暂无法比较入院记录现病史与首次病程记录病例特点",
+        "当前缺少可结构化读取的入院记录现病史或首次病程记录病例特点。",
+        "请确认两段结构化内容已完整同步后重新评估。",
+    ),
     "LX0609-011": (
         "暂无法核对 CT/MRI 报告后 24 小时内是否记录病程",
         "当前缺少可关联的检查报告时间、报告类型或报告后病程记录。",
@@ -216,8 +233,8 @@ _RULE_DATA_GAP_MESSAGES = {
 }
 _RULE_NON_COMPLIANT_MESSAGES = {
     "LX0609-016": (
-        "入院记录与首次病程记录存在高度重复",
-        "入院记录现病史与首次病程记录病例特点的相似度超过 70% 判定标准。",
+        "入院记录现病史与首次病程记录病例特点完全相同",
+        "已按受控结构化段落逐字规范化比较，两段内容完全相同。",
         "请结合首次病程记录要求，补充病例特点的归纳、分析和诊疗思路。",
     ),
     "LX0609-023": (
@@ -344,7 +361,7 @@ _RULE_COMPLIANT_FINDINGS = {
     "LX0609-013": "已确认病理检查结果已在手术记录或病程中记录。",
     "LX0609-014": "已确认细菌培养结果在报告后 24 小时内记入病程。",
     "LX0609-015": "已确认细菌培养阳性结果在报告后 24 小时内完成分析记录。",
-    "LX0609-016": "已核对入院记录与首次病程记录，重复程度未达到不合理复制判定标准。",
+    "LX0609-016": "已核对入院记录现病史与首次病程记录病例特点，两段内容并非完全相同。",
     "LX0609-017": "已核对病程记录，未发现相似度超过 70% 的重复记录。",
     "LX0609-018": "已确认主诉长度及诊断指向符合书写要求。",
     "LX0609-019": "已确认病理取材情况已在手术记录或病程中记录。",
@@ -458,6 +475,13 @@ def _unknown_criterion_labels(decision: ReducedRuleDecision) -> tuple[str, ...]:
         and item.criterion_id in labels_by_id
     )
 
+
+def _missing_item_labels(decision: ReducedRuleDecision) -> tuple[str, ...]:
+    return _unknown_criterion_labels(decision) or _RULE_MISSING_ITEM_LABELS.get(
+        decision.rule_id,
+        (),
+    )
+
 SafeTraceSink = Callable[[Mapping[str, Any]], None]
 
 
@@ -533,7 +557,7 @@ def render_luxian_0609_customer_result(
     elif decision.final_state is CustomerFinalState.DATA_GAP:
         controlled_gap = customer_gap_message(
             decision.reason_code,
-            missing_items=_unknown_criterion_labels(decision),
+            missing_items=_missing_item_labels(decision),
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
         if controlled_gap is not None:

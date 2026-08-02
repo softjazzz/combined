@@ -124,10 +124,10 @@ def _criterion_results_match_decision(decision: RuleDecision) -> bool:
         if decision.qc_direction is QcDirection.SATISFIED:
             return all(status is CriterionStatus.PASSED for status in statuses)
         if decision.qc_direction is QcDirection.DEFECT:
-            return (
-                CriterionStatus.FAILED in statuses
-                and CriterionStatus.UNKNOWN not in statuses
-            )
+            # “任一子项失败即不合规”的规则中，一个已证实失败的子项足以
+            # 形成缺陷；其余子项仍可如实保留 unknown，不能反过来把已证实
+            # 的问题降成数据不足。
+            return CriterionStatus.FAILED in statuses
     if decision.evidence_state in {EvidenceState.DATA_GAP, EvidenceState.CONFLICT}:
         return (
             CriterionStatus.FAILED not in statuses

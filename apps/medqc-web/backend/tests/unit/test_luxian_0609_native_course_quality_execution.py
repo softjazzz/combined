@@ -882,8 +882,25 @@ async def test_course_007_typed_truth_table_is_python_only_and_fail_closed(
             "interval_end_time": "2026-01-05 09:00:01",
             "interval_hours": 96.0,
             "threshold_hours": 72,
+            "recorded_dates": ["2026-01-01", "2026-01-05"],
         }),)
         assert "首次查房" not in repr(result.customer_display_facts)
+    elif scenario == "submit_time":
+        assert result.customer_display_facts == (("LX0609-007", {
+            "failure_kind": "course_record_interval_within_72h",
+            "interval_start_source": "daily_course_record",
+            "interval_end_source": "daily_course_record",
+            "interval_start_time": "2026-01-01 09:00:00",
+            "interval_end_time": "2026-01-02 09:00:00",
+            "interval_hours": 24.0,
+            "threshold_hours": 72,
+            "recorded_dates": ["2026-01-01", "2026-01-02"],
+        }),)
+    elif scenario == "unstable":
+        assert result.customer_display_facts == (("LX0609-007", {
+            "failure_kind": "unstable_patient_order_present",
+            "stable_course_rule_applicable": False,
+        }),)
     else:
         assert result.customer_display_facts == ()
 
@@ -1086,6 +1103,8 @@ async def test_2496813_009_daily_frequency_and_semantics_are_both_compliant():
     assert dict(result.customer_display_facts)["LX0609-009"] == {
         "failure_kind": "critical_daily_record_coverage_satisfied",
         "severity": "critical",
+        "evaluated_scope": "critical_daily_course_coverage",
+        "pending_scope": ["condition_change_course_documentation"],
         "anchor_date": "2026-07-07",
         "horizon_date": "2026-07-13",
         "required_dates": [
@@ -1347,6 +1366,7 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
             "gap_end_date": "2026-01-04",
             "gap_days": 3,
             "threshold_days": 2,
+            "recorded_dates": ["2026-01-04"],
         },
     )
 
@@ -1369,8 +1389,12 @@ async def test_course_008_009_emit_only_safe_missing_interval_facts() -> None:
         {
             "failure_kind": "critical_daily_record_missing",
             "severity": "critical",
+            "evaluated_scope": "critical_daily_course_coverage",
+            "pending_scope": ["condition_change_course_documentation"],
             "anchor_date": "2026-01-01",
             "horizon_date": "2026-01-03",
+            "required_dates": ["2026-01-01", "2026-01-02", "2026-01-03"],
+            "covered_dates": ["2026-01-01", "2026-01-03"],
             "missing_dates": ["2026-01-02"],
             "missing_count": 1,
             "missing_first_date": "2026-01-02",
@@ -2326,12 +2350,12 @@ async def test_016_requires_two_comparable_documents_before_model():
         ),
         llm_client=client,
     )
-    assert [item["status"] for item in complete.results] == ["non_compliant"]
-    assert complete.llm_call_count == 1
+    assert [item["status"] for item in complete.results] == ["data_gap"]
+    assert complete.llm_call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_2496813_016_structured_history_copy_is_non_compliant_without_model():
+async def test_2496813_016_contained_history_is_not_treated_as_complete_copy():
     history = (
         "患者于1小时前骑电动车不慎侧滑，摔倒致头面部外伤、持续出血、"
         "呼唤无反应，伴肢体不自主抖动、小便失禁。"
@@ -2389,8 +2413,8 @@ async def test_2496813_016_structured_history_copy_is_non_compliant_without_mode
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
-    assert reduced[0].reason_code == "requirement_violated"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -2542,18 +2566,12 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         row_reader=read,
     )
     client = _Client(
-        [
-            {"is_compliant": False},
-            {
-                "diagnostic_relation_state": "supported",
-                "diagnostic_reason_dimensions": [
-                    "anatomic_site",
-                    "symptom_pattern",
-                ],
-                "diagnostic_rationale_code": "supported",
-                "medical_analysis": "主诉与第一诊断方向一致。",
-            },
-        ]
+        [{
+            "diagnostic_relation_state": "supported",
+            "diagnostic_reason_dimensions": ["anatomic_site", "symptom_pattern"],
+            "diagnostic_rationale_code": "supported",
+            "medical_analysis": "主诉与第一诊断方向一致。",
+        }]
     )
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-016", "LX0609-018"),
@@ -2576,7 +2594,7 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         snapshot=session.snapshot,
     )
     assert [item.final_state.value for item in reduced] == [
-        "non_compliant",
+        "data_gap",
         "compliant",
     ]
     assert all(item.fact_refs for item in reduced)
@@ -2674,11 +2692,11 @@ async def test_typed_018_preserves_source_state_without_model(
 @pytest.mark.parametrize(
     ("complaint", "expected_state", "expected_criterion_state"),
     (
-        ("胸痛" * 10, CustomerFinalState.COMPLIANT, "passed"),
+        ("胸痛" * 10, CustomerFinalState.DATA_GAP, "passed"),
         ("胸痛" * 10 + "加", CustomerFinalState.NON_COMPLIANT, "failed"),
     ),
 )
-async def test_typed_018_only_executes_approved_length_criterion_without_model(
+async def test_typed_018_reports_length_and_missing_diagnosis_as_separate_criteria(
     complaint: str,
     expected_state: CustomerFinalState,
     expected_criterion_state: str,
@@ -2733,9 +2751,11 @@ async def test_typed_018_only_executes_approved_length_criterion_without_model(
 
     assert reduced[0].final_state is expected_state
     assert [item.criterion_id for item in reduced[0].criterion_results] == [
-        "chief_complaint_length"
+        "chief_complaint_length",
+        "diagnostic_direction",
     ]
     assert reduced[0].criterion_results[0].status.value == expected_criterion_state
+    assert reduced[0].criterion_results[1].status.value == "unknown"
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -2804,12 +2824,12 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
 
     assert raw.results[0]["status"] == reduced[0].final_state.value
     assert typed.results == ()
-    assert typed.llm_call_count == raw.llm_call_count == 0
-    assert typed.total_tokens == raw.total_tokens == 0
+    assert typed.llm_call_count == raw.llm_call_count == 1
+    assert typed.total_tokens == raw.total_tokens == 45
 
 
 @pytest.mark.asyncio
-async def test_typed_018_pending_diagnosis_material_does_not_affect_active_length():
+async def test_typed_018_uses_controlled_primary_diagnosis_for_direction():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复腹痛2个月。现病史与既往诊疗经过记录完整。")
@@ -2865,14 +2885,14 @@ async def test_typed_018_pending_diagnosis_material_does_not_affect_active_lengt
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert typed.llm_call_count == 1
+    assert "结肠恶性肿瘤" in client.prompts[0]
     assert "结肠恶性肿瘤" not in repr(typed)
 
 
 @pytest.mark.asyncio
-async def test_typed_018_does_not_execute_pending_numbered_diagnosis_criterion():
+async def test_typed_018_uses_first_item_of_numbered_diagnosis():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复腰腹部疼痛伴尿频1月。现病史与诊疗经过记录完整。")
@@ -2903,7 +2923,11 @@ async def test_typed_018_does_not_execute_pending_numbered_diagnosis_criterion()
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["anatomic_site"],
+        "diagnostic_rationale_code": "supported",
+    }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
@@ -2914,13 +2938,13 @@ async def test_typed_018_does_not_execute_pending_numbered_diagnosis_criterion()
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert "双侧肾周围炎" in client.prompts[0]
     assert typed.results == ()
 
 
 @pytest.mark.asyncio
-async def test_typed_018_does_not_execute_pending_admission_diagnosis_criterion():
+async def test_typed_018_uses_admission_first_diagnosis_criterion():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复咳嗽咳痰气促10余年，加重伴纳差1天。现病史完整。")
@@ -2957,7 +2981,11 @@ async def test_typed_018_does_not_execute_pending_admission_diagnosis_criterion(
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["symptom_pattern"],
+        "diagnostic_rationale_code": "supported",
+    }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
@@ -2968,8 +2996,8 @@ async def test_typed_018_does_not_execute_pending_admission_diagnosis_criterion(
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert "慢性阻塞性肺病" in client.prompts[0]
     assert typed.results == ()
 
 
@@ -3010,7 +3038,11 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([{"is_compliant": True}])
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["laterality", "anatomic_site"],
+        "diagnostic_rationale_code": "supported",
+    }])
     typed = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         decision_rule_ids=("LX0609-018",),
@@ -3021,24 +3053,13 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert "左侧膝关节骨性关节病" in client.prompts[0]
     assert typed.results == ()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("model_output", "expected_reason", "expected_tokens"),
-    (
-        (RuntimeError("private model transport detail"), "model_transport_error", 0),
-        ("not-json private model output", "model_invalid_output", 45),
-    ),
-)
-async def test_typed_016_model_failures_are_explicit_technical_errors(
-    model_output: object,
-    expected_reason: str,
-    expected_tokens: int,
-):
+async def test_typed_016_missing_structured_sections_is_data_gap_without_model():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。现病史完整。")
@@ -3071,7 +3092,7 @@ async def test_typed_016_model_failures_are_explicit_technical_errors(
         decision_rule_ids=("LX0609-016",),
         wrapper_rules=[_wrapper("LX0609-016")],
         evidence_payload=None,
-        llm_client=_Client([model_output]),
+        llm_client=_Client([RuntimeError("must not call model")]),
         evidence_snapshot=session.snapshot,
         evidence_materials=session.materials,
     )
@@ -3081,10 +3102,10 @@ async def test_typed_016_model_failures_are_explicit_technical_errors(
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
-    assert reduced[0].reason_code == expected_reason
-    assert typed.total_tokens == expected_tokens
-    assert "private model" not in repr(typed)
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "required_field_missing"
+    assert typed.llm_call_count == 0
+    assert typed.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -4068,7 +4089,7 @@ async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_018_active_length_only_requires_complaint_material():
+async def test_018_requires_complaint_and_primary_diagnosis_material():
     client = _Client([])
     incomplete = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
@@ -4078,7 +4099,7 @@ async def test_018_active_length_only_requires_complaint_material():
         ),
         llm_client=client,
     )
-    assert [item["status"] for item in incomplete.results] == ["compliant"]
+    assert [item["status"] for item in incomplete.results] == ["data_gap"]
     assert incomplete.llm_call_count == 0
 
     client = _Client(
@@ -4103,8 +4124,8 @@ async def test_018_active_length_only_requires_complaint_material():
         llm_client=client,
     )
     assert [item["status"] for item in complete.results] == ["compliant"]
-    assert complete.llm_call_count == 0
-    assert client.prompts == []
+    assert complete.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -4137,12 +4158,13 @@ async def test_018_returns_safe_criterion_results_without_returning_admission_te
     criteria = item["criterion_results"]
     assert [(row["criterion_id"], row["status"]) for row in criteria] == [
         ("chief_complaint_length", "failed"),
+        ("diagnostic_direction", "failed"),
     ]
     assert criteria[0]["actual_value"] == 21
     assert criteria[0]["expected_value"] == 20
     assert criteria[0]["operator"] == "lte"
     assert complaint not in repr(item)
-    assert client.prompts == []
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -4221,7 +4243,7 @@ async def test_model_failure_and_invalid_json_are_isolated_and_safe():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "compliant",
+        "technical_error",
     ]
     assert result.llm_call_count == 1
     assert secret not in repr(result)

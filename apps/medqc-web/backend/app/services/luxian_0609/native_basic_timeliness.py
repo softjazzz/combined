@@ -532,6 +532,11 @@ def _typed_basic_decisions(
                     elapsed_hours - threshold_hours,
                     2,
                 )
+            elif state == "within" and elapsed_hours >= 0:
+                facts["remaining_hours"] = round(
+                    max(0.0, threshold_hours - elapsed_hours),
+                    2,
+                )
         if source_document_id:
             # 仅供聚合层生成不可逆文书引用；安全投影不得回传该内部 ID。
             facts["source_document_id"] = source_document_id

@@ -160,7 +160,7 @@ _RULE_CONTEXT_SOURCES = {
 
 _RULE_007_MAX_INTERVAL = timedelta(hours=72)
 _RULE_008_MAX_GAP_DAYS = 2
-_RULE_016_COPY_THRESHOLD = 0.70
+_RULE_016_EXACT_MATCH = 1.0
 _RULE_009_TEMPLATE_VALUES = frozenset(
     {"", "模板", "空模板", "待补充", "暂无内容", "无内容", "未填写", "待完善", "null", "none"}
 )
@@ -940,13 +940,19 @@ def _rule_007_customer_display_facts(
     materials: Luxian0609EvidenceMaterialStore,
     decision: RuleDecision,
 ) -> Mapping[str, Any] | None:
-    """为已确认的007超期间隔提供最小、无正文的客户核对事实。"""
+    """为007输出实际查房间隔或不适用门控事实，不返回病历正文。"""
 
+    if decision.rule_id != "LX0609-007":
+        return None
     if (
-        decision.rule_id != "LX0609-007"
-        or decision.reason_code != "threshold_exceeded"
-        or decision.qc_direction is not QcDirection.DEFECT
+        decision.applicability is ApplicabilityState.NOT_APPLICABLE
+        and decision.reason_code == "eligibility_not_met"
     ):
+        return {
+            "failure_kind": "unstable_patient_order_present",
+            "stable_course_rule_applicable": False,
+        }
+    if decision.evidence_state is not EvidenceState.SUFFICIENT:
         return None
     source_by_time: dict[datetime, str] = {}
     try:
@@ -961,19 +967,27 @@ def _rule_007_customer_display_facts(
     except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
         return None
     ordered_times = sorted(source_by_time)
-    for previous, current in zip(ordered_times, ordered_times[1:]):
-        interval = current - previous
-        if interval > _RULE_007_MAX_INTERVAL:
-            return {
-                "failure_kind": "course_record_interval_over_72h",
-                "interval_start_source": source_by_time[previous],
-                "interval_end_source": source_by_time[current],
-                "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
-                "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
-                "interval_hours": round(interval.total_seconds() / 3600, 2),
-                "threshold_hours": 72,
-            }
-    return None
+    intervals = tuple(
+        (current - previous, previous, current)
+        for previous, current in zip(ordered_times, ordered_times[1:])
+    )
+    if not intervals:
+        return None
+    interval, previous, current = max(intervals, key=lambda item: item[0])
+    return {
+        "failure_kind": (
+            "course_record_interval_over_72h"
+            if interval > _RULE_007_MAX_INTERVAL
+            else "course_record_interval_within_72h"
+        ),
+        "interval_start_source": source_by_time[previous],
+        "interval_end_source": source_by_time[current],
+        "interval_start_time": previous.strftime("%Y-%m-%d %H:%M:%S"),
+        "interval_end_time": current.strftime("%Y-%m-%d %H:%M:%S"),
+        "interval_hours": round(interval.total_seconds() / 3600, 2),
+        "threshold_hours": 72,
+        "recorded_dates": [item.date().isoformat() for item in ordered_times],
+    }
 
 
 def _rule_008_009_decision(
@@ -1372,9 +1386,27 @@ def _rule_008_009_decision(
                     "gap_end_date": exceeded_interval[1].isoformat(),
                     "gap_days": (exceeded_interval[1] - exceeded_interval[0]).days,
                     "threshold_days": _RULE_008_MAX_GAP_DAYS,
+                    "recorded_dates": [item.isoformat() for item in ordered_dates],
                 }
                 if exceeded_interval is not None
-                else None
+                else {
+                    "failure_kind": "severity_course_interval_satisfied",
+                    "severity": "serious",
+                    "anchor_date": anchor_date.isoformat(),
+                    "horizon_date": horizon_date.isoformat() if horizon_date else "",
+                    "threshold_days": _RULE_008_MAX_GAP_DAYS,
+                    "recorded_dates": [item.isoformat() for item in ordered_dates],
+                    "maximum_gap_days": max(
+                        (
+                            (current - previous).days
+                            for previous, current in zip(
+                                dates_with_anchor,
+                                dates_with_anchor[1:],
+                            )
+                        ),
+                        default=0,
+                    ),
+                }
             ),
         )
 
@@ -1395,8 +1427,17 @@ def _rule_008_009_decision(
             display_facts={
                 "failure_kind": "critical_daily_record_missing",
                 "severity": "critical",
+                "evaluated_scope": "critical_daily_course_coverage",
+                "pending_scope": ["condition_change_course_documentation"],
                 "anchor_date": anchor_date.isoformat(),
                 "horizon_date": prefix_end.isoformat(),
+                "required_dates": [
+                    item.isoformat() for item in sorted(expected_dates)
+                ],
+                "covered_dates": [
+                    item.isoformat()
+                    for item in sorted(expected_dates.intersection(timed_record_dates))
+                ],
                 "missing_dates": [item.isoformat() for item in missing_dates[:7]],
                 "missing_count": len(missing_dates),
                 "missing_first_date": missing_dates[0].isoformat(),
@@ -1425,6 +1466,8 @@ def _rule_008_009_decision(
         display_facts={
             "failure_kind": "critical_daily_record_coverage_satisfied",
             "severity": "critical",
+            "evaluated_scope": "critical_daily_course_coverage",
+            "pending_scope": ["condition_change_course_documentation"],
             "anchor_date": anchor_date.isoformat(),
             "horizon_date": horizon_date.isoformat(),
             "required_dates": [item.isoformat() for item in sorted(expected_dates)],
@@ -1995,7 +2038,7 @@ def _normalized_for_similarity(content: str) -> str:
 
 
 def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
-    """只用结构化现病史与病例特点计算覆盖率，避免整篇文书误碰撞。"""
+    """只比较结构化现病史与病例特点；1.0仅表示规范化后完全相同。"""
 
     admission_texts = tuple(
         _clean(row.get("history_of_present_illness"))
@@ -2016,19 +2059,14 @@ def _rule_016_copy_coverage(documents: Mapping[str, Any]) -> float | None:
             continue
         for first_course_text in first_course_texts:
             normalized_first = _normalized_for_similarity(first_course_text)
-            shorter_length = min(len(normalized_admission), len(normalized_first))
-            if shorter_length == 0:
+            if not normalized_first:
                 continue
-            matching_length = sum(
-                block.size
-                for block in SequenceMatcher(
-                    None,
-                    normalized_admission,
-                    normalized_first,
-                    autojunk=False,
-                ).get_matching_blocks()
+            maximum = max(
+                maximum,
+                SequenceMatcher(
+                    None, normalized_admission, normalized_first, autojunk=False
+                ).ratio(),
             )
-            maximum = max(maximum, matching_length / shorter_length)
     return maximum
 
 
@@ -2037,7 +2075,7 @@ def _rule_016_customer_display_facts(
     *,
     copy_coverage: float,
 ) -> Mapping[str, Any]:
-    """仅投影比对范围、相似度和可定位文书 ID，不返回病历正文。"""
+    """仅投影比对范围、完全相同结论和可定位文书 ID，不返回正文。"""
 
     source_document_ids = [
         document_id
@@ -2046,9 +2084,17 @@ def _rule_016_customer_display_facts(
         if (document_id := _clean(row.get("document_id")))
     ]
     return {
-        "failure_kind": "admission_first_course_copy_detected",
+        "failure_kind": (
+            "admission_first_course_copy_detected"
+            if copy_coverage >= _RULE_016_EXACT_MATCH
+            else "admission_first_course_not_identical"
+        ),
         "copy_similarity": round(copy_coverage, 4),
-        "copy_similarity_threshold": _RULE_016_COPY_THRESHOLD,
+        "copy_relation": (
+            "completely_identical"
+            if copy_coverage >= _RULE_016_EXACT_MATCH
+            else "not_completely_identical"
+        ),
         "compared_sections": ["入院记录现病史", "首次病程记录病例特点"],
         "source_document_ids": list(dict.fromkeys(source_document_ids)),
     }
@@ -2102,27 +2148,14 @@ class _CourseSemanticOutcome:
     criterion_results: tuple[CriterionResult, ...] = ()
 
 
-def _lx018_active_length_outcome(
-    documents: Mapping[str, Any],
-) -> _CourseSemanticOutcome:
-    """018 当前只执行已批准的主诉长度子判定。"""
+def _lx018_unknown_semantic_result(reason_code: str) -> CriterionResult:
+    """为未能完成的诊断指向子判定生成受控未知结果。"""
 
-    length_result = _lx018_length_criterion_result(documents)
-    if length_result.status is CriterionStatus.PASSED:
-        status = "compliant"
-        reason_code = "chief_complaint_length_within_threshold"
-    elif length_result.status is CriterionStatus.FAILED:
-        status = "non_compliant"
-        reason_code = "chief_complaint_length_exceeded"
-    else:
-        status = "data_gap"
-        reason_code = "required_field_missing"
-    return _CourseSemanticOutcome(
-        rule_id="LX0609-018",
-        status=status,
-        reason_code=reason_code,
-        executor_type="program",
-        criterion_results=(length_result,),
+    return _lx018_semantic_criterion_result(
+        relation_state="unknown",
+        reason_dimensions=(),
+        rationale_code=reason_code,
+        medical_analysis="",
     )
 
 
@@ -2448,7 +2481,11 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": (
+            "admission_record",
+            "diagnosis",
+            "admission_record_diagnosis",
+        ),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -2515,7 +2552,11 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": (
+            "admission_record",
+            "diagnosis",
+            "admission_record_diagnosis",
+        ),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -2805,9 +2846,6 @@ async def execute_luxian_0609_native_course_quality_rules(
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
                 continue
-            if rule_id == "LX0609-018":
-                emit_course_semantic(_lx018_active_length_outcome(typed_documents))
-                continue
             if rule_id == "LX0609-016":
                 comparison_material_state = _rule_016_comparison_material_state(
                     typed_documents
@@ -2834,15 +2872,19 @@ async def execute_luxian_0609_native_course_quality_rules(
                     continue
             if rule_id == "LX0609-016":
                 copy_coverage = _rule_016_copy_coverage(typed_documents)
-                if (
-                    copy_coverage is not None
-                    and copy_coverage > _RULE_016_COPY_THRESHOLD
-                ):
+                if copy_coverage is not None:
+                    exact_copy = copy_coverage >= _RULE_016_EXACT_MATCH
                     emit_course_semantic(
                         _CourseSemanticOutcome(
                             rule_id=rule_id,
-                            status="non_compliant",
-                            reason_code="copy_similarity_threshold_exceeded",
+                            status=(
+                                "non_compliant" if exact_copy else "compliant"
+                            ),
+                            reason_code=(
+                                "copy_sections_completely_identical"
+                                if exact_copy
+                                else "copy_sections_not_completely_identical"
+                            ),
                             executor_type="program",
                             customer_display_facts=_rule_016_customer_display_facts(
                                 typed_documents,
@@ -2851,15 +2893,33 @@ async def execute_luxian_0609_native_course_quality_rules(
                         )
                     )
                     continue
-            if rule_id == "LX0609-018" and not _admission_material_ready(
-                typed_documents, ()
-            ):
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
                         status="data_gap",
+                        reason_code="copy_sections_unavailable",
+                        executor_type="program",
+                    )
+                )
+                continue
+            if rule_id == "LX0609-018" and not _admission_material_ready(
+                typed_documents, ()
+            ):
+                length_result = _lx018_length_criterion_result(typed_documents)
+                semantic_result = _lx018_unknown_semantic_result(
+                    "required_field_missing"
+                )
+                emit_course_semantic(
+                    _CourseSemanticOutcome(
+                        rule_id=rule_id,
+                        status=(
+                            "non_compliant"
+                            if length_result.status is CriterionStatus.FAILED
+                            else "data_gap"
+                        ),
                         reason_code="complaint_or_primary_diagnosis_unavailable",
                         executor_type="program",
+                        criterion_results=(length_result, semantic_result),
                     )
                 )
                 continue
@@ -2890,11 +2950,19 @@ async def execute_luxian_0609_native_course_quality_rules(
                 else None
             )
             if llm_client is None:
+                unresolved_semantic = (
+                    _lx018_unknown_semantic_result("model_transport_error")
+                    if rule_id == "LX0609-018"
+                    else None
+                )
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
                         status=(
-                            "technical_error"
+                            "non_compliant"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "technical_error"
                             if rule_id == "LX0609-018"
                             else "data_gap"
                         ),
@@ -2905,7 +2973,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                         ),
                         executor_type="program",
                         criterion_results=(
-                            (length_result,) if length_result is not None else ()
+                            (length_result, unresolved_semantic)
+                            if length_result is not None
+                            and unresolved_semantic is not None
+                            else ()
                         ),
                     )
                 )
@@ -2918,14 +2989,27 @@ async def execute_luxian_0609_native_course_quality_rules(
                     else _prompt(wrapper, context=context)
                 )
             except Exception:
+                unresolved_semantic = (
+                    _lx018_unknown_semantic_result("model_transport_error")
+                    if rule_id == "LX0609-018"
+                    else None
+                )
                 emit_course_semantic(
                     _CourseSemanticOutcome(
                         rule_id=rule_id,
-                        status="technical_error",
+                        status=(
+                            "non_compliant"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "technical_error"
+                        ),
                         reason_code="model_transport_error",
                         executor_type="llm",
                         criterion_results=(
-                            (length_result,) if length_result is not None else ()
+                            (length_result, unresolved_semantic)
+                            if length_result is not None
+                            and unresolved_semantic is not None
+                            else ()
                         ),
                     )
                 )
@@ -2944,10 +3028,18 @@ async def execute_luxian_0609_native_course_quality_rules(
                     else ""
                 )
                 if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+                    unresolved_semantic = _lx018_unknown_semantic_result(
+                        "model_invalid_output"
+                    )
                     emit_course_semantic(
                         _CourseSemanticOutcome(
                             rule_id=rule_id,
-                            status="technical_error",
+                            status=(
+                                "non_compliant"
+                                if length_result is not None
+                                and length_result.status is CriterionStatus.FAILED
+                                else "technical_error"
+                            ),
                             reason_code="model_invalid_output",
                             executor_type="llm",
                             prompt_tokens=prompt,
@@ -2955,7 +3047,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                             total_tokens=total,
                             api_time=elapsed,
                             criterion_results=(
-                                (length_result,) if length_result is not None else ()
+                                (length_result, unresolved_semantic)
+                                if length_result is not None
+                                else ()
                             ),
                         )
                     )
@@ -3151,31 +3245,50 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
             copy_coverage = _rule_016_copy_coverage(documents)
-            if (
-                copy_coverage is not None
-                and copy_coverage > _RULE_016_COPY_THRESHOLD
-            ):
+            if copy_coverage is None:
                 results.append(
                     _result(
                         rule_id,
-                        "non_compliant",
-                        "copy_similarity_threshold_exceeded",
+                        "data_gap",
+                        "copy_sections_unavailable",
                         executor_type="program",
                     )
                 )
                 continue
-        elif rule_id == "LX0609-018":
-            outcome = _lx018_active_length_outcome(documents)
+            exact_copy = copy_coverage >= _RULE_016_EXACT_MATCH
             results.append(
                 _result(
                     rule_id,
-                    outcome.status,
-                    outcome.reason_code,
-                    executor_type=outcome.executor_type,
-                    criterion_results=outcome.criterion_results,
+                    "non_compliant" if exact_copy else "compliant",
+                    (
+                        "copy_sections_completely_identical"
+                        if exact_copy
+                        else "copy_sections_not_completely_identical"
+                    ),
+                    executor_type="program",
                 )
             )
             continue
+        elif rule_id == "LX0609-018":
+            length_result = _lx018_length_criterion_result(documents)
+            if not _admission_material_ready(documents, facts):
+                semantic_result = _lx018_unknown_semantic_result(
+                    "required_field_missing"
+                )
+                results.append(
+                    _result(
+                        rule_id,
+                        (
+                            "non_compliant"
+                            if length_result.status is CriterionStatus.FAILED
+                            else "data_gap"
+                        ),
+                        "complaint_or_primary_diagnosis_unavailable",
+                        executor_type="program",
+                        criterion_results=(length_result, semantic_result),
+                    )
+                )
+                continue
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)
@@ -3204,10 +3317,22 @@ async def execute_luxian_0609_native_course_quality_rules(
             else None
         )
         if llm_client is None:
+            unresolved_semantic = (
+                _lx018_unknown_semantic_result("model_transport_error")
+                if rule_id == "LX0609-018"
+                else None
+            )
             results.append(
                 _result(
                     rule_id,
-                    "technical_error" if rule_id == "LX0609-018" else "data_gap",
+                    (
+                        "non_compliant"
+                        if length_result is not None
+                        and length_result.status is CriterionStatus.FAILED
+                        else "technical_error"
+                        if rule_id == "LX0609-018"
+                        else "data_gap"
+                    ),
                     (
                         "model_transport_error"
                         if rule_id == "LX0609-018"
@@ -3215,7 +3340,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                     ),
                     executor_type="program",
                     criterion_results=(
-                        (length_result,) if length_result is not None else ()
+                        (length_result, unresolved_semantic)
+                        if length_result is not None
+                        and unresolved_semantic is not None
+                        else ()
                     ),
                 )
             )
@@ -3228,10 +3356,22 @@ async def execute_luxian_0609_native_course_quality_rules(
                 else _prompt(wrapper, context=context)
             )
         except Exception:
+            unresolved_semantic = (
+                _lx018_unknown_semantic_result("model_transport_error")
+                if rule_id == "LX0609-018"
+                else None
+            )
             results.append(
                 _result(
                     rule_id,
-                    "technical_error" if rule_id == "LX0609-018" else "data_gap",
+                    (
+                        "non_compliant"
+                        if length_result is not None
+                        and length_result.status is CriterionStatus.FAILED
+                        else "technical_error"
+                        if rule_id == "LX0609-018"
+                        else "data_gap"
+                    ),
                     (
                         "model_transport_error"
                         if rule_id == "LX0609-018"
@@ -3239,7 +3379,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                     ),
                     executor_type="llm",
                     criterion_results=(
-                        (length_result,) if length_result is not None else ()
+                        (length_result, unresolved_semantic)
+                        if length_result is not None
+                        and unresolved_semantic is not None
+                        else ()
                     ),
                 )
             )
@@ -3272,10 +3415,18 @@ async def execute_luxian_0609_native_course_quality_rules(
                 else ""
             )
             if raw_relation_state not in _LX018_DIAGNOSTIC_RELATION_STATES:
+                unresolved_semantic = _lx018_unknown_semantic_result(
+                    "model_invalid_output"
+                )
                 results.append(
                     _result(
                         rule_id,
-                        "technical_error",
+                        (
+                            "non_compliant"
+                            if length_result is not None
+                            and length_result.status is CriterionStatus.FAILED
+                            else "technical_error"
+                        ),
                         "model_invalid_output",
                         executor_type="llm",
                         prompt_tokens=prompt,
@@ -3283,7 +3434,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                         total_tokens=total,
                         api_time=elapsed,
                         criterion_results=(
-                            (length_result,) if length_result is not None else ()
+                            (length_result, unresolved_semantic)
+                            if length_result is not None
+                            else ()
                         ),
                     )
                 )
