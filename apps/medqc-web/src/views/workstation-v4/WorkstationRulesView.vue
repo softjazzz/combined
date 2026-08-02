@@ -26,7 +26,6 @@
           <CodingRulesTab v-if="activeTab === 'coding'" />
           <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
           <WorkstationSemanticRulesView v-else-if="activeTab === 'semantic'" />
-          <SurgeryProcedureCatalogView v-else-if="activeTab === 'surgery-catalog'" />
           <SettlementRulesTab v-else />
         </div>
       </div>
@@ -41,19 +40,12 @@ import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import FrontpageRulesTab from '@/components/rules/FrontpageRulesTab.vue'
 import SettlementRulesTab from '@/components/rules/SettlementRulesTab.vue'
 import WorkstationSemanticRulesView from '@/views/workstation-v4/WorkstationSemanticRulesView.vue'
-import SurgeryProcedureCatalogView from '@/views/workstation-v4/components/SurgeryProcedureCatalogView.vue'
 
 const route = useRoute()
 const router = useRouter()
 
-type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic' | 'surgery-catalog'
-const SUPPORTED_TABS: TabKey[] = [
-  'coding',
-  'frontpage',
-  'settlement',
-  'semantic',
-  'surgery-catalog',
-]
+type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic'
+const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement', 'semantic']
 
 const activeTab = ref<TabKey>('coding')
 
@@ -62,7 +54,6 @@ const tabs: Array<{ key: TabKey; label: string; count: string }> = [
   { key: 'frontpage', label: '首页规则', count: '首页' },
   { key: 'settlement', label: '结算规则', count: '清单' },
   { key: 'semantic', label: '语义规则', count: '语义' },
-  { key: 'surgery-catalog', label: '手术分级', count: '配置' },
 ]
 
 const resolveTab = (tab: string | undefined): TabKey => {
@@ -165,7 +156,7 @@ watch(
   align-items: center;
   display: flex;
   justify-content: flex-end;
-  max-width: 780px;
+  max-width: 620px;
 }
 
 .rules-tab-group {

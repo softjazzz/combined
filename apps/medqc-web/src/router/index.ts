@@ -1017,6 +1017,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '质控记录', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'customer-sample-validation/surgery-catalog',
+        name: 'WorkstationV4SurgeryProcedureCatalog',
+        component: () =>
+          import('@/views/workstation-v4/components/SurgeryProcedureCatalogView.vue'),
+        meta: { title: '手术分级目录', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'custom-qc-experience',
         name: 'WorkstationV4CustomQCExperience',
         component: () => import('@/views/workstation-v4/CustomQCExperienceView.vue'),

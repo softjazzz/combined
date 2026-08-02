@@ -1,194 +1,204 @@
 <template>
-  <section class="catalog-workbench">
-    <header class="catalog-header">
-      <div>
-        <div class="catalog-eyebrow">
-          <BookOpen :size="15" /> 只读配置
+  <main class="catalog-page">
+    <div class="catalog-page-inner">
+      <header class="catalog-page-header">
+        <div class="catalog-title-block">
+          <div class="catalog-eyebrow">
+            <BookOpen :size="15" /> 只读配置
+          </div>
+          <h1>手术操作分级目录</h1>
+          <p>查看质控引擎用于区分手术、操作及手术等级的当前口径。</p>
         </div>
-        <h2>手术操作分级目录</h2>
-        <p>查看质控引擎用于区分手术、操作及手术等级的当前口径。</p>
-      </div>
-      <div class="catalog-version">
-        {{ data?.version || '目录加载中' }}
-      </div>
-    </header>
+        <div class="catalog-page-actions">
+          <span class="catalog-version">{{ data?.version || '目录加载中' }}</span>
+          <a-button @click="goBack">
+            <ArrowLeft :size="15" />返回样本验证
+          </a-button>
+        </div>
+      </header>
 
-    <div
-      v-if="data"
-      class="policy-strip"
-    >
-      <ShieldCheck :size="18" />
-      <div>
-        <strong>等级判定口径</strong>
-        <span>{{ data.policy.level_priority }}；{{ data.policy.conditional_level_four }}。</span>
-        <span>{{ data.policy.category_boundary }}。</span>
-      </div>
-    </div>
-
-    <div class="summary-strip">
-      <button
-        class="summary-item"
-        :class="{ active: !filters.category && !filters.level }"
-        @click="showAll"
-      >
-        <span>目录总数</span><strong>{{ data?.summary.total ?? '—' }}</strong>
-      </button>
-      <button
-        class="summary-item"
-        :class="{ active: filters.category === '手术' && !filters.level }"
-        @click="showSurgeries"
-      >
-        <span>手术</span><strong>{{ data?.summary.surgery ?? '—' }}</strong>
-      </button>
-      <button
-        class="summary-item"
-        :class="{ active: isLevelFourFilter }"
-        @click="showLevelFour"
-      >
-        <span>四级手术</span><strong>{{ data?.summary.level_four_surgery ?? '—' }}</strong>
-      </button>
-      <button
-        class="summary-item"
-        :class="{ active: filters.category === 'operation' }"
-        @click="showOperations"
-      >
-        <span>非手术操作</span><strong>{{ data?.summary.operation ?? '—' }}</strong>
-      </button>
-    </div>
-
-    <div class="filter-bar">
-      <a-input
-        v-model:value="filters.keyword"
-        allow-clear
-        class="catalog-search"
-        placeholder="搜索手术操作编码或名称"
-        @press-enter="applyFilters"
-      >
-        <template #prefix>
-          <Search :size="15" />
-        </template>
-      </a-input>
-      <a-select
-        v-model:value="filters.category"
-        allow-clear
-        class="catalog-select"
-        placeholder="全部分类"
-        popup-class-name="catalog-filter-popup"
-        @change="applyFilters"
-      >
-        <a-select-option
-          v-for="item in categoryOptions"
-          :key="item.value"
-          :value="item.value"
+      <section class="catalog-workbench">
+        <div
+          v-if="data"
+          class="policy-strip"
         >
-          {{ item.label }}
-        </a-select-option>
-      </a-select>
-      <a-select
-        v-model:value="filters.level"
-        allow-clear
-        class="catalog-select level-select"
-        placeholder="全部等级"
-        popup-class-name="catalog-filter-popup"
-        @change="applyFilters"
-      >
-        <a-select-option
-          v-for="level in data?.filter_options.levels || []"
-          :key="level"
-          :value="level"
-        >
-          {{ level }}
-        </a-select-option>
-      </a-select>
-      <a-select
-        v-model:value="filters.source"
-        allow-clear
-        class="catalog-select source-select"
-        placeholder="全部来源"
-        popup-class-name="catalog-filter-popup"
-        @change="applyFilters"
-      >
-        <a-select-option
-          v-for="source in data?.filter_options.sources || []"
-          :key="source.value"
-          :value="source.value"
-        >
-          {{ source.label }}
-        </a-select-option>
-      </a-select>
-      <a-button
-        type="primary"
-        @click="applyFilters"
-      >
-        <Search :size="15" />查询
-      </a-button>
-      <a-button @click="resetFilters">
-        <RefreshCw :size="15" />重置
-      </a-button>
-    </div>
+          <ShieldCheck :size="18" />
+          <div>
+            <strong>等级判定口径</strong>
+            <span>{{ data.policy.level_priority }}；{{ data.policy.conditional_level_four }}。</span>
+            <span>{{ data.policy.category_boundary }}。</span>
+          </div>
+        </div>
 
-    <div class="catalog-table-wrap">
-      <div class="table-caption">
-        <span>当前筛选 <strong>{{ data?.total ?? 0 }}</strong> 条</span>
-        <span>有效等级是质控判定使用的等级</span>
-      </div>
-      <a-table
-        :columns="columns"
-        :data-source="data?.items || []"
-        :loading="loading"
-        :pagination="pagination"
-        :row-key="(record: SurgeryProcedureCatalogItem) => record.code"
-        size="middle"
-        @change="handleTableChange"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'identity'">
-            <div class="catalog-identity">
-              <code>{{ record.code }}</code>
-              <strong>{{ record.name }}</strong>
-            </div>
-          </template>
-          <template v-else-if="column.key === 'category'">
-            <span
-              class="category-label"
-              :class="{ surgery: record.category === '手术' }"
+        <div class="summary-strip">
+          <button
+            class="summary-item"
+            :class="{ active: !filters.category && !filters.level }"
+            @click="showAll"
+          >
+            <span>目录总数</span><strong>{{ data?.summary.total ?? '—' }}</strong>
+          </button>
+          <button
+            class="summary-item"
+            :class="{ active: filters.category === '手术' && !filters.level }"
+            @click="showSurgeries"
+          >
+            <span>手术</span><strong>{{ data?.summary.surgery ?? '—' }}</strong>
+          </button>
+          <button
+            class="summary-item"
+            :class="{ active: isLevelFourFilter }"
+            @click="showLevelFour"
+          >
+            <span>四级手术</span><strong>{{ data?.summary.level_four_surgery ?? '—' }}</strong>
+          </button>
+          <button
+            class="summary-item"
+            :class="{ active: filters.category === 'operation' }"
+            @click="showOperations"
+          >
+            <span>非手术操作</span><strong>{{ data?.summary.operation ?? '—' }}</strong>
+          </button>
+        </div>
+
+        <div class="filter-bar">
+          <a-input
+            v-model:value="filters.keyword"
+            allow-clear
+            class="catalog-search"
+            placeholder="搜索手术操作编码或名称"
+            @press-enter="applyFilters"
+          >
+            <template #prefix>
+              <Search :size="15" />
+            </template>
+          </a-input>
+          <a-select
+            v-model:value="filters.category"
+            allow-clear
+            class="catalog-select"
+            placeholder="全部分类"
+            popup-class-name="catalog-filter-popup"
+            @change="applyFilters"
+          >
+            <a-select-option
+              v-for="item in categoryOptions"
+              :key="item.value"
+              :value="item.value"
             >
-              {{ record.category }}
-            </span>
-          </template>
-          <template v-else-if="column.key === 'effective_level'">
-            <span
-              v-if="record.effective_level"
-              class="level-label"
-              :class="levelClass(record.effective_level)"
+              {{ item.label }}
+            </a-select-option>
+          </a-select>
+          <a-select
+            v-model:value="filters.level"
+            allow-clear
+            class="catalog-select level-select"
+            placeholder="全部等级"
+            popup-class-name="catalog-filter-popup"
+            @change="applyFilters"
+          >
+            <a-select-option
+              v-for="level in data?.filter_options.levels || []"
+              :key="level"
+              :value="level"
             >
-              {{ record.effective_level }}
-            </span>
-            <span
-              v-else
-              class="muted-value"
-            >不适用</span>
-          </template>
-          <template v-else-if="column.key === 'basis'">
-            <div class="basis-cell">
-              <strong>{{ record.raw_level || '未分级' }}</strong>
-              <span>{{ record.source_label }}</span>
-            </div>
-          </template>
-        </template>
-        <template #emptyText>
-          <a-empty description="没有符合当前条件的手术操作" />
-        </template>
-      </a-table>
+              {{ level }}
+            </a-select-option>
+          </a-select>
+          <a-select
+            v-model:value="filters.source"
+            allow-clear
+            class="catalog-select source-select"
+            placeholder="全部来源"
+            popup-class-name="catalog-filter-popup"
+            @change="applyFilters"
+          >
+            <a-select-option
+              v-for="source in data?.filter_options.sources || []"
+              :key="source.value"
+              :value="source.value"
+            >
+              {{ source.label }}
+            </a-select-option>
+          </a-select>
+          <a-button
+            type="primary"
+            @click="applyFilters"
+          >
+            <Search :size="15" />查询
+          </a-button>
+          <a-button @click="resetFilters">
+            <RefreshCw :size="15" />重置
+          </a-button>
+        </div>
+
+        <div class="catalog-table-wrap">
+          <div class="catalog-table-meta">
+            <span>当前筛选 <strong>{{ data?.total ?? 0 }}</strong> 条</span>
+            <span>有效等级是质控判定使用的等级</span>
+          </div>
+          <a-table
+            :columns="columns"
+            :data-source="data?.items || []"
+            :loading="loading"
+            :pagination="pagination"
+            :row-key="(record: SurgeryProcedureCatalogItem) => record.code"
+            :scroll="{ x: 1020 }"
+            size="middle"
+            table-layout="fixed"
+            @change="handleTableChange"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'identity'">
+                <div class="catalog-identity">
+                  <code>{{ record.code }}</code>
+                  <strong>{{ record.name }}</strong>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'category'">
+                <span
+                  class="category-label"
+                  :class="{ surgery: record.category === '手术' }"
+                >
+                  {{ record.category }}
+                </span>
+              </template>
+              <template v-else-if="column.key === 'effective_level'">
+                <span
+                  v-if="record.effective_level"
+                  class="level-label"
+                  :class="levelClass(record.effective_level)"
+                >
+                  {{ record.effective_level }}
+                </span>
+                <span
+                  v-else
+                  class="muted-value"
+                >不适用</span>
+              </template>
+              <template v-else-if="column.key === 'basis'">
+                <div class="basis-cell">
+                  <strong>{{ record.raw_level || '未分级' }}</strong>
+                  <span>{{ record.source_label }}</span>
+                </div>
+              </template>
+            </template>
+            <template #emptyText>
+              <a-empty description="没有符合当前条件的手术操作" />
+            </template>
+          </a-table>
+        </div>
+      </section>
     </div>
-  </section>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { BookOpen, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
+import { ArrowLeft, BookOpen, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
 import {
   fetchSurgeryProcedureCatalog,
   type SurgeryProcedureCatalogData,
@@ -196,6 +206,7 @@ import {
 } from '@/views/workstation-v4/surgery-catalog/service'
 
 const loading = ref(false)
+const router = useRouter()
 const data = ref<SurgeryProcedureCatalogData>()
 const filters = reactive({
   keyword: '',
@@ -300,23 +311,76 @@ function levelClass(level: string): string {
   return `level-${({ 一级: 1, 二级: 2, 三级: 3, 四级: 4 } as Record<string, number>)[level] || 0}`
 }
 
+function goBack(): void {
+  void router.push({ name: 'WorkstationV4CustomerSampleValidation' })
+}
+
 onMounted(() => void loadCatalog())
 </script>
 
 <style scoped>
+.catalog-page {
+  background: #f5f5f7;
+  box-sizing: border-box;
+  color: #1d1d1f;
+  min-height: 100%;
+  overflow-x: hidden;
+  padding: 22px 24px 34px;
+  width: 100%;
+}
+
+.catalog-page-inner {
+  margin: 0 auto;
+  max-width: 1440px;
+  min-width: 0;
+  width: 100%;
+}
+
+.catalog-page-header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.catalog-title-block h1 {
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 31px;
+  margin: 0;
+}
+
+.catalog-title-block p {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+  line-height: 20px;
+  margin: 7px 0 0;
+}
+
+.catalog-page-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.catalog-page-actions :deep(.ant-btn) {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+}
+
 .catalog-workbench {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 20px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+  min-width: 0;
   overflow: hidden;
-}
-
-.catalog-header {
-  align-items: flex-start;
-  display: flex;
-  justify-content: space-between;
-  padding: 24px 26px 20px;
+  width: 100%;
 }
 
 .catalog-eyebrow {
@@ -326,21 +390,7 @@ onMounted(() => void loadCatalog())
   font-size: 12px;
   font-weight: 600;
   gap: 6px;
-  margin-bottom: 7px;
-}
-
-.catalog-header h2 {
-  color: #1d1d1f;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 26px;
-  margin: 0;
-}
-
-.catalog-header p {
-  color: rgba(29, 29, 31, 0.58);
-  font-size: 13px;
-  margin: 5px 0 0;
+  margin-bottom: 6px;
 }
 
 .catalog-version {
@@ -413,12 +463,15 @@ onMounted(() => void loadCatalog())
 .filter-bar {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 16px 26px;
 }
 
 .catalog-search {
-  max-width: 330px;
+  flex: 1 1 300px;
+  max-width: 420px;
+  min-width: 260px;
 }
 .catalog-select {
   width: 150px;
@@ -442,16 +495,35 @@ onMounted(() => void loadCatalog())
 
 .catalog-table-wrap {
   border-top: 1px solid rgba(0, 0, 0, 0.08);
+  min-width: 0;
+  width: 100%;
 }
-.table-caption {
+.catalog-table-meta {
+  box-sizing: border-box;
   color: rgba(29, 29, 31, 0.46);
   display: flex;
   font-size: 12px;
   justify-content: space-between;
+  line-height: 20px;
+  min-width: 0;
   padding: 12px 26px;
+  white-space: nowrap;
+  width: 100%;
 }
-.table-caption strong {
+.catalog-table-meta strong {
   color: #0066cc;
+}
+.catalog-table-wrap :deep(.ant-table-wrapper) {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+.catalog-table-wrap :deep(.ant-spin-nested-loading),
+.catalog-table-wrap :deep(.ant-spin-container),
+.catalog-table-wrap :deep(.ant-table),
+.catalog-table-wrap :deep(.ant-table-container) {
+  min-width: 0;
+  width: 100%;
 }
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
   background: rgba(0, 0, 0, 0.025);
@@ -525,6 +597,17 @@ onMounted(() => void loadCatalog())
 }
 
 @media (max-width: 980px) {
+  .catalog-page {
+    padding: 16px;
+  }
+  .catalog-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .catalog-page-actions {
+    justify-content: space-between;
+  }
   .filter-bar {
     align-items: stretch;
     flex-wrap: wrap;
@@ -532,6 +615,11 @@ onMounted(() => void loadCatalog())
   .catalog-search {
     max-width: none;
     width: 100%;
+  }
+  .catalog-table-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    white-space: normal;
   }
   .summary-strip {
     grid-template-columns: repeat(2, 1fr);

@@ -1439,6 +1439,19 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.find('.customer-sample-task-center').exists()).toBe(false)
   })
 
+  it('从更多操作菜单进入手术分级目录', async () => {
+    const wrapper = await mountView()
+    const catalogEntry = wrapper
+      .findAll('button')
+      .find((item) => item.text().trim() === '手术分级目录')
+
+    expect(catalogEntry).toBeTruthy()
+    await catalogEntry!.trigger('click')
+    await flushPromises()
+
+    expect(routerPush).toHaveBeenCalledWith({ name: 'WorkstationV4SurgeryProcedureCatalog' })
+  })
+
   it('主任务状态条应识别压缩任务里的数组型状态分布', async () => {
     getSichuanWorkspaceBatchJob.mockResolvedValueOnce({
       success: true,

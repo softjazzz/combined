@@ -1665,6 +1665,10 @@ export function useCustomerSampleValidationController() {
       await openLatestJob()
       return
     }
+    if (key === 'surgery-catalog') {
+      await router.push({ name: 'WorkstationV4SurgeryProcedureCatalog' })
+      return
+    }
     if (key === 'export-luxian-md') {
       await handleExportLuxianReport('md')
       return

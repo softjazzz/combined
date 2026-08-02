@@ -86,6 +86,10 @@
                           查看最近任务
                         </a-menu-item>
                         <a-menu-divider />
+                        <a-menu-item @click="handleMoreActionKey('surgery-catalog')">
+                          手术分级目录
+                        </a-menu-item>
+                        <a-menu-divider />
                         <a-sub-menu
                           key="luxian-report"
                           title="导出报告"
