@@ -224,7 +224,7 @@
     },
     {
       "rule_id": "LX0609-020",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
       "execution_mode": "native_async",
@@ -235,7 +235,7 @@
     },
     {
       "rule_id": "LX0609-021",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
       "execution_mode": "native_async",
@@ -246,7 +246,7 @@
     },
     {
       "rule_id": "LX0609-022",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "consultation_quality",
       "executor_key": "consultation_quality",
       "execution_mode": "native_async",

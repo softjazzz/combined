@@ -296,6 +296,12 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
     assert result.llm_call_count == 1
     assert "专科会诊意见" in client.prompts[0]
     assert all("consultation_record-1" not in repr(item) for item in result.results)
+    display = dict(result.customer_display_facts)
+    assert display["LX0609-021"]["semantic_state"] == "clear"
+    assert display["LX0609-021"]["episode_count"] == 1
+    assert display["LX0609-021"]["document_count"] == 2
+    assert display["LX0609-022"]["semantic_state"] == "clear"
+    assert display["LX0609-022"]["checked_requirement"] == "给出针对当前病情的明确诊疗意见"
 
 
 @pytest.mark.asyncio
@@ -1277,8 +1283,8 @@ async def test_020_023_execution_state_mapping(monkeypatch, execution_state, exp
 
 
 @pytest.mark.asyncio
-async def test_020_023_specific_trace_and_structured_action_stay_review_state(monkeypatch):
-    """020/023 正向闭环先进入建议复核，避免模型正向漂移直接改客户结论。"""
+async def test_020_specific_trace_closes_while_pending_023_stays_review_state(monkeypatch):
+    """020在病程痕迹和结构化动作均关联时闭环，待确认023仍保持复核态。"""
 
     source_rows = {
         "consultation_record": _rows("意见：建议加强抗感染治疗。"),
@@ -1336,7 +1342,12 @@ async def test_020_023_specific_trace_and_structured_action_stay_review_state(mo
         llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert [item["status"] for item in result.results] == ["compliant", "uncertain"]
+    display = dict(result.customer_display_facts)["LX0609-020"]
+    assert display["relation_state"] == "all_linked"
+    assert display["completed_opinion_episode_count"] == 1
+    assert display["recommendation_count"] == 1
+    assert display["specific_execution_count"] == 1
 
 
 @pytest.mark.asyncio

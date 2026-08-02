@@ -949,6 +949,125 @@ def _generic_execution_display_facts(
     }
 
 
+def _consultation_semantic_display_facts(
+    *,
+    rule_id: str,
+    episodes: Sequence[_Episode],
+    documents: Sequence[Mapping[str, str]],
+) -> Mapping[str, Any]:
+    """将021/022已裁决的episode事实投影为受控客户展示事实。"""
+
+    is_application = rule_id == "LX0609-021"
+    state_field = "application_state" if is_application else "opinion_state"
+    ref_field = "application_refs" if is_application else "opinion_refs"
+    relevant = tuple(
+        episode
+        for episode in episodes
+        if getattr(episode, state_field) != "absent"
+    )
+    refs = tuple(
+        dict.fromkeys(
+            ref
+            for episode in relevant
+            for ref in getattr(episode, ref_field)
+        )
+    )
+    documents_by_ref = {str(item.get("ref")): item for item in documents}
+    states = {getattr(episode, state_field) for episode in relevant}
+    semantic_state = (
+        "absent"
+        if not relevant
+        else next(iter(states))
+        if len(states) == 1
+        else "mixed"
+    )
+    source_document_ids = [
+        document_id
+        for ref in refs
+        if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
+    ]
+    return {
+        "verification_kind": (
+            "consultation_application_quality_check"
+            if is_application
+            else "consultation_opinion_quality_check"
+        ),
+        "episode_count": len(relevant),
+        "document_count": len(refs),
+        "semantic_state": semantic_state,
+        "checked_requirement": (
+            "说明具体临床问题、会诊理由或明确会诊目的"
+            if is_application
+            else "给出针对当前病情的明确诊疗意见"
+        ),
+        "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+    }
+
+
+def _consultation_execution_display_facts(
+    *,
+    status: str,
+    episodes: Sequence[_Episode],
+    completed_recommendations: Sequence[_CompletedRecommendation],
+    assessments: Sequence[_ExecutionAssessment] | None,
+    documents: Sequence[Mapping[str, str]],
+) -> Mapping[str, Any]:
+    """解释020为何已关联、缺失、未触发或暂不能关联。"""
+
+    relation_by_status = {
+        "compliant": "all_linked",
+        "non_compliant": "execution_missing",
+        "not_applicable": "not_triggered",
+        "data_gap": "source_incomplete",
+        "evaluation_unknown": "association_unresolved",
+        "technical_error": "source_error",
+    }
+    opinion_refs = tuple(
+        dict.fromkeys(
+            ref
+            for episode in episodes
+            if episode.opinion_state == "clear" and episode.confidence == "high"
+            for ref in episode.opinion_refs
+        )
+    )
+    documents_by_ref = {str(item.get("ref")): item for item in documents}
+    source_document_ids = [
+        document_id
+        for ref in opinion_refs
+        if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
+    ]
+    assessment_rows = tuple(assessments or ())
+    return {
+        "verification_kind": "consultation_execution_relation_check",
+        "completed_opinion_episode_count": len(
+            {
+                episode.episode_ref
+                for episode in episodes
+                if episode.opinion_state == "clear" and episode.confidence == "high"
+            }
+        ),
+        "recommendation_count": (
+            len(completed_recommendations)
+            or sum(len(episode.recommendations) for episode in episodes)
+        ),
+        "specific_execution_count": sum(
+            item.execution_record_state == "specific_trace"
+            and item.execution_state == "linked_specific"
+            for item in assessment_rows
+        ),
+        "generic_execution_count": sum(
+            item.execution_record_state in {"generic_trace", "copied_opinion"}
+            for item in assessment_rows
+        ),
+        "missing_execution_count": sum(
+            item.execution_record_state == "no_trace" and not item.execution_refs
+            for item in assessment_rows
+        ),
+        "relation_state": relation_by_status.get(status, "association_unresolved"),
+        "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+    }
+
+
 def _completed_recommendations(
     episodes: Sequence[_Episode],
     documents: Sequence[Mapping[str, str]],
@@ -1270,7 +1389,7 @@ def _execution_outcome(
                 return "technical_error", "source_query_error"
             return "non_compliant", "requirement_violated"
         if complete_specific_links:
-            return "evaluation_unknown", "semantic_output_unknown"
+            return "compliant", "requirement_satisfied"
         return "evaluation_unknown", "semantic_output_unknown"
     if any(state in {"generic_trace", "copied_opinion"} for state in trace_states):
         return "non_compliant", "requirement_violated"
@@ -1791,14 +1910,39 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         for rule_id in selected
         if rule_id in typed and evidence_snapshot is not None
     )
-    customer_display_facts = (
-        (("LX0609-023", _generic_execution_display_facts(documents)),)
-        if statuses.get("LX0609-023") == ("non_compliant", "requirement_violated")
-        else ()
-    )
+    display_facts: list[tuple[str, Mapping[str, Any]]] = []
+    for rule_id in ("LX0609-021", "LX0609-022"):
+        if rule_id in selected and rule_id in statuses:
+            display_facts.append(
+                (
+                    rule_id,
+                    _consultation_semantic_display_facts(
+                        rule_id=rule_id,
+                        episodes=episodes,
+                        documents=documents,
+                    ),
+                )
+            )
+    if "LX0609-020" in selected and "LX0609-020" in statuses:
+        display_facts.append(
+            (
+                "LX0609-020",
+                _consultation_execution_display_facts(
+                    status=statuses["LX0609-020"][0],
+                    episodes=episodes,
+                    completed_recommendations=completed_recommendations,
+                    assessments=execution_assessments,
+                    documents=documents,
+                ),
+            )
+        )
+    if statuses.get("LX0609-023") == ("non_compliant", "requirement_violated"):
+        display_facts.append(
+            ("LX0609-023", _generic_execution_display_facts(documents))
+        )
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(item for item in results if item["rule_id"] not in typed), planned_rule_ids=selected,
-        decisions=decisions, customer_display_facts=customer_display_facts,
+        decisions=decisions, customer_display_facts=tuple(display_facts),
         llm_call_count=calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         total_tokens=total_tokens, api_time=api_time,

@@ -185,6 +185,21 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
             "病理申请或报告来源",
         ),
         (
+            "LX0609-020",
+            "暂无法核对会诊意见是否具有对应执行记录",
+            "后续病程执行记录",
+        ),
+        (
+            "LX0609-021",
+            "暂无法核对会诊申请目的是否明确",
+            "具体临床问题、会诊理由",
+        ),
+        (
+            "LX0609-022",
+            "暂无法核对会诊意见是否明确",
+            "明确诊疗意见",
+        ),
+        (
             "LX0609-026",
             "暂无法核对化疗记录与医嘱是否一致",
             "药名、剂量、用法、时间",
@@ -216,7 +231,8 @@ def test_task3_data_gap_names_the_customer_visible_missing_material(
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["findings"].startswith("当前记录缺少完成核对所需的关键信息；")
+    assert result["findings"].startswith("当前")
+    assert "；" in result["findings"]
     assert result["findings"].endswith(expected_finding)
     assert expected_evidence in result["evidence"]
 

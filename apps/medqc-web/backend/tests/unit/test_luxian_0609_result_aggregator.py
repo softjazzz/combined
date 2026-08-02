@@ -88,6 +88,50 @@ def test_task3_customer_display_fact_contracts_are_preserved(rule_id, facts):
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
+            "LX0609-020",
+            {
+                "verification_kind": "consultation_execution_relation_check",
+                "completed_opinion_episode_count": 1,
+                "recommendation_count": 2,
+                "specific_execution_count": 2,
+                "generic_execution_count": 0,
+                "missing_execution_count": 0,
+                "relation_state": "all_linked",
+                "source_document_ids": ["CONSULT-1"],
+            },
+        ),
+        (
+            "LX0609-021",
+            {
+                "verification_kind": "consultation_application_quality_check",
+                "episode_count": 1,
+                "document_count": 1,
+                "semantic_state": "clear",
+                "checked_requirement": "说明具体临床问题、会诊理由或明确会诊目的",
+                "source_document_ids": ["CONSULT-1"],
+            },
+        ),
+        (
+            "LX0609-022",
+            {
+                "verification_kind": "consultation_opinion_quality_check",
+                "episode_count": 1,
+                "document_count": 1,
+                "semantic_state": "vague",
+                "checked_requirement": "给出针对当前病情的明确诊疗意见",
+                "source_document_ids": ["CONSULT-1"],
+            },
+        ),
+    ],
+)
+def test_task4_consultation_display_fact_contracts_are_preserved(rule_id, facts):
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+
+
 def _reduced_decision(
     rule_id: str,
     *,

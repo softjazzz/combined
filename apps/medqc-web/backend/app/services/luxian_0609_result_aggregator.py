@@ -2859,6 +2859,94 @@ def safe_luxian_0609_customer_display_facts(
                 if isinstance(value, str) and value.strip()
             ][:2],
         }
+    if rule_id in {"LX0609-021", "LX0609-022"}:
+        expected_kind = (
+            "consultation_application_quality_check"
+            if rule_id == "LX0609-021"
+            else "consultation_opinion_quality_check"
+        )
+        expected_requirement = (
+            "说明具体临床问题、会诊理由或明确会诊目的"
+            if rule_id == "LX0609-021"
+            else "给出针对当前病情的明确诊疗意见"
+        )
+        expected_keys = {
+            "verification_kind",
+            "episode_count",
+            "document_count",
+            "semantic_state",
+            "checked_requirement",
+            "source_document_ids",
+        }
+        source_document_ids = raw.get("source_document_ids")
+        if (
+            set(raw) != expected_keys
+            or raw.get("verification_kind") != expected_kind
+            or raw.get("checked_requirement") != expected_requirement
+            or raw.get("semantic_state")
+            not in {"clear", "vague", "missing", "absent", "unknown", "mixed"}
+            or type(raw.get("episode_count")) is not int
+            or not 0 <= raw["episode_count"] <= 100
+            or type(raw.get("document_count")) is not int
+            or not 0 <= raw["document_count"] <= 100
+            or not isinstance(source_document_ids, list)
+            or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
+        ):
+            return None
+        return {
+            "verification_kind": expected_kind,
+            "episode_count": raw["episode_count"],
+            "document_count": raw["document_count"],
+            "semantic_state": raw["semantic_state"],
+            "checked_requirement": expected_requirement,
+            "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+        }
+    if rule_id == "LX0609-020":
+        expected_keys = {
+            "verification_kind",
+            "completed_opinion_episode_count",
+            "recommendation_count",
+            "specific_execution_count",
+            "generic_execution_count",
+            "missing_execution_count",
+            "relation_state",
+            "source_document_ids",
+        }
+        count_keys = (
+            "completed_opinion_episode_count",
+            "recommendation_count",
+            "specific_execution_count",
+            "generic_execution_count",
+            "missing_execution_count",
+        )
+        source_document_ids = raw.get("source_document_ids")
+        if (
+            set(raw) != expected_keys
+            or raw.get("verification_kind")
+            != "consultation_execution_relation_check"
+            or raw.get("relation_state")
+            not in {
+                "all_linked",
+                "execution_missing",
+                "not_triggered",
+                "source_incomplete",
+                "association_unresolved",
+                "source_error",
+            }
+            or any(
+                type(raw.get(key)) is not int or not 0 <= raw[key] <= 100
+                for key in count_keys
+            )
+            or not isinstance(source_document_ids, list)
+            or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
+        ):
+            return None
+        return {
+            "verification_kind": "consultation_execution_relation_check",
+            **{key: raw[key] for key in count_keys},
+            "relation_state": raw["relation_state"],
+            "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+        }
     if rule_id == "LX0609-023":
         missing_details = raw.get("missing_details")
         source_document_ids = raw.get("source_document_ids")
