@@ -80,6 +80,12 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     )
     assert all(item["contract_version"] for item in manifest["rules"])
     assert all(item["definition_version"] for item in manifest["rules"])
+    assert (
+        by_rule["LX0609-007"]["decision_rollout_flag"]
+        == "LUXIAN_0609_RULE_DECISION_007_ENABLED"
+    )
+    assert by_rule["LX0609-018"]["decision_rollout_flag"] is None
+    assert by_rule["LX0609-075"]["decision_rollout_flag"] is None
     assert manifest["flags"]["unified_engine"] is True
     assert manifest["flags"]["rule_decision_surgery_document"] is True
     assert manifest["flags"]["native_consultation"] is False

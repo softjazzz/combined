@@ -24,6 +24,7 @@ from app.services.luxian_0609.native_package import (  # noqa: E402
     load_luxian_0609_dependency_inventory,
 )
 from app.services.luxian_0609.rule_decision_settings import (  # noqa: E402
+    get_rule_decision_rollout_flag,
     resolve_mainline_rule_decision_settings,
 )
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules  # noqa: E402
@@ -183,6 +184,11 @@ def build_runtime_manifest(
             "active_criteria": list(contract_by_id[item.rule_id].active_criteria),
             "pending_criteria": list(contract_by_id[item.rule_id].pending_criteria),
             "pending_reason_code": contract_by_id[item.rule_id].pending_reason_code,
+            "decision_rollout_flag": (
+                get_rule_decision_rollout_flag(item.rule_id)
+                if int(item.rule_id.rsplit("-", 1)[-1]) <= 49
+                else None
+            ),
         }
         for item in dependencies
     ]
