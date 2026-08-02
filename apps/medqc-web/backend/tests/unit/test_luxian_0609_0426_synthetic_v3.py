@@ -213,15 +213,15 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         for answer in case.source_item.get("synthetic_golden_answers") or []
     ]
     assert audit["rule_count"] == 75
-    assert len(answers) == 106
+    assert len(answers) == 114
     assert len({answer["qc_point_id"] for answer in answers}) == 75
     assert all(answer["expected_status"] != "pending" for answer in answers)
     assert all(answer["evidence_refs"] for answer in answers)
     assert {answer["acceptance_tier"] for answer in answers} == {"formal", "provisional"}
     matrix = module.build_validation_matrix(cases)
-    assert len(matrix) == 106
+    assert len(matrix) == 114
     assert Counter(row["acceptance_tier"] for row in matrix) == {
-        "formal": 98,
+        "formal": 106,
         "provisional": 8,
     }
     statuses_by_rule = {
@@ -246,6 +246,25 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
     assert all(
         statuses == {"compliant", "non_compliant"}
         for statuses in timeliness_statuses.values()
+    )
+    transfusion_statuses = {
+        rule_id: {
+            row["expected_status"] for row in matrix if row["rule_id"] == rule_id
+        }
+        for rule_id in (
+            "LX0609-041",
+            "LX0609-042",
+            "LX0609-043",
+            "LX0609-044",
+            "LX0609-045",
+            "LX0609-046",
+            "LX0609-047",
+            "LX0609-048",
+        )
+    }
+    assert all(
+        statuses == {"compliant", "non_compliant"}
+        for statuses in transfusion_statuses.values()
     )
 
 
@@ -277,3 +296,47 @@ def test_transfusion_case_uses_typed_consent_form() -> None:
         and row.get("document_title") == "输血知情同意书"
     ]
     assert fake_rows == []
+
+
+def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    visit_ids = {
+        index: next(case.target_visit_id for case in cases if case.target_index == index)
+        for index in range(24, 28)
+    }
+
+    assert not any(
+        row.get("visit_id") == visit_ids[24]
+        for row in rows_by_table.get("consent_form", [])
+    )
+    incomplete_consent = next(
+        row
+        for row in rows_by_table["consent_form"]
+        if row.get("visit_id") == visit_ids[25]
+    )
+    assert not incomplete_consent.get("patient_sign")
+    assert not any(
+        row.get("visit_id") == visit_ids[25]
+        and str(row.get("item_abbreviation") or "").upper() == "ALT"
+        for row in rows_by_table["labtest_item_report"]
+    )
+    assert not any(
+        row.get("visit_id") == visit_ids[26]
+        for row in rows_by_table.get("bloodtrans_record", [])
+    )
+    inconsistent_contents = {
+        table_name: next(
+            row["record_content"]
+            for row in rows_by_table[table_name]
+            if row.get("visit_id") == visit_ids[27]
+        )
+        for table_name in (
+            "surgery_record",
+            "anesthesia_record",
+            "postsurg_firstcourse_record",
+        )
+    }
+    assert len(set(inconsistent_contents.values())) == 3

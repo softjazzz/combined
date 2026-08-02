@@ -38,6 +38,10 @@ RULE_NUMBERS_BY_CASE: dict[int, tuple[int, ...]] = {
     21: (64, 65, 66),
     22: (75,),
     23: (41, 42, 43, 44, 45, 46, 47, 48, 49, 70),
+    24: (41,),
+    25: (42, 43, 44),
+    26: (45, 47),
+    27: (46, 48),
     28: (13, 19, 26, 27),
     31: (61, 62, 63, 67, 68),
     32: (50,),
@@ -61,6 +65,10 @@ _NON_COMPLIANT_RULE_IDS_BY_CASE = {
     2: frozenset(
         {"LX0609-001", "LX0609-002", "LX0609-004", "LX0609-005", "LX0609-006"}
     ),
+    24: frozenset({"LX0609-041"}),
+    25: frozenset({"LX0609-042", "LX0609-043", "LX0609-044"}),
+    26: frozenset({"LX0609-045", "LX0609-047"}),
+    27: frozenset({"LX0609-046", "LX0609-048"}),
 }
 
 
@@ -403,7 +411,13 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
     return refs
 
 
-def _build_transfusion(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_transfusion(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "complete",
+) -> list[str]:
     _clear_visit_rows(rows, case, "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
     refs = [_append_registration(rows, case, v2)]
     request_time = v2._dt_for_case(case, 1, 10)
@@ -434,6 +448,48 @@ def _build_transfusion(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="blood-daily-course", title="输血病程记录", record_time=transfusion_time, content="输血前评估Hb 65g/L且有症状，输注悬浮红细胞2U；输血过程无不良反应，输血后症状改善，复查Hb 82g/L。"))
     for table, suffix, title in (("surgery_record","surgery-blood","手术记录"),("anesthesia_record","anesthesia-blood","麻醉记录单"),("postsurg_firstcourse_record","postop-blood","术后首次病程记录")):
         refs.append(_append_document(rows, case, v2, table_name=table, suffix=suffix, title=title, record_time=v2._dt_for_case(case, 1, 16), content="术中输注悬浮红细胞2U，无输血不良反应。"))
+    visit_id = case.target_visit_id
+    if mode == "missing_consent":
+        rows["consent_form"] = [
+            row for row in rows.get("consent_form", []) if row.get("visit_id") != visit_id
+        ]
+    elif mode == "incomplete_pretransfusion":
+        for row in rows.get("consent_form", []):
+            if row.get("visit_id") == visit_id:
+                row["patient_sign"] = ""
+                row["patient_sign_datetime"] = None
+        rows["labtest_item_report"] = [
+            row
+            for row in rows.get("labtest_item_report", [])
+            if not (
+                row.get("visit_id") == visit_id
+                and str(row.get("item_abbreviation") or "").upper() == "ALT"
+            )
+        ]
+        for table_name in ("bloodtrans_record", "daily_course_record"):
+            for row in rows.get(table_name, []):
+                if row.get("visit_id") == visit_id:
+                    row["record_content"] = "核对血型后输注悬浮红细胞2U，过程无不良反应。"
+    elif mode == "missing_course":
+        for table_name in ("bloodtrans_record", "daily_course_record"):
+            rows[table_name] = [
+                row
+                for row in rows.get(table_name, [])
+                if row.get("visit_id") != visit_id
+            ]
+    elif mode == "incomplete_inconsistent":
+        for row in rows.get("bloodtrans_record", []):
+            if row.get("visit_id") == visit_id:
+                row["record_content"] = "患者已输血，过程记录不完整。"
+        inconsistent_text = {
+            "surgery_record": "术中输注悬浮红细胞2U。",
+            "anesthesia_record": "术中输注新鲜冰冻血浆400ml。",
+            "postsurg_firstcourse_record": "术中输注悬浮红细胞1U。",
+        }
+        for table_name, content in inconsistent_text.items():
+            for row in rows.get(table_name, []):
+                if row.get("visit_id") == visit_id:
+                    row["record_content"] = content
     return refs
 
 
@@ -537,6 +593,18 @@ def apply_controlled_evidence(
         21: lambda case: _build_surgery(rows_by_table, case, v2, mode="postop"),
         22: lambda case: _build_surgery(rows_by_table, case, v2, mode="procedure"),
         23: lambda case: _build_transfusion(rows_by_table, case, v2),
+        24: lambda case: _build_transfusion(
+            rows_by_table, case, v2, mode="missing_consent"
+        ),
+        25: lambda case: _build_transfusion(
+            rows_by_table, case, v2, mode="incomplete_pretransfusion"
+        ),
+        26: lambda case: _build_transfusion(
+            rows_by_table, case, v2, mode="missing_course"
+        ),
+        27: lambda case: _build_transfusion(
+            rows_by_table, case, v2, mode="incomplete_inconsistent"
+        ),
         28: lambda case: _build_tumor(rows_by_table, case, v2),
         31: lambda case: _build_discharge(rows_by_table, case, v2, mode="alive"),
         32: lambda case: _build_discharge(rows_by_table, case, v2, mode="uncertain"),
