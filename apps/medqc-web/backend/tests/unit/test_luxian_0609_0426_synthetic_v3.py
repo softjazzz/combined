@@ -335,6 +335,57 @@ def test_v3_full_validation_upgrade_supplies_course_gate_facts_for_every_case() 
     assert primary_diagnosis["diagnosis_type"] == "入院诊断"
 
 
+def test_v3_surgery_cases_replace_cloned_events_with_one_authoritative_event() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    surgery_cases = {
+        case.target_index: case for case in cases if 17 <= case.target_index <= 22
+    }
+    inherited_visit = surgery_cases[21].target_visit_id
+    rows_by_table: dict[str, list[dict]] = {
+        "mr_surgery": [
+            {"visit_id": inherited_visit, "surgery_id": "legacy-1"},
+            {"visit_id": inherited_visit, "surgery_id": "legacy-2"},
+        ],
+        "rescue_record": [
+            {"visit_id": surgery_cases[20].target_visit_id, "document_id": "legacy-rescue"},
+        ],
+    }
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    for case_index in range(17, 22):
+        visit_id = surgery_cases[case_index].target_visit_id
+        mr_rows = [
+            row for row in rows_by_table["mr_surgery"] if row.get("visit_id") == visit_id
+        ]
+        record = next(
+            row
+            for row in rows_by_table["surgery_record"]
+            if row.get("visit_id") == visit_id
+        )
+        assert len(mr_rows) == 1
+        assert mr_rows[0]["surgery_id"] == record["surgery_id"]
+        assert mr_rows[0]["surgical_level"] == "4"
+
+    procedure_visit = surgery_cases[22].target_visit_id
+    assert not any(
+        row.get("visit_id") == procedure_visit for row in rows_by_table["mr_surgery"]
+    )
+    assert not any(
+        row.get("visit_id") == surgery_cases[20].target_visit_id
+        for row in rows_by_table.get("rescue_record", [])
+    )
+
+    implant_record = next(
+        row
+        for row in rows_by_table["surgery_record"]
+        if row.get("visit_id") == surgery_cases[17].target_visit_id
+    )
+    for label in ("植入物名称", "种类", "规格/型号", "材质", "数量", "植入物条码"):
+        assert label in implant_record["record_content"]
+
+
 def test_transfusion_case_uses_typed_consent_form() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()

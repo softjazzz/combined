@@ -406,12 +406,13 @@ def _build_consultation(
 
 def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, mode: str) -> list[str]:
     tables = (
-        "surgery_application", "inpat_nondrug_order", "surgery_record", "presurg_summary",
+        "surgery_application", "inpat_nondrug_order", "surgery_record", "mr_surgery", "presurg_summary",
         "inpat_drug_order",
         "surgery_safecheck_record", "surgery_inform_consent", "anesthesia_record",
         "consent_form",
         "preane_surveil_record", "postane_surveil_record", "presurg_discussion",
         "postsurg_firstcourse_record", "daily_course_record", "senior_course_record",
+        "rescue_record",
     )
     _clear_visit_rows(rows, case, *tables)
     refs = [_append_registration(rows, case, v2)]
@@ -430,15 +431,40 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
             "surgeon": "陈某医师", "request_physician": "陈某医师",
             "request_surgery_datetime": surgery_time, "record_content": "申请四级胃癌根治术，非急诊抢救手术。",
         })
+        surgery_id = f"{case.target_visit_id}-surgery-event"
+        v2._append_row(rows, "mr_surgery", {
+            **v2._case_base_row(case),
+            "surgery_id": surgery_id,
+            "surgery_name": "胃癌根治术",
+            "surgery_code": "43.9900",
+            "surgical_level": "4",
+            "surgery_level": "四级",
+            "surgeon": "陈某医师",
+            "anesthesia_method": "全身麻醉",
+            "surgery_begin_datetime": surgery_time,
+            "surgery_end_datetime": v2._dt_for_case(case, 2, 14),
+            "record_content": "已实施四级胃癌根治术，非急诊抢救手术。",
+        })
+        refs.append(surgery_id)
         refs.append(_append_document(
             rows, case, v2, table_name="surgery_record", suffix="surgery-record",
             title="手术记录", record_time=v2._dt_for_case(case, 2, 15),
-            content="实施四级胃癌根治术，II类切口，完成D2淋巴结清扫；植入可吸收止血材料1片，规格5cm×8cm。术者陈某，签名医生陈某。",
+            content=(
+                "实施四级胃癌根治术，II类切口，完成D2淋巴结清扫；"
+                "植入物名称：可吸收止血材料；种类：医用止血材料；"
+                "规格/型号：5cm×8cm；材质：氧化再生纤维素；数量：1片；"
+                "植入物条码：SYN-V3-IMPLANT-001。术者陈某，签名医生陈某。"
+            ),
             surgery_name="胃癌根治术", surgeon="陈某医师",
+            surgery_id=surgery_id,
             surgery_begin_time=f"{surgery_time:%Y-%m-%d %H:%M:%S}+08",
             surgery_end_time=f"{v2._dt_for_case(case, 2, 14):%Y-%m-%d %H:%M:%S}+08",
             anesthesia_method="全身麻醉",
-            surgery_process="完成D2淋巴结清扫，植入可吸收止血材料1片，规格5cm×8cm。",
+            surgery_process=(
+                "完成D2淋巴结清扫。植入物名称：可吸收止血材料；"
+                "种类：医用止血材料；规格/型号：5cm×8cm；"
+                "材质：氧化再生纤维素；数量：1片；条码：SYN-V3-IMPLANT-001。"
+            ),
         ))
     if mode == "record":
         refs.append(_append_order(
