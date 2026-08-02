@@ -2797,6 +2797,66 @@ def safe_luxian_0609_customer_display_facts(
                     "postane_surveil_record",
                 ],
             }
+        if (
+            rule_id == "LX0609-037"
+            and raw.get("verification_kind") == "anesthesia_visits_complete"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and raw.get("checked_sources")
+            == ["preane_surveil_record", "postane_surveil_record"]
+        ):
+            return {
+                "verification_kind": "anesthesia_visits_complete",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": [
+                    "preane_surveil_record",
+                    "postane_surveil_record",
+                ],
+            }
+        if (
+            rule_id == "LX0609-037"
+            and raw.get("failure_kind") == "anesthesia_visit_incomplete"
+            and raw.get("performed_anesthesia_confirmed") is True
+            and isinstance(raw.get("missing_fields_by_visit"), Mapping)
+        ):
+            allowed_fields = {
+                "preanesthesia_visit": {
+                    "asa_level",
+                    "airway_assessment",
+                    "fasting_status",
+                    "anesthesia_history",
+                    "risk_discussion",
+                    "anesthetist_signature",
+                    "record_time",
+                },
+                "postanesthesia_visit": {
+                    "consciousness_status",
+                    "respiratory_status",
+                    "circulatory_status",
+                    "complication_assessment",
+                    "anesthetist_signature",
+                    "record_time",
+                },
+            }
+            safe_missing = {
+                visit: list(
+                    dict.fromkeys(
+                        field
+                        for field in raw["missing_fields_by_visit"].get(visit, [])
+                        if field in allowed
+                    )
+                )
+                for visit, allowed in allowed_fields.items()
+                if isinstance(raw["missing_fields_by_visit"].get(visit), list)
+            }
+            safe_missing = {
+                visit: fields for visit, fields in safe_missing.items() if fields
+            }
+            if safe_missing:
+                return {
+                    "failure_kind": "anesthesia_visit_incomplete",
+                    "performed_anesthesia_confirmed": True,
+                    "missing_fields_by_visit": safe_missing,
+                }
         missing_sources = raw.get("missing_visit_sources")
         if (
             raw.get("failure_kind") != "anesthesia_visit_missing"

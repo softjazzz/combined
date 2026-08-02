@@ -848,6 +848,19 @@ _DISCHARGE_MEDICATION_FIELD_LABELS = {
     "route": "给药途径",
     "duration": "用药时间",
 }
+_ANESTHESIA_VISIT_FIELD_LABELS = {
+    "asa_level": "ASA分级",
+    "airway_assessment": "气道评估",
+    "fasting_status": "禁食禁饮情况",
+    "anesthesia_history": "既往麻醉史",
+    "risk_discussion": "麻醉风险告知",
+    "consciousness_status": "意识状态",
+    "respiratory_status": "呼吸情况",
+    "circulatory_status": "循环情况",
+    "complication_assessment": "麻醉并发症评估",
+    "anesthetist_signature": "麻醉医师签名",
+    "record_time": "记录时间",
+}
 
 
 def customer_finding_from_controlled_facts(
@@ -856,6 +869,7 @@ def customer_finding_from_controlled_facts(
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
     if rule_id not in {
+        "LX0609-037",
         *(f"LX0609-{index:03d}" for index in range(41, 49)),
         *(f"LX0609-{index:03d}" for index in range(50, 75)),
         "LX0609-070",
@@ -875,6 +889,31 @@ def customer_finding_from_controlled_facts(
     def joined(key: str) -> str:
         values = facts.get(key)
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
+
+    if rule_id == "LX0609-037":
+        if kind == "anesthesia_visits_complete":
+            return "麻醉术前和术后访视记录均存在，已核对的必要内容、麻醉医师签名及记录时间完整。"
+        if kind == "anesthesia_visit_incomplete":
+            raw_missing = facts.get("missing_fields_by_visit")
+            if not isinstance(raw_missing, Mapping):
+                return ""
+            visit_labels = {
+                "preanesthesia_visit": "麻醉术前访视",
+                "postanesthesia_visit": "麻醉术后访视",
+            }
+            details = []
+            for visit, visit_label in visit_labels.items():
+                fields = raw_missing.get(visit)
+                if not isinstance(fields, list):
+                    continue
+                field_labels = "、".join(
+                    _ANESTHESIA_VISIT_FIELD_LABELS[field]
+                    for field in fields
+                    if field in _ANESTHESIA_VISIT_FIELD_LABELS
+                )
+                if field_labels:
+                    details.append(f"{visit_label}缺少{field_labels}")
+            return f"{'；'.join(details)}。" if details else ""
 
     if rule_id == "LX0609-050" and kind == "uncertain_diagnosis_discussion_check":
         count = facts.get("discussion_count")

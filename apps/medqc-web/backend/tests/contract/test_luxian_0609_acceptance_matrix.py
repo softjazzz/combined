@@ -29,8 +29,8 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
     assert summary["rule_count"] == 75
     assert summary["definition_tiers"] == {"formal": 67, "temporary": 8}
     assert summary["pending_definition_rule_count"] == 9
-    assert summary["bound_fixture_count"] == 152
-    assert summary["case_slots"]["covered"] == 137
+    assert summary["bound_fixture_count"] == 153
+    assert summary["case_slots"]["covered"] == 138
     assert summary["case_slots"]["missing"] > 0
 
 
@@ -42,7 +42,7 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
             if slot["coverage"] == "covered":
                 covered_slots.append((rule["rule_id"], slot_name, slot["fixture_refs"]))
 
-    assert len(covered_slots) == 137
+    assert len(covered_slots) == 138
     assert all(
         refs
         and all(
@@ -53,7 +53,7 @@ def test_covered_means_controlled_fixture_binding_not_inferred_case_count() -> N
     )
     assert Counter(slot_name for _, slot_name, _ in covered_slots) == {
         "compliant": 66,
-        "confirmed_issue": 65,
+        "confirmed_issue": 66,
         "not_applicable": 6,
     }
 

@@ -92,6 +92,41 @@ def test_controlled_finding_does_not_render_untrusted_matrix_values():
     assert "PRIVATE_CHART_BODY" not in finding
 
 
+def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-037",
+        facts={
+            "failure_kind": "anesthesia_visit_incomplete",
+            "missing_fields_by_visit": {
+                "preanesthesia_visit": ["airway_assessment", "risk_discussion"],
+                "postanesthesia_visit": [
+                    "respiratory_status",
+                    "complication_assessment",
+                ],
+            },
+        },
+    )
+
+    assert finding == (
+        "麻醉术前访视缺少气道评估、麻醉风险告知；"
+        "麻醉术后访视缺少呼吸情况、麻醉并发症评估。"
+    )
+
+
+def test_anesthesia_visit_complete_facts_render_compliance_reason():
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-037",
+        facts={
+            "verification_kind": "anesthesia_visits_complete",
+            "performed_anesthesia_confirmed": True,
+            "checked_sources": [
+                "preane_surveil_record",
+                "postane_surveil_record",
+            ],
+        },
+    ) == "麻醉术前和术后访视记录均存在，已核对的必要内容、麻醉医师签名及记录时间完整。"
+
+
 def _reduced(final_state: CustomerFinalState):
     dimensions = {
         CustomerFinalState.COMPLIANT: (

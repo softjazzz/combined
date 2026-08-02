@@ -449,8 +449,8 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
         refs.extend([
             _append_document(rows, case, v2, table_name="anesthesia_record", suffix="anesthesia", title="麻醉记录单", record_time=v2._dt_for_case(case, 2, 9), content="静吸复合全麻，麻醉开始09:30，结束14:30，生命体征平稳。"),
             _append_document(rows, case, v2, table_name="consent_form", suffix="anesthesia-consent", title="麻醉知情同意书", record_time=v2._dt_for_case(case, 1, 15), content="患者和麻醉医生均已签名，签署时间精确到分钟。", consent_type="anesthesia", patient_sign="患者已签名", physician_sign="麻醉医师已签名", patient_sign_datetime=v2._dt_for_case(case, 1, 15), physician_sign_datetime=v2._dt_for_case(case, 1, 15)),
-            _append_document(rows, case, v2, table_name="preane_surveil_record", suffix="preane", title="麻醉术前访视记录", record_time=v2._dt_for_case(case, 1, 16), content="术前评估、ASA分级、气道及麻醉计划记录完整。", anesthetist_sign="麻醉医师陈某"),
-            _append_document(rows, case, v2, table_name="postane_surveil_record", suffix="postane", title="麻醉术后访视记录", record_time=v2._dt_for_case(case, 3, 9), content="术后清醒，呼吸循环稳定，无麻醉并发症。", anesthetist_sign="麻醉医师陈某"),
+            _append_document(rows, case, v2, table_name="preane_surveil_record", suffix="preane", title="麻醉术前访视记录", record_time=v2._dt_for_case(case, 1, 16), content="ASA III级，完成气道评估，已核对禁食禁饮；既往麻醉史无，已完成麻醉风险告知。", anesthetist_sign="麻醉医师陈某"),
+            _append_document(rows, case, v2, table_name="postane_surveil_record", suffix="postane", title="麻醉术后访视记录", record_time=v2._dt_for_case(case, 3, 9), content="神志清醒，呼吸平稳，循环稳定，无麻醉并发症。", anesthetist_sign="麻醉医师陈某"),
         ])
     elif mode == "discussion":
         refs.append(_append_document(

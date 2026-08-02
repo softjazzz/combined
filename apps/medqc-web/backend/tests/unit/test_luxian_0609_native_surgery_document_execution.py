@@ -561,6 +561,105 @@ def test_typed_detail_rules_are_not_applicable_when_parent_document_is_absent(
         }
 
 
+def test_typed_037_incomplete_visits_report_exact_missing_fields(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "record_content": "ASA III级。",
+                "anesthetist_sign": "",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "available",
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-037",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials({}),
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.reason_code == "anesthesia_visit_incomplete"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "anesthesia_visit_incomplete",
+        "performed_anesthesia_confirmed": True,
+        "missing_fields_by_visit": {
+            "preanesthesia_visit": [
+                "airway_assessment",
+                "fasting_status",
+                "anesthesia_history",
+                "risk_discussion",
+                "anesthetist_signature",
+            ],
+            "postanesthesia_visit": [
+                "respiratory_status",
+                "circulatory_status",
+                "complication_assessment",
+            ],
+        },
+    }
+
+
+def test_037_complete_visits_are_compliant(monkeypatch):
+    rows_by_source = {
+        "preane_surveil_record": (
+            {
+                "record_time": "2026-07-30 08:00:00",
+                "record_content": (
+                    "ASA III级，完成气道评估，已核对禁食禁饮；"
+                    "既往麻醉史无，已完成麻醉风险告知。"
+                ),
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+        "postane_surveil_record": (
+            {
+                "record_time": "2026-07-31 08:00:00",
+                "record_content": "神志清醒，呼吸平稳，循环稳定，无麻醉并发症。",
+                "anesthetist_sign": "麻醉医师陈某",
+            },
+        ),
+    }
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_visit_rows",
+        lambda _materials, source_key: rows_by_source[source_key],
+    )
+    state, missing = surgery_doc._anesthesia_visit_completeness(
+        _RowsOnlyMaterials({})
+    )
+
+    assert state == "complete"
+    assert missing == {}
+
+
 def test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record(
     monkeypatch,
 ):

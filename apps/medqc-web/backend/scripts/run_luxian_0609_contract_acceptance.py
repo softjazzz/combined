@@ -91,6 +91,7 @@ _NATIVE_FIXTURE_SPECS = (
     ("LX0609-034", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"),
     ("LX0609-035", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_035_incomplete_consent_is_non_compliant_with_exact_missing_fields"),
     ("LX0609-036", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"),
+    ("LX0609-037", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_037_incomplete_visits_report_exact_missing_fields"),
     ("LX0609-038", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record"),
     ("LX0609-039", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion"),
     ("LX0609-040", "non_compliant", "test_luxian_0609_native_mdt_execution.py", "test_missing_mdt_document_is_programmatic_non_compliant"),

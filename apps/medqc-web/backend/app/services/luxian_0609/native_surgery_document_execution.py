@@ -717,6 +717,93 @@ def _anesthesia_consent_completeness(
     return ("incomplete" if missing else "complete"), missing
 
 
+def _anesthesia_visit_rows(
+    materials: Luxian0609EvidenceMaterialStore | None,
+    source_key: str,
+) -> tuple[Mapping[str, Any], ...] | None:
+    if not isinstance(materials, Luxian0609EvidenceMaterialStore):
+        return None
+    try:
+        return tuple(materials.rows(source_key))
+    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+        return None
+
+
+def _row_has_any(
+    row: Mapping[str, Any],
+    *,
+    structured_fields: Sequence[str] = (),
+    text_markers: Sequence[str] = (),
+) -> bool:
+    if any(_clean(row.get(field)) for field in structured_fields):
+        return True
+    text = _row_text(row)
+    return bool(text) and any(marker in text for marker in text_markers)
+
+
+def _anesthesia_visit_completeness(
+    materials: Luxian0609EvidenceMaterialStore | None,
+) -> tuple[str, dict[str, list[str]]]:
+    """按已确认的最小口径核对术前、术后麻醉访视必填项。"""
+
+    rows_by_source: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    for source_key in ("preane_surveil_record", "postane_surveil_record"):
+        rows = _anesthesia_visit_rows(materials, source_key)
+        if rows is None:
+            return "unavailable", {}
+        if len(rows) != 1:
+            return "association_failed", {}
+        rows_by_source[source_key] = rows
+
+    pre = rows_by_source["preane_surveil_record"][0]
+    post = rows_by_source["postane_surveil_record"][0]
+    pre_checks = {
+        "asa_level": _row_has_any(
+            pre, structured_fields=("ASA_level", "asa_level"), text_markers=("ASA",)
+        ),
+        "airway_assessment": _row_has_any(pre, text_markers=("气道",)),
+        "fasting_status": _row_has_any(pre, text_markers=("禁食", "禁饮")),
+        "anesthesia_history": _row_has_any(
+            pre, text_markers=("麻醉史", "麻醉手术史")
+        ),
+        "risk_discussion": _row_has_any(
+            pre, text_markers=("风险告知", "麻醉风险", "围术期风险")
+        ),
+        "anesthetist_signature": _row_has_any(
+            pre,
+            structured_fields=("anesthetist_sign",),
+            text_markers=("医师签名",),
+        ),
+        "record_time": _row_has_any(
+            pre, structured_fields=("record_time", "submit_datetime")
+        ),
+    }
+    post_checks = {
+        "consciousness_status": _row_has_any(
+            post, text_markers=("神志", "意识", "清醒")
+        ),
+        "respiratory_status": _row_has_any(post, text_markers=("呼吸",)),
+        "circulatory_status": _row_has_any(post, text_markers=("循环",)),
+        "complication_assessment": _row_has_any(
+            post, text_markers=("并发症", "恶心呕吐", "咽痛", "特殊情况")
+        ),
+        "anesthetist_signature": _row_has_any(
+            post,
+            structured_fields=("anesthetist_sign",),
+            text_markers=("医师签名",),
+        ),
+        "record_time": _row_has_any(
+            post, structured_fields=("record_time", "submit_datetime")
+        ),
+    }
+    missing = {
+        "preanesthesia_visit": [name for name, present in pre_checks.items() if not present],
+        "postanesthesia_visit": [name for name, present in post_checks.items() if not present],
+    }
+    missing = {source: fields for source, fields in missing.items() if fields}
+    return ("incomplete" if missing else "complete"), missing
+
+
 def _source_row_count(
     materials: Luxian0609EvidenceMaterialStore | None,
     source_key: str,
@@ -1079,8 +1166,37 @@ def _typed_terminal_outcome(
                     "checked_sources": list(typed_visit_sources),
                 },
             )
+        completeness, missing_fields = _anesthesia_visit_completeness(materials)
+        if completeness == "unavailable":
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "required_field_missing", "program"
+            )
+        if completeness == "association_failed":
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "association_failed", "program"
+            )
+        if completeness == "incomplete":
+            return _SurgeryDocumentOutcome(
+                rule_id,
+                "non_compliant",
+                "anesthesia_visit_incomplete",
+                "program",
+                {
+                    "failure_kind": "anesthesia_visit_incomplete",
+                    "performed_anesthesia_confirmed": True,
+                    "missing_fields_by_visit": missing_fields,
+                },
+            )
         return _SurgeryDocumentOutcome(
-            rule_id, "data_gap", "anesthesia_visit_semantics_unresolved", "program"
+            rule_id,
+            "compliant",
+            "anesthesia_visits_complete",
+            "program",
+            {
+                "verification_kind": "anesthesia_visits_complete",
+                "performed_anesthesia_confirmed": True,
+                "checked_sources": list(typed_visit_sources),
+            },
         )
 
     # 038只判麻醉记录单存在；具体字段规范不在该客户质控点范围。

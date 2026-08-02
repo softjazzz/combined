@@ -1001,6 +1001,34 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             },
         ),
         (
+            "LX0609-037",
+            {
+                "failure_kind": "anesthesia_visit_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields_by_visit": {
+                    "preanesthesia_visit": [
+                        "airway_assessment",
+                        "risk_discussion",
+                        "PRIVATE_FIELD",
+                    ],
+                    "postanesthesia_visit": ["respiratory_status"],
+                    "PRIVATE_VISIT": ["record_time"],
+                },
+                "raw_visit_text": "PRIVATE_VISIT_TEXT",
+            },
+            {
+                "failure_kind": "anesthesia_visit_incomplete",
+                "performed_anesthesia_confirmed": True,
+                "missing_fields_by_visit": {
+                    "preanesthesia_visit": [
+                        "airway_assessment",
+                        "risk_discussion",
+                    ],
+                    "postanesthesia_visit": ["respiratory_status"],
+                },
+            },
+        ),
+        (
             "LX0609-039",
             {
                 "failure_kind": "preop_discussion_missing",

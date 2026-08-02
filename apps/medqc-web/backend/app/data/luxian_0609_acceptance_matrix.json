@@ -1780,8 +1780,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_037_incomplete_visits_report_exact_missing_fields"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
