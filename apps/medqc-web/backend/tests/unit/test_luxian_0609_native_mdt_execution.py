@@ -188,6 +188,13 @@ async def test_hospital_performance_level_promotes_catalog_surgery_to_level_four
 
     assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
     assert execution.decisions[0].reason_code == "requirement_satisfied"
+    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "hospital_performance",
+        "mdt_discussion_state": "completed",
+    }
 
 
 @pytest.mark.asyncio
@@ -220,6 +227,10 @@ async def test_catalog_operation_never_triggers_level_four_mdt():
 
     assert execution.decisions[0].applicability is ApplicabilityState.NOT_APPLICABLE
     assert execution.decisions[0].reason_code == "trigger_absent_complete"
+    assert dict(execution.customer_display_facts)["LX0609-040"] == {
+        "performed_surgery_confirmed": False,
+        "procedure_kind": "non_surgical_operation",
+    }
 
 
 @pytest.mark.asyncio

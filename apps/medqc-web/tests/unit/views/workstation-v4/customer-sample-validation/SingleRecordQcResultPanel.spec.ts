@@ -348,6 +348,37 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('手术记录')
   })
 
+  it('四级手术MDT问题展示手术等级、等级来源和讨论事实', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-040',
+            rule_name: '四级手术术前多学科讨论',
+            status: 'non_compliant',
+            conclusion: '四级手术术前未完成多学科讨论。',
+            customer_display_facts: {
+              performed_surgery_confirmed: true,
+              procedure_kind: 'surgery',
+              effective_surgery_level: '四级',
+              surgery_level_source: 'hospital_performance',
+              mdt_discussion_state: 'missing',
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.text()).toContain('手术等级')
+    expect(wrapper.text()).toContain('四级')
+    expect(wrapper.text()).toContain('等级来源')
+    expect(wrapper.text()).toContain('院内绩效目录')
+    expect(wrapper.text()).toContain('多学科讨论')
+    expect(wrapper.text()).toContain('未完成')
+  })
+
   it('时限问题直接展示后端返回的入院时间、记录时间、实际间隔和超出时长', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {

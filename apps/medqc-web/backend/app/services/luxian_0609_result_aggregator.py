@@ -2222,6 +2222,41 @@ def safe_luxian_0609_customer_display_facts(
             "emergency_rescue_exception_absent": True,
             "checked_sources": ["presurg_discussion"],
         }
+    if rule_id == "LX0609-040":
+        performed = raw.get("performed_surgery_confirmed")
+        procedure_kind = raw.get("procedure_kind")
+        effective_level = raw.get("effective_surgery_level")
+        level_source = raw.get("surgery_level_source")
+        discussion_state = raw.get("mdt_discussion_state")
+        if (
+            not isinstance(performed, bool)
+            or procedure_kind not in {"surgery", "non_surgical_operation", "none", "unknown"}
+            or (
+                effective_level is not None
+                and effective_level not in {"一级", "二级", "三级", "四级"}
+            )
+            or (
+                level_source is not None
+                and level_source
+                not in {"hospital_performance", "national_catalog", "structured_field"}
+            )
+            or (
+                discussion_state is not None
+                and discussion_state not in {"completed", "missing", "unknown"}
+            )
+        ):
+            return None
+        facts: dict[str, Any] = {
+            "performed_surgery_confirmed": performed,
+            "procedure_kind": procedure_kind,
+        }
+        if effective_level is not None:
+            facts["effective_surgery_level"] = effective_level
+        if level_source is not None:
+            facts["surgery_level_source"] = level_source
+        if discussion_state is not None:
+            facts["mdt_discussion_state"] = discussion_state
+        return facts
     if rule_id == "LX0609-025":
         missing = raw.get("missing_fields")
         if not isinstance(missing, list):

@@ -419,6 +419,10 @@ const factLabels: Record<string, string> = {
   checked_sources: '已核对来源',
   target_document: '目标文书',
   performed_surgery_confirmed: '已实施手术',
+  procedure_kind: '操作类型',
+  effective_surgery_level: '手术等级',
+  surgery_level_source: '等级来源',
+  mdt_discussion_state: '多学科讨论',
   threshold_hours: '规定时限',
   copy_similarity: '实际相似度',
   copy_similarity_threshold: '判定阈值',
@@ -447,6 +451,15 @@ const factValueLabels: Record<string, string> = {
   first_course_record: '首次病程记录',
   presurg_summary: '术前小结',
   surgery_safecheck_record: '手术安全核查表',
+  surgery: '手术',
+  non_surgical_operation: '非手术操作',
+  none: '未实施手术',
+  unknown: '暂无法确认',
+  hospital_performance: '院内绩效目录',
+  national_catalog: '国家临床版目录',
+  structured_field: '病历结构化字段',
+  completed: '已完成',
+  missing: '未完成',
 }
 
 const dataGapLabels: Record<string, string> = {

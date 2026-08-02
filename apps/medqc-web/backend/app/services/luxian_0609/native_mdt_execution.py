@@ -84,6 +84,7 @@ class MdtLLMClient(Protocol):
 class NativeMdtExecutionResult:
     result: dict[str, Any] | None
     decisions: tuple[RuleDecision, ...] = ()
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -427,6 +428,7 @@ def _finalize(
     completion_tokens: int = 0,
     total_tokens: int = 0,
     api_time: float = 0.0,
+    customer_display_facts: tuple[tuple[str, Mapping[str, Any]], ...] = (),
 ) -> NativeMdtExecutionResult:
     if typed_requested and conditional_blocker is not None and outcome.status in {
         "non_compliant",
@@ -440,6 +442,7 @@ def _finalize(
             decisions=(
                 _typed_decision_from_outcome(outcome=outcome, snapshot=snapshot),
             ),
+            customer_display_facts=customer_display_facts,
             llm_call_count=llm_call_count,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -457,6 +460,7 @@ def _finalize(
             total_tokens=total_tokens,
             api_time=api_time,
         ),
+        customer_display_facts=customer_display_facts,
         llm_call_count=llm_call_count,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
@@ -505,6 +509,7 @@ async def execute_luxian_0609_native_mdt_rule(
         raise ValueError("typed mdt rule requires one evidence session")
     terminal_blocker: _MdtRuleOutcome | None = None
     conditional_blocker: _MdtRuleOutcome | None = None
+    display_facts: dict[str, Any] = {}
     if typed_requested:
         assert evidence_snapshot is not None
         terminal_blocker, conditional_blocker = _typed_source_blockers(
@@ -520,6 +525,14 @@ async def execute_luxian_0609_native_mdt_rule(
         total_tokens: int = 0,
         api_time: float = 0.0,
     ) -> NativeMdtExecutionResult:
+        facts = dict(display_facts)
+        if facts:
+            if outcome.status == "compliant":
+                facts["mdt_discussion_state"] = "completed"
+            elif outcome.status == "non_compliant":
+                facts["mdt_discussion_state"] = "missing"
+            elif outcome.status == "data_gap":
+                facts["mdt_discussion_state"] = "unknown"
         return _finalize(
             outcome=outcome,
             typed_requested=typed_requested,
@@ -530,6 +543,7 @@ async def execute_luxian_0609_native_mdt_rule(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             api_time=api_time,
+            customer_display_facts=((RULE_ID, facts),) if facts else (),
         )
 
     if terminal_blocker is not None:
@@ -542,6 +556,22 @@ async def execute_luxian_0609_native_mdt_rule(
             materials=evidence_materials,
             source_keys=("mr_surgery",),
         )
+        display_facts.update(
+            {
+                "performed_surgery_confirmed": (
+                    surgery_applicability.state == "applicable"
+                ),
+                "procedure_kind": surgery_applicability.procedure_kind,
+            }
+        )
+        if surgery_applicability.effective_level:
+            display_facts["effective_surgery_level"] = (
+                surgery_applicability.effective_level
+            )
+        if surgery_applicability.level_source:
+            display_facts["surgery_level_source"] = (
+                surgery_applicability.level_source
+            )
         if surgery_applicability.state == "technical_error":
             return finish(
                 _MdtRuleOutcome(

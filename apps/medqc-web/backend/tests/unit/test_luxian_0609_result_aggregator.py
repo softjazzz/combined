@@ -384,6 +384,40 @@ def test_reduced_decision_preserves_surgery_record_present_facts():
     }
 
 
+def test_040_preserves_controlled_level_source_and_mdt_facts():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-040", "name": "四级手术术前多学科讨论"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-040", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(
+            (
+                "LX0609-040",
+                {
+                    "performed_surgery_confirmed": True,
+                    "procedure_kind": "surgery",
+                    "effective_surgery_level": "四级",
+                    "surgery_level_source": "hospital_performance",
+                    "mdt_discussion_state": "missing",
+                },
+            ),
+        ),
+    )[0]
+
+    assert result["customer_display_facts"] == {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "hospital_performance",
+        "mdt_discussion_state": "missing",
+    }
+
+
 def test_surgery_record_present_facts_keep_only_exact_referenced_evidence():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
