@@ -150,27 +150,49 @@ def _fixture_bindings() -> dict[str, list[dict[str, str]]]:
                 "fixture_ref": f"native-unit:tests/unit/{filename}::{test_name}",
             }
         )
+    for contract in load_luxian_0609_rule_contracts():
+        if contract.phase_status == "pending_definition":
+            continue
+        bindings.setdefault(contract.rule_id, []).append(
+            {
+                "rule_id": contract.rule_id,
+                "expected_status": "data_gap",
+                "fixture_ref": (
+                    "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::"
+                    "test_each_defined_rule_data_gap_names_customer_visible_missing_material"
+                    f"[{contract.rule_id}]"
+                ),
+            }
+        )
     return bindings
 
 
-def _validate_native_fixture_ref(fixture_ref: str) -> str | None:
-    if not fixture_ref.startswith("native-unit:"):
+def _validate_pytest_fixture_ref(fixture_ref: str) -> str | None:
+    prefix = next(
+        (
+            candidate
+            for candidate in ("native-unit:", "contract-unit:")
+            if fixture_ref.startswith(candidate)
+        ),
+        "",
+    )
+    if not prefix:
         return None
-    node_id = fixture_ref.removeprefix("native-unit:")
+    node_id = fixture_ref.removeprefix(prefix)
     relative_path, separator, test_name = node_id.partition("::")
     if not separator or not relative_path or not test_name:
-        return f"invalid native fixture ref: {fixture_ref}"
+        return f"invalid pytest fixture ref: {fixture_ref}"
     test_path = (BACKEND_ROOT / relative_path).resolve()
     try:
         test_path.relative_to(BACKEND_ROOT.resolve())
     except ValueError:
-        return f"native fixture escapes backend root: {fixture_ref}"
+        return f"pytest fixture escapes backend root: {fixture_ref}"
     if not test_path.is_file():
-        return f"native fixture file does not exist: {fixture_ref}"
+        return f"pytest fixture file does not exist: {fixture_ref}"
     function_name = test_name.split("[", 1)[0]
     pattern = re.compile(rf"^(?:async\s+)?def\s+{re.escape(function_name)}\s*\(", re.MULTILINE)
     if not pattern.search(test_path.read_text(encoding="utf-8")):
-        return f"native fixture test does not exist: {fixture_ref}"
+        return f"pytest fixture test does not exist: {fixture_ref}"
     return None
 
 
@@ -352,7 +374,7 @@ def validate_acceptance_matrix(
                 errors.append(f"{rule_id}/{slot_key} has fixture without coverage")
             slot_counts[coverage] += 1
             for fixture_ref in refs:
-                fixture_error = _validate_native_fixture_ref(str(fixture_ref))
+                fixture_error = _validate_pytest_fixture_ref(str(fixture_ref))
                 if fixture_error:
                     errors.append(fixture_error)
             fixture_refs.extend(str(ref) for ref in refs)

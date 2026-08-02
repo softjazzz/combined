@@ -37,8 +37,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-001]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["入院时间", "记录时间"],
@@ -84,8 +87,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-002]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["入院时间", "记录时间"],
@@ -133,8 +139,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-003]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术时间", "记录时间"],
@@ -180,8 +189,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-004]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["抢救结束时间", "记录时间"],
@@ -227,8 +239,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-005]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["入院时间", "查房时间", "医师层级"],
@@ -274,8 +289,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-006]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["入院时间", "查房时间", "医师层级"],
@@ -323,8 +341,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-007]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["病危病重排除", "记录时间轴"],
@@ -372,8 +393,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-008]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["病重医嘱起止时间", "记录时间轴"],
@@ -426,8 +450,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-009]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["病危医嘱起止时间", "病情变化证据"],
@@ -536,8 +563,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-011]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["报告时间", "检查类型", "记录时间"],
@@ -608,8 +638,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-012]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["报告时间", "阳性结果标志"],
@@ -680,8 +713,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-013]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["病理报告时间", "病理结果"],
@@ -728,8 +764,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-014]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["细菌培养报告时间", "记录时间"],
@@ -800,8 +839,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-015]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["阳性菌", "药敏", "报告时间"],
@@ -876,8 +918,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-016]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -947,8 +992,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-018]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["主诊断"],
@@ -995,8 +1043,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-019]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["病理检查存在性"],
@@ -1044,8 +1095,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-020]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["会诊时间", "执行记录时间"],
@@ -1093,8 +1147,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-021]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -1142,8 +1199,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-022]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -1284,8 +1344,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-025]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["植入物标志可选"],
@@ -1332,8 +1395,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-026]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"],
@@ -1365,8 +1431,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-027]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["恶性肿瘤诊断"],
@@ -1460,8 +1529,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-029]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术医嘱"],
@@ -1500,8 +1572,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-030]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术医嘱"],
@@ -1535,8 +1610,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-031]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["术者", "记录者", "签名医生"],
@@ -1575,8 +1653,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-032]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -1618,8 +1699,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-033]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -1686,8 +1770,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-034]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["无"],
@@ -1721,8 +1808,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-035]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["签名", "签署时间"],
@@ -1756,8 +1846,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-036]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["麻醉方式"],
@@ -1791,8 +1884,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-037]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["麻醉方式", "访视必要字段"],
@@ -1826,8 +1922,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-038]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["麻醉方式"],
@@ -1861,8 +1960,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-039]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["急诊抢救标志", "术者"],
@@ -1896,8 +1998,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-040]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术级别"],
@@ -1954,8 +2059,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-041]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血医嘱或输血记录"],
@@ -1987,8 +2095,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-042]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["签名", "输血指征", "风险告知"],
@@ -2020,8 +2131,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-043]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血前检验项目", "检验时间"],
@@ -2053,8 +2167,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-044]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血医嘱", "输血申请"],
@@ -2101,8 +2218,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-045]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血时间"],
@@ -2149,8 +2269,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-046]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血成分", "输血量", "反应"],
@@ -2197,8 +2320,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-047]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血结束时间"],
@@ -2230,8 +2356,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-048]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血成分", "剂量", "时间"],
@@ -2305,8 +2434,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-050]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["入院时间", "诊断不明确事件", "疑难病历讨论记录"],
@@ -2354,8 +2486,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-051]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["死亡时间", "死亡病历讨论记录时间"],
@@ -2402,8 +2537,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-052]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["PL/PH标识", "检验报告时间", "处置记录时间"],
@@ -2450,8 +2588,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-053]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["PL/PH标识", "危急值处置记录"],
@@ -2483,8 +2624,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-054]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["抗菌药物医嘱", "用药理由"],
@@ -2516,8 +2660,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-055]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["用药时间", "效果评价时间", "效果评价内容"],
@@ -2594,8 +2741,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-057]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["经验用药标识", "用药理由", "病原学标本"],
@@ -2627,8 +2777,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-058]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["特殊级抗菌药物目录", "专家查房或会诊"],
@@ -2693,8 +2846,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-060]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["死亡状态", "死亡记录"],
@@ -2728,8 +2884,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-061]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["出院时间", "出院记录时间"],
@@ -2777,8 +2936,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-062]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["结构化出院带药"],
@@ -2812,8 +2974,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-063]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["权威诊断", "出院记录诊断", "诊断顺序"],
@@ -2847,8 +3012,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-064]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术时间", "病程时间", "术者身份", "文书作者或签名"],
@@ -2896,8 +3064,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-065]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["手术时间", "上级医师查房记录时间"],
@@ -2945,8 +3116,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-066]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["已实施手术", "术后首次病程记录"],
@@ -2980,8 +3154,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-067]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["出院时间", "病程记录时间"],
@@ -3015,8 +3192,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-068]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["出院时间", "上级医师查房记录", "同意出院意见"],
@@ -3049,8 +3229,11 @@
           "expected_status": "not_applicable"
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-069]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["会诊申请时间", "会诊记录时间", "会诊关联标识"],
@@ -3098,8 +3281,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-070]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["输血事件", "输血前九项检验"],
@@ -3131,8 +3317,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-071]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["经治医师变更事件", "交班记录时间", "接班记录时间"],
@@ -3178,8 +3367,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-072]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["转科医嘱时间", "转入记录时间", "转出记录时间"],
@@ -3225,8 +3417,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-073]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["转科医嘱", "转入记录", "转出记录"],
@@ -3258,8 +3453,11 @@
           "fixture_refs": []
         },
         "data_insufficient": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_defined_rule_data_gap_names_customer_visible_missing_material[LX0609-074]"
+          ],
+          "expected_status": "data_gap"
         }
       },
       "required_facts": ["诊断变更历史", "病程记录"],

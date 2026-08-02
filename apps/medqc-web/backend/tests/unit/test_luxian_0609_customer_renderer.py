@@ -22,10 +22,16 @@ from app.services.luxian_0609.decision_reducer import (
     reduce_luxian_0609_rule_decision,
 )
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
+from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
 
 
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
+DEFINED_RULE_IDS = tuple(
+    contract.rule_id
+    for contract in load_luxian_0609_rule_contracts()
+    if contract.phase_status != "pending_definition"
+)
 
 
 @pytest.mark.parametrize(
@@ -496,6 +502,31 @@ def test_data_gap_uses_unknown_criterion_label_to_name_missing_data():
     assert result["findings"] == "当前缺少第一诊断指向，暂时无法完成核对"
     assert "已读取到相关记录" in result["evidence"]
     assert "第一诊断指向" in result["evidence"]
+
+
+@pytest.mark.parametrize("rule_id", DEFINED_RULE_IDS)
+def test_each_defined_rule_data_gap_names_customer_visible_missing_material(rule_id):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-gap-acceptance-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert result["findings"] not in {
+        "当前记录缺少完成核对所需的关键信息",
+        "当前资料不足，暂时无法完成核对",
+    }
+    assert result["evidence"] != "已读取到相关记录，但其中缺少本项判断所需的字段。"
 
 
 def test_renderer_has_no_free_text_or_wrapper_mapping_input_seam():
