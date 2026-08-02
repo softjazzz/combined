@@ -146,6 +146,12 @@ def build_runtime_manifest(
     )
     if [item.rule_id for item in dependencies] != rule_ids:
         raise ValueError("LX0609 dependency inventory does not match rule catalog")
+    from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contracts
+
+    contracts = load_luxian_0609_rule_contracts()
+    if [item.rule_id for item in contracts] != rule_ids:
+        raise ValueError("LX0609 rule contracts do not match rule catalog")
+    contract_by_id = {item.rule_id: item for item in contracts}
 
     runtime_settings = resolve_mainline_rule_decision_settings(settings)
     package_plan = build_luxian_0609_package_plan_from_settings(
@@ -166,6 +172,17 @@ def build_runtime_manifest(
             "executor_key": item.executor_key,
             "active_path": "native" if item.rule_id in native_ids else "compatibility",
             "rule_version": item.rule_version,
+            "contract_version": contract_by_id[item.rule_id].contract_version,
+            "decision_authority": contract_by_id[item.rule_id].decision_authority,
+            "max_llm_calls_per_rule": contract_by_id[
+                item.rule_id
+            ].max_llm_calls_per_rule,
+            "source_contract_state": contract_by_id[item.rule_id].source_contract_state,
+            "phase_status": contract_by_id[item.rule_id].phase_status,
+            "definition_version": contract_by_id[item.rule_id].definition_version,
+            "active_criteria": list(contract_by_id[item.rule_id].active_criteria),
+            "pending_criteria": list(contract_by_id[item.rule_id].pending_criteria),
+            "pending_reason_code": contract_by_id[item.rule_id].pending_reason_code,
         }
         for item in dependencies
     ]

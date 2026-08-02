@@ -107,6 +107,11 @@ class Luxian0609RuleContract:
     data_dependencies: tuple[str, ...]
     rule_version: str
     prompt_version: str
+    phase_status: str
+    definition_version: str
+    active_criteria: tuple[str, ...] = ()
+    pending_criteria: tuple[str, ...] = ()
+    pending_reason_code: str = ""
     criteria: tuple[RuleCriterionContract, ...] = ()
 
     def __post_init__(self) -> None:
@@ -121,6 +126,8 @@ class Luxian0609RuleContract:
                 self.result_contract_version,
                 self.privacy_contract_version,
                 self.rule_version,
+                self.phase_status,
+                self.definition_version,
             )
         ):
             raise ValueError("incomplete LX0609 rule contract")
@@ -143,6 +150,21 @@ class Luxian0609RuleContract:
             raise ValueError("invalid LX0609 LLM call budget")
         if not self.applicable_documents:
             raise ValueError("LX0609 contract is missing applicable documents")
+        if self.phase_status == "phase_1_target":
+            if self.pending_criteria or self.pending_reason_code:
+                raise ValueError("LX0609 phase target contains pending definition")
+        elif self.phase_status == "phase_1_partial":
+            if (
+                not self.active_criteria
+                or not self.pending_criteria
+                or self.pending_reason_code
+            ):
+                raise ValueError("invalid LX0609 partial definition contract")
+        elif self.phase_status == "pending_definition":
+            if self.active_criteria or self.pending_criteria or not self.pending_reason_code:
+                raise ValueError("invalid LX0609 pending definition contract")
+        else:
+            raise ValueError("invalid LX0609 phase status")
         if (
             not isinstance(self.criteria, tuple)
             or len({item.criterion_id for item in self.criteria}) != len(self.criteria)
@@ -204,6 +226,7 @@ def compile_luxian_0609_rule_contracts(
     """把临床目录和执行覆盖层编译为不可变契约，并拒绝任何注册漂移。"""
 
     from .native_package import build_luxian_0609_dependency_inventory
+    from .phase_scope import load_luxian_0609_phase_scope
 
     inventory = build_luxian_0609_dependency_inventory(
         rules=rules,
@@ -214,6 +237,10 @@ def compile_luxian_0609_rule_contracts(
         for item in rules
     }
     dependency_by_id = {item.rule_id: item for item in inventory}
+    phase_scope = load_luxian_0609_phase_scope()
+    phase_scope_by_id = {item.rule_id: item for item in phase_scope}
+    if tuple(phase_scope_by_id) != tuple(item.rule_id for item in inventory):
+        raise ValueError("LX0609 phase scope does not match dependency inventory")
     if _clean(payload.get("schema_version")) != RULE_CONTRACT_SCHEMA_VERSION:
         raise ValueError("unsupported LX0609 rule contract schema")
     defaults = payload.get("defaults")
@@ -230,6 +257,7 @@ def compile_luxian_0609_rule_contracts(
         if rule_id in seen or rule_id not in dependency_by_id or rule_id not in catalog_by_id:
             raise ValueError("duplicate or unknown LX0609 rule contract")
         dependency = dependency_by_id[rule_id]
+        scope = phase_scope_by_id[rule_id]
         for field_name in ("family_key", "executor_key", "execution_mode"):
             if _clean(raw.get(field_name)) != _clean(getattr(dependency, field_name)):
                 raise ValueError(f"LX0609 rule contract drift: {rule_id}.{field_name}")
@@ -253,6 +281,11 @@ def compile_luxian_0609_rule_contracts(
                 data_dependencies=dependency.data_dependencies,
                 rule_version=dependency.rule_version,
                 prompt_version=_clean(rule.get("prompt_version")),
+                phase_status=scope.phase_status,
+                definition_version=scope.definition_version,
+                active_criteria=scope.active_criteria,
+                pending_criteria=scope.pending_criteria,
+                pending_reason_code=scope.pending_reason_code,
                 criteria=_compile_criteria(rule),
             )
         )

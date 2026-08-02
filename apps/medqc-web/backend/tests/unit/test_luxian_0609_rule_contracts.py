@@ -30,6 +30,28 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 57
+    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 2
+    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 16
+    assert {contract.definition_version for contract in contracts} == {
+        "lx0609-defined-scope-2026-07-31"
+    }
+
+
+@pytest.mark.unit
+def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> None:
+    contracts = {item.rule_id: item for item in load_luxian_0609_rule_contracts()}
+
+    critical_course = contracts["LX0609-009"]
+    assert critical_course.phase_status == "phase_1_partial"
+    assert critical_course.active_criteria == ("critical_daily_course_coverage",)
+    assert critical_course.pending_criteria == (
+        "condition_change_course_timeliness",
+    )
+
+    exam_course = contracts["LX0609-010"]
+    assert exam_course.phase_status == "pending_definition"
+    assert exam_course.pending_reason_code == "exam_course_linkage_window_undefined"
 
 
 @pytest.mark.unit

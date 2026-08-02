@@ -69,6 +69,17 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert by_rule["LX0609-029"]["active_path"] == "native"
     assert by_rule["LX0609-030"]["active_path"] == "native"
     assert by_rule["LX0609-032"]["active_path"] == "native"
+    assert by_rule["LX0609-009"]["phase_status"] == "phase_1_partial"
+    assert by_rule["LX0609-009"]["active_criteria"] == [
+        "critical_daily_course_coverage"
+    ]
+    assert by_rule["LX0609-010"]["phase_status"] == "pending_definition"
+    assert (
+        by_rule["LX0609-010"]["pending_reason_code"]
+        == "exam_course_linkage_window_undefined"
+    )
+    assert all(item["contract_version"] for item in manifest["rules"])
+    assert all(item["definition_version"] for item in manifest["rules"])
     assert manifest["flags"]["unified_engine"] is True
     assert manifest["flags"]["rule_decision_surgery_document"] is True
     assert manifest["flags"]["native_consultation"] is False
