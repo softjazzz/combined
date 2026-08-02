@@ -1,0 +1,3193 @@
+{
+  "schema_version": "lx0609-acceptance-matrix-v1",
+  "rule_set_key": "luxian_0609_qc_v1",
+  "rule_master_version": "2026-08-02",
+  "generated_from": {
+    "runtime_manifest_schema": "lx0609-runtime-manifest-v1",
+    "runtime_contract_hash": "511f63ef20214a8c4b7922b66e43b0e6dc3eb7a17bcfe4acdea0e5206a87ea3d",
+    "synthetic_fixture_set": "0426-derived-v3"
+  },
+  "coverage_semantics": {
+    "covered": "已绑定受控fixture；不代表引擎执行已经通过",
+    "missing": "规则定义明确，但尚无对应受控fixture",
+    "not_required": "该规则没有此状态语义，不计入覆盖分母",
+    "pending_definition": "当前规则定义合同尚未收口，fixture验收暂停"
+  },
+  "rules": [
+    {
+      "rule_id": "LX0609-001",
+      "title": "入院记录：入院后24小时内是否完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["入院时间", "记录时间"],
+      "required_evidence": ["admission_record"],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-002",
+      "title": "首次病程：入院后8小时内无首次病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["入院时间", "记录时间"],
+      "required_evidence": ["daily_course_record", "first_course_record", "senior_course_record"],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-003",
+      "title": "手术记录：手术后24小时内是否完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术时间", "记录时间"],
+      "required_evidence": ["surgery_record"],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-004",
+      "title": "抢救记录：抢救结束后6小时内是否完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["抢救结束时间", "记录时间"],
+      "required_evidence": ["rescue_record"],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-005",
+      "title": "上级医生查房记录：入院后48小时内无主治医师首次查房记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["入院时间", "查房时间", "医师层级"],
+      "required_evidence": ["senior_course_record"],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-006",
+      "title": "上级医生查房记录：入院后72小时内无最高级别（副主任医师或主任医师）首次查房记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "basic_timeliness",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-001"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["入院时间", "查房时间", "医师层级"],
+      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "expected_executor": "basic_timeliness",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-007",
+      "title": "查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-005"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["病危病重排除", "记录时间轴"],
+      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-008",
+      "title": "查房记录：病重（下了病重医嘱）患者2天内无查房病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-006"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["病重医嘱起止时间", "记录时间轴"],
+      "required_evidence": [
+        "daily_course_record",
+        "exam_attention_report",
+        "lab_attention_report",
+        "senior_course_record"
+      ],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-009",
+      "title": "查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_partial",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-007"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["病危医嘱起止时间", "病情变化证据"],
+      "required_evidence": [
+        "daily_course_record",
+        "exam_attention_report",
+        "lab_attention_report",
+        "senior_course_record"
+      ],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-010",
+      "title": "CT/MRI检查记录：CT/MRI检查前无说明检查原因的病程记录",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-010"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["CT/MRI医嘱", "检查时间", "报告时间"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "medical_order",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "daily_course_record",
+            "first_course_record",
+            "medical_order",
+            "rescue_record",
+            "senior_course_record"
+          ],
+          "facts": ["CT/MRI医嘱", "检查时间", "报告时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-011",
+      "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未在病程中记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-010"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["报告时间", "检查类型", "记录时间"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "daily_course_record",
+            "first_course_record",
+            "rescue_record",
+            "senior_course_record"
+          ],
+          "facts": ["报告时间", "检查类型", "记录时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-012",
+      "title": "CT/MRI检查记录：CT/MRI影像报告结果出具后24小时内未对阳性结果进行分析",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-011"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["报告时间", "阳性结果标志"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "daily_course_record",
+            "first_course_record",
+            "rescue_record",
+            "senior_course_record"
+          ],
+          "facts": ["报告时间", "阳性结果标志"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-013",
+      "title": "病理检查：病理检查结果在手术记录、病程中未记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "tumor_pathology",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-028"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["病理报告时间", "病理结果"],
+      "required_evidence": ["daily_course_record", "surgery_record"],
+      "expected_executor": "tumor_pathology",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["daily_course_record", "surgery_record"],
+          "facts": ["病理报告时间", "病理结果"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-014",
+      "title": "细菌培养记录：细菌培养结果在报告出具后24小时内未在病程中记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-012"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["细菌培养报告时间", "记录时间"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "daily_course_record",
+            "first_course_record",
+            "rescue_record",
+            "senior_course_record"
+          ],
+          "facts": ["细菌培养报告时间", "记录时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-015",
+      "title": "细菌培养结果无分析：细菌培养结果有阳性菌，报告出具后24小时内未在病程记录中分析",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "exam_lab",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-012"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["阳性菌", "药敏", "报告时间"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "labtest_item_report",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "exam_lab",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "daily_course_record",
+            "first_course_record",
+            "labtest_item_report",
+            "rescue_record",
+            "senior_course_record"
+          ],
+          "facts": ["阳性菌", "药敏", "报告时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-016",
+      "title": "不合理复制病历：首次病程记录病例特点与入院记录、现病史完全相同",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-005"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": ["admission_record", "first_course_record"],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["admission_record", "first_course_record"],
+          "facts": ["无"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-017",
+      "title": "不合理复制病历：2次以上病程记录完全相同（相似度大于70%）",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-006"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": [
+        "daily_course_record",
+        "first_course_record",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-018",
+      "title": "入院记录：主诉只写症状不写诊断、超过20字，或不能导出第一诊断",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_partial",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "course_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-005"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["主诊断"],
+      "required_evidence": ["admission_record"],
+      "expected_executor": "course_quality",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-019",
+      "title": "病理检查：取材情况未在病程记录或手术记录中记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "tumor_pathology",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-028"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["病理检查存在性"],
+      "required_evidence": ["daily_course_record", "surgery_record"],
+      "expected_executor": "tumor_pathology",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["daily_course_record", "surgery_record"],
+          "facts": ["病理检查存在性"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-020",
+      "title": "会诊记录：有会诊记录单无请会诊执行记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "consultation_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-013"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["会诊时间", "执行记录时间"],
+      "required_evidence": ["consultation_record", "daily_course_record"],
+      "expected_executor": "consultation_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["consultation_record", "daily_course_record"],
+          "facts": ["会诊时间", "执行记录时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-021",
+      "title": "会诊记录：会诊申请单会诊目的不明确",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "consultation_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-013"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": ["consultation_record"],
+      "expected_executor": "consultation_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["consultation_record"],
+          "facts": ["无"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-022",
+      "title": "会诊记录：会诊记录单会诊意见不明确（如出现必要时行检查或药物治疗）",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "consultation_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-013"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": ["consultation_record"],
+      "expected_executor": "consultation_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["consultation_record"],
+          "facts": ["无"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-023",
+      "title": "会诊记录：请会诊执行记录不规范，照抄会诊意见，未归纳总结或未明确具体执行情况",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "consultation_quality",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-013"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["会诊时间", "病程时间"],
+      "required_evidence": ["consultation_record", "daily_course_record"],
+      "expected_executor": "consultation_quality",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 2,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["consultation_record", "daily_course_record"],
+          "facts": ["会诊时间", "病程时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 2
+      }
+    },
+    {
+      "rule_id": "LX0609-024",
+      "title": "手术记录：恶性肿瘤手术记录未书写淋巴结清扫情况",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["恶性肿瘤诊断或病理诊断"],
+      "required_evidence": ["surgery_record"],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["surgery_record"],
+          "facts": ["恶性肿瘤诊断或病理诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-025",
+      "title": "手术记录：未记录植入物名称、种类、规格或型号、材质及数量等信息",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["植入物标志可选"],
+      "required_evidence": ["surgery_record"],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["surgery_record"],
+          "facts": ["植入物标志可选"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-026",
+      "title": "恶性肿瘤化学治疗记录：病程中化学治疗记录的药物名称、剂量、使用方法、时间与医嘱不一致",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "tumor_pathology",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-028"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["化疗医嘱", "药名", "剂量", "方法", "时间"],
+      "required_evidence": ["daily_course_record", "medical_order"],
+      "expected_executor": "tumor_pathology",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-027",
+      "title": "出院记录：恶性肿瘤患者出院记录中无出院后肿瘤相关治疗计划",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "tumor_pathology",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-028"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["恶性肿瘤诊断"],
+      "required_evidence": ["discharge_record"],
+      "expected_executor": "tumor_pathology",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["discharge_record"],
+          "facts": ["恶性肿瘤诊断"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-028",
+      "title": "抗菌药物使用记录：I类、II类切口手术预防使用抗菌药物超过24小时，特殊情况超过48小时",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["切口等级", "手术时间", "抗菌药物医嘱起止时间"],
+      "required_evidence": ["daily_course_record"],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["daily_course_record"],
+          "facts": ["切口等级", "手术时间", "抗菌药物医嘱起止时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-029",
+      "title": "术前小结：有手术医嘱但无术前小结",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-018"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术医嘱"],
+      "required_evidence": [
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "surgery_record"
+      ],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-030",
+      "title": "手术记录：有手术医嘱但无手术记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-018"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术医嘱"],
+      "required_evidence": ["surgery_record"],
+      "expected_executor": "surgery_presence",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-031",
+      "title": "手术记录：手术记录非手术者签字（核对术者及签名医生）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-017"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["术者", "记录者", "签名医生"],
+      "required_evidence": [
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "surgery_record"
+      ],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-032",
+      "title": "手术安全核查表：有手术记录但无手术安全核查表",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-018"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": [
+        "anesthesia_record",
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "surgery_record",
+        "surgery_risk_assessment",
+        "surgery_safecheck_record"
+      ],
+      "expected_executor": "surgery_presence",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-033",
+      "title": "手术知情同意书：有手术记录但无手术知情同意书",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-018"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": [
+        "anesthesia_record",
+        "consent_form",
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "surgery_record",
+        "surgery_risk_assessment",
+        "surgery_safecheck_record"
+      ],
+      "expected_executor": "surgery_gate",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "anesthesia_record",
+            "consent_form",
+            "postsurg_firstcourse_record",
+            "presurg_discussion",
+            "presurg_summary",
+            "surgery_record",
+            "surgery_risk_assessment",
+            "surgery_safecheck_record"
+          ],
+          "facts": ["无"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-034",
+      "title": "麻醉知情同意书：有麻醉记录但无麻醉知情同意书",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-019"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["无"],
+      "required_evidence": ["anesthesia_record", "consent_form"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-035",
+      "title": "麻醉知情同意书：填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-019"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["签名", "签署时间"],
+      "required_evidence": ["anesthesia_record", "consent_form"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-036",
+      "title": "麻醉访视：无麻醉术前或麻醉术后访视记录（局麻除外）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-019"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["麻醉方式"],
+      "required_evidence": ["anesthesia_record"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-037",
+      "title": "麻醉访视：麻醉术前和术后访视记录填写不规范（局麻除外）",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-019"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["麻醉方式", "访视必要字段"],
+      "required_evidence": ["anesthesia_record", "consent_form"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-038",
+      "title": "麻醉记录单：无麻醉记录单（局麻除外）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-019"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["麻醉方式"],
+      "required_evidence": ["consent_form"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-039",
+      "title": "术前讨论记录：除紧急抢救生命的急诊手术外，住院患者手术无术前讨论或术者未参加",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-020"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["急诊抢救标志", "术者"],
+      "required_evidence": ["presurg_discussion"],
+      "expected_executor": "surgery_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-040",
+      "title": "术前多学科讨论记录：四级手术术前讨论未开展多学科讨论",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "surgery_anesthesia",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-020"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术级别"],
+      "required_evidence": [
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "surgery_record"
+      ],
+      "expected_executor": "surgery_mdt",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": [
+            "postsurg_firstcourse_record",
+            "presurg_discussion",
+            "presurg_summary",
+            "surgery_record"
+          ],
+          "facts": ["手术级别"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-041",
+      "title": "输血知情同意书：无输血知情同意书",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血医嘱或输血记录"],
+      "required_evidence": ["bloodtrans_record", "consent_form"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-042",
+      "title": "输血知情同意书：输血知情同意书填写或签名不完整",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["签名", "输血指征", "风险告知"],
+      "required_evidence": ["consent_form"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-043",
+      "title": "输血前辅助检查：输血前常规检查不完整",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血前检验项目", "检验时间"],
+      "required_evidence": ["daily_course_record", "exam_item_report"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-044",
+      "title": "输血前评估：无输血前评估记录或记录不完整",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血医嘱", "输血申请"],
+      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["bloodtrans_record", "daily_course_record"],
+          "facts": ["输血医嘱", "输血申请"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-045",
+      "title": "输血记录：无输血病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血时间"],
+      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["bloodtrans_record", "daily_course_record"],
+          "facts": ["输血时间"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-046",
+      "title": "输血记录：输血病程记录不完整或不规范",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血成分", "输血量", "反应"],
+      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_then_optional_llm",
+      "max_llm_calls_per_rule": 1,
+      "semantic_contract": {
+        "minimal_input": {
+          "documents": ["bloodtrans_record", "daily_course_record"],
+          "facts": ["输血成分", "输血量", "反应"]
+        },
+        "controlled_status_enum": [
+          "compliant",
+          "non_compliant",
+          "not_applicable",
+          "data_gap",
+          "technical_error",
+          "evaluation_unknown"
+        ],
+        "max_llm_calls_per_rule": 1
+      }
+    },
+    {
+      "rule_id": "LX0609-047",
+      "title": "输血后评价：无输血后评价",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血结束时间"],
+      "required_evidence": ["bloodtrans_record", "daily_course_record"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-048",
+      "title": "输血记录：有术中输血，但手术记录、麻醉记录、术后首次病程记录中输血相关内容不一致",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血成分", "剂量", "时间"],
+      "required_evidence": [
+        "bloodtrans_record",
+        "daily_course_record",
+        "first_course_record",
+        "postsurg_firstcourse_record",
+        "presurg_discussion",
+        "presurg_summary",
+        "senior_course_record",
+        "surgery_record"
+      ],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-049",
+      "title": "输血医嘱：输血医嘱与收费不一致",
+      "definition_status": "formal",
+      "definition_phase": "pending_definition",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "transfusion",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "pending_definition",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血医嘱", "费用明细", "输血成分和数量"],
+      "required_evidence": ["daily_course_record", "exam_item_report", "medical_order"],
+      "expected_executor": "transfusion",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-050",
+      "title": "疑难病历讨论记录：诊断不明确（入院后7天）未书写疑难病历讨论",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-032"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["入院时间", "诊断不明确事件", "疑难病历讨论记录"],
+      "required_evidence": ["daily_course_record", "diffcase_discussion_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-051",
+      "title": "死亡病历讨论记录：患者死亡后7天未书写死亡病历讨论记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-033"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["死亡时间", "死亡病历讨论记录时间"],
+      "required_evidence": ["death_record", "death_discussion"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-052",
+      "title": "危急值记录：6小时内未书写危急值处置记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-011"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["PL/PH标识", "检验报告时间", "处置记录时间"],
+      "required_evidence": ["labtest_item_report", "crisis_value_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-053",
+      "title": "危急值记录：检验检查危急值报告后无危急值处置记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "confirmed_issue": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-011"],
+          "expected_status": "non_compliant"
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["PL/PH标识", "危急值处置记录"],
+      "required_evidence": ["labtest_item_report", "crisis_value_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-054",
+      "title": "抗菌药物使用记录：使用、停用、更换、联合或超说明书范围使用时，无用药理由或理由不充分",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["抗菌药物医嘱", "用药理由"],
+      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-055",
+      "title": "抗菌药物使用记录：48至72小时内无效果评价",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["用药时间", "效果评价时间", "效果评价内容"],
+      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-056",
+      "title": "抗菌药物使用记录：接受两个或两个以上重点抗菌药物，使用前未完善病原学检查",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["重点抗菌药物", "用药时间", "标本采集时间"],
+      "required_evidence": ["inpat_drug_order", "labtest_master"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-057",
+      "title": "抗菌药物使用记录：经验用药时未说明理由，无样可采时未注明原因",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["经验用药标识", "用药理由", "病原学标本"],
+      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-058",
+      "title": "抗菌药物使用记录：使用特殊级抗菌药物缺少专家查房或会诊记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["特殊级抗菌药物目录", "专家查房或会诊"],
+      "required_evidence": ["inpat_drug_order", "consultation_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-059",
+      "title": "医嘱：缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-034"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["诊疗医嘱", "同期病程记录"],
+      "required_evidence": ["inpat_drug_order", "daily_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-060",
+      "title": "死亡记录：死亡患者无死亡记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-033"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["死亡状态", "死亡记录"],
+      "required_evidence": ["death_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-061",
+      "title": "出院记录：出院记录未在出院后24小时内完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-031"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["出院时间", "出院记录时间"],
+      "required_evidence": ["discharge_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-062",
+      "title": "出院记录：出院带药不详细（无药品名称、剂量、途径、时间，或药名、剂量错误）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-031"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["结构化出院带药"],
+      "required_evidence": ["discharge_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-063",
+      "title": "出院记录：出院诊断或死亡诊断错填、漏填、顺序错误",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-031"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["权威诊断", "出院记录诊断", "诊断顺序"],
+      "required_evidence": ["diagnosis", "discharge_record_diagnosis"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-064",
+      "title": "术后连续三天查房记录：术后三天无连续病程记录（包含术后术者查房记录）",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-021"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术时间", "病程时间", "术者身份", "文书作者或签名"],
+      "required_evidence": ["surgery_record", "daily_course_record", "senior_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-065",
+      "title": "术后三天内上级医师查房记录：无术后三天内上级医师查看病人记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-021"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["手术时间", "上级医师查房记录时间"],
+      "required_evidence": ["surgery_record", "senior_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-066",
+      "title": "术后首次病程记录：无术后首次病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-021"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["已实施手术", "术后首次病程记录"],
+      "required_evidence": ["surgery_record", "postsurg_firstcourse_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-067",
+      "title": "出院前病程记录：无出院前一天或当天的病程记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-031"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["出院时间", "病程记录时间"],
+      "required_evidence": ["discharge_record", "daily_course_record", "senior_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-068",
+      "title": "出院前病程记录：无上级医师同意出院的意见",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-031"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["出院时间", "上级医师查房记录", "同意出院意见"],
+      "required_evidence": ["discharge_record", "senior_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-069",
+      "title": "会诊记录：会诊记录单未在会诊申请发出后24小时内完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-013"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["会诊申请时间", "会诊记录时间", "会诊关联标识"],
+      "required_evidence": ["consultation_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-070",
+      "title": "输血前评估：未做输血前相关九项检查",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-023"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["输血事件", "输血前九项检验"],
+      "required_evidence": ["bloodtrans_record", "labtest_item_report"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-071",
+      "title": "交接班记录：经治医师变更时无交接班记录，或交班前、接班后24小时内未按时完成",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-036"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["经治医师变更事件", "交班记录时间", "接班记录时间"],
+      "required_evidence": ["handoff_record", "handover_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-072",
+      "title": "转科记录：转科病人24小时内未完成转入、转出记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-036"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["转科医嘱时间", "转入记录时间", "转出记录时间"],
+      "required_evidence": ["transfer_in_record", "transfer_out_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
+      "time_boundaries": {
+        "before_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "at_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "after_threshold": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      }
+    },
+    {
+      "rule_id": "LX0609-073",
+      "title": "转科记录：有转科医嘱但无转入、转出记录",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-036"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["转科医嘱", "转入记录", "转出记录"],
+      "required_evidence": ["transfer_in_record", "transfer_out_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-074",
+      "title": "病程记录：修正或补充诊断时，未记录修改或补充理由及诊断依据",
+      "definition_status": "formal",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-036"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "not_required",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["诊断变更历史", "病程记录"],
+      "required_evidence": ["daily_course_record", "senior_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    },
+    {
+      "rule_id": "LX0609-075",
+      "title": "有创操作记录：有创操作医嘱但无有创操作记录",
+      "definition_status": "temporary",
+      "definition_phase": "phase_1_target",
+      "definition_version": "lx0609-defined-scope-2026-07-31",
+      "family_key": "extended_document",
+      "cases": {
+        "compliant": {
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-022"],
+          "expected_status": "compliant"
+        },
+        "confirmed_issue": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "not_applicable": {
+          "coverage": "missing",
+          "fixture_refs": []
+        },
+        "data_insufficient": {
+          "coverage": "missing",
+          "fixture_refs": []
+        }
+      },
+      "required_facts": ["有创操作目录", "有创操作医嘱", "操作记录"],
+      "required_evidence": ["inpat_nondrug_order", "daily_course_record"],
+      "expected_executor": "extended_document",
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0
+    }
+  ]
+}
