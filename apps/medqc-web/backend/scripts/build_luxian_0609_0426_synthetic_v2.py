@@ -44,6 +44,8 @@ TARGET_SOURCE_SHEET = "0426-derived"
 TARGET_INSTITUTE_ID = "LX0609_0426_SYN"
 TARGET_VISIT_PREFIX = "LX0609_0426_SYN_"
 TARGET_MR_PREFIX = "LX0609V2-"
+TARGET_ITEM_PREFIX = "lx0609-v2"
+BUNDLE_POLICY_VERSION = "luxian_0609_0426_syn_v2"
 DEID_VERSION = "local-rule-deid-v1"
 DEFAULT_OUTPUT_DIR = ROOT / "tmp-lx0609-0426-synthetic-v2"
 
@@ -1316,7 +1318,7 @@ def write_pool_and_items(
             }
             item_values.append(
                 {
-                    "id": f"lx0609-v2-{case.target_index:03d}",
+                    "id": f"{TARGET_ITEM_PREFIX}-{case.target_index:03d}",
                     "pool_id": TARGET_POOL_ID,
                     "row_no": case.target_index,
                     "department": item.get("department"),
@@ -1366,22 +1368,22 @@ def write_pool_and_items(
                 "visit_id": case.target_visit_id,
             }
         ]
-        item_id = f"lx0609-v2-{case.target_index:03d}"
+        item_id = f"{TARGET_ITEM_PREFIX}-{case.target_index:03d}"
         bundle_status = "pending"
         try:
             refresh_scene_bundles_for_rows(
                 scene="running",
                 rows=bundle_rows,
-                policy_version="luxian_0609_0426_syn_v2",
+                policy_version=BUNDLE_POLICY_VERSION,
             )
             refresh_scene_bundles_for_rows(
                 scene="final",
                 rows=bundle_rows,
-                policy_version="luxian_0609_0426_syn_v2",
+                policy_version=BUNDLE_POLICY_VERSION,
             )
             refresh_domain_bundles_for_rows(
                 rows=bundle_rows,
-                policy_version="luxian_0609_0426_syn_v2",
+                policy_version=BUNDLE_POLICY_VERSION,
             )
             bundle_status = service._wait_running_bundle_ready(
                 institute_id=TARGET_INSTITUTE_ID,

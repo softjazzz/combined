@@ -84,6 +84,8 @@ def test_v3_compatibility_configuration_keeps_v2_logic_but_uses_v3_identity() ->
     assert module.V2.TARGET_POOL_ID == "luxian-0609-0426-syn-v3"
     assert module.V2.TARGET_VISIT_PREFIX == "LX0609_0426_SYN_V3_"
     assert module.V2.TARGET_MR_PREFIX == "LX0609V3-"
+    assert module.V2.TARGET_ITEM_PREFIX == "lx0609-v3"
+    assert module.V2.BUNDLE_POLICY_VERSION == "luxian_0609_0426_syn_v3"
     assert sum(module.V2.FAMILY_QUOTAS.values()) == 38
     assert len(
         {

@@ -31,6 +31,8 @@ TARGET_SOURCE_SHEET = "0426-derived-v3"
 TARGET_INSTITUTE_ID = "LX0609_0426_SYN_V3"
 TARGET_VISIT_PREFIX = "LX0609_0426_SYN_V3_"
 TARGET_MR_PREFIX = "LX0609V3-"
+TARGET_ITEM_PREFIX = "lx0609-v3"
+BUNDLE_POLICY_VERSION = "luxian_0609_0426_syn_v3"
 DEFAULT_OUTPUT_DIR = ROOT / "tmp-lx0609-0426-synthetic-v3"
 
 
@@ -141,6 +143,8 @@ def _configure_v2_compatibility() -> None:
     V2.TARGET_INSTITUTE_ID = TARGET_INSTITUTE_ID
     V2.TARGET_VISIT_PREFIX = TARGET_VISIT_PREFIX
     V2.TARGET_MR_PREFIX = TARGET_MR_PREFIX
+    V2.TARGET_ITEM_PREFIX = TARGET_ITEM_PREFIX
+    V2.BUNDLE_POLICY_VERSION = BUNDLE_POLICY_VERSION
     V2.FAMILY_QUOTAS = dict(FAMILY_QUOTAS)
     V2.FAMILY_RULE_IDS = build_master_family_rule_ids(statuses={"active"})
     V2.FAMILY_KEYWORDS = dict(FAMILY_KEYWORDS)
@@ -243,6 +247,7 @@ def _render_report(
     clone_audit: dict[str, Any],
     forbidden_hits: dict[str, int],
     ledger: Sequence[dict[str, Any]],
+    write_summary: dict[str, Any] | None,
 ) -> str:
     coverage_counts = Counter(row["coverage_status"] for row in ledger)
     implementation_counts = Counter(row["implementation_status"] for row in ledger)
@@ -252,7 +257,7 @@ def _render_report(
         f"- 目标标识：`{TARGET_POOL_ID}` / {TARGET_POOL_NAME}",
         f"- 源样本池：`{source_pool.get('id')}` / {source_pool.get('name')}",
         f"- 候选病历：{len(cases)} 份",
-        "- 写库状态：dry-run，未写数据库",
+        f"- 写库状态：{'已写入' if write_summary else 'dry-run，未写数据库'}",
         "- 黄金答案：全部待人工复核，不声明准确率",
         "",
         "## 唯一规则总表口径",
@@ -287,7 +292,7 @@ def _render_report(
             "- `assigned_pending_golden_review` 只表示已分配真实结构候选，不表示规则已通过验证。",
             "- `contract_ready` 规则不得加入当前执行请求，直到执行器接入并完成回归。",
             "- `pending_definition` 规则不生成占位结果，也不计入完成率。",
-            "- 本脚本不提供写库参数；人工审查覆盖账本后再单独启用入池流程。",
+            "- 未使用 `--write-db` 时仅生成审计产物；确认后可显式写入本机验证库。",
             "",
         ]
     )
@@ -301,6 +306,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--source-pool", default=SOURCE_POOL_NAME)
     parser.add_argument("--target-size", type=int, default=sum(FAMILY_QUOTAS.values()))
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--write-db", action="store_true", help="Write audited v3 rows and sample pool items to local DB.")
+    parser.add_argument("--replace-items", action="store_true", help="Replace existing v3 rows and sample pool items.")
     args = parser.parse_args(argv)
     if args.target_size < sum(FAMILY_QUOTAS.values()):
         raise ValueError(f"v3 target-size must be at least {sum(FAMILY_QUOTAS.values())}")
@@ -319,6 +326,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     rows_by_table, clone_audit = V2.build_clone_rows(cases)
     forbidden_hits = V2.forbidden_token_hits(rows_by_table)
     ledger = build_coverage_ledger(cases)
+    write_summary = None
+    if args.write_db:
+        write_summary = V2.write_pool_and_items(
+            source_pool=source_pool,
+            cases=cases,
+            rows_by_table=rows_by_table,
+            supplemental_rows=clone_audit.get("supplemental_evidence_rows") or [],
+            replace_items=bool(args.replace_items),
+        )
 
     V2.write_selection_csv(output_dir / "selection.csv", cases)
     V2.write_text_lf(
@@ -328,7 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "selection_summary": selection_summary,
                 "clone_audit": clone_audit,
                 "forbidden_token_hits": forbidden_hits,
-                "write_summary": None,
+                "write_summary": write_summary,
             },
             ensure_ascii=False,
             indent=2,
@@ -350,6 +366,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             clone_audit=clone_audit,
             forbidden_hits=forbidden_hits,
             ledger=ledger,
+            write_summary=write_summary,
         ),
     )
 
@@ -360,7 +377,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"coverage_counts={dict(coverage_counts)}")
     print(f"forbidden_token_hits={forbidden_hits}")
     print(f"wrote={output_dir}")
-    print("db_write=no")
+    print(f"db_write={'yes' if args.write_db else 'no'}")
     return 0
 
 
