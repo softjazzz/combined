@@ -33,11 +33,11 @@ def test_rule_contracts_cover_all_phase1_registered_rules_in_catalog_order() -> 
     assert tuple(contract.rule_id for contract in contracts) == tuple(
         str(item["rule_id"]) for item in load_luxian_0609_rules()
     )
-    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 57
-    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 2
-    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 16
+    assert sum(contract.phase_status == "phase_1_target" for contract in contracts) == 65
+    assert sum(contract.phase_status == "phase_1_partial" for contract in contracts) == 1
+    assert sum(contract.phase_status == "pending_definition" for contract in contracts) == 9
     assert {contract.definition_version for contract in contracts} == {
-        "lx0609-defined-scope-2026-07-31"
+        "lx0609-defined-scope-2026-08-02"
     }
 
 
@@ -53,11 +53,9 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     )
 
     complaint_rule = contracts["LX0609-018"]
-    assert complaint_rule.phase_status == "phase_1_partial"
-    assert complaint_rule.active_criteria == ("chief_complaint_length_lte_20",)
-    assert complaint_rule.pending_criteria == (
-        "chief_complaint_diagnostic_direction",
-    )
+    assert complaint_rule.phase_status == "phase_1_target"
+    assert complaint_rule.active_criteria == ()
+    assert complaint_rule.pending_criteria == ()
     assert complaint_rule.decision_authority == "program_only"
     assert complaint_rule.max_llm_calls_per_rule == 0
 

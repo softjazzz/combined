@@ -1,6 +1,6 @@
 {
   "schema_version": "lx0609-phase-scope-v1",
-  "definition_version": "lx0609-defined-scope-2026-07-31",
+  "definition_version": "lx0609-defined-scope-2026-08-02",
   "rules": [
     { "rule_id": "LX0609-001", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-002", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -24,12 +24,7 @@
       "pending_reason_code": "exam_course_linkage_window_undefined"
     },
     { "rule_id": "LX0609-011", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-012",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "positive_imaging_definition_missing"
-    },
+    { "rule_id": "LX0609-012", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-013", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-014", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-015", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -40,27 +35,11 @@
       "catalog_registered": true,
       "pending_reason_code": "similarity_contract_missing"
     },
-    {
-      "rule_id": "LX0609-018",
-      "phase_status": "phase_1_partial",
-      "catalog_registered": true,
-      "active_criteria": ["chief_complaint_length_lte_20"],
-      "pending_criteria": ["chief_complaint_diagnostic_direction"]
-    },
+    { "rule_id": "LX0609-018", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-019", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-020", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-021",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "consultation_purpose_minimum_elements_missing"
-    },
-    {
-      "rule_id": "LX0609-022",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "consultation_opinion_minimum_elements_missing"
-    },
+    { "rule_id": "LX0609-021", "phase_status": "phase_1_target", "catalog_registered": true },
+    { "rule_id": "LX0609-022", "phase_status": "phase_1_target", "catalog_registered": true },
     {
       "rule_id": "LX0609-023",
       "phase_status": "pending_definition",
@@ -74,12 +53,7 @@
       "pending_reason_code": "lymph_node_dissection_applicability_missing"
     },
     { "rule_id": "LX0609-025", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-026",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "chemotherapy_drug_dictionary_missing"
-    },
+    { "rule_id": "LX0609-026", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-027", "phase_status": "phase_1_target", "catalog_registered": true },
     {
       "rule_id": "LX0609-028",
@@ -95,48 +69,18 @@
     { "rule_id": "LX0609-034", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-035", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-036", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-037",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "anesthesia_visit_required_fields_missing"
-    },
+    { "rule_id": "LX0609-037", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-038", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-039", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-040", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-041", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-042",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "transfusion_consent_required_fields_missing"
-    },
-    {
-      "rule_id": "LX0609-043",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "pretransfusion_test_catalog_missing"
-    },
-    {
-      "rule_id": "LX0609-044",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "pretransfusion_assessment_required_fields_missing"
-    },
+    { "rule_id": "LX0609-042", "phase_status": "phase_1_target", "catalog_registered": true },
+    { "rule_id": "LX0609-043", "phase_status": "phase_1_target", "catalog_registered": true },
+    { "rule_id": "LX0609-044", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-045", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-046",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "transfusion_course_required_fields_missing"
-    },
+    { "rule_id": "LX0609-046", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-047", "phase_status": "phase_1_target", "catalog_registered": true },
-    {
-      "rule_id": "LX0609-048",
-      "phase_status": "pending_definition",
-      "catalog_registered": true,
-      "pending_reason_code": "intraoperative_transfusion_comparison_fields_missing"
-    },
+    { "rule_id": "LX0609-048", "phase_status": "phase_1_target", "catalog_registered": true },
     {
       "rule_id": "LX0609-049",
       "phase_status": "pending_definition",
@@ -149,10 +93,20 @@
     { "rule_id": "LX0609-053", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-054", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-055", "phase_status": "phase_1_target", "catalog_registered": true },
-    { "rule_id": "LX0609-056", "phase_status": "phase_1_target", "catalog_registered": true },
+    {
+      "rule_id": "LX0609-056",
+      "phase_status": "pending_definition",
+      "catalog_registered": true,
+      "pending_reason_code": "key_antimicrobial_catalog_missing"
+    },
     { "rule_id": "LX0609-057", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-058", "phase_status": "phase_1_target", "catalog_registered": true },
-    { "rule_id": "LX0609-059", "phase_status": "phase_1_target", "catalog_registered": true },
+    {
+      "rule_id": "LX0609-059",
+      "phase_status": "pending_definition",
+      "catalog_registered": true,
+      "pending_reason_code": "required_diagnostic_order_catalog_missing"
+    },
     { "rule_id": "LX0609-060", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-061", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-062", "phase_status": "phase_1_target", "catalog_registered": true },
@@ -168,6 +122,11 @@
     { "rule_id": "LX0609-072", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-073", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-074", "phase_status": "phase_1_target", "catalog_registered": true },
-    { "rule_id": "LX0609-075", "phase_status": "phase_1_target", "catalog_registered": true }
+    {
+      "rule_id": "LX0609-075",
+      "phase_status": "pending_definition",
+      "catalog_registered": true,
+      "pending_reason_code": "invasive_procedure_catalog_missing"
+    }
   ]
 }

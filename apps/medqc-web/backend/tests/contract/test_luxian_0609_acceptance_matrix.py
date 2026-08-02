@@ -28,6 +28,7 @@ def test_matrix_keeps_formal_and_temporary_tiers_separate() -> None:
 
     assert summary["rule_count"] == 75
     assert summary["definition_tiers"] == {"formal": 67, "temporary": 8}
+    assert summary["pending_definition_rule_count"] == 9
     assert summary["bound_fixture_count"] == 75
     assert summary["case_slots"]["covered"] == 75
     assert summary["case_slots"]["missing"] > 0

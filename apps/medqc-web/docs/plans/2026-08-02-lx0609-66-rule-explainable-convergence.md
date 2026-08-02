@@ -176,11 +176,12 @@ presence、timeliness、coverage、completeness、consistency、text_length、se
 **Files:**
 
 - Modify: `backend/app/data/luxian_0609_phase_scope_v1.json`
-- Modify: `backend/app/data/luxian_0609_rule_contracts_v1.json`
-- Modify: `backend/app/data/luxian_0609_phase1_rule_contracts_extension_v1.json`
+- Regenerate: `backend/app/data/luxian_0609_acceptance_matrix.json`
+- Regenerate: `docs/reports/luxian-0609-rule-acceptance-status.md`
 - Test: `backend/tests/unit/test_luxian_0609_phase_scope.py`
 - Test: `backend/tests/unit/test_luxian_0609_rule_contracts.py`
 - Test: `backend/tests/unit/test_luxian_0609_full_regression_scope.py`
+- Test: `backend/tests/contract/test_luxian_0609_acceptance_matrix.py`
 
 **Steps:**
 
@@ -190,12 +191,13 @@ presence、timeliness、coverage、completeness、consistency、text_length、se
 4. 将056、059、075从当前目标降为 `pending_definition`。
 5. 保留009为部分定义，并固定 active/pending 子项。
 6. 断言最终为：65条完整定义、1条部分定义、9条待确认。
-7. 运行聚焦测试并提交。
+7. 通过现有生成器重建验收矩阵和状态报告，保持 Runtime Contract 一致。
+8. 运行聚焦测试并提交。
 
 **Run:**
 
 ```powershell
-python -m pytest backend/tests/unit/test_luxian_0609_phase_scope.py backend/tests/unit/test_luxian_0609_rule_contracts.py backend/tests/unit/test_luxian_0609_full_regression_scope.py -q
+python -m pytest backend/tests/unit/test_luxian_0609_phase_scope.py backend/tests/unit/test_luxian_0609_rule_contracts.py backend/tests/unit/test_luxian_0609_full_regression_scope.py backend/tests/contract/test_luxian_0609_acceptance_matrix.py -q
 ```
 
 **Commit:** `配置：对齐LX0609业务标准阶段范围`
