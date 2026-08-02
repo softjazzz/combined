@@ -40,6 +40,16 @@ def _case(index: int, family: str):
     )
 
 
+def _all_v3_cases():
+    cases = []
+    index = 1
+    for family, quota in module.FAMILY_QUOTAS.items():
+        for _ in range(quota):
+            cases.append(_case(index, family))
+            index += 1
+    return cases
+
+
 def test_v3_family_projection_covers_the_unique_75_rule_master() -> None:
     all_rules = module.build_master_family_rule_ids()
     active_rules = module.build_master_family_rule_ids(statuses={"active"})
@@ -192,3 +202,29 @@ def test_v3_exam_lab_upgrade_attaches_reviewable_expected_results() -> None:
     assert expectations[cases[2].target_visit_id]["LX0609-012"] == "non_compliant"
     assert expectations[cases[2].target_visit_id]["LX0609-052"] == "non_compliant"
     assert expectations[cases[3].target_visit_id]["LX0609-052"] == "compliant"
+
+
+def test_v3_full_validation_upgrade_assigns_all_75_rules_without_pending_goldens() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    audit = module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    answers = [
+        answer
+        for case in cases
+        for answer in case.source_item.get("synthetic_golden_answers") or []
+    ]
+    assert audit["rule_count"] == 75
+    assert len(answers) == 75
+    assert len({answer["qc_point_id"] for answer in answers}) == 75
+    assert all(answer["expected_status"] != "pending" for answer in answers)
+    assert all(answer["evidence_refs"] for answer in answers)
+    assert {answer["acceptance_tier"] for answer in answers} == {"formal", "provisional"}
+    matrix = module.build_validation_matrix(cases)
+    assert len(matrix) == 75
+    assert Counter(row["acceptance_tier"] for row in matrix) == {
+        "formal": 67,
+        "provisional": 8,
+    }

@@ -22,6 +22,9 @@ from app.services.luxian_0609_rule_master import (  # noqa: E402
     Luxian0609RuleMasterEntry,
     load_luxian_0609_rule_master,
 )
+from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
+    apply_controlled_evidence,
+)
 
 
 SOURCE_POOL_NAME = "0426"
@@ -150,6 +153,14 @@ def _configure_v2_compatibility() -> None:
     V2.FAMILY_RULE_IDS = build_master_family_rule_ids(statuses={"active"})
     V2.FAMILY_KEYWORDS = dict(FAMILY_KEYWORDS)
     V2.FAMILY_KEYWORD_ORDER = FAMILY_KEYWORD_ORDER
+
+
+def _assign_full_validation_family_scope(cases: Sequence[Any]) -> list[Any]:
+    validation_rules = build_master_family_rule_ids()
+    return [
+        replace(case, selected_rule_ids=list(validation_rules[case.family]))
+        for case in cases
+    ]
 
 
 def _assign_full_active_family_scope(cases: Sequence[Any]) -> list[Any]:
@@ -720,6 +731,26 @@ def refresh_exam_lab_supplement_audit(
     clone_audit["supplemental_evidence_rows"] = retained
 
 
+def upgrade_full_validation_evidence(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    cases: Sequence[Any],
+) -> dict[str, Any]:
+    exam_lab_audit = upgrade_exam_lab_evidence(rows_by_table, cases)
+    rule_titles = {
+        entry.rule_id: entry.qc_point for entry in load_luxian_0609_rule_master()
+    }
+    controlled_audit = apply_controlled_evidence(
+        rows_by_table,
+        cases,
+        v2=V2,
+        rule_titles=rule_titles,
+    )
+    return {
+        **controlled_audit,
+        "exam_lab": exam_lab_audit,
+    }
+
+
 def build_coverage_ledger(
     cases: Sequence[Any],
     entries: Sequence[Luxian0609RuleMasterEntry] | None = None,
@@ -800,6 +831,38 @@ def _write_coverage_csv(path: Path, ledger: Sequence[dict[str, Any]]) -> None:
             )
 
 
+def build_validation_matrix(cases: Sequence[Any]) -> list[dict[str, Any]]:
+    matrix: list[dict[str, Any]] = []
+    for case in cases:
+        for answer in case.source_item.get("synthetic_golden_answers") or []:
+            matrix.append(
+                {
+                    "rule_id": str(answer.get("qc_point_id") or ""),
+                    "acceptance_tier": str(answer.get("acceptance_tier") or ""),
+                    "definition_version": str(answer.get("definition_version") or ""),
+                    "case_index": int(case.target_index),
+                    "visit_id": case.target_visit_id,
+                    "patient_name": case.target_patient_name,
+                    "rule_family": case.family,
+                    "expected_status": str(answer.get("expected_status") or ""),
+                    "evidence_refs": json.dumps(answer.get("evidence_refs") or [], ensure_ascii=False),
+                    "expected_fact": str(answer.get("human_reason") or ""),
+                }
+            )
+    matrix.sort(key=lambda row: row["rule_id"])
+    rule_ids = [row["rule_id"] for row in matrix]
+    if len(rule_ids) != 75 or len(rule_ids) != len(set(rule_ids)):
+        raise ValueError("v3 validation matrix must contain every rule exactly once")
+    return matrix
+
+
+def _write_validation_matrix(path: Path, matrix: Sequence[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(matrix[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(matrix)
+
+
 def _render_report(
     *,
     source_pool: dict[str, Any],
@@ -819,7 +882,7 @@ def _render_report(
         f"- 源样本池：`{source_pool.get('id')}` / {source_pool.get('name')}",
         f"- 候选病历：{len(cases)} 份",
         f"- 写库状态：{'已写入' if write_summary else 'dry-run，未写数据库'}",
-        "- 黄金答案：全部待人工复核，不声明准确率",
+        "- 黄金答案：75条均已绑定唯一受控病例；67条正式口径、8条临时口径",
         "",
         "## 唯一规则总表口径",
         "",
@@ -849,6 +912,8 @@ def _render_report(
             f"- 检查报告：{int((clone_audit.get('exam_lab_upgrade') or {}).get('exam_report_count') or 0)} 份",
             f"- 检验报告组：{int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_master_count') or 0)} 组，明细 {int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_item_count') or 0)} 项",
             f"- 危急值场景：{int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_value_count') or 0)} 个，其中已处置 {int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_disposition_count') or 0)} 个",
+            f"- 唯一验收映射：{int((clone_audit.get('full_validation_upgrade') or {}).get('rule_count') or 0)} 条",
+            f"- 验收口径：`{json.dumps((clone_audit.get('full_validation_upgrade') or {}).get('tier_counts') or {}, ensure_ascii=False)}`",
             f"- 来源配额缺口：`{json.dumps(selection_summary.get('source_gaps') or {}, ensure_ascii=False)}`",
             "",
             "## 使用限制",
@@ -886,12 +951,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         source_items=source_items,
         target_size=args.target_size,
     )
-    cases = _assign_full_active_family_scope(raw_cases)
+    cases = _assign_full_validation_family_scope(raw_cases)
     rows_by_table, clone_audit = V2.build_clone_rows(cases)
-    clone_audit["exam_lab_upgrade"] = upgrade_exam_lab_evidence(rows_by_table, cases)
+    clone_audit["full_validation_upgrade"] = upgrade_full_validation_evidence(rows_by_table, cases)
+    clone_audit["exam_lab_upgrade"] = clone_audit["full_validation_upgrade"]["exam_lab"]
     refresh_exam_lab_supplement_audit(clone_audit, cases)
     forbidden_hits = V2.forbidden_token_hits(rows_by_table)
     ledger = build_coverage_ledger(cases)
+    validation_matrix = build_validation_matrix(cases)
     write_summary = None
     if args.write_db:
         write_summary = V2.write_pool_and_items(
@@ -903,6 +970,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     V2.write_selection_csv(output_dir / "selection.csv", cases)
+    _write_validation_matrix(output_dir / "validation-matrix.csv", validation_matrix)
     V2.write_text_lf(
         output_dir / "deid-audit.json",
         json.dumps(
