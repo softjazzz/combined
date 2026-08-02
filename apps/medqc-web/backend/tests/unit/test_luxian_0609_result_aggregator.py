@@ -552,6 +552,62 @@ def test_reduced_transfusion_result_renders_exact_controlled_gap_in_backend():
     assert result["status"] == "non_compliant"
 
 
+def test_extended_document_facts_are_whitelisted_and_rendered_in_backend():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    raw_facts = {
+        "verification_kind": "discharge_record_timeliness_check",
+        "discharge_time": "2026-07-01 12:00:00",
+        "record_time": "2026-07-02 14:00:00",
+        "threshold_hours": 24,
+        "actual_interval_hours": 26.0,
+        "raw_record_content": "PRIVATE_DISCHARGE_TEXT",
+    }
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-061", "name": "出院记录时限"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-061", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-061", raw_facts),),
+    )[0]
+
+    assert result["findings"] == (
+        "出院时间 2026-07-01 12:00:00，出院记录时间 2026-07-02 14:00:00，"
+        "实际间隔 26.0 小时，规定时限 24 小时。"
+    )
+    assert "PRIVATE_DISCHARGE_TEXT" not in repr(result)
+    assert "raw_record_content" not in result["customer_display_facts"]
+
+
+def test_extended_document_list_facts_are_normalized_without_raw_text():
+    safe = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["safe_luxian_0609_customer_display_facts"],
+    ).safe_luxian_0609_customer_display_facts
+    result = safe(
+        rule_id="LX0609-064",
+        raw={
+            "verification_kind": "postoperative_three_day_coverage_check",
+            "surgery_time": "2026-07-01 10:00:00",
+            "required_postop_dates": ("2026-07-02", "2026-07-03", "2026-07-04"),
+            "covered_postop_dates": ("2026-07-02", "2026-07-03"),
+            "surgeon_round_present": False,
+            "raw_document_text": "PRIVATE_POSTOP_TEXT",
+        },
+    )
+
+    assert result == {
+        "verification_kind": "postoperative_three_day_coverage_check",
+        "surgery_time": "2026-07-01 10:00:00",
+        "required_postop_dates": ["2026-07-02", "2026-07-03", "2026-07-04"],
+        "covered_postop_dates": ["2026-07-02", "2026-07-03"],
+        "surgeon_round_present": False,
+    }
+
+
 def test_reduced_decision_preserves_surgery_record_present_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -1467,6 +1523,28 @@ def test_transfusion_native_result_preserves_only_safe_explanation_facts():
                 "abo_present": True,
                 "rh_present": True,
                 "antibody_screen_present": True,
+            },
+        ),
+        (
+            "LX0609-070",
+            {
+                "failure_kind": "pretransfusion_items_incomplete",
+                "performed_transfusion_confirmed": True,
+                "required_items": [
+                    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
+                    "hcv", "hiv", "syphilis", "alt",
+                ],
+                "missing_items": ["hiv", "alt"],
+                "raw_rows": "PRIVATE_LAB_ROWS",
+            },
+            {
+                "failure_kind": "pretransfusion_items_incomplete",
+                "performed_transfusion_confirmed": True,
+                "required_items": [
+                    "hbsag", "hbsab", "hbeag", "hbeab", "hbcab",
+                    "hcv", "hiv", "syphilis", "alt",
+                ],
+                "missing_items": ["hiv", "alt"],
             },
         ),
         (

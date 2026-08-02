@@ -17,7 +17,7 @@ from .evidence_snapshot import SourceCompleteness
 from .rule_contracts import load_luxian_0609_rule_contracts
 
 
-SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v18"
+SOURCE_REGISTRY_VERSION = "lx0609-source-registry-v19"
 EXACT_VISIT_BINDING_FIELDS = ("institute_id", "patient_id", "visit_id")
 _SOURCE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 
@@ -484,6 +484,10 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "labtest_item_report",
     ),
     "LX0609-063": ("discharge_record",),
+    "LX0609-064": ("mr_surgery",),
+    "LX0609-065": ("mr_surgery",),
+    "LX0609-066": ("mr_surgery",),
+    "LX0609-070": ("mr_bloodtrans",),
     # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
     # Evidence Session，供适用性、时限和关联判定绑定。
     "LX0609-051": ("inpat_registration",),

@@ -1992,6 +1992,136 @@ def safe_luxian_0609_customer_display_facts(
             return None
         return values
 
+    extended_kinds_by_rule = {
+        "LX0609-050": {"uncertain_diagnosis_discussion_check"},
+        "LX0609-051": {
+            "death_discussion_timeliness_check",
+            "death_discussion_missing_after_deadline",
+        },
+        "LX0609-052": {"critical_value_timeliness_check"},
+        "LX0609-053": {"critical_value_disposition_presence_check"},
+        "LX0609-054": {"antimicrobial_reason_documentation_check"},
+        "LX0609-055": {"antimicrobial_effect_evaluation_check"},
+        "LX0609-057": {"empiric_antimicrobial_reason_check"},
+        "LX0609-058": {"special_antimicrobial_expert_support_check"},
+        "LX0609-060": {"death_record_presence_check"},
+        "LX0609-061": {"discharge_record_timeliness_check"},
+        "LX0609-062": {"discharge_medication_completeness_check"},
+        "LX0609-063": {"discharge_diagnosis_consistency_check"},
+        "LX0609-064": {"postoperative_three_day_coverage_check"},
+        "LX0609-065": {"postoperative_senior_round_check"},
+        "LX0609-066": {"postoperative_first_course_presence_check"},
+        "LX0609-067": {"predischarge_course_presence_check"},
+        "LX0609-069": {"consultation_timeliness_check"},
+        "LX0609-071": {"physician_handoff_timeliness_check"},
+        "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
+        "LX0609-073": {"transfer_record_presence_check", "transfer_records_missing"},
+        "LX0609-074": {"diagnosis_change_documentation_check"},
+    }
+    extended_allowed_keys = {
+        "uncertain_diagnosis_discussion_check": {
+            "admission_time", "uncertain_record_times", "discussion_count",
+        },
+        "death_discussion_timeliness_check": {
+            "death_time", "discussion_time", "threshold_hours", "actual_interval_hours",
+        },
+        "death_discussion_missing_after_deadline": {
+            "death_time", "threshold_hours", "discussion_count",
+        },
+        "critical_value_timeliness_check": {
+            "critical_item_names", "critical_flags", "report_times", "disposition_times",
+            "threshold_hours", "actual_interval_hours",
+        },
+        "critical_value_disposition_presence_check": {
+            "critical_item_names", "critical_flags", "report_times", "disposition_times",
+        },
+        "antimicrobial_reason_documentation_check": {"antimicrobials", "reason_documented"},
+        "antimicrobial_effect_evaluation_check": {
+            "antimicrobials", "window_hours", "evaluation_intervals",
+        },
+        "empiric_antimicrobial_reason_check": {
+            "antimicrobials", "empiric_use_confirmed", "reason_or_no_specimen_documented",
+        },
+        "special_antimicrobial_expert_support_check": {
+            "special_antimicrobials", "expert_support_present",
+        },
+        "death_record_presence_check": {"death_confirmed", "death_time", "death_record_count"},
+        "discharge_record_timeliness_check": {
+            "discharge_time", "record_time", "threshold_hours", "actual_interval_hours",
+        },
+        "discharge_medication_completeness_check": {
+            "medication_count", "required_fields", "missing_fields",
+        },
+        "discharge_diagnosis_consistency_check": {
+            "authoritative_diagnoses", "written_diagnoses", "diagnoses_consistent",
+        },
+        "postoperative_three_day_coverage_check": {
+            "surgery_time", "required_postop_dates", "covered_postop_dates",
+            "surgeon_round_present",
+        },
+        "postoperative_senior_round_check": {
+            "surgery_time", "threshold_hours", "senior_round_times",
+        },
+        "postoperative_first_course_presence_check": {
+            "performed_surgery_count", "postoperative_first_course_count",
+        },
+        "predischarge_course_presence_check": {
+            "discharge_date", "checked_dates", "course_present",
+        },
+        "consultation_timeliness_check": {
+            "threshold_hours", "actual_interval_hours", "request_times", "record_times",
+        },
+        "physician_handoff_timeliness_check": {
+            "change_time", "handoff_times", "handover_times", "handover_threshold_hours",
+        },
+        "transfer_record_timeliness_check": {
+            "transfer_order_time", "threshold_hours", "record_times", "actual_interval_hours",
+        },
+        "transfer_record_presence_check": {
+            "transfer_order_count", "transfer_in_count", "transfer_out_count",
+        },
+        "transfer_records_missing": {
+            "transfer_order_count", "transfer_in_count", "transfer_out_count",
+        },
+        "diagnosis_change_documentation_check": {
+            "diagnosis_change_count", "reason_recorded", "basis_recorded",
+        },
+    }
+
+    if rule_id in extended_kinds_by_rule:
+        kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
+        kind = raw.get(kind_key)
+        if kind not in extended_kinds_by_rule[rule_id]:
+            return None
+        safe: dict[str, Any] = {kind_key: kind}
+        for key in extended_allowed_keys[kind]:
+            value = raw.get(key)
+            if value is None:
+                safe[key] = None
+            elif isinstance(value, bool):
+                safe[key] = value
+            elif isinstance(value, int) and not isinstance(value, bool):
+                safe[key] = value
+            elif isinstance(value, float):
+                safe[key] = round(value, 2)
+            elif isinstance(value, str) and len(value) <= 160 and "\n" not in value:
+                safe[key] = value
+            elif isinstance(value, (list, tuple)) and len(value) <= 100 and all(
+                (
+                    isinstance(item, (int, float)) and not isinstance(item, bool)
+                )
+                or (
+                    isinstance(item, str)
+                    and len(item) <= 160
+                    and "\n" not in item
+                )
+                for item in value
+            ):
+                safe[key] = list(value)
+            else:
+                return None
+        return safe
+
     if rule_id == "LX0609-041":
         if (
             raw.get("verification_kind") == "transfusion_consent_present"
@@ -2040,7 +2170,7 @@ def safe_luxian_0609_customer_display_facts(
                 "missing_fields": fields,
             }
         return None
-    if rule_id == "LX0609-043":
+    if rule_id in {"LX0609-043", "LX0609-070"}:
         allowed_items = {"hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"}
         kind = raw.get("verification_kind") or raw.get("failure_kind")
         if kind == "pretransfusion_items_complete":

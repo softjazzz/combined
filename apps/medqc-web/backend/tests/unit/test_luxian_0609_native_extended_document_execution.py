@@ -27,7 +27,10 @@ from app.services.luxian_0609.native_extended_document_execution import (
 )
 from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
 from app.services.luxian_0609.source_manifest import QueryStatus
-from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
+from app.services.luxian_0609.source_registry import (
+    SOURCE_REGISTRY_VERSION,
+    resolve_luxian_0609_decision_support_source_keys,
+)
 
 
 def _session(rows_by_source):
@@ -119,6 +122,15 @@ async def _evaluate(rule_id, rows_by_source):
         snapshot=snapshot,
     )
     return result, reduced[0]
+
+
+def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sources() -> None:
+    sources = resolve_luxian_0609_decision_support_source_keys(
+        ("LX0609-064", "LX0609-065", "LX0609-066", "LX0609-070")
+    )
+
+    assert "mr_surgery" in sources
+    assert "mr_bloodtrans" in sources
 
 
 @pytest.mark.asyncio
@@ -484,6 +496,53 @@ async def test_074_reason_written_before_diagnosis_change_does_not_pass() -> Non
 
 
 @pytest.mark.asyncio
+async def test_074_changed_diagnosis_requires_both_reason_and_basis() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-074",
+        {
+            "diagnosis": (
+                {"diagnosis_datetime": "2026-07-01 08:00:00", "diagnosis_name": "肺部感染"},
+                {"diagnosis_datetime": "2026-07-02 08:00:00", "diagnosis_name": "细菌性肺炎"},
+            ),
+            "daily_course_record": ({
+                "record_time": "2026-07-02 09:00:00",
+                "record_content": "补充诊断为细菌性肺炎。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "mr_surgery": (
+                {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
+                    "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                    "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                    "surgeon": "张医生",
+                },
+                {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
+                    "surgery_begin_datetime": datetime(2026, 7, 5, 8, 0),
+                    "surgery_end_datetime": datetime(2026, 7, 5, 10, 0),
+                    "surgeon": "张医生",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
 async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() -> None:
     _, reduced = await _evaluate(
         "LX0609-050",
@@ -574,6 +633,25 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
 
 
 @pytest.mark.asyncio
+async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-054",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-06-01 12:00:00",
+                "record_content": "启用美罗培南。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
 async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-063",
@@ -600,12 +678,48 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
         {
             "bloodtrans_record": ({"record_time": "2026-06-02 14:00:00", "record_content": "输注红细胞2U"},),
             "labtest_item_report": tuple(
-                {"item_code": code, "item_name": name, "result": "阴性"}
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-02 10:00:00",
+                }
                 for code, name in names
             ),
         },
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "bloodtrans_record": ({"record_time": "2026-06-02 14:00:00"},),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": (
+                        "2026-06-02 15:00:00" if code == "HIV" else "2026-06-02 10:00:00"
+                    ),
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-070"]["late_items"] == ["hiv"]
 
 
 @pytest.mark.asyncio

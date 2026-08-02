@@ -127,6 +127,29 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-046": ("输血病程的原因、起止时间、成分、剂量、过程观察、反应处理或效果",),
     "LX0609-047": ("输血结束时间、输血后评价时间或评价内容",),
     "LX0609-048": ("手术记录、麻醉记录和术后首次病程中的输血成分与剂量",),
+    "LX0609-050": ("入院时间、入院满7天后的诊断状态或疑难病例讨论记录",),
+    "LX0609-051": ("死亡时间、死亡病历讨论记录时间",),
+    "LX0609-052": ("PL/PH危急值标志、报告时间或处置记录时间",),
+    "LX0609-053": ("PL/PH危急值标志、报告时间或危急值处置记录",),
+    "LX0609-054": ("抗菌药物医嘱、用药调整动作或对应理由",),
+    "LX0609-055": ("抗菌药物首次用药时间或48～72小时效果评价时间",),
+    "LX0609-057": ("经验用药事实、用药理由或无样可采原因",),
+    "LX0609-058": ("特殊级抗菌药物医嘱或专家查房、会诊记录",),
+    "LX0609-060": ("住院结局、死亡时间或死亡记录",),
+    "LX0609-061": ("出院时间或出院记录完成时间",),
+    "LX0609-062": ("出院带药的药名、剂量、途径或用药时间",),
+    "LX0609-063": ("权威出院诊断或出院记录诊断及顺序",),
+    "LX0609-064": ("手术时间、术后三日病程日期或术者身份",),
+    "LX0609-065": ("手术时间、上级医师身份或术后三日查房时间",),
+    "LX0609-066": ("已实施手术与术后首次病程的关联信息",),
+    "LX0609-067": ("出院日期或出院前一天、当天病程记录",),
+    "LX0609-068": ("出院日期、上级医师身份或同意出院意见",),
+    "LX0609-069": ("会诊申请时间或会诊记录完成时间",),
+    "LX0609-070": ("输血前九项检查结果、报告时间或输血开始时间",),
+    "LX0609-071": ("经治医师变更时间、交班记录或接班记录时间",),
+    "LX0609-072": ("转科医嘱时间、转入记录或转出记录时间",),
+    "LX0609-073": ("转科医嘱、转入记录或转出记录",),
+    "LX0609-074": ("诊断修正时间、修改理由或诊断依据",),
 }
 _RULE_DATA_GAP_MESSAGES = {
     "LX0609-016": (
@@ -304,6 +327,86 @@ _RULE_DATA_GAP_MESSAGES = {
         "当前读取到的转科医嘱或转入、转出记录不完整。",
         "请确认转科医嘱和转科记录已完整同步后重新评估。",
     ),
+    "LX0609-050": (
+        "暂无法核对入院7天后诊断不明确病例的讨论记录",
+        "当前缺少入院时间、满7天后的诊断状态或疑难病例讨论记录。",
+        "请确认入院登记、病程和疑难病例讨论记录已完整同步后重新评估。",
+    ),
+    "LX0609-052": (
+        "暂无法核对危急值是否在6小时内处置",
+        "当前缺少PL/PH危急值标志、报告时间或对应处置记录时间。",
+        "请确认危急值检验结果及处置记录已完整同步后重新评估。",
+    ),
+    "LX0609-053": (
+        "暂无法确认危急值报告后是否有处置记录",
+        "当前缺少PL/PH危急值标志、报告时间或可关联的危急值处置记录。",
+        "请确认危急值检验结果及处置记录已完整同步后重新评估。",
+    ),
+    "LX0609-054": (
+        "暂无法核对抗菌药物使用或调整理由",
+        "当前缺少抗菌药物医嘱、使用调整动作或对应病程理由。",
+        "请确认抗菌药物医嘱和相关病程已完整同步后重新评估。",
+    ),
+    "LX0609-055": (
+        "暂无法核对48～72小时抗菌药物效果评价",
+        "当前缺少首次用药时间、效果评价记录或评价时间。",
+        "请确认抗菌药物医嘱时间和效果评价病程已完整同步后重新评估。",
+    ),
+    "LX0609-057": (
+        "暂无法核对经验用药理由",
+        "当前缺少经验用药事实、用药理由或无样可采原因。",
+        "请确认抗菌药物医嘱及对应病程说明已完整同步后重新评估。",
+    ),
+    "LX0609-058": (
+        "暂无法核对特殊级抗菌药物的专家支持记录",
+        "当前缺少特殊级抗菌药物医嘱，或缺少可关联的专家查房、会诊记录。",
+        "请确认特殊级抗菌药物医嘱和专家支持记录已完整同步后重新评估。",
+    ),
+    "LX0609-061": (
+        "暂无法核对出院记录完成时限",
+        "当前缺少出院时间或出院记录完成时间，无法计算24小时时限。",
+        "请确认住院登记及出院记录的权威时间已完整同步后重新评估。",
+    ),
+    "LX0609-063": (
+        "暂无法核对出院诊断内容及顺序",
+        "当前缺少权威出院诊断或出院记录中的诊断及顺序。",
+        "请确认诊断表和出院记录诊断已完整同步后重新评估。",
+    ),
+    "LX0609-064": (
+        "暂无法核对术后三日连续病程及术者查房",
+        "当前缺少手术时间、术后三日病程日期、术者身份或单台手术关联信息。",
+        "请确认手术及术后病程资料已完整同步后重新评估。",
+    ),
+    "LX0609-065": (
+        "暂无法核对术后三日内上级医师查房",
+        "当前缺少手术时间、上级医师身份、查房时间或单台手术关联信息。",
+        "请确认手术及上级医师查房资料已完整同步后重新评估。",
+    ),
+    "LX0609-066": (
+        "暂无法核对术后首次病程记录",
+        "当前缺少已实施手术与术后首次病程之间的单台手术关联信息。",
+        "请确认手术和术后首次病程资料已完整同步后重新评估。",
+    ),
+    "LX0609-067": (
+        "暂无法核对出院前病程记录",
+        "当前缺少出院日期或出院前一天、当天的病程记录。",
+        "请确认出院时间和病程资料已完整同步后重新评估。",
+    ),
+    "LX0609-068": (
+        "暂无法核对上级医师同意出院意见",
+        "当前缺少出院日期、上级医师身份或同意出院意见。",
+        "请确认出院时间及上级医师病程已完整同步后重新评估。",
+    ),
+    "LX0609-070": (
+        "暂无法完整核对输血前九项检查",
+        "当前缺少输血前九项结果、报告时间或输血开始时间。",
+        "请补充缺失的输血前检查结果及权威时间后重新评估。",
+    ),
+    "LX0609-074": (
+        "暂无法核对诊断修正或补充记录",
+        "当前缺少诊断修正时间、对应修改理由或诊断依据。",
+        "请确认诊断变更及对应病程记录已完整同步后重新评估。",
+    ),
 }
 _RULE_NON_COMPLIANT_MESSAGES = {
     "LX0609-016": (
@@ -426,6 +529,116 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
     ("LX0609-074", "trigger_absent_complete"): (
         "本次未发现修正或补充诊断事件",
         "现有诊断记录未触发修改或补充诊断依据核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-050", "trigger_absent_complete"): (
+        "入院满7天后未发现诊断仍不明确的记录",
+        "已核对入院时间及后续病程，未触发疑难病例讨论要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-051", "trigger_absent_complete"): (
+        "本次住院结局不是死亡",
+        "已核对住院结局和死亡资料，未触发死亡病历讨论时限要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-052", "trigger_absent_complete"): (
+        "本次未发现带PL或PH标志的危急值",
+        "已核对检验结果及异常标志，未触发6小时处置时限要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-053", "trigger_absent_complete"): (
+        "本次未发现带PL或PH标志的危急值",
+        "已核对检验结果及异常标志，未触发危急值处置记录要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-054", "trigger_absent_complete"): (
+        "本次未发现抗菌药物医嘱",
+        "已核对住院药物医嘱，未触发抗菌药物使用或调整理由核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-055", "trigger_absent_complete"): (
+        "本次未发现抗菌药物医嘱",
+        "已核对住院药物医嘱，未触发48～72小时效果评价要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-057", "trigger_absent_complete"): (
+        "本次未发现经验性抗菌药物使用",
+        "已核对抗菌药物医嘱及病程，未触发经验用药理由核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-058", "trigger_absent_complete"): (
+        "本次未使用特殊级抗菌药物",
+        "已按院内抗菌药物分级目录核对医嘱，未触发专家查房或会诊要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-060", "trigger_absent_complete"): (
+        "本次住院结局不是死亡",
+        "已核对住院结局和死亡资料，未触发死亡记录要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-061", "trigger_absent_complete"): (
+        "本次尚未形成出院时间",
+        "现有住院登记未表明患者已出院，不启动出院记录24小时时限。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-062", "trigger_absent_complete"): (
+        "本次未发现需要核对的出院带药",
+        "已核对出院记录，未发现出院带药项目。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-063", "trigger_absent_complete"): (
+        "本次尚未形成出院记录",
+        "当前未触发出院诊断与权威诊断的一致性核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-064", "performed_event_absent"): (
+        "本次未实施手术",
+        "已核对手术主表和手术记录，未触发术后三日连续病程要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-065", "performed_event_absent"): (
+        "本次未实施手术",
+        "已核对手术主表和手术记录，未触发术后三日内上级医师查房要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-066", "performed_event_absent"): (
+        "本次未实施手术",
+        "已核对手术主表和手术记录，未触发术后首次病程要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-067", "trigger_absent_complete"): (
+        "本次尚未出院",
+        "当前未形成出院日期，不启动出院前病程核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-068", "trigger_absent_complete"): (
+        "本次尚未出院",
+        "当前未形成出院日期，不启动上级医师同意出院意见核对。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-069", "trigger_absent_complete"): (
+        "本次未发现会诊申请或会诊记录",
+        "已核对会诊资料，未触发会诊记录24小时时限要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-070", "trigger_absent_complete"): (
+        "本次未实施输血",
+        "已核对输血记录，未触发输血前九项检查要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-071", "trigger_absent_complete"): (
+        "本次未发现经治医师变更事件",
+        "已核对医师变更资料，未触发交接班记录要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-072", "trigger_absent_complete"): (
+        "本次未发现转科医嘱",
+        "已核对非药物医嘱，未触发转科记录24小时时限要求。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-073", "trigger_absent_complete"): (
+        "本次未发现转科医嘱",
+        "已核对非药物医嘱，未触发转入、转出记录存在性要求。",
         "无需按本质控点处理。",
     ),
 }
@@ -629,6 +842,12 @@ _TRANSFUSION_SOURCE_LABELS = {
     "anesthesia_record": "麻醉记录",
     "postsurg_firstcourse_record": "术后首次病程记录",
 }
+_DISCHARGE_MEDICATION_FIELD_LABELS = {
+    "drug_name": "药品名称",
+    "dose": "用药剂量",
+    "route": "给药途径",
+    "duration": "用药时间",
+}
 
 
 def customer_finding_from_controlled_facts(
@@ -636,7 +855,11 @@ def customer_finding_from_controlled_facts(
 ) -> str:
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
-    if rule_id not in {f"LX0609-{index:03d}" for index in range(41, 49)}:
+    if rule_id not in {
+        *(f"LX0609-{index:03d}" for index in range(41, 49)),
+        *(f"LX0609-{index:03d}" for index in range(50, 75)),
+        "LX0609-070",
+    }:
         return ""
     if not isinstance(facts, Mapping):
         return ""
@@ -648,6 +871,133 @@ def customer_finding_from_controlled_facts(
         if not isinstance(values, list):
             return ""
         return "、".join(mapping[value] for value in values if value in mapping)
+
+    def joined(key: str) -> str:
+        values = facts.get(key)
+        return "、".join(str(value) for value in values) if isinstance(values, list) else ""
+
+    if rule_id == "LX0609-050" and kind == "uncertain_diagnosis_discussion_check":
+        count = facts.get("discussion_count")
+        trigger_times = joined("uncertain_record_times")
+        if trigger_times:
+            return (
+                f"入院时间为 {facts.get('admission_time')}，入院满 7 天后仍有诊断不明确记录"
+                f"（{trigger_times}）；疑难病例讨论记录 {count} 份。"
+            )
+        return f"入院时间为 {facts.get('admission_time')}，未发现入院满 7 天后诊断仍不明确的触发记录，本质控点不适用。"
+
+    if rule_id == "LX0609-051":
+        if kind == "death_discussion_timeliness_check":
+            return (
+                f"死亡时间 {facts.get('death_time')}，死亡病历讨论时间 {facts.get('discussion_time')}，"
+                f"实际间隔 {facts.get('actual_interval_hours')} 小时，规定时限 168 小时。"
+            )
+        if kind == "death_discussion_missing_after_deadline":
+            return f"患者于 {facts.get('death_time')} 死亡，超过 7 天仍未找到死亡病历讨论记录。"
+
+    if rule_id in {"LX0609-052", "LX0609-053"}:
+        items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
+        reports = joined("report_times")
+        dispositions = joined("disposition_times")
+        if rule_id == "LX0609-052":
+            intervals = joined("actual_interval_hours")
+            if dispositions and intervals:
+                return f"危急值项目：{items}；报告时间：{reports}；处置时间：{dispositions}；实际间隔 {intervals} 小时，规定时限 6 小时。"
+            return f"危急值项目：{items}；报告时间：{reports}；未找到 6 小时内的危急值处置记录。"
+        if dispositions:
+            return f"危急值项目：{items}；报告后已找到危急值处置记录（{dispositions}）。"
+        return f"危急值项目：{items}；报告时间：{reports}；未找到报告后的危急值处置记录。"
+
+    if rule_id == "LX0609-054" and kind == "antimicrobial_reason_documentation_check":
+        medicines = joined("antimicrobials")
+        return (
+            f"已核对抗菌药物 {medicines}，病程中已记录使用或调整理由。"
+            if facts.get("reason_documented") is True
+            else f"已核对抗菌药物 {medicines}，病程中未找到明确的使用或调整理由。"
+        )
+
+    if rule_id == "LX0609-055" and kind == "antimicrobial_effect_evaluation_check":
+        medicines = joined("antimicrobials")
+        intervals = joined("evaluation_intervals")
+        return f"已核对抗菌药物 {medicines}；效果评价距首次用药 {intervals or '无可用'} 小时，要求在 48～72 小时内完成。"
+
+    if rule_id == "LX0609-057" and kind == "empiric_antimicrobial_reason_check":
+        medicines = joined("antimicrobials")
+        return (
+            f"已确认经验使用 {medicines}，并记录经验用药理由或无样可采原因。"
+            if facts.get("reason_or_no_specimen_documented") is True
+            else f"已确认经验使用 {medicines}，但未记录经验用药理由或无样可采原因。"
+        )
+
+    if rule_id == "LX0609-058" and kind == "special_antimicrobial_expert_support_check":
+        medicines = joined("special_antimicrobials")
+        return (
+            f"已使用特殊级抗菌药物 {medicines}，并找到专家查房或会诊支持记录。"
+            if facts.get("expert_support_present") is True
+            else f"已使用特殊级抗菌药物 {medicines}，未找到专家查房或会诊支持记录。"
+        )
+
+    if rule_id == "LX0609-060" and kind == "death_record_presence_check":
+        return (
+            f"已确认患者死亡（死亡时间 {facts.get('death_time') or '未返回'}），"
+            f"死亡记录 {facts.get('death_record_count')} 份。"
+        )
+
+    if rule_id == "LX0609-061" and kind == "discharge_record_timeliness_check":
+        return (
+            f"出院时间 {facts.get('discharge_time')}，出院记录时间 {facts.get('record_time')}，"
+            f"实际间隔 {facts.get('actual_interval_hours')} 小时，规定时限 24 小时。"
+        )
+
+    if rule_id == "LX0609-062" and kind == "discharge_medication_completeness_check":
+        missing = labels("missing_fields", _DISCHARGE_MEDICATION_FIELD_LABELS)
+        return (
+            f"共核对 {facts.get('medication_count')} 项出院带药，药名、剂量、途径及用药时间均完整。"
+            if not missing
+            else f"出院带药缺少字段：{missing}。"
+        )
+
+    if rule_id == "LX0609-063" and kind == "discharge_diagnosis_consistency_check":
+        authority = joined("authoritative_diagnoses")
+        written = joined("written_diagnoses")
+        state = "一致" if facts.get("diagnoses_consistent") is True else "不一致"
+        return f"权威出院诊断为“{authority}”，出院记录诊断为“{written}”，两者顺序及内容{state}。"
+
+    if rule_id == "LX0609-064" and kind == "postoperative_three_day_coverage_check":
+        required = joined("required_postop_dates")
+        covered = joined("covered_postop_dates") or "无"
+        surgeon = "有" if facts.get("surgeon_round_present") is True else "无"
+        return f"手术时间 {facts.get('surgery_time')}；术后应记录日期为 {required}，实际覆盖 {covered}；{surgeon}术者查房记录。"
+
+    if rule_id == "LX0609-065" and kind == "postoperative_senior_round_check":
+        rounds = joined("senior_round_times")
+        return f"手术时间 {facts.get('surgery_time')}；术后 72 小时内上级医师查房时间：{rounds or '未找到'}。"
+
+    if rule_id == "LX0609-066" and kind == "postoperative_first_course_presence_check":
+        return f"已确认实施手术 {facts.get('performed_surgery_count')} 台，找到术后首次病程记录 {facts.get('postoperative_first_course_count')} 份。"
+
+    if rule_id == "LX0609-067" and kind == "predischarge_course_presence_check":
+        state = "已找到" if facts.get("course_present") is True else "未找到"
+        return f"出院日期 {facts.get('discharge_date')}；已核对 {joined('checked_dates')}，{state}出院前病程记录。"
+
+    if rule_id == "LX0609-069" and kind == "consultation_timeliness_check":
+        return f"会诊申请时间：{joined('request_times')}；完成时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"
+
+    if rule_id == "LX0609-071" and kind == "physician_handoff_timeliness_check":
+        return f"经治医师变更时间 {facts.get('change_time')}；交班记录时间：{joined('handoff_times') or '未找到'}；接班记录时间：{joined('handover_times') or '未找到'}，接班时限 24 小时。"
+
+    if rule_id == "LX0609-072" and kind == "transfer_record_timeliness_check":
+        return f"转科医嘱时间 {facts.get('transfer_order_time')}；转入、转出记录时间：{joined('record_times')}；实际间隔 {joined('actual_interval_hours')} 小时，规定时限 24 小时。"
+
+    if rule_id == "LX0609-073" and kind == "transfer_record_presence_check":
+        return f"已确认转科医嘱 {facts.get('transfer_order_count')} 条，转入记录 {facts.get('transfer_in_count')} 份，转出记录 {facts.get('transfer_out_count')} 份。"
+
+    if rule_id in {"LX0609-072", "LX0609-073"} and kind == "transfer_records_missing":
+        return f"已确认转科医嘱 {facts.get('transfer_order_count')} 条，转入记录 {facts.get('transfer_in_count')} 份，转出记录 {facts.get('transfer_out_count')} 份；目标文书缺失。"
+
+    if rule_id == "LX0609-074" and kind == "diagnosis_change_documentation_check":
+        state = "均已记录" if facts.get("reason_recorded") and facts.get("basis_recorded") else "未完整记录"
+        return f"共识别 {facts.get('diagnosis_change_count')} 次诊断修正或补充，修改理由和诊断依据{state}。"
 
     if rule_id == "LX0609-041":
         if kind == "transfusion_consent_present":
@@ -662,7 +1012,7 @@ def customer_finding_from_controlled_facts(
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
             return f"输血知情同意书缺少：{missing}。" if missing else ""
 
-    if rule_id == "LX0609-043":
+    if rule_id in {"LX0609-043", "LX0609-070"}:
         if kind == "pretransfusion_items_complete":
             return (
                 "输血前九项均已完成，最晚检验时间为 "

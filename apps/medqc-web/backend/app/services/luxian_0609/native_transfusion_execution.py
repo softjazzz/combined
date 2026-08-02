@@ -855,7 +855,7 @@ def _lab_report_time(row: Mapping[str, Any]) -> datetime | None:
     return None
 
 
-def _programmatic_043_status(
+def evaluate_pretransfusion_nine_items(
     documents: Mapping[str, Any],
 ) -> tuple[str, str, Mapping[str, Any] | None]:
     # 九项检查本身就可能超过模型上下文使用的 8 行上限；确定性核对必须消费
@@ -1875,7 +1875,7 @@ async def execute_luxian_0609_native_transfusion_rules(
             programmatic = {
                 "LX0609-041": _programmatic_041_status,
                 "LX0609-042": _programmatic_042_status,
-                "LX0609-043": _programmatic_043_status,
+                "LX0609-043": evaluate_pretransfusion_nine_items,
             }[rule_id](documents)
             status, reason_code, display_facts = programmatic
             emit_outcome(

@@ -27,6 +27,7 @@ from .source_evidence_reader import (
     authoritative_document_time_value,
     trusted_performed_surgery_times,
 )
+from .native_transfusion_execution import evaluate_pretransfusion_nine_items
 from .surgery_applicability import (
     SurgeryApplicability,
     resolve_surgery_applicability,
@@ -108,19 +109,6 @@ _INVASIVE_PROCEDURES = (
     "中心静脉置管", "胸腔穿刺", "腹腔穿刺", "腰椎穿刺",
     "气管插管", "支气管镜", "动脉置管",
 )
-_PRETRANSFUSION_NINE_GROUPS = (
-    ("hbsag", "乙肝表面抗原"),
-    ("hbsab", "乙肝表面抗体"),
-    ("hbeag", "乙肝e抗原"),
-    ("hbeab", "乙肝e抗体"),
-    ("hbcab", "乙肝核心抗体"),
-    ("hiv", "艾滋"),
-    ("hcv", "丙肝"),
-    ("tp", "梅毒"),
-    ("alt", "谷丙转氨酶"),
-)
-
-
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -359,6 +347,25 @@ def _has_any_text(rows: Sequence[Mapping[str, Any]], markers: Sequence[str]) -> 
     return any(any(marker in _material_text(row) for marker in markers) for row in rows)
 
 
+def _has_antimicrobial_action_reason(
+    rows: Sequence[Mapping[str, Any]],
+    antimicrobial_names: Sequence[str],
+) -> bool:
+    """同一病程必须同时出现药物、用药动作和临床理由，禁止仅凭“启用”通过。"""
+
+    actions = ("使用", "启用", "停用", "更换", "联合", "超说明书")
+    reasons = (
+        "因为", "由于", "考虑", "依据", "理由", "重症感染", "覆盖",
+        "培养", "药敏", "感染证据", "无样可采",
+    )
+    return any(
+        any(name in (text := _material_text(row)) for name in antimicrobial_names)
+        and any(action in text for action in actions)
+        and any(reason in text for reason in reasons)
+        for row in rows
+    )
+
+
 def _diagnosis_sequence(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     ordered = sorted(
         (
@@ -464,6 +471,24 @@ def _performed_surgery_times(
                 if (parsed := _parse_datetime(value)) is not None
             )
     return tuple(sorted(set(values)))
+
+
+def _performed_surgery_event_count(
+    mr_surgery_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> int:
+    """按权威手术主表优先计数，避免把同台手术的开始/结束时间算成两台。"""
+
+    qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
+        mr_surgery_rows, surgery_record_rows
+    )
+    authoritative_rows = qualified_mr_rows or qualified_record_rows
+    source_key = "mr_surgery" if qualified_mr_rows else "surgery_record"
+    return sum(
+        1
+        for row in authoritative_rows
+        if trusted_performed_surgery_times(source_key=source_key, row=row)
+    )
 
 
 def _person_tokens(row: Mapping[str, Any]) -> set[str]:
@@ -639,6 +664,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "compliant", "requirement_satisfied"
             else:
                 final_state, reason_code = "non_compliant", "required_document_missing"
+            if admission_time is not None:
+                display.append((rule_id, {
+                    "verification_kind": "uncertain_diagnosis_discussion_check",
+                    "admission_time": admission_time.isoformat(sep=" "),
+                    "uncertain_record_times": [
+                        value.isoformat(sep=" ")
+                        for row in uncertain_rows
+                        if (value := _row_time(row)) is not None
+                    ],
+                    "discussion_count": len(diffcase_rows),
+                }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("inpat_registration", "daily_course_record", "diffcase_discussion_record"),
@@ -648,6 +684,7 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id in {"LX0609-052", "LX0609-053"}:
             critical = _critical_rows(lab_item_rows)
+            intervals: tuple[float | None, ...] = ()
             if lab_item_error:
                 final_state, reason_code = "data_gap", lab_item_error
             elif not critical:
@@ -694,7 +731,50 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     final_state = "compliant" if handled else "non_compliant"
                     reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
-                    display.append((rule_id, {"threshold_hours": 6, "actual_interval_hours": intervals}))
+            if critical:
+                safe_report_times = [
+                    value.isoformat(sep=" ")
+                    for row in critical
+                    if (value := _parse_datetime(
+                        row.get("report_time")
+                        or row.get("report_datetime")
+                        or row.get("record_time")
+                    )) is not None
+                ]
+                safe_disposition_times = [
+                    value.isoformat(sep=" ")
+                    for row in crisis_rows
+                    if (value := _row_time(row)) is not None
+                ]
+                facts: dict[str, Any] = {
+                    "verification_kind": (
+                        "critical_value_timeliness_check"
+                        if rule_id == "LX0609-052"
+                        else "critical_value_disposition_presence_check"
+                    ),
+                    "critical_item_names": [
+                        _clean(row.get("item_name") or row.get("item_code"))[:40]
+                        for row in critical
+                    ],
+                    "critical_flags": [
+                        _clean(
+                            row.get("result_flag")
+                            or row.get("abnormal_flag")
+                            or row.get("abnormal_indicator")
+                        ).upper()
+                        for row in critical
+                    ],
+                    "report_times": safe_report_times,
+                    "disposition_times": safe_disposition_times,
+                }
+                if rule_id == "LX0609-052":
+                    facts["threshold_hours"] = 6
+                    facts["actual_interval_hours"] = [
+                        round(value, 2)
+                        for value in intervals
+                        if isinstance(value, (int, float))
+                    ]
+                display.append((rule_id, facts))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("labtest_item_report", "crisis_value_record"),
@@ -714,12 +794,18 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not antimicrobial_orders:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif rule_id == "LX0609-054":
-                complete = _has_any_text(
-                    course_rows,
-                    ("启用", "停用", "更换", "联合", "用药理由", "重症感染", "覆盖耐药菌"),
+                used_names = tuple(
+                    name for name in _ANTIMICROBIALS
+                    if any(name in _material_text(row) for row in antimicrobial_orders)
                 )
+                complete = _has_antimicrobial_action_reason(course_rows, used_names)
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                display.append((rule_id, {
+                    "verification_kind": "antimicrobial_reason_documentation_check",
+                    "antimicrobials": list(used_names),
+                    "reason_documented": complete,
+                }))
             elif rule_id == "LX0609-055":
                 order_times = tuple(
                     value for row in antimicrobial_orders if (value := _parse_datetime(
@@ -742,7 +828,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     complete = any(48 <= value <= 72 for value in intervals)
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_within_threshold" if complete else "threshold_exceeded"
-                    display.append((rule_id, {"window_hours": (48, 72), "evaluation_intervals": intervals}))
+                    display.append((rule_id, {
+                        "verification_kind": "antimicrobial_effect_evaluation_check",
+                        "antimicrobials": [
+                            name for name in _ANTIMICROBIALS
+                            if any(name in _material_text(row) for row in antimicrobial_orders)
+                        ],
+                        "window_hours": [48, 72],
+                        "evaluation_intervals": [round(value, 2) for value in intervals],
+                    }))
             elif rule_id == "LX0609-056":
                 special_orders = tuple(
                     row for row in antimicrobial_orders
@@ -784,6 +878,15 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "requirement_violated"
+                    display.append((rule_id, {
+                        "verification_kind": "empiric_antimicrobial_reason_check",
+                        "antimicrobials": [
+                            name for name in _ANTIMICROBIALS
+                            if any(name in _material_text(row) for row in antimicrobial_orders)
+                        ],
+                        "empiric_use_confirmed": True,
+                        "reason_or_no_specimen_documented": complete,
+                    }))
             elif rule_id == "LX0609-058":
                 special_used = any(
                     any(name in _material_text(row) for name in _SPECIAL_ANTIMICROBIALS)
@@ -800,6 +903,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                     )
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "required_document_missing"
+                    display.append((rule_id, {
+                        "verification_kind": "special_antimicrobial_expert_support_check",
+                        "special_antimicrobials": [
+                            name for name in _SPECIAL_ANTIMICROBIALS
+                            if any(name in _material_text(row) for row in antimicrobial_orders)
+                        ],
+                        "expert_support_present": complete,
+                    }))
             else:
                 used_names = tuple(
                     name for name in _ANTIMICROBIALS
@@ -837,7 +948,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     complete = authority == written
                     final_state = "compliant" if complete else "non_compliant"
                     reason_code = "requirement_satisfied" if complete else "requirement_violated"
-                    display.append((rule_id, {"authoritative_diagnoses": authority, "written_diagnoses": written}))
+                    display.append((rule_id, {
+                        "verification_kind": "discharge_diagnosis_consistency_check",
+                        "authoritative_diagnoses": list(authority),
+                        "written_diagnoses": list(written),
+                        "diagnoses_consistent": complete,
+                    }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("discharge_record", "diagnosis", "discharge_record_diagnosis"),
@@ -853,16 +969,27 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif lab_item_error:
                 final_state, reason_code = "data_gap", lab_item_error
             else:
-                lab_text = "\n".join(_material_text(row).lower() for row in lab_item_rows)
-                present = tuple(
-                    labels[0]
-                    for labels in _PRETRANSFUSION_NINE_GROUPS
-                    if any(label.lower() in lab_text for label in labels)
+                final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
+                    {
+                        "mr_bloodtrans": list(bloodtrans_rows),
+                        "labtest_item_report": list(lab_item_rows),
+                        "blood_application": [],
+                        "__logical_source_states__": {
+                            "labtest_item_report": "available" if lab_item_rows else "empty",
+                        },
+                    }
                 )
-                complete = len(present) == len(_PRETRANSFUSION_NINE_GROUPS)
-                final_state = "compliant" if complete else "non_compliant"
-                reason_code = "requirement_satisfied" if complete else "requirement_violated"
-                display.append((rule_id, {"required_test_count": 9, "present_test_count": len(present)}))
+                reason_code = {
+                    "pretransfusion_items_complete": "requirement_satisfied",
+                    "pretransfusion_items_incomplete": "requirement_violated",
+                    "pretransfusion_tests_after_transfusion": "requirement_violated",
+                    "pretransfusion_test_time_missing": "authoritative_time_missing",
+                    "transfusion_time_unavailable": "authoritative_time_missing",
+                    "pretransfusion_item_contract_unavailable": "source_unavailable",
+                    "source_query_error": "source_query_error",
+                }.get(detail_reason, "required_field_missing")
+                if facts is not None:
+                    display.append((rule_id, dict(facts)))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("bloodtrans_record", "labtest_item_report"),
@@ -935,6 +1062,12 @@ async def execute_luxian_0609_native_extended_document_rules(
 
         if rule_id == "LX0609-060":
             final_state = "compliant" if death_rows else "non_compliant"
+            display.append((rule_id, {
+                "verification_kind": "death_record_presence_check",
+                "death_confirmed": True,
+                "death_time": death_time.isoformat(sep=" ") if death_time else None,
+                "death_record_count": len(death_rows),
+            }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -995,6 +1128,9 @@ async def execute_luxian_0609_native_extended_document_rules(
                     (
                         rule_id,
                         {
+                            "verification_kind": "death_discussion_timeliness_check",
+                            "death_time": death_time.isoformat(sep=" "),
+                            "discussion_time": discussion_time.isoformat(sep=" "),
                             "threshold_hours": 168,
                             "actual_interval_hours": round(hours, 2),
                         },
@@ -1008,6 +1144,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "non_compliant",
                     "required_document_missing",
                 )
+                display.append((rule_id, {
+                    "failure_kind": "death_discussion_missing_after_deadline",
+                    "death_time": death_time.isoformat(sep=" "),
+                    "threshold_hours": 168,
+                    "discussion_count": 0,
+                }))
             else:
                 final_state, reason_code = "data_gap", "source_readiness_unproven"
             decisions.append(
@@ -1068,15 +1210,16 @@ async def execute_luxian_0609_native_extended_document_rules(
                     if hours <= 24
                     else "threshold_exceeded"
                 )
-                display.append(
-                    (
-                        rule_id,
-                        {
-                            "threshold_hours": 24,
-                            "actual_interval_hours": round(hours, 2),
-                        },
-                    )
-                )
+            display.append((rule_id, {
+                "verification_kind": "discharge_record_timeliness_check",
+                "discharge_time": discharge_time.isoformat(sep=" "),
+                "record_time": record_time.isoformat(sep=" ") if record_time else None,
+                "threshold_hours": 24,
+                "actual_interval_hours": (
+                    round((record_time - discharge_time).total_seconds() / 3600, 2)
+                    if record_time else None
+                ),
+            }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -1136,17 +1279,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                 reason_code = (
                     "requirement_satisfied" if complete else "requirement_violated"
                 )
+                missing_fields = sorted({
+                    group[0]
+                    for item in medications
+                    for group in required_groups
+                    if not any(_clean(item.get(key)) for key in group)
+                })
                 display.append(
                     (
                         rule_id,
                         {
+                            "verification_kind": "discharge_medication_completeness_check",
                             "medication_count": len(medications),
-                            "required_fields": (
+                            "required_fields": [
                                 "drug_name",
                                 "dose",
                                 "route",
                                 "duration",
-                            ),
+                            ],
+                            "missing_fields": missing_fields,
                         },
                     )
                 )
@@ -1166,6 +1317,8 @@ async def execute_luxian_0609_native_extended_document_rules(
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
+            elif _performed_surgery_event_count(mr_surgery_rows, surgery_record_rows) > 1:
+                final_state, reason_code = "data_gap", "association_failed"
             elif postop_first_error:
                 final_state, reason_code = "data_gap", postop_first_error
             elif postop_first_rows:
@@ -1175,6 +1328,14 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "non_compliant",
                     "required_document_missing",
                 )
+            if gate_outcome is None:
+                display.append((rule_id, {
+                    "verification_kind": "postoperative_first_course_presence_check",
+                    "performed_surgery_count": _performed_surgery_event_count(
+                        mr_surgery_rows, surgery_record_rows
+                    ),
+                    "postoperative_first_course_count": len(postop_first_rows),
+                }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -1203,6 +1364,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = gate_outcome
             elif not surgery_times:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
+            elif _performed_surgery_event_count(mr_surgery_rows, surgery_record_rows) > 1:
+                final_state, reason_code = "data_gap", "association_failed"
             elif daily_error or senior_error:
                 final_state, reason_code = "data_gap", daily_error or senior_error
             else:
@@ -1226,6 +1389,17 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if present
                         else "required_document_missing"
                     )
+                    display.append((rule_id, {
+                        "verification_kind": "postoperative_senior_round_check",
+                        "surgery_time": surgery_time.isoformat(sep=" "),
+                        "threshold_hours": 72,
+                        "senior_round_times": [
+                            value.isoformat(sep=" ")
+                            for row in senior_rows
+                            if (value := _row_time(row)) is not None
+                            and surgery_time <= value <= deadline
+                        ],
+                    }))
                 else:
                     required_dates = {
                         (surgery_time + timedelta(days=offset)).date()
@@ -1265,10 +1439,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                             (
                                 rule_id,
                                 {
-                                    "required_postop_dates": tuple(
+                                    "verification_kind": "postoperative_three_day_coverage_check",
+                                    "surgery_time": surgery_time.isoformat(sep=" "),
+                                    "required_postop_dates": list(
                                         sorted(item.isoformat() for item in required_dates)
                                     ),
-                                    "covered_postop_dates": tuple(
+                                    "covered_postop_dates": list(
                                         sorted(item.isoformat() for item in covered_dates)
                                     ),
                                     "surgeon_round_present": surgeon_round,
@@ -1353,6 +1529,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                             },
                         )
                     )
+                else:
+                    display.append((rule_id, {
+                        "verification_kind": "predischarge_course_presence_check",
+                        "discharge_date": discharge_time.date().isoformat(),
+                        "checked_dates": sorted(item.isoformat() for item in valid_dates),
+                        "course_present": present,
+                    }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -1416,10 +1599,24 @@ async def execute_luxian_0609_native_extended_document_rules(
                         (
                             rule_id,
                             {
+                                "verification_kind": "consultation_timeliness_check",
                                 "threshold_hours": 24,
-                                "actual_interval_hours": tuple(
+                                "actual_interval_hours": [
                                     round(value, 2) for value in intervals
-                                ),
+                                ],
+                                "request_times": [
+                                    _parse_datetime(
+                                        row.get("request_time")
+                                        or row.get("request_datetime")
+                                        or row.get("application_time")
+                                        or row.get("application_datetime")
+                                    ).isoformat(sep=" ")
+                                    for row in consultation_rows
+                                ],
+                                "record_times": [
+                                    _row_time(row).isoformat(sep=" ")
+                                    for row in consultation_rows
+                                ],
                             },
                         )
                     )
@@ -1469,6 +1666,8 @@ async def execute_luxian_0609_native_extended_document_rules(
                         "data_gap",
                         "authoritative_time_missing",
                     )
+                elif len(change_times) > 1:
+                    final_state, reason_code = "data_gap", "association_failed"
                 else:
                     compliant = all(
                         any(item <= change_time for item in handoff_times)
@@ -1484,6 +1683,13 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if compliant
                         else "requirement_violated"
                     )
+                    display.append((rule_id, {
+                        "verification_kind": "physician_handoff_timeliness_check",
+                        "change_time": change_times[0].isoformat(sep=" "),
+                        "handoff_times": [value.isoformat(sep=" ") for value in handoff_times],
+                        "handover_times": [value.isoformat(sep=" ") for value in handover_times],
+                        "handover_threshold_hours": 24,
+                    }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -1513,8 +1719,22 @@ async def execute_luxian_0609_native_extended_document_rules(
                     "non_compliant",
                     "required_document_missing",
                 )
+                display.append((rule_id, {
+                    "failure_kind": "transfer_records_missing",
+                    "transfer_order_count": len(orders),
+                    "transfer_in_count": len(transfer_in_rows),
+                    "transfer_out_count": len(transfer_out_rows),
+                }))
+            elif len(orders) > 1:
+                final_state, reason_code = "data_gap", "association_failed"
             elif rule_id == "LX0609-073":
                 final_state, reason_code = "compliant", "requirement_satisfied"
+                display.append((rule_id, {
+                    "verification_kind": "transfer_record_presence_check",
+                    "transfer_order_count": len(orders),
+                    "transfer_in_count": len(transfer_in_rows),
+                    "transfer_out_count": len(transfer_out_rows),
+                }))
             else:
                 order_times = tuple(
                     parsed
@@ -1550,6 +1770,16 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if compliant
                         else "threshold_exceeded"
                     )
+                    display.append((rule_id, {
+                        "verification_kind": "transfer_record_timeliness_check",
+                        "transfer_order_time": trigger_time.isoformat(sep=" "),
+                        "threshold_hours": 24,
+                        "record_times": [value.isoformat(sep=" ") for value in record_times],
+                        "actual_interval_hours": [
+                            round((value - trigger_time).total_seconds() / 3600, 2)
+                            for value in record_times
+                        ],
+                    }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
@@ -1610,23 +1840,32 @@ async def execute_luxian_0609_native_extended_document_rules(
                     reason_markers = (
                         "修正诊断",
                         "补充诊断",
-                        "诊断依据",
                         "修改理由",
                     )
-                    has_reason = all(
+                    basis_markers = ("诊断依据", "依据为", "依据：", "依据:")
+                    has_reason_and_basis = all(
                         any(
                             record_time >= change_time
                             and any(marker in text for marker in reason_markers)
+                            and any(marker in text for marker in basis_markers)
                             for record_time, text in course_rows
                         )
                         for change_time in change_events
                     )
-                    final_state = "compliant" if has_reason else "non_compliant"
+                    final_state = (
+                        "compliant" if has_reason_and_basis else "non_compliant"
+                    )
                     reason_code = (
                         "requirement_satisfied"
-                        if has_reason
+                        if has_reason_and_basis
                         else "requirement_violated"
                     )
+                    display.append((rule_id, {
+                        "verification_kind": "diagnosis_change_documentation_check",
+                        "diagnosis_change_count": len(change_events),
+                        "reason_recorded": has_reason_and_basis,
+                        "basis_recorded": has_reason_and_basis,
+                    }))
             decisions.append(
                 _decision(
                     rule_id=rule_id,
