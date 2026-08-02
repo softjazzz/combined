@@ -1026,11 +1026,6 @@ def _rule_008_009_decision(
         CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
         EVALUATION_HORIZON_SOURCE_KEY,
         *_RULE_007_RECORD_SOURCES,
-        *(
-            _RULE_009_EXTERNAL_EVENT_SOURCES
-            if rule_id == "LX0609-009"
-            else ()
-        ),
     )
     observations = {
         source_key: observation_by_source.get(source_key)
@@ -2107,6 +2102,30 @@ class _CourseSemanticOutcome:
     criterion_results: tuple[CriterionResult, ...] = ()
 
 
+def _lx018_active_length_outcome(
+    documents: Mapping[str, Any],
+) -> _CourseSemanticOutcome:
+    """018 当前只执行已批准的主诉长度子判定。"""
+
+    length_result = _lx018_length_criterion_result(documents)
+    if length_result.status is CriterionStatus.PASSED:
+        status = "compliant"
+        reason_code = "chief_complaint_length_within_threshold"
+    elif length_result.status is CriterionStatus.FAILED:
+        status = "non_compliant"
+        reason_code = "chief_complaint_length_exceeded"
+    else:
+        status = "data_gap"
+        reason_code = "required_field_missing"
+    return _CourseSemanticOutcome(
+        rule_id="LX0609-018",
+        status=status,
+        reason_code=reason_code,
+        executor_type="program",
+        criterion_results=(length_result,),
+    )
+
+
 def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
     item = _result(
         "LX0609-017",
@@ -2429,7 +2448,7 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record", *_LX018_DIAGNOSIS_SOURCES),
+        "LX0609-018": ("admission_record",),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -2496,7 +2515,7 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record", *_LX018_DIAGNOSIS_SOURCES),
+        "LX0609-018": ("admission_record",),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -2785,6 +2804,9 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             if terminal_outcome is not None:
                 emit_course_semantic(terminal_outcome)
+                continue
+            if rule_id == "LX0609-018":
+                emit_course_semantic(_lx018_active_length_outcome(typed_documents))
                 continue
             if rule_id == "LX0609-016":
                 comparison_material_state = _rule_016_comparison_material_state(
@@ -3143,18 +3165,17 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
         elif rule_id == "LX0609-018":
-            if not _substantive_rows(
-                documents, ("admission_record",)
-            ) or not _admission_material_ready(documents, facts):
-                results.append(
-                    _result(
-                        rule_id,
-                        "data_gap",
-                        "complaint_or_primary_diagnosis_unavailable",
-                        executor_type="program",
-                    )
+            outcome = _lx018_active_length_outcome(documents)
+            results.append(
+                _result(
+                    rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type=outcome.executor_type,
+                    criterion_results=outcome.criterion_results,
                 )
-                continue
+            )
+            continue
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)

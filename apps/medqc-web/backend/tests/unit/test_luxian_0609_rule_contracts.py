@@ -11,6 +11,9 @@ from app.services.luxian_0609.rule_contracts import (
     compile_luxian_0609_rule_contracts,
     load_luxian_0609_rule_contracts,
 )
+from app.services.luxian_0609.source_registry import (
+    resolve_luxian_0609_decision_support_source_keys,
+)
 from app.services.luxian_0609_rule_catalog import load_luxian_0609_rules
 
 
@@ -49,9 +52,29 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
         "condition_change_course_timeliness",
     )
 
+    complaint_rule = contracts["LX0609-018"]
+    assert complaint_rule.phase_status == "phase_1_partial"
+    assert complaint_rule.active_criteria == ("chief_complaint_length_lte_20",)
+    assert complaint_rule.pending_criteria == (
+        "chief_complaint_diagnostic_direction",
+    )
+    assert complaint_rule.decision_authority == "program_only"
+    assert complaint_rule.max_llm_calls_per_rule == 0
+
     exam_course = contracts["LX0609-010"]
     assert exam_course.phase_status == "pending_definition"
     assert exam_course.pending_reason_code == "exam_course_linkage_window_undefined"
+
+
+@pytest.mark.unit
+def test_009_phase1_decision_support_only_loads_daily_coverage_sources() -> None:
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-009",))) == {
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+        "inpat_nondrug_order.severity_order",
+        "daily_course_record",
+        "senior_course_record",
+    }
 
 
 @pytest.mark.unit
