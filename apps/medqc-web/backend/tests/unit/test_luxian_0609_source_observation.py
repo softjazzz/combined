@@ -104,6 +104,18 @@ def test_customer_gap_contract_covers_all_approved_customer_reasons():
         assert message.suggestion
 
 
+def test_customer_gap_contract_names_specific_missing_items():
+    message = customer_gap_message(
+        "authoritative_time_missing",
+        missing_items=("CT/MRI报告时间", "报告后病程记录时间"),
+    )
+
+    assert message is not None
+    assert message.findings == "当前缺少CT/MRI报告时间、报告后病程记录时间，暂时无法完成核对"
+    assert "无法计算质控时限" in message.evidence
+    assert "相关记录时间" in message.suggestion
+
+
 def test_unknown_reason_is_not_guessed_by_source_gap_contract():
     assert customer_gap_message("target_document_missing") is None
 

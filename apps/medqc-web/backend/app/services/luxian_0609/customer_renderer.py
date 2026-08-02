@@ -436,6 +436,28 @@ def compliant_customer_finding(
         "已完成本质控点核对，未发现违反质控要求的情况。",
     )
 
+
+def _unknown_criterion_labels(decision: ReducedRuleDecision) -> tuple[str, ...]:
+    if not decision.criterion_results:
+        return ()
+    contract = next(
+        (
+            item
+            for item in load_luxian_0609_rule_contracts()
+            if item.rule_id == decision.rule_id
+        ),
+        None,
+    )
+    if contract is None:
+        return ()
+    labels_by_id = {item.criterion_id: item.label for item in contract.criteria}
+    return tuple(
+        labels_by_id[item.criterion_id]
+        for item in decision.criterion_results
+        if getattr(item.status, "value", "") == "unknown"
+        and item.criterion_id in labels_by_id
+    )
+
 SafeTraceSink = Callable[[Mapping[str, Any]], None]
 
 
@@ -509,7 +531,10 @@ def render_luxian_0609_customer_result(
             criterion_results=decision.criterion_results,
         )
     elif decision.final_state is CustomerFinalState.DATA_GAP:
-        controlled_gap = customer_gap_message(decision.reason_code)
+        controlled_gap = customer_gap_message(
+            decision.reason_code,
+            missing_items=_unknown_criterion_labels(decision),
+        )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
         if controlled_gap is not None:
             findings, evidence, suggestion = (

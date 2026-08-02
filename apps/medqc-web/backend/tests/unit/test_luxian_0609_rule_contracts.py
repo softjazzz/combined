@@ -8,6 +8,7 @@ import pytest
 
 from app.services.luxian_0609.customer_rule_package import RULE_FAMILY_DEFINITIONS
 from app.services.luxian_0609.rule_contracts import (
+    RuleCriterionContract,
     compile_luxian_0609_rule_contracts,
     load_luxian_0609_rule_contracts,
 )
@@ -260,14 +261,58 @@ def test_018_compiles_two_independent_criteria_from_catalog() -> None:
     )
 
     assert [
-        (item.criterion_id, item.kind)
+        (item.criterion_id, item.label, item.kind)
         for item in contract.criteria
     ] == [
-        ("chief_complaint_length", "text_length"),
-        ("diagnostic_direction", "semantic_relation"),
+        ("chief_complaint_length", "主诉字数", "text_length"),
+        ("diagnostic_direction", "第一诊断指向", "semantic_relation"),
     ]
     length = contract.criteria[0]
     assert length.source_fact == "admission_record.chief_complaint"
     assert length.operator == "lte"
     assert length.expected == 20
     assert length.unit == "character"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("kind", "operator", "unit"),
+    [
+        ("presence", "present", "boolean"),
+        ("timeliness", "lte", "hour"),
+        ("coverage", "covers", "day"),
+        ("completeness", "complete", "boolean"),
+    ],
+)
+def test_rule_criterion_contract_accepts_controlled_explanation_kinds(
+    kind: str,
+    operator: str,
+    unit: str,
+) -> None:
+    criterion = RuleCriterionContract(
+        criterion_id="controlled_fact",
+        label="受控判定事实",
+        kind=kind,
+        failure_reason_code="requirement_violated",
+        source_fact="document.controlled_fact",
+        operator=operator,
+        expected=8 if kind == "timeliness" else True,
+        unit=unit,
+    )
+
+    assert criterion.label == "受控判定事实"
+
+
+@pytest.mark.unit
+def test_rule_criterion_contract_rejects_missing_customer_label() -> None:
+    with pytest.raises(ValueError, match="criterion label"):
+        RuleCriterionContract(
+            criterion_id="completion_interval",
+            label="",
+            kind="timeliness",
+            failure_reason_code="requirement_violated",
+            source_fact="document.completed_at",
+            operator="lte",
+            expected=8,
+            unit="hour",
+        )

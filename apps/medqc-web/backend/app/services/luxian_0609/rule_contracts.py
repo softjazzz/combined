@@ -36,9 +36,23 @@ ALLOWED_FINAL_STATES = (
 _DECISION_AUTHORITIES = frozenset({"program_only", "program_then_optional_llm"})
 _SOURCE_CONTRACT_STATES = frozenset({"legacy_projection_v1", "typed_shadow_v1"})
 _GOLDEN_GATE_STATES = frozenset({"pending", "accepted"})
-_CRITERION_KINDS = frozenset({"text_length", "semantic_relation"})
-_CRITERION_OPERATORS = frozenset({"lte"})
-_CRITERION_UNITS = frozenset({"character"})
+_CRITERION_KINDS = frozenset(
+    {
+        "presence",
+        "timeliness",
+        "coverage",
+        "completeness",
+        "consistency",
+        "text_length",
+        "semantic_relation",
+    }
+)
+_CRITERION_OPERATORS = frozenset(
+    {"eq", "lte", "gte", "present", "complete", "matches", "covers"}
+)
+_CRITERION_UNITS = frozenset(
+    {"boolean", "character", "count", "day", "hour", "minute", "percent"}
+)
 
 
 def _clean(value: Any) -> str:
@@ -50,11 +64,12 @@ class RuleCriterionContract:
     """从客户规则目录编译出的单个、不可变判定子项。"""
 
     criterion_id: str
+    label: str
     kind: str
     failure_reason_code: str
     source_fact: str = ""
     operator: str = ""
-    expected: int | None = None
+    expected: int | str | bool | None = None
     unit: str = ""
     left_fact: str = ""
     right_fact: str = ""
@@ -62,29 +77,61 @@ class RuleCriterionContract:
     def __post_init__(self) -> None:
         if not self.criterion_id or not self.failure_reason_code:
             raise ValueError("incomplete LX0609 criterion")
+        if (
+            not isinstance(self.label, str)
+            or not self.label.strip()
+            or len(self.label.strip()) > 40
+            or any(ord(char) < 32 for char in self.label)
+        ):
+            raise ValueError("invalid LX0609 criterion label")
         if self.kind not in _CRITERION_KINDS:
             raise ValueError("invalid LX0609 criterion kind")
         if self.kind == "text_length":
             if (
                 not self.source_fact
-                or self.operator not in _CRITERION_OPERATORS
+                or self.operator != "lte"
                 or not isinstance(self.expected, int)
                 or isinstance(self.expected, bool)
                 or self.expected < 0
-                or self.unit not in _CRITERION_UNITS
+                or self.unit != "character"
                 or self.left_fact
                 or self.right_fact
             ):
                 raise ValueError("invalid LX0609 text-length criterion")
-        elif (
-            not self.left_fact
-            or not self.right_fact
-            or self.source_fact
-            or self.operator
-            or self.expected is not None
-            or self.unit
-        ):
-            raise ValueError("invalid LX0609 semantic-relation criterion")
+        elif self.kind == "semantic_relation":
+            if (
+                not self.left_fact
+                or not self.right_fact
+                or self.source_fact
+                or self.operator
+                or self.expected is not None
+                or self.unit
+            ):
+                raise ValueError("invalid LX0609 semantic-relation criterion")
+        elif self.kind == "consistency":
+            if (
+                not self.left_fact
+                or not self.right_fact
+                or self.source_fact
+                or self.operator not in {"eq", "matches"}
+                or self.unit
+            ):
+                raise ValueError("invalid LX0609 consistency criterion")
+        else:
+            allowed_shape = {
+                "presence": ({"present"}, {"boolean"}),
+                "timeliness": ({"lte", "gte"}, {"hour", "minute", "day"}),
+                "coverage": ({"covers"}, {"day", "count"}),
+                "completeness": ({"complete"}, {"boolean"}),
+            }[self.kind]
+            if (
+                not self.source_fact
+                or self.left_fact
+                or self.right_fact
+                or self.operator not in allowed_shape[0]
+                or self.unit not in allowed_shape[1]
+            ):
+                raise ValueError("invalid LX0609 fact criterion")
 
 
 @dataclass(frozen=True)
@@ -187,11 +234,17 @@ def _compile_criteria(rule: Mapping[str, Any]) -> tuple[RuleCriterionContract, .
         criteria.append(
             RuleCriterionContract(
                 criterion_id=_clean(raw.get("criterion_id")),
+                label=_clean(raw.get("label")),
                 kind=_clean(raw.get("kind")),
                 failure_reason_code=_clean(raw.get("failure_reason_code")),
                 source_fact=_clean(raw.get("source_fact")),
                 operator=_clean(raw.get("operator")),
-                expected=expected if isinstance(expected, int) and not isinstance(expected, bool) else None,
+                expected=(
+                    expected
+                    if isinstance(expected, (int, str, bool))
+                    and (not isinstance(expected, str) or len(expected) <= 120)
+                    else None
+                ),
                 unit=_clean(raw.get("unit")),
                 left_fact=_clean(raw.get("left_fact")),
                 right_fact=_clean(raw.get("right_fact")),

@@ -7,6 +7,8 @@ from app.services.luxian_0609.decision_binding import (
 )
 from app.services.luxian_0609.decision_model import (
     ApplicabilityState,
+    CriterionResult,
+    CriterionStatus,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -45,6 +47,14 @@ def _snapshot() -> Luxian0609EvidenceSnapshot:
                 record_count=0,
                 query_version="snapshot-provider-surgery_record-v2",
                 snapshot_ref=f"sha256:{'c' * 64}",
+            ),
+            SourceObservation.create(
+                source_key="admission_record",
+                query_state=QueryStatus.AVAILABLE,
+                completeness=SourceCompleteness.COMPLETE,
+                record_count=1,
+                query_version="snapshot-provider-admission_record-v1",
+                snapshot_ref=f"sha256:{'d' * 64}",
             ),
         ),
         facts=(),
@@ -188,3 +198,84 @@ def test_binding_rejects_tuple_subclass_before_iteration():
             expected_rule_ids=("LX0609-007",),
             snapshot=snapshot,
         )
+
+
+def _criterion(
+    criterion_id: str,
+    status: CriterionStatus,
+) -> CriterionResult:
+    return CriterionResult(
+        criterion_id=criterion_id,
+        status=status,
+        reason_code=(
+            "requirement_satisfied"
+            if status is CriterionStatus.PASSED
+            else "requirement_violated"
+            if status is CriterionStatus.FAILED
+            else "required_field_missing"
+        ),
+        fact_refs=("d" * 64,),
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence_state", "direction", "criteria"),
+    [
+        (
+            EvidenceState.SUFFICIENT,
+            QcDirection.SATISFIED,
+            (
+                _criterion("chief_complaint_length", CriterionStatus.FAILED),
+                _criterion("diagnostic_direction", CriterionStatus.PASSED),
+            ),
+        ),
+        (
+            EvidenceState.SUFFICIENT,
+            QcDirection.DEFECT,
+            (
+                _criterion("chief_complaint_length", CriterionStatus.PASSED),
+                _criterion("diagnostic_direction", CriterionStatus.PASSED),
+            ),
+        ),
+        (
+            EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+            (
+                _criterion("chief_complaint_length", CriterionStatus.PASSED),
+                _criterion("diagnostic_direction", CriterionStatus.PASSED),
+            ),
+        ),
+    ],
+)
+def test_binding_rejects_criterion_results_that_contradict_final_dimensions(
+    evidence_state,
+    direction,
+    criteria,
+):
+    snapshot = _snapshot()
+    decision = RuleDecision(
+        rule_id="LX0609-018",
+        snapshot_hash=snapshot.snapshot_hash,
+        applicability=ApplicabilityState.APPLICABLE,
+        evidence_state=evidence_state,
+        qc_direction=direction,
+        reason_code=(
+            "requirement_satisfied"
+            if direction is QcDirection.SATISFIED
+            else "requirement_violated"
+            if direction is QcDirection.DEFECT
+            else "required_field_missing"
+        ),
+        fact_refs=("d" * 64,),
+        evaluator_version="binding-test-v1",
+        criterion_results=criteria,
+    )
+
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=(decision,),
+        expected_rule_ids=("LX0609-018",),
+        snapshot=snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "decision_contract_violation"

@@ -6,6 +6,7 @@ import re
 
 from .decision_model import (
     ApplicabilityState,
+    CriterionStatus,
     EvidenceState,
     QcDirection,
     RuleDecision,
@@ -15,6 +16,7 @@ from .decision_reducer import (
     reduce_luxian_0609_rule_decision,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .rule_contracts import load_luxian_0609_rule_contracts
 from .source_registry import (
     resolve_luxian_0609_controlled_fact_source_keys,
     resolve_luxian_0609_decision_support_source_keys,
@@ -89,6 +91,54 @@ def _requires_evidence_ref(decision: RuleDecision) -> bool:
     )
 
 
+def _criterion_results_match_decision(decision: RuleDecision) -> bool:
+    contract = next(
+        (
+            item
+            for item in load_luxian_0609_rule_contracts()
+            if item.rule_id == decision.rule_id
+        ),
+        None,
+    )
+    if contract is None:
+        return False
+    expected_ids = tuple(item.criterion_id for item in contract.criteria)
+    actual_ids = tuple(item.criterion_id for item in decision.criterion_results)
+    if not expected_ids:
+        return not actual_ids
+    # 规则族按批迁移到子判定合同：绑定层先验证已经输出的子判定，是否为
+    # 可信目录中的有序前缀；是否覆盖全部子项由对应规则族验收负责。这样既
+    # 不允许执行器伪造/乱序子项，也不会在迁移窗口把旧的有效结论整体打成
+    # 技术异常。
+    if not actual_ids:
+        return True
+    if actual_ids != expected_ids[: len(actual_ids)]:
+        return False
+    statuses = tuple(item.status for item in decision.criterion_results)
+    if decision.applicability in {
+        ApplicabilityState.ERROR,
+        ApplicabilityState.NOT_APPLICABLE,
+    }:
+        return True
+    if decision.evidence_state is EvidenceState.SUFFICIENT:
+        if decision.qc_direction is QcDirection.SATISFIED:
+            return all(status is CriterionStatus.PASSED for status in statuses)
+        if decision.qc_direction is QcDirection.DEFECT:
+            return (
+                CriterionStatus.FAILED in statuses
+                and CriterionStatus.UNKNOWN not in statuses
+            )
+    if decision.evidence_state in {EvidenceState.DATA_GAP, EvidenceState.CONFLICT}:
+        return (
+            CriterionStatus.FAILED not in statuses
+            and (
+                CriterionStatus.UNKNOWN in statuses
+                or len(actual_ids) < len(expected_ids)
+            )
+        )
+    return False
+
+
 def bind_and_reduce_luxian_0609_rule_decisions(
     *,
     decisions: tuple[RuleDecision, ...],
@@ -136,20 +186,25 @@ def bind_and_reduce_luxian_0609_rule_decisions(
             rule_id=decision.rule_id,
             snapshot=snapshot,
         )
-        binding_valid = (
+        snapshot_binding_valid = (
             decision.snapshot_hash == snapshot.snapshot_hash
             and set(decision.fact_refs).issubset(allowed_refs)
             and (not _requires_evidence_ref(decision) or bool(decision.fact_refs))
         )
-        bound = (
-            decision
-            if binding_valid
-            else _technical_decision(
+        if not snapshot_binding_valid:
+            bound = _technical_decision(
                 rule_id=decision.rule_id,
                 snapshot_hash=snapshot.snapshot_hash,
                 reason_code="snapshot_mismatch",
             )
-        )
+        elif not _criterion_results_match_decision(decision):
+            bound = _technical_decision(
+                rule_id=decision.rule_id,
+                snapshot_hash=snapshot.snapshot_hash,
+                reason_code="decision_contract_violation",
+            )
+        else:
+            bound = decision
         try:
             reduced.append(reduce_luxian_0609_rule_decision(bound))
         except (TypeError, ValueError):

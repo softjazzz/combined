@@ -69,12 +69,47 @@ def source_observation_reason(observation: SourceObservation) -> str | None:
     return None
 
 
-def customer_gap_message(reason_code: str) -> CustomerGapMessage | None:
+def _normalize_missing_items(missing_items: tuple[str, ...]) -> tuple[str, ...]:
+    if not isinstance(missing_items, tuple):
+        raise TypeError("missing_items must be tuple")
+    normalized = tuple(dict.fromkeys(item.strip() for item in missing_items))
+    if any(
+        not item
+        or len(item) > 40
+        or any(ord(char) < 32 for char in item)
+        for item in normalized
+    ):
+        raise ValueError("invalid missing item")
+    return normalized
+
+
+def customer_gap_message(
+    reason_code: str,
+    *,
+    missing_items: tuple[str, ...] = (),
+) -> CustomerGapMessage | None:
     """返回受控客户文案；未知原因不得在这里被猜测或改写。"""
 
     if not isinstance(reason_code, str):
         raise TypeError("reason_code must be str")
-    return CUSTOMER_GAP_MESSAGES.get(reason_code)
+    message = CUSTOMER_GAP_MESSAGES.get(reason_code)
+    if message is None or not missing_items:
+        return message
+    items = _normalize_missing_items(missing_items)
+    item_text = "、".join(items)
+    evidence_by_reason = {
+        "source_unavailable": f"本次质控无法读取{item_text}所在的数据来源。",
+        "source_empty": f"数据来源可以正常读取，但本次病历未返回{item_text}。",
+        "source_truncated": f"本次只读取到部分相关资料，无法确认{item_text}是否完整。",
+        "required_field_missing": f"已读取到相关记录，但其中缺少{item_text}。",
+        "authoritative_time_missing": f"当前缺少{item_text}，无法计算质控时限。",
+        "association_failed": f"已找到相关资料，但缺少能够确认{item_text}属于同一次诊疗事件的关联信息。",
+    }
+    return CustomerGapMessage(
+        findings=f"当前缺少{item_text}，暂时无法完成核对",
+        evidence=evidence_by_reason[reason_code],
+        suggestion=message.suggestion,
+    )
 
 
 __all__ = [

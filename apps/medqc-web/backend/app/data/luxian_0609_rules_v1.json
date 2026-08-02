@@ -1266,6 +1266,7 @@
     "criteria": [
       {
         "criterion_id": "chief_complaint_length",
+        "label": "主诉字数",
         "kind": "text_length",
         "source_fact": "admission_record.chief_complaint",
         "operator": "lte",
@@ -1275,6 +1276,7 @@
       },
       {
         "criterion_id": "diagnostic_direction",
+        "label": "第一诊断指向",
         "kind": "semantic_relation",
         "left_fact": "admission_record.chief_complaint",
         "right_fact": "admission_record.first_diagnosis",

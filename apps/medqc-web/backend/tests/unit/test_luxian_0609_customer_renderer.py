@@ -271,6 +271,45 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
     assert result["findings"] == "主诉共 8 字，不超过 20 字；诊断指向明确。"
 
 
+def test_data_gap_uses_unknown_criterion_label_to_name_missing_data():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-018",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-course-quality-v1",
+            criterion_results=(
+                CriterionResult(
+                    criterion_id="chief_complaint_length",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                    actual_value=8,
+                    expected_value=20,
+                    operator="lte",
+                    unit="character",
+                ),
+                CriterionResult(
+                    criterion_id="diagnostic_direction",
+                    status=CriterionStatus.UNKNOWN,
+                    reason_code="required_field_missing",
+                    fact_refs=(FACT_REF,),
+                ),
+            ),
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == "当前缺少第一诊断指向，暂时无法完成核对"
+    assert "已读取到相关记录" in result["evidence"]
+    assert "第一诊断指向" in result["evidence"]
+
+
 def test_renderer_has_no_free_text_or_wrapper_mapping_input_seam():
     decision = _reduced(CustomerFinalState.NON_COMPLIANT)
     with pytest.raises(TypeError, match="unexpected keyword"):
