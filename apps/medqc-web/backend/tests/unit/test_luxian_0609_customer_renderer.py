@@ -32,6 +32,41 @@ DEFINED_RULE_IDS = tuple(
     for contract in load_luxian_0609_rule_contracts()
     if contract.phase_status != "pending_definition"
 )
+NOT_APPLICABLE_CASES = (
+    ("LX0609-003", "performed_event_absent"),
+    ("LX0609-007", "eligibility_not_met"),
+    ("LX0609-008", "trigger_absent_complete"),
+    ("LX0609-009", "trigger_absent_complete"),
+    ("LX0609-011", "trigger_absent_complete"),
+    ("LX0609-012", "trigger_absent_complete"),
+    ("LX0609-013", "trigger_absent_complete"),
+    ("LX0609-014", "trigger_absent_complete"),
+    ("LX0609-015", "trigger_absent_complete"),
+    ("LX0609-019", "trigger_absent_complete"),
+    ("LX0609-027", "trigger_absent_complete"),
+    ("LX0609-029", "performed_event_absent"),
+    ("LX0609-030", "performed_event_absent"),
+    ("LX0609-031", "performed_event_absent"),
+    ("LX0609-032", "performed_event_absent"),
+    ("LX0609-033", "performed_event_absent"),
+    ("LX0609-034", "performed_event_absent"),
+    ("LX0609-036", "performed_event_absent"),
+    ("LX0609-037", "eligibility_not_met"),
+    ("LX0609-038", "performed_event_absent"),
+    ("LX0609-039", "performed_event_absent"),
+    ("LX0609-040", "performed_event_absent"),
+) + tuple(
+    (f"LX0609-{index:03d}", "trigger_absent_complete")
+    for index in range(41, 49)
+) + (
+    ("LX0609-051", "trigger_absent_complete"),
+    ("LX0609-058", "trigger_absent_complete"),
+    ("LX0609-060", "trigger_absent_complete"),
+    ("LX0609-063", "trigger_absent_complete"),
+    ("LX0609-070", "trigger_absent_complete"),
+    ("LX0609-072", "trigger_absent_complete"),
+    ("LX0609-073", "trigger_absent_complete"),
+)
 
 
 @pytest.mark.parametrize(
@@ -527,6 +562,30 @@ def test_each_defined_rule_data_gap_names_customer_visible_missing_material(rule
         "当前资料不足，暂时无法完成核对",
     }
     assert result["evidence"] != "已读取到相关记录，但其中缺少本项判断所需的字段。"
+
+
+@pytest.mark.parametrize(("rule_id", "reason_code"), NOT_APPLICABLE_CASES)
+def test_each_gated_rule_not_applicable_names_the_excluding_fact(
+    rule_id, reason_code
+):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.NOT_APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-not-applicable-acceptance-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "not_applicable"
+    assert result["findings"] != "本次就诊不适用该质控点"
+    assert result["evidence"] != "完整适用性证据未触发本质控点。"
 
 
 def test_renderer_has_no_free_text_or_wrapper_mapping_input_seam():

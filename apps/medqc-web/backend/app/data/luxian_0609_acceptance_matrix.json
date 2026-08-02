@@ -135,8 +135,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-003]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -337,8 +340,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-007]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -389,8 +395,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-008]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -446,8 +455,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-009]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -559,8 +571,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-011]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -634,8 +649,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-012]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -709,8 +727,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-013]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -760,8 +781,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-014]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -835,8 +859,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-015]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1039,8 +1066,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-019]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1427,8 +1457,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-027]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1525,8 +1558,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-029]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1568,8 +1604,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-030]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1606,8 +1645,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-031]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1649,8 +1691,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-032]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1695,8 +1740,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-033]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1766,8 +1814,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-034]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1842,8 +1893,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-036]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1880,8 +1934,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-037]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1918,8 +1975,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-038]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1956,8 +2016,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-039]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -1994,8 +2057,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-040]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2055,8 +2121,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-041]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2091,8 +2160,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-042]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2127,8 +2199,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-043]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2163,8 +2238,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-044]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2214,8 +2292,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-045]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2265,8 +2346,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-046]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2316,8 +2400,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-047]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2352,8 +2439,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-048]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2482,8 +2572,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-051]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2773,8 +2866,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-058]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2842,8 +2938,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-060]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -2970,8 +3069,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-063]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -3277,8 +3379,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-070]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -3363,8 +3468,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-072]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",
@@ -3413,8 +3521,11 @@
           "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::test_each_gated_rule_not_applicable_names_the_excluding_fact[LX0609-073]"
+          ],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "covered",

@@ -109,6 +109,48 @@ _NATIVE_FIXTURE_SPECS = (
     ("LX0609-070", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_070_rejects_nine_tests_reported_after_transfusion"),
 )
 
+# 仅登记确有适用性门控的规则；fixture 断言客户结果必须写明排除事实，
+# 不能使用“本次不适用”一类无依据的通用文案。
+_NOT_APPLICABLE_FIXTURE_RULE_IDS = (
+    "LX0609-003",
+    "LX0609-007",
+    "LX0609-008",
+    "LX0609-009",
+    "LX0609-011",
+    "LX0609-012",
+    "LX0609-013",
+    "LX0609-014",
+    "LX0609-015",
+    "LX0609-019",
+    "LX0609-027",
+    "LX0609-029",
+    "LX0609-030",
+    "LX0609-031",
+    "LX0609-032",
+    "LX0609-033",
+    "LX0609-034",
+    "LX0609-036",
+    "LX0609-037",
+    "LX0609-038",
+    "LX0609-039",
+    "LX0609-040",
+    "LX0609-041",
+    "LX0609-042",
+    "LX0609-043",
+    "LX0609-044",
+    "LX0609-045",
+    "LX0609-046",
+    "LX0609-047",
+    "LX0609-048",
+    "LX0609-051",
+    "LX0609-058",
+    "LX0609-060",
+    "LX0609-063",
+    "LX0609-070",
+    "LX0609-072",
+    "LX0609-073",
+)
+
 
 def _runtime_manifest() -> dict[str, Any]:
     return build_runtime_manifest(
@@ -161,6 +203,18 @@ def _fixture_bindings() -> dict[str, list[dict[str, str]]]:
                     "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::"
                     "test_each_defined_rule_data_gap_names_customer_visible_missing_material"
                     f"[{contract.rule_id}]"
+                ),
+            }
+        )
+    for rule_id in _NOT_APPLICABLE_FIXTURE_RULE_IDS:
+        bindings.setdefault(rule_id, []).append(
+            {
+                "rule_id": rule_id,
+                "expected_status": "not_applicable",
+                "fixture_ref": (
+                    "contract-unit:tests/unit/test_luxian_0609_customer_renderer.py::"
+                    "test_each_gated_rule_not_applicable_names_the_excluding_fact"
+                    f"[{rule_id}]"
                 ),
             }
         )
