@@ -659,8 +659,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-029"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -967,8 +968,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-029"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1294,8 +1296,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-029"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -1326,8 +1329,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-029"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -2401,8 +2405,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-035"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2433,8 +2438,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-035"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2510,8 +2516,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-035"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2542,8 +2549,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-035"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -3013,8 +3021,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-037"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -3059,8 +3068,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-037"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -3105,8 +3115,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-038"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -3137,8 +3148,9 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-037"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",

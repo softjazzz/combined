@@ -43,11 +43,15 @@ RULE_NUMBERS_BY_CASE: dict[int, tuple[int, ...]] = {
     26: (45, 47),
     27: (46, 48),
     28: (13, 19, 26, 27),
+    29: (13, 19, 26, 27),
     31: (61, 62, 63, 67, 68),
     32: (50,),
     33: (51, 60),
     34: (54, 55, 56, 57, 58, 59),
+    35: (54, 55, 57, 58),
     36: (71, 72, 73, 74),
+    37: (71, 72, 74),
+    38: (73,),
 }
 
 NON_COMPLIANT_RULE_IDS = frozenset(
@@ -69,6 +73,10 @@ _NON_COMPLIANT_RULE_IDS_BY_CASE = {
     25: frozenset({"LX0609-042", "LX0609-043", "LX0609-044"}),
     26: frozenset({"LX0609-045", "LX0609-047"}),
     27: frozenset({"LX0609-046", "LX0609-048"}),
+    29: frozenset({"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}),
+    35: frozenset({"LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"}),
+    37: frozenset({"LX0609-071", "LX0609-072", "LX0609-074"}),
+    38: frozenset({"LX0609-073"}),
 }
 
 
@@ -493,7 +501,13 @@ def _build_transfusion(
     return refs
 
 
-def _build_tumor(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_tumor(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "complete",
+) -> list[str]:
     _clear_visit_rows(rows, case, "pathology_exam_master", "pathology_exam_report", "surgery_record", "daily_course_record", "inpat_drug_order", "discharge_record", "diagnosis", "discharge_record_diagnosis")
     refs = [_append_registration(rows, case, v2, discharge_time=v2._dt_for_case(case, 8, 10))]
     pathology_id = f"{case.target_visit_id}-pathology"
@@ -509,6 +523,20 @@ def _build_tumor(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> l
     v2._append_row(rows, "diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-frontpage", "diagnosis_id": diagnosis_id, "diagnosis_type": "出院诊断", "diagnosis_no": 1, "diagnosis_name": "胃腺癌", "diagnosis_code": "C16.900", "diagnosis_datetime": v2._dt_for_case(case, 8, 9), "diagnosis_source": "病案首页"})
     v2._append_row(rows, "discharge_record_diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-tumor-discharge", "diagnosis_id": f"{diagnosis_id}-record", "diagnosis_main": "1", "diagnosis_no": 1, "diagnosis_name": "胃腺癌", "diagnosis_code": "C16.900", "diagnosis_time": v2._dt_for_case(case, 8, 9)})
     refs.extend((diagnosis_id, f"{diagnosis_id}-record"))
+    if mode == "quality_defects":
+        for row in rows.get("surgery_record", []):
+            if row.get("visit_id") == case.target_visit_id:
+                row["record_content"] = "行胃癌根治术，手术过程顺利。"
+        for row in rows.get("daily_course_record", []):
+            if row.get("visit_id") != case.target_visit_id:
+                continue
+            if "病理报告" in str(row.get("record_content") or ""):
+                row["record_content"] = "患者术后恢复，继续观察。"
+            elif "奥沙利铂" in str(row.get("record_content") or ""):
+                row["record_content"] = "今日给予奥沙利铂100mg/m²静脉滴注，第1天。"
+        for row in rows.get("discharge_record", []):
+            if row.get("visit_id") == case.target_visit_id:
+                row["record_content"] = "出院诊断胃腺癌，病情稳定后出院。"
     return refs
 
 
@@ -534,7 +562,13 @@ def _build_discharge(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, 
     return refs
 
 
-def _build_antimicrobial(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_antimicrobial(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "complete",
+) -> list[str]:
     _clear_visit_rows(rows, case, "inpat_drug_order", "daily_course_record", "consultation_record", "labtest_master", "labtest_item_report")
     refs = [_append_registration(rows, case, v2)]
     culture_id = f"{case.target_visit_id}-culture"
@@ -546,10 +580,39 @@ def _build_antimicrobial(rows: dict[str, list[dict[str, Any]]], case: Any, v2: A
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="antimicrobial-reason", title="抗菌药物使用记录", record_time=v2._dt_for_case(case, 0, 12), content="患者重症感染，已在用药前留取血培养。经验性联合美罗培南和万古霉素覆盖耐药菌，记录启用及联合用药理由。"))
     refs.append(_append_document(rows, case, v2, table_name="consultation_record", suffix="expert-consult", title="感染专家会诊记录", record_time=v2._dt_for_case(case, 0, 15), content="感染专家会诊同意特殊级抗菌药物方案，并建议根据培养结果及时降阶梯。"))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="antimicrobial-evaluation", title="抗菌药物72小时效果评价", record_time=v2._dt_for_case(case, 3, 9), content="用药72小时后体温下降、白细胞和CRP降低，培养提示肺炎克雷伯菌且美罗培南敏感，停用万古霉素并继续美罗培南。"))
+    if mode == "quality_defects":
+        visit_id = case.target_visit_id
+        for row in rows.get("inpat_drug_order", []):
+            if row.get("visit_id") == visit_id:
+                row["record_content"] = f"启用{row.get('generic_name')}抗感染。"
+        rows["labtest_master"] = [
+            row for row in rows.get("labtest_master", []) if row.get("visit_id") != visit_id
+        ]
+        rows["labtest_item_report"] = [
+            row
+            for row in rows.get("labtest_item_report", [])
+            if row.get("visit_id") != visit_id
+        ]
+        rows["consultation_record"] = [
+            row
+            for row in rows.get("consultation_record", [])
+            if row.get("visit_id") != visit_id
+        ]
+        rows["daily_course_record"] = [
+            row
+            for row in rows.get("daily_course_record", [])
+            if row.get("visit_id") != visit_id
+        ]
     return refs
 
 
-def _build_transfer(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_transfer(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "complete",
+) -> list[str]:
     _clear_visit_rows(rows, case, "inpat_nondrug_order", "handoff_record", "handover_record", "transfer_out_record", "transfer_in_record", "daily_course_record", "diagnosis")
     refs = [_append_registration(rows, case, v2)]
     refs.append(_append_document(rows, case, v2, table_name="handoff_record", suffix="handoff", title="交班记录", record_time=v2._dt_for_case(case, 2, 8), content="交班前完成交班记录，说明当前诊断、治疗和注意事项。"))
@@ -562,6 +625,31 @@ def _build_transfer(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -
         diagnosis_id = f"{case.target_visit_id}-diagnosis-{index}"
         v2._append_row(rows, "diagnosis", {**v2._case_base_row(case), "document_id": f"{case.target_visit_id}-course-diagnosis-revision", "diagnosis_id": diagnosis_id, "diagnosis_type": "住院诊断", "diagnosis_no": index, "diagnosis_name": name, "diagnosis_code": "J18.900", "diagnosis_datetime": when, "diagnosis_source": "病程记录"})
         refs.append(diagnosis_id)
+    visit_id = case.target_visit_id
+    if mode == "late_and_incomplete":
+        rows["handoff_record"] = [
+            row for row in rows.get("handoff_record", []) if row.get("visit_id") != visit_id
+        ]
+        rows["handover_record"] = [
+            row for row in rows.get("handover_record", []) if row.get("visit_id") != visit_id
+        ]
+        for table_name in ("transfer_out_record", "transfer_in_record"):
+            for row in rows.get(table_name, []):
+                if row.get("visit_id") == visit_id:
+                    late_time = v2._dt_for_case(case, 4, 12)
+                    row["record_time"] = late_time
+                    row["record_datetime"] = late_time
+                    row["submit_datetime"] = late_time
+        for row in rows.get("daily_course_record", []):
+            if row.get("visit_id") == visit_id:
+                row["record_content"] = "补充诊断细菌性肺炎。"
+    elif mode == "missing_transfer_records":
+        for table_name in ("transfer_out_record", "transfer_in_record"):
+            rows[table_name] = [
+                row
+                for row in rows.get(table_name, [])
+                if row.get("visit_id") != visit_id
+            ]
     return refs
 
 
@@ -606,11 +694,23 @@ def apply_controlled_evidence(
             rows_by_table, case, v2, mode="incomplete_inconsistent"
         ),
         28: lambda case: _build_tumor(rows_by_table, case, v2),
+        29: lambda case: _build_tumor(
+            rows_by_table, case, v2, mode="quality_defects"
+        ),
         31: lambda case: _build_discharge(rows_by_table, case, v2, mode="alive"),
         32: lambda case: _build_discharge(rows_by_table, case, v2, mode="uncertain"),
         33: lambda case: _build_discharge(rows_by_table, case, v2, mode="death"),
         34: lambda case: _build_antimicrobial(rows_by_table, case, v2),
+        35: lambda case: _build_antimicrobial(
+            rows_by_table, case, v2, mode="quality_defects"
+        ),
         36: lambda case: _build_transfer(rows_by_table, case, v2),
+        37: lambda case: _build_transfer(
+            rows_by_table, case, v2, mode="late_and_incomplete"
+        ),
+        38: lambda case: _build_transfer(
+            rows_by_table, case, v2, mode="missing_transfer_records"
+        ),
     }
     for case_index, builder in builders.items():
         refs_by_case[case_index] = builder(case_by_index[case_index])

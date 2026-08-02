@@ -213,16 +213,16 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         for answer in case.source_item.get("synthetic_golden_answers") or []
     ]
     assert audit["rule_count"] == 75
-    assert len(answers) == 114
+    assert len(answers) == 126
     assert len({answer["qc_point_id"] for answer in answers}) == 75
     assert all(answer["expected_status"] != "pending" for answer in answers)
     assert all(answer["evidence_refs"] for answer in answers)
     assert {answer["acceptance_tier"] for answer in answers} == {"formal", "provisional"}
     matrix = module.build_validation_matrix(cases)
-    assert len(matrix) == 114
+    assert len(matrix) == 126
     assert Counter(row["acceptance_tier"] for row in matrix) == {
-        "formal": 106,
-        "provisional": 8,
+        "formal": 115,
+        "provisional": 11,
     }
     statuses_by_rule = {
         rule_id: {
@@ -266,6 +266,20 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         statuses == {"compliant", "non_compliant"}
         for statuses in transfusion_statuses.values()
     )
+    for rule_ids in (
+        ("LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"),
+        ("LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"),
+        ("LX0609-071", "LX0609-072", "LX0609-073", "LX0609-074"),
+    ):
+        assert all(
+            {
+                row["expected_status"]
+                for row in matrix
+                if row["rule_id"] == rule_id
+            }
+            == {"compliant", "non_compliant"}
+            for rule_id in rule_ids
+        )
 
 
 def test_transfusion_case_uses_typed_consent_form() -> None:
@@ -340,3 +354,35 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         )
     }
     assert len(set(inconsistent_contents.values())) == 3
+
+
+def test_tumor_antimicrobial_and_transfer_issue_variants_change_source_facts() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    visit_id = {
+        index: next(case.target_visit_id for case in cases if case.target_index == index)
+        for index in (29, 35, 37, 38)
+    }
+
+    tumor_course = "\n".join(
+        row["record_content"]
+        for row in rows_by_table["daily_course_record"]
+        if row.get("visit_id") == visit_id[29]
+    )
+    assert "病理报告" not in tumor_course
+    assert "奥沙利铂100mg/m²" in tumor_course
+    assert not any(
+        row.get("visit_id") == visit_id[35]
+        for row in rows_by_table.get("consultation_record", [])
+    )
+    assert not any(
+        row.get("visit_id") == visit_id[37]
+        for row in rows_by_table.get("handoff_record", [])
+    )
+    assert not any(
+        row.get("visit_id") == visit_id[38]
+        for table_name in ("transfer_out_record", "transfer_in_record")
+        for row in rows_by_table.get(table_name, [])
+    )
