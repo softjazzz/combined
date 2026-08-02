@@ -27,6 +27,10 @@ from .source_evidence_reader import (
     authoritative_document_time_value,
     trusted_performed_surgery_times,
 )
+from .surgery_applicability import (
+    SurgeryApplicability,
+    resolve_surgery_applicability,
+)
 from .surgery_procedure_catalog import catalog_surgery_state
 
 
@@ -198,6 +202,11 @@ def _decision(
         "data_gap": (
             ApplicabilityState.UNKNOWN,
             EvidenceState.DATA_GAP,
+            QcDirection.UNKNOWN,
+        ),
+        "technical_error": (
+            ApplicabilityState.ERROR,
+            EvidenceState.TECHNICAL_ERROR,
             QcDirection.UNKNOWN,
         ),
     }
@@ -420,6 +429,20 @@ def _qualified_surgery_rows(
     )
 
 
+def _surgery_applicability_outcome(
+    applicability: SurgeryApplicability,
+) -> tuple[str, str] | None:
+    """将规则族共用门控投影为扩展文书执行器的受控状态。"""
+
+    if applicability.state == "applicable":
+        return None
+    if applicability.state == "not_applicable":
+        return "not_applicable", "performed_event_absent"
+    if applicability.state == "technical_error":
+        return "technical_error", applicability.reason_code
+    return "data_gap", applicability.reason_code
+
+
 def _performed_surgery_times(
     mr_surgery_rows: Sequence[Mapping[str, Any]],
     surgery_record_rows: Sequence[Mapping[str, Any]],
@@ -577,6 +600,14 @@ async def execute_luxian_0609_native_extended_document_rules(
     )
     decisions: list[RuleDecision] = []
     display: list[tuple[str, Mapping[str, Any]]] = []
+    surgery_applicability = (
+        resolve_surgery_applicability(
+            snapshot=evidence_snapshot,
+            materials=evidence_materials,
+        )
+        if {"LX0609-064", "LX0609-065", "LX0609-066"}.intersection(selected)
+        else None
+    )
 
     for rule_id in selected:
         if rule_id == "LX0609-050":
@@ -1131,14 +1162,10 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-066":
-            surgery_error = mr_surgery_error or surgery_record_error
-            qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
-                mr_surgery_rows, surgery_record_rows
-            )
-            if surgery_error:
-                final_state, reason_code = "data_gap", surgery_error
-            elif not qualified_mr_rows and not qualified_record_rows:
-                final_state, reason_code = "not_applicable", "performed_event_absent"
+            assert surgery_applicability is not None
+            gate_outcome = _surgery_applicability_outcome(surgery_applicability)
+            if gate_outcome is not None:
+                final_state, reason_code = gate_outcome
             elif postop_first_error:
                 final_state, reason_code = "data_gap", postop_first_error
             elif postop_first_rows:
@@ -1164,17 +1191,16 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {"LX0609-064", "LX0609-065"}:
-            surgery_error = mr_surgery_error or surgery_record_error
+            assert surgery_applicability is not None
+            gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
                 mr_surgery_rows, surgery_record_rows
             )
             surgery_times = _performed_surgery_times(
                 mr_surgery_rows, surgery_record_rows
             )
-            if surgery_error:
-                final_state, reason_code = "data_gap", surgery_error
-            elif not qualified_mr_rows and not qualified_record_rows:
-                final_state, reason_code = "not_applicable", "performed_event_absent"
+            if gate_outcome is not None:
+                final_state, reason_code = gate_outcome
             elif not surgery_times:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
             elif daily_error or senior_error:

@@ -217,6 +217,8 @@ async def test_064_requires_three_dates_and_surgeon_round() -> None:
         {
             "mr_surgery": (
                 {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
                     "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
                     "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
                     "surgeon": "张医生",
@@ -240,6 +242,8 @@ async def test_064_uses_postoperative_calendar_days_not_72_hour_cutoff() -> None
         {
             "mr_surgery": (
                 {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
                     "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
                     "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
                     "surgeon": "张医生",
@@ -263,6 +267,8 @@ async def test_065_binds_only_surgery_and_senior_round_sources() -> None:
         {
             "mr_surgery": (
                 {
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "硬脑膜外血肿清除术",
                     "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
                     "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
                     "surgeon": "张医生",
@@ -345,9 +351,13 @@ async def test_066_without_performed_surgery_is_not_applicable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_066_catalog_operation_is_not_a_performed_surgery() -> None:
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-064", "LX0609-065", "LX0609-066"),
+)
+async def test_postoperative_rules_ignore_catalog_operation(rule_id: str) -> None:
     _, reduced = await _evaluate(
-        "LX0609-066",
+        rule_id,
         {
             "mr_surgery": (
                 {
