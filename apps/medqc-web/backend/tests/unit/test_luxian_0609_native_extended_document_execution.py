@@ -422,6 +422,48 @@ async def test_069_consultation_over_24_hours_is_non_compliant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_069_pairs_separate_consultation_request_and_record_rows() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-069",
+        {
+            "consultation_record": (
+                {
+                    "document_title": "会诊申请单",
+                    "record_time": "2026-07-01 08:00:00",
+                },
+                {
+                    "document_title": "会诊记录单",
+                    "record_time": "2026-07-01 14:00:00",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-069"]
+    assert facts["actual_interval_hours"] == [6.0]
+    assert facts["request_times"] == ["2026-07-01 08:00:00"]
+    assert facts["record_times"] == ["2026-07-01 14:00:00"]
+
+
+@pytest.mark.asyncio
+async def test_069_multiple_unlinked_consultations_fail_closed() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-069",
+        {
+            "consultation_record": (
+                {"document_title": "会诊申请单", "record_time": "2026-07-01 08:00:00"},
+                {"document_title": "会诊申请单", "record_time": "2026-07-01 09:00:00"},
+                {"document_title": "会诊记录单", "record_time": "2026-07-01 14:00:00"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "association_failed"
+
+
+@pytest.mark.asyncio
 async def test_071_physician_change_requires_handoff_and_handover() -> None:
     _, reduced = await _evaluate(
         "LX0609-071",

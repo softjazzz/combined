@@ -112,6 +112,10 @@ _INVASIVE_PROCEDURES = (
 _PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
     r"经治医师(?:发生)?变更|更换经治医师|交接班医嘱"
 )
+_CONSULTATION_REQUEST_TITLE_PATTERN = re.compile(r"会诊.*申请|申请.*会诊")
+_CONSULTATION_RECORD_TITLE_PATTERN = re.compile(r"会诊.*(?:记录|意见)|(?:记录|意见).*会诊")
+
+
 def _clean(value: Any) -> str:
     return str(value or "").strip()
 
@@ -137,6 +141,98 @@ def _row_time(row: Mapping[str, Any]) -> datetime | None:
         or row.get("discharge_datetime")
         or row.get("discharge_time")
     )
+
+
+def _consultation_timeliness_facts(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[float, ...], tuple[datetime, ...], tuple[datetime, ...], str]:
+    """兼容同一行时限字段，以及申请单/记录单分行保存的院端结构。"""
+
+    request_rows = tuple(
+        row
+        for row in rows
+        if _CONSULTATION_REQUEST_TITLE_PATTERN.search(
+            _clean(row.get("document_title"))
+        )
+    )
+    record_rows = tuple(
+        row
+        for row in rows
+        if not _CONSULTATION_REQUEST_TITLE_PATTERN.search(
+            _clean(row.get("document_title"))
+        )
+        and _CONSULTATION_RECORD_TITLE_PATTERN.search(
+            _clean(row.get("document_title"))
+        )
+    )
+
+    pairs: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    if request_rows or record_rows:
+        if len(request_rows) == len(record_rows) == 1:
+            pairs.append((request_rows[0], record_rows[0]))
+        elif request_rows and record_rows:
+            requests_by_id: dict[str, list[Mapping[str, Any]]] = {}
+            for row in request_rows:
+                business_id = _clean(
+                    row.get("consultation_id") or row.get("application_id")
+                )
+                if business_id:
+                    requests_by_id.setdefault(business_id, []).append(row)
+            for record_row in record_rows:
+                business_id = _clean(
+                    record_row.get("consultation_id")
+                    or record_row.get("application_id")
+                )
+                candidates = requests_by_id.get(business_id, []) if business_id else []
+                if len(candidates) != 1:
+                    return (), (), (), "association_failed"
+                pairs.append((candidates[0], record_row))
+            if len(pairs) != len(record_rows):
+                return (), (), (), "association_failed"
+        else:
+            return (), (), (), "association_failed"
+
+        request_times: list[datetime] = []
+        record_times: list[datetime] = []
+        for request_row, record_row in pairs:
+            request_time = _parse_datetime(
+                request_row.get("request_time")
+                or request_row.get("request_datetime")
+                or request_row.get("application_time")
+                or request_row.get("application_datetime")
+            ) or _row_time(request_row)
+            record_time = _row_time(record_row)
+            if request_time is None or record_time is None:
+                return (), (), (), "authoritative_time_missing"
+            request_times.append(request_time)
+            record_times.append(record_time)
+        return (
+            tuple(
+                (record_time - request_time).total_seconds() / 3600
+                for request_time, record_time in zip(request_times, record_times)
+            ),
+            tuple(request_times),
+            tuple(record_times),
+            "",
+        )
+
+    intervals: list[float] = []
+    request_times = []
+    record_times = []
+    for row in rows:
+        request_time = _parse_datetime(
+            row.get("request_time")
+            or row.get("request_datetime")
+            or row.get("application_time")
+            or row.get("application_datetime")
+        )
+        record_time = _row_time(row)
+        if request_time is None or record_time is None:
+            return (), (), (), "authoritative_time_missing"
+        request_times.append(request_time)
+        record_times.append(record_time)
+        intervals.append((record_time - request_time).total_seconds() / 3600)
+    return tuple(intervals), tuple(request_times), tuple(record_times), ""
 
 
 def _source_rows(
@@ -1569,26 +1665,12 @@ async def execute_luxian_0609_native_extended_document_rules(
             elif not consultation_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             else:
-                intervals: list[float] = []
-                missing_time = False
-                for row in consultation_rows:
-                    request_time = _parse_datetime(
-                        row.get("request_time")
-                        or row.get("request_datetime")
-                        or row.get("application_time")
-                        or row.get("application_datetime")
-                    )
-                    record_time = _row_time(row)
-                    if request_time is None or record_time is None:
-                        missing_time = True
-                        continue
-                    intervals.append(
-                        (record_time - request_time).total_seconds() / 3600
-                    )
-                if missing_time or not intervals:
-                    final_state, reason_code = (
-                        "data_gap",
-                        "authoritative_time_missing",
+                intervals, request_times, record_times, fact_error = (
+                    _consultation_timeliness_facts(consultation_rows)
+                )
+                if fact_error or not intervals:
+                    final_state, reason_code = "data_gap", (
+                        fact_error or "authoritative_time_missing"
                     )
                 else:
                     compliant = all(0 <= value <= 24 for value in intervals)
@@ -1608,17 +1690,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                                     round(value, 2) for value in intervals
                                 ],
                                 "request_times": [
-                                    _parse_datetime(
-                                        row.get("request_time")
-                                        or row.get("request_datetime")
-                                        or row.get("application_time")
-                                        or row.get("application_datetime")
-                                    ).isoformat(sep=" ")
-                                    for row in consultation_rows
+                                    value.isoformat(sep=" ") for value in request_times
                                 ],
                                 "record_times": [
-                                    _row_time(row).isoformat(sep=" ")
-                                    for row in consultation_rows
+                                    value.isoformat(sep=" ") for value in record_times
                                 ],
                             },
                         )
