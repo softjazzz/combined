@@ -31,6 +31,8 @@ RULE_NUMBERS_BY_CASE: dict[int, tuple[int, ...]] = {
     11: (12, 52, 53),
     12: (14, 15),
     13: (20, 21, 22, 23, 69),
+    14: (20, 21, 22, 69),
+    16: (20, 21, 22, 69),
     17: (3, 24, 25, 28, 31),
     18: (29, 30, 32, 33),
     19: (34, 35, 36, 37, 38),
@@ -74,13 +76,26 @@ _NON_COMPLIANT_RULE_IDS_BY_CASE = {
     26: frozenset({"LX0609-045", "LX0609-047"}),
     27: frozenset({"LX0609-046", "LX0609-048"}),
     29: frozenset({"LX0609-013", "LX0609-019", "LX0609-026", "LX0609-027"}),
+    14: frozenset({"LX0609-020", "LX0609-021", "LX0609-022", "LX0609-069"}),
     35: frozenset({"LX0609-054", "LX0609-055", "LX0609-057", "LX0609-058"}),
     37: frozenset({"LX0609-071", "LX0609-072", "LX0609-074"}),
     38: frozenset({"LX0609-073"}),
 }
 
+_STATUS_OVERRIDES_BY_CASE = {
+    16: {
+        "LX0609-020": "not_applicable",
+        "LX0609-021": "not_applicable",
+        "LX0609-022": "not_applicable",
+        "LX0609-069": "not_applicable",
+    },
+}
+
 
 def expected_status_for_case(case_index: int, rule_id: str) -> str:
+    override = _STATUS_OVERRIDES_BY_CASE.get(case_index, {}).get(rule_id)
+    if override:
+        return override
     if rule_id in _NON_COMPLIANT_RULE_IDS_BY_CASE.get(case_index, frozenset()):
         return "non_compliant"
     return "non_compliant" if rule_id in NON_COMPLIANT_RULE_IDS else "compliant"
@@ -302,13 +317,21 @@ def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, 
     return refs
 
 
-def _build_consultation(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
+def _build_consultation(
+    rows: dict[str, list[dict[str, Any]]],
+    case: Any,
+    v2: Any,
+    *,
+    mode: str = "complete",
+) -> list[str]:
     _clear_visit_rows(
         rows, case, "consultation_record", "daily_course_record",
         "inpat_drug_order", "inpat_nondrug_order", "exam_master",
         "labtest_master", "surgery_record",
     )
     refs = [_append_registration(rows, case, v2)]
+    if mode == "no_event":
+        return refs
     consultation_id = f"{case.target_visit_id}-consultation"
     request_time = v2._dt_for_case(case, 1, 8)
     refs.append(_append_document(
@@ -336,6 +359,34 @@ def _build_consultation(rows: dict[str, list[dict[str, Any]]], case: Any, v2: An
         content="执行会诊意见：完善凝血检查并预约ERCP取石引流。",
         order_type="治疗", order_name="ERCP取石引流术前准备",
     ))
+    if mode == "quality_defects":
+        visit_id = case.target_visit_id
+        consultation_rows = [
+            row
+            for row in rows.get("consultation_record", [])
+            if row.get("visit_id") == visit_id
+        ]
+        request_row = next(
+            row for row in consultation_rows if "申请" in str(row.get("document_title") or "")
+        )
+        opinion_row = next(
+            row for row in consultation_rows if "记录单" in str(row.get("document_title") or "")
+        )
+        request_row["record_content"] = "请相关科室会诊协助诊治。"
+        opinion_row["record_content"] = "会诊意见：必要时完善检查并给予药物治疗。"
+        late_time = v2._dt_for_case(case, 2, 10)
+        for field in ("record_time", "record_datetime", "submit_datetime"):
+            opinion_row[field] = late_time
+        rows["daily_course_record"] = [
+            row
+            for row in rows.get("daily_course_record", [])
+            if row.get("visit_id") != visit_id
+        ]
+        rows["inpat_nondrug_order"] = [
+            row
+            for row in rows.get("inpat_nondrug_order", [])
+            if row.get("visit_id") != visit_id
+        ]
     return refs
 
 
@@ -674,6 +725,12 @@ def apply_controlled_evidence(
         6: lambda case: _build_course(rows_by_table, case, v2, mode="severe"),
         7: lambda case: _build_course(rows_by_table, case, v2, mode="critical"),
         13: lambda case: _build_consultation(rows_by_table, case, v2),
+        14: lambda case: _build_consultation(
+            rows_by_table, case, v2, mode="quality_defects"
+        ),
+        16: lambda case: _build_consultation(
+            rows_by_table, case, v2, mode="no_event"
+        ),
         17: lambda case: _build_surgery(rows_by_table, case, v2, mode="record"),
         18: lambda case: _build_surgery(rows_by_table, case, v2, mode="presence"),
         19: lambda case: _build_surgery(rows_by_table, case, v2, mode="anesthesia"),

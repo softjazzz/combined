@@ -1016,12 +1016,14 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-014"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-016"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
@@ -1063,12 +1065,14 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-014"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-016"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
@@ -1110,12 +1114,14 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-014"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-016"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
@@ -2943,12 +2949,14 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-014"],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": ["0426-v3:case-016"],
+          "expected_status": "not_applicable"
         },
         "data_insufficient": {
           "coverage": "missing",
