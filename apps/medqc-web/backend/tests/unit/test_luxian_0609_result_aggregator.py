@@ -18,9 +18,74 @@ from app.services.luxian_0609.decision_reducer import (
 )
 from app.services.luxian_0609.programmatic_rules import FindingKind, ProgrammaticFinding, ProgrammaticFindingReport, build_luxian_0609_programmatic_findings_shadow
 from app.services.luxian_0609.result_aggregator import FinalState, AggregatedRuleResult, aggregate_luxian_0609_programmatic_findings_shadow
+from app.services.luxian_0609_result_aggregator import (
+    safe_luxian_0609_customer_display_facts,
+)
 
 CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
+            "LX0609-013",
+            {
+                "verification_kind": "pathology_result_documentation_check",
+                "pathology_trigger_sources": ["pathology_exam_report"],
+                "checked_target_sources": [
+                    {"source": "surgery_record", "state": "empty"},
+                    {"source": "daily_course_record", "state": "present"},
+                ],
+                "requirement_met": True,
+                "report_time": "2026-04-26 10:00:00",
+            },
+        ),
+        (
+            "LX0609-019",
+            {
+                "verification_kind": "pathology_sampling_documentation_check",
+                "pathology_trigger_sources": ["pathology_exam_master"],
+                "checked_target_sources": [
+                    {"source": "surgery_record", "state": "present"},
+                    {"source": "daily_course_record", "state": "empty"},
+                ],
+                "documented_sources": ["surgery_record"],
+                "requirement_met": True,
+            },
+        ),
+        (
+            "LX0609-026",
+            {
+                "verification_kind": "chemotherapy_order_course_comparison",
+                "order_count": 1,
+                "field_results": {
+                    "drug_name": "matched",
+                    "dose": "mismatched",
+                    "route": "matched",
+                    "time": "matched",
+                },
+                "missing_order_fields": [],
+            },
+        ),
+        (
+            "LX0609-027",
+            {
+                "verification_kind": "malignant_discharge_plan_check",
+                "malignant_diagnosis_present": True,
+                "plan_items": {
+                    "future_plan": True,
+                    "tumor_treatment": True,
+                    "follow_up": False,
+                },
+                "requirement_met": True,
+            },
+        ),
+    ],
+)
+def test_task3_customer_display_fact_contracts_are_preserved(rule_id, facts):
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
 def _reduced_decision(
@@ -939,6 +1004,40 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
                 "missing_count": 1,
                 "missing_first_date": "2026-06-02",
                 "missing_last_date": "2026-06-02",
+            },
+        ),
+        (
+            "LX0609-011",
+            {
+                "verification_kind": "exam_lab_requirement_checked",
+                "subject": "ct_mri",
+                "requirement": "result_recording_within_24h",
+                "event_phase": "report",
+                "checked_sources": ["exam_lab_report", "course_record"],
+                "applicable": True,
+                "requirement_met": True,
+                "positive_state": "not_relevant",
+                "threshold_hours": 24,
+                "response_record_count": 1,
+                "report_time": "2026-06-01 08:00:00",
+                "response_record_time": "2026-06-01 10:00:00",
+                "interval_hours": 2,
+                "raw_report_text": "PRIVATE_REPORT_TEXT",
+            },
+            {
+                "verification_kind": "exam_lab_requirement_checked",
+                "subject": "ct_mri",
+                "requirement": "result_recording_within_24h",
+                "event_phase": "report",
+                "checked_sources": ["exam_lab_report", "course_record"],
+                "applicable": True,
+                "requirement_met": True,
+                "positive_state": "not_relevant",
+                "threshold_hours": 24,
+                "response_record_count": 1,
+                "report_time": "2026-06-01 08:00:00",
+                "response_record_time": "2026-06-01 10:00:00",
+                "interval_hours": 2.0,
             },
         ),
     ],

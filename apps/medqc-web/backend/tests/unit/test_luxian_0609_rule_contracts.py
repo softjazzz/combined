@@ -107,6 +107,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-016",
         "LX0609-017",
         "LX0609-026",
+        "LX0609-027",
         "LX0609-031",
         "LX0609-034",
         "LX0609-035",

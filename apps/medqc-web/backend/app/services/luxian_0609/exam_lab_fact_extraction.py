@@ -40,7 +40,9 @@ _EXPLICIT_NON_TARGET_CULTURE_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 _IMAGING_NEGATIVE_PATTERN = re.compile(r"未见(?:明显)?异常|未见明确病变|阴性")
-_IMAGING_POSITIVE_PATTERN = re.compile(r"阳性|占位|恶性|异常|病变")
+# 客户已确认：检查阳性只接受报告结构字段或原文明示“阳性”，不得把
+# “异常、病变、占位”等临床描述自行提升为该规则的阳性门控事实。
+_IMAGING_POSITIVE_PATTERN = re.compile(r"阳性")
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
 
@@ -179,10 +181,27 @@ def _unique_role_time(
     return (next(iter(values)), False) if len(values) == 1 else (None, len(values) > 1)
 
 
+def _event_identity(family: str, row: Mapping[str, Any], index: int) -> str:
+    """按报告业务键归并主表和项目明细，禁止把每个项目当独立事件。"""
+
+    fields = (
+        ("exam_id", "exam_no", "order_id")
+        if family == "exam"
+        else ("test_id", "test_no", "order_id")
+    )
+    for field in fields:
+        value = _clean(row.get(field))
+        if value:
+            return f"business:{value}"
+    report_time = _clean(row.get("report_time") or row.get("report_datetime"))
+    if report_time:
+        return f"report_time:{report_time}"
+    return f"unbound:{index}"
+
+
 def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
-    max_event_rows: int = 2,
     max_course_rows: int = 4,
     max_row_chars: int = 2000,
     max_context_chars: int = 10000,
@@ -245,14 +264,42 @@ def build_exam_lab_text_projection(
 
     def build_event(family: str) -> ExamLabSingleEvent | None:
         target_confirmed = bool(family_refs[family])
-        rows = family_rows[family] if target_confirmed else generic_rows[family]
-        row_refs = family_refs[family] if target_confirmed else generic_refs[family]
+        rows = list(family_rows[family] if target_confirmed else generic_rows[family])
+        row_refs = list(
+            family_refs[family] if target_confirmed else generic_refs[family]
+        )
+        if target_confirmed:
+            target_identities = {
+                _event_identity(family, row, index)
+                for index, row in enumerate(rows, start=1)
+            }
+            # 项目明细常只写项目名/结果，不重复“培养、CT/MRI”等报告类型。
+            # 只要业务键或唯一报告时间与已确认主记录一致，就并入同一报告事件。
+            for index, (row, ref) in enumerate(
+                zip(generic_rows[family], generic_refs[family]),
+                start=1,
+            ):
+                identity = _event_identity(family, row, index)
+                if not identity.startswith("unbound:") and identity in target_identities:
+                    rows.append(row)
+                    row_refs.append(ref)
         if not row_refs:
             return None
         conflicts: set[str] = set()
-        if not target_confirmed and len(rows) != 1:
+        event_identities = {
+            _event_identity(family, row, index)
+            for index, row in enumerate(rows, start=1)
+        }
+        bound_identities = {
+            identity
+            for identity in event_identities
+            if not identity.startswith("unbound:")
+        }
+        if len(bound_identities) > 1 or (
+            not bound_identities and len(event_identities) > 1
+        ):
             conflicts.add("event_binding")
-        if len(rows) > max_event_rows:
+        elif not target_confirmed and len(event_identities) != 1:
             conflicts.add("event_binding")
         exam_time: datetime | None = None
         if family == "exam":
@@ -570,6 +617,13 @@ def parse_exam_lab_fact_response(
             if positive == "negative":
                 semantic = "absent"
                 normalized_course = ()
+        elif rule_id == "LX0609-012" and event is not None and event.target_confirmed:
+            # 012 的阳性门控只能来自报告结构字段或原文明示“阳性”。模型无权
+            # 把“异常、病变、占位”等描述提升为阳性，否则保持资料不足。
+            positive = "unknown"
+            applicability = "unknown"
+            semantic = "unknown"
+            normalized_course = ()
         elif positive == "positive":
             applicability = "applicable"
         elif positive == "negative":

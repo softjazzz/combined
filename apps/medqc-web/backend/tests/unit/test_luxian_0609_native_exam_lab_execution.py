@@ -656,6 +656,55 @@ def test_unrelated_exam_and_lab_rows_do_not_pollute_target_event_times():
     assert projection.culture_event.conflict_roles == frozenset()
 
 
+def test_lab_item_rows_with_same_test_id_form_one_report_event():
+    item_rows = tuple(
+        {
+            "test_id": "LAB-001",
+            "item_name": f"项目{index}",
+            "result": "检出大肠埃希菌" if index == 1 else str(index),
+            "report_time": "2026-04-26 11:00:00",
+        }
+        for index in range(1, 13)
+    )
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "labtest_master": ({
+                "test_id": "LAB-001",
+                "test_type": "血培养及药敏",
+                "report_time": "2026-04-26 11:00:00",
+            },),
+            "labtest_item_report": item_rows,
+        }
+    )
+
+    assert projection.culture_event is not None
+    assert len(projection.culture_event.document_refs) == 13
+    assert projection.culture_event.conflict_roles == frozenset()
+    assert projection.culture_event.positive_hint == "positive"
+
+
+def test_multiple_report_business_ids_are_an_association_conflict():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "labtest_master": (
+                {
+                    "test_id": "LAB-001",
+                    "test_type": "血培养",
+                    "report_time": "2026-04-26 11:00:00",
+                },
+                {
+                    "test_id": "LAB-002",
+                    "test_type": "痰培养",
+                    "report_time": "2026-04-27 11:00:00",
+                },
+            ),
+        }
+    )
+
+    assert projection.culture_event is not None
+    assert "event_binding" in projection.culture_event.conflict_roles
+
+
 def test_long_stay_course_rows_are_filtered_before_projection_limit():
     course_rows = tuple(
         {
@@ -1009,7 +1058,13 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         snapshot=snapshot,
     )
 
-    assert [item.final_state.value for item in reduced] == ["non_compliant"] * 5
+    assert [item.final_state.value for item in reduced] == [
+        "non_compliant",
+        "non_compliant",
+        "data_gap",
+        "non_compliant",
+        "non_compliant",
+    ]
     assert result.llm_call_count == 0
     assert client.prompts == []
     facts = dict(result.customer_display_facts)
@@ -1021,7 +1076,7 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         "checked_sources": ["exam_lab_order", "course_record"],
     }
     assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
-    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
+    assert "LX0609-012" not in facts
     assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
     assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
 
@@ -1452,7 +1507,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
             "exam_name": "胸部CT",
             "exam_time": "2026-04-26 08:00:00",
             "report_time": "2026-04-26 12:00:00",
-            "exam_conclusion": "肺部占位，考虑恶性。",
+            "exam_conclusion": "阳性：肺部占位，考虑恶性。",
         },),
         culture_rows=({
             "labtest_subject": "血培养及药敏",
@@ -1507,6 +1562,18 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     assert all("主执行规则" not in prompt for prompt in client.prompts)
     assert "阳性影像结果" not in repr(result)
     assert "阳性培养结果" not in repr(result)
+    display_facts = dict(result.customer_display_facts)
+    for rule_id in ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"):
+        assert display_facts[rule_id]["verification_kind"] == (
+            "exam_lab_requirement_checked"
+        )
+        assert display_facts[rule_id]["requirement_met"] is True
+        assert display_facts[rule_id]["report_time"] == "2026-04-26 12:00:00"
+        assert display_facts[rule_id]["response_record_time"] == (
+            "2026-04-26 13:00:00"
+        )
+        assert display_facts[rule_id]["interval_hours"] == 1.0
+        assert display_facts[rule_id]["threshold_hours"] == 24
 
 
 @pytest.mark.asyncio

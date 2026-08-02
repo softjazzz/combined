@@ -202,7 +202,7 @@ LEGACY_RULE_MATERIAL_SOURCE_KEYS = {
     ),
     "LX0609-013": ("pathology_exam_master", "pathology_exam_report"),
     "LX0609-019": ("pathology_exam_master", "pathology_exam_report"),
-    "LX0609-026": ("diagnosis", "inpat_drug_order"),
+    "LX0609-026": ("diagnosis", "inpat_drug_order", "daily_course_record"),
     # 与 RuleDecision 来源契约保持一致：027 的裁剪上下文必须包含出院记录。
     "LX0609-027": ("diagnosis", "discharge_record"),
 }

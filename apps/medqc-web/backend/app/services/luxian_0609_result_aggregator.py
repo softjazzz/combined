@@ -2044,22 +2044,209 @@ def safe_luxian_0609_customer_display_facts(
             if rule_id == "LX0609-010"
             else ["exam_lab_report", "course_record"]
         )
+        failure_kind = raw.get("failure_kind")
+        verification_kind = raw.get("verification_kind")
         if (
-            raw.get("failure_kind") != "exam_lab_requirement_not_documented"
+            (
+                failure_kind != "exam_lab_requirement_not_documented"
+                and verification_kind != "exam_lab_requirement_checked"
+            )
+            or (failure_kind is not None and verification_kind is not None)
             or subject != expected_subject
             or requirement != allowed_requirements[rule_id]
             or event_phase != expected_phase
             or checked_sources != expected_sources
         ):
             return None
-        return {
-            "failure_kind": "exam_lab_requirement_not_documented",
+        facts: dict[str, Any] = {
+            (
+                "failure_kind" if failure_kind is not None else "verification_kind"
+            ): (
+                "exam_lab_requirement_not_documented"
+                if failure_kind is not None
+                else "exam_lab_requirement_checked"
+            ),
             "subject": subject,
             "requirement": requirement,
             "event_phase": event_phase,
             "checked_sources": list(checked_sources),
         }
+        optional_bool_fields = ("applicable", "requirement_met")
+        for key in optional_bool_fields:
+            value = raw.get(key)
+            if value is not None:
+                if not isinstance(value, bool):
+                    return None
+                facts[key] = value
+        positive_state = raw.get("positive_state")
+        if positive_state is not None:
+            if positive_state not in {"positive", "negative", "not_relevant"}:
+                return None
+            facts["positive_state"] = positive_state
+        for key in ("report_time", "response_record_time"):
+            value = raw.get(key)
+            if value is not None:
+                if not isinstance(value, str) or not re.fullmatch(
+                    r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
+                ):
+                    return None
+                facts[key] = value
+        threshold_hours = raw.get("threshold_hours")
+        if threshold_hours is not None:
+            if threshold_hours != 24:
+                return None
+            facts["threshold_hours"] = 24
+        response_count = raw.get("response_record_count")
+        if response_count is not None:
+            if not isinstance(response_count, int) or response_count < 0:
+                return None
+            facts["response_record_count"] = response_count
+        interval_hours = raw.get("interval_hours")
+        if interval_hours is not None:
+            if not isinstance(interval_hours, (int, float)) or interval_hours < 0:
+                return None
+            facts["interval_hours"] = round(float(interval_hours), 2)
+        return facts
+    if rule_id == "LX0609-013":
+        trigger_sources = raw.get("pathology_trigger_sources")
+        checked_sources = raw.get("checked_target_sources")
+        if (
+            raw.get("verification_kind")
+            != "pathology_result_documentation_check"
+            or not isinstance(trigger_sources, list)
+            or not trigger_sources
+            or any(
+                value not in {"pathology_exam_master", "pathology_exam_report"}
+                for value in trigger_sources
+            )
+            or not isinstance(checked_sources, list)
+            or checked_sources
+            != [
+                {"source": "surgery_record", "state": checked_sources[0].get("state")}
+                if len(checked_sources) > 0 and isinstance(checked_sources[0], Mapping)
+                else {},
+                {"source": "daily_course_record", "state": checked_sources[1].get("state")}
+                if len(checked_sources) > 1 and isinstance(checked_sources[1], Mapping)
+                else {},
+            ]
+            or any(
+                item.get("state") not in {"present", "empty"}
+                for item in checked_sources
+            )
+            or not isinstance(raw.get("requirement_met"), bool)
+        ):
+            return None
+        facts = {
+            "verification_kind": "pathology_result_documentation_check",
+            "pathology_trigger_sources": list(dict.fromkeys(trigger_sources)),
+            "checked_target_sources": [dict(item) for item in checked_sources],
+            "requirement_met": raw["requirement_met"],
+        }
+        report_time = raw.get("report_time")
+        if report_time is not None:
+            if not isinstance(report_time, str) or not re.fullmatch(
+                r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", report_time
+            ):
+                return None
+            facts["report_time"] = report_time
+        return facts
+    if rule_id == "LX0609-026":
+        field_results = raw.get("field_results")
+        missing_order_fields = raw.get("missing_order_fields")
+        allowed_fields = {"drug_name", "dose", "route", "time"}
+        if (
+            raw.get("verification_kind")
+            != "chemotherapy_order_course_comparison"
+            or not isinstance(raw.get("order_count"), int)
+            or raw.get("order_count") < 1
+            or not isinstance(field_results, Mapping)
+            or set(field_results) != allowed_fields
+            or any(
+                value not in {"matched", "mismatched", "unknown"}
+                for value in field_results.values()
+            )
+            or not isinstance(missing_order_fields, list)
+            or any(value not in allowed_fields for value in missing_order_fields)
+        ):
+            return None
+        return {
+            "verification_kind": "chemotherapy_order_course_comparison",
+            "order_count": raw["order_count"],
+            "field_results": {
+                field: field_results[field]
+                for field in ("drug_name", "dose", "route", "time")
+            },
+            "missing_order_fields": list(dict.fromkeys(missing_order_fields)),
+        }
+    if rule_id == "LX0609-027":
+        plan_items = raw.get("plan_items")
+        if (
+            raw.get("verification_kind") != "malignant_discharge_plan_check"
+            or raw.get("malignant_diagnosis_present") is not True
+            or not isinstance(plan_items, Mapping)
+            or set(plan_items) != {"future_plan", "tumor_treatment", "follow_up"}
+            or any(not isinstance(value, bool) for value in plan_items.values())
+            or not isinstance(raw.get("requirement_met"), bool)
+        ):
+            return None
+        return {
+            "verification_kind": "malignant_discharge_plan_check",
+            "malignant_diagnosis_present": True,
+            "plan_items": {
+                key: plan_items[key]
+                for key in ("future_plan", "tumor_treatment", "follow_up")
+            },
+            "requirement_met": raw["requirement_met"],
+        }
     if rule_id == "LX0609-019":
+        if raw.get("verification_kind") == "pathology_sampling_documentation_check":
+            trigger_sources = raw.get("pathology_trigger_sources")
+            checked_sources = raw.get("checked_target_sources")
+            documented_sources = raw.get("documented_sources")
+            if (
+                not isinstance(trigger_sources, list)
+                or not trigger_sources
+                or any(
+                    value not in {"pathology_exam_master", "pathology_exam_report"}
+                    for value in trigger_sources
+                )
+                or not isinstance(checked_sources, list)
+                or len(checked_sources) != 2
+                or checked_sources
+                != [
+                    {
+                        "source": "surgery_record",
+                        "state": checked_sources[0].get("state"),
+                    }
+                    if isinstance(checked_sources[0], Mapping)
+                    else {},
+                    {
+                        "source": "daily_course_record",
+                        "state": checked_sources[1].get("state"),
+                    }
+                    if isinstance(checked_sources[1], Mapping)
+                    else {},
+                ]
+                or any(
+                    item.get("state") not in {"present", "empty"}
+                    for item in checked_sources
+                )
+                or not isinstance(documented_sources, list)
+                or not documented_sources
+                or any(
+                    value not in {"surgery_record", "daily_course_record"}
+                    for value in documented_sources
+                )
+                or raw.get("requirement_met") is not True
+            ):
+                return None
+            return {
+                "verification_kind": "pathology_sampling_documentation_check",
+                "pathology_trigger_sources": list(dict.fromkeys(trigger_sources)),
+                "checked_target_sources": [dict(item) for item in checked_sources],
+                "documented_sources": list(dict.fromkeys(documented_sources)),
+                "requirement_met": True,
+            }
         trigger_sources = raw.get("pathology_trigger_sources")
         checked_sources = raw.get("checked_target_sources")
         if (

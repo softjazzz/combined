@@ -95,6 +95,7 @@ def _material_session(
     *,
     truncated_master: bool = False,
     surgery_process: str = "术中切取病灶标本并送病理检查。",
+    empty_targets: bool = False,
 ):
     rows_by_source = {
         "pathology_exam_master": (
@@ -111,10 +112,12 @@ def _material_session(
             )
         ),
         "surgery_record": (
-            {"surgery_process": surgery_process},
+            () if empty_targets else ({"surgery_process": surgery_process},)
         ),
         "daily_course_record": (
-            {"record_content": "病程记录中已记录病理结果与处理计划。"},
+            ()
+            if empty_targets
+            else ({"record_content": "病程记录中已记录病理结果与处理计划。"},)
         ),
     }
 
@@ -175,6 +178,42 @@ async def test_013_019_use_request_materials_without_family_live_query(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_typed_013_complete_empty_target_sources_are_non_compliant_without_model():
+    session = _material_session(empty_targets=True)
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-013",),
+        wrapper_rules=[_wrapper("LX0609-013")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-013",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == "non_compliant"
+    assert dict(result.customer_display_facts)["LX0609-013"] == {
+        "verification_kind": "pathology_result_documentation_check",
+        "pathology_trigger_sources": [
+            "pathology_exam_master",
+            "pathology_exam_report",
+        ],
+        "checked_target_sources": [
+            {"source": "surgery_record", "state": "empty"},
+            {"source": "daily_course_record", "state": "empty"},
+        ],
+        "requirement_met": False,
+        "report_time": "2026-04-26 10:00:00",
+    }
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
     monkeypatch,
 ):
@@ -213,6 +252,19 @@ async def test_typed_019_uses_same_session_surgery_process_not_stale_payload(
     )
     assert result.decisions[0].snapshot_hash == session.snapshot.snapshot_hash
     assert "旧投影明确未记录" not in repr(result)
+    assert dict(result.customer_display_facts)["LX0609-019"] == {
+        "verification_kind": "pathology_sampling_documentation_check",
+        "pathology_trigger_sources": [
+            "pathology_exam_master",
+            "pathology_exam_report",
+        ],
+        "checked_target_sources": [
+            {"source": "surgery_record", "state": "present"},
+            {"source": "daily_course_record", "state": "present"},
+        ],
+        "documented_sources": ["surgery_record"],
+        "requirement_met": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -672,8 +724,18 @@ async def test_typed_027_late_malignant_code_is_not_lost_by_prompt_row_limit() -
     assert reduce_luxian_0609_rule_decision(
         result.decisions[0]
     ).final_state.value == "compliant"
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+    assert dict(result.customer_display_facts)["LX0609-027"] == {
+        "verification_kind": "malignant_discharge_plan_check",
+        "malignant_diagnosis_present": True,
+        "plan_items": {
+            "future_plan": True,
+            "tumor_treatment": True,
+            "follow_up": False,
+        },
+        "requirement_met": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -777,14 +839,27 @@ async def test_snapshot_pathology_source_state_never_replays_family_reader(
     assert result.llm_call_count == 0
 
 
-def _chemo_discharge_material_session(*, truncated_drug: bool = False):
+def _chemo_discharge_material_session(
+    *,
+    truncated_drug: bool = False,
+    course_text: str = "2026-04-26 使用奥沙利铂 130mg 静滴，记录化疗经过。",
+):
     rows_by_source = {
         "diagnosis": ({"diagnosis_code": "C18.9"},),
         "inpat_drug_order": (
-            {"drug_code": "safe-drug", "order_status": "执行"},
+            {
+                "drug_code": "safe-drug",
+                "generic_name": "奥沙利铂",
+                "single_dose": "130",
+                "single_dose_unit": "mg",
+                "drug_apply_method": "静滴",
+                "prescribed_datetime": "2026-04-26 09:00:00",
+                "drug_type": "抗肿瘤化疗药物",
+                "order_status": "执行",
+            },
         ),
         "daily_course_record": (
-            {"record_content": "病程记录中包含治疗经过。"},
+            {"record_content": course_text},
         ),
         "discharge_record": (
             {"treatment_course": "出院记录中包含后续治疗计划。"},
@@ -903,13 +978,15 @@ async def test_typed_013_027_emit_ordered_decisions_from_same_session(monkeypatc
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["compliant", "non_compliant"]
-    assert result.llm_call_count == 2
-    assert result.total_tokens == 220
+    ] == ["compliant", "compliant"]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
 
 
 @pytest.mark.asyncio
-async def test_typed_013_027_match_raw_state_calls_tokens_and_prompts(monkeypatch):
+async def test_typed_027_uses_deterministic_plan_facts_while_legacy_stays_unchanged(
+    monkeypatch,
+):
     session = _typed_013_027_session()
     payload = _payload(
         surgery_record=[
@@ -955,11 +1032,14 @@ async def test_typed_013_027_match_raw_state_calls_tokens_and_prompts(monkeypatc
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in typed.decisions
-    ] == ["compliant", "non_compliant"]
+    ] == ["compliant", "compliant"]
     assert typed.results == ()
-    assert raw.llm_call_count == typed.llm_call_count == 2
-    assert raw.total_tokens == typed.total_tokens == 220
-    assert raw_client.prompts == typed_client.prompts
+    assert raw.llm_call_count == 2
+    assert typed.llm_call_count == 1
+    assert raw.total_tokens == 220
+    assert typed.total_tokens == 110
+    assert len(raw_client.prompts) == 2
+    assert len(typed_client.prompts) == 1
 
 
 @pytest.mark.asyncio
@@ -1057,6 +1137,63 @@ async def test_typed_026_is_explicit_data_gap_without_legacy_chemotherapy_fact(
     assert result.decisions[0].reason_code == "source_unavailable"
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_text", "expected_state", "dose_state"),
+    [
+        (
+            "2026-04-26 使用奥沙利铂 130mg 静滴，记录化疗经过。",
+            "compliant",
+            "matched",
+        ),
+        (
+            "2026-04-26 使用奥沙利铂 100mg 静滴，记录化疗经过。",
+            "non_compliant",
+            "mismatched",
+        ),
+    ],
+)
+async def test_typed_026_compares_four_structured_order_fields_without_model(
+    monkeypatch,
+    course_text,
+    expected_state,
+    dose_state,
+):
+    session = _chemo_discharge_material_session(course_text=course_text)
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == expected_state
+    facts = dict(result.customer_display_facts)["LX0609-026"]
+    assert facts["field_results"] == {
+        "drug_name": "matched",
+        "dose": dose_state,
+        "route": "matched",
+        "time": "matched",
+    }
+    assert facts["missing_order_fields"] == []
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.parametrize(

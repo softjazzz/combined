@@ -171,6 +171,56 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     assert "已确认实施手术" in result["evidence"]
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "expected_finding", "expected_evidence"),
+    [
+        (
+            "LX0609-013",
+            "暂无法核对病理结果是否记入手术记录或病程",
+            "病理最终诊断",
+        ),
+        (
+            "LX0609-019",
+            "暂无法核对病理取材记录",
+            "病理申请或报告来源",
+        ),
+        (
+            "LX0609-026",
+            "暂无法核对化疗记录与医嘱是否一致",
+            "药名、剂量、用法、时间",
+        ),
+        (
+            "LX0609-027",
+            "暂无法核对恶性肿瘤出院治疗计划",
+            "恶性肿瘤诊断依据",
+        ),
+    ],
+)
+def test_task3_data_gap_names_the_customer_visible_missing_material(
+    rule_id,
+    expected_finding,
+    expected_evidence,
+):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="required_field_missing",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-task3-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"].startswith("当前记录缺少完成核对所需的关键信息；")
+    assert result["findings"].endswith(expected_finding)
+    assert expected_evidence in result["evidence"]
+
+
 def test_rule_identity_and_name_come_only_from_the_trusted_catalog():
     trusted = get_luxian_0609_rule("LX0609-001")
     result = render_luxian_0609_customer_result(

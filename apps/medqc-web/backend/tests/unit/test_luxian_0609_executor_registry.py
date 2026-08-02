@@ -235,7 +235,12 @@ def test_tumor_pathology_materials_are_scoped_by_rule() -> None:
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-026", "LX0609-027"),
-    ) == ("diagnosis", "discharge_record", "inpat_drug_order")
+    ) == (
+        "daily_course_record",
+        "diagnosis",
+        "discharge_record",
+        "inpat_drug_order",
+    )
     assert resolve_legacy_executor_material_source_keys(
         ("tumor_pathology",),
         selected_rule_ids=("LX0609-027",),

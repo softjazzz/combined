@@ -48,8 +48,7 @@ _TYPED_RULE_SOURCE_KEYS = {
         "surgery_record",
         "daily_course_record",
     ),
-    # 026 仍缺受控化疗事实，只绑定真正读取的恶性诊断来源并保守 DG。
-    "LX0609-026": ("diagnosis",),
+    "LX0609-026": ("diagnosis", "inpat_drug_order", "daily_course_record"),
     "LX0609-027": ("diagnosis", "discharge_record"),
 }
 _TYPED_EVALUATOR_VERSION = "tumor-pathology-ruledecision-shadow-v1"
@@ -107,6 +106,12 @@ _PATHOLOGY_PENDING_RESULT_PATTERN = re.compile(
 _PATHOLOGY_REPORT_DATETIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"(?:化疗|抗肿瘤)")
+_DISCHARGE_PLAN_FUTURE_PATTERN = re.compile(r"(?:后续|出院后|继续|定期|计划|建议|门诊)")
+_DISCHARGE_PLAN_TREATMENT_PATTERN = re.compile(
+    r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤|治疗计划)"
+)
+_DISCHARGE_PLAN_FOLLOW_UP_PATTERN = re.compile(r"(?:随访|复查|门诊)")
 
 _MALIGNANT_FACT_TYPES = frozenset(
     {
@@ -613,6 +618,202 @@ def _lx019_missing_sampling_display_facts(
     }
 
 
+def _pathology_checked_sources(
+    *,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    surgery_record: SourceMaterial,
+    daily_course_record: SourceMaterial,
+) -> tuple[list[str], list[dict[str, str]]]:
+    trigger_sources = [
+        source_key
+        for source_key, material in (
+            ("pathology_exam_master", pathology_master),
+            ("pathology_exam_report", pathology_report),
+        )
+        if material.state == "present"
+    ]
+    target_sources = [
+        {"source": source_key, "state": material.state}
+        for source_key, material in (
+            ("surgery_record", surgery_record),
+            ("daily_course_record", daily_course_record),
+        )
+        if material.state in {"present", "empty"}
+    ]
+    return trigger_sources, target_sources
+
+
+def _pathology_result_display_facts(
+    *,
+    status: str,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    surgery_record: SourceMaterial,
+    daily_course_record: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    trigger_sources, target_sources = _pathology_checked_sources(
+        pathology_master=pathology_master,
+        pathology_report=pathology_report,
+        surgery_record=surgery_record,
+        daily_course_record=daily_course_record,
+    )
+    if not trigger_sources or len(target_sources) != 2:
+        return None
+    report_times = {
+        value
+        for row in pathology_report.rows
+        if (
+            value := _clean(
+                row.get("report_datetime")
+                or row.get("report_time")
+                or row.get("record_time")
+            )
+        )
+        and _PATHOLOGY_REPORT_DATETIME_PATTERN.fullmatch(value)
+    }
+    facts: dict[str, Any] = {
+        "verification_kind": "pathology_result_documentation_check",
+        "pathology_trigger_sources": trigger_sources,
+        "checked_target_sources": target_sources,
+        "requirement_met": status == "compliant",
+    }
+    if len(report_times) == 1:
+        facts["report_time"] = next(iter(report_times))
+    return facts
+
+
+def _pathology_sampling_display_facts(
+    *,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    surgery_record: SourceMaterial,
+    daily_course_record: SourceMaterial,
+) -> Mapping[str, Any] | None:
+    trigger_sources, target_sources = _pathology_checked_sources(
+        pathology_master=pathology_master,
+        pathology_report=pathology_report,
+        surgery_record=surgery_record,
+        daily_course_record=daily_course_record,
+    )
+    if not trigger_sources or len(target_sources) != 2:
+        return None
+    documented_sources = [
+        source
+        for source, material in (
+            ("surgery_record", surgery_record),
+            ("daily_course_record", daily_course_record),
+        )
+        if _has_documented_pathology_sampling(material)
+    ]
+    return {
+        "verification_kind": "pathology_sampling_documentation_check",
+        "pathology_trigger_sources": trigger_sources,
+        "checked_target_sources": target_sources,
+        "documented_sources": documented_sources,
+        "requirement_met": bool(documented_sources),
+    }
+
+
+def _normalized_comparison_text(value: Any) -> str:
+    return re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", _clean(value).lower())
+
+
+def _typed_chemotherapy_comparison(
+    *,
+    orders: SourceMaterial,
+    course_records: SourceMaterial,
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    """以结构化医嘱为权威值，逐项核对病程中的药名、剂量、用法和时间。"""
+
+    chemotherapy_orders = tuple(
+        row
+        for row in orders.rows
+        if _CHEMOTHERAPY_CLASS_PATTERN.search(
+            _clean(
+                row.get("drug_type")
+                or row.get("order_class")
+                or row.get("order_category")
+            )
+        )
+    )
+    if not chemotherapy_orders:
+        return "data_gap", "chemotherapy_fact_unavailable", None
+    course_text = _normalized_comparison_text(
+        " ".join(_row_text(row) for row in course_records.rows)
+    )
+    if not course_text:
+        return "data_gap", "chemotherapy_course_record_unavailable", None
+
+    field_results = {
+        "drug_name": "matched",
+        "dose": "matched",
+        "route": "matched",
+        "time": "matched",
+    }
+    missing_order_fields: set[str] = set()
+    for row in chemotherapy_orders:
+        drug_name = _clean(
+            row.get("generic_name") or row.get("drug_name") or row.get("brand_name")
+        )
+        dose_value = _clean(row.get("single_dose") or row.get("dose"))
+        dose_unit = _clean(row.get("single_dose_unit") or row.get("dose_unit"))
+        route = _clean(row.get("drug_apply_method") or row.get("administration_route"))
+        prescribed = _clean(row.get("prescribed_datetime") or row.get("order_time"))
+        expected_values = {
+            "drug_name": drug_name,
+            "dose": f"{dose_value}{dose_unit}" if dose_value else "",
+            "route": route,
+            "time": prescribed[:10] if len(prescribed) >= 10 else prescribed,
+        }
+        for field, expected in expected_values.items():
+            normalized = _normalized_comparison_text(expected)
+            if not normalized:
+                missing_order_fields.add(field)
+            elif normalized not in course_text:
+                field_results[field] = "mismatched"
+
+    for field in missing_order_fields:
+        field_results[field] = "unknown"
+    facts = {
+        "verification_kind": "chemotherapy_order_course_comparison",
+        "order_count": len(chemotherapy_orders),
+        "field_results": field_results,
+        "missing_order_fields": sorted(missing_order_fields),
+    }
+    if missing_order_fields:
+        return "data_gap", "chemotherapy_order_fields_missing", facts
+    if any(value == "mismatched" for value in field_results.values()):
+        return "non_compliant", "chemotherapy_record_mismatch", facts
+    return "compliant", "chemotherapy_record_matches_order", facts
+
+
+def _typed_discharge_plan_outcome(
+    material: SourceMaterial,
+) -> tuple[str, str, Mapping[str, Any]]:
+    text = _clean(" ".join(_row_text(row) for row in material.rows))
+    future_plan = bool(_DISCHARGE_PLAN_FUTURE_PATTERN.search(text))
+    treatment_plan = bool(_DISCHARGE_PLAN_TREATMENT_PATTERN.search(text))
+    follow_up_plan = bool(_DISCHARGE_PLAN_FOLLOW_UP_PATTERN.search(text))
+    compliant = future_plan and treatment_plan
+    return (
+        "compliant" if compliant else "non_compliant",
+        "malignant_discharge_plan_recorded"
+        if compliant
+        else "malignant_discharge_plan_missing",
+        {
+            "verification_kind": "malignant_discharge_plan_check",
+            "malignant_diagnosis_present": True,
+            "plan_items": {
+                "future_plan": future_plan,
+                "tumor_treatment": treatment_plan,
+                "follow_up": follow_up_plan,
+            },
+            "requirement_met": compliant,
+        },
+    )
+
+
 async def execute_luxian_0609_native_tumor_pathology_rules(
     *,
     rule_ids: Sequence[str],
@@ -825,13 +1026,40 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 continue
             if rule_id == "LX0609-026":
                 if typed_rule:
-                    # 当前快照没有受控 chemotherapy FactV2，普通药品医嘱不能
-                    # 被提升为化疗事实。保守闭合，不回读 legacy timeline_facts。
+                    chemotherapy_orders = source_for_rule("inpat_drug_order")
+                    course_records = source_for_rule("daily_course_record")
+                    if any(
+                        material.state == "error"
+                        for material in (chemotherapy_orders, course_records)
+                    ):
+                        emit_outcome(
+                            rule_id,
+                            "technical_error",
+                            "source_query_error",
+                            executor_type="program",
+                        )
+                        continue
+                    if any(
+                        material.state in {"unavailable", "truncated"}
+                        for material in (chemotherapy_orders, course_records)
+                    ):
+                        emit_outcome(
+                            rule_id,
+                            "data_gap",
+                            "tumor_target_projection_unavailable",
+                            executor_type="program",
+                        )
+                        continue
+                    status, reason_code, display_facts = _typed_chemotherapy_comparison(
+                        orders=chemotherapy_orders,
+                        course_records=course_records,
+                    )
                     emit_outcome(
                         rule_id,
-                        "data_gap",
-                        "chemotherapy_fact_unavailable",
+                        status,
+                        reason_code,
                         executor_type="program",
+                        display_facts=display_facts,
                     )
                     continue
                 chemo_present = _has_fact(
@@ -887,6 +1115,23 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         target_states = tuple(
             materials[source_key].state for source_key in required_sources
         )
+        if rule_id == "LX0609-013" and all(
+            state == "empty" for state in target_states
+        ):
+            emit_outcome(
+                rule_id,
+                "non_compliant",
+                "pathology_result_not_documented",
+                executor_type="program",
+                display_facts=_pathology_result_display_facts(
+                    status="non_compliant",
+                    pathology_master=master,
+                    pathology_report=report,
+                    surgery_record=materials["surgery_record"],
+                    daily_course_record=materials["daily_course_record"],
+                ),
+            )
+            continue
         if rule_id == "LX0609-019" and all(
             state == "empty" for state in target_states
         ):
@@ -920,6 +1165,18 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 executor_type="program",
             )
             continue
+        if rule_id == "LX0609-027" and typed_rule:
+            status, reason_code, display_facts = _typed_discharge_plan_outcome(
+                materials["discharge_record"]
+            )
+            emit_outcome(
+                rule_id,
+                status,
+                reason_code,
+                executor_type="program",
+                display_facts=display_facts,
+            )
+            continue
         sampling_surgery = materials.get("surgery_record")
         if (
             rule_id == "LX0609-019"
@@ -948,6 +1205,12 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                 "compliant",
                 "pathology_sampling_recorded",
                 executor_type="program",
+                display_facts=_pathology_sampling_display_facts(
+                    pathology_master=master,
+                    pathology_report=report,
+                    surgery_record=sampling_surgery or materials["surgery_record"],
+                    daily_course_record=materials["daily_course_record"],
+                ),
             )
             continue
         context = "\n".join(
@@ -1003,6 +1266,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
             status,
             "tumor_customer_prompt",
             executor_type="llm",
+            display_facts=(
+                _pathology_result_display_facts(
+                    status=status,
+                    pathology_master=master,
+                    pathology_report=report,
+                    surgery_record=materials["surgery_record"],
+                    daily_course_record=materials["daily_course_record"],
+                )
+                if rule_id == "LX0609-013"
+                else None
+            ),
         )
 
     return NativeTumorPathologyExecutionResult(

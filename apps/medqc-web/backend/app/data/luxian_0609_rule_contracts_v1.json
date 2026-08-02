@@ -125,7 +125,7 @@
     },
     {
       "rule_id": "LX0609-011",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
       "execution_mode": "native_async",
@@ -136,7 +136,7 @@
     },
     {
       "rule_id": "LX0609-012",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
       "execution_mode": "native_async",
@@ -147,7 +147,7 @@
     },
     {
       "rule_id": "LX0609-013",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
@@ -158,7 +158,7 @@
     },
     {
       "rule_id": "LX0609-014",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
       "execution_mode": "native_async",
@@ -169,7 +169,7 @@
     },
     {
       "rule_id": "LX0609-015",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "exam_lab",
       "executor_key": "exam_lab",
       "execution_mode": "native_async",
@@ -213,7 +213,7 @@
     },
     {
       "rule_id": "LX0609-019",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
@@ -290,7 +290,7 @@
     },
     {
       "rule_id": "LX0609-026",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
@@ -301,12 +301,12 @@
     },
     {
       "rule_id": "LX0609-027",
-      "contract_version": "v2",
+      "contract_version": "v3",
       "family_key": "tumor_pathology",
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
-      "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "decision_authority": "program_only",
+      "max_llm_calls_per_rule": 0,
       "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },

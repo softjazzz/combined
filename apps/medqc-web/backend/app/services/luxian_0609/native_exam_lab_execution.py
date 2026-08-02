@@ -757,6 +757,70 @@ def _customer_display_facts_for_outcome(
     return None
 
 
+def _text_outcome_display_facts(
+    *,
+    rule_id: str,
+    status: str,
+    fact: ExamLabEventFact,
+    projection: ExamLabTextProjection,
+) -> Mapping[str, Any] | None:
+    """输出报告事件、响应病程和24小时计算事实，不暴露正文。"""
+
+    if (
+        rule_id not in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
+        or status not in {"compliant", "non_compliant", "not_applicable"}
+    ):
+        return None
+    event = projection.imaging_event if rule_id in EXAM_RULE_IDS else projection.culture_event
+    if event is None:
+        return None
+    subject = "ct_mri" if rule_id in EXAM_RULE_IDS else "culture_susceptibility"
+    analysis_rule = rule_id in {"LX0609-012", "LX0609-015"}
+    requirement = (
+        "positive_result_analysis_within_24h"
+        if analysis_rule
+        else "result_recording_within_24h"
+    )
+    response_times = sorted(
+        value
+        for ref in fact.course_doc_refs
+        if (value := projection.course_times.get(ref)) is not None
+        and event.report_time is not None
+        and value >= event.report_time
+    )
+    first_response = response_times[0] if response_times else None
+    facts: dict[str, Any] = {
+        (
+            "failure_kind"
+            if status == "non_compliant"
+            else "verification_kind"
+        ): (
+            "exam_lab_requirement_not_documented"
+            if status == "non_compliant"
+            else "exam_lab_requirement_checked"
+        ),
+        "subject": subject,
+        "requirement": requirement,
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "applicable": status != "not_applicable",
+        "positive_state": fact.positive_state,
+        "threshold_hours": 24,
+        "response_record_count": len(response_times),
+    }
+    if status != "not_applicable":
+        facts["requirement_met"] = status == "compliant"
+    if event.report_time is not None:
+        facts["report_time"] = event.report_time.strftime("%Y-%m-%d %H:%M:%S")
+    if first_response is not None and event.report_time is not None:
+        facts["response_record_time"] = first_response.strftime("%Y-%m-%d %H:%M:%S")
+        facts["interval_hours"] = round(
+            (first_response - event.report_time).total_seconds() / 3600,
+            2,
+        )
+    return facts
+
+
 def _target_source_document_ids(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
@@ -1092,6 +1156,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
         reason_code: str,
         fact_refs: tuple[str, ...] = (),
         source_document_ids: Sequence[str] = (),
+        display_facts: Mapping[str, Any] | None = None,
     ) -> None:
         assert evidence_snapshot is not None
         if status == "non_compliant" and not source_document_ids:
@@ -1100,12 +1165,24 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 display_rows_by_source,
                 fact_kind=fact_kind,
             )
-        display_facts = _customer_display_facts_for_outcome(
-            rule_id=rule_id,
-            status=status,
-            reason_code=reason_code,
-            source_document_ids=source_document_ids,
-        )
+        if display_facts is None:
+            display_facts = _customer_display_facts_for_outcome(
+                rule_id=rule_id,
+                status=status,
+                reason_code=reason_code,
+                source_document_ids=source_document_ids,
+            )
+        elif source_document_ids:
+            display_facts = {
+                **display_facts,
+                "source_document_ids": list(
+                    dict.fromkeys(
+                        value
+                        for raw in source_document_ids
+                        if (value := _clean(raw))
+                    )
+                ),
+            }
         if display_facts is not None:
             customer_display_facts.append((rule_id, display_facts))
         decisions.append(
@@ -1332,6 +1409,12 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         outcome.status,
                         outcome.reason_code,
                         outcome.fact_refs,
+                        display_facts=_text_outcome_display_facts(
+                            rule_id=rule_id,
+                            status=outcome.status,
+                            fact=fact,
+                            projection=projection,
+                        ),
                     )
                     typed_processed.add(rule_id)
                 eligible_rule_ids = []
@@ -1388,6 +1471,20 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             outcome.status,
                             outcome.reason_code,
                             outcome.fact_refs,
+                            display_facts=(
+                                _text_outcome_display_facts(
+                                    rule_id=rule_id,
+                                    status=outcome.status,
+                                    fact=next(
+                                        item
+                                        for item in text_facts
+                                        if item.rule_id == rule_id
+                                    ),
+                                    projection=projection,
+                                )
+                                if text_facts is not None
+                                else None
+                            ),
                         )
                         typed_processed.add(rule_id)
 
