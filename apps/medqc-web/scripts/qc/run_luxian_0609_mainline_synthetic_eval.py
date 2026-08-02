@@ -22,6 +22,20 @@ SYNTHETIC_CASES_PATH = DOCS_DIR / "luxian_0609_synthetic_cases_v1.json"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from app.services.luxian_0609.rule_contracts import (  # noqa: E402
+    load_luxian_0609_rule_contracts,
+)
+
+
+V1_VISIT_PREFIX = "LX0609_SYN_"
+V2_VISIT_PREFIX = "LX0609_0426_SYN_V2_"
+V3_VISIT_PREFIX = "LX0609_0426_SYN_V3_"
+SYNTHETIC_INSTITUTE_BY_VISIT_PREFIX = {
+    V1_VISIT_PREFIX: "LX0609_SYN",
+    V2_VISIT_PREFIX: "LX0609_0426_SYN",
+    V3_VISIT_PREFIX: "LX0609_0426_SYN_V3",
+}
+
 
 def load_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -138,9 +152,32 @@ def select_visit_ids(all_visit_ids: list[str], args: argparse.Namespace) -> list
     return selected
 
 
-def load_validation_matrix(path: Path) -> dict[str, dict[str, str]]:
+def defined_rule_ids() -> frozenset[str]:
+    return frozenset(
+        contract.rule_id
+        for contract in load_luxian_0609_rule_contracts()
+        if contract.phase_status != "pending_definition"
+    )
+
+
+def resolve_synthetic_institute_id(visit_id: str, configured: str = "") -> str:
+    explicit = safe_text(configured)
+    if explicit:
+        return explicit
+    for prefix, institute_id in SYNTHETIC_INSTITUTE_BY_VISIT_PREFIX.items():
+        if visit_id.startswith(prefix):
+            return institute_id
+    raise ValueError(
+        f"无法从 synthetic visit_id 识别院区：{visit_id}；请显式传入 --institute-id"
+    )
+
+
+def load_validation_matrix(
+    path: Path, *, defined_only: bool = False
+) -> dict[str, dict[str, str]]:
     """读取“每个规则只绑定一个病例”的 v3 黄金验收矩阵。"""
     grouped: dict[str, dict[str, str]] = {}
+    allowed_rule_ids = defined_rule_ids() if defined_only else None
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             visit_id = safe_text(row.get("visit_id"))
@@ -148,6 +185,8 @@ def load_validation_matrix(path: Path) -> dict[str, dict[str, str]]:
             expected_status = safe_text(row.get("expected_status"))
             if not visit_id or not rule_id or not expected_status:
                 raise ValueError("validation matrix contains an incomplete row")
+            if allowed_rule_ids is not None and rule_id not in allowed_rule_ids:
+                continue
             visit_rules = grouped.setdefault(visit_id, {})
             if rule_id in visit_rules:
                 raise ValueError(f"validation matrix duplicates {rule_id}")
@@ -353,7 +392,9 @@ async def run_all(args: argparse.Namespace) -> int:
         raise RuntimeError("DATABASE_URL 未配置，无法读取 PG 合成样本")
     validate_runtime_env()
     validation_matrix = (
-        load_validation_matrix(Path(args.validation_matrix))
+        load_validation_matrix(
+            Path(args.validation_matrix), defined_only=bool(args.defined_only)
+        )
         if args.validation_matrix
         else {}
     )
@@ -376,7 +417,9 @@ async def run_all(args: argparse.Namespace) -> int:
             output_dir=output_dir,
             schema=str(args.schema),
             use_execution_cache=not bool(args.no_cache),
-            institute_id=safe_text(args.institute_id),
+            institute_id=resolve_synthetic_institute_id(
+                visit_id, safe_text(args.institute_id)
+            ),
             rule_ids=list(validation_matrix.get(visit_id, {})) or None,
         )
         expected_statuses = validation_matrix.get(visit_id, {})
@@ -427,12 +470,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--visit-id", action="append", default=[], help="只运行指定 synthetic visit，可重复传入")
     parser.add_argument("--limit", type=int, default=0, help="按 visit_id 排序后只运行前 N 份")
     parser.add_argument("--schema", default="public")
-    parser.add_argument("--institute-id", default="LX0609_SYN")
+    parser.add_argument(
+        "--institute-id",
+        default="",
+        help="默认按 synthetic visit 前缀识别；仅非标准样本需要显式指定",
+    )
     parser.add_argument("--synthetic-cases", default=str(SYNTHETIC_CASES_PATH))
     parser.add_argument(
         "--validation-matrix",
         default="",
         help="按 CSV 中 visit_id/rule_id/expected_status 仅运行并核对绑定规则",
+    )
+    parser.add_argument(
+        "--defined-only",
+        action="store_true",
+        help="仅运行规则合同中非 pending_definition 的规则（当前为66条）",
     )
     parser.add_argument("--output-dir", default=str(RUNTIME_DIR))
     parser.add_argument("--env-file", action="append", default=[], help="加载本地 env 文件；不会打印密钥内容")
