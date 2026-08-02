@@ -1279,7 +1279,8 @@ def write_pool_and_items(
                     if any(row.get("visit_id") == case.target_visit_id for row in rows)
                 }
             )
-            golden_answers = [
+            configured_golden_answers = item.get("synthetic_golden_answers")
+            golden_answers = list(configured_golden_answers) if isinstance(configured_golden_answers, list) else [
                 {
                     "qc_point_id": rule_id,
                     "expected_status": "pending",

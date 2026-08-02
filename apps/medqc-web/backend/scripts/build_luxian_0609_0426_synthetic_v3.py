@@ -7,6 +7,7 @@ import json
 import sys
 from collections import Counter, defaultdict
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Sequence
@@ -159,6 +160,566 @@ def _assign_full_active_family_scope(cases: Sequence[Any]) -> list[Any]:
     ]
 
 
+_EXAM_LAB_RULE_IDS = tuple(
+    f"LX0609-{number:03d}" for number in (10, 11, 12, 14, 15, 52, 53)
+)
+_EXAM_LAB_SCENARIO_BY_INDEX = {
+    9: "all_compliant",
+    10: "all_missing",
+    11: "recorded_without_analysis_with_unhandled_critical",
+    12: "all_compliant_with_handled_critical",
+}
+
+
+def _exam_lab_expected_statuses(scenario: str) -> dict[str, str]:
+    if scenario == "all_missing":
+        return {
+            **{rule_id: "non_compliant" for rule_id in _EXAM_LAB_RULE_IDS[:5]},
+            "LX0609-052": "not_applicable",
+            "LX0609-053": "not_applicable",
+        }
+    if scenario == "recorded_without_analysis_with_unhandled_critical":
+        return {
+            "LX0609-010": "compliant",
+            "LX0609-011": "compliant",
+            "LX0609-012": "non_compliant",
+            "LX0609-014": "compliant",
+            "LX0609-015": "non_compliant",
+            "LX0609-052": "non_compliant",
+            "LX0609-053": "non_compliant",
+        }
+    critical_status = "compliant" if scenario == "all_compliant_with_handled_critical" else "not_applicable"
+    return {
+        **{rule_id: "compliant" for rule_id in _EXAM_LAB_RULE_IDS[:5]},
+        "LX0609-052": critical_status,
+        "LX0609-053": critical_status,
+    }
+
+
+def _replace_target_rows(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    *,
+    table_names: Sequence[str],
+    visit_ids: set[str],
+) -> None:
+    for table_name in table_names:
+        rows_by_table[table_name] = [
+            row
+            for row in rows_by_table.get(table_name, [])
+            if str(row.get("visit_id") or "") not in visit_ids
+        ]
+
+
+def _append_exam_lab_first_course(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+) -> None:
+    base = V2._case_base_row(case)
+    record_time = V2._dt_for_case(case, 0, 16, 0)
+    document_id = f"{case.target_visit_id}-first-course-controlled"
+    V2._append_row(
+        rows_by_table,
+        "first_course_record",
+        {
+            **base,
+            "document_id": document_id,
+            "document_title": "首次病程记录",
+            "document_status": "Submitted",
+            "submitter": "陈某医师",
+            "submitter_id": "DEID",
+            "submit_datetime": record_time,
+            "record_time": record_time,
+            "case_characteristic": "患者因腰痛伴右下肢麻木入院，活动后加重，查体腰椎活动受限，右下肢直腿抬高试验阳性。",
+            "diagnose_based_on": "结合症状及神经根受压体征，初步考虑腰椎间盘突出症。",
+            "differential_diagnosis": "需与腰椎管狭窄、周围神经病变及骨质疏松性压缩骨折鉴别。",
+            "treatment_plan": "予止痛、营养神经和康复指导，根据后续辅助检查调整诊疗计划。",
+            "record_content": "患者因腰痛伴右下肢麻木入院，当前先予对症治疗并动态观察神经系统体征。",
+            "physician_sign": "陈某医师",
+            "physician_sign_datetime": record_time,
+            "last_modified_datetime": record_time,
+            "update_time": record_time,
+        },
+    )
+    V2._append_row(
+        rows_by_table,
+        "first_course_record_diagnosis",
+        {
+            **base,
+            "document_id": document_id,
+            "diagnosis_id": f"{document_id}-diagnosis",
+            "diagnosis_main": "1",
+            "diagnosis_type": "初步诊断",
+            "diagnosis_no": "1",
+            "diagnosis_name": "腰椎间盘突出症",
+            "diagnosis_code": "M51.202",
+            "diagnosis_source": "controlled_exam_lab_v3",
+            "diagnosis_time": record_time,
+            "record_time": record_time,
+            "update_time": record_time,
+        },
+    )
+
+
+def _append_course_row(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+    *,
+    suffix: str,
+    record_time: datetime,
+    content: str,
+) -> None:
+    base = V2._case_base_row(case)
+    V2._append_row(
+        rows_by_table,
+        "daily_course_record",
+        {
+            **base,
+            "document_id": f"{case.target_visit_id}-course-{suffix}",
+            "document_title": "日常病程记录",
+            "document_status": "Submitted",
+            "submitter": "陈某医师",
+            "submitter_id": "DEID",
+            "submit_datetime": record_time,
+            "record_time": record_time,
+            "record_content": content,
+            "last_modified_datetime": record_time,
+            "update_time": record_time,
+        },
+    )
+
+
+def _append_exam_report_pair(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+) -> None:
+    base = V2._case_base_row(case)
+    exams = (
+        {
+            "suffix": "mri",
+            "exam_type": "MRI",
+            "exam_name": "腰椎MRI平扫",
+            "request_time": V2._dt_for_case(case, 1, 8, 0),
+            "exam_time": V2._dt_for_case(case, 1, 10, 0),
+            "report_time": V2._dt_for_case(case, 1, 14, 0),
+            "reason": "腰痛伴右下肢麻木，评估椎间盘及神经根受压情况。",
+            "findings": "腰椎生理曲度变直，L4/5椎间盘向右后方突出，硬膜囊及右侧神经根受压。",
+            "conclusion": "阳性：L4/5椎间盘突出并右侧神经根受压。",
+        },
+        {
+            "suffix": "ultrasound",
+            "exam_type": "超声",
+            "exam_name": "泌尿系彩色多普勒超声",
+            "request_time": V2._dt_for_case(case, 1, 8, 20),
+            "exam_time": V2._dt_for_case(case, 1, 11, 0),
+            "report_time": V2._dt_for_case(case, 1, 13, 0),
+            "reason": "排除泌尿系结石及梗阻相关腰痛。",
+            "findings": "双肾形态大小正常，集合系统未见分离，输尿管未见明显扩张。",
+            "conclusion": "双肾及输尿管未见明显异常。",
+        },
+    )
+    for number, exam in enumerate(exams, start=1):
+        exam_id = f"EX-V3-{case.target_index:03d}-{number:02d}"
+        V2._append_row(
+            rows_by_table,
+            "exam_master",
+            {
+                **base,
+                "exam_id": exam_id,
+                "order_id": f"ORDER-{exam_id}",
+                "exam_type": exam["exam_type"],
+                "exam_reason": exam["reason"],
+                "clinic_sympton": "腰痛伴右下肢麻木",
+                "request_dept": base["dept_name"],
+                "request_physician": "陈某医师",
+                "performed_dept": "医学影像科",
+                "request_time": exam["request_time"],
+                "schedule_time": exam["exam_time"],
+                "received_time": exam["exam_time"],
+                "exam_time": exam["exam_time"],
+                "report_time": exam["report_time"],
+                "reporter": "影像医师甲",
+                "verifier": "影像医师乙",
+                "exam_result_status": "Final",
+                "record_content": f"{exam['exam_name']}申请：{exam['reason']}",
+                "record_time": exam["request_time"],
+                "last_modified_time": exam["report_time"],
+                "update_time": exam["report_time"],
+            },
+        )
+        V2._append_row(
+            rows_by_table,
+            "exam_item_report",
+            {
+                **base,
+                "document_id": f"{case.target_visit_id}-exam-{exam['suffix']}",
+                "document_title": f"{exam['exam_name']}检查报告",
+                "document_status": "Submitted",
+                "submitter": "影像医师乙",
+                "submitter_id": "DEID-IMG",
+                "submit_datetime": exam["report_time"],
+                "record_time": exam["report_time"],
+                "exam_no": exam_id,
+                "exam_id": exam_id,
+                "item_no": "1",
+                "item_id": f"ITEM-{exam_id}",
+                "item_code": exam["suffix"].upper(),
+                "item_name": exam["exam_name"],
+                "exam_name": exam["exam_name"],
+                "exam_item_name": exam["exam_name"],
+                "exam_type": exam["exam_type"],
+                "exam_result": exam["findings"],
+                "exam_findings": exam["findings"],
+                "exam_impression": exam["conclusion"],
+                "exam_conclusion": exam["conclusion"],
+                "record_content": f"检查所见：{exam['findings']}\n诊断意见：{exam['conclusion']}",
+                "report_time": exam["report_time"],
+                "last_modified_datetime": exam["report_time"],
+                "update_time": exam["report_time"],
+            },
+        )
+
+
+def _lab_panels(case: Any, scenario: str) -> tuple[dict[str, Any], ...]:
+    wbc = ("1.0", "PL") if scenario == "recorded_without_analysis_with_unhandled_critical" else ("6.8", "")
+    potassium = ("6.8", "PH") if scenario == "all_compliant_with_handled_critical" else ("4.2", "")
+    return (
+        {
+            "subject": "血常规检验报告",
+            "specimen": "静脉全血",
+            "request_time": V2._dt_for_case(case, 0, 8, 0),
+            "collection_time": V2._dt_for_case(case, 0, 8, 20),
+            "report_time": V2._dt_for_case(case, 0, 13, 0),
+            "items": (
+                ("WBC", "白细胞计数", *wbc, "3.5-9.5", "10^9/L"),
+                ("RBC", "红细胞计数", "4.32", "", "3.8-5.1", "10^12/L"),
+                ("HGB", "血红蛋白", "128", "", "115-150", "g/L"),
+                ("PLT", "血小板计数", "226", "", "125-350", "10^9/L"),
+                ("NEUT", "中性粒细胞百分比", "68.2", "", "40-75", "%"),
+                ("LYMPH", "淋巴细胞百分比", "23.6", "", "20-50", "%"),
+            ),
+        },
+        {
+            "subject": "肝肾功能及电解质检验报告",
+            "specimen": "血清",
+            "request_time": V2._dt_for_case(case, 0, 8, 0),
+            "collection_time": V2._dt_for_case(case, 0, 8, 25),
+            "report_time": V2._dt_for_case(case, 0, 13, 30),
+            "items": (
+                ("ALT", "丙氨酸氨基转移酶", "35", "", "7-40", "U/L"),
+                ("AST", "天门冬氨酸氨基转移酶", "28", "", "13-35", "U/L"),
+                ("ALB", "白蛋白", "38.5", "", "35-55", "g/L"),
+                ("CREA", "肌酐", "72", "", "41-81", "μmol/L"),
+                ("UREA", "尿素", "5.6", "", "2.6-7.5", "mmol/L"),
+                ("K", "钾", *potassium, "3.5-5.3", "mmol/L"),
+                ("NA", "钠", "140", "", "137-147", "mmol/L"),
+                ("GLU", "葡萄糖", "5.4", "", "3.9-6.1", "mmol/L"),
+            ),
+        },
+        {
+            "subject": "凝血功能检验报告",
+            "specimen": "枸橼酸钠抗凝血浆",
+            "request_time": V2._dt_for_case(case, 0, 8, 0),
+            "collection_time": V2._dt_for_case(case, 0, 8, 30),
+            "report_time": V2._dt_for_case(case, 0, 14, 0),
+            "items": (
+                ("PT", "凝血酶原时间", "12.1", "", "9.8-13.8", "s"),
+                ("APTT", "活化部分凝血活酶时间", "31.0", "", "25-37", "s"),
+                ("INR", "国际标准化比值", "1.02", "", "0.8-1.2", ""),
+                ("FIB", "纤维蛋白原", "3.2", "", "2.0-4.0", "g/L"),
+                ("DD", "D-二聚体", "0.82", "H", "0-0.55", "mg/L"),
+            ),
+        },
+        {
+            "subject": "尿培养及药敏检验报告",
+            "specimen": "中段尿",
+            "request_time": V2._dt_for_case(case, 0, 9, 0),
+            "collection_time": V2._dt_for_case(case, 0, 9, 30),
+            "report_time": V2._dt_for_case(case, 2, 10, 30),
+            "items": (
+                ("CULTURE", "培养结果", "培养阳性：检出大肠埃希菌", "阳性", "", ""),
+                ("CFU", "菌落计数", ">10^5", "H", "<10^3", "CFU/mL"),
+                ("CRO", "头孢曲松", "敏感", "S", "", ""),
+                ("LEV", "左氧氟沙星", "耐药", "R", "", ""),
+                ("MEM", "美罗培南", "敏感", "S", "", ""),
+                ("TZP", "哌拉西林/他唑巴坦", "敏感", "S", "", ""),
+            ),
+        },
+    )
+
+
+def _append_lab_reports(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+    scenario: str,
+) -> None:
+    base = V2._case_base_row(case)
+    for panel_index, panel in enumerate(_lab_panels(case, scenario), start=1):
+        test_id = f"LAB-V3-{case.target_index:03d}-{panel_index:02d}"
+        V2._append_row(
+            rows_by_table,
+            "labtest_master",
+            {
+                **base,
+                "test_id": test_id,
+                "order_id": f"ORDER-{test_id}",
+                "labtest_subject": panel["subject"],
+                "labtest_cause": "入院评估及病情复核",
+                "specimen": panel["specimen"],
+                "request_dept": base["dept_name"],
+                "request_physician": "陈某医师",
+                "request_datetime": panel["request_time"],
+                "report_datetime": panel["report_time"],
+                "reporter": "检验医师甲",
+                "verifier": "检验医师乙",
+                "labtest_result_status": "Final",
+                "record_content": f"{panel['subject']}，标本：{panel['specimen']}；申请时间：{panel['request_time']}；采样时间：{panel['collection_time']}；报告时间：{panel['report_time']}；共{len(panel['items'])}项。",
+                "last_modified_datetime": panel["report_time"],
+                "update_time": panel["report_time"],
+            },
+        )
+        for item_index, (code, name, result, flag, reference, unit) in enumerate(panel["items"], start=1):
+            V2._append_row(
+                rows_by_table,
+                "labtest_item_report",
+                {
+                    **base,
+                    "document_id": f"{test_id}-{code}",
+                    "document_title": panel["subject"],
+                    "document_status": "Submitted",
+                    "submitter": "检验医师乙",
+                    "submitter_id": "DEID-LAB",
+                    "submit_datetime": panel["report_time"],
+                    "record_time": panel["report_time"],
+                    "test_no": test_id,
+                    "test_id": test_id,
+                    "item_no": str(item_index),
+                    "item_id": f"{test_id}-{item_index:02d}",
+                    "item_code": code,
+                    "item_name": name,
+                    "item_abbreviation": code,
+                    "result": result,
+                    "unit": unit,
+                    "abnormal_indicator": flag,
+                    "reference_range": reference,
+                    "record_content": f"{name}：{result}{(' ' + unit) if unit else ''}；提示：{flag or '正常'}；参考范围：{reference or '-'}",
+                    "report_time": panel["report_time"],
+                    "last_modified_datetime": panel["report_time"],
+                    "update_time": panel["report_time"],
+                },
+            )
+
+
+def _append_exam_lab_orders(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+) -> None:
+    base = V2._case_base_row(case)
+    for suffix, name, prescribed_time in (
+        ("mri", "腰椎MRI平扫", V2._dt_for_case(case, 1, 8, 0)),
+        ("culture", "尿培养及药敏", V2._dt_for_case(case, 1, 8, 10)),
+    ):
+        V2._append_row(
+            rows_by_table,
+            "inpat_nondrug_order",
+            {
+                **base,
+                "order_id": f"{case.target_visit_id}-order-{suffix}",
+                "order_type": "检查检验",
+                "order_name": name,
+                "quantity": "1",
+                "quantity_unit": "次",
+                "frequency": "一次",
+                "prescribed_datetime": prescribed_time,
+                "prescribed_doctor": "陈某医师",
+                "order_status": "执行",
+                "record_content": f"检查检验医嘱：{name}",
+                "last_modified_datetime": prescribed_time,
+                "update_time": prescribed_time,
+            },
+        )
+
+
+def _append_exam_lab_scenario_courses(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+    scenario: str,
+) -> None:
+    if scenario == "all_missing":
+        return
+    _append_course_row(
+        rows_by_table,
+        case,
+        suffix="pre-exam-reason",
+        record_time=V2._dt_for_case(case, 1, 7, 0),
+        content="患者腰痛伴右下肢放射性麻木，为明确腰椎神经受压部位及程度，拟行腰椎MRI检查。",
+    )
+    if scenario == "recorded_without_analysis_with_unhandled_critical":
+        _append_course_row(
+            rows_by_table,
+            case,
+            suffix="exam-result-only",
+            record_time=V2._dt_for_case(case, 1, 18, 0),
+            content="已查看腰椎MRI报告，报告提示L4/5椎间盘突出并右侧神经根受压。",
+        )
+        _append_course_row(
+            rows_by_table,
+            case,
+            suffix="culture-result-only",
+            record_time=V2._dt_for_case(case, 2, 15, 0),
+            content="已查看尿培养报告，结果为大肠埃希菌阳性，药敏结果已回报。",
+        )
+        return
+    _append_course_row(
+        rows_by_table,
+        case,
+        suffix="exam-analysis",
+        record_time=V2._dt_for_case(case, 1, 18, 0),
+        content="已查看腰椎MRI报告，L4/5椎间盘突出并右侧神经根受压，与右下肢放射痛及直腿抬高试验阳性相符，结合症状分析考虑当前神经根受压明确，继续营养神经并请脊柱专科评估。",
+    )
+    _append_course_row(
+        rows_by_table,
+        case,
+        suffix="culture-analysis",
+        record_time=V2._dt_for_case(case, 2, 15, 0),
+        content="已查看尿培养及药敏报告，大肠埃希菌阳性，对头孢曲松敏感、左氧氟沙星耐药；结合尿路刺激征考虑泌尿系感染，根据药敏停用左氧氟沙星并改用头孢曲松。",
+    )
+
+
+def _append_handled_critical_value(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: Any,
+) -> None:
+    base = V2._case_base_row(case)
+    record_time = V2._dt_for_case(case, 0, 15, 30)
+    V2._append_row(
+        rows_by_table,
+        "crisis_value_record",
+        {
+            **base,
+            "document_id": f"{case.target_visit_id}-critical-value-k",
+            "document_title": "危急值处理记录",
+            "document_status": "Submitted",
+            "submitter": "陈某医师",
+            "submitter_id": "DEID",
+            "submit_datetime": record_time,
+            "record_datetime": record_time,
+            "record_time": record_time,
+            "dept_name": base["dept_name"],
+            "record_content": "14:00接检验科危急值报告：血钾6.8mmol/L（PH）。立即复核标本并行心电监护，停用补钾药物，予降钾处理，通知上级医师，计划2小时后复查电解质。",
+            "last_modified_datetime": record_time,
+            "update_time": record_time,
+        },
+    )
+
+
+def upgrade_exam_lab_evidence(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    cases: Sequence[Any],
+) -> dict[str, Any]:
+    target_cases = [case for case in cases if case.family == "检查检验"]
+    visit_ids = {case.target_visit_id for case in target_cases}
+    _replace_target_rows(
+        rows_by_table,
+        table_names=(
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "daily_course_record",
+            "senior_course_record",
+            "crisis_value_record",
+            "first_course_record",
+            "first_course_record_diagnosis",
+        ),
+        visit_ids=visit_ids,
+    )
+    rows_by_table["inpat_nondrug_order"] = [
+        row
+        for row in rows_by_table.get("inpat_nondrug_order", [])
+        if str(row.get("visit_id") or "") not in visit_ids
+        or not any(
+            marker in str(row.get("order_name") or "").upper()
+            for marker in ("CT", "MRI", "磁共振", "核磁", "培养", "药敏")
+        )
+    ]
+
+    scenario_counts: Counter[str] = Counter()
+    for case in target_cases:
+        scenario = _EXAM_LAB_SCENARIO_BY_INDEX.get(
+            int(case.target_index), "all_compliant"
+        )
+        scenario_counts[scenario] += 1
+        _append_exam_lab_first_course(rows_by_table, case)
+        _append_exam_lab_orders(rows_by_table, case)
+        _append_exam_report_pair(rows_by_table, case)
+        _append_lab_reports(rows_by_table, case, scenario)
+        _append_exam_lab_scenario_courses(rows_by_table, case, scenario)
+        if scenario == "all_compliant_with_handled_critical":
+            _append_handled_critical_value(rows_by_table, case)
+        expected_statuses = _exam_lab_expected_statuses(scenario)
+        case.source_item["synthetic_golden_answers"] = [
+            {
+                "qc_point_id": rule_id,
+                "expected_status": expected_statuses[rule_id],
+                "expected_hit": expected_statuses[rule_id] == "non_compliant",
+                "review_status": "pending",
+                "human_reason": f"v3检查检验受控场景：{scenario}",
+                "trigger_facts": [scenario],
+            }
+            for rule_id in _EXAM_LAB_RULE_IDS
+        ]
+
+    return {
+        "case_count": len(target_cases),
+        "scenario_counts": dict(scenario_counts),
+        "exam_master_count": sum(
+            1 for row in rows_by_table.get("exam_master", []) if row.get("visit_id") in visit_ids
+        ),
+        "exam_report_count": sum(
+            1 for row in rows_by_table.get("exam_item_report", []) if row.get("visit_id") in visit_ids
+        ),
+        "lab_master_count": sum(
+            1 for row in rows_by_table.get("labtest_master", []) if row.get("visit_id") in visit_ids
+        ),
+        "lab_item_count": sum(
+            1 for row in rows_by_table.get("labtest_item_report", []) if row.get("visit_id") in visit_ids
+        ),
+        "critical_value_count": sum(
+            1
+            for row in rows_by_table.get("labtest_item_report", [])
+            if row.get("visit_id") in visit_ids and row.get("abnormal_indicator") in {"PL", "PH"}
+        ),
+        "critical_disposition_count": sum(
+            1 for row in rows_by_table.get("crisis_value_record", []) if row.get("visit_id") in visit_ids
+        ),
+    }
+
+
+def refresh_exam_lab_supplement_audit(
+    clone_audit: dict[str, Any],
+    cases: Sequence[Any],
+) -> None:
+    """让样本项审计只描述 v3 当前真实写入的检查检验证据。"""
+    target_cases = [case for case in cases if int(case.target_index) in _EXAM_LAB_SCENARIO_BY_INDEX]
+    target_visit_ids = {case.target_visit_id for case in target_cases}
+    retained = [
+        dict(item)
+        for item in clone_audit.get("supplemental_evidence_rows") or []
+        if str(item.get("target_visit_id") or "") not in target_visit_ids
+    ]
+    for case in target_cases:
+        retained.append(
+            {
+                "target_visit_id": case.target_visit_id,
+                "source_visit_id": str(case.source_item.get("matched_visit_id") or ""),
+                "rule_family": case.family,
+                "table": "exam_item_report+labtest_item_report",
+                "reason": "v3_controlled_exam_lab_report_set",
+            }
+        )
+    clone_audit["supplemental_evidence_rows"] = retained
+
+
 def build_coverage_ledger(
     cases: Sequence[Any],
     entries: Sequence[Luxian0609RuleMasterEntry] | None = None,
@@ -285,6 +846,9 @@ def _render_report(
             f"- 禁止词命中：`{json.dumps(forbidden_hits, ensure_ascii=False)}`",
             f"- 空壳核心文书过滤：{len(clone_audit.get('skipped_shell_documents') or [])} 条",
             f"- 派生证据补全：{len(clone_audit.get('supplemental_evidence_rows') or [])} 条",
+            f"- 检查报告：{int((clone_audit.get('exam_lab_upgrade') or {}).get('exam_report_count') or 0)} 份",
+            f"- 检验报告组：{int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_master_count') or 0)} 组，明细 {int((clone_audit.get('exam_lab_upgrade') or {}).get('lab_item_count') or 0)} 项",
+            f"- 危急值场景：{int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_value_count') or 0)} 个，其中已处置 {int((clone_audit.get('exam_lab_upgrade') or {}).get('critical_disposition_count') or 0)} 个",
             f"- 来源配额缺口：`{json.dumps(selection_summary.get('source_gaps') or {}, ensure_ascii=False)}`",
             "",
             "## 使用限制",
@@ -324,6 +888,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     cases = _assign_full_active_family_scope(raw_cases)
     rows_by_table, clone_audit = V2.build_clone_rows(cases)
+    clone_audit["exam_lab_upgrade"] = upgrade_exam_lab_evidence(rows_by_table, cases)
+    refresh_exam_lab_supplement_audit(clone_audit, cases)
     forbidden_hits = V2.forbidden_token_hits(rows_by_table)
     ledger = build_coverage_ledger(cases)
     write_summary = None

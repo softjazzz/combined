@@ -5,6 +5,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from app.services.luxian_0609.exam_lab_fact_extraction import (
+    build_exam_lab_text_projection,
+)
+
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
@@ -94,3 +98,97 @@ def test_v3_compatibility_configuration_keeps_v2_logic_but_uses_v3_identity() ->
             for rule_id in rule_ids
         }
     ) == 63
+
+
+def test_v3_exam_lab_upgrade_builds_rich_grouped_reports_with_complete_links() -> None:
+    module._configure_v2_compatibility()
+    cases = [_case(index, "检查检验") for index in range(9, 13)]
+    rows_by_table: dict[str, list[dict]] = {}
+
+    audit = module.upgrade_exam_lab_evidence(rows_by_table, cases)
+
+    assert audit["case_count"] == 4
+    assert audit["exam_master_count"] == 8
+    assert audit["exam_report_count"] == 8
+    assert audit["lab_master_count"] == 16
+    assert audit["lab_item_count"] >= 100
+    exam_ids = {row["exam_id"] for row in rows_by_table["exam_master"]}
+    assert {row["exam_id"] for row in rows_by_table["exam_item_report"]} == exam_ids
+    test_ids = {row["test_id"] for row in rows_by_table["labtest_master"]}
+    assert {row["test_id"] for row in rows_by_table["labtest_item_report"]} == test_ids
+    assert all(row.get("report_time") for row in rows_by_table["exam_item_report"])
+    assert all(row.get("report_time") for row in rows_by_table["labtest_item_report"])
+    assert all(
+        row["request_datetime"] < row["report_datetime"]
+        for row in rows_by_table["labtest_master"]
+    )
+
+    for case in cases:
+        case_rows = {
+            table_name: [
+                row for row in rows if row.get("visit_id") == case.target_visit_id
+            ]
+            for table_name, rows in rows_by_table.items()
+        }
+        projection = build_exam_lab_text_projection(rows_by_source=case_rows)
+        assert projection.imaging_event is not None
+        assert projection.imaging_event.positive_hint == "positive"
+        assert not projection.imaging_event.conflict_roles
+        assert projection.culture_event is not None
+        assert projection.culture_event.positive_hint == "positive"
+        assert not projection.culture_event.conflict_roles
+
+
+def test_v3_exam_lab_upgrade_contains_paired_course_and_critical_value_scenarios() -> None:
+    module._configure_v2_compatibility()
+    cases = [_case(index, "检查检验") for index in range(9, 13)]
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_exam_lab_evidence(rows_by_table, cases)
+
+    course_texts = {
+        visit_id: "\n".join(
+            row["record_content"]
+            for row in rows_by_table["daily_course_record"]
+            if row["visit_id"] == visit_id
+        )
+        for visit_id in (case.target_visit_id for case in cases)
+    }
+    assert "为明确腰椎神经受压" in course_texts[cases[0].target_visit_id]
+    assert "结合症状分析" in course_texts[cases[0].target_visit_id]
+    assert course_texts[cases[1].target_visit_id] == ""
+    assert "已查看腰椎MRI报告" in course_texts[cases[2].target_visit_id]
+    assert "结合症状分析" not in course_texts[cases[2].target_visit_id]
+    critical_flags = {
+        row["visit_id"]: row["abnormal_indicator"]
+        for row in rows_by_table["labtest_item_report"]
+        if row.get("abnormal_indicator") in {"PL", "PH"}
+    }
+    assert critical_flags == {
+        cases[2].target_visit_id: "PL",
+        cases[3].target_visit_id: "PH",
+    }
+    assert [row["visit_id"] for row in rows_by_table["crisis_value_record"]] == [
+        cases[3].target_visit_id
+    ]
+
+
+def test_v3_exam_lab_upgrade_attaches_reviewable_expected_results() -> None:
+    module._configure_v2_compatibility()
+    cases = [_case(index, "检查检验") for index in range(9, 13)]
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_exam_lab_evidence(rows_by_table, cases)
+
+    expectations = {
+        case.target_visit_id: {
+            row["qc_point_id"]: row["expected_status"]
+            for row in case.source_item["synthetic_golden_answers"]
+        }
+        for case in cases
+    }
+    assert expectations[cases[0].target_visit_id]["LX0609-010"] == "compliant"
+    assert expectations[cases[1].target_visit_id]["LX0609-010"] == "non_compliant"
+    assert expectations[cases[2].target_visit_id]["LX0609-012"] == "non_compliant"
+    assert expectations[cases[2].target_visit_id]["LX0609-052"] == "non_compliant"
+    assert expectations[cases[3].target_visit_id]["LX0609-052"] == "compliant"
