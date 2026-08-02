@@ -148,6 +148,7 @@ EXTENDED_SOURCE_TABLES: tuple[str, ...] = (
     "postsurg_firstcourse_record",
     "surgery_application",
     "surgery_inform_consent",
+    "consent_form",
     "surgery_inventory_record",
     "preane_surveil_record",
     "postane_surveil_record",

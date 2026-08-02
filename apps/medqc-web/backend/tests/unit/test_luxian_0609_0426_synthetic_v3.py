@@ -228,3 +228,33 @@ def test_v3_full_validation_upgrade_assigns_all_75_rules_without_pending_goldens
         "formal": 67,
         "provisional": 8,
     }
+
+
+def test_transfusion_case_uses_typed_consent_form() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    transfusion_case = next(case for case in cases if case.target_index == 23)
+
+    typed_rows = [
+        row
+        for row in rows_by_table.get("consent_form", [])
+        if row.get("visit_id") == transfusion_case.target_visit_id
+    ]
+    assert len(typed_rows) == 1
+    consent = typed_rows[0]
+    assert consent["document_title"] == "输血知情同意书"
+    assert consent["consent_type"] == "blood_transfusion"
+    assert consent["patient_sign"]
+    assert consent["physician_sign"]
+    assert consent["patient_sign_datetime"]
+    assert consent["physician_sign_datetime"]
+
+    fake_rows = [
+        row
+        for row in rows_by_table.get("surgery_inform_consent", [])
+        if row.get("visit_id") == transfusion_case.target_visit_id
+        and row.get("document_title") == "输血知情同意书"
+    ]
+    assert fake_rows == []

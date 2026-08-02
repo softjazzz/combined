@@ -342,14 +342,22 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
 
 
 def _build_transfusion(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any) -> list[str]:
-    _clear_visit_rows(rows, case, "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "surgery_inform_consent")
+    _clear_visit_rows(rows, case, "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
     refs = [_append_registration(rows, case, v2)]
     request_time = v2._dt_for_case(case, 1, 10)
     transfusion_time = v2._dt_for_case(case, 1, 14)
     application_id = f"{case.target_visit_id}-blood-app"
     v2._append_row(rows, "blood_application", {**v2._case_base_row(case), "application_id": application_id, "request_datetime": request_time, "transfuse_variety": "悬浮红细胞", "transfuse_volume": 2, "transfuse_volume_unit": "U", "physician_name": "陈某医师", "record_content": "因血红蛋白65g/L申请输注悬浮红细胞2U。"})
     refs.append(application_id)
-    refs.append(_append_document(rows, case, v2, table_name="surgery_inform_consent", suffix="blood-consent", title="输血知情同意书", record_time=v2._dt_for_case(case, 1, 9), content="已说明输血目的、风险和替代方案，患者及医生签名完整。", patient_sign="已签名", surgeon_sign="陈某医师"))
+    consent_time = v2._dt_for_case(case, 1, 9)
+    refs.append(_append_document(
+        rows, case, v2, table_name="consent_form", suffix="blood-consent",
+        title="输血知情同意书", record_time=consent_time,
+        content="输血指征为重度贫血，拟输注悬浮红细胞2U；已说明输血目的、风险、可能不良反应和替代方案，患者同意输血。",
+        consent_type="blood_transfusion", patient_sign="患者已签名",
+        physician_sign="陈某医师", patient_sign_datetime=consent_time,
+        physician_sign_datetime=consent_time,
+    ))
     test_id = f"{case.target_visit_id}-pretransfusion-nine"
     v2._append_row(rows, "labtest_master", {**v2._case_base_row(case), "test_id": test_id, "labtest_subject": "输血前九项", "specimen": "静脉血", "request_datetime": v2._dt_for_case(case, 0, 10), "report_datetime": v2._dt_for_case(case, 1, 8), "record_content": "输血前九项检查"})
     nine = (("HBsAg","乙肝表面抗原","阴性"),("HBsAb","乙肝表面抗体","阳性"),("HBeAg","乙肝e抗原","阴性"),("HBeAb","乙肝e抗体","阴性"),("HBcAb","乙肝核心抗体","阴性"),("HIV","艾滋抗体","阴性"),("HCV","丙肝抗体","阴性"),("TP","梅毒抗体","阴性"),("ALT","谷丙转氨酶","18"))
