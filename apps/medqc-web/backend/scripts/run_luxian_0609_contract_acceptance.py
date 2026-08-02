@@ -73,6 +73,41 @@ _APPLICABILITY_TERMS = (
     "有创操作",
 )
 
+# v3 病例用于跨文书端到端场景；互斥状态由现有 Native 单规则用例提供受控夹具。
+# 这里仅登记真实断言最终状态的测试节点，不以“存在测试文件”推断覆盖。
+_NATIVE_FIXTURE_SPECS = (
+    ("LX0609-003", "non_compliant", "test_luxian_0609_native_surgery_gate_execution.py", "test_typed_003_preserves_time_and_source_boundaries"),
+    ("LX0609-007", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_course_007_typed_truth_table_is_python_only_and_fail_closed"),
+    ("LX0609-008", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_course_008_009_typed_natural_day_truth_table_is_python_only"),
+    ("LX0609-009", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_course_008_009_typed_natural_day_truth_table_is_python_only"),
+    ("LX0609-016", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_typed_016_distinguishes_absent_unavailable_and_structured_comparable_bodies"),
+    ("LX0609-018", "non_compliant", "test_luxian_0609_native_course_quality_execution.py", "test_typed_018_reports_length_and_missing_diagnosis_as_separate_criteria"),
+    ("LX0609-025", "non_compliant", "test_luxian_0609_native_surgery_gate_execution.py", "test_025_actual_implant_field_contract_is_python_owned"),
+    ("LX0609-029", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_llm"),
+    ("LX0609-030", "non_compliant", "test_luxian_0609_shadow_execution.py", "test_real_nonzero_030_order_trigger_target_empty_is_non_compliant"),
+    ("LX0609-031", "non_compliant", "test_luxian_0609_native_surgery_gate_execution.py", "test_031_rejects_non_surgeon_signature"),
+    ("LX0609-032", "non_compliant", "test_luxian_0609_native_execution.py", "test_native_032_formal_surgery_record_with_shell_safecheck_is_non_compliant"),
+    ("LX0609-033", "non_compliant", "test_luxian_0609_native_surgery_gate_execution.py", "test_033_complete_readiness_with_empty_source_is_non_compliant_without_model"),
+    ("LX0609-034", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"),
+    ("LX0609-035", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_035_incomplete_consent_is_non_compliant_with_exact_missing_fields"),
+    ("LX0609-036", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"),
+    ("LX0609-038", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record"),
+    ("LX0609-039", "non_compliant", "test_luxian_0609_native_surgery_document_execution.py", "test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion"),
+    ("LX0609-040", "non_compliant", "test_luxian_0609_native_mdt_execution.py", "test_missing_mdt_document_is_programmatic_non_compliant"),
+    ("LX0609-050", "compliant", "test_luxian_0609_native_extended_document_execution.py", "test_050_uncertain_diagnosis_with_discussion_is_compliant"),
+    ("LX0609-051", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_051_death_discussion_uses_seven_day_threshold"),
+    ("LX0609-060", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_060_death_patient_without_death_record_is_non_compliant"),
+    ("LX0609-061", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_061_discharge_record_uses_24_hour_threshold"),
+    ("LX0609-062", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_062_incomplete_discharge_medication_is_non_compliant"),
+    ("LX0609-063", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_063_mismatched_discharge_diagnoses_are_non_compliant"),
+    ("LX0609-064", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_064_missing_postoperative_day_is_non_compliant"),
+    ("LX0609-065", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_065_missing_postoperative_senior_round_is_non_compliant"),
+    ("LX0609-066", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_066_missing_postoperative_first_course_is_non_compliant"),
+    ("LX0609-067", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_067_missing_predischarge_course_is_non_compliant"),
+    ("LX0609-068", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_068_missing_senior_discharge_opinion_exposes_checked_dates"),
+    ("LX0609-070", "non_compliant", "test_luxian_0609_native_extended_document_execution.py", "test_070_rejects_nine_tests_reported_after_transfusion"),
+)
+
 
 def _runtime_manifest() -> dict[str, Any]:
     return build_runtime_manifest(
@@ -106,7 +141,36 @@ def _fixture_bindings() -> dict[str, list[dict[str, str]]]:
     bindings: dict[str, list[dict[str, str]]] = {}
     for binding in build_acceptance_fixture_bindings():
         bindings.setdefault(binding["rule_id"], []).append(binding)
+    for rule_id, expected_status, filename, test_name in _NATIVE_FIXTURE_SPECS:
+        bindings.setdefault(rule_id, []).append(
+            {
+                "rule_id": rule_id,
+                "expected_status": expected_status,
+                "fixture_ref": f"native-unit:tests/unit/{filename}::{test_name}",
+            }
+        )
     return bindings
+
+
+def _validate_native_fixture_ref(fixture_ref: str) -> str | None:
+    if not fixture_ref.startswith("native-unit:"):
+        return None
+    node_id = fixture_ref.removeprefix("native-unit:")
+    relative_path, separator, test_name = node_id.partition("::")
+    if not separator or not relative_path or not test_name:
+        return f"invalid native fixture ref: {fixture_ref}"
+    test_path = (BACKEND_ROOT / relative_path).resolve()
+    try:
+        test_path.relative_to(BACKEND_ROOT.resolve())
+    except ValueError:
+        return f"native fixture escapes backend root: {fixture_ref}"
+    if not test_path.is_file():
+        return f"native fixture file does not exist: {fixture_ref}"
+    function_name = test_name.split("[", 1)[0]
+    pattern = re.compile(rf"^(?:async\s+)?def\s+{re.escape(function_name)}\s*\(", re.MULTILINE)
+    if not pattern.search(test_path.read_text(encoding="utf-8")):
+        return f"native fixture test does not exist: {fixture_ref}"
+    return None
 
 
 def _slot(*, required: bool, phase_status: str) -> dict[str, Any]:
@@ -286,6 +350,10 @@ def validate_acceptance_matrix(
             if coverage != "covered" and refs:
                 errors.append(f"{rule_id}/{slot_key} has fixture without coverage")
             slot_counts[coverage] += 1
+            for fixture_ref in refs:
+                fixture_error = _validate_native_fixture_ref(str(fixture_ref))
+                if fixture_error:
+                    errors.append(fixture_error)
             fixture_refs.extend(str(ref) for ref in refs)
         for boundary in (rule.get("time_boundaries") or {}).values():
             boundary_counts[str(boundary.get("coverage") or "")] += 1
@@ -343,7 +411,7 @@ def render_report(payload: Mapping[str, Any], summary: Mapping[str, Any]) -> str
         "## 当前结论",
         "",
         f"- 规则总数：{summary['rule_count']}（正式 67，临时 8）",
-        f"- 已绑定 v3 fixture：{summary['bound_fixture_count']} 个规则状态槽位",
+        f"- 已绑定受控 fixture：{summary['bound_fixture_count']} 个规则状态引用",
         f"- 语义规则：{summary['semantic_rule_count']} 条",
         f"- 当前定义合同仍为 Pending：{summary['pending_definition_rule_count']} 条",
         "- 当前只统计真实生成的 Golden 状态；未绑定槽位继续显示待补，不能据此宣称 75 条已经完整验收。",
@@ -375,7 +443,7 @@ def render_report(payload: Mapping[str, Any], summary: Mapping[str, Any]) -> str
                 "",
                 f"## {title}",
                 "",
-                "| 规则与质控点 | 当前 v3 Golden | 合规槽 | 问题槽 | 不适用槽 | 数据不足槽 | 定义阶段 |",
+                "| 规则与质控点 | 当前受控 fixture | 合规槽 | 问题槽 | 不适用槽 | 数据不足槽 | 定义阶段 |",
                 "| --- | --- | --- | --- | --- | --- | --- |",
             ]
         )

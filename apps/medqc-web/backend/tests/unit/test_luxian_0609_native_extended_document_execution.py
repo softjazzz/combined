@@ -723,6 +723,168 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
 
 
 @pytest.mark.asyncio
+async def test_050_uncertain_diagnosis_with_discussion_is_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-050",
+        {
+            "inpat_registration": ({"admission_datetime": "2026-06-01 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": "入院第7天，发热原因待查，目前诊断仍不明确。",
+            },),
+            "diffcase_discussion_record": ({
+                "record_time": "2026-06-08 10:00:00",
+                "record_content": "疑难病例讨论已完成。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-050"] == {
+        "verification_kind": "uncertain_diagnosis_discussion_check",
+        "admission_time": "2026-06-01 08:00:00",
+        "uncertain_record_times": ["2026-06-08 09:00:00"],
+        "discussion_count": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_062_incomplete_discharge_medication_is_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-062",
+        {
+            "discharge_record": ({
+                "record_time": "2026-06-09 09:00:00",
+                "discharge_medications": [{"drug_name": "阿莫西林", "dose": "0.5g"}],
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-062"]["missing_fields"] == [
+        "duration",
+        "route",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-063",
+        {
+            "discharge_record": ({"record_time": "2026-06-09 09:00:00"},),
+            "diagnosis": (
+                {"diagnosis_no": 1, "diagnosis_name": "社区获得性肺炎"},
+                {"diagnosis_no": 2, "diagnosis_name": "高血压病"},
+            ),
+            "discharge_record_diagnosis": (
+                {"diagnosis_no": 1, "diagnosis_name": "高血压病"},
+                {"diagnosis_no": 2, "diagnosis_name": "社区获得性肺炎"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-063"]
+    assert facts["diagnoses_consistent"] is False
+    assert facts["authoritative_diagnoses"] != facts["written_diagnoses"]
+
+
+@pytest.mark.asyncio
+async def test_064_missing_postoperative_day_is_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-02 08:00:00", "author_name": "张医生"},
+                {"record_time": "2026-07-03 08:00:00", "author_name": "李医生"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-064"]
+    assert facts["surgeon_round_present"] is True
+    assert "2026-07-04" not in facts["covered_postop_dates"]
+
+
+@pytest.mark.asyncio
+async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+            "daily_course_record": ({
+                "record_time": "2026-07-02 09:00:00",
+                "author_name": "王医生",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == []
+
+
+@pytest.mark.asyncio
+async def test_066_missing_postoperative_first_course_is_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "mr_surgery": ({
+                "surgery_code": "01.2400X013",
+                "surgery_name": "硬脑膜外血肿清除术",
+                "surgery_begin_datetime": datetime(2026, 7, 1, 8, 0),
+                "surgery_end_datetime": datetime(2026, 7, 1, 10, 0),
+                "surgeon": "张医生",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-066"] == {
+        "verification_kind": "postoperative_first_course_presence_check",
+        "performed_surgery_count": 1,
+        "postoperative_first_course_count": 0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_067_missing_predischarge_course_is_non_compliant() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-067",
+        {
+            "inpat_registration": ({
+                "patient_status": "出院",
+                "discharge_datetime": "2026-07-03 12:00:00",
+            },),
+            "discharge_record": ({"record_time": "2026-07-03 12:00:00"},),
+            "daily_course_record": ({"record_time": "2026-07-01 09:00:00"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-067"] == {
+        "verification_kind": "predischarge_course_presence_check",
+        "discharge_date": "2026-07-03",
+        "checked_dates": ["2026-07-02", "2026-07-03"],
+        "course_present": False,
+    }
+
+
+@pytest.mark.asyncio
 async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-075",

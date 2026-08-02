@@ -122,8 +122,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_gate_execution.py::test_typed_003_preserves_time_and_source_boundaries"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -309,8 +312,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_007_typed_truth_table_is_python_only_and_fail_closed"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -355,8 +361,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_is_python_only"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -406,8 +415,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_course_008_009_typed_natural_day_truth_table_is_python_only"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -853,8 +865,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_typed_016_distinguishes_absent_unavailable_and_structured_comparable_bodies"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -921,8 +936,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_course_quality_execution.py::test_typed_018_reports_length_and_missing_diagnosis_as_separate_criteria"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -1255,8 +1273,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_gate_execution.py::test_025_actual_implant_field_contract_is_python_owned"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -1428,8 +1449,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_029_blank_or_placeholder_summary_is_non_compliant_without_llm"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1465,8 +1489,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_shadow_execution.py::test_real_nonzero_030_order_trigger_target_empty_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1497,8 +1524,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_gate_execution.py::test_031_rejects_non_surgeon_signature"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1534,8 +1564,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_execution.py::test_native_032_formal_surgery_record_with_shell_safecheck_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1574,8 +1607,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_gate_execution.py::test_033_complete_readiness_with_empty_source_is_non_compliant_without_model"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1639,8 +1675,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1671,8 +1710,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_035_incomplete_consent_is_non_compliant_with_exact_missing_fields"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -1703,8 +1745,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_anesthesia_missing_documents_emit_controlled_customer_facts"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1767,8 +1812,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_038_uses_independent_nonlocal_anesthesia_trigger_for_missing_record"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1799,8 +1847,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_surgery_document_execution.py::test_typed_039_is_non_compliant_when_known_surgeon_is_not_in_discussion"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -1831,8 +1882,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_mdt_execution.py::test_missing_mdt_document_is_programmatic_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -2232,8 +2286,11 @@
       "family_key": "extended_document",
       "cases": {
         "compliant": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_050_uncertain_diagnosis_with_discussion_is_compliant"
+          ],
+          "expected_status": "compliant"
         },
         "confirmed_issue": {
           "coverage": "covered",
@@ -2283,8 +2340,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_051_death_discussion_uses_seven_day_threshold"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -2619,8 +2679,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_060_death_patient_without_death_record_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -2651,8 +2714,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_061_discharge_record_uses_24_hour_threshold"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2697,8 +2763,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_062_incomplete_discharge_medication_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2729,8 +2798,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_063_mismatched_discharge_diagnoses_are_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",
@@ -2761,8 +2833,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_064_missing_postoperative_day_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2807,8 +2882,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_065_missing_postoperative_senior_round_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2853,8 +2931,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_066_missing_postoperative_first_course_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2885,8 +2966,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_067_missing_predischarge_course_is_non_compliant"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2917,8 +3001,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_068_missing_senior_discharge_opinion_exposes_checked_dates"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "not_required",
@@ -2997,8 +3084,11 @@
           "expected_status": "compliant"
         },
         "confirmed_issue": {
-          "coverage": "missing",
-          "fixture_refs": []
+          "coverage": "covered",
+          "fixture_refs": [
+            "native-unit:tests/unit/test_luxian_0609_native_extended_document_execution.py::test_070_rejects_nine_tests_reported_after_transfusion"
+          ],
+          "expected_status": "non_compliant"
         },
         "not_applicable": {
           "coverage": "missing",

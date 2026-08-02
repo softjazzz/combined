@@ -833,6 +833,53 @@ def test_035_structured_consent_completeness_lists_exact_missing_fields():
     assert missing == ["physician_signature", "physician_signature_time"]
 
 
+def test_typed_035_incomplete_consent_is_non_compliant_with_exact_missing_fields(
+    monkeypatch,
+):
+    monkeypatch.setattr(surgery_doc, "_typed_source_gate", lambda **_: None)
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_fact_state",
+        lambda _snapshot, *, fact_types, source_key: (
+            ("present", "全身麻醉")
+            if source_key == "anesthesia_record"
+            else ("absent", "")
+        ),
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_observation_state",
+        lambda _snapshot, source_key: "available",
+    )
+    monkeypatch.setattr(
+        surgery_doc,
+        "_anesthesia_consent_rows",
+        lambda _materials: (
+            {
+                "consent_type": "麻醉知情同意书",
+                "patient_sign": "患者甲",
+                "physician_sign": "",
+                "patient_sign_datetime": "2026-07-30 10:20:00",
+                "physician_sign_datetime": "2026-07-30",
+            },
+        ),
+    )
+
+    outcome = surgery_doc._typed_terminal_outcome(
+        rule_id="LX0609-035",
+        snapshot=object(),
+        materials=_RowsOnlyMaterials({}),
+    )
+
+    assert outcome.status == "non_compliant"
+    assert outcome.reason_code == "anesthesia_consent_incomplete"
+    assert outcome.customer_display_facts == {
+        "failure_kind": "anesthesia_consent_incomplete",
+        "performed_anesthesia_confirmed": True,
+        "missing_fields": ["physician_signature", "physician_signature_time"],
+    }
+
+
 def test_035_multiple_anesthesia_consents_fail_closed_on_association():
     state, missing = surgery_doc._anesthesia_consent_completeness(({}, {}))
 
