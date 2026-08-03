@@ -338,6 +338,7 @@ async def run_one_visit(
     use_execution_cache: bool,
     institute_id: str = "LX0609_SYN",
     rule_ids: list[str] | None = None,
+    evaluation_as_of_date: str | None = None,
 ) -> dict[str, Any]:
     from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate_running_final_bundle
     from app.services.qc_rule_sets import get_sichuan_rule_set
@@ -368,6 +369,7 @@ async def run_one_visit(
             max_refine_candidates=rule_set.max_refine_candidates,
             use_execution_cache=use_execution_cache,
             rule_set_key=rule_set.key,
+            evaluation_as_of_date=evaluation_as_of_date,
         )
     except Exception as exc:  # noqa: BLE001
         error = f"{type(exc).__name__}: {exc}"
@@ -441,6 +443,9 @@ async def run_all(args: argparse.Namespace) -> int:
                 visit_id, safe_text(args.institute_id)
             ),
             rule_ids=list(validation_matrix.get(visit_id, {})) or None,
+            evaluation_as_of_date=(
+                safe_text(args.evaluation_as_of_date) or None
+            ),
         )
         expected_statuses = validation_matrix.get(visit_id, {})
         actual_statuses = row.pop("actual_statuses", {})
@@ -510,6 +515,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", default=str(RUNTIME_DIR))
     parser.add_argument("--env-file", action="append", default=[], help="加载本地 env 文件；不会打印密钥内容")
+    parser.add_argument(
+        "--evaluation-as-of-date",
+        default="",
+        help="冻结在院病例的质控观察日期（YYYY-MM-DD），用于验证已届满的时限规则",
+    )
     parser.add_argument("--preflight", action="store_true", help="只检查样本、PG 和 LLM 前置条件，不调用模型")
     parser.add_argument("--no-cache", action="store_true", help="关闭执行缓存")
     parser.add_argument("--allow-errors", action="store_true", help="即使某些样本失败也返回 0")

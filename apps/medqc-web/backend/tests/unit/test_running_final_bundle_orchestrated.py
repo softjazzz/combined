@@ -1,5 +1,6 @@
 import pytest
 
+import app.services.qc_input_adapters as adapter_module
 import app.services.qc_input_adapters.running_final_bundle_runtime as runtime_module
 from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate_running_final_bundle
 from app.services.sichuan_qc_service import SichuanQCService
@@ -203,6 +204,25 @@ async def test_runtime_forwards_explicit_frozen_evaluation_as_of_date():
         bundle_input={"scene": "running", "visit_id": "V001"},
         rule_ids=["LX0609-008"],
         rule_set_key="luxian_0609",
+        evaluation_as_of_date="2026-07-21",
+    )
+
+    assert called["evaluation_as_of_date"] == "2026-07-21"
+
+
+@pytest.mark.asyncio
+async def test_public_adapter_forwards_explicit_frozen_evaluation_as_of_date(monkeypatch):
+    called = {}
+
+    async def _fake_evaluate(**kwargs):
+        called.update(kwargs)
+        return {"evaluation_results": []}
+
+    monkeypatch.setattr(runtime_module, "evaluate_running_final_bundle", _fake_evaluate)
+
+    await adapter_module.evaluate_running_final_bundle(
+        qc_service=object(),
+        bundle_input={"scene": "running", "visit_id": "V001"},
         evaluation_as_of_date="2026-07-21",
     )
 

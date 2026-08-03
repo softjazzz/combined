@@ -54,6 +54,7 @@ async def evaluate_running_final_bundle(
     max_refine_candidates: int = 3,
     use_execution_cache: bool = True,
     rule_set_key: str = "",
+    evaluation_as_of_date: str | None = None,
     cancellation_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """保持原调用签名，仅在实际执行时加载旧 runtime。"""
@@ -77,6 +78,7 @@ async def evaluate_running_final_bundle(
         max_refine_candidates=max_refine_candidates,
         use_execution_cache=use_execution_cache,
         rule_set_key=rule_set_key,
+        evaluation_as_of_date=evaluation_as_of_date,
         cancellation_check=cancellation_check,
     )
 
