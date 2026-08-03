@@ -11,6 +11,18 @@ RULE_SET_VERSION = "2026-06-09"
 RULE_VERSION = "v1"
 SCHEMA_VERSION = "luxian_0609_evidence_schema_v1"
 
+CANONICAL_RESULT_STATUSES = (
+    "non_compliant",
+    "ai_suggested_non_compliant",
+    "compliant",
+    "ai_suggested_compliant",
+    "not_applicable",
+    "data_gap",
+    "uncertain",
+    "not_executed",
+    "technical_error",
+)
+
 _SENSITIVE_KEYS = {
     "raw_response",
     "raw_output",
@@ -63,17 +75,7 @@ def _normalize_status(value: Any, *, is_compliant: Any = None) -> str:
     status = _text(value).lower()
     if status in _STATUS_MAP:
         status = _STATUS_MAP[status]
-    if status in {
-        "non_compliant",
-        "ai_suggested_non_compliant",
-        "compliant",
-        "ai_suggested_compliant",
-        "not_applicable",
-        "data_gap",
-        "uncertain",
-        "not_executed",
-        "technical_error",
-    }:
+    if status in CANONICAL_RESULT_STATUSES:
         return status
     if is_compliant is True:
         return "compliant"
