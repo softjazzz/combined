@@ -305,9 +305,9 @@ def test_only_gate_attested_report_can_reach_final_mapping():
         ("compliant", True, "compliant"),
         ("non_compliant", None, "uncertain"),
         ("not_applicable", True, "not_applicable"),
-        ("data_gap", False, "data_gap"),
-        ("technical_error", False, "technical_error"),
-        ("uncertain", False, "uncertain"),
+        ("data_gap", None, "data_gap"),
+        ("technical_error", None, "technical_error"),
+        ("uncertain", None, "uncertain"),
     ],
 )
 def test_native_direct_customer_result_must_not_expose_legacy_mapping_diagnostics(
@@ -1907,6 +1907,70 @@ def test_empty_reduced_tuple_preserves_legacy_native_branch():
     assert result["status"] == "uncertain"
     assert result["reason_code"] == "customer_explanation_incomplete"
     assert result["metadata"]["execution_source"] == "lx0609_native"
+
+
+def test_all_four_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    finalized_rule_ids: list[str] = []
+
+    def finalize(result):
+        finalized_rule_ids.append(str(result.get("rule_id") or ""))
+        return {**result, "canonical_finalizer_called": True}
+
+    monkeypatch.setattr(module, "finalize_luxian_0609_canonical_result", finalize)
+    cases = (
+        {
+            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "execution_results": [],
+            "reduced_decisions": (_reduced_decision("LX0609-029"),),
+        },
+        {
+            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "execution_results": [
+                {
+                    "rule_id": "LX0609-029",
+                    "status": "compliant",
+                    "metadata": {"execution_source": "lx0609_native"},
+                }
+            ],
+        },
+        {
+            "wrapper_rules": [{"rule_id": "LX0609-029"}],
+            "execution_results": [
+                {
+                    "rule_id": "LX0609-029",
+                    "status": "compliant",
+                    "metadata": {"execution_source": "customer_programmatic"},
+                }
+            ],
+        },
+        {
+            "wrapper_rules": [
+                {
+                    "rule_id": "LX0609-029",
+                    "mapped_rule_ids": ["SC-TEST-029"],
+                }
+            ],
+            "execution_results": [
+                {
+                    "rule_id": "SC-TEST-029",
+                    "status": "compliant",
+                }
+            ],
+        },
+    )
+
+    for case in cases:
+        result = module.aggregate_luxian_0609_results(
+            **case,
+            format_evidence=False,
+        )[0]
+        assert result["canonical_finalizer_called"] is True
+
+    assert finalized_rule_ids == ["LX0609-029"] * 4
 
 
 def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():

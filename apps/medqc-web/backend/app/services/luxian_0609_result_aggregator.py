@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING, Any, Mapping
 
 from .copy_content_similarity import compare_text_segments, split_sentences
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
-from .luxian_0609_result_schema import apply_luxian_0609_result_schema
+from .luxian_0609_result_schema import (
+    CANONICAL_RESULT_STATUSES,
+    apply_luxian_0609_result_schema,
+)
+from .luxian_0609.canonical_result_finalizer import (
+    finalize_luxian_0609_canonical_result,
+)
 from .luxian_0609.decision_reducer import ReducedRuleDecision
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
@@ -35,18 +41,6 @@ _STATUS_PRIORITY = {
     "not_executed": 5,
     "technical_error": 60,
 }
-
-CANONICAL_RESULT_STATUSES = (
-    "non_compliant",
-    "ai_suggested_non_compliant",
-    "compliant",
-    "ai_suggested_compliant",
-    "not_applicable",
-    "data_gap",
-    "uncertain",
-    "not_executed",
-    "technical_error",
-)
 
 _SENSITIVE_KEYS = {
     "raw_response",
@@ -3872,61 +3866,6 @@ def _customer_evidence_from_display_facts(
     ]
 
 
-def _guard_customer_explanation_result(result: dict[str, Any]) -> dict[str, Any]:
-    """缺少可展示事实的不合规结果不得以泛化缺陷文案离开客户出口。"""
-
-    if str(result.get("status") or "") != "non_compliant":
-        return result
-    evidence_items = result.get("evidence_items")
-    has_locatable_evidence = isinstance(evidence_items, list) and any(
-        isinstance(item, Mapping)
-        and bool(str(item.get("quote") or "").strip())
-        and bool(
-            str(
-                item.get("source_table")
-                or item.get("source_document_id")
-                or item.get("evidence_ref")
-                or ""
-            ).strip()
-        )
-        for item in evidence_items
-    )
-    if (
-        result.get("criterion_results")
-        or result.get("customer_display_facts")
-        or has_locatable_evidence
-    ):
-        return result
-    guarded_messages = {
-        "LX0609-040": (
-            "暂无法确认是否需要进行四级手术术前多学科讨论",
-            "当前缺少明确的手术级别或可核对的多学科讨论资料，不能将本项作为确定问题展示。",
-            "请确认手术级别、术前讨论记录及参加科室信息后重新评估。",
-        ),
-    }
-    findings, evidence, suggestion = guarded_messages.get(
-        str(result.get("rule_id") or ""),
-        (
-            "本次结果缺少规则专属、可核对的事实依据，暂不作为确定问题展示。",
-            "未返回可展示的具体原因、核对标准或证据定位。",
-            "请重新质控；如仍出现该提示，请补齐对应规则的受控事实和证据引用后再确认。",
-        ),
-    )
-    guarded = dict(result)
-    guarded.update(
-        {
-            "status": "uncertain",
-            "result_status": "uncertain",
-            "is_compliant": None,
-            "findings": findings,
-            "evidence": evidence,
-            "suggestion": suggestion,
-            "reason_code": "customer_explanation_incomplete",
-        }
-    )
-    return guarded
-
-
 def _valid_customer_evidence_document_id(value: Any) -> str:
     """仅允许内部已验证的文书 ID 进入后续安全签名环节。"""
 
@@ -4237,7 +4176,7 @@ def aggregate_luxian_0609_results(
             )
             if customer_evidence:
                 result["customer_evidence"] = customer_evidence
-            result = _guard_customer_explanation_result(result)
+            result = finalize_luxian_0609_canonical_result(result)
             customer_results.append(result)
             continue
         decision = decisions.get(wrapper_id)
@@ -4318,7 +4257,7 @@ def aggregate_luxian_0609_results(
                 ):
                     native_audit.pop(internal_key, None)
                 result["audit"] = native_audit
-                result = _guard_customer_explanation_result(result)
+                result = finalize_luxian_0609_canonical_result(result)
                 customer_results.append(result)
                 continue
             selected = _guard_copy_rule_without_first_course(
@@ -4361,7 +4300,7 @@ def aggregate_luxian_0609_results(
                 gate_decision=decision,
                 audit_context=audit_context,
             )
-            result = _guard_customer_explanation_result(result)
+            result = finalize_luxian_0609_canonical_result(result)
             customer_results.append(result)
             continue
         if decision and decision.status in {TRIGGER_ABSENT, TRIGGER_DATA_GAP}:
@@ -4438,7 +4377,7 @@ def aggregate_luxian_0609_results(
             gate_decision=decision,
             audit_context=audit_context,
         )
-        result = _guard_customer_explanation_result(result)
+        result = finalize_luxian_0609_canonical_result(result)
         customer_results.append(result)
     return customer_results
 
