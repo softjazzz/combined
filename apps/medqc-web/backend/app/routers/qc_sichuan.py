@@ -281,6 +281,22 @@ def _workspace_bundle_scene_candidates(*, query_scope: str, record_scope: str) -
     return ["running", "final"]
 
 
+def _workspace_scene_resolution_status(
+    *,
+    record_scope: str,
+    resolved_scene: str,
+    loaded_scene: str,
+) -> str:
+    normalized_record = str(record_scope or "").strip().lower()
+    if not loaded_scene:
+        return "unavailable"
+    if normalized_record not in {"running", "final"}:
+        return "uncertain_fallback"
+    if loaded_scene != resolved_scene:
+        return "fallback"
+    return "matched"
+
+
 def _build_workspace_record_scene_snapshot(
     records: Sequence[Dict[str, Any]],
     *,
@@ -3003,6 +3019,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 bundle_scene
                                 and resolved_record_scene
                                 and bundle_scene != resolved_record_scene
+                            ),
+                            "resolution_status": _workspace_scene_resolution_status(
+                                record_scope=str(record.get("scope") or ""),
+                                resolved_scene=resolved_record_scene,
+                                loaded_scene=bundle_scene,
                             ),
                         }
                         package_bundle.setdefault("institute_id", institute_id)

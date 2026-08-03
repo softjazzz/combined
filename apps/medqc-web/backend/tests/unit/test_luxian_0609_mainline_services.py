@@ -957,6 +957,90 @@ async def test_basic_timeliness_typed_decisions_share_snapshot_and_skip_legacy_r
 
 
 @pytest.mark.asyncio
+async def test_public_entry_keeps_native_result_when_scene_bundles_are_unavailable_but_material_store_is_complete(
+    monkeypatch,
+) -> None:
+    selected = ("LX0609-001",)
+    package_plan = Luxian0609PackagePlan(
+        selected_rule_ids=selected,
+        native_sync_rule_ids=selected,
+        native_async_rule_ids=(),
+        compatibility_rule_ids=(),
+        compatibility_execution_rule_ids=(),
+        bypassed_execution_rule_ids=(),
+        native_executor_batches=(("basic_timeliness", selected),),
+    )
+    settings = _all_native_settings(
+        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=True,
+        LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED=True,
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "app.services.sichuan_qc_service.build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_package_plan_from_settings",
+        lambda **_kwargs: package_plan,
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "build_luxian_0609_evidence_read_session",
+        lambda **_kwargs: _basic_timeliness_evidence_session(),
+    )
+    monkeypatch.setattr(
+        luxian_execution,
+        "load_luxian_0609_rules",
+        lambda: [
+            _wrapper(
+                "LX0609-001",
+                name="入院记录：入院后24小时内是否完成",
+                mapped_rule_ids=["RAW-LX0609-001"],
+                trigger_condition="入院记录应在入院后24小时内完成。",
+            )
+        ],
+    )
+
+    result = await SichuanQCService().evaluate_running_final_bundle_input(
+        bundle={
+            "scene": "running",
+            "institute_id": "private-institute",
+            "patient_id": "private-patient",
+            "visit_id": "private-visit",
+            "medical_text": "",
+            "structured_context": {},
+            "document_hits": {},
+            "source_doc_priority": [],
+            "data_quality_flags": ["bundle_unavailable"],
+            "scene_resolution": {
+                "query_scope": "all",
+                "record_scene": "unknown",
+                "resolved_scene": "",
+                "attempted_scenes": ["running", "final"],
+                "loaded_scene": "",
+                "used_fallback": False,
+                "resolution_status": "unavailable",
+            },
+            "text_available": False,
+        },
+        rule_ids=list(selected),
+        rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        use_execution_cache=False,
+    )
+
+    customer_results = list(result["evaluation_results"])
+    assert [item["rule_id"] for item in customer_results] == ["LX0609-001"]
+    assert customer_results[0]["status"] == "compliant"
+    assert customer_results[0]["reason_code"] == "requirement_within_threshold"
+    assert all(item["status"] != "data_gap" for item in customer_results)
+    assert result["token_usage"]["total_tokens"] == 0
+
+
+@pytest.mark.asyncio
 async def test_transfusion_044_047_typed_decisions_replace_raw_results_without_drift(
     monkeypatch,
 ) -> None:

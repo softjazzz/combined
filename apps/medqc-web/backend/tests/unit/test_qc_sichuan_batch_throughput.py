@@ -1769,6 +1769,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         "record_rule_map": {
             "visit-001": ["LX0609-001"],
             "visit-002": ["LX0609-001"],
+            "visit-003": ["LX0609-001"],
         },
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
@@ -1778,6 +1779,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         return [
             {"record_id": "visit-001", "visit_id": "visit-001", "scope": "final"},
             {"record_id": "visit-002", "visit_id": "visit-002", "scope": "running"},
+            {"record_id": "visit-003", "visit_id": "visit-003", "scope": "unknown"},
         ]
 
     def _hydrate(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1840,6 +1842,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         {"visit_id": "visit-001", "scene": "final"},
         {"visit_id": "visit-001", "scene": "running"},
         {"visit_id": "visit-002", "scene": "running"},
+        {"visit_id": "visit-003", "scene": "running"},
     ]
     assert captured == [
         {
@@ -1852,6 +1855,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "attempted_scenes": ["final", "running"],
                 "loaded_scene": "running",
                 "used_fallback": True,
+                "resolution_status": "fallback",
             },
         },
         {
@@ -1864,6 +1868,20 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "attempted_scenes": ["running"],
                 "loaded_scene": "running",
                 "used_fallback": False,
+                "resolution_status": "matched",
+            },
+        },
+        {
+            "visit_id": "visit-003",
+            "scene": "running",
+            "scene_resolution": {
+                "query_scope": "all",
+                "record_scene": "unknown",
+                "resolved_scene": "",
+                "attempted_scenes": ["running"],
+                "loaded_scene": "running",
+                "used_fallback": False,
+                "resolution_status": "uncertain_fallback",
             },
         },
     ]
@@ -2101,6 +2119,103 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
     assert workspace.create_called is False
     assert submitted_tasks == []
     assert [call["status"] for call in workspace.list_calls] == ["queued", "running"]
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_should_not_reuse_running_job_after_record_becomes_final(
+    monkeypatch,
+):
+    class _StatusChangedWorkspaceStub(_IdempotentWorkspaceStub):
+        def collect_records(self, **_: Any) -> List[Dict[str, Any]]:
+            return [
+                {
+                    "record_id": "visit-001",
+                    "visit_id": "visit-001",
+                    "scope": "final",
+                    "discharge_datetime": "2026-08-03 09:30:00",
+                }
+            ]
+
+        def create_batch_job(self, **kwargs: Any) -> Dict[str, Any]:
+            self.create_called = True
+            return _WorkspaceStub.create_batch_job(self, **kwargs)
+
+    workspace = _StatusChangedWorkspaceStub()
+    service = _ServiceStub()
+    submitted_tasks: List[Dict[str, Any]] = []
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "submit_detached_task",
+        lambda task_name, func, job_id: submitted_tasks.append(
+            {"task_name": task_name, "func": func, "job_id": job_id}
+        ),
+    )
+
+    running_snapshot = qc_sichuan._build_workspace_record_scene_snapshot(
+        [
+            {
+                "record_id": "visit-001",
+                "visit_id": "visit-001",
+                "scope": "running",
+                "discharge_datetime": "",
+            }
+        ],
+        query_scope="all",
+    )
+    active_payload = {
+        "scope": "all",
+        "query_scope": "all",
+        "department": "",
+        "doctor": "",
+        "date_field": "admission",
+        "start_date": "",
+        "end_date": "",
+        "keyword": "",
+        "record_ids": ["visit-001"],
+        "record_scene_snapshot": running_snapshot,
+        "rule_set_key": "",
+        "rule_ids": ["SC-001"],
+        "execution_strategy": "standard",
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "domain_only",
+        "batch_output_mode": "full",
+        "run_mode": "parallel",
+    }
+    workspace.job["filters"] = {
+        "idempotency_key": "sichuan-workspace-run:"
+        + hashlib.sha256(
+            json.dumps(active_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:24],
+        "idempotency_payload": active_payload,
+    }
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_ids=["SC-001"],
+            scope="all",
+            date_field="admission",
+            record_ids=["visit-001"],
+            run_mode="parallel",
+        ),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert response["data"].get("idempotency_reused") is not True
+    assert workspace.create_called is True
+    assert workspace.created_job is not None
+    assert workspace.created_job["filters"]["record_scene_snapshot"] == [
+        {
+            "record_id": "visit-001",
+            "record_scene": "final",
+            "resolved_scene": "final",
+            "discharge_snapshot": "2026-08-03 09:30:00",
+        }
+    ]
+    assert len(submitted_tasks) == 1
 
 
 @pytest.mark.asyncio
