@@ -32,3 +32,12 @@ Native 执行器和结果 API 只能处理这一集合，不能为未启用规�
 `non_compliant` 在这里一次性降级为 `uncertain`；终结器返回后，聚合器、Envelope
 保存、单一结果接口和前端均不得再次修改 `status`、`result_status`、`reason_code`
 或 `is_compliant`。
+
+`is_compliant` 是 Canonical 状态的兼容布尔投影，不是第二套判定：
+
+- `compliant`、`not_applicable`：`True`；
+- `non_compliant`：`False`；
+- `ai_suggested_non_compliant`、`ai_suggested_compliant`、`data_gap`、`uncertain`、
+  `not_executed`、`technical_error`：`None`。
+
+接口使用方必须以 `status` 为主状态；不得把 `is_compliant=None` 解释为不合规。

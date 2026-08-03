@@ -466,8 +466,18 @@ git commit -m "docs: 明确LX0609最终状态所有权"
 ## 五、执行记录
 
 - Task 1：`3dab4b87c`，建立唯一状态常量和 Canonical 终结器；17项合同测试通过。
-- Task 2：`7c9eb93a8`，四条结果出口统一进入终结器；122项聚焦测试通过。
+- Task 2：`7c9eb93a8`，当时识别的四条结果出口统一进入终结器；122项聚焦测试通过。
 - Task 3：`a187786b1`，锁定Envelope/API直通并保留`is_compliant=None`；15项测试通过。
 - Task 4：`5180fef73`，锁定前端只渲染服务端状态；4项测试通过。
-- Task 5：后端完整聚焦回归137项通过；前端4项通过；四类冻结状态样本通过；
-  `npm run check:encoding`与`npm run lint`通过。
+- Task 5 初次审查后发现 Trigger Gate 第五条出口、空壳事实判定和批任务交付装配仍有缺口，
+  不再沿用“四条出口已经完全收口”的结论。
+- `4ec02589b`：第五条 Trigger Gate 出口进入终结器；空字符串和嵌套空容器不再作为充分解释，
+  同时保留 `False` 和 `0` 这类有效受控事实。
+- `df5ca1691`：批任务装配保留 `result_status`，并原样保留 Canonical `is_compliant=None`。
+- `36ace2345`：Canonical 客户结果绕开旧 LX0609-016 批任务保护，禁止其在终结后把合规重判为数据不足。
+- 最终后端聚焦回归177项通过；前端结果模型4项通过；`npm run check:encoding`与
+  `npm run lint`通过。
+- 冻结病例任务 `4abe6e48-e297-4a31-9908-c865fe77a9cf` 完成75条结果：
+  `non_compliant=6`、`uncertain=2`、`compliant=17`、`data_gap=38`、`not_applicable=12`。
+  已确认终结器四字段幂等、Canonical交付投影与数据库Envelope完全一致、Envelope与
+  单一结果API完全一致，并逐字段核对 `rule_id/status/result_status/reason_code/is_compliant/conclusion/evidence`。
