@@ -522,6 +522,21 @@ def test_tumor_antimicrobial_and_transfer_issue_variants_change_source_facts() -
     )
 
 
+def test_consultation_cases_do_not_inherit_uncontrolled_senior_course_rows() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    consultation_visits = {
+        case.target_visit_id for case in cases if case.target_index in {13, 14}
+    }
+
+    assert not any(
+        row.get("visit_id") in consultation_visits
+        for row in rows_by_table.get("senior_course_record", [])
+    )
+
+
 def test_transfer_complete_case_has_explicit_physician_change_trigger() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()

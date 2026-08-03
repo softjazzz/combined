@@ -339,7 +339,7 @@ def _build_consultation(
     mode: str = "complete",
 ) -> list[str]:
     _clear_visit_rows(
-        rows, case, "consultation_record", "daily_course_record",
+        rows, case, "consultation_record", "daily_course_record", "senior_course_record",
         "inpat_drug_order", "inpat_nondrug_order", "exam_master",
         "labtest_master", "surgery_record",
     )

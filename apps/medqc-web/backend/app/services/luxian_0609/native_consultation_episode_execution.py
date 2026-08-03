@@ -124,6 +124,26 @@ _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN = re.compile(
     r"(?:遵|按|依照|根据).{0,12}(?:会诊|专科).{0,12}(?:意见|建议).{0,12}"
     r"(?:执行|处理|落实|治疗)"
 )
+_EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
+    r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
+    r"(?:评估.{0,24}(?:适应证|病情|方案)|明确.{0,24}(?:诊断|原因|方案)|"
+    r"提出.{0,16}(?:明确)?(?:方案|意见)|制定.{0,16}(?:方案|计划))"
+)
+_EXPLICIT_REQUEST_VAGUE_PATTERN = re.compile(
+    r"^(?:会诊申请单；)?(?:请|申请)?相关科室会诊(?:协助)?(?:诊治|处理)[。；]?$"
+)
+_EXPLICIT_OPINION_VAGUE_PATTERN = re.compile(
+    r"(?:必要时|酌情|视情况).{0,24}(?:完善|行|给予).{0,20}(?:检查|药物治疗|对症治疗)"
+)
+_EXPLICIT_OPINION_CLEAR_PATTERN = re.compile(
+    r"(?:会诊意见).{0,160}(?:建议|诊断).{0,100}"
+    r"(?:今日|立即|继续|停用|改用|加用|行[A-Za-z0-9\u4e00-\u9fff]{2,24}|"
+    r"完善[A-Za-z0-9\u4e00-\u9fff]{2,24}(?:检查|检验)|预约)"
+)
+_EXPLICIT_EXECUTION_TRACE_PATTERN = re.compile(
+    r"(?:已归纳.{0,12}会诊意见|执行会诊意见|按(?:会诊)?建议|"
+    r"根据会诊意见|落实会诊意见|按意见.{0,12}(?:执行|处理|治疗))"
+)
 _EVALUATOR_VERSION = "consultation-episode-v2"
 _SIGNATURE_LABEL = (
     r"(?:(?:患者|家属|会诊(?:医师|医生)?|申请(?:医师|医生)?|"
@@ -753,6 +773,52 @@ def _candidate_documents(
         source_incomplete_keys=frozenset(source_incomplete_keys),
         source_technical=source_technical,
     )
+
+
+def _strong_explicit_consultation_statuses(
+    *,
+    selected: Sequence[str],
+    documents: Sequence[Mapping[str, str]],
+    execution_projection: _CandidateProjection | None,
+) -> dict[str, tuple[str, str]]:
+    """只处理文书角色和结论均显式的高置信会诊场景。"""
+
+    request_documents = tuple(
+        item for item in documents if "会诊申请" in _clean(item.get("text"))
+    )
+    opinion_documents = tuple(
+        item for item in documents if "会诊意见" in _clean(item.get("text"))
+    )
+    if len(request_documents) != 1 or len(opinion_documents) != 1:
+        return {}
+
+    statuses: dict[str, tuple[str, str]] = {}
+    request_text = _clean(request_documents[0].get("text"))
+    opinion_text = _clean(opinion_documents[0].get("text"))
+    if "LX0609-021" in selected:
+        if _EXPLICIT_REQUEST_VAGUE_PATTERN.fullmatch(request_text):
+            statuses["LX0609-021"] = ("non_compliant", "requirement_violated")
+        elif _EXPLICIT_REQUEST_CLEAR_PATTERN.search(request_text):
+            statuses["LX0609-021"] = ("compliant", "requirement_satisfied")
+    if "LX0609-022" in selected:
+        if _EXPLICIT_OPINION_VAGUE_PATTERN.search(opinion_text):
+            statuses["LX0609-022"] = ("non_compliant", "requirement_violated")
+        elif _EXPLICIT_OPINION_CLEAR_PATTERN.search(opinion_text):
+            statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
+    if "LX0609-020" in selected and execution_projection is not None:
+        if any(
+            _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
+            for item in execution_projection.candidates
+        ):
+            statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
+        elif (
+            not execution_projection.candidates
+            and set(_EXECUTION_SOURCE_KEYS).issubset(
+                execution_projection.source_complete_keys
+            )
+        ):
+            statuses["LX0609-020"] = ("non_compliant", "requirement_violated")
+    return statuses
 
 
 def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
@@ -1625,6 +1691,71 @@ def _finish(
     )
 
 
+def _finish_explicit_statuses(
+    *,
+    selected: tuple[str, ...],
+    statuses: Mapping[str, tuple[str, str]],
+    documents: Sequence[Mapping[str, str]],
+    execution_projection: _CandidateProjection | None,
+    evidence_snapshot: Luxian0609EvidenceSnapshot | None,
+    decision_rule_ids: frozenset[str],
+) -> NativeConsultationEpisodeExecutionResult:
+    results = []
+    for rule_id in selected:
+        status, reason_code = statuses[rule_id]
+        item = _result(
+            rule_id=rule_id,
+            status=status,
+            reason_code=reason_code,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+        )
+        item["metadata"]["executor_type"] = "program"
+        if rule_id not in decision_rule_ids:
+            results.append(item)
+    decisions = tuple(
+        _decision(
+            rule_id=rule_id,
+            status=statuses[rule_id][0],
+            reason_code=statuses[rule_id][1],
+            snapshot=evidence_snapshot,
+        )
+        for rule_id in selected
+        if rule_id in decision_rule_ids and evidence_snapshot is not None
+    )
+    source_document_ids = tuple(
+        dict.fromkeys(
+            document_id
+            for item in documents
+            if (document_id := _clean(item.get("document_id")))
+        )
+    )
+    display_facts: list[tuple[str, Mapping[str, Any]]] = []
+    for rule_id in selected:
+        status = statuses[rule_id][0]
+        facts: dict[str, Any] = {
+            "source_document_ids": list(source_document_ids),
+            "consultation_assessment": "明确" if status == "compliant" else "不符合要求",
+        }
+        if rule_id == "LX0609-020":
+            facts["execution_record_state"] = (
+                "已发现明确执行记录" if status == "compliant" else "未发现执行记录"
+            )
+            facts["execution_candidate_count"] = (
+                len(execution_projection.candidates)
+                if execution_projection is not None
+                else 0
+            )
+        display_facts.append((rule_id, facts))
+    return NativeConsultationEpisodeExecutionResult(
+        results=tuple(results),
+        planned_rule_ids=selected,
+        decisions=decisions,
+        customer_display_facts=tuple(display_facts),
+    )
+
+
 async def execute_luxian_0609_native_consultation_episode_rules(
     *, rule_ids: Sequence[str], institute_id: str, patient_id: str, visit_id: str,
     source_schema: str | None, llm_client: ConsultationEpisodeLLMClient | None,
@@ -1692,6 +1823,31 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 evidence_snapshot=evidence_snapshot,
                 decision_rule_ids=typed,
             )
+    explicit_execution_projection: _CandidateProjection | None = None
+    if "LX0609-020" in stage_two_rule_ids and execution_stay_window is not None:
+        explicit_execution_projection = _candidate_documents(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            source_schema=source_schema,
+            evidence_materials=evidence_materials,
+            evidence_snapshot=evidence_snapshot,
+            stay_window=execution_stay_window,
+        )
+    explicit_statuses = _strong_explicit_consultation_statuses(
+        selected=selected,
+        documents=documents,
+        execution_projection=explicit_execution_projection,
+    )
+    if all(rule_id in explicit_statuses for rule_id in selected):
+        return _finish_explicit_statuses(
+            selected=selected,
+            statuses=explicit_statuses,
+            documents=documents,
+            execution_projection=explicit_execution_projection,
+            evidence_snapshot=evidence_snapshot,
+            decision_rule_ids=typed,
+        )
     if llm_client is None:
         return _finish(selected=selected, status="data_gap", reason_code="linkage_unresolved", evidence_snapshot=evidence_snapshot, decision_rule_ids=typed)
     calls = 1
