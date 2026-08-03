@@ -923,6 +923,20 @@ def _criterion_value(item: Any, field: str) -> Any:
     return getattr(value, "value", value)
 
 
+def _criterion_medical_analysis(item: Any) -> str:
+    """把已写入受控子结论的医学分析压缩为列表可读的一句话。"""
+
+    value = _criterion_value(item, "medical_analysis")
+    if not isinstance(value, str):
+        return ""
+    text = re.sub(r"\s+", " ", value).strip()
+    if not text:
+        return ""
+    text = re.sub(r"^(?:AI)?医学分析[：:]\s*", "", text)
+    text = text.rstrip("。；; ")
+    return f"{text[:157]}…" if len(text) > 160 else text
+
+
 def _lx018_criterion_finding(criterion_results: Any) -> str:
     """把018两个受控子判定压缩为列表中可直接阅读的一句话。"""
 
@@ -948,12 +962,17 @@ def _lx018_criterion_finding(criterion_results: Any) -> str:
 
     relation_status = _criterion_value(relation, "status")
     relation_value = _criterion_value(relation, "actual_value")
+    medical_analysis = _criterion_medical_analysis(relation)
     relation_text = (
-        "主诉提供的诊断线索能够支持入院第一诊断"
+        f"第一诊断可导出：{medical_analysis}"
+        if relation_status == "passed" and medical_analysis
+        else "主诉中的临床线索与入院第一诊断相符，可以导出第一诊断"
         if relation_status == "passed"
-        else "主诉与入院第一诊断的方向不一致"
+        else f"不能据此导出第一诊断：{medical_analysis}"
+        if relation_status == "failed" and medical_analysis
+        else "主诉与入院第一诊断的方向不一致，不能据此导出第一诊断"
         if relation_status == "failed" and relation_value == "mismatch"
-        else "主诉提供的诊断线索不足以支持入院第一诊断"
+        else "主诉提供的诊断线索不足，不能据此导出第一诊断"
         if relation_status == "failed"
         else "主诉能否支持入院第一诊断暂无法判断"
     )

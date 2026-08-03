@@ -652,6 +652,10 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
                     actual_value="supported",
                     rationale_code="supported",
                     dimensions=("symptom_pattern",),
+                    medical_analysis=(
+                        "主诉中的反复胸痛及持续时间，为入院第一诊断"
+                        "不稳定型心绞痛提供了症状和病程依据。"
+                    ),
                 ),
             ),
         )
@@ -661,7 +665,8 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
 
     assert result["findings"] == (
         "主诉共 8 字，符合不超过 20 字要求；"
-        "主诉提供的诊断线索能够支持入院第一诊断。"
+        "第一诊断可导出：主诉中的反复胸痛及持续时间，为入院第一诊断"
+        "不稳定型心绞痛提供了症状和病程依据。"
     )
 
 
@@ -704,7 +709,7 @@ def test_lx018_non_compliant_result_names_failed_diagnostic_direction():
 
     assert result["findings"] == (
         "主诉共 18 字，符合不超过 20 字要求；"
-        "主诉与入院第一诊断的方向不一致。"
+        "主诉与入院第一诊断的方向不一致，不能据此导出第一诊断。"
     )
 
 
