@@ -1577,14 +1577,14 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_explicit_report_and_culture_action_phrases_use_one_controlled_fact_call(monkeypatch):
+async def test_explicit_report_and_culture_action_phrases_use_python_without_model(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({
             "exam_name": "胸部CT",
             "exam_time": "2026-04-26 08:00:00",
             "report_time": "2026-04-26 12:00:00",
-            "exam_conclusion": "右肺占位。",
+            "exam_conclusion": "阳性：右肺占位。",
         },),
         culture_rows=({
             "labtest_subject": "血培养及药敏",
@@ -1594,17 +1594,19 @@ async def test_explicit_report_and_culture_action_phrases_use_one_controlled_fac
         course_rows=({
             "record_time": "2026-04-26 13:00:00",
             "record_content": (
-                "影像报告提示右肺占位；微生物报告检出大肠埃希菌，"
+                "影像报告提示右肺占位，结合病史考虑肺部肿瘤，计划进一步检查；"
+                "微生物报告检出大肠埃希菌，"
                 "对头孢类敏感，改用头孢曲松。"
             ),
         },),
     )
-    client = _Client([_fact_response(("LX0609-011", "LX0609-014", "LX0609-015"))])
+    client = _Client([])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
-        rule_ids=("LX0609-011", "LX0609-014", "LX0609-015"),
+        rule_ids=("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
         wrapper_rules=[
             _wrapper("LX0609-011"),
+            _wrapper("LX0609-012"),
             _wrapper("LX0609-014"),
             _wrapper("LX0609-015"),
         ],
@@ -1612,17 +1614,65 @@ async def test_explicit_report_and_culture_action_phrases_use_one_controlled_fac
         llm_client=client,
         evidence_snapshot=snapshot,
         evidence_materials=materials,
-        decision_rule_ids=("LX0609-011", "LX0609-014", "LX0609-015"),
+        decision_rule_ids=("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
     )
 
     assert [item.qc_direction.value for item in result.decisions] == [
         "satisfied",
         "satisfied",
         "satisfied",
+        "satisfied",
     ]
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_result_only_course_closes_analysis_rules_without_model(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=({
+            "exam_name": "腰椎MRI平扫",
+            "exam_time": "2026-04-26 08:00:00",
+            "report_time": "2026-04-26 12:00:00",
+            "exam_conclusion": "阳性：L4/5椎间盘突出并右侧神经根受压。",
+        },),
+        culture_rows=({
+            "labtest_subject": "尿培养及药敏",
+            "report_time": "2026-04-26 12:00:00",
+            "result": "大肠埃希菌阳性，药敏结果已报告。",
+        },),
+        course_rows=({
+            "record_time": "2026-04-26 13:00:00",
+            "record_content": (
+                "已查看腰椎MRI报告，报告提示L4/5椎间盘突出并右侧神经根受压；"
+                "已查看尿培养报告，结果为大肠埃希菌阳性，药敏结果已回报。"
+            ),
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-28"},),
+    )
+    client = _Client([])
+    rule_ids = ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015")
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=rule_ids,
+        wrapper_rules=[_wrapper(rule_id) for rule_id in rule_ids],
+        evidence_payload={},
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=rule_ids,
+    )
+
+    assert [item.qc_direction.value for item in result.decisions] == [
+        "satisfied",
+        "defect",
+        "satisfied",
+        "defect",
+    ]
+    assert result.llm_call_count == 0
+    assert client.prompts == []
 
 
 def test_pending_or_conditional_report_phrases_are_not_strong_evidence():

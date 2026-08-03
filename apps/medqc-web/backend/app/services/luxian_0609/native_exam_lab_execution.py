@@ -75,7 +75,7 @@ _STRONG_SEMANTIC_PATTERNS = {
     ),
     "LX0609-011": re.compile(
         r"(?:CT|MRI|计算机断层|磁共振|影像(?:报告|提示)?).{0,30}"
-        r"(?:未见(?:明显)?异常|未见明确病变|占位|病变|梗死|出血|炎症|结节|肿块|积液|异常)",
+        r"(?:未见(?:明显)?异常|未见明确病变|占位|病变|梗死|出血|炎症|结节|肿块|积液|异常|突出|受压)",
         re.IGNORECASE,
     ),
     "LX0609-012": re.compile(
@@ -98,6 +98,14 @@ _NEGATED_CULTURE_ACTION_PATTERN = re.compile(
 )
 _CONDITIONAL_CULTURE_ACTION_PATTERN = re.compile(
     rf"(?:如|若|拟|计划|待|必要时|视情况).{{0,24}}{_CULTURE_ACTION_PATTERN}"
+)
+_CONDITIONAL_ANALYSIS_PATTERN = re.compile(
+    r"(?:如|若|拟|计划|待|必要时|视情况).{0,24}"
+    r"(?:分析|考虑|结合|处理|进一步|复查|评估)"
+)
+_DEFINITE_ANALYSIS_PATTERN = re.compile(
+    r"(?:结合.{0,24}(?:考虑|判断|提示)|分析(?:认为|提示|考虑)?|"
+    r"与.{0,24}(?:相符|一致)|考虑.{0,24}(?:明确|可能|诊断))"
 )
 _UNCERTAIN_SEMANTIC_PATTERN = re.compile(
     r"(?:尚?未(?:回报|报告|确认)|待(?:回|报|确认|评估|定|查|进一步)|"
@@ -1051,21 +1059,57 @@ def _strong_semantic_fact(
         positive_state = "not_relevant"
     pattern = _STRONG_SEMANTIC_PATTERNS[rule_id]
     refs = []
+    deferred_semantic = False
     for ref, text in (projection.course_texts or {}).items():
         for clause in _CLAUSE_SPLIT_PATTERN.split(text):
             if not pattern.search(clause):
                 continue
             if _UNCERTAIN_SEMANTIC_PATTERN.search(clause):
+                deferred_semantic = True
                 continue
-            if rule_id == "LX0609-015" and (
-                _NEGATED_CULTURE_ACTION_PATTERN.search(clause)
-                or _CONDITIONAL_CULTURE_ACTION_PATTERN.search(clause)
+            if rule_id == "LX0609-015":
+                if (
+                    _NEGATED_CULTURE_ACTION_PATTERN.search(clause)
+                    or _CONDITIONAL_CULTURE_ACTION_PATTERN.search(clause)
+                ):
+                    deferred_semantic = True
+                    continue
+            if (
+                rule_id == "LX0609-012"
+                and _CONDITIONAL_ANALYSIS_PATTERN.search(clause)
+                and not _DEFINITE_ANALYSIS_PATTERN.search(clause)
             ):
+                deferred_semantic = True
                 continue
             refs.append(ref)
             break
     refs = tuple(refs)
     if not refs:
+        # 阳性报告已明确记入病程，但完整病程投影中没有分析/处置事实时，
+        # 可直接形成“已记录结果、未完成分析”的闭世界结论。含待评估、
+        # 计划处理等条件性语句仍交给受控模型，避免把灰区误判为缺陷。
+        if rule_id in {"LX0609-012", "LX0609-015"} and not deferred_semantic:
+            mention_pattern = _STRONG_SEMANTIC_PATTERNS[
+                "LX0609-011" if rule_id == "LX0609-012" else "LX0609-014"
+            ]
+            mention_refs = tuple(
+                ref
+                for ref, text in (projection.course_texts or {}).items()
+                if any(
+                    mention_pattern.search(clause)
+                    and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)
+                    for clause in _CLAUSE_SPLIT_PATTERN.split(text)
+                )
+            )
+            if mention_refs:
+                return ExamLabEventFact(
+                    rule_id=rule_id,
+                    applicability="applicable",
+                    semantic_state="absent",
+                    positive_state=positive_state,
+                    course_doc_refs=mention_refs,
+                    evidence_refs=tuple((*event.document_refs, *mention_refs)),
+                )
         return None
     return ExamLabEventFact(
         rule_id=rule_id,
@@ -1348,6 +1392,35 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     else:
                         semantic_rule_ids.append(rule_id)
                 eligible_rule_ids = semantic_rule_ids
+            if eligible_rule_ids and projection is not None:
+                # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
+                # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
+                for rule_id in tuple(eligible_rule_ids):
+                    fact = _strong_semantic_fact(
+                        rule_id=rule_id,
+                        projection=projection,
+                    )
+                    if fact is None:
+                        continue
+                    outcome = _text_fact_outcome(
+                        rule_id=rule_id,
+                        facts=(fact,),
+                        projection=projection,
+                    )
+                    emit_typed(
+                        rule_id,
+                        outcome.status,
+                        outcome.reason_code,
+                        outcome.fact_refs,
+                        display_facts=_text_outcome_display_facts(
+                            rule_id=rule_id,
+                            status=outcome.status,
+                            fact=fact,
+                            projection=projection,
+                        ),
+                    )
+                    typed_processed.add(rule_id)
+                    eligible_rule_ids.remove(rule_id)
             if not eligible_rule_ids:
                 projection = None
             if (
