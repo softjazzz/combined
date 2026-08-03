@@ -440,6 +440,7 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
             "surgical_level": "4",
             "surgery_level": "四级",
             "surgeon": "陈某医师",
+            "main_surgery_sign": "陈某医师",
             "anesthesia_method": "全身麻醉",
             "surgery_begin_datetime": surgery_time,
             "surgery_end_datetime": v2._dt_for_case(case, 2, 14),
@@ -454,6 +455,7 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
                 "植入物名称：可吸收止血材料；种类：医用止血材料；"
                 "规格/型号：5cm×8cm；材质：氧化再生纤维素；数量：1片；"
                 "植入物条码：SYN-V3-IMPLANT-001。术者陈某，签名医生陈某。"
+                "本次为非急诊抢救手术。"
             ),
             surgery_name="胃癌根治术", surgeon="陈某医师",
             surgery_id=surgery_id,
@@ -496,7 +498,11 @@ def _build_surgery(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *,
         refs.append(_append_document(
             rows, case, v2, table_name="presurg_discussion", suffix="presurg-discussion",
             title="四级手术术前多学科讨论记录", record_time=v2._dt_for_case(case, 1, 15),
-            content="外科、麻醉科、影像科参加四级手术讨论，术者陈某参加并发言，排除急诊抢救手术。",
+            content=(
+                "外科陈某医师、麻醉科李某医师、影像科王某医师实际参加四级手术术前讨论，"
+                "术者陈某医师参加并发言。经多学科讨论后一致认为手术指征明确，可实施手术；"
+                "本次为非急诊抢救手术。"
+            ),
             discuss_staff="术者陈某、麻醉医师李某、影像医师王某", host_name="陈某医师",
         ))
     elif mode == "postop":
@@ -521,6 +527,23 @@ def _build_transfusion(
     refs = [_append_registration(rows, case, v2)]
     request_time = v2._dt_for_case(case, 1, 10)
     transfusion_time = v2._dt_for_case(case, 1, 14)
+    transfusion_end_time = v2._dt_for_case(case, 1, 16)
+    bloodtrans_id = f"{case.target_visit_id}-blood-event"
+    v2._append_row(
+        rows,
+        "mr_bloodtrans",
+        {
+            **v2._case_base_row(case),
+            "document_id": f"{case.target_visit_id}-frontpage",
+            "bloodtrans_id": bloodtrans_id,
+            "transfuse_variety": "悬浮红细胞",
+            "blood_transfusion_volume": "2",
+            "blood_transfusion_unit": "U",
+            "transfution_datetime": transfusion_time,
+            "transfusion_reason": "重度贫血",
+        },
+    )
+    refs.append(bloodtrans_id)
     application_id = f"{case.target_visit_id}-blood-app"
     v2._append_row(rows, "blood_application", {**v2._case_base_row(case), "application_id": application_id, "request_datetime": request_time, "transfuse_variety": "悬浮红细胞", "transfuse_volume": 2, "transfuse_volume_unit": "U", "physician_name": "陈某医师", "record_content": "因血红蛋白65g/L申请输注悬浮红细胞2U。"})
     refs.append(application_id)
@@ -528,7 +551,11 @@ def _build_transfusion(
     refs.append(_append_document(
         rows, case, v2, table_name="consent_form", suffix="blood-consent",
         title="输血知情同意书", record_time=consent_time,
-        content="诊断：重度贫血；输血指征为重度贫血，拟输注悬浮红细胞2U；已说明输血目的、风险、可能不良反应和替代方案，患者同意输血。",
+        content=(
+            "诊断：重度贫血；输血指征：重度贫血；输血成分：悬浮红细胞2U；"
+            "风险：已说明可能发生发热、寒战等不良反应；"
+            "替代方案：已说明药物治疗等其他方案；患者同意输血。"
+        ),
         consent_type="blood_transfusion", patient_sign="患者已签名",
         physician_sign="陈某医师", patient_sign_datetime=consent_time,
         physician_sign_datetime=consent_time,
@@ -543,7 +570,6 @@ def _build_transfusion(
     order_id = _append_order(rows, case, v2, table_name="inpat_nondrug_order", suffix="blood-order", prescribed_time=request_time, content="输注悬浮红细胞2U", order_type="输血", order_name="悬浮红细胞2U", quantity=2, quantity_unit="U")
     refs.append(order_id)
     v2._append_row(rows, "inpat_bill_item", {**v2._case_base_row(case), "bill_item_id": f"{case.target_visit_id}-blood-bill", "order_id": order_id, "medical_catalog_name": "悬浮红细胞", "quantity": 2, "quantity_unit": "U", "billing_datetime": transfusion_time, "record_content": "悬浮红细胞2U收费"})
-    transfusion_end_time = v2._dt_for_case(case, 1, 16)
     evaluation_time = v2._dt_for_case(case, 2, 9)
     refs.append(_append_document(
         rows, case, v2, table_name="bloodtrans_record", suffix="blood-course",
@@ -589,14 +615,22 @@ def _build_transfusion(
         for table_name in ("bloodtrans_record", "daily_course_record"):
             for row in rows.get(table_name, []):
                 if row.get("visit_id") == visit_id:
-                    row["record_content"] = "核对血型后输注悬浮红细胞2U，过程无不良反应。"
+                    row["record_content"] = (
+                        "未记录输血前评估。核对血型后输注悬浮红细胞2U，"
+                        "过程无不良反应。"
+                    )
     elif mode == "missing_course":
-        for table_name in ("bloodtrans_record", "daily_course_record"):
-            rows[table_name] = [
-                row
-                for row in rows.get(table_name, [])
-                if row.get("visit_id") != visit_id
-            ]
+        rows["daily_course_record"] = [
+            row
+            for row in rows.get("daily_course_record", [])
+            if row.get("visit_id") != visit_id
+        ]
+        for row in rows.get("bloodtrans_record", []):
+            if row.get("visit_id") == visit_id:
+                row["record_content"] = (
+                    f"{transfusion_end_time:%Y-%m-%d %H:%M:%S}输血结束；"
+                    "未记录输血病程主要内容，未记录输血结束后评价。"
+                )
     elif mode == "incomplete_inconsistent":
         for row in rows.get("bloodtrans_record", []):
             if row.get("visit_id") == visit_id:
@@ -628,7 +662,7 @@ def _build_tumor(
     refs.append(pathology_id)
     refs.append(_append_document(rows, case, v2, table_name="surgery_record", suffix="tumor-surgery", title="手术记录", record_time=v2._dt_for_case(case, 2, 16), content="行胃癌根治术，取胃大部切除标本及18枚淋巴结送病理检查。"))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="pathology-course", title="病程记录", record_time=v2._dt_for_case(case, 5, 14), content="病理报告胃腺癌、淋巴结2/18枚转移，结合分期拟行奥沙利铂联合卡培他滨化疗。"))
-    refs.append(_append_order(rows, case, v2, table_name="inpat_drug_order", suffix="oxaliplatin", prescribed_time=v2._dt_for_case(case, 6, 9), content="奥沙利铂130mg/m²静滴，第1天", generic_name="奥沙利铂", single_dose=130, single_dose_unit="mg/m²", drug_apply_method="静脉滴注"))
+    refs.append(_append_order(rows, case, v2, table_name="inpat_drug_order", suffix="oxaliplatin", prescribed_time=v2._dt_for_case(case, 6, 9), content="奥沙利铂130mg/m²静滴，第1天", generic_name="奥沙利铂", drug_type="抗肿瘤药物", single_dose=130, single_dose_unit="mg/m²", drug_apply_method="静脉滴注"))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="chemo-course", title="化疗病程记录", record_time=v2._dt_for_case(case, 6, 10), content="今日给予奥沙利铂130mg/m²静脉滴注，第1天，与医嘱一致，观察不良反应。"))
     refs.append(_append_document(rows, case, v2, table_name="discharge_record", suffix="tumor-discharge", title="出院记录", record_time=v2._dt_for_case(case, 8, 9), content="出院诊断胃腺癌。出院后肿瘤治疗计划：三周后返院继续奥沙利铂联合卡培他滨方案并复查血常规、肝肾功能。", discharge_date=v2._dt_for_case(case, 8, 10), discharge_time=v2._dt_for_case(case, 8, 10)))
     diagnosis_id = f"{case.target_visit_id}-tumor-diagnosis"
@@ -638,12 +672,18 @@ def _build_tumor(
     if mode == "quality_defects":
         for row in rows.get("surgery_record", []):
             if row.get("visit_id") == case.target_visit_id:
-                row["record_content"] = "行胃癌根治术，手术过程顺利。"
+                row["record_content"] = (
+                    "行胃癌根治术，手术过程顺利。"
+                    "手术记录未记录病理取材及送检情况，未记录病理结果。"
+                )
         for row in rows.get("daily_course_record", []):
             if row.get("visit_id") != case.target_visit_id:
                 continue
             if "病理报告" in str(row.get("record_content") or ""):
-                row["record_content"] = "患者术后恢复，继续观察。"
+                row["record_content"] = (
+                    "患者术后恢复，继续观察。"
+                    "病程记录未记录病理取材及送检情况，未记录病理结果。"
+                )
             elif "奥沙利铂" in str(row.get("record_content") or ""):
                 row["record_content"] = "今日给予奥沙利铂100mg/m²静脉滴注，第1天。"
         for row in rows.get("discharge_record", []):
@@ -681,7 +721,16 @@ def _build_antimicrobial(
     *,
     mode: str = "complete",
 ) -> list[str]:
-    _clear_visit_rows(rows, case, "inpat_drug_order", "daily_course_record", "consultation_record", "labtest_master", "labtest_item_report")
+    _clear_visit_rows(
+        rows,
+        case,
+        "inpat_drug_order",
+        "daily_course_record",
+        "senior_course_record",
+        "consultation_record",
+        "labtest_master",
+        "labtest_item_report",
+    )
     refs = [_append_registration(rows, case, v2)]
     culture_id = f"{case.target_visit_id}-culture"
     v2._append_row(rows, "labtest_master", {**v2._case_base_row(case), "test_id": culture_id, "labtest_subject": "血培养及药敏", "specimen": "静脉血", "request_datetime": v2._dt_for_case(case, 0, 9), "report_datetime": v2._dt_for_case(case, 2, 9), "record_content": "用药前采集血培养"})
@@ -696,7 +745,9 @@ def _build_antimicrobial(
         visit_id = case.target_visit_id
         for row in rows.get("inpat_drug_order", []):
             if row.get("visit_id") == visit_id:
-                row["record_content"] = f"启用{row.get('generic_name')}抗感染。"
+                row["record_content"] = (
+                    f"经验性启用{row.get('generic_name')}抗感染。"
+                )
         rows["labtest_master"] = [
             row for row in rows.get("labtest_master", []) if row.get("visit_id") != visit_id
         ]

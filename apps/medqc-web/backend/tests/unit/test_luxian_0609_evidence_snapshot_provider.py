@@ -8,6 +8,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import source_evidence_reader
+from app.services.luxian_0609 import evidence_snapshot_provider
 from app.services.luxian_0609.evidence_snapshot import SourceCompleteness, SourceQueryState
 from app.services.luxian_0609.evidence_material import Luxian0609EvidenceMaterialStore
 from app.services.luxian_0609.evidence_snapshot_provider import (
@@ -29,6 +30,22 @@ from app.services.luxian_0609.source_registry import (
     SourceAccessMode,
     load_luxian_0609_source_registry,
 )
+
+
+def test_039_does_not_treat_emergency_admission_with_stable_vitals_as_rescue_surgery():
+    state = evidence_snapshot_provider._explicit_emergency_rescue_state(({
+        "record_content": "患者急诊入院，生命体征平稳，择期实施手术。",
+    },))
+
+    assert state is None
+
+
+def test_039_accepts_explicit_emergency_life_saving_surgery_wording():
+    state = evidence_snapshot_provider._explicit_emergency_rescue_state(({
+        "record_content": "为紧急挽救生命，立即实施手术。",
+    },))
+
+    assert state is True
 from app.services.luxian_0609.executor_registry import (
     resolve_legacy_executor_material_source_keys,
 )
@@ -36,6 +53,20 @@ from app.services.luxian_0609.executor_registry import (
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
 HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("已实施四级手术，非急诊抢救手术。", False),
+        ("因急诊抢救生命实施手术。", True),
+        ("已实施四级手术。", None),
+    ],
+)
+def test_039_emergency_rescue_fact_requires_explicit_text(text, expected):
+    assert evidence_snapshot_provider._explicit_emergency_rescue_state(
+        ({"record_content": text},)
+    ) is expected
 
 
 def test_exam_lab_session_uses_filtered_order_source_not_truncated_generic_order() -> None:
@@ -560,6 +591,38 @@ def test_039_mr_surgery_typed_time_builds_hash_only_performed_fact() -> None:
     assert fact.source_snapshot_hash == observation.snapshot_ref.removeprefix(
         "sha256:"
     )
+
+
+def test_039_explicit_non_emergency_surgery_builds_negated_exception_fact() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            ({
+                "surgery_begin_time": "2026-01-01 08:00:00+08",
+                "record_content": "已实施四级手术，本次为非急诊抢救手术。",
+            },)
+            if source_key == "surgery_record"
+            else ()
+        )
+        return _rows(source_key, rows)
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-039",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    fact = next(
+        item
+        for item in session.snapshot.facts
+        if item.fact_type == "current_visit_emergency_rescue_surgery"
+    )
+    assert fact.assertion.value == "negated"
+    assert fact.source_key == "surgery_record"
     safe_output = repr((session.snapshot.to_safe_dict(), session.materials))
     for marker in (
         "2026-01-01",

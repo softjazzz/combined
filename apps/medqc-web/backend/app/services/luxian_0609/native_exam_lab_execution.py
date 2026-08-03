@@ -396,12 +396,15 @@ def _typed_trigger_state(
     )
     if fact_state == "present":
         return "present", loaded
-    if fact_state == "absent":
-        return ("unknown" if row_trigger else "absent"), loaded
     if row_trigger:
         return "present", loaded
     if source_gap:
         return "unavailable", loaded
+    # 否定事实只有在本次规则所需来源均完整时才可证明“不适用”。来源缺失、
+    # 截断或未接入的优先级高于历史/投影中的 negated fact，避免缺资料被折叠
+    # 为“未发生 CT/MRI 或培养事件”。
+    if fact_state == "absent":
+        return "absent", loaded
     if all(source.state == "empty" for source in loaded.values()):
         return "absent", loaded
     # 有通用检查/检验行但没有受控 CT/MRI 或培养/药敏触发，不得把沉默当临床否定。

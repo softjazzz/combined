@@ -36,6 +36,7 @@ from app.services.luxian_0609.source_registry import (
 def _session(rows_by_source, *, unavailable_sources=frozenset()):
     query_versions = {
         "inpat_registration": "snapshot-provider-inpat_registration-v1",
+        "admission_record": "snapshot-provider-admission_record-v1",
         "death_record": "snapshot-provider-death_record-v1",
         "death_discussion": "snapshot-provider-death_discussion-v1",
         "discharge_record": "snapshot-provider-discharge_record-v1",
@@ -329,7 +330,10 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
                 {"record_time": "2026-07-03 12:00:00"},
             ),
             "senior_course_record": (
-                {"record_time": "2026-07-03 08:00:00", "record_content": "同意出院。"},
+                {
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": "上级医师查看患者，同意明日出院。",
+                },
             ),
             "daily_course_record": (
                 {"record_time": "2026-07-03 09:00:00", "record_content": "一般病程。"},
@@ -655,6 +659,29 @@ async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() ->
 
 
 @pytest.mark.asyncio
+async def test_050_uses_admission_record_when_registration_time_is_missing() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-050",
+        {
+            "admission_record": ({"admission_datetime": "2026-06-01 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-06-08 09:00:00",
+                "record_content": "入院第7天，发热原因待查，目前诊断仍不明确。",
+            },),
+            "diffcase_discussion_record": ({
+                "record_time": "2026-06-08 11:00:00",
+                "record_content": "疑难病例讨论记录。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-050"]
+    assert facts["admission_time"] == "2026-06-01 08:00:00"
+    assert facts["discussion_count"] == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
 async def test_critical_value_without_disposition_is_non_compliant(rule_id: str) -> None:
     _, reduced = await _evaluate(
@@ -665,6 +692,32 @@ async def test_critical_value_without_disposition_is_non_compliant(rule_id: str)
         },)},
     )
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+async def test_critical_value_master_without_result_detail_is_data_gap(
+    rule_id: str,
+) -> None:
+    result, reduced = await _evaluate(
+        rule_id,
+        {
+            "labtest_master": ({
+                "report_id": "LAB-1",
+                "test_name": "血常规",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "labtest_item_report": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "required_field_missing"
+    assert dict(result.customer_display_facts)[rule_id] == {
+        "failure_kind": "critical_value_result_detail_missing",
+        "lab_report_count": 1,
+        "missing_source": "labtest_item_report",
+    }
 
 
 @pytest.mark.asyncio
@@ -741,6 +794,24 @@ async def test_054_bare_antimicrobial_action_without_reason_is_non_compliant() -
                 "record_time": "2026-06-01 12:00:00",
                 "record_content": "启用美罗培南。",
             },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-057",
+        {
+            "inpat_drug_order": ({
+                "generic_name": "美罗培南",
+                "prescribed_datetime": "2026-06-01 10:00:00",
+                "record_content": "经验性启用美罗培南抗感染。",
+            },),
+            "daily_course_record": (),
+            "senior_course_record": (),
         },
     )
 

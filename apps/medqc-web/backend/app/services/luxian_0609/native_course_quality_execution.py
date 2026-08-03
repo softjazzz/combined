@@ -2148,6 +2148,37 @@ class _CourseSemanticOutcome:
     criterion_results: tuple[CriterionResult, ...] = ()
 
 
+def _lx018_confirmed_length_outcome(
+    documents: Mapping[str, Any],
+) -> _CourseSemanticOutcome:
+    """只执行客户已确认的主诉长度口径；诊断指向仍属待确认项。"""
+
+    length_result = _lx018_length_criterion_result(documents)
+    if length_result.status is CriterionStatus.UNKNOWN:
+        return _CourseSemanticOutcome(
+            rule_id="LX0609-018",
+            status="data_gap",
+            reason_code="required_field_missing",
+            executor_type="program",
+            criterion_results=(length_result,),
+        )
+    return _CourseSemanticOutcome(
+        rule_id="LX0609-018",
+        status=(
+            "compliant"
+            if length_result.status is CriterionStatus.PASSED
+            else "non_compliant"
+        ),
+        reason_code=(
+            "requirement_satisfied"
+            if length_result.status is CriterionStatus.PASSED
+            else length_result.reason_code
+        ),
+        executor_type="program",
+        criterion_results=(length_result,),
+    )
+
+
 def _lx018_unknown_semantic_result(reason_code: str) -> CriterionResult:
     """为未能完成的诊断指向子判定生成受控未知结果。"""
 
@@ -2481,11 +2512,7 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": (
-            "admission_record",
-            "diagnosis",
-            "admission_record_diagnosis",
-        ),
+        "LX0609-018": ("admission_record",),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -2552,11 +2579,7 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": (
-            "admission_record",
-            "diagnosis",
-            "admission_record_diagnosis",
-        ),
+        "LX0609-018": ("admission_record",),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -2902,25 +2925,9 @@ async def execute_luxian_0609_native_course_quality_rules(
                     )
                 )
                 continue
-            if rule_id == "LX0609-018" and not _admission_material_ready(
-                typed_documents, ()
-            ):
-                length_result = _lx018_length_criterion_result(typed_documents)
-                semantic_result = _lx018_unknown_semantic_result(
-                    "required_field_missing"
-                )
+            if rule_id == "LX0609-018":
                 emit_course_semantic(
-                    _CourseSemanticOutcome(
-                        rule_id=rule_id,
-                        status=(
-                            "non_compliant"
-                            if length_result.status is CriterionStatus.FAILED
-                            else "data_gap"
-                        ),
-                        reason_code="complaint_or_primary_diagnosis_unavailable",
-                        executor_type="program",
-                        criterion_results=(length_result, semantic_result),
-                    )
+                    _lx018_confirmed_length_outcome(typed_documents)
                 )
                 continue
             context = _context(rule_id, typed_documents)
@@ -3270,25 +3277,17 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             continue
         elif rule_id == "LX0609-018":
-            length_result = _lx018_length_criterion_result(documents)
-            if not _admission_material_ready(documents, facts):
-                semantic_result = _lx018_unknown_semantic_result(
-                    "required_field_missing"
+            outcome = _lx018_confirmed_length_outcome(documents)
+            results.append(
+                _result(
+                    rule_id,
+                    outcome.status,
+                    outcome.reason_code,
+                    executor_type=outcome.executor_type,
+                    criterion_results=outcome.criterion_results,
                 )
-                results.append(
-                    _result(
-                        rule_id,
-                        (
-                            "non_compliant"
-                            if length_result.status is CriterionStatus.FAILED
-                            else "data_gap"
-                        ),
-                        "complaint_or_primary_diagnosis_unavailable",
-                        executor_type="program",
-                        criterion_results=(length_result, semantic_result),
-                    )
-                )
-                continue
+            )
+            continue
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)

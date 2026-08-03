@@ -70,6 +70,11 @@ _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     # 均来自上级医师查房记录，不能把锚点文书投影成客户证据。
     "LX0609-005": frozenset({"senior_course_record"}),
     "LX0609-006": frozenset({"senior_course_record"}),
+    # 026 以诊断事实判定适用性，但客户实际需要核对的是化疗医嘱与病程记录。
+    # 诊断仅作为触发来源，不能混入两类治疗记录的一致性证据。
+    "LX0609-026": frozenset({"inpat_drug_order", "daily_course_record"}),
+    # 038 只核对麻醉记录单是否存在；手术/同意书仅参与麻醉适用性门控。
+    "LX0609-038": frozenset({"anesthesia_record"}),
 }
 
 
@@ -1998,8 +2003,14 @@ def safe_luxian_0609_customer_display_facts(
             "death_discussion_timeliness_check",
             "death_discussion_missing_after_deadline",
         },
-        "LX0609-052": {"critical_value_timeliness_check"},
-        "LX0609-053": {"critical_value_disposition_presence_check"},
+        "LX0609-052": {
+            "critical_value_timeliness_check",
+            "critical_value_result_detail_missing",
+        },
+        "LX0609-053": {
+            "critical_value_disposition_presence_check",
+            "critical_value_result_detail_missing",
+        },
         "LX0609-054": {"antimicrobial_reason_documentation_check"},
         "LX0609-055": {"antimicrobial_effect_evaluation_check"},
         "LX0609-057": {"empiric_antimicrobial_reason_check"},
@@ -2034,6 +2045,9 @@ def safe_luxian_0609_customer_display_facts(
         },
         "critical_value_disposition_presence_check": {
             "critical_item_names", "critical_flags", "report_times", "disposition_times",
+        },
+        "critical_value_result_detail_missing": {
+            "lab_report_count", "missing_source",
         },
         "antimicrobial_reason_documentation_check": {"antimicrobials", "reason_documented"},
         "antimicrobial_effect_evaluation_check": {
@@ -2092,6 +2106,13 @@ def safe_luxian_0609_customer_display_facts(
         kind_key = "verification_kind" if raw.get("verification_kind") else "failure_kind"
         kind = raw.get(kind_key)
         if kind not in extended_kinds_by_rule[rule_id]:
+            return None
+        if kind == "critical_value_result_detail_missing" and (
+            raw.get("missing_source") != "labtest_item_report"
+            or not isinstance(raw.get("lab_report_count"), int)
+            or isinstance(raw.get("lab_report_count"), bool)
+            or raw.get("lab_report_count") <= 0
+        ):
             return None
         safe: dict[str, Any] = {kind_key: kind}
         for key in extended_allowed_keys[kind]:
@@ -2266,7 +2287,7 @@ def safe_luxian_0609_customer_display_facts(
         }:
             allowed_fields = {
                 "reason_or_indication", "start_and_end_time", "component", "dose",
-                "process_observation", "reaction_and_handling", "effect",
+                "process_observation", "reaction_and_handling",
             }
             checked = controlled_list(raw.get("checked_fields"), allowed=allowed_fields)
             missing = controlled_list(raw.get("missing_fields"), allowed=allowed_fields)
@@ -2803,6 +2824,26 @@ def safe_luxian_0609_customer_display_facts(
             and raw.get("performed_anesthesia_confirmed") is True
             and raw.get("checked_sources")
             == ["preane_surveil_record", "postane_surveil_record"]
+            and raw.get("checked_fields_by_visit")
+            == {
+                "preanesthesia_visit": [
+                    "asa_level",
+                    "airway_assessment",
+                    "fasting_status",
+                    "anesthesia_history",
+                    "risk_discussion",
+                    "anesthetist_signature",
+                    "record_time",
+                ],
+                "postanesthesia_visit": [
+                    "consciousness_status",
+                    "respiratory_status",
+                    "circulatory_status",
+                    "complication_assessment",
+                    "anesthetist_signature",
+                    "record_time",
+                ],
+            }
         ):
             return {
                 "verification_kind": "anesthesia_visits_complete",
@@ -2811,6 +2852,14 @@ def safe_luxian_0609_customer_display_facts(
                     "preane_surveil_record",
                     "postane_surveil_record",
                 ],
+                "checked_fields_by_visit": {
+                    "preanesthesia_visit": list(
+                        raw["checked_fields_by_visit"]["preanesthesia_visit"]
+                    ),
+                    "postanesthesia_visit": list(
+                        raw["checked_fields_by_visit"]["postanesthesia_visit"]
+                    ),
+                },
             }
         if (
             rule_id == "LX0609-037"
@@ -2943,6 +2992,14 @@ def safe_luxian_0609_customer_display_facts(
             or (
                 discussion_state is not None
                 and discussion_state not in {"completed", "missing", "unknown"}
+            )
+            or (
+                discussion_state in {"completed", "missing"}
+                and (
+                    performed is not True
+                    or procedure_kind != "surgery"
+                    or effective_level != "四级"
+                )
             )
         ):
             return None
@@ -3464,6 +3521,42 @@ def safe_luxian_0609_customer_display_facts(
                 if isinstance(value, str) and value.strip()
             ][:2],
         }
+    if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"} and raw.get(
+        "consultation_assessment"
+    ) in {"明确", "不符合要求"}:
+        expected_keys = {"source_document_ids", "consultation_assessment"}
+        if rule_id == "LX0609-020":
+            expected_keys.update({"execution_record_state", "execution_candidate_count"})
+        source_document_ids = raw.get("source_document_ids")
+        if (
+            set(raw) != expected_keys
+            or not isinstance(source_document_ids, list)
+            or len(source_document_ids) > 8
+            or any(
+                not isinstance(value, str) or not value.strip()
+                for value in source_document_ids
+            )
+        ):
+            return None
+        facts = {
+            "source_document_ids": list(dict.fromkeys(source_document_ids)),
+            "consultation_assessment": raw["consultation_assessment"],
+        }
+        if rule_id == "LX0609-020":
+            if (
+                raw.get("execution_record_state")
+                not in {"已发现明确执行记录", "未发现执行记录"}
+                or type(raw.get("execution_candidate_count")) is not int
+                or not 0 <= raw["execution_candidate_count"] <= 100
+            ):
+                return None
+            facts.update(
+                {
+                    "execution_record_state": raw["execution_record_state"],
+                    "execution_candidate_count": raw["execution_candidate_count"],
+                }
+            )
+        return facts
     if rule_id in {"LX0609-021", "LX0609-022"}:
         expected_kind = (
             "consultation_application_quality_check"
@@ -3641,7 +3734,13 @@ def _timeliness_customer_findings(
     """从已白名单化的时限事实生成客户可直接核对的结论。"""
 
     if (
-        rule_id != "LX0609-002"
+        rule_id not in {
+            "LX0609-001",
+            "LX0609-002",
+            "LX0609-004",
+            "LX0609-005",
+            "LX0609-006",
+        }
         or not isinstance(facts, Mapping)
         or facts.get("failure_kind") != "timeliness_requirement_not_met"
         or facts.get("timeliness_state") != "late"
@@ -3662,9 +3761,17 @@ def _timeliness_customer_findings(
         or not isinstance(overdue_hours, (int, float))
     ):
         return ""
+    labels = {
+        "LX0609-001": ("入院记录", "入院后", "入院时间"),
+        "LX0609-002": ("首次病程记录", "入院后", "入院时间"),
+        "LX0609-004": ("抢救记录", "抢救结束后", "抢救结束时间"),
+        "LX0609-005": ("主治医师及以上首次查房记录", "入院后", "入院时间"),
+        "LX0609-006": ("副主任医师或主任医师首次查房记录", "入院后", "入院时间"),
+    }
+    document_label, relation_label, anchor_label = labels[rule_id]
     return (
-        f"首次病程记录于入院后 {elapsed_hours:g} 小时完成"
-        f"（入院时间 {anchor_time}；记录时间 {observed_time}），"
+        f"{document_label}于{relation_label} {elapsed_hours:g} 小时完成"
+        f"（{anchor_label} {anchor_time}；记录时间 {observed_time}），"
         f"超过 {threshold_hours} 小时要求 {overdue_hours:g} 小时。"
     )
 
@@ -3728,7 +3835,17 @@ def _customer_evidence_from_display_facts(
     if source_type and source_document_id:
         return [{"source_type": source_type, "source_document_id": source_document_id}]
 
-    if rule_id not in {"LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+    if rule_id not in {
+        "LX0609-010",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-014",
+        "LX0609-015",
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-046",
+    }:
         return []
     raw_ids = raw.get("source_document_ids")
     if not isinstance(raw_ids, list):
@@ -3742,8 +3859,15 @@ def _customer_evidence_from_display_facts(
     )
     # 这些来源行仅在显式存在 document_id 时进入此列表。类型无法可靠区分
     # 时统一按 document 交给病历对照页按 source_ref 精确解析，禁止猜测标题。
+    source_type = (
+        "consultation_record"
+        if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"}
+        else "bloodtrans_record"
+        if rule_id == "LX0609-046"
+        else "document"
+    )
     return [
-        {"source_type": "document", "source_document_id": document_id}
+        {"source_type": source_type, "source_document_id": document_id}
         for document_id in document_ids
     ]
 

@@ -890,11 +890,31 @@ def _typed_terminal_outcome(
         )
         if blocker is not None:
             return blocker
-        emergency_state, _ = _typed_fact_state(
-            snapshot,
-            fact_types=_EMERGENCY_FACT_TYPES,
-            source_key="rescue_record",
-        )
+        if isinstance(snapshot, Luxian0609EvidenceSnapshot):
+            emergency_states = {
+                state
+                for source_key in ("surgery_record", "mr_surgery", "rescue_record")
+                if (
+                    state := _typed_fact_state(
+                        snapshot,
+                        fact_types=_EMERGENCY_FACT_TYPES,
+                        source_key=source_key,
+                    )[0]
+                )
+                != "unknown"
+            }
+            emergency_state = (
+                next(iter(emergency_states))
+                if len(emergency_states) == 1
+                else "unknown"
+            )
+        else:
+            # 保留纯函数单测/旧调用桩的既有边界；正式运行只走上面的同快照聚合。
+            emergency_state, _ = _typed_fact_state(
+                snapshot,
+                fact_types=_EMERGENCY_FACT_TYPES,
+                source_key="rescue_record",
+            )
         if emergency_state == "present":
             return _SurgeryDocumentOutcome(
                 rule_id, "not_applicable", "emergency_rescue_exception", "program"
@@ -1196,6 +1216,25 @@ def _typed_terminal_outcome(
                 "verification_kind": "anesthesia_visits_complete",
                 "performed_anesthesia_confirmed": True,
                 "checked_sources": list(typed_visit_sources),
+                "checked_fields_by_visit": {
+                    "preanesthesia_visit": [
+                        "asa_level",
+                        "airway_assessment",
+                        "fasting_status",
+                        "anesthesia_history",
+                        "risk_discussion",
+                        "anesthetist_signature",
+                        "record_time",
+                    ],
+                    "postanesthesia_visit": [
+                        "consciousness_status",
+                        "respiratory_status",
+                        "circulatory_status",
+                        "complication_assessment",
+                        "anesthetist_signature",
+                        "record_time",
+                    ],
+                },
             },
         )
 

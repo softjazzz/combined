@@ -816,8 +816,8 @@ async def test_033_complete_readiness_with_empty_source_is_non_compliant_without
 
 
 @pytest.mark.asyncio
-async def test_typed_024_025_028_033_share_one_joint_fact_call() -> None:
-    """四条均需语义事实时，统一旁路只能发起一次联合提取。"""
+async def test_typed_024_025_028_share_one_call_and_033_structured_signatures_short_circuit() -> None:
+    """033签名强事实直接收口，其余语义规则仍只发起一次联合提取。"""
 
     selected = ("LX0609-024", "LX0609-025", "LX0609-028", "LX0609-033")
 
@@ -879,10 +879,10 @@ async def test_typed_024_025_028_033_share_one_joint_fact_call() -> None:
     assert result.llm_call_count == 1
     assert len(client.prompts) == 1
     prompt = client.prompts[0]
-    assert all(rule_id in prompt for rule_id in selected)
-    assert "033 只阅读给定的本次手术知情同意书正文" in prompt
+    assert all(rule_id in prompt for rule_id in selected[:3])
+    assert "LX0609-033" not in prompt
     assert "SAFE_SURGERY_MARKER" in prompt
-    assert "SAFE_CONSENT_MARKER" in prompt
+    assert "SAFE_CONSENT_MARKER" not in prompt
     assert "SHOULD_NOT_LEAK" not in prompt
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
@@ -892,6 +892,76 @@ async def test_typed_024_025_028_033_share_one_joint_fact_call() -> None:
     assert [item.final_state.value for item in reduced] == [
         "compliant", "compliant", "data_gap", "compliant",
     ]
+
+
+def test_031_does_not_treat_submitter_as_authoritative_signer() -> None:
+    status, reason, facts = surgery._surgery_signature_outcome(
+        ({"surgeon": "陈某医师", "submitter": "陈某医师"},)
+    )
+
+    assert (status, reason) == ("data_gap", "required_field_missing")
+    assert facts is None
+
+
+def test_031_accepts_explicit_surgeon_signature() -> None:
+    status, reason, facts = surgery._surgery_signature_outcome(({
+        "surgeon": "陈某医师",
+        "submitter": "陈某医师",
+        "surgeon_sign": "陈某医师",
+    },))
+
+    assert (status, reason) == ("compliant", "surgery_signature_confirmed")
+    assert facts is not None and facts["surgeon_signature_matches"] is True
+
+
+def test_031_accepts_authoritative_main_surgery_signature() -> None:
+    status, reason, facts = surgery._surgery_signature_outcome(({
+        "surgeon": "陈某医师",
+        "main_surgery_sign": "陈某医师",
+    },))
+
+    assert (status, reason) == ("compliant", "surgery_signature_confirmed")
+    assert facts is not None and facts["surgeon_signature_matches"] is True
+
+
+def test_031_does_not_hide_unsigned_surgery_behind_single_signed_record() -> None:
+    status, reason, facts = surgery._resolve_surgery_signature_outcome(
+        surgery_master_rows=(
+            {"surgeon": "张医师", "main_surgery_sign": "张医师"},
+            {"surgeon": "李医师", "main_surgery_sign": ""},
+        ),
+        surgery_record_rows=(
+            {"surgeon": "张医师", "surgeon_sign": "张医师"},
+        ),
+    )
+
+    assert (status, reason, facts) == ("data_gap", "association_failed", None)
+
+
+def test_031_single_event_fallback_requires_same_surgeon() -> None:
+    status, reason, facts = surgery._resolve_surgery_signature_outcome(
+        surgery_master_rows=({"surgeon": "张医师", "main_surgery_sign": ""},),
+        surgery_record_rows=({"surgeon": "李医师", "surgeon_sign": "李医师"},),
+    )
+
+    assert (status, reason, facts) == ("data_gap", "association_failed", None)
+
+
+def test_025_explicit_six_implant_fields_are_programmatic() -> None:
+    outcome = surgery._deterministic_025_outcome(
+        ({
+            "document_id": "surgery-025",
+            "record_content": (
+                "植入物名称：止血材料；种类：医用材料；规格/型号：5cm×8cm；"
+                "材质：氧化纤维素；数量：1片；植入物条码：TRACE-001。"
+            ),
+        },)
+    )
+
+    assert outcome is not None
+    assert outcome.status == "compliant"
+    assert outcome.customer_display_facts is not None
+    assert outcome.customer_display_facts["source_document_id"] == "surgery-025"
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -101,12 +101,23 @@ _PATHOLOGY_SAMPLING_ADMIN_PATTERN = re.compile(
 )
 _PATHOLOGY_FINAL_RESULT_PATTERN = re.compile(r"病理(?:诊断|结果)")
 _PATHOLOGY_PENDING_RESULT_PATTERN = re.compile(
-    r"(?:待补|待出|待定|待完善|待诊断|待报告|待复核|未出|审核中|尚未|另报|后续正式报告|暂缺|未完成|初步)"
+    r"(?:待补|待出|待定|待完善|待诊断|待报告|待回报|待复核|未出|审核中|尚未|另报|后续正式报告|暂缺|未完成|初步)"
 )
 _PATHOLOGY_REPORT_DATETIME_PATTERN = re.compile(
     r"^\d{4}-\d{1,2}-\d{1,2}[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?$"
 )
+_PATHOLOGY_RESULT_REFERENCE_PATTERN = re.compile(r"病理(?:报告|结果|诊断)")
+_PATHOLOGY_RESULT_MISSING_PATTERN = re.compile(
+    r"(?:未记录.{0,12}病理(?:报告|结果|诊断)|病理(?:报告|结果|诊断).{0,12}未记录)"
+)
+_PATHOLOGY_SAMPLING_MISSING_PATTERN = re.compile(
+    r"(?:未记录.{0,12}(?:病理)?(?:取材|送检)|(?:病理)?(?:取材|送检).{0,12}未记录)"
+)
 _CHEMOTHERAPY_CLASS_PATTERN = re.compile(r"(?:化疗|抗肿瘤)")
+_CHEMOTHERAPY_RELATIVE_DATE_PATTERN = re.compile(r"(?:今日|当日)")
+_CHEMOTHERAPY_EXPLICIT_DATE_PATTERN = re.compile(
+    r"(?P<year>\d{4})[-年/](?P<month>\d{1,2})[-月/](?P<day>\d{1,2})日?"
+)
 _DISCHARGE_PLAN_FUTURE_PATTERN = re.compile(r"(?:后续|出院后|继续|定期|计划|建议|门诊)")
 _DISCHARGE_PLAN_TREATMENT_PATTERN = re.compile(
     r"(?:肿瘤治疗|化疗|放疗|靶向|免疫治疗|内分泌治疗|抗肿瘤|治疗计划)"
@@ -522,6 +533,49 @@ def _has_documented_pathology_sampling(*materials: SourceMaterial) -> bool:
     return False
 
 
+def _has_documented_pathology_result(
+    pathology_report: SourceMaterial,
+    *target_materials: SourceMaterial,
+) -> bool:
+    """只接受目标文书中明确的病理结果引用，并用最终诊断关键词交叉核对。"""
+
+    diagnosis_terms: list[str] = []
+    for row in pathology_report.rows:
+        diagnosis = _clean(row.get("diagnosis"))
+        diagnosis_terms.extend(
+            term
+            for term in (
+                _clean(item)
+                for item in re.split(r"[，,；;。\r\n]+", diagnosis)
+            )
+            if len(term) >= 2
+        )
+    for material in target_materials:
+        for row in material.rows:
+            text = _clean(_row_text(row))
+            if not _PATHOLOGY_RESULT_REFERENCE_PATTERN.search(text):
+                continue
+            if _PATHOLOGY_PENDING_RESULT_PATTERN.search(text):
+                continue
+            if any(term in text for term in diagnosis_terms):
+                return True
+            if not diagnosis_terms and _PATHOLOGY_FINAL_RESULT_PATTERN.search(text):
+                return True
+    return False
+
+
+def _all_targets_explicitly_missing(
+    pattern: re.Pattern[str], *target_materials: SourceMaterial
+) -> bool:
+    """只有每类现有目标文书都明确声明该事实未记录时才短路为缺陷。"""
+
+    return bool(target_materials) and all(
+        material.state == "present"
+        and any(pattern.search(_clean(_row_text(row))) for row in material.rows)
+        for material in target_materials
+    )
+
+
 def _prompt(wrapper: Mapping[str, Any], *, context: str) -> str:
     custom_prompt = _MAPPING_LINE_PATTERN.sub(
         "", str(wrapper.get("custom_prompt") or "")
@@ -719,6 +773,72 @@ def _normalized_comparison_text(value: Any) -> str:
     return re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", _clean(value).lower())
 
 
+def _date_value(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    text = _clean(value)
+    if not text:
+        return None
+    try:
+        normalized = text.replace("T", " ").replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized).date()
+    except ValueError:
+        return None
+
+
+def _course_record_date(row: Mapping[str, Any]) -> date | None:
+    for key in ("record_time", "record_datetime", "submit_time", "submit_datetime"):
+        if value := _date_value(row.get(key)):
+            return value
+    return None
+
+
+def _chemotherapy_time_state(
+    *,
+    prescribed: Any,
+    drug_name: str,
+    course_rows: Sequence[Mapping[str, Any]],
+) -> str:
+    """将病程中的今日/当日绑定到文书日期，再与医嘱日期核对。"""
+
+    prescribed_date = _date_value(prescribed)
+    if prescribed_date is None:
+        return "unknown"
+    normalized_drug = _normalized_comparison_text(drug_name)
+    candidates = tuple(
+        row
+        for row in course_rows
+        if not normalized_drug
+        or normalized_drug in _normalized_comparison_text(_row_text(row))
+    )
+    if not candidates:
+        return "unknown"
+
+    observed_dates: list[date] = []
+    for row in candidates:
+        row_text = _row_text(row)
+        for match in _CHEMOTHERAPY_EXPLICIT_DATE_PATTERN.finditer(row_text):
+            try:
+                observed_dates.append(
+                    datetime(
+                        int(match.group("year")),
+                        int(match.group("month")),
+                        int(match.group("day")),
+                    ).date()
+                )
+            except ValueError:
+                continue
+        if _CHEMOTHERAPY_RELATIVE_DATE_PATTERN.search(row_text):
+            if record_date := _course_record_date(row):
+                observed_dates.append(record_date)
+
+    if prescribed_date in observed_dates:
+        return "matched"
+    if observed_dates:
+        return "mismatched"
+    return "unknown"
+
+
 def _typed_chemotherapy_comparison(
     *,
     orders: SourceMaterial,
@@ -764,7 +884,6 @@ def _typed_chemotherapy_comparison(
             "drug_name": drug_name,
             "dose": f"{dose_value}{dose_unit}" if dose_value else "",
             "route": route,
-            "time": prescribed[:10] if len(prescribed) >= 10 else prescribed,
         }
         for field, expected in expected_values.items():
             normalized = _normalized_comparison_text(expected)
@@ -772,6 +891,15 @@ def _typed_chemotherapy_comparison(
                 missing_order_fields.add(field)
             elif normalized not in course_text:
                 field_results[field] = "mismatched"
+        time_state = _chemotherapy_time_state(
+            prescribed=prescribed,
+            drug_name=drug_name,
+            course_rows=course_records.rows,
+        )
+        if not _date_value(prescribed):
+            missing_order_fields.add("time")
+        elif time_state != "matched":
+            field_results["time"] = time_state
 
     for field in missing_order_fields:
         field_results[field] = "unknown"
@@ -783,6 +911,8 @@ def _typed_chemotherapy_comparison(
     }
     if missing_order_fields:
         return "data_gap", "chemotherapy_order_fields_missing", facts
+    if any(value == "unknown" for value in field_results.values()):
+        return "data_gap", "chemotherapy_time_unavailable", facts
     if any(value == "mismatched" for value in field_results.values()):
         return "non_compliant", "chemotherapy_record_mismatch", facts
     return "compliant", "chemotherapy_record_matches_order", facts
@@ -1209,6 +1339,53 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     pathology_master=master,
                     pathology_report=report,
                     surgery_record=sampling_surgery or materials["surgery_record"],
+                    daily_course_record=materials["daily_course_record"],
+                ),
+            )
+            continue
+        if rule_id == "LX0609-013":
+            documented = _has_documented_pathology_result(
+                report,
+                materials["surgery_record"],
+                materials["daily_course_record"],
+            )
+            explicitly_missing = _all_targets_explicitly_missing(
+                _PATHOLOGY_RESULT_MISSING_PATTERN,
+                materials["surgery_record"],
+                materials["daily_course_record"],
+            )
+            if documented or explicitly_missing:
+                status = "compliant" if documented else "non_compliant"
+                emit_outcome(
+                    rule_id,
+                    status,
+                    "pathology_result_documented"
+                    if documented
+                    else "pathology_result_not_documented",
+                    executor_type="program",
+                    display_facts=_pathology_result_display_facts(
+                        status=status,
+                        pathology_master=master,
+                        pathology_report=report,
+                        surgery_record=materials["surgery_record"],
+                        daily_course_record=materials["daily_course_record"],
+                    ),
+                )
+                continue
+        if rule_id == "LX0609-019" and _all_targets_explicitly_missing(
+            _PATHOLOGY_SAMPLING_MISSING_PATTERN,
+            materials["surgery_record"],
+            materials["daily_course_record"],
+        ):
+            emit_outcome(
+                rule_id,
+                "non_compliant",
+                "pathology_sampling_not_documented",
+                executor_type="program",
+                display_facts=_lx019_missing_sampling_display_facts(
+                    pathology_master=master,
+                    pathology_report=report,
+                    surgery_record=materials["surgery_record"],
                     daily_course_record=materials["daily_course_record"],
                 ),
             )

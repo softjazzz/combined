@@ -43,18 +43,28 @@ NOT_APPLICABLE_CASES = (
     ("LX0609-014", "trigger_absent_complete"),
     ("LX0609-015", "trigger_absent_complete"),
     ("LX0609-019", "trigger_absent_complete"),
+    ("LX0609-020", "trigger_absent_complete"),
+    ("LX0609-021", "trigger_absent_complete"),
+    ("LX0609-022", "trigger_absent_complete"),
+    ("LX0609-025", "performed_event_absent"),
     ("LX0609-027", "trigger_absent_complete"),
     ("LX0609-029", "performed_event_absent"),
     ("LX0609-030", "performed_event_absent"),
+    ("LX0609-030", "trigger_absent_complete"),
     ("LX0609-031", "performed_event_absent"),
     ("LX0609-032", "performed_event_absent"),
+    ("LX0609-032", "trigger_absent_complete"),
     ("LX0609-033", "performed_event_absent"),
     ("LX0609-034", "performed_event_absent"),
+    ("LX0609-035", "performed_event_absent"),
     ("LX0609-036", "performed_event_absent"),
     ("LX0609-037", "eligibility_not_met"),
+    ("LX0609-037", "performed_event_absent"),
     ("LX0609-038", "performed_event_absent"),
     ("LX0609-039", "performed_event_absent"),
     ("LX0609-040", "performed_event_absent"),
+    ("LX0609-040", "trigger_absent_complete"),
+    ("LX0609-042", "eligibility_not_met"),
 ) + tuple(
     (f"LX0609-{index:03d}", "trigger_absent_complete")
     for index in range(41, 49)
@@ -73,6 +83,63 @@ NOT_APPLICABLE_CASES = (
     ("rule_id", "facts", "expected"),
     [
         (
+            "LX0609-009",
+            {
+                "failure_kind": "critical_daily_record_coverage_satisfied",
+                "required_dates": ["2026-06-01", "2026-06-02"],
+                "covered_dates": ["2026-06-01", "2026-06-02"],
+            },
+            "病危期间应记录日期为 2026-06-01、2026-06-02，实际均已覆盖。本结论仅核对病危期间每日病程；病情变化时的记录要求暂未纳入本阶段判断。",
+        ),
+        (
+            "LX0609-012",
+            {
+                "failure_kind": "exam_lab_requirement_not_documented",
+                "report_time": "2026-06-02 14:00:00",
+                "response_record_count": 1,
+                "response_record_time": "2026-06-02 18:00:00",
+                "interval_hours": 4.0,
+            },
+            "CT/MRI 报告于 2026-06-02 14:00:00 出具，找到 1 份相关病程，最早相关病程时间 2026-06-02 18:00:00，间隔 4 小时，但病程未记录阳性结果的临床意义判断或相应处置。",
+        ),
+        (
+            "LX0609-020",
+            {"execution_record_state": "未发现执行记录"},
+            "已找到会诊意见，但未发现对应的请会诊执行记录。",
+        ),
+        (
+            "LX0609-021",
+            {"consultation_assessment": "不符合要求"},
+            "已核对会诊申请目的，其中未说明具体临床问题、会诊理由或明确目的。",
+        ),
+        (
+            "LX0609-026",
+            {
+                "verification_kind": "chemotherapy_order_course_comparison",
+                "order_count": 1,
+                "field_results": {
+                    "drug_name": "matched",
+                    "dose": "mismatched",
+                    "route": "matched",
+                    "time": "matched",
+                },
+            },
+            "已核对 1 条化疗医嘱及对应病程，剂量记录不一致。",
+        ),
+        (
+            "LX0609-040",
+            {
+                "performed_surgery_confirmed": True,
+                "procedure_kind": "surgery",
+                "effective_surgery_level": "四级",
+                "surgery_level_source": "hospital_performance",
+                "mdt_discussion_state": "missing",
+                "procedure_code": "01.2400X013",
+                "procedure_name": "硬脑膜外血肿清除术",
+            },
+            "已确认实施四级手术 硬脑膜外血肿清除术（01.2400X013）（等级来源：院内绩效分配），未找到术前多学科讨论记录。",
+        ),
+        (
             "LX0609-042",
             {
                 "failure_kind": "transfusion_consent_incomplete",
@@ -89,6 +156,30 @@ NOT_APPLICABLE_CASES = (
             "输血前九项缺少：艾滋病病毒抗体、梅毒筛查、谷丙转氨酶。",
         ),
         (
+            "LX0609-044",
+            {
+                "verification_kind": "pretransfusion_assessment_complete",
+                "missing_fields": [],
+            },
+            "输血前评估已记录输血指征、相关检验，以及输血风险、既往输血情况或患者当前情况。",
+        ),
+        (
+            "LX0609-044",
+            {
+                "failure_kind": "pretransfusion_assessment_missing",
+                "missing_fields": ["indication", "laboratory_indicator"],
+            },
+            "已确认实施输血，但未找到可核对的输血前评估记录。",
+        ),
+        (
+            "LX0609-046",
+            {
+                "verification_kind": "transfusion_course_record_complete",
+                "missing_fields": [],
+            },
+            "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。",
+        ),
+        (
             "LX0609-047",
             {
                 "verification_kind": "posttransfusion_evaluation_complete",
@@ -97,6 +188,34 @@ NOT_APPLICABLE_CASES = (
                 "elapsed_hours": 16.0,
             },
             "已在输血结束后 24 小时内完成效果评价，间隔 16 小时（结束时间 2026-06-05 16:00:00；评价时间 2026-06-06 08:00:00）。",
+        ),
+        (
+            "LX0609-055",
+            {
+                "verification_kind": "antimicrobial_effect_evaluation_check",
+                "antimicrobials": ["美罗培南", "万古霉素"],
+                "evaluation_intervals": [],
+            },
+            "已核对抗菌药物 美罗培南、万古霉素，未找到首次用药后 48～72 小时内的效果评价记录。",
+        ),
+        (
+            "LX0609-061",
+            {
+                "verification_kind": "discharge_record_timeliness_check",
+                "record_time": "2026-06-09 09:00:00",
+                "discharge_time": "2026-06-09 10:00:00",
+                "actual_interval_hours": -1.0,
+            },
+            "出院记录于出院前 1 小时完成（记录时间 2026-06-09 09:00:00；出院时间 2026-06-09 10:00:00），符合出院后 24 小时内完成要求。",
+        ),
+        (
+            "LX0609-066",
+            {
+                "verification_kind": "postoperative_first_course_presence_check",
+                "performed_surgery_count": 7,
+                "postoperative_first_course_count": 2,
+            },
+            "已确认实施手术 7 台，找到术后首次病程记录 2 份；尚不能逐台关联，暂无法确认每台手术均有对应记录。",
         ),
         (
             "LX0609-048",
@@ -133,6 +252,23 @@ def test_controlled_finding_does_not_render_untrusted_matrix_values():
     assert "PRIVATE_CHART_BODY" not in finding
 
 
+@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+def test_critical_value_missing_result_detail_renders_exact_gap(rule_id):
+    finding = customer_finding_from_controlled_facts(
+        rule_id=rule_id,
+        facts={
+            "failure_kind": "critical_value_result_detail_missing",
+            "lab_report_count": 43,
+            "missing_source": "labtest_item_report",
+        },
+    )
+
+    assert finding == (
+        "已读取到检验报告 43 条，但检验结果明细未同步，"
+        "无法取得 PL/PH 危急值标志及报告时间。"
+    )
+
+
 def test_anesthesia_visit_incomplete_facts_render_exact_customer_gaps():
     finding = customer_finding_from_controlled_facts(
         rule_id="LX0609-037",
@@ -164,8 +300,31 @@ def test_anesthesia_visit_complete_facts_render_compliance_reason():
                 "preane_surveil_record",
                 "postane_surveil_record",
             ],
+            "checked_fields_by_visit": {
+                "preanesthesia_visit": [
+                    "asa_level",
+                    "airway_assessment",
+                    "fasting_status",
+                    "anesthesia_history",
+                    "risk_discussion",
+                    "anesthetist_signature",
+                    "record_time",
+                ],
+                "postanesthesia_visit": [
+                    "consciousness_status",
+                    "respiratory_status",
+                    "circulatory_status",
+                    "complication_assessment",
+                    "anesthetist_signature",
+                    "record_time",
+                ],
+            },
         },
-    ) == "麻醉术前和术后访视记录均存在，已核对的必要内容、麻醉医师签名及记录时间完整。"
+    ) == (
+        "麻醉术前访视已核对：ASA分级、气道评估、禁食禁饮情况、既往麻醉史、"
+        "麻醉风险告知、麻醉医师签名、记录时间；麻醉术后访视已核对：意识状态、"
+        "呼吸情况、循环情况、麻醉并发症评估、麻醉医师签名、记录时间。"
+    )
 
 
 def _reduced(final_state: CustomerFinalState):
@@ -485,19 +644,16 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
                     operator="lte",
                     unit="character",
                 ),
-                CriterionResult(
-                    criterion_id="diagnostic_direction",
-                    status=CriterionStatus.PASSED,
-                    reason_code="requirement_satisfied",
-                    fact_refs=(FACT_REF,),
-                ),
             ),
         )
     )
 
     result = render_luxian_0609_customer_result(decision=decision)
 
-    assert result["findings"] == "主诉共 8 字，不超过 20 字；诊断指向明确。"
+    assert result["findings"] == (
+        "主诉共 8 字，不超过 20 字，符合当前已确认的长度要求；"
+        "能否导出第一诊断暂未纳入本阶段判断。"
+    )
 
 
 def test_data_gap_uses_unknown_criterion_label_to_name_missing_data():

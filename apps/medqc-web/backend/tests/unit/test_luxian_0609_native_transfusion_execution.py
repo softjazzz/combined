@@ -577,6 +577,8 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         "LX0609-048": "not_applicable",
         "LX0609-049": "data_gap",
     }
+    decision_by_rule = {item.rule_id: item for item in result.decisions}
+    assert decision_by_rule["LX0609-042"].reason_code == "eligibility_not_met"
     bound = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=selected,
@@ -1245,7 +1247,7 @@ async def test_045_typed_shadow_returns_bound_decision_instead_of_raw_result(
             _documents(daily_course_record=[]),
             [],
             True,
-            "data_gap",
+            "non_compliant",
         ),
         (
             "LX0609-047",
@@ -1466,7 +1468,41 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
 
 
 @pytest.mark.asyncio
-async def test_046_incomplete_or_cross_record_fields_keep_exactly_one_cropped_model_call(
+async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    client = _Client([{"is_compliant": False}])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {
+                    "content": (
+                        "患者Hb 65g/L，因贫血予悬浮红细胞2U输注，08时开始，"
+                        "10时输毕，输注过程中生命体征平稳，未见不良反应。"
+                    )
+                }
+            ],
+            daily_course_record=[{"content": "病程记录：继续观察治疗。"}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_course_record_complete"
+    )
+    assert result.llm_call_count == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
@@ -1499,14 +1535,20 @@ async def test_046_incomplete_or_cross_record_fields_keep_exactly_one_cropped_mo
         llm_client=client,
     )
 
-    assert result.results[0]["status"] == "compliant"
+    assert result.results[0]["status"] == "non_compliant"
     assert result.results[0]["metadata"]["reason_code"] == (
-        "transfusion_customer_prompt"
+        "transfusion_course_record_incomplete"
     )
-    assert result.results[0]["metadata"]["executor_type"] == "llm"
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 110
-    assert len(client.prompts) == 1
+    assert result.results[0]["metadata"]["executor_type"] == "program"
+    facts = dict(result.customer_display_facts)["LX0609-046"]
+    assert facts["missing_fields"] == [
+        "component",
+        "dose",
+        "reason_or_indication",
+    ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert client.prompts == []
 
 
 @pytest.mark.asyncio
@@ -1566,6 +1608,22 @@ async def test_dedicated_record_precedes_missing_daily_projection_for_044_047(
     )
 
     assert [item["status"] for item in result.results] == ["compliant"] * 4
+    display_facts = dict(result.customer_display_facts)
+    assert display_facts["LX0609-044"]["checked_fields"] == [
+        "indication",
+        "laboratory_indicator",
+        "risk_history_or_status",
+    ]
+    assert display_facts["LX0609-044"]["missing_fields"] == []
+    assert display_facts["LX0609-046"]["checked_fields"] == [
+        "component",
+        "dose",
+        "process_observation",
+        "reaction_and_handling",
+        "reason_or_indication",
+        "start_and_end_time",
+    ]
+    assert display_facts["LX0609-046"]["missing_fields"] == []
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
@@ -1620,22 +1678,16 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     )
     assert dict(result.customer_display_facts) == {
         "LX0609-044": {
-            "failure_kind": "pretransfusion_assessment_incomplete",
+            "failure_kind": "pretransfusion_assessment_missing",
             "performed_transfusion_confirmed": True,
             "checked_fields": [
-                "expected_effect",
                 "indication",
                 "laboratory_indicator",
-                "patient_status",
-                "physician_signature",
-                "planned_component",
-                "transfusion_history_or_reaction",
+                "risk_history_or_status",
             ],
             "missing_fields": [
-                "expected_effect",
                 "indication",
                 "laboratory_indicator",
-                "physician_signature",
             ],
         },
         "LX0609-046": {
@@ -1645,13 +1697,12 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
             "checked_fields": [
                 "component",
                 "dose",
-                "effect",
                 "process_observation",
                 "reaction_and_handling",
                 "reason_or_indication",
                 "start_and_end_time",
             ],
-            "missing_fields": ["effect", "reason_or_indication"],
+            "missing_fields": ["reason_or_indication"],
         },
         "LX0609-047": {
             "failure_kind": "posttransfusion_evaluation_missing",
@@ -1664,6 +1715,52 @@ async def test_dedicated_record_proves_044_046_defects_before_daily_projection(
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert client.prompts == []
+
+
+def test_045_explicit_missing_course_and_complete_empty_source_are_non_compliant():
+    explicit = transfusion._programmatic_045_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "未记录输血病程主要内容。"}
+            ],
+            "__logical_source_states__": {"bloodtrans_record": "available"},
+        }
+    )
+    empty = transfusion._programmatic_045_status(
+        {
+            "bloodtrans_record": [],
+            "__logical_source_states__": {"bloodtrans_record": "empty"},
+        }
+    )
+
+    assert explicit == ("non_compliant", "transfusion_course_record_missing")
+    assert empty == ("non_compliant", "transfusion_course_record_missing")
+
+
+def test_046_explicit_incomplete_course_is_non_compliant_without_model():
+    assert transfusion._programmatic_046_status(
+        {
+            "bloodtrans_record": [
+                {"record_content": "患者已输血，过程记录不完整。"}
+            ]
+        }
+    ) == ("non_compliant", "transfusion_course_record_incomplete")
+
+
+def test_047_explicit_missing_evaluation_uses_authoritative_end_time():
+    assert transfusion._programmatic_047_status(
+        {
+            "bloodtrans_record": [
+                {
+                    "record_content": (
+                        "2026-06-05 16:00:00输血结束；"
+                        "未记录输血结束后评价。"
+                    )
+                }
+            ],
+            "daily_course_record": [],
+        }
+    ) == ("non_compliant", "posttransfusion_evaluation_missing")
 
 
 @pytest.mark.asyncio

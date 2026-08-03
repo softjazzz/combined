@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 from zoneinfo import ZoneInfo
 
 from .evidence_snapshot import (
@@ -44,6 +45,34 @@ from .source_registry import (
 
 SnapshotRowReader = Callable[..., SnapshotSourceRows]
 _LOCAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_EMERGENCY_RESCUE_NEGATIVE_PATTERN = re.compile(
+    r"(?:非|不是|不属于|排除)(?:急诊|紧急).{0,12}(?:抢救|救命|挽救生命)"
+)
+_EMERGENCY_RESCUE_POSITIVE_PATTERN = re.compile(
+    r"(?:急诊|紧急).{0,12}(?:抢救|救命|挽救生命)"
+)
+
+
+def _explicit_emergency_rescue_state(
+    rows: tuple[Mapping[str, Any], ...],
+) -> bool | None:
+    """仅从明确肯定/否定文本生成039急诊抢救事实；沉默和冲突保持未知。"""
+
+    states: set[bool] = set()
+    for row in rows:
+        text = " ".join(
+            str(row.get(key) or "").strip()
+            for key in ("record_content", "document_title", "surgery_name")
+            if str(row.get(key) or "").strip()
+        )
+        if not text:
+            continue
+        if _EMERGENCY_RESCUE_NEGATIVE_PATTERN.search(text):
+            states.add(False)
+            text = _EMERGENCY_RESCUE_NEGATIVE_PATTERN.sub("", text)
+        if _EMERGENCY_RESCUE_POSITIVE_PATTERN.search(text):
+            states.add(True)
+    return next(iter(states)) if len(states) == 1 else None
 
 
 def _require_coordinates(*, institute_id: str, patient_id: str, visit_id: str) -> None:
@@ -398,6 +427,42 @@ def build_luxian_0609_evidence_read_session(
                             if source_key == "surgery_record"
                             else "snapshot-provider-mr-surgery-v1"
                         ),
+                        fact_schema_version=FACT_SCHEMA_VERSION,
+                        source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
+                        created_at=created_at,
+                        extensions={},
+                        known_upstream_fact_ids=(),
+                    )
+                )
+        if source_key in {"surgery_record", "mr_surgery", "rescue_record"}:
+            emergency_rescue = _explicit_emergency_rescue_state(result.rows)
+            if emergency_rescue is not None:
+                facts.append(
+                    FactV2.create(
+                        visit_ref=build_luxian_0609_visit_ref(
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                        ),
+                        family="surgery_anesthesia",
+                        fact_type="current_visit_emergency_rescue_surgery",
+                        normalized_value={"emergency_rescue": emergency_rescue},
+                        trigger_scope="current_visit",
+                        current_visit_relevance="relevant",
+                        assertion="affirmed" if emergency_rescue else "negated",
+                        assertion_context="other",
+                        event_status="performed" if emergency_rescue else "unknown",
+                        source_key=source_key,
+                        source_document_id="",
+                        source_document_type=source_key,
+                        record_time=None,
+                        submit_time=None,
+                        update_time=None,
+                        quote="",
+                        redaction_terms=(),
+                        confidence=1.0,
+                        extractor="deterministic",
+                        extractor_version="snapshot-provider-emergency-rescue-v1",
                         fact_schema_version=FACT_SCHEMA_VERSION,
                         source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
                         created_at=created_at,

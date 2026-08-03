@@ -5,10 +5,18 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 from app.services.luxian_0609.exam_lab_fact_extraction import (
     build_exam_lab_text_projection,
 )
 from app.services.luxian_0609 import native_transfusion_execution as transfusion
+from app.services.luxian_0609 import native_mdt_execution
+from app.services.luxian_0609.decision_model import QcDirection
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
 
 
 SCRIPT_PATH = (
@@ -290,6 +298,85 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         } == {"compliant", "non_compliant", "not_applicable"}
 
 
+def test_v3_020_explains_actual_multidisciplinary_participation() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    discussion = next(
+        row
+        for row in rows_by_table["presurg_discussion"]
+        if row["visit_id"] == "LX0609_0426_SYN_V3_020"
+    )
+    content = discussion["record_content"]
+    assert "外科陈某医师" in content
+    assert "麻醉科李某医师" in content
+    assert "影像科王某医师" in content
+    assert "实际参加" in content
+    assert "经多学科讨论后一致认为" in content
+    assert "可实施手术" in content
+
+
+@pytest.mark.asyncio
+async def test_v3_020_mdt_executes_programmatically_as_compliant() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+    visit_id = "LX0609_0426_SYN_V3_020"
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=[
+                row
+                for row in rows_by_table.get(source_key, [])
+                if row.get("visit_id") == visit_id
+            ],
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-040",),
+        institute_id="I",
+        patient_id="P",
+        visit_id=visit_id,
+        source_schema=None,
+        created_at="2026-08-03T09:00:00+08:00",
+        row_reader=read,
+        additional_source_keys=(
+            "mr_surgery",
+            "presurg_discussion",
+            "consultation_record",
+        ),
+    )
+
+    class FailIfCalled:
+        async def generate(self, _prompt: str) -> dict:
+            raise AssertionError("明确的多学科参与事实不得调用 LLM")
+
+    execution = await native_mdt_execution.execute_luxian_0609_native_mdt_rule(
+        institute_id="I",
+        patient_id="P",
+        visit_id=visit_id,
+        source_schema=None,
+        llm_client=FailIfCalled(),
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-040",),
+    )
+
+    assert execution.llm_call_count == 0
+    assert execution.decisions[0].qc_direction is QcDirection.SATISFIED
+    assert dict(execution.customer_display_facts)["LX0609-040"][
+        "mdt_discussion_state"
+    ] == "completed"
+
+
 def test_v3_full_validation_upgrade_supplies_course_gate_facts_for_every_case() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()
@@ -407,6 +494,22 @@ def test_transfusion_case_uses_typed_consent_form() -> None:
     assert consent["physician_sign"]
     assert consent["patient_sign_datetime"]
     assert consent["physician_sign_datetime"]
+    status, reason, facts = transfusion._programmatic_042_status(
+        {
+            "consent_form": [consent],
+            "__logical_source_states__": {"consent_form": "available"},
+        }
+    )
+    assert (status, reason) == ("compliant", "transfusion_consent_complete")
+    assert facts and set(facts["checked_fields"]) >= {
+        "indication",
+        "component",
+        "risks",
+        "alternatives",
+        "patient_or_agent_signature",
+        "physician_signature",
+        "signed_time",
+    }
 
     fake_rows = [
         row
@@ -440,10 +543,33 @@ def test_transfusion_complete_case_has_reviewable_process_and_24h_evaluation() -
     assert "输血结束时间" in evaluation["record_content"]
     assert "输血后评价时间" in evaluation["record_content"]
     assert "复查Hb 82g/L" in evaluation["record_content"]
-    assert not any(
-        row.get("visit_id") == visit_id
+    event = next(
+        row
         for row in rows_by_table.get("mr_bloodtrans", [])
+        if row.get("visit_id") == visit_id
     )
+    assert event["transfution_datetime"]
+    assert event["transfuse_variety"] == "悬浮红细胞"
+    status, reason, facts = transfusion.evaluate_pretransfusion_nine_items(
+        {
+            "mr_bloodtrans": [event],
+            "labtest_item_report": [
+                row
+                for row in rows_by_table["labtest_item_report"]
+                if row.get("visit_id") == visit_id
+            ],
+            "blood_application": [
+                row
+                for row in rows_by_table["blood_application"]
+                if row.get("visit_id") == visit_id
+            ],
+            "__logical_source_states__": {
+                "labtest_item_report": "available",
+            },
+        }
+    )
+    assert (status, reason) == ("compliant", "pretransfusion_items_complete")
+    assert facts and len(facts["checked_items"]) == 9
 
 
 def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
@@ -471,10 +597,79 @@ def test_transfusion_issue_variants_have_distinct_reviewable_defects() -> None:
         and str(row.get("item_abbreviation") or "").upper() == "ALT"
         for row in rows_by_table["labtest_item_report"]
     )
-    assert not any(
-        row.get("visit_id") == visit_ids[26]
-        for row in rows_by_table.get("bloodtrans_record", [])
+    incomplete_assessment = next(
+        row
+        for row in rows_by_table["bloodtrans_record"]
+        if row.get("visit_id") == visit_ids[25]
     )
+    assert "未记录输血前评估" in incomplete_assessment["record_content"]
+    assert transfusion._programmatic_044_status(
+        {
+            "bloodtrans_record": [incomplete_assessment],
+            "blood_application": [
+                row
+                for row in rows_by_table["blood_application"]
+                if row.get("visit_id") == visit_ids[25]
+            ],
+            "daily_course_record": [
+                row
+                for row in rows_by_table["daily_course_record"]
+                if row.get("visit_id") == visit_ids[25]
+            ],
+        }
+    ) == ("non_compliant", "pretransfusion_assessment_missing")
+    missing_item_status = transfusion.evaluate_pretransfusion_nine_items(
+        {
+            "mr_bloodtrans": [
+                row
+                for row in rows_by_table["mr_bloodtrans"]
+                if row.get("visit_id") == visit_ids[25]
+            ],
+            "labtest_item_report": [
+                row
+                for row in rows_by_table["labtest_item_report"]
+                if row.get("visit_id") == visit_ids[25]
+            ],
+            "__logical_source_states__": {
+                "labtest_item_report": "available",
+            },
+        }
+    )
+    assert missing_item_status[:2] == (
+        "non_compliant",
+        "pretransfusion_items_incomplete",
+    )
+    assert missing_item_status[2] and missing_item_status[2]["missing_items"] == [
+        "alt"
+    ]
+    missing_course = next(
+        row
+        for row in rows_by_table.get("bloodtrans_record", [])
+        if row.get("visit_id") == visit_ids[26]
+    )
+    assert "未记录输血病程主要内容" in missing_course["record_content"]
+    assert "未记录输血结束后评价" in missing_course["record_content"]
+    assert any(
+        row.get("visit_id") == visit_ids[26]
+        for row in rows_by_table.get("mr_bloodtrans", [])
+    )
+    assert transfusion._programmatic_045_status(
+        {
+            "bloodtrans_record": [missing_course],
+            "__logical_source_states__": {"bloodtrans_record": "available"},
+        }
+    ) == ("non_compliant", "transfusion_course_record_missing")
+    assert transfusion._programmatic_047_status(
+        {"bloodtrans_record": [missing_course], "daily_course_record": []}
+    ) == ("non_compliant", "posttransfusion_evaluation_missing")
+    incomplete_course = next(
+        row
+        for row in rows_by_table["bloodtrans_record"]
+        if row.get("visit_id") == visit_ids[27]
+    )
+    assert transfusion._programmatic_046_status(
+        {"bloodtrans_record": [incomplete_course]}
+    ) == ("non_compliant", "transfusion_course_record_incomplete")
     inconsistent_contents = {
         table_name: next(
             row["record_content"]
@@ -510,6 +705,21 @@ def test_tumor_antimicrobial_and_transfer_issue_variants_change_source_facts() -
     assert not any(
         row.get("visit_id") == visit_id[35]
         for row in rows_by_table.get("consultation_record", [])
+    )
+    antimicrobial_orders = [
+        row
+        for row in rows_by_table.get("inpat_drug_order", [])
+        if row.get("visit_id") == visit_id[35]
+    ]
+    assert antimicrobial_orders
+    assert all(
+        "经验性启用" in str(row.get("record_content") or "")
+        for row in antimicrobial_orders
+    )
+    assert not any(
+        row.get("visit_id") == visit_id[35]
+        for table_name in ("daily_course_record", "senior_course_record")
+        for row in rows_by_table.get(table_name, [])
     )
     assert not any(
         row.get("visit_id") == visit_id[37]

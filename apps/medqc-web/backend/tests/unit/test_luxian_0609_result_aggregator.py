@@ -88,6 +88,24 @@ def test_task3_customer_display_fact_contracts_are_preserved(rule_id, facts):
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
+@pytest.mark.parametrize("rule_id", ["LX0609-052", "LX0609-053"])
+def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
+    facts = {
+        "failure_kind": "critical_value_result_detail_missing",
+        "lab_report_count": 43,
+        "missing_source": "labtest_item_report",
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id=rule_id,
+        raw=facts,
+    ) == facts
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id=rule_id,
+        raw={**facts, "missing_source": "PRIVATE_SOURCE"},
+    ) is None
+
+
 @pytest.mark.parametrize(
     ("rule_id", "facts"),
     [
@@ -129,6 +147,38 @@ def test_task3_customer_display_fact_contracts_are_preserved(rule_id, facts):
     ],
 )
 def test_task4_consultation_display_fact_contracts_are_preserved(rule_id, facts):
+    assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
+            "LX0609-020",
+            {
+                "source_document_ids": ["CONSULT-REQUEST", "CONSULT-OPINION"],
+                "consultation_assessment": "不符合要求",
+                "execution_record_state": "未发现执行记录",
+                "execution_candidate_count": 0,
+            },
+        ),
+        (
+            "LX0609-021",
+            {
+                "source_document_ids": ["CONSULT-REQUEST"],
+                "consultation_assessment": "明确",
+            },
+        ),
+        (
+            "LX0609-022",
+            {
+                "source_document_ids": ["CONSULT-OPINION"],
+                "consultation_assessment": "不符合要求",
+            },
+        ),
+    ],
+)
+def test_explicit_consultation_facts_are_strictly_validated(rule_id, facts):
     assert safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts) == facts
 
 
@@ -194,6 +244,7 @@ def _reduced_decision(
     rule_id: str,
     *,
     direction: QcDirection = QcDirection.SATISFIED,
+    fact_refs: tuple[str, ...] = ("b" * 64,),
 ) -> ReducedRuleDecision:
     return reduce_luxian_0609_rule_decision(
         RuleDecision(
@@ -207,7 +258,7 @@ def _reduced_decision(
                 if direction is QcDirection.DEFECT
                 else "requirement_satisfied"
             ),
-            fact_refs=("b" * 64,),
+            fact_refs=fact_refs,
             evaluator_version="aggregator-test-v1",
             confidence=0.9,
         )
@@ -670,6 +721,32 @@ def test_040_preserves_controlled_level_source_and_mdt_facts():
     }
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        {"performed_surgery_confirmed": False},
+        {"procedure_kind": "non_surgical_operation"},
+        {"effective_surgery_level": "三级"},
+    ),
+)
+def test_040_rejects_mdt_facts_that_do_not_describe_performed_grade_four_surgery(
+    overrides,
+):
+    raw = {
+        "performed_surgery_confirmed": True,
+        "procedure_kind": "surgery",
+        "effective_surgery_level": "四级",
+        "surgery_level_source": "hospital_performance",
+        "mdt_discussion_state": "missing",
+        **overrides,
+    }
+
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-040",
+        raw=raw,
+    ) is None
+
+
 def test_surgery_record_present_facts_keep_only_exact_referenced_evidence():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
@@ -836,6 +913,100 @@ def test_001_customer_evidence_excludes_discharge_anchor_source():
             "source_type": "admission_record",
             "source_document_id": "private-admission-document-id",
         }
+    ]
+
+
+def test_038_customer_evidence_excludes_anesthesia_trigger_consent_form():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-038", "name": "麻醉记录单"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision(
+                "LX0609-038",
+                fact_refs=("b" * 64, "c" * 64),
+            ),
+        ),
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="anesthesia-record-fact",
+                        source_snapshot_hash="c" * 64,
+                        source_key="anesthesia_record",
+                        source_document_id="private-anesthesia-document-id",
+                    ),
+                    SimpleNamespace(
+                        fact_id="anesthesia-consent-trigger-fact",
+                        source_snapshot_hash="b" * 64,
+                        source_key="consent_form",
+                        source_document_id="private-consent-document-id",
+                    ),
+                )
+            )
+        },
+    )[0]
+
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "anesthesia_record",
+            "source_document_id": "private-anesthesia-document-id",
+        }
+    ]
+
+
+def test_026_customer_evidence_keeps_comparison_sources_and_excludes_diagnosis_trigger():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-026", "name": "化疗记录与医嘱一致性"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision(
+                "LX0609-026",
+                fact_refs=("b" * 64, "c" * 64, "d" * 64),
+            ),
+        ),
+        audit_context={
+            "evidence_snapshot": SimpleNamespace(
+                facts=(
+                    SimpleNamespace(
+                        fact_id="malignant-diagnosis-trigger-fact",
+                        source_snapshot_hash="c" * 64,
+                        source_key="diagnosis",
+                        source_document_id="private-diagnosis-document-id",
+                    ),
+                    SimpleNamespace(
+                        fact_id="chemotherapy-order-fact",
+                        source_snapshot_hash="d" * 64,
+                        source_key="inpat_drug_order",
+                        source_document_id="private-order-document-id",
+                    ),
+                    SimpleNamespace(
+                        fact_id="chemotherapy-course-fact",
+                        source_snapshot_hash="b" * 64,
+                        source_key="daily_course_record",
+                        source_document_id="private-course-document-id",
+                    ),
+                )
+            )
+        },
+    )[0]
+
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "inpat_drug_order",
+            "source_document_id": "private-order-document-id",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "private-course-document-id",
+        },
     ]
 
 

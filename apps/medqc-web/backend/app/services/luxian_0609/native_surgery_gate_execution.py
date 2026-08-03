@@ -262,6 +262,121 @@ def _deterministic_024_outcome(
     return None
 
 
+_IMPLANT_FIELD_PATTERNS = {
+    "implant_name": re.compile(r"植入物名称\s*[:：]\s*([^；;。\n]{1,80})"),
+    "implant_type": re.compile(r"(?:植入物)?种类\s*[:：]\s*([^；;。\n]{1,80})"),
+    "implant_specification": re.compile(
+        r"(?:规格/型号|规格型号|型号)\s*[:：]\s*([^；;。\n]{1,80})"
+    ),
+    "implant_material": re.compile(r"材质\s*[:：]\s*([^；;。\n]{1,80})"),
+    "implant_quantity": re.compile(r"数量\s*[:：]\s*([^；;。\n]{1,40})"),
+    "implant_barcode": re.compile(
+        r"(?:植入物)?(?:条码|追溯码)\s*[:：]\s*([^；;。\n]{1,100})"
+    ),
+}
+_EMPTY_IMPLANT_FIELD_PATTERN = re.compile(r"^(?:无|暂无|未填|未记录|不详|/|-)$")
+
+
+def _deterministic_025_outcome(
+    surgery_rows: Sequence[Mapping[str, Any]],
+) -> _SurgeryTextOutcome | None:
+    """025：只收口正文中明确标为“植入物”的六字段事实。"""
+
+    for row in surgery_rows:
+        text = _clean(" ".join((_row_text(row), _clean(row.get("surgery_process")))))
+        if not text or "植入物" not in text:
+            continue
+        if re.search(r"(?:未使用|未植入|无)植入物", text):
+            return _SurgeryTextOutcome(
+                "LX0609-025",
+                "not_applicable",
+                "surgery_text_fact_absent",
+                {
+                    "verification_kind": "implant_not_used",
+                    "performed_surgery_confirmed": True,
+                    "source_label": "手术记录",
+                },
+            )
+        values = {
+            field: (match.group(1).strip() if (match := pattern.search(text)) else "")
+            for field, pattern in _IMPLANT_FIELD_PATTERNS.items()
+        }
+        # 空模板或计划性描述不证明本次实际植入，继续交给受控模型。
+        if not values["implant_name"] or re.search(r"(?:拟|计划|备)植入", text):
+            continue
+        missing = sorted(
+            field
+            for field, value in values.items()
+            if not value or _EMPTY_IMPLANT_FIELD_PATTERN.fullmatch(value)
+        )
+        document_id = _clean(row.get("document_id"))
+        if missing:
+            return _SurgeryTextOutcome(
+                "LX0609-025",
+                "non_compliant",
+                "surgery_text_fact_defect",
+                {
+                    "failure_kind": "implant_information_incomplete",
+                    "missing_fields": missing,
+                    "source_label": "手术记录",
+                    **({"source_document_id": document_id} if document_id else {}),
+                },
+            )
+        return _SurgeryTextOutcome(
+            "LX0609-025",
+            "compliant",
+            "surgery_text_fact_satisfied",
+            {
+                "verification_kind": "implant_information_complete",
+                "performed_surgery_confirmed": True,
+                "checked_fields": list(_IMPLANT_FIELD_PATTERNS),
+                "source_label": "手术记录",
+                **({"source_document_id": document_id} if document_id else {}),
+            },
+        )
+    return None
+
+
+def _deterministic_033_outcome(
+    consent_rows: Sequence[Mapping[str, Any]],
+) -> _SurgeryTextOutcome | None:
+    """033：结构化手术同意书及患者、术者签名齐全时无需调用模型。"""
+
+    for row in consent_rows:
+        patient_sign = _clean(row.get("patient_sign"))
+        surgeon_sign = _clean(row.get("surgeon_sign"))
+        if not patient_sign and not surgeon_sign:
+            continue
+        missing_roles = [
+            role
+            for role, value in (("patient", patient_sign), ("surgeon", surgeon_sign))
+            if not value
+        ]
+        if missing_roles:
+            return _SurgeryTextOutcome(
+                "LX0609-033",
+                "non_compliant",
+                "surgery_text_fact_defect",
+                {
+                    "failure_kind": "surgery_consent_signature_missing",
+                    "consent_state": "signature_missing",
+                    "performed_surgery_confirmed": True,
+                    "missing_signature_roles": missing_roles,
+                },
+            )
+        return _SurgeryTextOutcome(
+            "LX0609-033",
+            "compliant",
+            "surgery_text_fact_satisfied",
+            {
+                "verification_kind": "surgery_consent_complete",
+                "performed_surgery_confirmed": True,
+                "checked_signature_roles": ["patient", "surgeon"],
+            },
+        )
+    return None
+
+
 def _structured_nonmalignant_diagnoses(
     diagnosis_rows: Sequence[Mapping[str, Any]],
 ) -> bool:
@@ -430,7 +545,6 @@ def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
             row.get("surgeon_sign")
             or row.get("physician_sign")
             or row.get("signer")
-            or row.get("submitter")
         )
         if surgeon and signer and surgeon == signer:
             return True
@@ -440,7 +554,7 @@ def _has_signature(rows: Sequence[Mapping[str, Any]]) -> bool:
 def _surgery_signature_outcome(
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, str, Mapping[str, Any] | None]:
-    """031：只按同一手术记录行核对术者、书写者、一助和术者签名。"""
+    """031：按同一手术事件核对术者与权威签名；有书写者时再核对代写资格。"""
 
     if not rows:
         return "data_gap", "required_field_missing", None
@@ -471,7 +585,7 @@ def _surgery_signature_outcome(
             states.append("defect")
             continue
         if not recorder:
-            states.append("unknown")
+            states.append("satisfied")
             continue
         if recorder == surgeon:
             states.append("satisfied")
@@ -503,6 +617,38 @@ def _surgery_signature_outcome(
             "first_assistant_exception_used": used_first_assistant_exception,
         },
     )
+
+
+def _resolve_surgery_signature_outcome(
+    *,
+    surgery_master_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, str, Mapping[str, Any] | None]:
+    """优先采用手术主表签名；仅对唯一且术者一致的事件使用文书表回退。"""
+
+    if not surgery_master_rows:
+        return _surgery_signature_outcome(surgery_record_rows)
+    master_outcome = _surgery_signature_outcome(surgery_master_rows)
+    if master_outcome[0] == "non_compliant":
+        return master_outcome
+    if not surgery_record_rows:
+        return "data_gap", "association_failed", None
+    if len(surgery_master_rows) != len(surgery_record_rows):
+        return "data_gap", "association_failed", None
+    if len(surgery_master_rows) != 1:
+        return master_outcome
+    if master_outcome[0] != "data_gap":
+        return master_outcome
+
+    master_surgeon = re.sub(
+        r"[\s,，、;；:：]+", "", _clean(surgery_master_rows[0].get("surgeon"))
+    )
+    record_surgeon = re.sub(
+        r"[\s,，、;；:：]+", "", _clean(surgery_record_rows[0].get("surgeon"))
+    )
+    if master_surgeon and record_surgeon and master_surgeon != record_surgeon:
+        return "data_gap", "association_failed", None
+    return _surgery_signature_outcome(surgery_record_rows)
 
 
 def _authoritative_record_time(value: Any) -> datetime | None:
@@ -924,7 +1070,8 @@ def _typed_conservative_surgery_gate_decision(
 
     if rule_id == "LX0609-031":
         try:
-            signature_rows = tuple(materials.rows("surgery_record"))
+            surgery_record_rows = tuple(materials.rows("surgery_record"))
+            surgery_master_rows = tuple(materials.rows("mr_surgery"))
         except EvidenceMaterialTruncated:
             final_state, reason_code, display_facts = (
                 "data_gap",
@@ -938,8 +1085,9 @@ def _typed_conservative_surgery_gate_decision(
                 None,
             )
         else:
-            final_state, reason_code, display_facts = _surgery_signature_outcome(
-                signature_rows
+            final_state, reason_code, display_facts = _resolve_surgery_signature_outcome(
+                surgery_master_rows=surgery_master_rows,
+                surgery_record_rows=surgery_record_rows,
             )
         if display_facts is not None and customer_display_facts is not None:
             customer_display_facts.append((rule_id, display_facts))
@@ -964,11 +1112,17 @@ def _typed_conservative_surgery_gate_decision(
             applicability=applicability,
             evidence_state=evidence_state,
             qc_direction=qc_direction,
-            reason_code=reason_code,
+            reason_code=(
+                "requirement_satisfied"
+                if final_state == "compliant"
+                else "requirement_violated"
+                if final_state == "non_compliant"
+                else reason_code
+            ),
         )
 
-    # 现库尚无可审计的恶性手术关联、植入物实际使用、预防用药实际区间、
-    # 术者签名关联或同意书同步完整性事实。迁移只改变执行契约，不制造结论。
+    # 其余规则仍缺少可审计的恶性手术关联、植入物实际使用、预防用药
+    # 实际区间或同意书同步完整性事实。迁移只改变执行契约，不制造结论。
     return decision(
         applicability=(
             ApplicabilityState.UNKNOWN
@@ -1628,6 +1782,16 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
                 if rule_id == "LX0609-024"
                 and states_by_source.get("surgery_record") == "available"
+                else _deterministic_025_outcome(
+                    rows_by_source["surgery_record"]
+                )
+                if rule_id == "LX0609-025"
+                and states_by_source.get("surgery_record") == "available"
+                else _deterministic_033_outcome(
+                    rows_by_source["surgery_inform_consent"]
+                )
+                if rule_id == "LX0609-033"
+                and states_by_source.get("surgery_inform_consent") == "available"
                 else None
             )
             structured_not_applicable = (

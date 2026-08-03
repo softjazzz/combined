@@ -122,9 +122,9 @@ _RULE_MISSING_ITEM_LABELS = {
     "LX0609-041": ("输血事实与同次住院输血知情同意书的关联信息",),
     "LX0609-042": ("输血知情同意书告知内容、签名或签署时间",),
     "LX0609-043": ("输血前九项检查结果、报告时间或输血开始时间",),
-    "LX0609-044": ("输血前评估的指征、检验指标、患者情况、拟输成分或预期效果",),
+    "LX0609-044": ("输血前评估的指征、检验指标、输血风险、既往输血情况或患者当前情况",),
     "LX0609-045": ("输血事实与对应输血病程记录",),
-    "LX0609-046": ("输血病程的原因、起止时间、成分、剂量、过程观察、反应处理或效果",),
+    "LX0609-046": ("输血病程的原因、起止时间、成分、剂量、过程观察或反应处理",),
     "LX0609-047": ("输血结束时间、输血后评价时间或评价内容",),
     "LX0609-048": ("手术记录、麻醉记录和术后首次病程中的输血成分与剂量",),
     "LX0609-050": ("入院时间、入院满7天后的诊断状态或疑难病例讨论记录",),
@@ -536,9 +536,29 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "病理检查及手术资料已完成核对，未发现需要记录取材情况的病理事件。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-020", "trigger_absent_complete"): (
+        "本次未发现已完成的会诊意见，不启动会诊执行记录核对",
+        "已核对会诊申请和会诊记录，未发现需要追踪执行情况的已完成会诊意见。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-021", "trigger_absent_complete"): (
+        "本次未发现会诊申请单，不启动会诊申请目的核对",
+        "已核对会诊资料，未发现需要检查目的是否明确的会诊申请。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-022", "trigger_absent_complete"): (
+        "本次未发现会诊记录单，不启动会诊意见明确性核对",
+        "已核对会诊资料，未发现需要检查意见是否明确的会诊记录。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-024", "trigger_absent_complete"): (
         "本次未触发恶性肿瘤手术规则",
         "现有诊断和手术资料未表明本次属于恶性肿瘤手术。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-025", "performed_event_absent"): (
+        "本次未实施手术，不启动手术记录植入物信息核对",
+        "已核对手术主表和手术记录，未发现已实施手术事件。",
         "无需按本质控点处理。",
     ),
     ("LX0609-026", "trigger_absent_complete"): (
@@ -561,6 +581,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已核对手术主表、手术医嘱和手术记录，未发现已实施手术事件。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-030", "trigger_absent_complete"): (
+        "本次未发现已实施手术，不要求形成手术记录",
+        "完整手术来源未触发已实施手术事件。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-031", "performed_event_absent"): (
         "本次未实施手术，不启动手术记录签名核对",
         "已核对手术主表和手术记录，未发现已实施手术事件。",
@@ -569,6 +594,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
     ("LX0609-032", "performed_event_absent"): (
         "本次未实施手术，不要求形成手术安全核查表",
         "已核对手术主表和手术记录，未发现已实施手术事件。",
+        "无需按本质控点处理。",
+    ),
+    ("LX0609-032", "trigger_absent_complete"): (
+        "本次未发现已实施手术，不要求形成手术安全核查表",
+        "完整手术来源未触发已实施手术事件。",
         "无需按本质控点处理。",
     ),
     ("LX0609-033", "performed_event_absent"): (
@@ -581,6 +611,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已核对麻醉主表和麻醉记录，未发现已实施麻醉事件。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-035", "performed_event_absent"): (
+        "本次未实施需签署同意书的麻醉，不启动麻醉知情同意书完整性核对",
+        "已核对麻醉主表、麻醉方式和麻醉记录，未发现适用的麻醉事件。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-036", "performed_event_absent"): (
         "本次未实施需访视的麻醉，不要求形成麻醉术前或术后访视记录",
         "已核对麻醉主表、麻醉方式和麻醉记录，未发现需访视的麻醉事件。",
@@ -590,6 +625,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已确认实施麻醉，但麻醉术前或术后访视记录缺失，本项规范性检查不再重复判定",
         "麻醉访视记录是否缺失由 LX0609-036 判定；本质控点仅在术前、术后访视记录均存在时核对填写规范。",
         "请先补齐麻醉访视记录，再核对记录填写是否规范。",
+    ),
+    ("LX0609-037", "performed_event_absent"): (
+        "本次未实施需访视的麻醉，不启动麻醉访视填写规范核对",
+        "已核对麻醉主表、麻醉方式和麻醉记录，未发现适用的麻醉事件。",
+        "无需按本质控点处理。",
     ),
     ("LX0609-038", "performed_event_absent"): (
         "本次未实施需记录的麻醉，不要求形成麻醉记录单",
@@ -606,6 +646,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "已核对手术主表、手术分级和手术记录，未发现已实施四级手术事件。",
         "无需按本质控点处理。",
     ),
+    ("LX0609-040", "trigger_absent_complete"): (
+        "本次未实施四级手术，不启动术前多学科讨论核对",
+        "已核对手术事件及手术分级，未发现已实施四级手术。",
+        "无需按本质控点处理。",
+    ),
     ("LX0609-041", "trigger_absent_complete"): (
         "本次未实施输血，不要求形成输血知情同意书",
         "已核对输血申请、医嘱和输血记录，未发现输血事件。",
@@ -615,6 +660,11 @@ _RULE_NOT_APPLICABLE_MESSAGES = {
         "本次未实施输血，不启动输血知情同意书完整性核对",
         "已核对输血申请、医嘱和输血记录，未发现输血事件。",
         "无需按本质控点处理。",
+    ),
+    ("LX0609-042", "eligibility_not_met"): (
+        "未找到输血知情同意书，本项不再重复核对填写完整性",
+        "已确认本次实施输血；知情同意书缺失问题由 LX0609-041 判定，本质控点仅核对已存在同意书的填写与签名完整性。",
+        "请先按 LX0609-041 补齐输血知情同意书，再核对必要内容、双方签名和分钟级签署时间。",
     ),
     ("LX0609-043", "trigger_absent_complete"): (
         "本次未实施输血，不启动输血前辅助检查核对",
@@ -867,24 +917,25 @@ def compliant_customer_finding(
             if isinstance(criterion_id, str) and criterion_id:
                 criteria[criterion_id] = item
         length = criteria.get("chief_complaint_length")
-        diagnostic = criteria.get("diagnostic_direction")
         length_actual = (
             length.get("actual_value")
             if isinstance(length, Mapping)
             else getattr(length, "actual_value", None)
         )
-        diagnostic_status = (
-            diagnostic.get("status")
-            if isinstance(diagnostic, Mapping)
-            else getattr(getattr(diagnostic, "status", None), "value", "")
+        length_status = (
+            length.get("status")
+            if isinstance(length, Mapping)
+            else getattr(getattr(length, "status", None), "value", "")
         )
         if (
             length is not None
             and isinstance(length_actual, int)
-            and diagnostic is not None
-            and diagnostic_status == "passed"
+            and length_status == "passed"
         ):
-            return f"主诉共 {length_actual} 字，不超过 20 字；诊断指向明确。"
+            return (
+                f"主诉共 {length_actual} 字，不超过 20 字，"
+                "符合当前已确认的长度要求；能否导出第一诊断暂未纳入本阶段判断。"
+            )
     return _RULE_COMPLIANT_FINDINGS.get(
         rule_id,
         "已完成本质控点核对，未发现违反质控要求的情况。",
@@ -931,6 +982,7 @@ _TRANSFUSION_FIELD_LABELS = {
     "physician_signature": "医师签名",
     "signed_time": "精确到分钟的签署时间",
     "laboratory_indicator": "输血前检验指标",
+    "risk_history_or_status": "输血风险、既往输血情况或患者当前情况",
     "transfusion_history_or_reaction": "既往输血史或输血反应史",
     "patient_status": "患者当前情况",
     "planned_component": "拟输注血液成分",
@@ -989,7 +1041,20 @@ def customer_finding_from_controlled_facts(
     """将已白名单化的受控事实投影为客户可核对短句，不接受原始病历正文。"""
 
     if rule_id not in {
+        "LX0609-009",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-013",
+        "LX0609-014",
+        "LX0609-015",
+        "LX0609-019",
+        "LX0609-020",
+        "LX0609-021",
+        "LX0609-022",
+        "LX0609-026",
+        "LX0609-027",
         "LX0609-037",
+        "LX0609-040",
         *(f"LX0609-{index:03d}" for index in range(41, 49)),
         *(f"LX0609-{index:03d}" for index in range(50, 75)),
         "LX0609-070",
@@ -1010,9 +1075,114 @@ def customer_finding_from_controlled_facts(
         values = facts.get(key)
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
 
+    if rule_id == "LX0609-009":
+        required = joined("required_dates")
+        covered = joined("covered_dates") or "无"
+        scope_note = "本结论仅核对病危期间每日病程；病情变化时的记录要求暂未纳入本阶段判断。"
+        if kind == "critical_daily_record_coverage_satisfied":
+            return f"病危期间应记录日期为 {required}，实际均已覆盖。{scope_note}"
+        if kind == "critical_daily_record_missing":
+            missing = joined("missing_dates")
+            return f"病危期间应记录日期为 {required}，实际覆盖 {covered}，缺少 {missing} 的病程记录。{scope_note}"
+
+    if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
+        subject = "CT/MRI" if rule_id in {"LX0609-011", "LX0609-012"} else "细菌培养"
+        analysis_rule = rule_id in {"LX0609-012", "LX0609-015"}
+        report_time = facts.get("report_time")
+        response_count = facts.get("response_record_count")
+        response_time = facts.get("response_record_time")
+        interval = facts.get("interval_hours")
+        if kind == "exam_lab_requirement_not_documented":
+            if isinstance(response_count, int) and response_count > 0:
+                timing = (
+                    f"，最早相关病程时间 {response_time}，间隔 {interval:g} 小时"
+                    if isinstance(interval, (int, float)) and response_time
+                    else ""
+                )
+                missing_content = (
+                    "但病程未记录阳性结果的临床意义判断或相应处置"
+                    if analysis_rule
+                    else "但病程未记录报告结果"
+                )
+                return f"{subject} 报告于 {report_time} 出具，找到 {response_count} 份相关病程{timing}，{missing_content}。"
+            requirement = "阳性结果分析" if analysis_rule else "报告结果记录"
+            return f"{subject} 报告于 {report_time} 出具，未找到报告后 24 小时内的{requirement}。"
+
+    if rule_id == "LX0609-013" and kind == "pathology_result_documentation_check":
+        return f"病理报告于 {facts.get('report_time')} 出具；已核对手术记录和病程记录，未找到病理结果记录。"
+
+    if rule_id == "LX0609-019" and kind == "pathology_sampling_not_documented":
+        return "已确认存在病理取材事件；已核对手术记录和病程记录，均未找到取材情况记录。"
+
+    if rule_id == "LX0609-020":
+        state = str(facts.get("execution_record_state") or "")
+        if state == "未发现执行记录":
+            return "已找到会诊意见，但未发现对应的请会诊执行记录。"
+        if state == "已发现明确执行记录":
+            return "已找到会诊意见及对应的明确执行记录。"
+
+    if rule_id in {"LX0609-021", "LX0609-022"}:
+        assessment = str(facts.get("consultation_assessment") or "")
+        target = "会诊申请目的" if rule_id == "LX0609-021" else "会诊意见"
+        requirement = (
+            "具体临床问题、会诊理由或明确目的"
+            if rule_id == "LX0609-021"
+            else "针对当前病情的明确诊疗意见"
+        )
+        if assessment == "明确":
+            return f"已核对{target}，其中已说明{requirement}。"
+        if assessment == "不符合要求":
+            return f"已核对{target}，其中未说明{requirement}。"
+
+    if rule_id == "LX0609-026" and kind == "chemotherapy_order_course_comparison":
+        field_labels = {
+            "drug_name": "药物名称",
+            "dose": "剂量",
+            "route": "使用方法",
+            "time": "用药时间",
+        }
+        field_results = facts.get("field_results")
+        if isinstance(field_results, Mapping):
+            mismatched = "、".join(
+                field_labels[key]
+                for key, value in field_results.items()
+                if key in field_labels and value == "mismatched"
+            )
+            if mismatched:
+                return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，{mismatched}记录不一致。"
+            return f"已核对 {facts.get('order_count')} 条化疗医嘱及对应病程，药物名称、剂量、使用方法和用药时间一致。"
+
+    if rule_id == "LX0609-027" and kind == "malignant_discharge_plan_check":
+        items = facts.get("plan_items")
+        if isinstance(items, Mapping):
+            missing = "、".join(
+                label
+                for key, label in {
+                    "future_plan": "后续诊疗计划",
+                    "tumor_treatment": "肿瘤相关治疗安排",
+                    "follow_up": "随访安排",
+                }.items()
+                if items.get(key) is False
+            )
+            if missing:
+                return f"已确认出院诊断包含恶性肿瘤，但出院记录缺少：{missing}。"
+
     if rule_id == "LX0609-037":
         if kind == "anesthesia_visits_complete":
-            return "麻醉术前和术后访视记录均存在，已核对的必要内容、麻醉医师签名及记录时间完整。"
+            raw_checked = facts.get("checked_fields_by_visit")
+            if not isinstance(raw_checked, Mapping):
+                return ""
+            pre = "、".join(
+                _ANESTHESIA_VISIT_FIELD_LABELS[field]
+                for field in raw_checked.get("preanesthesia_visit", [])
+                if field in _ANESTHESIA_VISIT_FIELD_LABELS
+            )
+            post = "、".join(
+                _ANESTHESIA_VISIT_FIELD_LABELS[field]
+                for field in raw_checked.get("postanesthesia_visit", [])
+                if field in _ANESTHESIA_VISIT_FIELD_LABELS
+            )
+            return f"麻醉术前访视已核对：{pre}；麻醉术后访视已核对：{post}。" if pre and post else ""
         if kind == "anesthesia_visit_incomplete":
             raw_missing = facts.get("missing_fields_by_visit")
             if not isinstance(raw_missing, Mapping):
@@ -1035,6 +1205,26 @@ def customer_finding_from_controlled_facts(
                     details.append(f"{visit_label}缺少{field_labels}")
             return f"{'；'.join(details)}。" if details else ""
 
+    if rule_id == "LX0609-040":
+        if facts.get("performed_surgery_confirmed") is not True:
+            return ""
+        procedure = "".join(
+            part
+            for part in (
+                str(facts.get("procedure_name") or ""),
+                f"（{facts.get('procedure_code')}）" if facts.get("procedure_code") else "",
+            )
+        ) or "本次手术"
+        source = {
+            "hospital_performance": "院内绩效分配",
+            "national_catalog": "国家临床版手术分级目录",
+        }.get(str(facts.get("surgery_level_source") or ""), "受控手术分级目录")
+        state = str(facts.get("mdt_discussion_state") or "")
+        if state == "missing":
+            return f"已确认实施四级手术 {procedure}（等级来源：{source}），未找到术前多学科讨论记录。"
+        if state == "completed":
+            return f"已确认实施四级手术 {procedure}（等级来源：{source}），已完成术前多学科讨论。"
+
     if rule_id == "LX0609-050" and kind == "uncertain_diagnosis_discussion_check":
         count = facts.get("discussion_count")
         trigger_times = joined("uncertain_record_times")
@@ -1055,6 +1245,11 @@ def customer_finding_from_controlled_facts(
             return f"患者于 {facts.get('death_time')} 死亡，超过 7 天仍未找到死亡病历讨论记录。"
 
     if rule_id in {"LX0609-052", "LX0609-053"}:
+        if kind == "critical_value_result_detail_missing":
+            return (
+                f"已读取到检验报告 {facts.get('lab_report_count')} 条，但检验结果明细未同步，"
+                "无法取得 PL/PH 危急值标志及报告时间。"
+            )
         items = joined("critical_item_names") or "已标记 PL/PH 的检验项目"
         reports = joined("report_times")
         dispositions = joined("disposition_times")
@@ -1078,7 +1273,9 @@ def customer_finding_from_controlled_facts(
     if rule_id == "LX0609-055" and kind == "antimicrobial_effect_evaluation_check":
         medicines = joined("antimicrobials")
         intervals = joined("evaluation_intervals")
-        return f"已核对抗菌药物 {medicines}；效果评价距首次用药 {intervals or '无可用'} 小时，要求在 48～72 小时内完成。"
+        if not intervals:
+            return f"已核对抗菌药物 {medicines}，未找到首次用药后 48～72 小时内的效果评价记录。"
+        return f"已核对抗菌药物 {medicines}；效果评价距首次用药 {intervals} 小时，要求在 48～72 小时内完成。"
 
     if rule_id == "LX0609-057" and kind == "empiric_antimicrobial_reason_check":
         medicines = joined("antimicrobials")
@@ -1103,9 +1300,16 @@ def customer_finding_from_controlled_facts(
         )
 
     if rule_id == "LX0609-061" and kind == "discharge_record_timeliness_check":
+        interval = facts.get("actual_interval_hours")
+        if isinstance(interval, (int, float)) and interval < 0:
+            return (
+                f"出院记录于出院前 {abs(interval):g} 小时完成"
+                f"（记录时间 {facts.get('record_time')}；出院时间 {facts.get('discharge_time')}），"
+                "符合出院后 24 小时内完成要求。"
+            )
         return (
             f"出院时间 {facts.get('discharge_time')}，出院记录时间 {facts.get('record_time')}，"
-            f"实际间隔 {facts.get('actual_interval_hours')} 小时，规定时限 24 小时。"
+            f"实际间隔 {interval} 小时，规定时限 24 小时。"
         )
 
     if rule_id == "LX0609-062" and kind == "discharge_medication_completeness_check":
@@ -1133,7 +1337,18 @@ def customer_finding_from_controlled_facts(
         return f"手术时间 {facts.get('surgery_time')}；术后 72 小时内上级医师查房时间：{rounds or '未找到'}。"
 
     if rule_id == "LX0609-066" and kind == "postoperative_first_course_presence_check":
-        return f"已确认实施手术 {facts.get('performed_surgery_count')} 台，找到术后首次病程记录 {facts.get('postoperative_first_course_count')} 份。"
+        surgery_count = facts.get("performed_surgery_count")
+        record_count = facts.get("postoperative_first_course_count")
+        if (
+            isinstance(surgery_count, int)
+            and isinstance(record_count, int)
+            and record_count < surgery_count
+        ):
+            return (
+                f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份；"
+                "尚不能逐台关联，暂无法确认每台手术均有对应记录。"
+            )
+        return f"已确认实施手术 {surgery_count} 台，找到术后首次病程记录 {record_count} 份，数量及关联关系符合要求。"
 
     if rule_id == "LX0609-067" and kind == "predischarge_course_presence_check":
         state = "已找到" if facts.get("course_present") is True else "未找到"
@@ -1193,9 +1408,14 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-044":
         if kind == "pretransfusion_assessment_complete":
-            return "输血前评估已记录输血指征、相关检验、患者情况、拟输成分、预期效果及医师签名。"
-        if kind == "pretransfusion_assessment_incomplete":
+            return "输血前评估已记录输血指征、相关检验，以及输血风险、既往输血情况或患者当前情况。"
+        if kind in {
+            "pretransfusion_assessment_missing",
+            "pretransfusion_assessment_incomplete",
+        }:
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
+            if kind == "pretransfusion_assessment_missing":
+                return "已确认实施输血，但未找到可核对的输血前评估记录。"
             return f"输血前评估缺少：{missing}。" if missing else ""
 
     if rule_id == "LX0609-045":
@@ -1207,7 +1427,7 @@ def customer_finding_from_controlled_facts(
 
     if rule_id == "LX0609-046":
         if kind == "transfusion_course_record_complete":
-            return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察、反应处理及效果。"
+            return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
         if kind == "transfusion_course_record_incomplete":
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
             return f"输血病程记录缺少：{missing}。" if missing else ""

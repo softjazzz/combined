@@ -458,7 +458,22 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order",
         "inpat_bill_item",
     ),
-    "LX0609-050": ("inpat_registration",),
+    "LX0609-050": (
+        "inpat_registration",
+        "admission_record",
+        "daily_course_record",
+        "diffcase_discussion_record",
+    ),
+    "LX0609-052": (
+        "labtest_master",
+        "labtest_item_report",
+        "crisis_value_record",
+    ),
+    "LX0609-053": (
+        "labtest_master",
+        "labtest_item_report",
+        "crisis_value_record",
+    ),
     "LX0609-054": (
         "senior_course_record", "consultation_record", "labtest_master",
         "labtest_item_report",

@@ -67,6 +67,7 @@ EXTENDED_DOCUMENT_RULE_IDS = (
 
 EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "inpat_registration",
+    "admission_record",
     "death_record",
     "death_discussion",
     "discharge_record",
@@ -114,6 +115,10 @@ _PHYSICIAN_CHANGE_ORDER_PATTERN = re.compile(
 )
 _CONSULTATION_REQUEST_TITLE_PATTERN = re.compile(r"会诊.*申请|申请.*会诊")
 _CONSULTATION_RECORD_TITLE_PATTERN = re.compile(r"会诊.*(?:记录|意见)|(?:记录|意见).*会诊")
+_DISCHARGE_APPROVAL_PATTERN = re.compile(
+    r"(?:同意|准予|可以)(?:患者)?(?:于|拟于)?"
+    r"(?:今日|明日|次日)?(?:办理)?出院"
+)
 
 
 def _clean(value: Any) -> str:
@@ -659,6 +664,9 @@ async def execute_luxian_0609_native_extended_document_rules(
     registration_rows, registration_error = _source_rows(
         evidence_materials, "inpat_registration"
     )
+    admission_rows, admission_error = _source_rows(
+        evidence_materials, "admission_record"
+    )
     death_rows, death_error = _source_rows(evidence_materials, "death_record")
     discussion_rows, discussion_error = _source_rows(
         evidence_materials, "death_discussion"
@@ -735,11 +743,15 @@ async def execute_luxian_0609_native_extended_document_rules(
 
     for rule_id in selected:
         if rule_id == "LX0609-050":
-            source_error = registration_error or daily_error or diffcase_error
+            source_error = (
+                (registration_error and admission_error)
+                or daily_error
+                or diffcase_error
+            )
             admission_time = next(
                 (
                     _parse_datetime(row.get("admission_datetime") or row.get("admission_time"))
-                    for row in registration_rows
+                    for row in (*registration_rows, *admission_rows)
                     if _parse_datetime(row.get("admission_datetime") or row.get("admission_time"))
                     is not None
                 ),
@@ -776,7 +788,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                 }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("inpat_registration", "daily_course_record", "diffcase_discussion_record"),
+                source_keys=(
+                    "inpat_registration",
+                    "admission_record",
+                    "daily_course_record",
+                    "diffcase_discussion_record",
+                ),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue
@@ -786,6 +803,15 @@ async def execute_luxian_0609_native_extended_document_rules(
             intervals: tuple[float | None, ...] = ()
             if lab_item_error:
                 final_state, reason_code = "data_gap", lab_item_error
+            elif lab_master_rows and not lab_item_rows:
+                # 报告主表已有当前病例检验记录，但结果明细为空，不能据此证明
+                # “没有 PL/PH 危急值”。这是明确的主从资料缺口。
+                final_state, reason_code = "data_gap", "required_field_missing"
+                display.append((rule_id, {
+                    "failure_kind": "critical_value_result_detail_missing",
+                    "lab_report_count": len(lab_master_rows),
+                    "missing_source": "labtest_item_report",
+                }))
             elif not critical:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif crisis_error:
@@ -876,7 +902,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                 display.append((rule_id, facts))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("labtest_item_report", "crisis_value_record"),
+                source_keys=(
+                    "labtest_master",
+                    "labtest_item_report",
+                    "crisis_value_record",
+                ),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue
@@ -1597,10 +1627,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     present = any(
                         _row_time(row) is not None
                         and _row_time(row).date() in valid_dates
-                        and any(
-                            marker in _row_text(row)
-                            for marker in ("同意出院", "准予出院", "可以出院")
-                        )
+                        and _DISCHARGE_APPROVAL_PATTERN.search(_row_text(row))
                         for row in senior_rows
                     )
                 final_state = "compliant" if present else "non_compliant"

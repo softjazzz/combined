@@ -35,7 +35,13 @@
       "catalog_registered": true,
       "pending_reason_code": "similarity_contract_missing"
     },
-    { "rule_id": "LX0609-018", "phase_status": "phase_1_target", "catalog_registered": true },
+    {
+      "rule_id": "LX0609-018",
+      "phase_status": "phase_1_partial",
+      "catalog_registered": true,
+      "active_criteria": ["chief_complaint_length"],
+      "pending_criteria": ["diagnostic_direction"]
+    },
     { "rule_id": "LX0609-019", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-020", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-021", "phase_status": "phase_1_target", "catalog_registered": true },

@@ -166,6 +166,7 @@ _NATIVE_SOURCE_FIELDS = {
         "anesthesia_method",
         "surgery_begin_datetime",
         "surgery_end_datetime",
+        "record_content",
     ),
     "presurg_discussion": (
         "document_id",

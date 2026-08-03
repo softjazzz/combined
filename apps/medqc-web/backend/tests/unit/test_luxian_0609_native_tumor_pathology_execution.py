@@ -843,6 +843,7 @@ def _chemo_discharge_material_session(
     *,
     truncated_drug: bool = False,
     course_text: str = "2026-04-26 使用奥沙利铂 130mg 静滴，记录化疗经过。",
+    course_record_time: str | None = None,
 ):
     rows_by_source = {
         "diagnosis": ({"diagnosis_code": "C18.9"},),
@@ -859,7 +860,10 @@ def _chemo_discharge_material_session(
             },
         ),
         "daily_course_record": (
-            {"record_content": course_text},
+            {
+                "record_content": course_text,
+                "record_time": course_record_time,
+            },
         ),
         "discharge_record": (
             {"treatment_course": "出院记录中包含后续治疗计划。"},
@@ -1193,6 +1197,81 @@ async def test_typed_026_compares_four_structured_order_fields_without_model(
         "time": "matched",
     }
     assert facts["missing_order_fields"] == []
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("course_text", "course_record_time", "expected_state", "time_state"),
+    [
+        (
+            "今日给予奥沙利铂130mg静滴，第1天。",
+            "2026-04-26 10:00:00",
+            "compliant",
+            "matched",
+        ),
+        (
+            "今日给予奥沙利铂130mg静滴，第1天。",
+            "2026-04-27 10:00:00",
+            "non_compliant",
+            "mismatched",
+        ),
+        (
+            "2026-04-27给予奥沙利铂130mg静滴，第1天。",
+            "2026-04-26 10:00:00",
+            "non_compliant",
+            "mismatched",
+        ),
+        (
+            "当日给予奥沙利铂130mg静滴，第1天。",
+            None,
+            "data_gap",
+            "unknown",
+        ),
+        (
+            "给予奥沙利铂130mg静滴，第1天。",
+            "2026-04-26 10:00:00",
+            "data_gap",
+            "unknown",
+        ),
+    ],
+)
+async def test_typed_026_binds_course_time_semantics_to_record_date(
+    monkeypatch,
+    course_text,
+    course_record_time,
+    expected_state,
+    time_state,
+):
+    session = _chemo_discharge_material_session(
+        course_text=course_text,
+        course_record_time=course_record_time,
+    )
+    monkeypatch.setattr(
+        tumor,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await tumor.execute_luxian_0609_native_tumor_pathology_rules(
+        rule_ids=("LX0609-026",),
+        wrapper_rules=[_wrapper("LX0609-026")],
+        evidence_payload={},
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-026",),
+    )
+
+    assert reduce_luxian_0609_rule_decision(
+        result.decisions[0]
+    ).final_state.value == expected_state
+    facts = dict(result.customer_display_facts)["LX0609-026"]
+    assert facts["field_results"]["time"] == time_state
     assert result.llm_call_count == 0
 
 
@@ -1870,3 +1949,40 @@ async def test_nonmalignant_diagnosis_is_not_applicable_and_source_error_is_sani
     )
     assert [item["status"] for item in failed.results] == ["data_gap"] * 4
     assert secret not in repr(failed)
+
+
+def test_pathology_result_and_explicit_missing_facts_are_programmatic() -> None:
+    report = tumor.SourceMaterial(
+        "present", ({"diagnosis": "胃腺癌，淋巴结2/18枚转移"},)
+    )
+    recorded_course = tumor.SourceMaterial(
+        "present", ({"record_content": "病理报告胃腺癌，结合分期制定方案。"},)
+    )
+    missing_surgery = tumor.SourceMaterial(
+        "present", ({"record_content": "手术记录未记录病理取材及送检情况，未记录病理结果。"},)
+    )
+    missing_course = tumor.SourceMaterial(
+        "present", ({"record_content": "病程记录未记录病理取材及送检情况，未记录病理结果。"},)
+    )
+
+    assert tumor._has_documented_pathology_result(report, recorded_course)
+    pending_course = tumor.SourceMaterial(
+        "present", ({"record_content": "病理报告尚待回报。"},)
+    )
+    report_without_diagnosis = tumor.SourceMaterial(
+        "present", ({"diagnosis": "", "record_content": ""},)
+    )
+    assert not tumor._has_documented_pathology_result(
+        report_without_diagnosis,
+        pending_course,
+    )
+    assert tumor._all_targets_explicitly_missing(
+        tumor._PATHOLOGY_RESULT_MISSING_PATTERN,
+        missing_surgery,
+        missing_course,
+    )
+    assert tumor._all_targets_explicitly_missing(
+        tumor._PATHOLOGY_SAMPLING_MISSING_PATTERN,
+        missing_surgery,
+        missing_course,
+    )

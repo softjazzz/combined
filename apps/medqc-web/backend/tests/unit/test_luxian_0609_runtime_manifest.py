@@ -73,6 +73,16 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert by_rule["LX0609-009"]["active_criteria"] == [
         "critical_daily_course_coverage"
     ]
+    assert by_rule["LX0609-018"]["phase_status"] == "phase_1_partial"
+    assert by_rule["LX0609-018"]["active_criteria"] == [
+        "chief_complaint_length"
+    ]
+    assert by_rule["LX0609-018"]["pending_criteria"] == [
+        "diagnostic_direction"
+    ]
+    assert by_rule["LX0609-018"]["pending_reason_code"] == ""
+    assert by_rule["LX0609-018"]["decision_authority"] == "program_only"
+    assert by_rule["LX0609-018"]["max_llm_calls_per_rule"] == 0
     assert by_rule["LX0609-010"]["phase_status"] == "pending_definition"
     assert (
         by_rule["LX0609-010"]["pending_reason_code"]

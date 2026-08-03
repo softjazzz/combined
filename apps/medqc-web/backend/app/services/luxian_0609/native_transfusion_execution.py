@@ -48,7 +48,10 @@ _MAX_CONTEXT_CHARS = 18000
 _MAPPING_LINE_PATTERN = re.compile(r"^.*(?:主执行规则|映射执行规则).*$", re.MULTILINE)
 
 _PRETRANSFUSION_ASSESSMENT_PATTERN = re.compile(r"输血前(?:评估|评价)")
-_PRETRANSFUSION_PURPOSE_PATTERN = re.compile(r"输血目的")
+_PRETRANSFUSION_PURPOSE_PATTERN = re.compile(
+    r"输血目的|输血指征|拟输血原因"
+    r"|因.{0,12}(?:予|给予|行).{0,12}(?:输血|输注|输入|红细胞|血浆|血小板|冷沉淀|全血)"
+)
 _PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN = re.compile(
     r"(?:未见|未记录|未形成|无|缺少).{0,12}输血前(?:评估|评价)"
     r"|输血前(?:评估|评价).{0,12}(?:缺失|不完整|未记录)"
@@ -78,13 +81,15 @@ _TRANSFUSION_COMPONENT_PATTERN = re.compile(
     r"红细胞|血浆|血小板|冷沉淀|全血|白蛋白|粒细胞"
 )
 _TRANSFUSION_DOSE_PATTERN = re.compile(
-    r"\d+(?:\.\d+)?\s*(?:U|单位|m[lL]|毫升|袋)",
+    r"\d+(?:\.\d+)?\s*(?:U|单位|m[lL]|毫升|袋|(?:个)?治疗量)",
     flags=re.IGNORECASE,
 )
 _TRANSFUSION_START_PATTERN = re.compile(
     r"(?:输血|输注).{0,12}(?:开始|起始)|(?:开始|起始)(?:时间|输血|输注)"
+    r"|(?:开始|起始)(?:输入|输注)"
     r"|\d{1,2}:\d{2}.{0,4}(?:开始|起始)"
     r"|(?:开始|起始).{0,4}\d{1,2}:\d{2}"
+    r"|\d{1,2}(?:时|点)(?:\d{1,2}分)?.{0,4}(?:开始|起始)"
 )
 _TRANSFUSION_COURSE_END_PATTERN = re.compile(
     r"(?:输血|输注).{0,12}(?:结束|完毕|完成)"
@@ -96,6 +101,14 @@ _TRANSFUSION_OBSERVATION_PATTERN = re.compile(
 _TRANSFUSION_REACTION_PATTERN = re.compile(
     r"(?:无|未见).{0,16}(?:不良反应|输血反应|寒战|发热|皮疹|胸闷)"
     r"|耐受良好|有输血反应|发生.{0,8}反应"
+)
+_TRANSFUSION_COURSE_MISSING_PATTERN = re.compile(
+    r"(?:未记录|缺少|未书写).{0,12}(?:输血|输注)(?:病程|记录)"
+    r"|(?:输血|输注)(?:病程|记录).{0,12}(?:缺失|未记录|未书写)"
+)
+_TRANSFUSION_COURSE_INCOMPLETE_PATTERN = re.compile(
+    r"(?:输血|输注).{0,12}(?:病程|过程|记录).{0,12}(?:不完整|不规范|缺项)"
+    r"|(?:病程|过程|记录).{0,12}(?:不完整|不规范|缺项)"
 )
 
 _TRANSFUSION_END_PATTERN = re.compile(
@@ -332,11 +345,17 @@ def _typed_decision_from_outcome(
             "requirement_violated",
         )
     elif status == "not_applicable":
+        reason_code = (
+            "eligibility_not_met"
+            if outcome.rule_id == "LX0609-042"
+            and outcome.reason_code == "transfusion_consent_absent"
+            else "trigger_absent_complete"
+        )
         dimensions = (
             ApplicabilityState.NOT_APPLICABLE,
             EvidenceState.SUFFICIENT,
             QcDirection.UNKNOWN,
-            "trigger_absent_complete",
+            reason_code,
         )
     elif status == "data_gap":
         source_gap = "source_unavailable" in outcome.reason_code
@@ -1037,8 +1056,12 @@ def _programmatic_045_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
     entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    if any(_TRANSFUSION_COURSE_MISSING_PATTERN.search(entry) for entry in entries):
+        return "non_compliant", "transfusion_course_record_missing"
     if any(_is_substantive_transfusion_course_entry(entry) for entry in entries):
         return "compliant", "transfusion_course_record_present"
+    if not entries and _logical_source_state(documents, "bloodtrans_record") == "empty":
+        return "non_compliant", "transfusion_course_record_missing"
     return None
 
 
@@ -1068,6 +1091,10 @@ def _programmatic_046_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
     entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    if entries and any(
+        _TRANSFUSION_COURSE_INCOMPLETE_PATTERN.search(entry) for entry in entries
+    ):
+        return "non_compliant", "transfusion_course_record_incomplete"
     if entries and all(_is_complete_transfusion_course_entry(entry) for entry in entries):
         return "compliant", "transfusion_course_record_complete"
     if entries and all(
@@ -1079,6 +1106,10 @@ def _programmatic_046_status(
         for entry in entries
     ):
         return "non_compliant", "transfusion_purpose_or_indication_missing"
+    if entries:
+        # 来源完整且已有输血病程正文时，字段核对的缺项本身就是本规则要判定
+        # 的“不完整”，不能再交给只返回布尔值、无法给出字段事实的通用模型。
+        return "non_compliant", "transfusion_course_record_incomplete"
     return None
 
 
@@ -1512,19 +1543,12 @@ def _programmatic_transfusion_display_facts(
         ]
         joined = " ".join(entries)
         checked = {
-            "indication": bool(re.search(r"输血指征|适应证|必要性|拟输血原因", joined)),
-            "laboratory_indicator": bool(re.search(r"血红蛋白|\bHb\b|血小板|凝血|失血|出血", joined, re.IGNORECASE)),
-            "transfusion_history_or_reaction": bool(re.search(r"既往输血|不良反应|过敏", joined)),
-            "patient_status": bool(re.search(r"生命体征|病情|一般情况", joined)),
-            "planned_component": bool(_TRANSFUSION_COMPONENT_PATTERN.search(joined)),
-            "expected_effect": bool(re.search(r"预期(?:效果|疗效)|纠正|改善|提升", joined)),
-            "physician_signature": any(
-                _structured_or_labeled_value(
-                    row,
-                    fields=("physician_name", "apply_doctor", "physician_sign"),
-                    labels=("申请医师", "医师签名"),
-                )
-                for row in _source_document_rows(documents, "blood_application")
+            "indication": bool(_PRETRANSFUSION_CORE_PATTERNS[0].search(joined)),
+            "laboratory_indicator": bool(
+                _PRETRANSFUSION_CORE_PATTERNS[1].search(joined)
+            ),
+            "risk_history_or_status": bool(
+                _PRETRANSFUSION_CORE_PATTERNS[2].search(joined)
             ),
         }
         missing = sorted(key for key, present in checked.items() if not present)
@@ -1533,11 +1557,14 @@ def _programmatic_transfusion_display_facts(
             "checked_fields": sorted(checked),
             "missing_fields": missing,
         }
-        payload["verification_kind" if status == "compliant" else "failure_kind"] = (
-            "pretransfusion_assessment_complete"
-            if status == "compliant"
-            else "pretransfusion_assessment_incomplete"
-        )
+        if status == "compliant":
+            payload["verification_kind"] = "pretransfusion_assessment_complete"
+        else:
+            payload["failure_kind"] = (
+                "pretransfusion_assessment_missing"
+                if reason_code == "pretransfusion_assessment_missing"
+                else "pretransfusion_assessment_incomplete"
+            )
         return payload
     if rule_id == "LX0609-045":
         if status == "compliant":
@@ -1564,11 +1591,10 @@ def _programmatic_transfusion_display_facts(
                 "dose": bool(_TRANSFUSION_DOSE_PATTERN.search(text)),
                 "process_observation": bool(_TRANSFUSION_OBSERVATION_PATTERN.search(text)),
                 "reaction_and_handling": bool(_TRANSFUSION_REACTION_PATTERN.search(text)),
-                "effect": bool(re.search(r"疗效|效果|改善|好转|复查|复测", text)),
             })
         field_names = (
             "reason_or_indication", "start_and_end_time", "component", "dose",
-            "process_observation", "reaction_and_handling", "effect",
+            "process_observation", "reaction_and_handling",
         )
         checked = {
             field: bool(checks_by_record) and all(item[field] for item in checks_by_record)
@@ -1581,6 +1607,15 @@ def _programmatic_transfusion_display_facts(
             "checked_fields": sorted(checked),
             "missing_fields": missing,
         }
+        source_document_ids = [
+            document_id
+            for record in records
+            if (document_id := _clean(record.get("document_id")))
+        ]
+        if source_document_ids:
+            payload["source_document_ids"] = list(
+                dict.fromkeys(source_document_ids)
+            )[:8]
         payload["verification_kind" if status == "compliant" else "failure_kind"] = (
             "transfusion_course_record_complete"
             if status == "compliant"
