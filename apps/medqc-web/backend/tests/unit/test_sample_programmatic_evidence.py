@@ -308,6 +308,183 @@ def test_build_programmatic_evidence_payload_should_fallback_to_source_tables_wh
     assert timeline["documents"]["senior_course_record"][0]["authored_at"] == "2026-02-08 09:00:00"
 
 
+def test_build_programmatic_evidence_payload_should_keep_distinct_fallback_documents_from_same_table(monkeypatch):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: (
+            [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_id": "D2",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-04 09:00:00",
+                    "content": "第二次查房：患者生命体征平稳，继续观察病情变化。",
+                    "text_preview": "第二次查房：患者生命体征平稳，继续观察病情变化。",
+                }
+            ],
+            {},
+        ),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_id": "D1",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-03 09:00:00",
+                    "content": "第一次查房：" + "患者一般情况稳定，继续当前治疗方案。" * 6,
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    documents = payload["programmatic_timeline"]["documents"]["daily_course_record"]
+    assert [item["document_id"] for item in documents] == ["D1", "D2"]
+    assert "第二次查房" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_deduplicate_same_document_id_and_keep_richer_copy(monkeypatch):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: (
+            [
+                {
+                    "source_table": "consultation_record",
+                    "document_type": "consultation_record",
+                    "document_id": "C1",
+                    "document_title": "会诊记录",
+                    "record_time": "2026-02-04 10:00:00",
+                    "content": "会诊意见：患者目前病情平稳，建议继续抗感染治疗，并根据复查结果调整方案。",
+                    "text_preview": "会诊意见：患者目前病情平稳，建议继续抗感染治疗，并根据复查结果调整方案。",
+                }
+            ],
+            {},
+        ),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "consultation_record",
+                    "document_type": "consultation_record",
+                    "document_id": "C1",
+                    "document_title": "会诊记录",
+                    "record_time": "",
+                    "content": "会诊意见：继续观察。",
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    documents = payload["programmatic_timeline"]["documents"]["consultation_record"]
+    assert len(documents) == 1
+    assert documents[0]["authored_at"] == "2026-02-04 10:00:00"
+    assert "根据复查结果调整方案" in documents[0]["content"]
+    assert payload["primary_document_text"].count("根据复查结果调整方案") == 1
+
+
+def test_build_programmatic_evidence_payload_should_not_double_count_preview_when_choosing_richer_copy(monkeypatch):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: (
+            [
+                {
+                    "source_table": "consultation_record",
+                    "document_type": "consultation_record",
+                    "document_id": "C2",
+                    "document_title": "会诊记录",
+                    "record_time": "2026-02-05 10:00:00",
+                    "content": "短摘要：建议继续观察患者病情变化并复查。" * 2,
+                    "text_preview": "短摘要：建议继续观察患者病情变化并复查。" * 2,
+                }
+            ],
+            {},
+        ),
+    )
+
+    complete_content = "完整会诊正文：" + "患者病史、查体、辅助检查及会诊分析记录完整。" * 5
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "consultation_record",
+                    "document_type": "consultation_record",
+                    "document_id": "C2",
+                    "document_title": "会诊记录",
+                    "record_time": "",
+                    "content": complete_content,
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    document = payload["programmatic_timeline"]["documents"]["consultation_record"][0]
+    assert document["content"] == complete_content
+    assert document["authored_at"] == "2026-02-05 10:00:00"
+
+
+def test_build_programmatic_evidence_payload_should_use_conservative_identity_when_document_id_is_missing(monkeypatch):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: (
+            [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-03 09:00:00",
+                    "content": "患者   病情稳定，继续观察。",
+                    "text_preview": "患者   病情稳定，继续观察。",
+                },
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-04 09:00:00",
+                    "content": "患者出现发热，调整抗感染方案。",
+                    "text_preview": "患者出现发热，调整抗感染方案。",
+                },
+            ],
+            {},
+        ),
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "source_documents": [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-03 09:00:00",
+                    "content": "患者 病情稳定，继续观察。",
+                }
+            ],
+            "structured_context": {},
+        }
+    )
+
+    documents = payload["programmatic_timeline"]["documents"]["daily_course_record"]
+    assert len(documents) == 2
+    assert [item["authored_at"] for item in documents] == [
+        "2026-02-03 09:00:00",
+        "2026-02-04 09:00:00",
+    ]
+    assert payload["primary_document_text"].count("患者出现发热") == 1
+
+
 def test_build_programmatic_evidence_payload_should_fallback_to_detail_service_when_source_tables_are_empty(monkeypatch):
     monkeypatch.setattr(
         evidence_module,

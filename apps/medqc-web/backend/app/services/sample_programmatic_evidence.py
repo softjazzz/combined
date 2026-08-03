@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime
 from typing import Any
@@ -159,28 +160,72 @@ def _item_text(item: dict[str, Any]) -> str:
     return " ".join(values)
 
 
+def _normalize_identity_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", _safe_text(value))
+
+
+def _identity_content(item: dict[str, Any]) -> str:
+    for key in (
+        "content",
+        "record_content",
+        "raw_text",
+        "assembled_text",
+        "text_preview",
+        "content_preview",
+        "report_content",
+        "exam_report",
+        "result",
+    ):
+        content = _normalize_identity_text(item.get(key))
+        if content:
+            return content
+    return ""
+
+
+def _fallback_document_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
+    source_table = _item_source_table(item)
+    document_id = _safe_text(item.get("document_id") or item.get("record_id") or item.get("id"))
+    if source_table and document_id:
+        return ("document_id", source_table, document_id)
+    identity_time = ""
+    for key in ("record_time", "display_time", "submit_datetime", "last_modified_time", "update_time"):
+        identity_time = _parse_datetime(item.get(key))
+        if identity_time:
+            break
+    content = _identity_content(item)
+    if not source_table or not identity_time or not content:
+        return None
+    document_type = _safe_text(item.get("document_type") or item.get("type") or source_table).lower()
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return ("content", source_table, identity_time, document_type, content_hash)
+
+
+def _merge_duplicate_document(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    if len(_item_text(candidate)) > len(_item_text(existing)):
+        primary, secondary = candidate, existing
+    else:
+        primary, secondary = existing, candidate
+    merged = dict(primary)
+    for key, value in secondary.items():
+        if not _safe_text(merged.get(key)) and _safe_text(value):
+            merged[key] = value
+    return merged
+
+
 def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not fallback_items:
         return items
-    merged = list(items)
-    table_content_lengths: dict[str, int] = {}
-    for item in merged:
-        source_table = _item_source_table(item)
-        if not source_table:
+    merged: list[dict[str, Any]] = []
+    identity_indexes: dict[tuple[str, ...], int] = {}
+    for item in [*items, *fallback_items]:
+        identity = _fallback_document_identity(item)
+        if identity is not None and identity in identity_indexes:
+            index = identity_indexes[identity]
+            merged[index] = _merge_duplicate_document(merged[index], item)
             continue
-        content_len = len(_item_text(item))
-        table_content_lengths[source_table] = max(table_content_lengths.get(source_table, 0), content_len)
-    for item in fallback_items:
-        source_table = _item_source_table(item)
-        if not source_table:
-            continue
-        fallback_len = len(_item_text(item))
-        if source_table not in table_content_lengths or (
-            fallback_len > table_content_lengths[source_table]
-            and table_content_lengths[source_table] < 80
-        ):
-            merged.append(item)
-            table_content_lengths[source_table] = max(table_content_lengths.get(source_table, 0), fallback_len)
+        if identity is not None:
+            identity_indexes[identity] = len(merged)
+        merged.append(item)
     return merged
 
 
