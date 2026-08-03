@@ -41,6 +41,21 @@ def _has_locatable_evidence(result: Mapping[str, Any]) -> bool:
     )
 
 
+def _has_meaningful_value(value: Any) -> bool:
+    """空字符串和空壳容器不能作为客户可核对的解释事实。"""
+
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, Mapping):
+        return any(_has_meaningful_value(item) for item in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return any(_has_meaningful_value(item) for item in value)
+    # False 和 0 可能分别表示受控否定事实和精确计数，不能按普通真值丢弃。
+    return True
+
+
 def _is_compliant_for_status(status: str) -> bool | None:
     if status in {"compliant", "not_applicable"}:
         return True
@@ -72,8 +87,8 @@ def finalize_luxian_0609_canonical_result(
     if status != "non_compliant":
         return finalized
     if (
-        finalized.get("criterion_results")
-        or finalized.get("customer_display_facts")
+        _has_meaningful_value(finalized.get("criterion_results"))
+        or _has_meaningful_value(finalized.get("customer_display_facts"))
         or _has_locatable_evidence(finalized)
     ):
         return finalized

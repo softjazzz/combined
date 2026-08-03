@@ -4206,6 +4206,7 @@ def aggregate_luxian_0609_results(
                     gate_decision=decision,
                     audit_context=audit_context,
                 )
+                result = finalize_luxian_0609_canonical_result(result)
                 customer_results.append(result)
                 continue
 

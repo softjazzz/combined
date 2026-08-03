@@ -1909,7 +1909,7 @@ def test_empty_reduced_tuple_preserves_legacy_native_branch():
     assert result["metadata"]["execution_source"] == "lx0609_native"
 
 
-def test_all_four_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
+def test_all_five_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
     module = __import__(
         "app.services.luxian_0609_result_aggregator",
         fromlist=["aggregate_luxian_0609_results"],
@@ -1926,6 +1926,21 @@ def test_all_four_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
             "wrapper_rules": [{"rule_id": "LX0609-029"}],
             "execution_results": [],
             "reduced_decisions": (_reduced_decision("LX0609-029"),),
+        },
+        {
+            "wrapper_rules": [{"rule_id": "LX0609-016"}],
+            "execution_results": [],
+            "gate_decisions": {
+                "LX0609-016": __import__(
+                    "app.services.luxian_0609_trigger_gate",
+                    fromlist=["Luxian0609GateDecision"],
+                ).Luxian0609GateDecision(
+                    rule_id="LX0609-016",
+                    status="data_gap",
+                    reason="首次病程记录缺失",
+                    data_gap_fields=("首次病程记录",),
+                )
+            },
         },
         {
             "wrapper_rules": [{"rule_id": "LX0609-029"}],
@@ -1970,7 +1985,42 @@ def test_all_four_delivery_paths_use_the_same_canonical_finalizer(monkeypatch):
         )[0]
         assert result["canonical_finalizer_called"] is True
 
-    assert finalized_rule_ids == ["LX0609-029"] * 4
+    assert finalized_rule_ids == [
+        "LX0609-029",
+        "LX0609-016",
+        "LX0609-029",
+        "LX0609-029",
+        "LX0609-029",
+    ]
+
+
+def test_trigger_gate_data_gap_uses_canonical_is_compliant_semantics():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    trigger_gate = __import__(
+        "app.services.luxian_0609_trigger_gate",
+        fromlist=["Luxian0609GateDecision"],
+    )
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-016"}],
+        execution_results=[],
+        gate_decisions={
+            "LX0609-016": trigger_gate.Luxian0609GateDecision(
+                rule_id="LX0609-016",
+                status="data_gap",
+                reason="首次病程记录缺失",
+                data_gap_fields=("首次病程记录",),
+            )
+        },
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "data_gap"
+    assert result["result_status"] == "data_gap"
+    assert result["is_compliant"] is None
 
 
 def test_native_llm_result_keeps_native_source_without_legacy_diagnostics():

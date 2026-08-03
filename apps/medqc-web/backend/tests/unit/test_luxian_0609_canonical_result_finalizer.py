@@ -19,7 +19,11 @@ def _finalize(result: dict):
     ("extra", "expected_status"),
     [
         ({}, "uncertain"),
+        ({"customer_display_facts": {"failure_kind": ""}}, "uncertain"),
+        ({"criterion_results": [{"status": "", "details": {}}]}, "uncertain"),
         ({"customer_display_facts": {"failure_kind": "document_missing"}}, "non_compliant"),
+        ({"customer_display_facts": {"requirement_met": False}}, "non_compliant"),
+        ({"customer_display_facts": {"missing_count": 0}}, "non_compliant"),
         ({"criterion_results": [{"criterion_id": "presence", "status": "failed"}]}, "non_compliant"),
         (
             {
