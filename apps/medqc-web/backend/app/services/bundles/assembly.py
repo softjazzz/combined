@@ -343,8 +343,10 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "transfer_out_record": 50,
     "newborn_record": 50,
     "medical_order": 100,
-    "inpat_drug_order": 100,
-    "inpat_nondrug_order": 100,
+    # 2026-08-04 对 0426 冻结 258 例审计：最大分别为 609、1377 行。
+    # 保留少量余量，避免完整资料被错误标记为 source_truncated。
+    "inpat_drug_order": 700,
+    "inpat_nondrug_order": 1500,
     "inpat_bill_item": 200,
     "blood_application": 50,
     "bloodtrans_record": 50,

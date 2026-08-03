@@ -1793,7 +1793,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         return _finish(
             selected=selected,
             status="not_applicable",
-            reason_code="non_target_document",
+            reason_code="eligibility_not_met",
             evidence_snapshot=evidence_snapshot,
             decision_rule_ids=typed,
         )

@@ -351,6 +351,24 @@ def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
     }
 
 
+def test_record_result_envelope_preserves_data_gap_customer_message():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-011",
+            "status": "data_gap",
+            "reason_code": "required_field_missing",
+            "customer_message": "缺少检查报告时间，暂时无法完成本项质控。",
+            "data_gap_details": {
+                "reason_label": "关键字段缺失",
+                "customer_message": "缺少检查报告时间，暂时无法完成本项质控。",
+            },
+        }
+    )
+
+    assert item["customer_message"] == "缺少检查报告时间，暂时无法完成本项质控。"
+    assert item["data_gap_details"]["reason_label"] == "关键字段缺失"
+
+
 def test_record_result_envelope_preserves_finalized_state_fields_verbatim():
     item = CustomQCWorkspaceService._envelope_item_from_rule_result(
         {

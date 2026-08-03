@@ -6151,6 +6151,17 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
                 "rule_name": "手术记录24小时内完成",
                 "status": "data_gap",
                 "is_compliant": False,
+                "reason_code": "authoritative_time_missing",
+                "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+                "missing_sources": [],
+                "missing_fields": ["用于计算质控时限的权威时间"],
+                "data_gap_details": {
+                    "reason_code": "authoritative_time_missing",
+                    "reason_label": "权威时间缺失",
+                    "missing_sources": [],
+                    "missing_fields": ["用于计算质控时限的权威时间"],
+                    "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+                },
                 "metadata": {},
             },
         ],
@@ -6187,6 +6198,11 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
         }
     ]
     assert result["evaluation_results"][0]["model_analysis"] == "模型已完成该规则的医学关系分析。"
+    gap_result = result["evaluation_results"][2]
+    assert gap_result["customer_message"] == "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。"
+    assert gap_result["missing_sources"] == []
+    assert gap_result["missing_fields"] == ["用于计算质控时限的权威时间"]
+    assert gap_result["data_gap_details"]["reason_label"] == "权威时间缺失"
 
 
 def test_trigger_gate_should_ignore_clear_negated_trigger_phrases():

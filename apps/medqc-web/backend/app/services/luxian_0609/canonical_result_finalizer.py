@@ -23,6 +23,131 @@ _INCOMPLETE_EXPLANATION_BY_RULE = {
     ),
 }
 
+_DATA_GAP_EXPLANATIONS = {
+    "required_field_missing": {
+        "reason_label": "关键字段缺失",
+        "missing_sources": [],
+        "missing_fields": ["完成判定所需的关键字段"],
+        "customer_message": "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。",
+    },
+    "source_unavailable": {
+        "reason_label": "数据源未接入",
+        "missing_sources": ["质控所需数据源"],
+        "missing_fields": [],
+        "customer_message": "本项质控所需的数据源尚未接入或本次未读取到，暂时无法完成判定。",
+    },
+    "source_empty": {
+        "reason_label": "未读取到相关资料",
+        "missing_sources": ["质控所需资料"],
+        "missing_fields": [],
+        "customer_message": "本次未读取到完成本项质控所需的相关资料，暂时无法完成判定。",
+    },
+    "source_truncated": {
+        "reason_label": "输入资料不完整",
+        "missing_sources": ["超出读取范围的后续资料"],
+        "missing_fields": [],
+        "customer_message": "相关资料数量超过本次读取范围，当前资料不完整，暂时无法完成本项质控。",
+    },
+    "source_readiness_unproven": {
+        "reason_label": "数据同步状态未确认",
+        "missing_sources": ["质控所需资料"],
+        "missing_fields": [],
+        "customer_message": "本项质控所需资料的同步状态尚未确认，暂时无法判断资料是否完整。",
+    },
+    "association_failed": {
+        "reason_label": "资料关联失败",
+        "missing_sources": ["需要相互核对的事件与文书"],
+        "missing_fields": [],
+        "customer_message": "已读取到相关资料，但暂时无法准确关联对应事件与文书，无法完成本项质控。",
+    },
+    "linkage_unresolved": {
+        "reason_label": "关联资料不足",
+        "missing_sources": ["需要相互核对的事件与文书"],
+        "missing_fields": [],
+        "customer_message": "现有资料不足以确认事件与文书的对应关系，暂时无法完成本项质控。",
+    },
+    "authoritative_time_missing": {
+        "reason_label": "权威时间缺失",
+        "missing_sources": [],
+        "missing_fields": ["用于计算质控时限的权威时间"],
+        "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
+    },
+    "applicability_source_gap": {
+        "reason_label": "适用性资料缺失",
+        "missing_sources": ["判断质控点是否适用的关键资料"],
+        "missing_fields": [],
+        "customer_message": "缺少判断本质控点是否适用的关键资料，暂时无法继续判定。",
+    },
+}
+
+_DEFAULT_DATA_GAP_EXPLANATION = {
+    "reason_label": "现有资料不足",
+    "missing_sources": ["完成本项质控所需资料"],
+    "missing_fields": [],
+    "customer_message": "现有资料不足，暂时无法完成本项质控；请补充或同步相关资料后重新评估。",
+}
+
+_CUSTOMER_SOURCE_LABELS = {
+    "labtest_item_report": "检验结果明细",
+    "exam_item_report": "检查报告明细",
+    "consultation_record": "会诊记录",
+    "inpat_drug_order": "药品医嘱",
+    "inpat_nondrug_order": "非药品医嘱",
+    "physician_change_event": "经治医师变更记录",
+    "medical_order": "诊疗医嘱",
+    "inpat_bill_item": "住院收费明细",
+    "surgery_risk_assessment": "手术风险评估",
+    "exam_attention_report": "检查危急值报告",
+    "lab_attention_report": "检验危急值报告",
+}
+
+
+def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]:
+    facts = result.get("customer_display_facts")
+    if not isinstance(facts, Mapping):
+        return []
+    raw_values = facts.get("missing_sources")
+    if not isinstance(raw_values, (list, tuple)):
+        raw_values = [facts.get("missing_source")]
+    labels: list[str] = []
+    for value in raw_values:
+        label = _CUSTOMER_SOURCE_LABELS.get(str(value or "").strip().lower())
+        if label and label not in labels:
+            labels.append(label)
+    return labels
+
+
+def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
+    reason_code = str(result.get("reason_code") or "").strip().lower()
+    defaults = _DATA_GAP_EXPLANATIONS.get(
+        reason_code,
+        _DEFAULT_DATA_GAP_EXPLANATION,
+    )
+    missing_sources = list(
+        result.get("missing_sources")
+        or _missing_sources_from_customer_facts(result)
+        or defaults["missing_sources"]
+    )
+    missing_fields = list(result.get("missing_fields") or defaults["missing_fields"])
+    customer_message = str(
+        result.get("customer_message") or defaults["customer_message"]
+    ).strip()
+    result["missing_sources"] = missing_sources
+    result["missing_fields"] = missing_fields
+    result["customer_message"] = customer_message
+    existing_details = result.get("data_gap_details")
+    completed_details = (
+        dict(existing_details) if isinstance(existing_details, Mapping) else {}
+    )
+    completed_details.update({
+        "reason_code": reason_code,
+        "reason_label": defaults["reason_label"],
+        "missing_sources": missing_sources,
+        "missing_fields": missing_fields,
+        "customer_message": customer_message,
+    })
+    result["data_gap_details"] = completed_details
+
 
 def _has_locatable_evidence(result: Mapping[str, Any]) -> bool:
     evidence_items = result.get("evidence_items")
@@ -83,6 +208,9 @@ def finalize_luxian_0609_canonical_result(
     finalized["status"] = status
     finalized["result_status"] = status
     finalized["is_compliant"] = _is_compliant_for_status(status)
+
+    if status == "data_gap":
+        _complete_data_gap_explanation(finalized)
 
     if status != "non_compliant":
         return finalized

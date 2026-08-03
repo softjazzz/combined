@@ -152,3 +152,98 @@ def test_rule_040_keeps_the_controlled_customer_message_when_downgraded():
     assert result["status"] == "uncertain"
     assert result["findings"] == "暂无法确认是否需要进行四级手术术前多学科讨论"
     assert "手术级别" in result["evidence"]
+
+
+def test_data_gap_always_has_customer_readable_missing_data_contract():
+    result = _finalize(
+        {
+            "rule_id": "LX0609-011",
+            "status": "data_gap",
+            "reason_code": "required_field_missing",
+        }
+    )
+
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == "required_field_missing"
+    assert result["missing_sources"] == []
+    assert result["missing_fields"] == ["完成判定所需的关键字段"]
+    assert result["customer_message"] == (
+        "已读取到相关资料，但缺少完成判定所需的关键字段，暂时无法完成本项质控。"
+    )
+    assert result["data_gap_details"] == {
+        "reason_code": "required_field_missing",
+        "reason_label": "关键字段缺失",
+        "missing_sources": [],
+        "missing_fields": ["完成判定所需的关键字段"],
+        "customer_message": result["customer_message"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "reason_label", "expected_phrase"),
+    [
+        ("source_unavailable", "数据源未接入", "尚未接入"),
+        ("source_empty", "未读取到相关资料", "未读取到"),
+        ("source_truncated", "输入资料不完整", "超过本次读取范围"),
+        ("source_readiness_unproven", "数据同步状态未确认", "同步状态"),
+        ("association_failed", "资料关联失败", "无法准确关联"),
+        ("linkage_unresolved", "关联资料不足", "对应关系"),
+        ("authoritative_time_missing", "权威时间缺失", "权威时间"),
+        ("applicability_source_gap", "适用性资料缺失", "是否适用"),
+        ("unexpected_gap", "现有资料不足", "现有资料不足"),
+    ],
+)
+def test_every_data_gap_reason_gets_a_controlled_customer_explanation(
+    reason_code: str,
+    reason_label: str,
+    expected_phrase: str,
+):
+    result = _finalize(
+        {
+            "rule_id": "LX0609-054",
+            "status": "data_gap",
+            "reason_code": reason_code,
+        }
+    )
+
+    assert result["data_gap_details"]["reason_label"] == reason_label
+    assert expected_phrase in result["customer_message"]
+    assert isinstance(result["missing_sources"], list)
+    assert isinstance(result["missing_fields"], list)
+
+
+def test_data_gap_completion_preserves_more_precise_existing_details():
+    result = _finalize(
+        {
+            "rule_id": "LX0609-052",
+            "status": "data_gap",
+            "reason_code": "required_field_missing",
+            "missing_sources": ["检验结果明细"],
+            "missing_fields": ["危急值标志"],
+            "customer_message": "缺少检验结果明细中的危急值标志，暂时无法核对。",
+            "data_gap_details": {"availability": "unavailable"},
+        }
+    )
+
+    assert result["missing_sources"] == ["检验结果明细"]
+    assert result["missing_fields"] == ["危急值标志"]
+    assert result["customer_message"] == "缺少检验结果明细中的危急值标志，暂时无法核对。"
+    assert result["data_gap_details"]["availability"] == "unavailable"
+    assert result["data_gap_details"]["reason_label"] == "关键字段缺失"
+
+
+def test_data_gap_uses_controlled_missing_source_from_customer_facts():
+    result = _finalize(
+        {
+            "rule_id": "LX0609-052",
+            "status": "data_gap",
+            "reason_code": "required_field_missing",
+            "customer_display_facts": {
+                "failure_kind": "critical_value_result_detail_missing",
+                "missing_source": "labtest_item_report",
+            },
+        }
+    )
+
+    assert result["missing_sources"] == ["检验结果明细"]
+    assert result["missing_fields"] == ["完成判定所需的关键字段"]

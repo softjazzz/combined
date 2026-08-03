@@ -4282,6 +4282,7 @@ class CustomQCWorkspaceService:
             "suggestion",
             "customer_conclusion",
             "customer_suggestion",
+            "customer_message",
             "customer_display_facts",
             "criterion_results",
             "decision_facts",

@@ -3544,6 +3544,21 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             set(),
                             max_text=120,
                         )
+                    if use_luxian_customer_results:
+                        customer_message = eval_item.get("customer_message")
+                        if isinstance(customer_message, str) and customer_message.strip():
+                            issue_item["customer_message"] = customer_message.strip()
+                        for gap_key in ("missing_sources", "missing_fields"):
+                            gap_values = eval_item.get(gap_key)
+                            if isinstance(gap_values, list):
+                                issue_item[gap_key] = list(gap_values)
+                        data_gap_details = eval_item.get("data_gap_details")
+                        if isinstance(data_gap_details, dict):
+                            issue_item["data_gap_details"] = _sanitize_trace_value(
+                                data_gap_details,
+                                set(),
+                                max_text=240,
+                            )
                     # 单病历新结果 Envelope 必须保留原生已生成的子结论和证据。
                     # 这里不把 document_id/raw text 直接作为客户输出；workspace
                     # 读取投影会对证据签名、对白名单字段做最终裁剪。

@@ -1120,6 +1120,30 @@ async def test_typed_decision_preserves_terminal_source_reason_code(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_typed_explicit_non_target_document_uses_allowed_not_applicable_reason(monkeypatch):
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("麻醉评估"),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=_snapshot(),
+        decision_rule_ids=("LX0609-021",),
+    )
+
+    assert result.results == ()
+    assert result.decisions[0].applicability is episode.ApplicabilityState.NOT_APPLICABLE
+    assert result.decisions[0].reason_code == "eligibility_not_met"
+
+
+@pytest.mark.asyncio
 async def test_typed_low_confidence_episode_is_conflict_not_source_gap(monkeypatch):
     monkeypatch.setattr(
         episode,
