@@ -3367,12 +3367,25 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),
                         "status": status,
+                        **(
+                            {
+                                "result_status": str(
+                                    eval_item.get("result_status") or status
+                                )
+                            }
+                            if use_luxian_customer_results
+                            else {}
+                        ),
                         "reason_code": str(
                             eval_item.get("reason_code")
                             or metadata.get("reason_code")
                             or ""
                         ),
-                        "is_compliant": bool(eval_item.get("is_compliant") is True),
+                        "is_compliant": (
+                            eval_item.get("is_compliant")
+                            if use_luxian_customer_results
+                            else bool(eval_item.get("is_compliant") is True)
+                        ),
                         "findings": str(eval_item.get("findings") or ""),
                         "evidence": str(eval_item.get("evidence") or ""),
                         "evidence_items": evidence_items,

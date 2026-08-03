@@ -2073,7 +2073,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
 
 @pytest.mark.asyncio
-async def test_native_criterion_result_persists_top_level_rule_version_for_single_record_read(
+async def test_native_criterion_result_persists_canonical_contract_fields_for_single_record_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """018 的当前契约版本必须从原生 eval 顶层保存，而非只读 metadata。"""
@@ -2099,8 +2099,10 @@ async def test_native_criterion_result_persists_top_level_rule_version_for_singl
                 {
                     "rule_id": "LX0609-018",
                     "rule_version": rule_version,
-                    "status": "non_compliant",
-                    "is_compliant": False,
+                    "status": "data_gap",
+                    "result_status": "data_gap",
+                    "reason_code": "required_field_missing",
+                    "is_compliant": None,
                     "criterion_results": [
                         {
                             "criterion_id": "chief_complaint_length",
@@ -2135,6 +2137,10 @@ async def test_native_criterion_result_persists_top_level_rule_version_for_singl
     persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-018")
     assert persisted["rule_version"] == rule_version
     assert persisted["rule_version"] != persisted["metadata"]["rule_version"]
+    assert persisted["status"] == "data_gap"
+    assert persisted["result_status"] == "data_gap"
+    assert persisted["reason_code"] == "required_field_missing"
+    assert persisted["is_compliant"] is None
     assert workspace_module._is_current_rule_contract_result(persisted) is True
 
 
