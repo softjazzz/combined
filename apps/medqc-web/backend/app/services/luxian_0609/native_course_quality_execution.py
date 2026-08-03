@@ -2148,10 +2148,10 @@ class _CourseSemanticOutcome:
     criterion_results: tuple[CriterionResult, ...] = ()
 
 
-def _lx018_confirmed_length_outcome(
+def _lx018_pre_model_outcome(
     documents: Mapping[str, Any],
-) -> _CourseSemanticOutcome:
-    """只执行客户已确认的主诉长度口径；诊断指向仍属待确认项。"""
+) -> _CourseSemanticOutcome | None:
+    """在调用模型前核对主诉和第一诊断是否具备，避免用缺失材料做语义判断。"""
 
     length_result = _lx018_length_criterion_result(documents)
     if length_result.status is CriterionStatus.UNKNOWN:
@@ -2160,23 +2160,31 @@ def _lx018_confirmed_length_outcome(
             status="data_gap",
             reason_code="required_field_missing",
             executor_type="program",
-            criterion_results=(length_result,),
+            criterion_results=(
+                length_result,
+                _lx018_unknown_semantic_result("required_field_missing"),
+            ),
         )
-    return _CourseSemanticOutcome(
-        rule_id="LX0609-018",
-        status=(
-            "compliant"
-            if length_result.status is CriterionStatus.PASSED
-            else "non_compliant"
-        ),
-        reason_code=(
-            "requirement_satisfied"
-            if length_result.status is CriterionStatus.PASSED
-            else length_result.reason_code
-        ),
-        executor_type="program",
-        criterion_results=(length_result,),
-    )
+    if not _lx018_primary_diagnosis_available(documents):
+        return _CourseSemanticOutcome(
+            rule_id="LX0609-018",
+            status=(
+                "non_compliant"
+                if length_result.status is CriterionStatus.FAILED
+                else "data_gap"
+            ),
+            reason_code=(
+                length_result.reason_code
+                if length_result.status is CriterionStatus.FAILED
+                else "required_field_missing"
+            ),
+            executor_type="program",
+            criterion_results=(
+                length_result,
+                _lx018_unknown_semantic_result("required_field_missing"),
+            ),
+        )
+    return None
 
 
 def _lx018_unknown_semantic_result(reason_code: str) -> CriterionResult:
@@ -2512,7 +2520,11 @@ def _typed_course_semantic_documents(
 
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": (
+            "admission_record",
+            "diagnosis",
+            "admission_record_diagnosis",
+        ),
     }[rule_id]
     observations = {
         item.source_key: item
@@ -2579,7 +2591,11 @@ def _course_semantic_decision(
         raise ValueError("typed course semantic evidence session mismatch")
     required_sources = {
         "LX0609-016": ("admission_record", "first_course_record"),
-        "LX0609-018": ("admission_record",),
+        "LX0609-018": (
+            "admission_record",
+            "diagnosis",
+            "admission_record_diagnosis",
+        ),
     }[outcome.rule_id]
     observations = tuple(
         item for item in snapshot.observations if item.source_key in required_sources
@@ -2926,10 +2942,10 @@ async def execute_luxian_0609_native_course_quality_rules(
                 )
                 continue
             if rule_id == "LX0609-018":
-                emit_course_semantic(
-                    _lx018_confirmed_length_outcome(typed_documents)
-                )
-                continue
+                terminal_outcome = _lx018_pre_model_outcome(typed_documents)
+                if terminal_outcome is not None:
+                    emit_course_semantic(terminal_outcome)
+                    continue
             context = _context(rule_id, typed_documents)
             wrapper = wrappers_by_id.get(rule_id)
             if (
@@ -3277,17 +3293,18 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             continue
         elif rule_id == "LX0609-018":
-            outcome = _lx018_confirmed_length_outcome(documents)
-            results.append(
-                _result(
-                    rule_id,
-                    outcome.status,
-                    outcome.reason_code,
-                    executor_type=outcome.executor_type,
-                    criterion_results=outcome.criterion_results,
+            terminal_outcome = _lx018_pre_model_outcome(documents)
+            if terminal_outcome is not None:
+                results.append(
+                    _result(
+                        rule_id,
+                        terminal_outcome.status,
+                        terminal_outcome.reason_code,
+                        executor_type=terminal_outcome.executor_type,
+                        criterion_results=terminal_outcome.criterion_results,
+                    )
                 )
-            )
-            continue
+                continue
 
         context = _context(rule_id, documents, controlled_fact=controlled_fact)
         wrapper = wrappers_by_id.get(rule_id)

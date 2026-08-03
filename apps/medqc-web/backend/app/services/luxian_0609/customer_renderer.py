@@ -907,39 +907,57 @@ def compliant_customer_finding(
     """只根据规则身份和已校验子结论生成合规短句，供 Envelope 单次生成复用。"""
 
     if rule_id == "LX0609-018":
-        criteria = {}
-        for item in criterion_results if isinstance(criterion_results, (tuple, list)) else ():
-            criterion_id = (
-                item.get("criterion_id")
-                if isinstance(item, Mapping)
-                else getattr(item, "criterion_id", "")
-            )
-            if isinstance(criterion_id, str) and criterion_id:
-                criteria[criterion_id] = item
-        length = criteria.get("chief_complaint_length")
-        length_actual = (
-            length.get("actual_value")
-            if isinstance(length, Mapping)
-            else getattr(length, "actual_value", None)
-        )
-        length_status = (
-            length.get("status")
-            if isinstance(length, Mapping)
-            else getattr(getattr(length, "status", None), "value", "")
-        )
-        if (
-            length is not None
-            and isinstance(length_actual, int)
-            and length_status == "passed"
-        ):
-            return (
-                f"主诉共 {length_actual} 字，不超过 20 字，"
-                "符合当前已确认的长度要求；能否导出第一诊断暂未纳入本阶段判断。"
-            )
+        finding = _lx018_criterion_finding(criterion_results)
+        if finding:
+            return finding
     return _RULE_COMPLIANT_FINDINGS.get(
         rule_id,
         "已完成本质控点核对，未发现违反质控要求的情况。",
     )
+
+
+def _criterion_value(item: Any, field: str) -> Any:
+    if isinstance(item, Mapping):
+        return item.get(field)
+    value = getattr(item, field, None)
+    return getattr(value, "value", value)
+
+
+def _lx018_criterion_finding(criterion_results: Any) -> str:
+    """把018两个受控子判定压缩为列表中可直接阅读的一句话。"""
+
+    criteria = {}
+    for item in criterion_results if isinstance(criterion_results, (tuple, list)) else ():
+        criterion_id = _criterion_value(item, "criterion_id")
+        if isinstance(criterion_id, str) and criterion_id:
+            criteria[criterion_id] = item
+    length = criteria.get("chief_complaint_length")
+    relation = criteria.get("diagnostic_direction")
+    if length is None or relation is None:
+        return ""
+
+    length_status = _criterion_value(length, "status")
+    length_actual = _criterion_value(length, "actual_value")
+    length_text = (
+        f"主诉共 {length_actual} 字，符合不超过 20 字要求"
+        if length_status == "passed" and isinstance(length_actual, int)
+        else f"主诉共 {length_actual} 字，超过 20 字上限"
+        if length_status == "failed" and isinstance(length_actual, int)
+        else "主诉字数暂无法核对"
+    )
+
+    relation_status = _criterion_value(relation, "status")
+    relation_value = _criterion_value(relation, "actual_value")
+    relation_text = (
+        "主诉提供的诊断线索能够支持入院第一诊断"
+        if relation_status == "passed"
+        else "主诉与入院第一诊断的方向不一致"
+        if relation_status == "failed" and relation_value == "mismatch"
+        else "主诉提供的诊断线索不足以支持入院第一诊断"
+        if relation_status == "failed"
+        else "主诉能否支持入院第一诊断暂无法判断"
+    )
+    return f"{length_text}；{relation_text}。"
 
 
 def _unknown_criterion_labels(decision: ReducedRuleDecision) -> tuple[str, ...]:
@@ -1076,14 +1094,46 @@ def customer_finding_from_controlled_facts(
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
 
     if rule_id == "LX0609-009":
-        required = joined("required_dates")
-        covered = joined("covered_dates") or "无"
-        scope_note = "本结论仅核对病危期间每日病程；病情变化时的记录要求暂未纳入本阶段判断。"
+        required_values = facts.get("required_dates")
+        required_dates = (
+            [str(value) for value in required_values]
+            if isinstance(required_values, list)
+            else []
+        )
+        covered_values = facts.get("covered_dates")
+        covered_dates = (
+            [str(value) for value in covered_values]
+            if isinstance(covered_values, list)
+            else []
+        )
+        date_scope = (
+            required_dates[0]
+            if len(required_dates) == 1
+            else f"{required_dates[0]} 至 {required_dates[-1]}"
+            if required_dates
+            else "日期暂缺"
+        )
+        required_count = len(required_dates)
+        covered_count = len(covered_dates)
+        scope_note = "本阶段仅核对病危期间每日病程。"
         if kind == "critical_daily_record_coverage_satisfied":
-            return f"病危期间应记录日期为 {required}，实际均已覆盖。{scope_note}"
+            return (
+                f"病危观察期 {date_scope}，共 {required_count} 天；"
+                f"每日病程 {covered_count}/{required_count} 天，记录完整。{scope_note}"
+            )
         if kind == "critical_daily_record_missing":
-            missing = joined("missing_dates")
-            return f"病危期间应记录日期为 {required}，实际覆盖 {covered}，缺少 {missing} 的病程记录。{scope_note}"
+            missing_values = facts.get("missing_dates")
+            missing_dates = (
+                [str(value) for value in missing_values]
+                if isinstance(missing_values, list)
+                else []
+            )
+            missing_text = "、".join(missing_dates) or "未明确日期"
+            return (
+                f"病危观察期 {date_scope}，共 {required_count} 天；"
+                f"每日病程已记录 {covered_count}/{required_count} 天，"
+                f"缺少 {missing_text}。{scope_note}"
+            )
 
     if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
         subject = "CT/MRI" if rule_id in {"LX0609-011", "LX0609-012"} else "细菌培养"
@@ -1576,6 +1626,10 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
+        if decision.rule_id == "LX0609-018":
+            findings = _lx018_criterion_finding(decision.criterion_results) or findings
+            evidence = "已分别核对主诉字数及主诉与入院第一诊断的诊断指向。"
+            suggestion = "请精简主诉，并确保主诉提供的诊断线索能够支持入院第一诊断。"
     elif decision.final_state is CustomerFinalState.NOT_APPLICABLE:
         findings, evidence, suggestion = _RULE_NOT_APPLICABLE_MESSAGES.get(
             (decision.rule_id, decision.reason_code),
@@ -1586,6 +1640,10 @@ def render_luxian_0609_customer_result(
             decision.rule_id,
             (findings, evidence, suggestion),
         )
+        if decision.rule_id == "LX0609-018":
+            findings = _lx018_criterion_finding(decision.criterion_results) or findings
+            evidence = "主诉字数已核对，但诊断指向的自动判断未形成可靠结论。"
+            suggestion = "请人工核对主诉提供的诊断线索是否能够支持入院第一诊断。"
     if decision.final_state in {
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.NOT_APPLICABLE,

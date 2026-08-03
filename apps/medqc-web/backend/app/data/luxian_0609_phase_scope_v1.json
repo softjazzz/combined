@@ -37,10 +37,9 @@
     },
     {
       "rule_id": "LX0609-018",
-      "phase_status": "phase_1_partial",
+      "phase_status": "phase_1_target",
       "catalog_registered": true,
-      "active_criteria": ["chief_complaint_length"],
-      "pending_criteria": ["diagnostic_direction"]
+      "active_criteria": ["chief_complaint_length", "diagnostic_direction"]
     },
     { "rule_id": "LX0609-019", "phase_status": "phase_1_target", "catalog_registered": true },
     { "rule_id": "LX0609-020", "phase_status": "phase_1_target", "catalog_registered": true },

@@ -89,7 +89,7 @@ NOT_APPLICABLE_CASES = (
                 "required_dates": ["2026-06-01", "2026-06-02"],
                 "covered_dates": ["2026-06-01", "2026-06-02"],
             },
-            "病危期间应记录日期为 2026-06-01、2026-06-02，实际均已覆盖。本结论仅核对病危期间每日病程；病情变化时的记录要求暂未纳入本阶段判断。",
+            "病危观察期 2026-06-01 至 2026-06-02，共 2 天；每日病程 2/2 天，记录完整。本阶段仅核对病危期间每日病程。",
         ),
         (
             "LX0609-012",
@@ -644,6 +644,15 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
                     operator="lte",
                     unit="character",
                 ),
+                CriterionResult(
+                    criterion_id="diagnostic_direction",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                    actual_value="supported",
+                    rationale_code="supported",
+                    dimensions=("symptom_pattern",),
+                ),
             ),
         )
     )
@@ -651,8 +660,51 @@ def test_lx018_compliant_result_uses_controlled_criterion_values():
     result = render_luxian_0609_customer_result(decision=decision)
 
     assert result["findings"] == (
-        "主诉共 8 字，不超过 20 字，符合当前已确认的长度要求；"
-        "能否导出第一诊断暂未纳入本阶段判断。"
+        "主诉共 8 字，符合不超过 20 字要求；"
+        "主诉提供的诊断线索能够支持入院第一诊断。"
+    )
+
+
+def test_lx018_non_compliant_result_names_failed_diagnostic_direction():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-018",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-course-quality-v1",
+            criterion_results=(
+                CriterionResult(
+                    criterion_id="chief_complaint_length",
+                    status=CriterionStatus.PASSED,
+                    reason_code="requirement_satisfied",
+                    fact_refs=(FACT_REF,),
+                    actual_value=18,
+                    expected_value=20,
+                    operator="lte",
+                    unit="character",
+                ),
+                CriterionResult(
+                    criterion_id="diagnostic_direction",
+                    status=CriterionStatus.FAILED,
+                    reason_code="complaint_primary_diagnosis_mismatch",
+                    fact_refs=(FACT_REF,),
+                    actual_value="mismatch",
+                    rationale_code="diagnosis_mismatch",
+                    dimensions=("anatomic_site",),
+                ),
+            ),
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == (
+        "主诉共 18 字，符合不超过 20 字要求；"
+        "主诉与入院第一诊断的方向不一致。"
     )
 
 

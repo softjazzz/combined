@@ -8,8 +8,8 @@ def test_phase_scope_freezes_all_75_customer_rules() -> None:
     assert tuple(entry.rule_id for entry in entries) == tuple(
         f"LX0609-{index:03d}" for index in range(1, 76)
     )
-    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 64
-    assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 2
+    assert sum(entry.phase_status == "phase_1_target" for entry in entries) == 65
+    assert sum(entry.phase_status == "phase_1_partial" for entry in entries) == 1
     assert sum(entry.phase_status == "pending_definition" for entry in entries) == 9
     assert sum(entry.catalog_registered for entry in entries) == 75
 
@@ -23,13 +23,12 @@ def test_phase_scope_keeps_confirmed_partial_criteria_and_freezes_pending_rules(
     assert entries["LX0609-009"].pending_criteria == (
         "condition_change_course_timeliness",
     )
-    assert entries["LX0609-018"].phase_status == "phase_1_partial"
+    assert entries["LX0609-018"].phase_status == "phase_1_target"
     assert entries["LX0609-018"].active_criteria == (
         "chief_complaint_length",
-    )
-    assert entries["LX0609-018"].pending_criteria == (
         "diagnostic_direction",
     )
+    assert entries["LX0609-018"].pending_criteria == ()
     assert entries["LX0609-018"].pending_reason_code == ""
     assert {
         rule_id

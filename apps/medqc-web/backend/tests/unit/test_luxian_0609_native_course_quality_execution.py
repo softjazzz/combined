@@ -2545,6 +2545,9 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         "first_course_record": [
             _row("首次病程记录包含病例特点、诊断依据、鉴别诊断和诊疗计划。")
         ],
+        "diagnosis": [
+            {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+        ],
     }
 
     def read(**kwargs):
@@ -2598,9 +2601,10 @@ async def test_typed_016_018_use_same_material_session_without_legacy_payload():
         "compliant",
     ]
     assert all(item.fact_refs for item in reduced)
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
+    assert "不稳定型心绞痛" in client.prompts[0]
     assert private_marker not in repr(result)
 
 
@@ -2697,7 +2701,7 @@ async def test_typed_018_preserves_source_state_without_model(
         ("胸痛" * 10 + "加", CustomerFinalState.NON_COMPLIANT, "failed"),
     ),
 )
-async def test_typed_018_uses_only_confirmed_length_criterion(
+async def test_typed_018_combines_length_and_diagnostic_direction(
     complaint: str,
     expected_state: CustomerFinalState,
     expected_criterion_state: str,
@@ -2707,6 +2711,10 @@ async def test_typed_018_uses_only_confirmed_length_criterion(
         rows = (
             [{**_row("入院记录正文完整。"), "chief_complaint": complaint}]
             if source_key == "admission_record"
+            else [
+                {"diagnosis_type": "主要诊断", "diagnosis_name": "稳定型心绞痛"}
+            ]
+            if source_key == "diagnosis"
             else []
         )
         return SnapshotSourceRows.create(
@@ -2728,9 +2736,9 @@ async def test_typed_018_uses_only_confirmed_length_criterion(
     client = _Client(
         [
             {
-                "diagnostic_relation_state": "mismatch",
-                "diagnostic_reason_dimensions": ["anatomic_site"],
-                "diagnostic_rationale_code": "diagnosis_mismatch",
+                "diagnostic_relation_state": "supported",
+                "diagnostic_reason_dimensions": ["symptom_pattern"],
+                "diagnostic_rationale_code": "supported",
             }
         ]
     )
@@ -2753,11 +2761,14 @@ async def test_typed_018_uses_only_confirmed_length_criterion(
     assert reduced[0].final_state is expected_state
     assert [item.criterion_id for item in reduced[0].criterion_results] == [
         "chief_complaint_length",
+        "diagnostic_direction",
     ]
     assert reduced[0].criterion_results[0].status.value == expected_criterion_state
-    assert result.llm_call_count == 0
-    assert result.total_tokens == 0
-    assert client.prompts == []
+    assert reduced[0].criterion_results[1].status.value == "passed"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    assert len(client.prompts) == 1
+    assert "稳定型心绞痛" in client.prompts[0]
 
 
 @pytest.mark.asyncio
@@ -2765,12 +2776,22 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
     admission_row = _row(
         "主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。现病史完整。"
     )
+    diagnosis_row = {
+        "diagnosis_type": "主要诊断",
+        "diagnosis_name": "不稳定型心绞痛",
+    }
 
     def read(**kwargs):
         source_key = kwargs["source_key"]
         return SnapshotSourceRows.create(
             source_key=source_key,
-            rows=[admission_row] if source_key == "admission_record" else [],
+            rows=(
+                [admission_row]
+                if source_key == "admission_record"
+                else [diagnosis_row]
+                if source_key == "diagnosis"
+                else []
+            ),
             truncated=False,
             limit_rows=50,
         )
@@ -2787,7 +2808,12 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
     raw = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
-        evidence_payload=_payload(documents={"admission_record": [admission_row]}),
+        evidence_payload=_payload(
+            documents={
+                "admission_record": [admission_row],
+                "diagnosis": [diagnosis_row],
+            }
+        ),
         llm_client=_Client(
             [
                 {
@@ -2823,12 +2849,12 @@ async def test_typed_018_matches_raw_state_calls_and_tokens():
 
     assert raw.results[0]["status"] == reduced[0].final_state.value
     assert typed.results == ()
-    assert typed.llm_call_count == raw.llm_call_count == 0
-    assert typed.total_tokens == raw.total_tokens == 0
+    assert typed.llm_call_count == raw.llm_call_count == 1
+    assert typed.total_tokens == raw.total_tokens == 45
 
 
 @pytest.mark.asyncio
-async def test_typed_018_ignores_primary_diagnosis_while_direction_is_pending():
+async def test_typed_018_uses_only_authoritative_primary_diagnosis():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复腹痛2个月。现病史与既往诊疗经过记录完整。")
@@ -2884,14 +2910,16 @@ async def test_typed_018_ignores_primary_diagnosis_while_direction_is_pending():
         snapshot=session.snapshot,
     )
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert typed.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "结肠恶性肿瘤" in client.prompts[0]
+    assert "不应采信的诊断" not in client.prompts[0]
     assert "结肠恶性肿瘤" not in repr(typed)
 
 
 @pytest.mark.asyncio
-async def test_typed_018_does_not_read_numbered_diagnosis_while_pending():
+async def test_typed_018_reads_only_first_numbered_diagnosis():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复腰腹部疼痛伴尿频1月。现病史与诊疗经过记录完整。")
@@ -2937,13 +2965,15 @@ async def test_typed_018_does_not_read_numbered_diagnosis_while_pending():
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "双侧肾周围炎" in client.prompts[0]
+    assert "前列腺增生" not in client.prompts[0]
     assert typed.results == ()
 
 
 @pytest.mark.asyncio
-async def test_typed_018_does_not_read_admission_diagnosis_while_pending():
+async def test_typed_018_reads_admission_first_diagnosis():
     rows_by_source = {
         "admission_record": [
             _row("主诉：反复咳嗽咳痰气促10余年，加重伴纳差1天。现病史完整。")
@@ -2995,8 +3025,10 @@ async def test_typed_018_does_not_read_admission_diagnosis_while_pending():
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "慢性阻塞性肺病伴有急性下呼吸道感染" in client.prompts[0]
+    assert "慢性呼吸衰竭" not in client.prompts[0]
     assert typed.results == ()
 
 
@@ -3052,8 +3084,9 @@ async def test_typed_018_accepts_structured_complaint_when_record_content_is_emp
         evidence_materials=session.materials,
     )
 
-    assert typed.llm_call_count == 0
-    assert client.prompts == []
+    assert typed.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert "左侧膝关节骨性关节病" in client.prompts[0]
     assert typed.results == ()
 
 
@@ -4088,8 +4121,12 @@ async def test_017_fast5_missing_authoritative_course_time_is_data_gap(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_018_requires_only_chief_complaint_material():
-    client = _UnexpectedLLMClient()
+async def test_018_requires_chief_complaint_and_primary_diagnosis():
+    client = _Client([{
+        "diagnostic_relation_state": "supported",
+        "diagnostic_reason_dimensions": ["symptom_pattern"],
+        "diagnostic_rationale_code": "supported",
+    }])
     incomplete = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
@@ -4105,12 +4142,17 @@ async def test_018_requires_only_chief_complaint_material():
         rule_ids=("LX0609-018",),
         wrapper_rules=[_wrapper("LX0609-018")],
         evidence_payload=_payload(
-            documents={"admission_record": [_row("主诉：反复胸痛3个月。现病史待查。")]}
+            documents={
+                "admission_record": [_row("主诉：反复胸痛3个月。现病史待查。")],
+                "diagnosis": [
+                    {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+                ],
+            }
         ),
         llm_client=client,
     )
     assert [item["status"] for item in complete.results] == ["compliant"]
-    assert complete.llm_call_count == 0
+    assert complete.llm_call_count == 1
 
 
 @pytest.mark.asyncio
@@ -4133,7 +4175,10 @@ async def test_018_returns_safe_criterion_results_without_returning_admission_te
             documents={
                 "admission_record": [
                     _row(f"主诉：{complaint}。入院诊断：急性胆囊炎。")
-                ]
+                ],
+                "diagnosis": [
+                    {"diagnosis_type": "主要诊断", "diagnosis_name": "急性胆囊炎"}
+                ],
             }
         ),
         llm_client=client,
@@ -4143,18 +4188,30 @@ async def test_018_returns_safe_criterion_results_without_returning_admission_te
     criteria = item["criterion_results"]
     assert [(row["criterion_id"], row["status"]) for row in criteria] == [
         ("chief_complaint_length", "failed"),
+        ("diagnostic_direction", "failed"),
     ]
     assert criteria[0]["actual_value"] == 21
     assert criteria[0]["expected_value"] == 20
     assert criteria[0]["operator"] == "lte"
     assert complaint not in repr(item)
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
 
 
 @pytest.mark.asyncio
 async def test_018_length_boundary_allows_20_chars_and_rejects_21_chars():
-    client = _UnexpectedLLMClient()
+    client = _Client([
+        {
+            "diagnostic_relation_state": "supported",
+            "diagnostic_reason_dimensions": ["symptom_pattern"],
+            "diagnostic_rationale_code": "supported",
+        },
+        {
+            "diagnostic_relation_state": "supported",
+            "diagnostic_reason_dimensions": ["symptom_pattern"],
+            "diagnostic_rationale_code": "supported",
+        },
+    ])
     statuses = []
     lengths = []
     for complaint in ("胸痛" * 10, "胸痛" * 10 + "加"):
@@ -4165,14 +4222,17 @@ async def test_018_length_boundary_allows_20_chars_and_rejects_21_chars():
                 documents={
                     "admission_record": [
                         _row(f"主诉：{complaint}。入院诊断：冠心病。")
-                    ]
+                    ],
+                    "diagnosis": [
+                        {"diagnosis_type": "主要诊断", "diagnosis_name": "冠心病"}
+                    ],
                 }
             ),
             llm_client=client,
         )
         statuses.append(result.results[0]["status"])
         lengths.append(result.results[0]["criterion_results"][0]["actual_value"])
-        assert result.llm_call_count == 0
+        assert result.llm_call_count == 1
 
     assert lengths == [20, 21]
     assert statuses == ["compliant", "non_compliant"]
@@ -4195,13 +4255,16 @@ def test_018_diagnostic_rationale_code_cannot_contradict_returned_dimensions():
 
 
 @pytest.mark.asyncio
-async def test_018_does_not_consume_model_failures_while_direction_is_pending():
+async def test_018_model_failure_is_controlled_without_leaking_upstream_text():
     secret = "Bearer_secret_13800138000"
     client = _Client([RuntimeError(secret), f"not-json {secret}"])
     payload = _payload(
         documents={
             "admission_record": [_row("主诉：反复胸痛3个月。入院诊断：不稳定型心绞痛。")],
             "first_course_record": [_row("首次病程病例特点与诊断依据。")],
+            "diagnosis": [
+                {"diagnosis_type": "主要诊断", "diagnosis_name": "不稳定型心绞痛"}
+            ],
         }
     )
 
@@ -4214,7 +4277,7 @@ async def test_018_does_not_consume_model_failures_while_direction_is_pending():
 
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "compliant",
+        "technical_error",
     ]
-    assert result.llm_call_count == 0
+    assert result.llm_call_count == 1
     assert secret not in repr(result)
