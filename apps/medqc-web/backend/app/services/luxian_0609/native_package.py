@@ -163,7 +163,7 @@ def build_luxian_0609_dependency_inventory(
     rules: Sequence[Mapping[str, Any]],
     family_definitions: Sequence[Mapping[str, Any]],
 ) -> tuple[Luxian0609RuleDependency, ...]:
-    """从权威规则目录生成机器可校验的 49 点执行依赖清单。"""
+    """从权威规则目录生成不绑定固定数量的全量执行依赖清单。"""
 
     family_index = _family_index(family_definitions)
     inventory: list[Luxian0609RuleDependency] = []
