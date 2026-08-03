@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSingleRecordQcResultItems,
+  buildSingleRecordQcStatusTabs,
   type SingleRecordQcResultItem,
 } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
@@ -64,5 +65,44 @@ describe('single-record-result-model canonical 直通展示', () => {
 
     expect(() => buildSingleRecordQcResultItems([malformed])).not.toThrow()
     expect(buildSingleRecordQcResultItems([malformed])[0]?.evidence).toEqual([])
+  })
+
+  it('解释不足原因不能驱动前端重算服务端最终状态', () => {
+    const items: SingleRecordQcResultItem[] = [
+      {
+        rule_id: 'LX0609-029',
+        rule_name: '术前小结',
+        status: 'non_compliant',
+        reason_code: 'customer_explanation_incomplete',
+        conclusion: '服务端仍交付为确定问题',
+        evidence: [],
+      },
+      {
+        rule_id: 'LX0609-040',
+        rule_name: '术前多学科讨论',
+        status: 'uncertain',
+        reason_code: 'customer_explanation_incomplete',
+        conclusion: '服务端已终结为待确认',
+        evidence: [],
+      },
+    ]
+
+    const rendered = buildSingleRecordQcResultItems(items)
+    const tabs = buildSingleRecordQcStatusTabs(rendered)
+
+    expect(rendered[0]).toMatchObject({
+      status: 'non_compliant',
+      reason_code: 'customer_explanation_incomplete',
+      displayStatus: '确定问题',
+      tone: 'danger',
+    })
+    expect(rendered[1]).toMatchObject({
+      status: 'uncertain',
+      reason_code: 'customer_explanation_incomplete',
+      displayStatus: '待确认',
+      tone: 'warning',
+    })
+    expect(tabs.find((item) => item.key === 'non_compliant')?.count).toBe(1)
+    expect(tabs.find((item) => item.key === 'pending')?.count).toBe(1)
   })
 })
