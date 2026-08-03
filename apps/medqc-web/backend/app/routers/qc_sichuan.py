@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Sequence
 import asyncio
 import uuid
 import json
@@ -261,14 +261,56 @@ def _enforce_sc_source_guard(
         raise HTTPException(status_code=503, detail=str(exc))
 
 
-def _resolve_workspace_bundle_scene(*, current_scope: str, record_scope: str) -> str:
-    normalized_current = str(current_scope or "").strip().lower()
+def _resolve_workspace_bundle_scene(*, query_scope: str, record_scope: str) -> str:
+    normalized_query = str(query_scope or "").strip().lower()
     normalized_record = str(record_scope or "").strip().lower()
-    if normalized_current in {"running", "final"}:
-        return normalized_current
-    if normalized_current == "all" and normalized_record in {"running", "final"}:
+    if normalized_record in {"running", "final"}:
         return normalized_record
+    if normalized_query in {"running", "final"}:
+        return normalized_query
     return ""
+
+
+def _workspace_bundle_scene_candidates(*, query_scope: str, record_scope: str) -> List[str]:
+    preferred_scene = _resolve_workspace_bundle_scene(
+        query_scope=query_scope,
+        record_scope=record_scope,
+    )
+    if preferred_scene == "final":
+        return ["final", "running"]
+    return ["running", "final"]
+
+
+def _build_workspace_record_scene_snapshot(
+    records: Sequence[Dict[str, Any]],
+    *,
+    query_scope: str,
+) -> List[Dict[str, str]]:
+    snapshot: List[Dict[str, str]] = []
+    for record in records:
+        record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+        if not record_id:
+            continue
+        normalized_record_scene = str(record.get("scope") or "").strip().lower()
+        record_scene = (
+            normalized_record_scene
+            if normalized_record_scene in {"running", "final"}
+            else "unknown"
+        )
+        snapshot.append(
+            {
+                "record_id": record_id,
+                "record_scene": record_scene,
+                "resolved_scene": _resolve_workspace_bundle_scene(
+                    query_scope=query_scope,
+                    record_scope=normalized_record_scene,
+                ),
+                "discharge_snapshot": str(
+                    record.get("discharge_datetime") or record.get("discharge_date") or ""
+                ).strip(),
+            }
+        )
+    return sorted(snapshot, key=lambda item: item["record_id"])
 
 
 async def _rule_source_monitor_loop() -> None:
@@ -2761,15 +2803,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             visit_id = str(record.get("visit_id") or record_id).strip()
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
-            current_scope = str(current.get("scope") or "all").strip().lower()
+            query_scope = str(
+                filters.get("query_scope") or current.get("scope") or "all"
+            ).strip().lower()
             should_postprocess_formal_results = _should_postprocess_formal_qc_results(
                 rule_set_key=rule_set_key,
                 validation_mode=validation_mode,
-                current_scope=current_scope,
+                current_scope=query_scope,
                 execution_strategy=execution_strategy,
                 bucket_strategy=bucket_strategy,
             )
-            document_type = _resolve_document_type(current_scope, str(record.get("scope") or ""))
+            document_type = _resolve_document_type(query_scope, str(record.get("scope") or ""))
             active_rule_ids = (
                 list(record_rule_map.get(visit_id) or record_rule_map.get(record_id) or [])
                 or list(valid_rule_ids)
@@ -2808,6 +2852,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_luxian_0609_input_profile: Dict[str, Any] = {}
                 bundle_scene = ""
                 bundle_payload: Optional[Dict[str, Any]] = None
+                attempted_bundle_scenes: List[str] = []
                 runtime_shadow_summary: Optional[Dict[str, Any]] = None
 
                 async def _evaluate_rule_level_visit_bundle() -> bool:
@@ -2889,20 +2934,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     and not (use_luxian_customer_results and not active_rule_ids)
                 ):
                     bundle_payload = None
-                    attempted_scenes: List[str] = []
                     if institute_id and patient_id and visit_id:
                         record_scope = str(record.get("scope") or "").strip().lower()
-                        preferred_scenes = ["final", "running"] if record_scope == "final" else ["running", "final"]
-                        candidate_scenes = [
-                            scene
-                            for scene in (
-                                current_scope,
-                                *preferred_scenes,
-                            )
-                            if scene in {"running", "final"} and scene not in attempted_scenes
-                        ]
+                        candidate_scenes = _workspace_bundle_scene_candidates(
+                            query_scope=query_scope,
+                            record_scope=record_scope,
+                        )
                         for scene in candidate_scenes:
-                            attempted_scenes.append(scene)
+                            attempted_bundle_scenes.append(scene)
                             try:
                                 bundle_payload = load_running_final_bundle(
                                     scene=scene,
@@ -2911,6 +2950,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                     visit_id=visit_id,
                                     schema="public",
                                 )
+                                bundle_scene = scene
                                 break
                             except Exception:
                                 continue
@@ -2946,14 +2986,25 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     )
                     if native_direct_enabled:
                         package_bundle = dict(bundle_payload or {})
-                        package_bundle.setdefault(
-                            "scene",
-                            _resolve_workspace_bundle_scene(
-                                current_scope=current_scope,
-                                record_scope=str(record.get("scope") or ""),
-                            )
-                            or "running",
+                        resolved_record_scene = _resolve_workspace_bundle_scene(
+                            query_scope=query_scope,
+                            record_scope=str(record.get("scope") or ""),
                         )
+                        package_bundle["scene"] = (
+                            bundle_scene or resolved_record_scene or "running"
+                        )
+                        package_bundle["scene_resolution"] = {
+                            "query_scope": query_scope,
+                            "record_scene": str(record.get("scope") or "").strip().lower() or "unknown",
+                            "resolved_scene": resolved_record_scene,
+                            "attempted_scenes": list(attempted_bundle_scenes),
+                            "loaded_scene": bundle_scene,
+                            "used_fallback": bool(
+                                bundle_scene
+                                and resolved_record_scene
+                                and bundle_scene != resolved_record_scene
+                            ),
+                        }
                         package_bundle.setdefault("institute_id", institute_id)
                         package_bundle.setdefault("patient_id", patient_id)
                         package_bundle.setdefault("visit_id", visit_id or record_id)
@@ -3029,7 +3080,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 eval_item["metadata"] = metadata
                 else:
                     bundle_scene = _resolve_workspace_bundle_scene(
-                        current_scope=current_scope,
+                        query_scope=query_scope,
                         record_scope=str(record.get("scope") or ""),
                     )
 
@@ -3139,7 +3190,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             )
                 elif (
                     not native_direct_enabled
-                    and current_scope in {"final", "all"}
+                    and query_scope in {"final", "all"}
                     and not (use_luxian_customer_results and not active_rule_ids)
                 ):
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
@@ -3316,7 +3367,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     metadata.setdefault("bucket_strategy", bucket_strategy)
                     if record_luxian_0609_input_profile:
                         metadata.setdefault("luxian_0609_input_profile", record_luxian_0609_input_profile)
-                    if current_scope == "final" and not used_bundle_path:
+                    if query_scope == "final" and not used_bundle_path:
                         metadata.setdefault("bundle_fallback", True)
                         if bundle_fallback_reason:
                             metadata.setdefault("bundle_fallback_reason", bundle_fallback_reason)
@@ -4110,6 +4161,10 @@ async def create_workspace_batch_job(
             if str(record.get("record_id") or record.get("visit_id") or "").strip()
         }
     )
+    record_scene_snapshot = _build_workspace_record_scene_snapshot(
+        records,
+        query_scope=normalized_scope,
+    )
     evaluation_as_of_date = (
         datetime.now().astimezone().date().isoformat()
         if is_direct_native_selection
@@ -4117,6 +4172,7 @@ async def create_workspace_batch_job(
     )
     idempotency_payload = {
         "scope": normalized_scope,
+        "query_scope": normalized_scope,
         "department": payload.department or "",
         "doctor": payload.doctor or "",
         "date_field": _normalize_date_field(payload.date_field),
@@ -4124,6 +4180,7 @@ async def create_workspace_batch_job(
         "end_date": payload.end_date or "",
         "keyword": payload.keyword or "",
         "record_ids": effective_record_ids,
+        "record_scene_snapshot": record_scene_snapshot,
         "rule_set_key": rule_set_key,
         "rule_ids": sorted({str(rule_id).strip().upper() for rule_id in rule_ids if str(rule_id).strip()}),
         "execution_strategy": execution_strategy,
@@ -4191,6 +4248,7 @@ async def create_workspace_batch_job(
             "start_date": payload.start_date,
             "end_date": payload.end_date,
             "keyword": payload.keyword,
+            "query_scope": normalized_scope,
             "rule_ids": rule_ids,
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
@@ -4211,6 +4269,7 @@ async def create_workspace_batch_job(
             ),
             "idempotency_key": idempotency_key,
             "idempotency_payload": idempotency_payload,
+            "record_scene_snapshot": record_scene_snapshot,
             **(
                 {
                     "selected_rule_ids": list(direct_native_rule_ids),

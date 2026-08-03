@@ -460,12 +460,71 @@ class _FormalPostprocessServiceStub(_ServiceStub):
         }
 
 
-def test_resolve_workspace_bundle_scene_should_follow_record_scope_when_scope_is_all():
-    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="final") == "final"
-    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="running") == "running"
-    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="final", record_scope="running") == "final"
-    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="running", record_scope="final") == "running"
-    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="") == ""
+def test_workspace_bundle_scene_should_prioritize_each_record_over_query_scope():
+    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="final") == "final"
+    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="running") == "running"
+    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="final", record_scope="running") == "running"
+    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="running", record_scope="final") == "final"
+    assert qc_sichuan._resolve_workspace_bundle_scene(query_scope="all", record_scope="") == ""
+
+    assert qc_sichuan._workspace_bundle_scene_candidates(
+        query_scope="running",
+        record_scope="final",
+    ) == ["final", "running"]
+    assert qc_sichuan._workspace_bundle_scene_candidates(
+        query_scope="final",
+        record_scope="",
+    ) == ["final", "running"]
+    assert qc_sichuan._workspace_bundle_scene_candidates(
+        query_scope="all",
+        record_scope="",
+    ) == ["running", "final"]
+
+
+def test_workspace_record_scene_snapshot_should_change_after_discharge():
+    running_snapshot = qc_sichuan._build_workspace_record_scene_snapshot(
+        [
+            {
+                "record_id": "visit-001",
+                "scope": "running",
+                "discharge_datetime": "",
+            }
+        ],
+        query_scope="all",
+    )
+    final_snapshot = qc_sichuan._build_workspace_record_scene_snapshot(
+        [
+            {
+                "record_id": "visit-001",
+                "scope": "final",
+                "discharge_datetime": "2026-08-03 09:30:00",
+            }
+        ],
+        query_scope="all",
+    )
+
+    assert running_snapshot == [
+        {
+            "record_id": "visit-001",
+            "record_scene": "running",
+            "resolved_scene": "running",
+            "discharge_snapshot": "",
+        }
+    ]
+    assert final_snapshot == [
+        {
+            "record_id": "visit-001",
+            "record_scene": "final",
+            "resolved_scene": "final",
+            "discharge_snapshot": "2026-08-03 09:30:00",
+        }
+    ]
+    assert running_snapshot != final_snapshot
+    assert hashlib.sha256(
+        json.dumps(running_snapshot, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest() != hashlib.sha256(
+        json.dumps(final_snapshot, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -1700,6 +1759,117 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
 
 
 @pytest.mark.asyncio
+async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["scope"] = "all"
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-001"],
+        "selected_rule_ids": ["LX0609-001"],
+        "scoped_customer_rule_ids": ["LX0609-001"],
+        "record_rule_map": {
+            "visit-001": ["LX0609-001"],
+            "visit-002": ["LX0609-001"],
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+
+    def _collect_mixed_records(**_: Any) -> List[Dict[str, Any]]:
+        return [
+            {"record_id": "visit-001", "visit_id": "visit-001", "scope": "final"},
+            {"record_id": "visit-002", "visit_id": "visit-002", "scope": "running"},
+        ]
+
+    def _hydrate(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                **record,
+                "institute_id": "HOSP-001",
+                "patient_id": f"PAT-{record['visit_id']}",
+                "medical_text": "fallback text",
+            }
+            for record in records
+        ]
+
+    workspace.collect_records = _collect_mixed_records  # type: ignore[assignment]
+    workspace.hydrate_records_with_medical_text = _hydrate  # type: ignore[assignment]
+    load_calls: List[Dict[str, str]] = []
+
+    def _load_bundle(*, scene: str, visit_id: str, **_: Any) -> Dict[str, Any]:
+        load_calls.append({"visit_id": visit_id, "scene": scene})
+        if visit_id == "visit-001" and scene == "final":
+            raise RuntimeError("final bundle暂不可用")
+        return {"scene": "stale-scene", "medical_text": "bundle text"}
+
+    captured: List[Dict[str, Any]] = []
+
+    class _SceneService(_ServiceStub):
+        async def evaluate_running_final_bundle_input(self, **kwargs: Any) -> Dict[str, Any]:
+            captured.append(
+                {
+                    "visit_id": kwargs["bundle"]["visit_id"],
+                    "scene": kwargs["bundle"]["scene"],
+                    "scene_resolution": dict(kwargs["bundle"]["scene_resolution"]),
+                }
+            )
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": "LX0609-001",
+                        "status": "compliant",
+                        "is_compliant": True,
+                        "reason_code": "requirement_satisfied",
+                        "metadata": {"execution_source": "lx0609_native"},
+                    }
+                ],
+                "token_usage": {"total_tokens": 0},
+            }
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "load_running_final_bundle", _load_bundle)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+
+    async def _get_service():
+        return _SceneService()
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert load_calls == [
+        {"visit_id": "visit-001", "scene": "final"},
+        {"visit_id": "visit-001", "scene": "running"},
+        {"visit_id": "visit-002", "scene": "running"},
+    ]
+    assert captured == [
+        {
+            "visit_id": "visit-001",
+            "scene": "running",
+            "scene_resolution": {
+                "query_scope": "all",
+                "record_scene": "final",
+                "resolved_scene": "final",
+                "attempted_scenes": ["final", "running"],
+                "loaded_scene": "running",
+                "used_fallback": True,
+            },
+        },
+        {
+            "visit_id": "visit-002",
+            "scene": "running",
+            "scene_resolution": {
+                "query_scope": "all",
+                "record_scene": "running",
+                "resolved_scene": "running",
+                "attempted_scenes": ["running"],
+                "loaded_scene": "running",
+                "used_fallback": False,
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_luxian_batch_single_family_off_checks_sc_source_and_keeps_customer_entry(
     monkeypatch,
 ):
@@ -1883,6 +2053,7 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
     )
     idempotency_payload = {
         "scope": "final",
+        "query_scope": "final",
         "department": "骨科",
         "doctor": "张医生",
         "date_field": "discharge",
@@ -1895,6 +2066,10 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
                 for record in first_records
                 if str(record.get("record_id") or record.get("visit_id") or "").strip()
             }
+        ),
+        "record_scene_snapshot": qc_sichuan._build_workspace_record_scene_snapshot(
+            first_records,
+            query_scope="final",
         ),
         "rule_set_key": "",
         "rule_ids": ["SC-001", "SC-002"],

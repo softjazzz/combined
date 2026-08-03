@@ -14,7 +14,10 @@ from pydantic import BaseModel, Field
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
-from ..routers.qc_sichuan import _run_sichuan_workspace_batch_job
+from ..routers.qc_sichuan import (
+    _build_workspace_record_scene_snapshot,
+    _run_sichuan_workspace_batch_job,
+)
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
     SampleSyncJobConflictError,
@@ -1138,7 +1141,7 @@ async def run_sample_pool_intrinsic_validation(
     workspace = _workspace_service()
     requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope
-    record_count = workspace.count_records(
+    selected_records = workspace.collect_records(
         scope=effective_scope,
         department=payload.department,
         doctor=payload.doctor,
@@ -1148,10 +1151,11 @@ async def run_sample_pool_intrinsic_validation(
         keyword=None,
         record_ids=record_ids,
     )
+    record_count = len(selected_records)
     if record_count == 0 and is_formal_fast_screen_full:
         raise HTTPException(status_code=422, detail="选中病历未同步为终末病历，无法发起正式终末质控")
     if record_ids and effective_scope != "all" and record_count < len(record_ids):
-        fallback_record_count = workspace.count_records(
+        fallback_records = workspace.collect_records(
             scope="all",
             department=payload.department,
             doctor=payload.doctor,
@@ -1161,11 +1165,17 @@ async def run_sample_pool_intrinsic_validation(
             keyword=None,
             record_ids=record_ids,
         )
+        fallback_record_count = len(fallback_records)
         if fallback_record_count > record_count:
             record_count = fallback_record_count
             effective_scope = "all"
+            selected_records = fallback_records
     if record_count == 0:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
+    record_scene_snapshot = _build_workspace_record_scene_snapshot(
+        selected_records,
+        query_scope=effective_scope,
+    )
 
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
@@ -1207,7 +1217,9 @@ async def run_sample_pool_intrinsic_validation(
         "model_code": payload.model_code,
         "max_parallel_records": payload.max_parallel_records,
         "effective_scope": effective_scope,
+        "query_scope": effective_scope,
         "validation_mode": validation_mode,
+        "record_scene_snapshot": record_scene_snapshot,
     }
     if record_rule_map:
         job_filters["record_rule_map"] = record_rule_map
@@ -1256,6 +1268,7 @@ async def run_sample_pool_intrinsic_validation(
             "max_tokens": payload.max_tokens,
             "max_parallel_records": payload.max_parallel_records,
             "rule_set_version": rule_set_version,
+            "record_scene_snapshot": record_scene_snapshot,
         },
     )
     duplicate_job = _find_recent_sample_validation_job(

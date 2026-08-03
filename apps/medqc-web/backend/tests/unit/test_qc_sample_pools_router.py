@@ -948,6 +948,21 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["filters"]["top_p"] == 0.8
     assert created["filters"]["max_tokens"] == 1600
     assert created["filters"]["effective_scope"] == "running"
+    assert created["filters"]["query_scope"] == "running"
+    assert created["filters"]["record_scene_snapshot"] == [
+        {
+            "record_id": "V001",
+            "record_scene": "unknown",
+            "resolved_scene": "running",
+            "discharge_snapshot": "",
+        },
+        {
+            "record_id": "V002",
+            "record_scene": "unknown",
+            "resolved_scene": "running",
+            "discharge_snapshot": "",
+        },
+    ]
     assert created["filters"]["validation_mode"] == "sc"
     assert created["filters"]["rule_set_name"] == "SC样本规则模式"
 
@@ -1190,8 +1205,8 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     )
 
     created = workspace_service.create_batch_job_calls[0]
-    assert len(luxian_rule_set.rule_ids) == 63
-    assert luxian_rule_set.rule_ids[-1] == "LX0609-074"
+    assert len(luxian_rule_set.rule_ids) == 75
+    assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
     assert created["draft_ids"] == list(luxian_rule_set.rule_ids)
     assert created["filters"]["validation_mode"] == "customer"
