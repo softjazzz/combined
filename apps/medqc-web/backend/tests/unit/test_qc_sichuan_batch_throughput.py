@@ -2145,6 +2145,70 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
 
 
 @pytest.mark.asyncio
+async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rule = get_luxian_0609_rule("LX0609-016")
+    assert rule is not None
+    workspace = _WorkspaceStub()
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-016"],
+        "selected_rule_ids": ["LX0609-016"],
+        "scoped_customer_rule_ids": ["LX0609-016"],
+        "record_rule_map": {"visit-001": ["LX0609-016"]},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "LX0609-016",
+                    "status": "compliant",
+                    "result_status": "compliant",
+                    "reason_code": "requirement_satisfied",
+                    "is_compliant": True,
+                    "customer_display_facts": {
+                        "failure_kind": "admission_first_course_not_identical",
+                        "copy_similarity": 0.45,
+                    },
+                    "metadata": {
+                        "execution_source": "lx0609_native",
+                        "executor_type": "program",
+                    },
+                }
+            ],
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(qc_sichuan, "load_luxian_0609_rules", lambda: [rule])
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    persisted = next(item for item in workspace.items if item["rule_id"] == "LX0609-016")
+    assert persisted["status"] == "compliant"
+    assert persisted["result_status"] == "compliant"
+    assert persisted["reason_code"] == "requirement_satisfied"
+    assert persisted["is_compliant"] is True
+    assert "copy_rule_priority_guard" not in persisted["metadata"]
+
+
+@pytest.mark.asyncio
 async def test_luxian_batch_aggregation_off_expands_full_legacy_rollback(monkeypatch):
     workspace = _WorkspaceStub()
     native_rule_ids = ["LX0609-029", "LX0609-030", "LX0609-032"]

@@ -3270,11 +3270,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 }
                         else:
                             continue
-                    eval_item = _guard_luxian_copy_result_for_batch(
-                        rule_id=normalized_rule_id,
-                        eval_item=eval_item,
-                        record=record,
-                    )
+                    if not use_luxian_customer_results:
+                        eval_item = _guard_luxian_copy_result_for_batch(
+                            rule_id=normalized_rule_id,
+                            eval_item=eval_item,
+                            record=record,
+                        )
 
                     status = str(eval_item.get("status") or "").strip().lower()
                     if status not in {
