@@ -94,8 +94,10 @@ def test_single_record_result_returns_canonical_envelope_items_without_reproject
     canonical_item = {
         "rule_id": "LX0609-001",
         "rule_name": "入院记录",
-        "status": "non_compliant",
-        "reason_code": "engine_reason",
+        "status": "uncertain",
+        "result_status": "uncertain",
+        "reason_code": "customer_explanation_incomplete",
+        "is_compliant": None,
         "conclusion": "引擎结论原文",
         "detail": "引擎明细原文",
         "evidence": [
@@ -170,7 +172,10 @@ def test_writer_marks_envelope_as_canonical_straight_through():
                 "institute_id": "inst-1",
                 "patient_id": "patient-1",
                 "rule_id": "LX0609-001",
-                "status": "non_compliant",
+                "status": "uncertain",
+                "result_status": "uncertain",
+                "reason_code": "customer_explanation_incomplete",
+                "is_compliant": None,
                 "conclusion": "引擎结论原文",
             }
         ],
@@ -180,5 +185,8 @@ def test_writer_marks_envelope_as_canonical_straight_through():
     insert_params = session.statements[-1].compile().params
     envelope = json.loads(insert_params["envelope_json"])
     assert envelope["delivery_mode"] == "canonical_straight_through"
-    assert envelope["items"][0]["status"] == "non_compliant"
+    assert envelope["items"][0]["status"] == "uncertain"
+    assert envelope["items"][0]["result_status"] == "uncertain"
+    assert envelope["items"][0]["reason_code"] == "customer_explanation_incomplete"
+    assert envelope["items"][0]["is_compliant"] is None
     assert envelope["items"][0]["conclusion"] == "引擎结论原文"

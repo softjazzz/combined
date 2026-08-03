@@ -349,3 +349,27 @@ def test_record_result_envelope_keeps_data_gap_source_and_field_facts():
         "missing_fields": ["report_time"],
         "source_availability": {"daily_course_record": "unavailable"},
     }
+
+
+def test_record_result_envelope_preserves_finalized_state_fields_verbatim():
+    item = CustomQCWorkspaceService._envelope_item_from_rule_result(
+        {
+            "rule_id": "LX0609-029",
+            "status": "uncertain",
+            "result_status": "uncertain",
+            "reason_code": "customer_explanation_incomplete",
+            "is_compliant": None,
+            "evidence": [],
+        }
+    )
+
+    assert "is_compliant" in item
+    assert {
+        key: item.get(key)
+        for key in ("status", "result_status", "reason_code", "is_compliant")
+    } == {
+        "status": "uncertain",
+        "result_status": "uncertain",
+        "reason_code": "customer_explanation_incomplete",
+        "is_compliant": None,
+    }

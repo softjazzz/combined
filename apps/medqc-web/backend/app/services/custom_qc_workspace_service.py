@@ -4310,7 +4310,7 @@ class CustomQCWorkspaceService:
         result = {
             key: item.get(key)
             for key in allowed_keys
-            if key in item and item.get(key) is not None
+            if key in item and (item.get(key) is not None or key == "is_compliant")
         }
         if not isinstance(result.get("decision_facts"), dict) and isinstance(
             result.get("customer_display_facts"), dict
