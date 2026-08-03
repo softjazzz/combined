@@ -201,7 +201,7 @@ def _fallback_document_identity(item: dict[str, Any]) -> tuple[str, ...] | None:
 
 
 def _merge_duplicate_document(existing: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
-    if len(_item_text(candidate)) > len(_item_text(existing)):
+    if len(_identity_content(candidate)) > len(_identity_content(existing)):
         primary, secondary = candidate, existing
     else:
         primary, secondary = existing, candidate

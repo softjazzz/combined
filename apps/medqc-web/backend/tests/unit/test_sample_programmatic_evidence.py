@@ -393,6 +393,7 @@ def test_build_programmatic_evidence_payload_should_deduplicate_same_document_id
 
 
 def test_build_programmatic_evidence_payload_should_not_double_count_preview_when_choosing_richer_copy(monkeypatch):
+    fallback_content = "乙" * 60
     monkeypatch.setattr(
         evidence_module,
         "_fetch_source_table_fallback_items",
@@ -404,15 +405,15 @@ def test_build_programmatic_evidence_payload_should_not_double_count_preview_whe
                     "document_id": "C2",
                     "document_title": "会诊记录",
                     "record_time": "2026-02-05 10:00:00",
-                    "content": "短摘要：建议继续观察患者病情变化并复查。" * 2,
-                    "text_preview": "短摘要：建议继续观察患者病情变化并复查。" * 2,
+                    "content": fallback_content,
+                    "text_preview": fallback_content,
                 }
             ],
             {},
         ),
     )
 
-    complete_content = "完整会诊正文：" + "患者病史、查体、辅助检查及会诊分析记录完整。" * 5
+    complete_content = "甲" * 100
     payload = build_programmatic_evidence_payload(
         bundle={
             "source_documents": [
