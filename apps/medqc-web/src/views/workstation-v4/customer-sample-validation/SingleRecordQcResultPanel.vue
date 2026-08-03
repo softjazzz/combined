@@ -72,8 +72,9 @@
         <button
           type="button"
           class="result-trigger"
-          :aria-expanded="expandedKey === item.key"
-          @click="toggle(item.key)"
+          :class="{ 'is-static': !isExpandable(item) }"
+          :aria-expanded="isExpandable(item) ? expandedKey === item.key : undefined"
+          @click="isExpandable(item) && toggle(item.key)"
         >
           <span class="status-cell">
             <span
@@ -97,6 +98,7 @@
             }}</span>
           </span>
           <span
+            v-if="isExpandable(item)"
             class="toggle-mark"
             aria-hidden="true"
           >
@@ -114,18 +116,15 @@
         </button>
 
         <section
-          v-if="
-            expandedKey === item.key &&
-              (!isCompliantResult(item) ||
-                timelinessMetrics(item).length ||
-                timelinessTimeline(item).length)
-          "
+          v-if="expandedKey === item.key && isExpandable(item)"
           class="result-detail"
         >
           <div
             v-if="
               isCompliantResult(item) &&
-                (timelinessMetrics(item).length || timelinessTimeline(item).length)
+                (timelinessMetrics(item).length ||
+                  timelinessTimeline(item).length ||
+                  item.criterion_results?.length)
             "
             class="compliant-detail"
             data-testid="single-record-compliant-detail"
@@ -170,6 +169,32 @@
                 </span>
               </template>
             </div>
+            <section
+              v-if="item.criterion_results?.length"
+              class="detail-block criterion-block compliant-criterion-block"
+              data-testid="single-record-compliant-criteria"
+            >
+              <h4>合规依据</h4>
+              <article
+                v-for="criterion in item.criterion_results"
+                :key="criterion.criterion_id"
+                class="criterion-row"
+              >
+                <div class="criterion-head">
+                  <strong>{{ criterionLabel(criterion.criterion_id) }}</strong>
+                  <span :class="`is-${criterion.status}`">{{
+                    criterionStatusText(criterion.status)
+                  }}</span>
+                </div>
+                <p>{{ criterionFactText(criterion) }}</p>
+                <p
+                  v-if="criterion.medical_analysis"
+                  class="criterion-analysis"
+                >
+                  {{ criterion.medical_analysis }}
+                </p>
+              </article>
+            </section>
           </div>
 
           <div
@@ -656,6 +681,15 @@ function isCompliantResult(item: SingleRecordQcResultItem) {
   return item.status === 'compliant'
 }
 
+function isExpandable(item: SingleRecordQcResultViewItem) {
+  if (!isCompliantResult(item)) return true
+  return Boolean(
+    timelinessMetrics(item).length ||
+      timelinessTimeline(item).length ||
+      item.criterion_results?.length,
+  )
+}
+
 function isPendingEvidenceStatus(item: SingleRecordQcResultItem) {
   return (
     item.status === 'data_gap' ||
@@ -914,6 +948,10 @@ watch(
   background: transparent;
 }
 
+.result-trigger.is-static {
+  cursor: default;
+}
+
 .status-cell {
   display: flex;
   align-items: center;
@@ -980,6 +1018,10 @@ watch(
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.result-row.is-expanded .rule-conclusion {
   -webkit-line-clamp: 2;
 }
 
@@ -996,6 +1038,16 @@ watch(
 
 .compliant-detail .timeliness-metrics {
   margin-top: 0;
+}
+
+.compliant-criterion-block {
+  padding-top: 1px;
+}
+
+.compliant-detail > :not(:first-child) {
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 .decision-summary {
@@ -1223,6 +1275,11 @@ watch(
   color: rgba(29, 29, 31, 0.72);
   font-size: 12px;
   line-height: 19px;
+}
+
+.criterion-row > .criterion-analysis {
+  margin-top: 5px;
+  color: rgba(29, 29, 31, 0.82);
 }
 
 .criterion-row .medical-analysis {

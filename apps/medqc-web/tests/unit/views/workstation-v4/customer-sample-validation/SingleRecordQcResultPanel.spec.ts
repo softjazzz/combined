@@ -502,12 +502,18 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).not.toContain('admission_record')
   })
 
-  it('合规结果可展开查看引擎保存的完整字段', async () => {
+  it('合规结果存在逐项判定时可展开查看合规依据', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [explainedCompliantItem] } })
 
     expect(wrapper.text()).toContain('合规')
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
-    expect(wrapper.find('.result-detail').exists()).toBe(false)
+    expect(wrapper.find('.result-detail').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="single-record-compliant-criteria"]').text()).toContain(
+      '合规依据',
+    )
+    expect(wrapper.get('[data-testid="single-record-compliant-criteria"]').text()).toContain(
+      '子项核对通过',
+    )
     expect(wrapper.text()).not.toContain(explainedCompliantItem.actual)
     expect(wrapper.text()).not.toContain(explainedCompliantItem.standard)
     expect(wrapper.text()).not.toContain('模型分析 / 医学判断')
@@ -521,6 +527,7 @@ describe('SingleRecordQcResultPanel', () => {
 
     expect(wrapper.text()).toContain('未发现问题。')
     expect(wrapper.text()).not.toContain('历史结果缺少可核查通过依据')
+    expect(wrapper.find('.toggle-mark').exists()).toBe(false)
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
