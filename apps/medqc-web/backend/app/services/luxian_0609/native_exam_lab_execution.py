@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -28,6 +27,11 @@ from .exam_lab_fact_extraction import (
     build_exam_lab_text_projection,
     parse_exam_lab_fact_response,
 )
+from .exam_lab_window import (
+    EvaluationWindowState,
+    _evaluation_window_gap_reason,
+    resolve_evaluation_window_state,
+)
 from .native_execution import build_luxian_0609_native_result
 from .source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
@@ -48,50 +52,6 @@ CULTURE_RULE_IDS = frozenset({"LX0609-014", "LX0609-015"})
 EXECUTOR_KEY = "exam_lab"
 _TYPED_DECISION_RULE_IDS = frozenset(EXAM_LAB_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v1"
-
-
-class EvaluationWindowState(str, Enum):
-    MATURE = "mature"
-    NOT_MATURE = "not_mature"
-    MISSING = "missing"
-    CONFLICT = "conflict"
-
-
-def resolve_evaluation_window_state(
-    *, projection: ExamLabTextProjection, event_time: datetime
-) -> EvaluationWindowState:
-    """使用受控评价终点判断24小时窗口，不回读原始住院时间。"""
-
-    if projection.horizon_conflict:
-        return EvaluationWindowState.CONFLICT
-    deadline = event_time + timedelta(hours=24)
-    if projection.precise_horizon is not None:
-        if projection.precise_horizon < event_time:
-            return EvaluationWindowState.CONFLICT
-        return (
-            EvaluationWindowState.MATURE
-            if projection.precise_horizon >= deadline
-            else EvaluationWindowState.NOT_MATURE
-        )
-    if projection.horizon_date is not None:
-        if projection.horizon_date < event_time.date():
-            return EvaluationWindowState.CONFLICT
-        return (
-            EvaluationWindowState.MATURE
-            if projection.horizon_date > deadline.date()
-            else EvaluationWindowState.NOT_MATURE
-        )
-    if projection.horizon_unavailable_reason == "authoritative_time_conflict":
-        return EvaluationWindowState.CONFLICT
-    return EvaluationWindowState.MISSING
-
-
-def _evaluation_window_gap_reason(state: EvaluationWindowState) -> str:
-    if state is EvaluationWindowState.NOT_MATURE:
-        return "evaluation_window_not_mature"
-    if state is EvaluationWindowState.CONFLICT:
-        return "authoritative_time_conflict"
-    return "authoritative_time_missing"
 
 
 _EXAM_SOURCE_KEYS = ("exam_master", "exam_item_report")
