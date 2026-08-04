@@ -252,6 +252,25 @@ def test_data_gap_completion_does_not_overwrite_rule_specific_detail_fields():
     )
 
     assert result["data_gap_details"] == existing_details
+    assert result["missing_sources"] == existing_details["missing_sources"]
+    assert result["missing_fields"] == existing_details["missing_fields"]
+    assert result["customer_message"] == existing_details["customer_message"]
+
+
+def test_data_gap_rejects_conflicting_top_level_and_detail_explanations():
+    with pytest.raises(ValueError, match="conflicting data gap explanation field"):
+        _finalize(
+            {
+                "rule_id": "LX0609-012",
+                "status": "data_gap",
+                "reason_code": "authoritative_time_missing",
+                "customer_message": "顶层解释",
+                "data_gap_details": {
+                    "reason_code": "authoritative_time_missing",
+                    "customer_message": "嵌套解释",
+                },
+            }
+        )
 
 
 def test_data_gap_uses_controlled_missing_source_from_customer_facts():

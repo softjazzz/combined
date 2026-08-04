@@ -27,6 +27,11 @@ _FORBIDDEN_METADATA_MARKERS = (
     "身份证",
     "患者姓名",
 )
+_EMPTY_REASON_CODES_BY_SOURCE = {
+    "evaluation_context.horizon": frozenset(
+        {"authoritative_time_missing", "authoritative_time_conflict"}
+    ),
+}
 
 
 class QueryStatus(str, Enum):
@@ -118,6 +123,14 @@ def _validate_created_at(value: Any) -> str:
     return text
 
 
+def _validate_empty_reason(*, source_key: str, reason_code: str) -> None:
+    if reason_code and reason_code not in _EMPTY_REASON_CODES_BY_SOURCE.get(
+        source_key,
+        frozenset(),
+    ):
+        raise ValueError("empty reason_code is not allowed for source_key")
+
+
 @dataclass(frozen=True)
 class SourceManifestEntry:
     source_key: str
@@ -149,6 +162,7 @@ class SourceManifestEntry:
                 raise ValueError("empty requires record_count == 0")
             if error_code:
                 raise ValueError("empty cannot carry error_code")
+            _validate_empty_reason(source_key=source_key, reason_code=reason_code)
         elif status is QueryStatus.UNAVAILABLE:
             if self.record_count is not None:
                 raise ValueError("unavailable requires record_count is None")
@@ -205,6 +219,10 @@ class SourceManifestEntry:
                 raise ValueError("empty requires record_count == 0")
             if normalized_error_code:
                 raise ValueError("empty cannot carry error_code")
+            _validate_empty_reason(
+                source_key=normalized_source_key,
+                reason_code=normalized_reason_code,
+            )
         elif status is QueryStatus.UNAVAILABLE:
             if record_count is not None:
                 raise ValueError("unavailable requires record_count is None")

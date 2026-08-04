@@ -135,22 +135,50 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
         reason_code,
         _DEFAULT_DATA_GAP_EXPLANATION,
     )
-    missing_sources = list(
-        result.get("missing_sources")
-        or _missing_sources_from_customer_facts(result)
-        or defaults["missing_sources"]
-    )
-    missing_fields = list(result.get("missing_fields") or defaults["missing_fields"])
-    customer_message = str(
-        result.get("customer_message") or defaults["customer_message"]
-    ).strip()
-    result["missing_sources"] = missing_sources
-    result["missing_fields"] = missing_fields
-    result["customer_message"] = customer_message
     existing_details = result.get("data_gap_details")
     completed_details = (
         dict(existing_details) if isinstance(existing_details, Mapping) else {}
     )
+
+    def is_present(value: Any) -> bool:
+        return value is not None and not (
+            isinstance(value, str) and not value.strip()
+        )
+
+    def consistent_value(field: str, default: Any) -> Any:
+        top_present = field in result and is_present(result.get(field))
+        detail_present = field in completed_details and is_present(
+            completed_details.get(field)
+        )
+        top_value = result.get(field)
+        detail_value = completed_details.get(field)
+        if top_present and detail_present and top_value != detail_value:
+            raise ValueError(f"conflicting data gap explanation field: {field}")
+        if top_present:
+            return top_value
+        if detail_present:
+            return detail_value
+        return default
+
+    missing_sources = list(
+        consistent_value(
+            "missing_sources",
+            _missing_sources_from_customer_facts(result)
+            or defaults["missing_sources"],
+        )
+    )
+    missing_fields = list(
+        consistent_value("missing_fields", defaults["missing_fields"])
+    )
+    customer_message = str(
+        consistent_value("customer_message", defaults["customer_message"])
+    ).strip()
+    result["missing_sources"] = missing_sources
+    result["missing_fields"] = missing_fields
+    result["customer_message"] = customer_message
+    detail_reason_code = str(completed_details.get("reason_code") or "").strip().lower()
+    if detail_reason_code and detail_reason_code != reason_code:
+        raise ValueError("conflicting data gap explanation field: reason_code")
     completed_details.setdefault("reason_code", reason_code)
     completed_details.setdefault("reason_label", defaults["reason_label"])
     completed_details.setdefault("missing_sources", missing_sources)

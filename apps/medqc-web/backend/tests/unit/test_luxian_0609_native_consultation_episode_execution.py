@@ -148,7 +148,14 @@ def _execution(*items):
     return {"executions": normalized}
 
 
-def _window_session(*, rows_by_source, horizon_error=False, missing_admission=False):
+def _window_session(
+    *,
+    rows_by_source,
+    horizon_error=False,
+    missing_admission=False,
+    horizon_policy=None,
+    horizon_unavailable_reason=None,
+):
     def reader(**kwargs):
         source_key = kwargs["source_key"]
         if source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY and horizon_error:
@@ -173,6 +180,8 @@ def _window_session(*, rows_by_source, horizon_error=False, missing_admission=Fa
         source_schema=None,
         created_at="2026-07-22T00:00:00+08:00",
         evaluation_as_of_date="2026-07-05",
+        evaluation_horizon_policy=horizon_policy,
+        horizon_unavailable_reason=horizon_unavailable_reason,
         row_reader=reader,
     )
 
@@ -1591,6 +1600,55 @@ async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm
     assert [item["status"] for item in result.results] == ["data_gap", "data_gap"]
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.parametrize(
+    "horizon_reason",
+    ("authoritative_time_missing", "authoritative_time_conflict"),
+)
+@pytest.mark.asyncio
+async def test_020_023_window_horizon_observation_reason_does_not_change_existing_contract(
+    horizon_reason,
+):
+    session = _window_session(
+        rows_by_source={
+            "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        },
+        horizon_policy="disabled",
+        horizon_unavailable_reason=horizon_reason,
+    )
+    horizon_observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == "evaluation_context.horizon"
+    )
+    assert horizon_observation.reason_code == horizon_reason
+    assert session.materials.bounded_rows("evaluation_context.horizon") == ()
+    with pytest.raises(episode._SourceGap):
+        episode._resolve_execution_stay_window(
+            evidence_materials=session.materials,
+            evidence_snapshot=session.snapshot,
+        )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-020", "LX0609-023"),
+    )
+
+    assert result.results == ()
+    assert [item.reason_code for item in result.decisions] == [
+        "linkage_unresolved",
+        "linkage_unresolved",
+    ]
+    assert [item.qc_direction.value for item in result.decisions] == ["unknown", "unknown"]
+    assert result.llm_call_count == 0
 
 
 @pytest.mark.asyncio

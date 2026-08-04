@@ -85,6 +85,26 @@ def test_empty_virtual_source_can_explain_why_no_row_was_produced() -> None:
 
 
 @pytest.mark.parametrize(
+    ("source_key", "reason_code"),
+    [
+        ("daily_course_record", "authoritative_time_missing"),
+        ("evaluation_context.horizon", "unexpected_empty_reason"),
+    ],
+)
+def test_empty_reason_is_restricted_to_controlled_evaluation_horizon_reasons(
+    source_key: str,
+    reason_code: str,
+) -> None:
+    with pytest.raises(ValueError, match="empty reason_code is not allowed"):
+        _entry(
+            source_key,
+            "empty",
+            record_count=0,
+            reason_code=reason_code,
+        )
+
+
+@pytest.mark.parametrize(
     ("status", "record_count", "error_code", "reason_code"),
     [
         ("available", 0, "", ""),
