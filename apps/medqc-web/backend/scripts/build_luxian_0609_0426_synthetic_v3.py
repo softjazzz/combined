@@ -30,6 +30,7 @@ from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
     apply_controlled_evidence,
     build_gold_acceptance_contracts,
     expected_status_for_case,
+    normalize_v3_stay_timeline,
 )
 
 
@@ -155,6 +156,7 @@ def _configure_v2_compatibility() -> None:
     V2.TARGET_MR_PREFIX = TARGET_MR_PREFIX
     V2.TARGET_ITEM_PREFIX = TARGET_ITEM_PREFIX
     V2.BUNDLE_POLICY_VERSION = BUNDLE_POLICY_VERSION
+    V2.TARGET_SCENE = "final"
     V2.FAMILY_QUOTAS = dict(FAMILY_QUOTAS)
     V2.FAMILY_RULE_IDS = build_master_family_rule_ids(statuses={"active"})
     V2.FAMILY_KEYWORDS = dict(FAMILY_KEYWORDS)
@@ -794,9 +796,15 @@ def upgrade_full_validation_evidence(
         v2=V2,
         rule_titles=rule_titles,
     )
+    timeline_audit = normalize_v3_stay_timeline(
+        rows_by_table,
+        cases,
+        v2=V2,
+    )
     return {
         **controlled_audit,
         "exam_lab": exam_lab_audit,
+        "timeline": timeline_audit,
     }
 
 

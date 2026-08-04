@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Sequence
 
 
@@ -122,7 +122,7 @@ GOLD_ACCEPTANCE_CONTRACTS: tuple[dict[str, Any], ...] = (
     _gold(2, 5, "non_compliant", "timeliness_requirement_not_met", ("主治医师首次查房超过入院后48小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
     _gold(2, 6, "non_compliant", "timeliness_requirement_not_met", ("最高级别医师首次查房超过入院后72小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
     _gold(6, 8, "compliant", "round_frequency_requirement_satisfied", ("存在病重医嘱且每两天至少一份查房病程",), ("inpat_nondrug_order", "daily_course_record", "inpat_registration"), ("severity_order", "course_timeline")),
-    _gold(6, 17, "compliant", "course_similarity_within_threshold", ("多份病程记录表达不同病情变化且最高相似度不超过70%",), ("daily_course_record",), ("compared_document", "similarity_measure")),
+    _gold(6, 17, "compliant", "copy_similarity_within_threshold", ("多份病程记录表达不同病情变化且最高相似度不超过70%",), ("daily_course_record",), ("compared_document", "similarity_measure")),
     _gold(11, 10, "compliant", "exam_reason_documented", ("CT或MRI检查前病程已记录检查原因",), ("exam_master", "daily_course_record"), ("exam_event", "pre_exam_course")),
     _gold(11, 11, "compliant", "exam_result_recorded_within_24h", ("影像报告出具后24小时内病程已记录结果",), ("exam_item_report", "daily_course_record"), ("report", "post_report_course")),
     _gold(11, 12, "non_compliant", "positive_exam_analysis_missing", ("阳性影像报告出具已满24小时且病程仅记录结果未作分析",), ("exam_item_report", "daily_course_record", "evaluation_horizon"), ("positive_report", "post_report_course", "evaluation_horizon")),
@@ -168,6 +168,168 @@ def build_gold_acceptance_contracts() -> list[dict[str, Any]]:
         }
         for row in GOLD_ACCEPTANCE_CONTRACTS
     ]
+
+
+_CURRENT_STAY_EVENT_TIME_FIELDS = (
+    "record_time",
+    "record_datetime",
+    "submit_time",
+    "submit_datetime",
+    "request_time",
+    "request_datetime",
+    "request_surgery_datetime",
+    "report_time",
+    "report_datetime",
+    "received_time",
+    "review_datetime",
+    "exam_time",
+    "prescribed_time",
+    "prescribed_datetime",
+    "schedule_time",
+    "billing_datetime",
+    "start_time",
+    "start_datetime",
+    "stop_time",
+    "stop_datetime",
+    "diagnosis_time",
+    "diagnosis_datetime",
+    "transfer_time",
+    "transfer_datetime",
+    "transfer_date",
+    "discharge_date",
+    "discharge_time",
+    "patient_sign_datetime",
+    "physician_sign_datetime",
+    "surgery_begin_time",
+    "surgery_begin_datetime",
+    "surgery_end_time",
+    "surgery_end_datetime",
+    "transfution_datetime",
+    "transfusion_datetime",
+)
+_CURRENT_STAY_FALLBACK_TIME_FIELDS = (
+    "last_modified_datetime",
+    "update_time",
+)
+
+
+def _timeline_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=None)
+
+
+def _row_current_stay_event_times(row: dict[str, Any]) -> list[datetime]:
+    times = [
+        parsed
+        for field in _CURRENT_STAY_EVENT_TIME_FIELDS
+        if (parsed := _timeline_datetime(row.get(field))) is not None
+    ]
+    if times:
+        return times
+    return [
+        parsed
+        for field in _CURRENT_STAY_FALLBACK_TIME_FIELDS
+        if (parsed := _timeline_datetime(row.get(field))) is not None
+    ]
+
+
+def normalize_v3_stay_timeline(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    cases: Sequence[Any],
+    *,
+    v2: Any,
+) -> dict[str, Any]:
+    """把固定验证集统一为同一受控final住院窗口。"""
+
+    registrations = rows_by_table.setdefault("inpat_registration", [])
+    normalized: list[dict[str, Any]] = []
+    for case in cases:
+        admission_time = v2._dt_for_case(case, 0, 8)
+        discharge_time = v2._dt_for_case(case, 12, 18)
+        matching = [
+            row
+            for row in registrations
+            if str(row.get("visit_id") or "") == case.target_visit_id
+        ]
+        row = dict(matching[0]) if matching else {
+            **v2._case_base_row(case),
+            "record_content": "受控验证病例住院登记。",
+        }
+        row.update(
+            {
+                "admission_datetime": admission_time,
+                "discharge_datetime": discharge_time,
+                "admission_dept_name": row.get("admission_dept_name") or "普通外科",
+                "discharge_dept_name": row.get("discharge_dept_name") or "普通外科",
+            }
+        )
+        normalized.append(row)
+        case.source_item["synthetic_record_scene"] = "final"
+        case.source_item["synthetic_admission_datetime"] = admission_time
+        case.source_item["synthetic_discharge_datetime"] = discharge_time
+    target_visit_ids = {case.target_visit_id for case in cases}
+    stay_window_by_visit = {
+        case.target_visit_id: (
+            v2._dt_for_case(case, 0, 8),
+            v2._dt_for_case(case, 12, 18),
+        )
+        for case in cases
+    }
+    rows_by_table["inpat_registration"] = [
+        row
+        for row in registrations
+        if str(row.get("visit_id") or "") not in target_visit_ids
+    ] + normalized
+    removed_by_table: Counter[str] = Counter()
+    for table_name, rows in tuple(rows_by_table.items()):
+        if table_name == "inpat_registration":
+            continue
+        retained: list[dict[str, Any]] = []
+        for row in rows:
+            visit_id = str(row.get("visit_id") or "")
+            window = stay_window_by_visit.get(visit_id)
+            event_times = _row_current_stay_event_times(row)
+            if window and event_times and any(
+                value < window[0] or value > window[1] for value in event_times
+            ):
+                removed_by_table[table_name] += 1
+                continue
+            retained.append(row)
+        rows_by_table[table_name] = retained
+    validated_event_rows = 0
+    remaining_issues: list[dict[str, str]] = []
+    for table_name, rows in rows_by_table.items():
+        if table_name == "inpat_registration":
+            continue
+        for row in rows:
+            visit_id = str(row.get("visit_id") or "")
+            window = stay_window_by_visit.get(visit_id)
+            event_times = _row_current_stay_event_times(row)
+            if not window or not event_times:
+                continue
+            validated_event_rows += 1
+            if any(value < window[0] or value > window[1] for value in event_times):
+                remaining_issues.append(
+                    {"visit_id": visit_id, "table": table_name}
+                )
+    return {
+        "record_scene": "final",
+        "case_count": len(normalized),
+        "validated_event_row_count": validated_event_rows,
+        "issue_count": len(remaining_issues),
+        "issues": remaining_issues,
+        "removed_out_of_window_rows": sum(removed_by_table.values()),
+        "removed_by_table": dict(sorted(removed_by_table.items())),
+    }
 
 
 def expected_status_for_case(case_index: int, rule_id: str) -> str:
@@ -399,12 +561,22 @@ def _build_course(rows: dict[str, list[dict[str, Any]]], case: Any, v2: Any, *, 
             order_type="病情", order_name="病危护理", frequency="持续",
         )
         days = (0, 1, 2, 3, 4, 5, 6, 7)
+    severe_course_content = {
+        1: "症状评估：患者高热伴气促，咳黄痰，查体双肺湿啰音，继续严密观察呼吸状态。",
+        2: "检查复核：血气提示低氧血症，胸部影像示双肺感染灶，结合培养结果完善病原判断。",
+        4: "治疗调整：依据药敏结果停用原经验方案，改为敏感抗菌药，并加强氧疗和液体管理。",
+        6: "疗效判断：体温恢复正常，氧合指数改善，炎症指标下降，当前方案有效并计划降阶梯治疗。",
+    }
     for day in days:
         record_hour = 15 if mode == "critical" and day == 0 else 9
         refs.append(_append_document(
             rows, case, v2, table_name="daily_course_record", suffix=f"course-{day}",
             title="日常病程记录", record_time=v2._dt_for_case(case, day, record_hour),
-            content=f"住院第{day}日查房：症状、生命体征、检查结果及治疗计划均已记录，内容与前次记录不同。",
+            content=(
+                severe_course_content[day]
+                if mode == "severe"
+                else f"住院第{day}日查房：症状、生命体征、检查结果及治疗计划均已记录，内容与前次记录不同。"
+            ),
         ))
     return refs
 

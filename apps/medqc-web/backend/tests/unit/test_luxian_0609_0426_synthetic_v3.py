@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import pytest
@@ -105,6 +107,7 @@ def test_v3_compatibility_configuration_keeps_v2_logic_but_uses_v3_identity() ->
     assert module.V2.TARGET_MR_PREFIX == "LX0609V3-"
     assert module.V2.TARGET_ITEM_PREFIX == "lx0609-v3"
     assert module.V2.BUNDLE_POLICY_VERSION == "luxian_0609_0426_syn_v3"
+    assert module.V2.TARGET_SCENE == "final"
     assert sum(module.V2.FAMILY_QUOTAS.values()) == 38
     assert len(
         {
@@ -327,7 +330,94 @@ def test_v3_gold_acceptance_contracts_freeze_37_reviewed_assertions() -> None:
     case_017 = next(row for row in contracts if row["rule_id"] == "LX0609-017")
     assert case_017["case_index"] == 6
     assert case_017["expected_status"] == "compliant"
-    assert case_017["expected_reason_code"] == "course_similarity_within_threshold"
+    assert case_017["expected_reason_code"] == "copy_similarity_within_threshold"
+
+
+def test_v3_full_validation_freezes_all_38_records_as_complete_final_stays() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    audit = module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    registrations = rows_by_table["inpat_registration"]
+    assert len(registrations) == 38
+    assert {row["visit_id"] for row in registrations} == {
+        case.target_visit_id for case in cases
+    }
+    assert all(row["admission_datetime"] < row["discharge_datetime"] for row in registrations)
+    assert audit["timeline"]["record_scene"] == "final"
+    assert audit["timeline"]["case_count"] == 38
+    assert audit["timeline"]["validated_event_row_count"] > 0
+    assert audit["timeline"]["issue_count"] == 0
+
+
+def test_v3_timeline_removes_cross_stay_events_but_keeps_history_fields() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    case = next(item for item in cases if item.target_index == 2)
+    rows_by_table: dict[str, list[dict]] = {
+        "mr_surgery": [
+            {
+                "visit_id": case.target_visit_id,
+                "surgery_id": "stale-surgery",
+                "surgery_begin_datetime": module.datetime(2025, 10, 1, 9, 0),
+                "surgery_end_datetime": module.datetime(2025, 10, 1, 11, 0),
+            },
+            {
+                "visit_id": case.target_visit_id,
+                "surgery_id": "future-surgery",
+                "surgery_begin_datetime": module.datetime(2026, 7, 1, 9, 0),
+                "surgery_end_datetime": module.datetime(2026, 7, 1, 11, 0),
+            },
+        ],
+        "medical_record_frontpage": [
+            {
+                "visit_id": case.target_visit_id,
+                "frontpage_id": "current-frontpage",
+                "past_surgery_datetime": module.datetime(2025, 10, 1, 9, 0),
+                "record_time": module.datetime(2026, 6, 2, 9, 0),
+            }
+        ],
+    }
+
+    audit = module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    assert {"stale-surgery", "future-surgery"}.isdisjoint({
+        row.get("surgery_id") for row in rows_by_table["mr_surgery"]
+    })
+    assert [row["frontpage_id"] for row in rows_by_table["medical_record_frontpage"]] == [
+        "current-frontpage"
+    ]
+    assert audit["timeline"]["removed_out_of_window_rows"] == 2
+    assert audit["timeline"]["removed_by_table"] == {"mr_surgery": 2}
+
+
+def test_v3_case_006_course_notes_are_genuinely_distinct_and_below_70_percent() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    texts = [
+        row["record_content"]
+        for row in rows_by_table["daily_course_record"]
+        if row["visit_id"] == "LX0609_0426_SYN_V3_006"
+    ]
+    assert len(texts) == 4
+    assert any("症状" in text for text in texts)
+    assert any("检查" in text for text in texts)
+    assert any("调整" in text for text in texts)
+    assert any("疗效" in text for text in texts)
+
+    normalized = [re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", text).lower() for text in texts]
+    maximum = max(
+        SequenceMatcher(None, left, right, autojunk=False).ratio()
+        for index, left in enumerate(normalized)
+        for right in normalized[index + 1 :]
+    )
+    assert maximum <= 0.70
 
 
 def test_v3_020_explains_actual_multidisciplinary_participation() -> None:

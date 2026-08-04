@@ -50,6 +50,7 @@ TARGET_VISIT_PREFIX = "LX0609_0426_SYN_"
 TARGET_MR_PREFIX = "LX0609V2-"
 TARGET_ITEM_PREFIX = "lx0609-v2"
 BUNDLE_POLICY_VERSION = "luxian_0609_0426_syn_v2"
+TARGET_SCENE = "running"
 DEID_VERSION = "local-rule-deid-v1"
 DEFAULT_OUTPUT_DIR = ROOT / "tmp-lx0609-0426-synthetic-v2"
 
@@ -1240,7 +1241,7 @@ def write_pool_and_items(
             "name": TARGET_POOL_NAME,
             "source_file": TARGET_SOURCE_FILE,
             "source_sheet": TARGET_SOURCE_SHEET,
-            "scene": "running",
+            "scene": TARGET_SCENE,
             "description": "基于 0426 样本池真实文书结构本地脱敏改写生成，仅用于 LX0609 客户演示和合成回归，不代表真实样本准确率。",
             "created_by": "system",
             "updated_at": now,
@@ -1326,6 +1327,9 @@ def write_pool_and_items(
                 "review_status": "pending",
                 "manual_issue_text": item.get("manual_issue_text"),
                 "source_reason": case.source_reason,
+                "record_scene": TARGET_SCENE,
+                "admission_datetime": item.get("synthetic_admission_datetime"),
+                "discharge_datetime": item.get("synthetic_discharge_datetime"),
             }
             item_values.append(
                 {
@@ -1342,7 +1346,7 @@ def write_pool_and_items(
                     "qc_user": "system",
                     "coverage_type": "llm_intrinsic",
                     "issue_category": case.family,
-                    "expected_scene": "running",
+                    "expected_scene": TARGET_SCENE,
                     "candidate_rule_ids_json": _safe_json_dumps(case.selected_rule_ids),
                     "include_in_batch_1": True,
                     "exclude_reason": "",
