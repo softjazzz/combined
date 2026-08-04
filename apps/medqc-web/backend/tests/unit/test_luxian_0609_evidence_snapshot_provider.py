@@ -350,6 +350,40 @@ def test_008_009_horizon_uses_authoritative_discharge_or_frozen_as_of(
     assert fact.normalized_value["basis"] == expected_basis
 
 
+def test_disabled_horizon_policy_ignores_available_authoritative_discharge() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "inpat_registration":
+            return _rows(
+                source_key,
+                [{"admission_datetime": "2026-06-01 08:00:00"}],
+            )
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"discharge_datetime": "2026-06-10 09:00:00"}],
+                limit_rows=1,
+            )
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-012",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_horizon_policy="disabled",
+        row_reader=reader,
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    assert not any(
+        fact.fact_type == "evaluation_horizon"
+        for fact in session.snapshot.facts
+    )
+
+
 def test_008_009_invalid_nonempty_discharge_datetime_fails_closed() -> None:
     def reader(**kwargs):
         source_key = kwargs["source_key"]

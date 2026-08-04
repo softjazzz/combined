@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Mapping
+
+
+EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE = "frozen_task_date"
+EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE = "authoritative_discharge"
+EVALUATION_HORIZON_POLICY_DISABLED = "disabled"
+EVALUATION_HORIZON_POLICIES = frozenset(
+    {
+        EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
+        EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE,
+        EVALUATION_HORIZON_POLICY_DISABLED,
+    }
+)
 
 
 def _normalized_text(value: Any) -> str:
@@ -37,6 +49,26 @@ class RecordEvaluationHorizon:
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
+
+
+def resolve_record_evaluation_horizon_policy(
+    snapshot: Mapping[str, Any] | None,
+) -> str | None:
+    """将逐病例快照收敛为 Provider 可执行的三态策略。
+
+    ``None`` 仅保留给升级前已排队、没有逐病例快照的兼容任务。
+    """
+
+    if snapshot is None:
+        return None
+    if _normalized_text(snapshot.get("resolution_status")) != "resolved":
+        return EVALUATION_HORIZON_POLICY_DISABLED
+    basis = _normalized_text(snapshot.get("evaluation_basis"))
+    if basis == "task_frozen_date":
+        return EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
+    if basis == "discharge_datetime":
+        return EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
+    return EVALUATION_HORIZON_POLICY_DISABLED
 
 
 def resolve_record_evaluation_horizon(

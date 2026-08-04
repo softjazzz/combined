@@ -1890,6 +1890,9 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                         kwargs["bundle"]["evaluation_horizon_snapshot"]
                     ),
                     "evaluation_as_of_date": kwargs["evaluation_as_of_date"],
+                    "evaluation_horizon_policy": kwargs[
+                        "evaluation_horizon_policy"
+                    ],
                 }
             )
             return {
@@ -1939,6 +1942,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "record_evaluation_snapshot"
             ][0],
             "evaluation_as_of_date": None,
+            "evaluation_horizon_policy": "authoritative_discharge",
         },
         {
             "visit_id": "visit-002",
@@ -1956,6 +1960,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "record_evaluation_snapshot"
             ][1],
             "evaluation_as_of_date": "2026-08-04",
+            "evaluation_horizon_policy": "frozen_task_date",
         },
         {
             "visit_id": "visit-003",
@@ -1973,6 +1978,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "record_evaluation_snapshot"
             ][2],
             "evaluation_as_of_date": None,
+            "evaluation_horizon_policy": "disabled",
         },
     ]
 
@@ -2067,7 +2073,7 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
                     ]
                 elif (
                     source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
-                    and visit_id == "visit-conflict"
+                    and visit_id in {"visit-conflict", "visit-unknown"}
                 ):
                     rows = [{"discharge_datetime": "2026-07-03 08:00:00"}]
                 return SnapshotSourceRows.create(
@@ -2085,12 +2091,16 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
                 source_schema=None,
                 created_at="2026-08-04T12:00:00+08:00",
                 evaluation_as_of_date=kwargs["evaluation_as_of_date"],
+                evaluation_horizon_policy=kwargs["evaluation_horizon_policy"],
                 row_reader=_reader,
             )
             provider_results.append(
                 {
                     "record_id": visit_id,
                     "evaluation_as_of_date": kwargs["evaluation_as_of_date"],
+                    "evaluation_horizon_policy": kwargs[
+                        "evaluation_horizon_policy"
+                    ],
                     "horizon_rows": session.materials.rows(
                         EVALUATION_HORIZON_SOURCE_KEY
                     ),
@@ -2128,6 +2138,7 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
         {
             "record_id": item["record_id"],
             "evaluation_as_of_date": None,
+            "evaluation_horizon_policy": "disabled",
             "horizon_rows": (),
         }
         for item in snapshots

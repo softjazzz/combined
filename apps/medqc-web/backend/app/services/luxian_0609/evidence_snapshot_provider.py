@@ -15,6 +15,12 @@ from .evidence_snapshot import (
     build_luxian_0609_visit_ref,
 )
 from .fact_schema import FACT_SCHEMA_VERSION, FactV2
+from .evaluation_horizon import (
+    EVALUATION_HORIZON_POLICIES,
+    EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE,
+    EVALUATION_HORIZON_POLICY_DISABLED,
+    EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE,
+)
 from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
     Luxian0609EvidenceReadSession,
@@ -161,6 +167,7 @@ def build_luxian_0609_evidence_read_session(
     source_schema: str | None,
     created_at: str,
     evaluation_as_of_date: str | None = None,
+    evaluation_horizon_policy: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
     additional_source_keys: tuple[str, ...] = (),
 ) -> Luxian0609EvidenceReadSession:
@@ -185,11 +192,25 @@ def build_luxian_0609_evidence_read_session(
             "LX0609-023",
         }.intersection(selected_rule_ids)
     )
+    if (
+        evaluation_horizon_policy is not None
+        and evaluation_horizon_policy not in EVALUATION_HORIZON_POLICIES
+    ):
+        raise ValueError("evaluation_horizon_policy is invalid")
     explicit_as_of_date = (
         _parse_evaluation_as_of_date(evaluation_as_of_date)
         if needs_evaluation_horizon
+        and evaluation_horizon_policy
+        in {None, EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE}
         else None
     )
+    if (
+        needs_evaluation_horizon
+        and evaluation_horizon_policy
+        == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
+        and explicit_as_of_date is None
+    ):
+        raise ValueError("frozen_task_date policy requires evaluation_as_of_date")
     resolved = resolve_luxian_0609_rule_sources(tuple(selected_rule_ids))
     entries_by_document = {
         entry.document_type: entry
@@ -489,52 +510,69 @@ def build_luxian_0609_evidence_read_session(
     if needs_evaluation_horizon:
         horizon_date: date | None = None
         horizon_basis = ""
-        admission_material = material_sources.get("inpat_registration")
-        admission_date = (
-            _parse_admission_date(
-                admission_material.rows[0].get("admission_datetime")
-            )
-            if admission_material is not None and admission_material.rows
-            else None
-        )
-        discharge_observation = next(
-            (
-                item
-                for item in observations
-                if item.source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
-            ),
-            None,
-        )
-        discharge_material = material_sources.get(
-            CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
-        )
         if (
-            discharge_observation is not None
-            and discharge_observation.query_state is QueryStatus.AVAILABLE
-            and discharge_observation.completeness is SourceCompleteness.COMPLETE
-            and discharge_material is not None
-            and len(discharge_material.rows) == 1
+            evaluation_horizon_policy
+            == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
         ):
-            discharge_date = _parse_discharge_date(
-                discharge_material.rows[0].get("discharge_datetime")
-            )
-            has_time_conflict = bool(
-                discharge_date is not None
-                and admission_date is not None
-                and discharge_date < admission_date
-            )
-            if not has_time_conflict and discharge_date is not None and (
-                explicit_as_of_date is None or discharge_date <= explicit_as_of_date
-            ):
-                horizon_date = discharge_date
-                horizon_basis = "discharge_date"
-            elif not has_time_conflict and explicit_as_of_date is not None:
-                horizon_date = explicit_as_of_date
-                horizon_basis = "evaluation_as_of"
-        elif explicit_as_of_date is not None:
-            # 在院病例没有出院日期时，任务创建时冻结的日期就是权威评价终点。
             horizon_date = explicit_as_of_date
             horizon_basis = "evaluation_as_of"
+        elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:
+            admission_material = material_sources.get("inpat_registration")
+            admission_date = (
+                _parse_admission_date(
+                    admission_material.rows[0].get("admission_datetime")
+                )
+                if admission_material is not None and admission_material.rows
+                else None
+            )
+            discharge_observation = next(
+                (
+                    item
+                    for item in observations
+                    if item.source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
+                ),
+                None,
+            )
+            discharge_material = material_sources.get(
+                CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
+            )
+            if (
+                discharge_observation is not None
+                and discharge_observation.query_state is QueryStatus.AVAILABLE
+                and discharge_observation.completeness is SourceCompleteness.COMPLETE
+                and discharge_material is not None
+                and len(discharge_material.rows) == 1
+            ):
+                discharge_date = _parse_discharge_date(
+                    discharge_material.rows[0].get("discharge_datetime")
+                )
+                has_time_conflict = bool(
+                    discharge_date is not None
+                    and admission_date is not None
+                    and discharge_date < admission_date
+                )
+                if not has_time_conflict and discharge_date is not None and (
+                    evaluation_horizon_policy
+                    == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
+                    or explicit_as_of_date is None
+                    or discharge_date <= explicit_as_of_date
+                ):
+                    horizon_date = discharge_date
+                    horizon_basis = "discharge_date"
+                elif (
+                    not has_time_conflict
+                    and explicit_as_of_date is not None
+                    and evaluation_horizon_policy is None
+                ):
+                    horizon_date = explicit_as_of_date
+                    horizon_basis = "evaluation_as_of"
+            elif (
+                explicit_as_of_date is not None
+                and evaluation_horizon_policy is None
+            ):
+                # 升级前任务保留原有在院日期回退；新任务由显式策略控制。
+                horizon_date = explicit_as_of_date
+                horizon_basis = "evaluation_as_of"
 
         horizon_entry = resolve_luxian_0609_physical_source_entry(
             EVALUATION_HORIZON_SOURCE_KEY
@@ -654,6 +692,7 @@ def build_luxian_0609_evidence_snapshot(
     source_schema: str | None,
     created_at: str,
     evaluation_as_of_date: str | None = None,
+    evaluation_horizon_policy: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
 ) -> Luxian0609EvidenceSnapshot:
     """兼容安全快照入口；请求内材料由 read-session 入口消费。"""
@@ -666,6 +705,7 @@ def build_luxian_0609_evidence_snapshot(
         source_schema=source_schema,
         created_at=created_at,
         evaluation_as_of_date=evaluation_as_of_date,
+        evaluation_horizon_policy=evaluation_horizon_policy,
         row_reader=row_reader,
     ).snapshot
 

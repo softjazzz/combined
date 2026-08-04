@@ -51,6 +51,7 @@ from ..services.sample_programmatic_evidence import build_programmatic_evidence_
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
 from ..services.luxian_0609.evaluation_horizon import (
     build_record_evaluation_horizon_snapshot,
+    resolve_record_evaluation_horizon_policy,
 )
 from ..services.luxian_0609.surgery_procedure_catalog import (
     CATALOG_VERSION as SURGERY_PROCEDURE_CATALOG_VERSION,
@@ -2832,6 +2833,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             ).strip().lower()
             record_evaluation_snapshot = record_evaluation_snapshot_by_id.get(record_id)
             if record_evaluation_snapshot is not None:
+                evaluation_horizon_policy = resolve_record_evaluation_horizon_policy(
+                    record_evaluation_snapshot
+                )
                 evaluation_as_of_date = (
                     str(record_evaluation_snapshot.get("evaluation_horizon") or "").strip()
                     if (
@@ -2844,6 +2848,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 )
             else:
                 # 兼容升级前已排队任务；新任务均使用逐病例快照。
+                evaluation_horizon_policy = None
                 evaluation_as_of_date = str(
                     filters.get("evaluation_as_of_date") or ""
                 ).strip()
@@ -3080,6 +3085,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
                             evaluation_as_of_date=evaluation_as_of_date or None,
+                            evaluation_horizon_policy=evaluation_horizon_policy,
                             cancellation_check=_is_cancelled,
                         )
                         used_bundle_path = True

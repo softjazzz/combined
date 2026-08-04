@@ -194,6 +194,7 @@ async def prepare_luxian_0609_execution(
     patient_id: str = "",
     source_schema: str | None = None,
     evaluation_as_of_date: str | None = None,
+    evaluation_horizon_policy: str | None = None,
     selected_customer_rule_ids: Iterable[str] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
@@ -275,6 +276,7 @@ async def prepare_luxian_0609_execution(
                     source_schema=source_schema,
                     created_at=datetime.now(timezone.utc).isoformat(),
                     evaluation_as_of_date=evaluation_as_of_date,
+                    evaluation_horizon_policy=evaluation_horizon_policy,
                     additional_source_keys=(
                         resolve_legacy_executor_material_source_keys(
                             tuple(
@@ -297,6 +299,7 @@ async def prepare_luxian_0609_execution(
                     source_schema=source_schema,
                     created_at=datetime.now(timezone.utc).isoformat(),
                     evaluation_as_of_date=evaluation_as_of_date,
+                    evaluation_horizon_policy=evaluation_horizon_policy,
                 )
             evidence_snapshot_rule_refs = (
                 build_luxian_0609_evidence_snapshot_rule_refs(
