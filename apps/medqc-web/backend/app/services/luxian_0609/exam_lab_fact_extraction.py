@@ -39,10 +39,16 @@ _EXPLICIT_NON_TARGET_CULTURE_PATTERN = re.compile(
     r"血常规|尿常规|生化|肝功能|肾功能|电解质|凝血|血气|D[-－]?二聚体|CRP|降钙素原",
     flags=re.IGNORECASE,
 )
-_IMAGING_NEGATIVE_PATTERN = re.compile(r"未见(?:明显)?异常|未见明确病变|阴性")
-# 客户已确认：检查阳性只接受报告结构字段或原文明示“阳性”，不得把
-# “异常、病变、占位”等临床描述自行提升为该规则的阳性门控事实。
-_IMAGING_POSITIVE_PATTERN = re.compile(r"阳性")
+_IMAGING_NEGATIVE_PATTERN = re.compile(
+    r"(?:未见|未发现|未提示|未显示|无)(?:明显|明确)?"
+    r"(?:异常|病变|占位|肿块|出血|梗死)|阴性"
+)
+_IMAGING_UNCERTAIN_PATTERN = re.compile(
+    r"待排|不除外|不能除外|未排除|建议排除"
+)
+# 客户已确认：012 的阳性门控使用报告中的明确阳性影像结论。否定和待排
+# 描述优先于此模式，避免将“未见出血”或“待排梗死”误触发为阳性事件。
+_IMAGING_POSITIVE_PATTERN = re.compile(r"阳性|异常|病变|占位|肿块|出血|梗死")
 _CULTURE_NEGATIVE_PATTERN = re.compile(r"无生长|未检出|培养阴性|阴性")
 _CULTURE_POSITIVE_PATTERN = re.compile(r"培养阳性|检出.{0,12}菌|分离出.{0,12}菌|药敏结果")
 
@@ -322,9 +328,12 @@ def build_exam_lab_text_projection(
             if family == "exam"
             else _CULTURE_POSITIVE_PATTERN
         )
+        uncertain_pattern = _IMAGING_UNCERTAIN_PATTERN if family == "exam" else None
         positive_hint = (
             "negative"
             if negative_pattern.search(material)
+            else "unknown"
+            if uncertain_pattern is not None and uncertain_pattern.search(material)
             else "positive"
             if positive_pattern.search(material)
             else "unknown"
@@ -516,7 +525,7 @@ CT/MRI不包括超声、X线、内镜、心电；仅拟行/申请未实施不适
 course_doc_refs只能引用给定COURSE_DOC，禁止创造引用。EVENT_DOC由Python按本次唯一事件自动绑定，模型不需要也不得输出evidence_refs。
 semantic_state=present时，course_doc_refs必须非空；semantic_state=absent或unknown时course_doc_refs必须为空。
 若COURSE_DOC为空，所有规则都不得输出semantic_state=present；目标事件已实施但没有匹配病程时，010/011/014以及阳性的012/015应输出applicable+absent，不得虚构文书引用，也不得把“未记录”写成not_applicable。
-positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
+positive_state字段固定规则：010/011/014必须始终为not_relevant；只有012/015允许positive、negative或unknown。012的影像阳性门控由Python按报告中的“阳性、异常、病变、占位、肿块、出血、梗死”等明确结论锁定；“未见/无/阴性”及待排、不除外、未排除等描述不算阳性。012/015事件明确阴性时用not_applicable+negative；事件明确阳性但未找到分析/处置病程时用applicable+absent+positive。
 011/014只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；012/015再独立判断阳性结果是否有分析或处置。
 本次每个家族最多只有一个事件：病程中的“影像报告/影像提示/胸部影像”在无冲突时应关联到唯一CT/MRI事件；“微生物报告/检出菌/敏感或耐药”应关联到唯一培养事件。病程既复述阳性影像结论又给出考虑、计划或处理时，011和012都为present；既复述培养结果又据敏感性调整用药时，014和015都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
@@ -621,8 +630,8 @@ def parse_exam_lab_fact_response(
                 semantic = "absent"
                 normalized_course = ()
         elif rule_id == "LX0609-012" and event is not None and event.target_confirmed:
-            # 012 的阳性门控只能来自报告结构字段或原文明示“阳性”。模型无权
-            # 把“异常、病变、占位”等描述提升为阳性，否则保持资料不足。
+            # 012 的阳性门控只能来自 Python 受控的明确影像结论；模型无权
+            # 自行把其他自由文本提升为阳性，否则保持资料不足。
             positive = "unknown"
             applicability = "unknown"
             semantic = "unknown"

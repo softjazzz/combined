@@ -962,13 +962,29 @@ def test_fact_parser_python_owns_nonpositive_rule_applicability():
     assert facts[0].semantic_state == "present"
 
 
-def test_fact_parser_python_owns_positive_rule_applicability():
+@pytest.mark.parametrize(
+    ("imaging_conclusion", "expected_positive"),
+    (
+        ("阳性占位。", "positive"),
+        ("右肺异常影。", "positive"),
+        ("右肺结节病变。", "positive"),
+        ("右肺占位，考虑恶性。", "positive"),
+        ("基底节区出血。", "positive"),
+        ("急性脑梗死。", "positive"),
+        ("未见明确占位、出血或梗死。", "negative"),
+        ("待排急性脑梗死。", "unknown"),
+    ),
+)
+def test_fact_parser_python_owns_controlled_positive_imaging_gate(
+    imaging_conclusion,
+    expected_positive,
+):
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({
                 "exam_type": "CT",
                 "report_time": "2026-04-26 08:00:00",
-                "result": "阳性占位。",
+                "result": imaging_conclusion,
             },),
             "daily_course_record": ({
                 "record_time": "2026-04-26 09:00:00",
@@ -985,8 +1001,14 @@ def test_fact_parser_python_owns_positive_rule_applicability():
         projection=projection,
     )
 
-    assert facts[0].applicability == "applicable"
-    assert facts[0].positive_state == "positive"
+    assert facts[0].applicability == (
+        "applicable"
+        if expected_positive == "positive"
+        else "not_applicable"
+        if expected_positive == "negative"
+        else "unknown"
+    )
+    assert facts[0].positive_state == expected_positive
 
 
 def test_fact_parser_strong_negative_event_overrides_model_not_relevant():
@@ -1165,7 +1187,7 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     assert [item.final_state.value for item in reduced] == [
         "non_compliant",
         "non_compliant",
-        "data_gap",
+        "non_compliant",
         "non_compliant",
         "non_compliant",
     ]
@@ -1180,7 +1202,8 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         "checked_sources": ["exam_lab_order", "course_record"],
     }
     assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
-    assert "LX0609-012" not in facts
+    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
+    assert facts["LX0609-012"]["subject"] == "ct_mri"
     assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
     assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
 
