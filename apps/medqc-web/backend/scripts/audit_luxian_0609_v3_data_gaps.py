@@ -41,6 +41,18 @@ ROOT_CAUSES = frozenset(
         "other_with_evidence",
     }
 )
+_EVALUATION_HORIZON_RULE_IDS = frozenset(
+    {
+        "LX0609-008",
+        "LX0609-009",
+        "LX0609-011",
+        "LX0609-012",
+        "LX0609-014",
+        "LX0609-015",
+        "LX0609-020",
+        "LX0609-023",
+    }
+)
 CSV_COLUMNS = (
     "record_id",
     "visit_id",
@@ -53,6 +65,8 @@ CSV_COLUMNS = (
     "required_source_keys",
     "source_observations",
     "material_summary",
+    "evidence_delivery_trace",
+    "customer_fact_delivery_trace",
     "workspace_envelope_match",
     "first_abnormal_layer",
     "primary_root_cause",
@@ -162,6 +176,8 @@ def _source_keys_for_rule(rule_id: str) -> tuple[str, ...]:
     ]
     keys.extend(resolve_luxian_0609_controlled_fact_source_keys((rule_id,)))
     keys.extend(resolve_luxian_0609_decision_support_source_keys((rule_id,)))
+    if rule_id in _EVALUATION_HORIZON_RULE_IDS:
+        keys.append("evaluation_context.horizon")
     return tuple(dict.fromkeys(key for key in keys if key))
 
 
@@ -174,15 +190,15 @@ def _serialize_observations(session: Any, required_keys: tuple[str, ...]) -> dic
             output[key] = {"query_state": "not_requested"}
             continue
         output[key] = item.to_dict()
-    horizon = observations.get("evaluation_context.horizon")
-    if horizon is not None:
-        output["evaluation_context.horizon"] = horizon.to_dict()
     return output
 
 
 def _material_summary(session: Any, required_keys: tuple[str, ...]) -> dict[str, Any]:
     summary: dict[str, Any] = {}
     for key in required_keys:
+        if key == "evaluation_context.horizon" or "." in key:
+            summary[key] = {"present": None, "runtime_derived": True}
+            continue
         if not session.materials.has_source(key):
             summary[key] = {"present": False}
             continue
@@ -224,9 +240,14 @@ def classify_gap(
     reason_code: str,
     observations: Mapping[str, Any],
     material_summary: Mapping[str, Any],
+    required_source_keys: tuple[str, ...],
     workspace_envelope_match: bool,
 ) -> tuple[str, str, str, str]:
     """只依据可复核资料链分类，不把未持久化 Decision 猜成根因。"""
+
+    observations = {
+        key: observations[key] for key in required_source_keys if key in observations
+    }
 
     if not workspace_envelope_match:
         return (
@@ -234,20 +255,6 @@ def classify_gap(
             "workspace_to_envelope",
             "confirmed",
             "任务原始项与保存 Envelope 的状态、原因或客户交付字段不一致。",
-        )
-    if reason_code == "authoritative_time_missing":
-        return (
-            "authoritative_time_missing",
-            "native_result_projection",
-            "confirmed",
-            "Native 后的任务原始项已明确给出权威时间缺失原因；历史原始 Decision 未持久化。",
-        )
-    if reason_code == "evaluation_window_not_mature":
-        return (
-            "evaluation_window_not_mature",
-            "native_result_projection",
-            "confirmed",
-            "Native 后的任务原始项已明确给出评价窗口尚未届满原因；历史原始 Decision 未持久化。",
         )
     if _has_reader_capability_gap(observations):
         return (
@@ -272,6 +279,20 @@ def classify_gap(
             "material_store",
             "confirmed",
             "Snapshot 已声明可读来源，但对应 MaterialStore 未提供可消费材料。",
+        )
+    if reason_code == "authoritative_time_missing":
+        return (
+            "authoritative_time_missing",
+            "native_result_projection",
+            "confirmed",
+            "Native 后的任务原始项已明确给出权威时间缺失原因；历史原始 Decision 未持久化。",
+        )
+    if reason_code == "evaluation_window_not_mature":
+        return (
+            "evaluation_window_not_mature",
+            "native_result_projection",
+            "confirmed",
+            "Native 后的任务原始项已明确给出评价窗口尚未届满原因；历史原始 Decision 未持久化。",
         )
     if reason_code in {"linkage_unresolved", "association_failed"}:
         if not _is_empty(observations):
@@ -321,6 +342,7 @@ def _compare_delivery(raw: Mapping[str, Any], envelope: Mapping[str, Any]) -> tu
             or raw.get("customer_message"),
             envelope.get("conclusion") or envelope.get("findings"),
         ),
+        "suggestion": (raw.get("suggestion"), envelope.get("suggestion")),
     }
     for key, (left, right) in checks.items():
         if _canonical_json(left) != _canonical_json(right):
@@ -337,6 +359,63 @@ def _compare_delivery(raw: Mapping[str, Any], envelope: Mapping[str, Any]) -> tu
         # Envelope 可附加 source_status；只要原字段保持原值就仍是原样交付。
         differences.append("data_gap_details")
     return not differences, differences
+
+
+def _evidence_delivery_trace(
+    raw: Mapping[str, Any], envelope: Mapping[str, Any]
+) -> dict[str, Any]:
+    """记录 Canonical 到 Envelope 的证据授权投影，不以无授权引用冒充丢失。"""
+
+    raw_rows: list[Mapping[str, Any]] = []
+    for key in ("customer_evidence", "evidence_items", "evidence_refs"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            raw_rows.extend(item for item in value if isinstance(item, Mapping))
+    locatable_keys = (
+        "source_ref",
+        "document_ref",
+        "fact_ref",
+        "source_document_id",
+        "document_id",
+    )
+    raw_locatable = [
+        item
+        for item in raw_rows
+        if any(_text(item.get(key)) for key in locatable_keys)
+    ]
+    envelope_rows = envelope.get("evidence")
+    envelope_rows = envelope_rows if isinstance(envelope_rows, list) else []
+    envelope_refs = [
+        _text(item.get("source_ref"))
+        for item in envelope_rows
+        if isinstance(item, Mapping) and _text(item.get("source_ref"))
+    ]
+    if not raw_rows:
+        state = "no_canonical_evidence_items"
+    elif not raw_locatable:
+        state = "canonical_evidence_unlocatable"
+    elif not envelope_refs:
+        state = "locatable_evidence_not_delivered"
+    else:
+        state = "locatable_evidence_delivered"
+    return {
+        "state": state,
+        "canonical_evidence_item_count": len(raw_rows),
+        "canonical_locatable_ref_count": len(raw_locatable),
+        "envelope_evidence_count": len(envelope_rows),
+        "envelope_source_refs": envelope_refs,
+    }
+
+
+def _customer_fact_delivery_trace(
+    raw: Mapping[str, Any], envelope: Mapping[str, Any]
+) -> dict[str, Any]:
+    return {
+        "canonical_customer_display_facts": raw.get("customer_display_facts"),
+        "canonical_decision_facts": raw.get("decision_facts"),
+        "envelope_customer_display_facts": envelope.get("customer_display_facts"),
+        "envelope_decision_facts": envelope.get("decision_facts"),
+    }
 
 
 def _task_snapshot_by_record(filters: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
@@ -525,10 +604,13 @@ def execute_audit(connection: Any, *, job_id: str, started_at: str, commit: str)
         observations = _serialize_observations(session, required_keys)
         materials = _material_summary(session, required_keys)
         matched, differences = _compare_delivery(raw_item, envelope_item)
+        evidence_trace = _evidence_delivery_trace(raw_item, envelope_item)
+        fact_trace = _customer_fact_delivery_trace(raw_item, envelope_item)
         cause, layer, confidence, evidence = classify_gap(
             reason_code=_text(envelope_item.get("reason_code")),
             observations=observations,
             material_summary=materials,
+            required_source_keys=required_keys,
             workspace_envelope_match=matched,
         )
         if cause not in ROOT_CAUSES:
@@ -549,6 +631,8 @@ def execute_audit(connection: Any, *, job_id: str, started_at: str, commit: str)
                 "required_source_keys": list(required_keys),
                 "source_observations": observations,
                 "material_summary": materials,
+                "evidence_delivery_trace": evidence_trace,
+                "customer_fact_delivery_trace": fact_trace,
                 "workspace_envelope_match": matched,
                 "delivery_differences": differences,
                 "first_abnormal_layer": layer,
@@ -627,6 +711,9 @@ def _render_report(report: Mapping[str, Any]) -> str:
         item for item in details if item["first_abnormal_layer"] == "source_registry"
     ]
     capability_by_rule = Counter(item["rule_id"] for item in capability_gaps)
+    evidence_states = Counter(
+        item["evidence_delivery_trace"]["state"] for item in details
+    )
     truth_causes = {
         "source_truly_absent",
         "source_sync_missing",
@@ -696,7 +783,7 @@ def _render_report(report: Mapping[str, Any]) -> str:
         "### 真实缺失与错误 data_gap 比例",
         "",
         f"- 仅以可证实结果计：真实/保守资料缺口 {confirmed_true}，错误 data_gap {confirmed_wrong}；比例为 `{confirmed_true}:{confirmed_wrong}`。",
-        "- 另有 352 条来源为空指征、2 条关联失败指征和 9 条未解析项，均不得强行并入任一侧。",
+        f"- 另有 {indicated_true} 条来源为空指征、{indicated_other} 条关联失败指征和 {unresolved} 条未解析项，均不得强行并入任一侧。",
         "",
         "### 按规则（全部见 CSV）",
         "",
@@ -709,7 +796,10 @@ def _render_report(report: Mapping[str, Any]) -> str:
         "1. 每一条 CSV 均记录了规则依赖、重建 Snapshot 的查询状态/行数、MaterialStore 行数/截断、任务原始项与 Envelope 一致性及首次可观察异常层。",
         "2. 历史任务没有持久化逐规则 `RuleDecision` 或当时的 Snapshot Observation；因此本审计不能伪造‘历史原始 Decision 已完全回放’。CSV 统一标记 `historical_rule_decision_not_persisted`。",
         "3. `required_field_missing` 且来源已读取的结果统一保守归为 `other_with_evidence`，不把泛化文案擅自判成字段映射缺陷。",
-        "4. 本阶段未修改任何规则、Canonical、Envelope、API、前端、LLM 调用或资料链。是否进入最多两个确定性修复，必须先从 CSV 中选出至少影响 3 条且能定位首次丢失位置的根因。",
+        "4. Evidence 交付状态：`"
+        + _canonical_json(dict(evidence_states))
+        + "`。其中 `canonical_evidence_unlocatable` 表示 Canonical 任务项有 evidence_items 但没有可授权引用，Envelope 为空是安全投影结果；不能据此宣称客户有可定位证据。",
+        "5. 本阶段未修改任何规则、Canonical、Envelope、API、前端、LLM 调用或资料链。是否进入最多两个确定性修复，必须先从 CSV 中选出至少影响 3 条且能定位首次丢失位置的根因。",
         "",
         "## 下一步建议",
         "",

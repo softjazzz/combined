@@ -2,7 +2,7 @@
 
 ## 冻结基线
 
-- 审计 Git：`d78397a984e62ec58c7db28925c099b1bddf764e`
+- 审计 Git：`fa9b7b24a2f1403bbd98eaede661b515abb58212`
 - 冻结任务：`1f63f39e-6ce2-44f7-a86b-5d65032e93a9`（运行完成：2026-08-03 20:21:07.832675）
 - 病例 / 规则：38 / 75
 - 三坐标集合哈希：`fcaa891604a95ea308afc278c485b56026e766687a4172a5e668b3fd375c5126`
@@ -14,29 +14,29 @@
 ## data_gap 汇总
 
 - data_gap：**651** 条，涉及 **38** 份病例。
-- 已证实的真实/保守资料缺口：239 条；存在资料缺口指征、但尚不能定性：352 条；存在关联失败指征、但尚不能定性为引擎缺陷：2 条；已证实的交付/读取错误：0 条；证据不足、不得臆断：9 条。
-- 分类置信度：`{"confirmed":288,"indicated":354,"unresolved":9}`。
+- 已证实的真实/保守资料缺口：233 条；存在资料缺口指征、但尚不能定性：268 条；存在关联失败指征、但尚不能定性为引擎缺陷：37 条；已证实的交付/读取错误：0 条；证据不足、不得臆断：58 条。
+- 分类置信度：`{"confirmed":288,"indicated":305,"unresolved":58}`。
 
 ### 按主要根因
 
 | 根因                       | 条数 |
 | -------------------------- | ---: |
-| source_truly_absent        |  352 |
-| authoritative_time_missing |  124 |
+| source_truly_absent        |  268 |
+| authoritative_time_missing |  118 |
 | applicability_unresolved   |  115 |
-| other_with_evidence        |   58 |
-| event_linkage_failed       |    2 |
+| other_with_evidence        |  113 |
+| event_linkage_failed       |   37 |
 
 ### 影响最大的三个根因
 
-- `source_truly_absent`：352 条。
-- `authoritative_time_missing`：124 条。
+- `source_truly_absent`：268 条。
+- `authoritative_time_missing`：118 条。
 - `applicability_unresolved`：115 条。
 
 ### 真实缺失与错误 data_gap 比例
 
-- 仅以可证实结果计：真实/保守资料缺口 239，错误 data_gap 0；比例为 `239:0`。
-- 另有 352 条来源为空指征、2 条关联失败指征和 9 条未解析项，均不得强行并入任一侧。
+- 仅以可证实结果计：真实/保守资料缺口 233，错误 data_gap 0；比例为 `233:0`。
+- 另有 268 条来源为空指征、37 条关联失败指征和 58 条未解析项，均不得强行并入任一侧。
 
 ### 按规则（全部见 CSV）
 
@@ -88,12 +88,13 @@
 1. 每一条 CSV 均记录了规则依赖、重建 Snapshot 的查询状态/行数、MaterialStore 行数/截断、任务原始项与 Envelope 一致性及首次可观察异常层。
 2. 历史任务没有持久化逐规则 `RuleDecision` 或当时的 Snapshot Observation；因此本审计不能伪造‘历史原始 Decision 已完全回放’。CSV 统一标记 `historical_rule_decision_not_persisted`。
 3. `required_field_missing` 且来源已读取的结果统一保守归为 `other_with_evidence`，不把泛化文案擅自判成字段映射缺陷。
-4. 本阶段未修改任何规则、Canonical、Envelope、API、前端、LLM 调用或资料链。是否进入最多两个确定性修复，必须先从 CSV 中选出至少影响 3 条且能定位首次丢失位置的根因。
+4. Evidence 交付状态：`{"canonical_evidence_unlocatable":26,"locatable_evidence_delivered":368,"no_canonical_evidence_items":257}`。其中 `canonical_evidence_unlocatable` 表示 Canonical 任务项有 evidence_items 但没有可授权引用，Envelope 为空是安全投影结果；不能据此宣称客户有可定位证据。
+5. 本阶段未修改任何规则、Canonical、Envelope、API、前端、LLM 调用或资料链。是否进入最多两个确定性修复，必须先从 CSV 中选出至少影响 3 条且能定位首次丢失位置的根因。
 
 ## 下一步建议
 
 1. 本阶段没有修复项：任务限定为只读审计，不能为了减少 data_gap 改写状态。
-2. 未修复的资料能力项：`LX0609-071` 35 条；`LX0609-033` 14 条。它们的首次可观察异常层是 Source Registry/Reader 能力，不是可在本任务中凭空补齐的源数据；修复会引入新的资料读取能力，触发停止条件。
+2. 未修复的资料能力项：`LX0609-071` 35 条；`LX0609-033` 20 条。它们的首次可观察异常层是 Source Registry/Reader 能力，不是可在本任务中凭空补齐的源数据；修复会引入新的资料读取能力，触发停止条件。
 3. `authoritative_time_missing` 分布在多个规则族，现有证据指向合成记录缺少规则所需的权威时间，而非一个可安全共用的代码缺陷；应先补验证资料或逐规则确认时间来源。
 4. 对 `unresolved` 项保留 data_gap，先补可观测 trace 或在用户批准后用受控重跑验证，不能直接改变临床结论。
 5. 本报告完成后暂停，等待独立审核确认根因分类与范围。
