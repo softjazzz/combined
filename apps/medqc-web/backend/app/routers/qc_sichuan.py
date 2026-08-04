@@ -49,6 +49,9 @@ from ..services.custom_qc_workspace_service import (
 )
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
+from ..services.luxian_0609.evaluation_horizon import (
+    build_record_evaluation_horizon_snapshot,
+)
 from ..services.luxian_0609.surgery_procedure_catalog import (
     CATALOG_VERSION as SURGERY_PROCEDURE_CATALOG_VERSION,
     OPERATION_CATEGORIES,
@@ -2350,6 +2353,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         qc_service = await get_qc_service()
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
+        record_evaluation_snapshot_by_id = {
+            str(item.get("record_id") or "").strip(): dict(item)
+            for item in list(filters.get("record_evaluation_snapshot") or [])
+            if isinstance(item, dict) and str(item.get("record_id") or "").strip()
+        }
         requested_rule_ids = [
             str(item).strip().upper()
             for item in (filters.get("rule_ids") or [])
@@ -2822,6 +2830,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             query_scope = str(
                 filters.get("query_scope") or current.get("scope") or "all"
             ).strip().lower()
+            record_evaluation_snapshot = record_evaluation_snapshot_by_id.get(record_id)
+            if record_evaluation_snapshot is not None:
+                evaluation_as_of_date = (
+                    str(record_evaluation_snapshot.get("evaluation_horizon") or "").strip()
+                    if (
+                        str(record_evaluation_snapshot.get("resolution_status") or "").strip()
+                        == "resolved"
+                        and str(record_evaluation_snapshot.get("evaluation_basis") or "").strip()
+                        == "task_frozen_date"
+                    )
+                    else ""
+                )
+            else:
+                # 兼容升级前已排队任务；新任务均使用逐病例快照。
+                evaluation_as_of_date = str(
+                    filters.get("evaluation_as_of_date") or ""
+                ).strip()
             should_postprocess_formal_results = _should_postprocess_formal_qc_results(
                 rule_set_key=rule_set_key,
                 validation_mode=validation_mode,
@@ -3026,6 +3051,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 loaded_scene=bundle_scene,
                             ),
                         }
+                        if record_evaluation_snapshot is not None:
+                            package_bundle["evaluation_horizon_snapshot"] = dict(
+                                record_evaluation_snapshot
+                            )
                         package_bundle.setdefault("institute_id", institute_id)
                         package_bundle.setdefault("patient_id", patient_id)
                         package_bundle.setdefault("visit_id", visit_id or record_id)
@@ -3050,10 +3079,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             refine_confidence_threshold=refine_confidence_threshold,
                             max_refine_candidates=max_refine_candidates,
                             rule_set_key=rule_set_key,
-                            evaluation_as_of_date=(
-                                str(filters.get("evaluation_as_of_date") or "").strip()
-                                or None
-                            ),
+                            evaluation_as_of_date=evaluation_as_of_date or None,
                             cancellation_check=_is_cancelled,
                         )
                         used_bundle_path = True
@@ -4201,10 +4227,18 @@ async def create_workspace_batch_job(
         records,
         query_scope=normalized_scope,
     )
-    evaluation_as_of_date = (
+    task_frozen_date = (
         datetime.now().astimezone().date().isoformat()
         if is_direct_native_selection
         else ""
+    )
+    record_evaluation_snapshot = (
+        build_record_evaluation_horizon_snapshot(
+            records,
+            task_frozen_date=task_frozen_date,
+        )
+        if task_frozen_date
+        else []
     )
     idempotency_payload = {
         "scope": normalized_scope,
@@ -4224,9 +4258,10 @@ async def create_workspace_batch_job(
         "bucket_strategy": bucket_strategy,
         "batch_output_mode": batch_output_mode,
         "run_mode": run_mode,
+        **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
         **(
-            {"evaluation_as_of_date": evaluation_as_of_date}
-            if evaluation_as_of_date
+            {"record_evaluation_snapshot": record_evaluation_snapshot}
+            if record_evaluation_snapshot
             else {}
         ),
     }
@@ -4298,14 +4333,15 @@ async def create_workspace_batch_job(
             "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
             "run_mode": run_mode,
-            **(
-                {"evaluation_as_of_date": evaluation_as_of_date}
-                if evaluation_as_of_date
-                else {}
-            ),
+            **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
             "idempotency_key": idempotency_key,
             "idempotency_payload": idempotency_payload,
             "record_scene_snapshot": record_scene_snapshot,
+            **(
+                {"record_evaluation_snapshot": record_evaluation_snapshot}
+                if record_evaluation_snapshot
+                else {}
+            ),
             **(
                 {
                     "selected_rule_ids": list(direct_native_rule_ids),

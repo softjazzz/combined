@@ -16,6 +16,9 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
     build_luxian_0609_evidence_snapshot,
 )
+from app.services.luxian_0609.evaluation_horizon import (
+    resolve_record_evaluation_horizon,
+)
 from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_EXAM_LAB_ORDER_SOURCE_KEY,
@@ -53,6 +56,84 @@ from app.services.luxian_0609.executor_registry import (
 
 CREATED_AT = "2026-07-16T12:00:00+08:00"
 HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
+
+
+@pytest.mark.parametrize(
+    ("record_scene", "admission_datetime", "discharge_datetime", "expected"),
+    [
+        (
+            "running",
+            "2026-06-01 08:00:00",
+            "",
+            {
+                "evaluation_horizon": "2026-08-04",
+                "evaluation_basis": "task_frozen_date",
+                "resolution_status": "resolved",
+            },
+        ),
+        (
+            "final",
+            "2026-06-01 08:00:00",
+            "2026-06-13 18:00:00",
+            {
+                "evaluation_horizon": "2026-06-13",
+                "evaluation_basis": "discharge_datetime",
+                "resolution_status": "resolved",
+            },
+        ),
+        (
+            "final",
+            "2026-06-01 08:00:00",
+            "",
+            {
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "authoritative_time_missing",
+            },
+        ),
+        (
+            "final",
+            "2026-06-13 08:00:00",
+            "2026-06-01 18:00:00",
+            {
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "time_conflict",
+            },
+        ),
+        (
+            "unknown",
+            "2026-06-01 08:00:00",
+            "",
+            {
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "scene_uncertain",
+            },
+        ),
+    ],
+)
+def test_record_evaluation_horizon_is_resolved_per_record(
+    record_scene: str,
+    admission_datetime: str,
+    discharge_datetime: str,
+    expected: dict[str, str],
+) -> None:
+    snapshot = resolve_record_evaluation_horizon(
+        record_id="visit-001",
+        record_scene=record_scene,
+        admission_datetime=admission_datetime,
+        discharge_datetime=discharge_datetime,
+        task_frozen_date="2026-08-04",
+    )
+
+    assert snapshot.to_dict() == {
+        "record_id": "visit-001",
+        "record_scene": record_scene,
+        "admission_datetime": admission_datetime,
+        "discharge_datetime": discharge_datetime,
+        **expected,
+    }
 
 
 @pytest.mark.parametrize(
@@ -299,6 +380,39 @@ def test_020_023_freeze_admission_and_authoritative_horizon_in_one_session() -> 
     )
     assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["basis"] == "discharge_date"
     assert any(fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts)
+
+
+def test_evaluation_horizon_rejects_discharge_before_current_admission() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "inpat_registration":
+            return _rows(
+                source_key,
+                [{"admission_datetime": "2026-07-10 08:00:00"}],
+            )
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"discharge_datetime": "2026-07-03 08:00:00"}],
+                limit_rows=1,
+            )
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-012",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_as_of_date=None,
+        row_reader=reader,
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    assert not any(
+        fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
+    )
 
 
 def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:

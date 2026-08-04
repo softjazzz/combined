@@ -1504,6 +1504,22 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     monkeypatch,
 ):
     workspace = _WorkspaceStub()
+    workspace.collect_records = lambda **_: [  # type: ignore[method-assign]
+        {
+            "record_id": "visit-001",
+            "visit_id": "visit-001",
+            "scope": "final",
+            "admission_datetime": "2026-06-01 08:00:00",
+            "discharge_datetime": "2026-06-13 18:00:00",
+        },
+        {
+            "record_id": "visit-002",
+            "visit_id": "visit-002",
+            "scope": "running",
+            "admission_datetime": "2026-06-02 08:00:00",
+            "discharge_datetime": "",
+        },
+    ]
     service = _ServiceStub()
     submitted_tasks: List[Dict[str, Any]] = []
 
@@ -1542,12 +1558,33 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     assert filters["scoped_customer_rule_ids"] == native_rule_ids
     assert filters["validation_mode"] == "programmatic"
     assert filters["customer_rule_count"] == filters["execution_rule_count"] == 3
-    evaluation_as_of_date = filters["evaluation_as_of_date"]
-    assert date.fromisoformat(evaluation_as_of_date).isoformat() == evaluation_as_of_date
+    task_frozen_date = filters["task_frozen_date"]
+    assert date.fromisoformat(task_frozen_date).isoformat() == task_frozen_date
+    assert filters["record_evaluation_snapshot"] == [
+        {
+            "record_id": "visit-001",
+            "record_scene": "final",
+            "admission_datetime": "2026-06-01 08:00:00",
+            "discharge_datetime": "2026-06-13 18:00:00",
+            "evaluation_horizon": "2026-06-13",
+            "evaluation_basis": "discharge_datetime",
+            "resolution_status": "resolved",
+        },
+        {
+            "record_id": "visit-002",
+            "record_scene": "running",
+            "admission_datetime": "2026-06-02 08:00:00",
+            "discharge_datetime": "",
+            "evaluation_horizon": task_frozen_date,
+            "evaluation_basis": "task_frozen_date",
+            "resolution_status": "resolved",
+        },
+    ]
     assert (
-        filters["idempotency_payload"]["evaluation_as_of_date"]
-        == evaluation_as_of_date
+        filters["idempotency_payload"]["record_evaluation_snapshot"]
+        == filters["record_evaluation_snapshot"]
     )
+    assert "evaluation_as_of_date" not in filters
     assert filters["record_rule_map"] == {
         "visit-001": native_rule_ids,
         "visit-002": native_rule_ids,
@@ -1773,6 +1810,35 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         },
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
+        "record_evaluation_snapshot": [
+            {
+                "record_id": "visit-001",
+                "record_scene": "final",
+                "admission_datetime": "2026-06-01 08:00:00",
+                "discharge_datetime": "",
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "authoritative_time_missing",
+            },
+            {
+                "record_id": "visit-002",
+                "record_scene": "running",
+                "admission_datetime": "2026-06-02 08:00:00",
+                "discharge_datetime": "",
+                "evaluation_horizon": "2026-08-04",
+                "evaluation_basis": "task_frozen_date",
+                "resolution_status": "resolved",
+            },
+            {
+                "record_id": "visit-003",
+                "record_scene": "unknown",
+                "admission_datetime": "2026-06-03 08:00:00",
+                "discharge_datetime": "",
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "scene_uncertain",
+            },
+        ],
     }
 
     def _collect_mixed_records(**_: Any) -> List[Dict[str, Any]]:
@@ -1812,6 +1878,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                     "visit_id": kwargs["bundle"]["visit_id"],
                     "scene": kwargs["bundle"]["scene"],
                     "scene_resolution": dict(kwargs["bundle"]["scene_resolution"]),
+                    "evaluation_horizon_snapshot": dict(
+                        kwargs["bundle"]["evaluation_horizon_snapshot"]
+                    ),
+                    "evaluation_as_of_date": kwargs["evaluation_as_of_date"],
                 }
             )
             return {
@@ -1857,6 +1927,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "used_fallback": True,
                 "resolution_status": "fallback",
             },
+            "evaluation_horizon_snapshot": workspace.job["filters"][
+                "record_evaluation_snapshot"
+            ][0],
+            "evaluation_as_of_date": None,
         },
         {
             "visit_id": "visit-002",
@@ -1870,6 +1944,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "used_fallback": False,
                 "resolution_status": "matched",
             },
+            "evaluation_horizon_snapshot": workspace.job["filters"][
+                "record_evaluation_snapshot"
+            ][1],
+            "evaluation_as_of_date": "2026-08-04",
         },
         {
             "visit_id": "visit-003",
@@ -1883,6 +1961,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "used_fallback": False,
                 "resolution_status": "uncertain_fallback",
             },
+            "evaluation_horizon_snapshot": workspace.job["filters"][
+                "record_evaluation_snapshot"
+            ][2],
+            "evaluation_as_of_date": None,
         },
     ]
 

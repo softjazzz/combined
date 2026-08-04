@@ -37,6 +37,9 @@ from ..services.luxian_0609 import (
     normalize_customer_rule_ids as _normalize_rule_id_list,
     resolve_execution_scope as _resolve_luxian_0609_execution_scope,
 )
+from ..services.luxian_0609.evaluation_horizon import (
+    build_record_evaluation_horizon_snapshot,
+)
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
@@ -1176,6 +1179,19 @@ async def run_sample_pool_intrinsic_validation(
         selected_records,
         query_scope=effective_scope,
     )
+    task_frozen_date = (
+        datetime.now().astimezone().date().isoformat()
+        if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+        else ""
+    )
+    record_evaluation_snapshot = (
+        build_record_evaluation_horizon_snapshot(
+            selected_records,
+            task_frozen_date=task_frozen_date,
+        )
+        if task_frozen_date
+        else []
+    )
 
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
@@ -1220,6 +1236,12 @@ async def run_sample_pool_intrinsic_validation(
         "query_scope": effective_scope,
         "validation_mode": validation_mode,
         "record_scene_snapshot": record_scene_snapshot,
+        **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
+        **(
+            {"record_evaluation_snapshot": record_evaluation_snapshot}
+            if record_evaluation_snapshot
+            else {}
+        ),
     }
     if record_rule_map:
         job_filters["record_rule_map"] = record_rule_map
@@ -1269,6 +1291,12 @@ async def run_sample_pool_intrinsic_validation(
             "max_parallel_records": payload.max_parallel_records,
             "rule_set_version": rule_set_version,
             "record_scene_snapshot": record_scene_snapshot,
+            **(
+                {"record_evaluation_snapshot": record_evaluation_snapshot}
+                if record_evaluation_snapshot
+                else {}
+            ),
+            **({"task_frozen_date": task_frozen_date} if task_frozen_date else {}),
         },
     )
     duplicate_job = _find_recent_sample_validation_job(

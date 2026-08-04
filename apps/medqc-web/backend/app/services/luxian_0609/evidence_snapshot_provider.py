@@ -116,7 +116,7 @@ def _parse_evaluation_as_of_date(value: str | None) -> date | None:
     return parsed
 
 
-def _parse_discharge_date(value: Any) -> date | None:
+def _parse_authoritative_date(value: Any, *, field_name: str) -> date | None:
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -128,7 +128,7 @@ def _parse_discharge_date(value: Any) -> date | None:
     if isinstance(value, date):
         return value
     if not isinstance(value, str) or not value.strip():
-        raise ValueError("discharge_datetime must be a valid date")
+        raise ValueError(f"{field_name} must be a valid date")
     normalized = value.strip().replace("Z", "+00:00")
     try:
         parsed_datetime = datetime.fromisoformat(normalized)
@@ -136,12 +136,20 @@ def _parse_discharge_date(value: Any) -> date | None:
         try:
             return date.fromisoformat(normalized)
         except ValueError:
-            raise ValueError("discharge_datetime must be a valid date") from None
+            raise ValueError(f"{field_name} must be a valid date") from None
     return (
         parsed_datetime.astimezone(_LOCAL_TIMEZONE).date()
         if parsed_datetime.tzinfo is not None
         else parsed_datetime.date()
     )
+
+
+def _parse_discharge_date(value: Any) -> date | None:
+    return _parse_authoritative_date(value, field_name="discharge_datetime")
+
+
+def _parse_admission_date(value: Any) -> date | None:
+    return _parse_authoritative_date(value, field_name="admission_datetime")
 
 
 def build_luxian_0609_evidence_read_session(
@@ -229,6 +237,11 @@ def build_luxian_0609_evidence_read_session(
         if existing is not None and existing.query_version != entry.query_version:
             raise ValueError("conflicting source query versions")
         bounded_requests[source_key] = entry
+    if needs_evaluation_horizon and "inpat_registration" not in bounded_requests:
+        # 评价终点必须与本次入院时间核对，不能只凭孤立的出院日期闭合时间窗。
+        bounded_requests["inpat_registration"] = (
+            resolve_luxian_0609_physical_source_entry("inpat_registration")
+        )
     for source_key in resolve_luxian_0609_controlled_fact_source_keys(
         selected_rule_ids
     ):
@@ -476,6 +489,14 @@ def build_luxian_0609_evidence_read_session(
     if needs_evaluation_horizon:
         horizon_date: date | None = None
         horizon_basis = ""
+        admission_material = material_sources.get("inpat_registration")
+        admission_date = (
+            _parse_admission_date(
+                admission_material.rows[0].get("admission_datetime")
+            )
+            if admission_material is not None and admission_material.rows
+            else None
+        )
         discharge_observation = next(
             (
                 item
@@ -497,12 +518,17 @@ def build_luxian_0609_evidence_read_session(
             discharge_date = _parse_discharge_date(
                 discharge_material.rows[0].get("discharge_datetime")
             )
-            if discharge_date is not None and (
+            has_time_conflict = bool(
+                discharge_date is not None
+                and admission_date is not None
+                and discharge_date < admission_date
+            )
+            if not has_time_conflict and discharge_date is not None and (
                 explicit_as_of_date is None or discharge_date <= explicit_as_of_date
             ):
                 horizon_date = discharge_date
                 horizon_basis = "discharge_date"
-            elif explicit_as_of_date is not None:
+            elif not has_time_conflict and explicit_as_of_date is not None:
                 horizon_date = explicit_as_of_date
                 horizon_basis = "evaluation_as_of"
         elif explicit_as_of_date is not None:

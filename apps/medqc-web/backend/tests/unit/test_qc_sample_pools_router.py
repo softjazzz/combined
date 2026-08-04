@@ -1362,6 +1362,75 @@ async def test_run_sample_pool_should_reuse_recent_identical_operation(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_record_evaluation_snapshot_must_change_sample_validation_identity(
+    monkeypatch,
+):
+    sample_service = _SamplePoolServiceStub()
+    sample_service.get_runnable_items = lambda **_: [  # type: ignore[method-assign]
+        {
+            "id": "item-1",
+            "matched_visit_id": "V001",
+            "candidate_rule_ids": ["LX0609-012"],
+        }
+    ]
+    workspace_service = _WorkspaceServiceStub()
+    workspace_service.records_by_scope["running"] = [
+        {
+            "record_id": "V001",
+            "visit_id": "V001",
+            "scope": "final",
+            "admission_datetime": "2026-06-01 08:00:00",
+            "discharge_datetime": "2026-06-13 18:00:00",
+        }
+    ]
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    payload = qc_sample_pools.SamplePoolRunRequest(
+        record_ids=["V001"],
+        sample_item_ids=["item-1"],
+        rule_set_key="luxian_0609_qc_v1",
+        selected_rule_ids=["LX0609-012"],
+    )
+
+    first = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=payload,
+        current_user={"id": "tester"},
+    )
+    first_job = workspace_service.create_batch_job_calls[0]
+    workspace_service.recent_jobs = [
+        {
+            "id": first_job["id"],
+            "status": "queued",
+            "created_at": datetime.utcnow() - timedelta(seconds=10),
+            "filters": dict(first_job["filters"]),
+        }
+    ]
+    workspace_service.records_by_scope["running"][0]["admission_datetime"] = (
+        "2026-06-02 08:00:00"
+    )
+
+    second = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=payload,
+        current_user={"id": "tester"},
+    )
+
+    second_job = workspace_service.create_batch_job_calls[1]
+    assert first["data"]["execution_scope_hash"] != second["data"][
+        "execution_scope_hash"
+    ]
+    assert first_job["filters"]["record_scene_snapshot"] == second_job["filters"][
+        "record_scene_snapshot"
+    ]
+    assert first_job["filters"]["record_evaluation_snapshot"] != second_job[
+        "filters"
+    ]["record_evaluation_snapshot"]
+
+
+@pytest.mark.asyncio
 async def test_native_customer_rule_selection_must_change_execution_identity(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
