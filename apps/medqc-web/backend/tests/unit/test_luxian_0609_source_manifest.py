@@ -72,6 +72,18 @@ def test_four_query_states_have_distinct_legal_shapes() -> None:
     assert entries[2].to_dict()["record_count"] is None
 
 
+def test_empty_virtual_source_can_explain_why_no_row_was_produced() -> None:
+    entry = _entry(
+        "evaluation_context.horizon",
+        "empty",
+        record_count=0,
+        reason_code="authoritative_time_missing",
+    )
+
+    assert entry.query_status is QueryStatus.EMPTY
+    assert entry.reason_code == "authoritative_time_missing"
+
+
 @pytest.mark.parametrize(
     ("status", "record_count", "error_code", "reason_code"),
     [

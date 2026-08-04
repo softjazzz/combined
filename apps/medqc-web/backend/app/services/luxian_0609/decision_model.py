@@ -106,6 +106,8 @@ ALLOWED_REASON_CODES_BY_FINAL_STATE = MappingProxyType({
             "source_readiness_unproven",
             "required_field_missing",
             "authoritative_time_missing",
+            "authoritative_time_conflict",
+            "evaluation_window_not_mature",
             "association_failed",
             "linkage_unresolved",
             "applicability_source_gap",

@@ -472,6 +472,43 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
 
 
 @pytest.mark.parametrize(
+    ("reason_code", "expected_evidence"),
+    [
+        ("authoritative_time_missing", "缺少本次住院的评价截止日期或有效出院时间"),
+        ("authoritative_time_conflict", "存在先后冲突"),
+        ("evaluation_window_not_mature", "尚未满 24 小时"),
+    ],
+)
+@pytest.mark.parametrize(
+    "rule_id",
+    ("LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"),
+)
+def test_exam_lab_window_gap_has_customer_readable_specific_explanation(
+    rule_id,
+    reason_code,
+    expected_evidence,
+):
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id=rule_id,
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code=reason_code,
+            fact_refs=(FACT_REF,),
+            evaluator_version="exam-lab-ruledecision-shadow-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == reason_code
+    assert expected_evidence in result["evidence"]
+
+
+@pytest.mark.parametrize(
     ("rule_id", "expected_finding", "expected_evidence"),
     [
         (

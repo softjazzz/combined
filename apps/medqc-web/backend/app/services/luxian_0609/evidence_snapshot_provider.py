@@ -150,6 +150,42 @@ def _parse_authoritative_date(value: Any, *, field_name: str) -> date | None:
     )
 
 
+def _parse_authoritative_datetime(
+    value: Any, *, field_name: str
+) -> datetime | None:
+    """保留权威时间的分钟级精度；纯日期输入不臆造零点。"""
+
+    if (
+        value is None
+        or value == ""
+        or isinstance(value, date) and not isinstance(value, datetime)
+    ):
+        return None
+    if isinstance(value, datetime):
+        return (
+            value.astimezone(_LOCAL_TIMEZONE).replace(tzinfo=None)
+            if value.tzinfo is not None
+            else value
+        )
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a valid date")
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        # 纯日期仍由 date 口径消费，不伪造分钟级终点。
+        try:
+            date.fromisoformat(normalized)
+        except ValueError:
+            raise ValueError(f"{field_name} must be a valid date") from None
+        return None
+    return (
+        parsed.astimezone(_LOCAL_TIMEZONE).replace(tzinfo=None)
+        if parsed.tzinfo is not None
+        else parsed
+    )
+
+
 def _parse_discharge_date(value: Any) -> date | None:
     return _parse_authoritative_date(value, field_name="discharge_datetime")
 
@@ -168,6 +204,7 @@ def build_luxian_0609_evidence_read_session(
     created_at: str,
     evaluation_as_of_date: str | None = None,
     evaluation_horizon_policy: str | None = None,
+    horizon_unavailable_reason: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
     additional_source_keys: tuple[str, ...] = (),
 ) -> Luxian0609EvidenceReadSession:
@@ -197,6 +234,17 @@ def build_luxian_0609_evidence_read_session(
         and evaluation_horizon_policy not in EVALUATION_HORIZON_POLICIES
     ):
         raise ValueError("evaluation_horizon_policy is invalid")
+    if horizon_unavailable_reason not in {
+        None,
+        "authoritative_time_missing",
+        "authoritative_time_conflict",
+    }:
+        raise ValueError("horizon_unavailable_reason is invalid")
+    if (
+        horizon_unavailable_reason is not None
+        and evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED
+    ):
+        raise ValueError("horizon_unavailable_reason requires disabled policy")
     explicit_as_of_date = (
         _parse_evaluation_as_of_date(evaluation_as_of_date)
         if needs_evaluation_horizon
@@ -509,7 +557,9 @@ def build_luxian_0609_evidence_read_session(
 
     if needs_evaluation_horizon:
         horizon_date: date | None = None
+        horizon_datetime: datetime | None = None
         horizon_basis = ""
+        resolved_horizon_reason = horizon_unavailable_reason or ""
         if (
             evaluation_horizon_policy
             == EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE
@@ -518,12 +568,15 @@ def build_luxian_0609_evidence_read_session(
             horizon_basis = "evaluation_as_of"
         elif evaluation_horizon_policy != EVALUATION_HORIZON_POLICY_DISABLED:
             admission_material = material_sources.get("inpat_registration")
-            admission_date = (
-                _parse_admission_date(
-                    admission_material.rows[0].get("admission_datetime")
-                )
+            admission_value = (
+                admission_material.rows[0].get("admission_datetime")
                 if admission_material is not None and admission_material.rows
                 else None
+            )
+            admission_date = _parse_admission_date(admission_value)
+            admission_datetime = _parse_authoritative_datetime(
+                admission_value,
+                field_name="admission_datetime",
             )
             discharge_observation = next(
                 (
@@ -543,14 +596,24 @@ def build_luxian_0609_evidence_read_session(
                 and discharge_material is not None
                 and len(discharge_material.rows) == 1
             ):
-                discharge_date = _parse_discharge_date(
-                    discharge_material.rows[0].get("discharge_datetime")
+                discharge_value = discharge_material.rows[0].get("discharge_datetime")
+                discharge_date = _parse_discharge_date(discharge_value)
+                discharge_datetime = _parse_authoritative_datetime(
+                    discharge_value,
+                    field_name="discharge_datetime",
                 )
-                has_time_conflict = bool(
-                    discharge_date is not None
-                    and admission_date is not None
-                    and discharge_date < admission_date
+                has_time_conflict = (
+                    discharge_datetime < admission_datetime
+                    if discharge_datetime is not None
+                    and admission_datetime is not None
+                    else bool(
+                        discharge_date is not None
+                        and admission_date is not None
+                        and discharge_date < admission_date
+                    )
                 )
+                if has_time_conflict:
+                    resolved_horizon_reason = "authoritative_time_conflict"
                 if not has_time_conflict and discharge_date is not None and (
                     evaluation_horizon_policy
                     == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
@@ -558,6 +621,7 @@ def build_luxian_0609_evidence_read_session(
                     or discharge_date <= explicit_as_of_date
                 ):
                     horizon_date = discharge_date
+                    horizon_datetime = discharge_datetime
                     horizon_basis = "discharge_date"
                 elif (
                     not has_time_conflict
@@ -574,24 +638,41 @@ def build_luxian_0609_evidence_read_session(
                 horizon_date = explicit_as_of_date
                 horizon_basis = "evaluation_as_of"
 
+            if (
+                evaluation_horizon_policy
+                == EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
+                and horizon_date is None
+                and not resolved_horizon_reason
+            ):
+                resolved_horizon_reason = "authoritative_time_missing"
+
         horizon_entry = resolve_luxian_0609_physical_source_entry(
             EVALUATION_HORIZON_SOURCE_KEY
         )
-        horizon_rows = (
-            (
-                {
-                    "horizon_date": horizon_date.isoformat(),
-                    "basis": horizon_basis,
-                    "row_ref": digest_source_evidence(
-                        (
-                            EVALUATION_HORIZON_SOURCE_KEY,
-                            horizon_basis,
-                            horizon_date.isoformat(),
-                        )
-                    ),
-                },
-            )
+        horizon_payload = (
+            {
+                "horizon_date": horizon_date.isoformat(),
+                **(
+                    {"horizon_datetime": horizon_datetime.isoformat()}
+                    if horizon_datetime is not None
+                    else {}
+                ),
+                "basis": horizon_basis,
+                "row_ref": digest_source_evidence(
+                    (
+                        EVALUATION_HORIZON_SOURCE_KEY,
+                        horizon_basis,
+                        horizon_date.isoformat(),
+                        horizon_datetime.isoformat() if horizon_datetime else "",
+                    )
+                ),
+            }
             if horizon_date is not None
+            else None
+        )
+        horizon_rows = (
+            (horizon_payload,)
+            if horizon_payload is not None
             else ()
         )
         horizon_material = SnapshotSourceRows.create(
@@ -622,6 +703,7 @@ def build_luxian_0609_evidence_read_session(
                 record_count=len(horizon_rows),
                 query_version=horizon_entry.query_version,
                 snapshot_ref=horizon_snapshot_ref,
+                reason_code=resolved_horizon_reason,
             )
         )
         material_sources[EVALUATION_HORIZON_SOURCE_KEY] = horizon_material
@@ -637,6 +719,11 @@ def build_luxian_0609_evidence_read_session(
                     fact_type="evaluation_horizon",
                     normalized_value={
                         "horizon_date": horizon_date.isoformat(),
+                        **(
+                            {"horizon_datetime": horizon_datetime.isoformat()}
+                            if horizon_datetime is not None
+                            else {}
+                        ),
                         "basis": horizon_basis,
                     },
                     trigger_scope="current_visit",
@@ -693,6 +780,7 @@ def build_luxian_0609_evidence_snapshot(
     created_at: str,
     evaluation_as_of_date: str | None = None,
     evaluation_horizon_policy: str | None = None,
+    horizon_unavailable_reason: str | None = None,
     row_reader: SnapshotRowReader = read_luxian_0609_snapshot_source_rows,
 ) -> Luxian0609EvidenceSnapshot:
     """兼容安全快照入口；请求内材料由 read-session 入口消费。"""
@@ -706,6 +794,7 @@ def build_luxian_0609_evidence_snapshot(
         created_at=created_at,
         evaluation_as_of_date=evaluation_as_of_date,
         evaluation_horizon_policy=evaluation_horizon_policy,
+        horizon_unavailable_reason=horizon_unavailable_reason,
         row_reader=row_reader,
     ).snapshot
 

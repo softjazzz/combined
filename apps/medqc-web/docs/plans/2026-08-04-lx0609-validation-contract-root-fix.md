@@ -178,6 +178,8 @@ python -m pytest backend/tests/unit/test_luxian_0609_0426_synthetic_v3.py backen
 
 ## Task 4：拆分评价终点缺失与窗口未成熟
 
+> 详细执行与验收以 `docs/plans/2026-08-04-lx0609-task4-evaluation-window-reasons.md` 为准；该子计划补充锁定了“检查检验投影不得绕过Task 3策略直接使用原始出院时间”的边界合同。
+
 **Files:**
 
 - Modify: `backend/app/services/luxian_0609/native_exam_lab_execution.py`

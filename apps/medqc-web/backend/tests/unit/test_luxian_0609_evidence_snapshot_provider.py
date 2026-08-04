@@ -374,6 +374,7 @@ def test_disabled_horizon_policy_ignores_available_authoritative_discharge() -> 
         source_schema=None,
         created_at=CREATED_AT,
         evaluation_horizon_policy="disabled",
+        horizon_unavailable_reason="authoritative_time_missing",
         row_reader=reader,
     )
 
@@ -382,6 +383,12 @@ def test_disabled_horizon_policy_ignores_available_authoritative_discharge() -> 
         fact.fact_type == "evaluation_horizon"
         for fact in session.snapshot.facts
     )
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == EVALUATION_HORIZON_SOURCE_KEY
+    )
+    assert observation.reason_code == "authoritative_time_missing"
 
 
 def test_008_009_invalid_nonempty_discharge_datetime_fails_closed() -> None:
@@ -432,7 +439,10 @@ def test_020_023_freeze_admission_and_authoritative_horizon_in_one_session() -> 
     assert session.materials.rows("inpat_registration") == (
         {"admission_datetime": "2026-07-01 08:00:00"},
     )
-    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]["basis"] == "discharge_date"
+    horizon = session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY)[0]
+    assert horizon["basis"] == "discharge_date"
+    assert horizon["horizon_datetime"] == "2026-07-03T08:00:00"
+    assert horizon["horizon_date"] == "2026-07-03"
     assert any(fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts)
 
 
@@ -467,6 +477,39 @@ def test_evaluation_horizon_rejects_discharge_before_current_admission() -> None
     assert not any(
         fact.fact_type == "evaluation_horizon" for fact in session.snapshot.facts
     )
+
+
+def test_authoritative_horizon_detects_same_day_minute_level_time_conflict() -> None:
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        if source_key == "inpat_registration":
+            return _rows(source_key, [{"admission_datetime": "2026-07-10 08:00:00"}])
+        if source_key == HORIZON_SOURCE_KEY:
+            return _rows(
+                source_key,
+                [{"discharge_datetime": "2026-07-10 07:59:00"}],
+                limit_rows=1,
+            )
+        return _rows(source_key, [])
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-012",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at=CREATED_AT,
+        evaluation_horizon_policy="authoritative_discharge",
+        row_reader=reader,
+    )
+
+    assert session.materials.rows(EVALUATION_HORIZON_SOURCE_KEY) == ()
+    observation = next(
+        item
+        for item in session.snapshot.observations
+        if item.source_key == EVALUATION_HORIZON_SOURCE_KEY
+    )
+    assert observation.reason_code == "authoritative_time_conflict"
 
 
 def test_027_projects_discharge_record_into_the_same_evidence_session() -> None:

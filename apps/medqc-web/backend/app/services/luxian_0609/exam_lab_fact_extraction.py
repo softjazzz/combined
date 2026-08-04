@@ -81,6 +81,7 @@ class ExamLabTextProjection:
     precise_horizon: datetime | None = None
     horizon_date: date | None = None
     horizon_conflict: bool = False
+    horizon_unavailable_reason: str | None = None
     course_time_incomplete: bool = False
     course_projection_truncated: bool = False
     course_texts: Mapping[str, str] | None = None
@@ -202,6 +203,7 @@ def _event_identity(family: str, row: Mapping[str, Any], index: int) -> str:
 def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+    horizon_unavailable_reason: str | None = None,
     max_course_rows: int = 4,
     max_row_chars: int = 2000,
     max_context_chars: int = 10000,
@@ -433,13 +435,13 @@ def build_exam_lab_text_projection(
     context = "\n".join(parts)
     if len(context) > max_context_chars:
         raise ValueError("exam lab text projection truncated")
-    discharge_rows = tuple(rows_by_source.get("inpat_registration.discharge_horizon", ()))
-    precise_horizon, discharge_conflict = _unique_role_time(
-        discharge_rows, ("discharge_datetime",)
+    horizon_rows = tuple(rows_by_source.get("evaluation_context.horizon", ()))
+    precise_horizon, precise_horizon_conflict = _unique_role_time(
+        horizon_rows, ("horizon_datetime",)
     )
     horizon_dates = {
         parsed
-        for row in rows_by_source.get("evaluation_context.horizon", ())
+        for row in horizon_rows
         if isinstance(row, Mapping)
         if (parsed := _parse_date(row.get("horizon_date"))) is not None
     }
@@ -453,7 +455,8 @@ def build_exam_lab_text_projection(
         safe_refs=dict(safe_refs),
         precise_horizon=precise_horizon,
         horizon_date=horizon_date,
-        horizon_conflict=discharge_conflict or len(horizon_dates) > 1,
+        horizon_conflict=precise_horizon_conflict or len(horizon_dates) > 1,
+        horizon_unavailable_reason=horizon_unavailable_reason,
         course_time_incomplete=any(
             _row_text(row) and _parse_datetime(row.get("record_time")) is None
             for _, _, _, row, _ in course_entries

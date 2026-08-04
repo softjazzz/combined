@@ -2092,7 +2092,15 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
                 created_at="2026-08-04T12:00:00+08:00",
                 evaluation_as_of_date=kwargs["evaluation_as_of_date"],
                 evaluation_horizon_policy=kwargs["evaluation_horizon_policy"],
+                horizon_unavailable_reason=kwargs[
+                    "evaluation_horizon_unavailable_reason"
+                ],
                 row_reader=_reader,
+            )
+            horizon_observation = next(
+                item
+                for item in session.snapshot.observations
+                if item.source_key == EVALUATION_HORIZON_SOURCE_KEY
             )
             provider_results.append(
                 {
@@ -2101,6 +2109,10 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
                     "evaluation_horizon_policy": kwargs[
                         "evaluation_horizon_policy"
                     ],
+                    "horizon_unavailable_reason": kwargs[
+                        "evaluation_horizon_unavailable_reason"
+                    ],
+                    "observation_reason": horizon_observation.reason_code,
                     "horizon_rows": session.materials.rows(
                         EVALUATION_HORIZON_SOURCE_KEY
                     ),
@@ -2134,14 +2146,21 @@ async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
+    expected_reasons = [
+        "authoritative_time_missing",
+        "authoritative_time_conflict",
+        "authoritative_time_missing",
+    ]
     assert provider_results == [
         {
             "record_id": item["record_id"],
             "evaluation_as_of_date": None,
             "evaluation_horizon_policy": "disabled",
+            "horizon_unavailable_reason": reason,
+            "observation_reason": reason,
             "horizon_rows": (),
         }
-        for item in snapshots
+        for item, reason in zip(snapshots, expected_reasons)
     ]
 
 

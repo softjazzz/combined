@@ -189,6 +189,8 @@ def test_data_gap_always_has_customer_readable_missing_data_contract():
         ("association_failed", "资料关联失败", "无法准确关联"),
         ("linkage_unresolved", "关联资料不足", "对应关系"),
         ("authoritative_time_missing", "权威时间缺失", "权威时间"),
+        ("authoritative_time_conflict", "权威时间冲突", "存在冲突"),
+        ("evaluation_window_not_mature", "评价窗口尚未结束", "尚未满"),
         ("applicability_source_gap", "适用性资料缺失", "是否适用"),
         ("unexpected_gap", "现有资料不足", "现有资料不足"),
     ],
@@ -230,6 +232,26 @@ def test_data_gap_completion_preserves_more_precise_existing_details():
     assert result["customer_message"] == "缺少检验结果明细中的危急值标志，暂时无法核对。"
     assert result["data_gap_details"]["availability"] == "unavailable"
     assert result["data_gap_details"]["reason_label"] == "关键字段缺失"
+
+
+def test_data_gap_completion_does_not_overwrite_rule_specific_detail_fields():
+    existing_details = {
+        "reason_code": "authoritative_time_missing",
+        "reason_label": "病例评价时间待确认",
+        "missing_sources": [],
+        "missing_fields": ["有效出院时间"],
+        "customer_message": "请确认本次住院的有效出院时间。",
+    }
+    result = _finalize(
+        {
+            "rule_id": "LX0609-012",
+            "status": "data_gap",
+            "reason_code": "authoritative_time_missing",
+            "data_gap_details": existing_details,
+        }
+    )
+
+    assert result["data_gap_details"] == existing_details
 
 
 def test_data_gap_uses_controlled_missing_source_from_customer_facts():

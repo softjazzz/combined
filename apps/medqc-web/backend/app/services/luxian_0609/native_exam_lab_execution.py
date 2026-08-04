@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import Enum
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -47,6 +48,51 @@ CULTURE_RULE_IDS = frozenset({"LX0609-014", "LX0609-015"})
 EXECUTOR_KEY = "exam_lab"
 _TYPED_DECISION_RULE_IDS = frozenset(EXAM_LAB_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "exam-lab-ruledecision-shadow-v1"
+
+
+class EvaluationWindowState(str, Enum):
+    MATURE = "mature"
+    NOT_MATURE = "not_mature"
+    MISSING = "missing"
+    CONFLICT = "conflict"
+
+
+def resolve_evaluation_window_state(
+    *, projection: ExamLabTextProjection, event_time: datetime
+) -> EvaluationWindowState:
+    """使用受控评价终点判断24小时窗口，不回读原始住院时间。"""
+
+    if projection.horizon_conflict:
+        return EvaluationWindowState.CONFLICT
+    deadline = event_time + timedelta(hours=24)
+    if projection.precise_horizon is not None:
+        if projection.precise_horizon < event_time:
+            return EvaluationWindowState.CONFLICT
+        return (
+            EvaluationWindowState.MATURE
+            if projection.precise_horizon >= deadline
+            else EvaluationWindowState.NOT_MATURE
+        )
+    if projection.horizon_date is not None:
+        if projection.horizon_date < event_time.date():
+            return EvaluationWindowState.CONFLICT
+        return (
+            EvaluationWindowState.MATURE
+            if projection.horizon_date > deadline.date()
+            else EvaluationWindowState.NOT_MATURE
+        )
+    if projection.horizon_unavailable_reason == "authoritative_time_conflict":
+        return EvaluationWindowState.CONFLICT
+    return EvaluationWindowState.MISSING
+
+
+def _evaluation_window_gap_reason(state: EvaluationWindowState) -> str:
+    if state is EvaluationWindowState.NOT_MATURE:
+        return "evaluation_window_not_mature"
+    if state is EvaluationWindowState.CONFLICT:
+        return "authoritative_time_conflict"
+    return "authoritative_time_missing"
+
 
 _EXAM_SOURCE_KEYS = ("exam_master", "exam_item_report")
 _CULTURE_SOURCE_KEYS = ("labtest_master", "labtest_item_report")
@@ -667,11 +713,18 @@ def _decision_from_outcome(
             "trigger_absent_complete",
         )
     elif outcome.status == "data_gap":
+        preserved_gap_reasons = {
+            "authoritative_time_missing",
+            "authoritative_time_conflict",
+            "evaluation_window_not_mature",
+        }
         dimensions = (
             ApplicabilityState.UNKNOWN,
             EvidenceState.DATA_GAP,
             QcDirection.UNKNOWN,
-            "source_unavailable"
+            outcome.reason_code
+            if outcome.reason_code in preserved_gap_reasons
+            else "source_unavailable"
             if "unavailable" in outcome.reason_code
             else "required_field_missing",
         )
@@ -965,18 +1018,6 @@ def _text_fact_outcome(
     if event_time is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_time_missing", refs)
 
-    def post_horizon_mature() -> bool | None:
-        if projection.horizon_conflict:
-            return None
-        deadline = event_time + timedelta(hours=24)
-        if projection.precise_horizon is not None:
-            return projection.precise_horizon >= deadline
-        if projection.horizon_date is not None:
-            # date 表示当天任意时刻；只有严格晚于截止日期，才可保守证明
-            # 即使取当天最早时刻也已成熟。禁止把 date 当作当天 00:00。
-            return projection.horizon_date > deadline.date()
-        return None
-
     if fact.semantic_state == "absent":
         if projection.course_time_incomplete or projection.course_projection_truncated:
             return _ExamLabOutcome(
@@ -987,11 +1028,18 @@ def _text_fact_outcome(
             )
         if rule_id == "LX0609-010":
             return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
-        mature = post_horizon_mature()
+        window_state = resolve_evaluation_window_state(
+            projection=projection,
+            event_time=event_time,
+        )
         return _ExamLabOutcome(
             rule_id,
-            "non_compliant" if mature is True else "data_gap",
-            "exam_lab_text_fact" if mature is True else "horizon_not_mature_or_missing",
+            "non_compliant"
+            if window_state is EvaluationWindowState.MATURE
+            else "data_gap",
+            "exam_lab_text_fact"
+            if window_state is EvaluationWindowState.MATURE
+            else _evaluation_window_gap_reason(window_state),
             refs,
         )
     if fact.semantic_state != "present":
@@ -1028,11 +1076,18 @@ def _text_fact_outcome(
     if any(interval > timedelta(hours=24) for interval in post_event_intervals):
         return _ExamLabOutcome(rule_id, "non_compliant", "exam_lab_text_fact", refs)
     # 只有报告前病程不能证明已记录报告结果。24 小时尚未届满时不能提前报缺陷。
-    mature = post_horizon_mature()
+    window_state = resolve_evaluation_window_state(
+        projection=projection,
+        event_time=event_time,
+    )
     return _ExamLabOutcome(
         rule_id,
-        "non_compliant" if mature is True else "data_gap",
-        "exam_lab_text_fact" if mature is True else "horizon_not_mature_or_missing",
+        "non_compliant"
+        if window_state is EvaluationWindowState.MATURE
+        else "data_gap",
+        "exam_lab_text_fact"
+        if window_state is EvaluationWindowState.MATURE
+        else _evaluation_window_gap_reason(window_state),
         refs,
     )
 
@@ -1331,8 +1386,22 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     typed_processed.add("LX0609-010")
                     eligible_rule_ids.remove("LX0609-010")
             try:
+                horizon_observation = next(
+                    (
+                        item
+                        for item in evidence_snapshot.observations
+                        if item.source_key == EVALUATION_HORIZON_SOURCE_KEY
+                    ),
+                    None,
+                )
                 projection = build_exam_lab_text_projection(
-                    rows_by_source=_course_rows_relevant_to_target_orders(rows_by_source)
+                    rows_by_source=_course_rows_relevant_to_target_orders(rows_by_source),
+                    horizon_unavailable_reason=(
+                        horizon_observation.reason_code
+                        if horizon_observation is not None
+                        and horizon_observation.reason_code
+                        else None
+                    ),
                 )
             except ValueError:
                 projection = None

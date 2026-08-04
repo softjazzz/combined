@@ -634,6 +634,79 @@ def test_projection_keeps_exam_and_report_time_roles_separate_and_conflict_close
     assert projection.imaging_event.conflict_roles == frozenset({"exam_time"})
 
 
+def test_projection_does_not_bypass_controlled_horizon_with_raw_discharge_time():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "inpat_registration.discharge_horizon": ({
+                "discharge_datetime": "2026-04-30 09:30:00",
+            },),
+            "evaluation_context.horizon": (),
+        }
+    )
+
+    assert projection.precise_horizon is None
+    assert projection.horizon_date is None
+    assert projection.horizon_conflict is False
+
+
+def test_projection_carries_controlled_horizon_unavailable_reason():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={"evaluation_context.horizon": ()},
+        horizon_unavailable_reason="authoritative_time_missing",
+    )
+
+    assert projection.horizon_unavailable_reason == "authoritative_time_missing"
+
+
+@pytest.mark.asyncio
+async def test_real_provider_to_lx012_preserves_missing_horizon_reason(monkeypatch):
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = ()
+        if source_key == "exam_master":
+            rows = ({
+                "exam_name": "腰椎MRI",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "阳性：L4/5椎间盘突出。",
+            },)
+        elif source_key == "inpat_registration":
+            rows = ({"admission_datetime": "2026-04-20 08:00:00"},)
+        elif source_key == "inpat_registration.discharge_horizon":
+            # disabled 策略下即使源表存在出院时间，也不得绕过逐病例快照。
+            rows = ({"discharge_datetime": "2026-04-30 12:00:00"},)
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-012",),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        created_at="2026-08-04T12:00:00+08:00",
+        evaluation_horizon_policy="disabled",
+        horizon_unavailable_reason="authoritative_time_missing",
+        row_reader=reader,
+    )
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+
+    assert result.decisions[0].reason_code == "authoritative_time_missing"
+    assert result.decisions[0].evidence_state.value == "data_gap"
+
+
 def test_unrelated_exam_and_lab_rows_do_not_pollute_target_event_times():
     projection = build_exam_lab_text_projection(
         rows_by_source={
@@ -1040,6 +1113,10 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         discharge_horizon_rows=({
             "discharge_datetime": "2026-04-30 12:00:00",
         },),
+        evaluation_horizon_rows=({
+            "horizon_datetime": "2026-04-30 12:00:00",
+            "horizon_date": "2026-04-30",
+        },),
     )
     client = _Client([])
 
@@ -1109,6 +1186,10 @@ async def test_noncompliant_exam_lab_facts_keep_only_explicit_report_document_id
         course_rows=(),
         discharge_horizon_rows=({
             "discharge_datetime": "2026-04-30 12:00:00",
+        },),
+        evaluation_horizon_rows=({
+            "horizon_datetime": "2026-04-30 12:00:00",
+            "horizon_date": "2026-04-30",
         },),
     )
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -1211,6 +1292,115 @@ def test_post_rule_absence_needs_exact_mature_horizon_and_date_is_conservative()
     assert outcome(horizon_date=datetime(2026, 4, 28).date()) == "non_compliant"
 
 
+@pytest.mark.parametrize(
+    ("projection", "expected"),
+    [
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                precise_horizon=datetime(2026, 4, 27, 10),
+            ),
+            exam_lab.EvaluationWindowState.MATURE,
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                precise_horizon=datetime(2026, 4, 27, 9, 59, 59),
+            ),
+            exam_lab.EvaluationWindowState.NOT_MATURE,
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                precise_horizon=datetime(2026, 4, 26, 9),
+            ),
+            exam_lab.EvaluationWindowState.CONFLICT,
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                horizon_date=datetime(2026, 4, 26).date(),
+            ),
+            exam_lab.EvaluationWindowState.NOT_MATURE,
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                horizon_date=datetime(2026, 4, 25).date(),
+            ),
+            exam_lab.EvaluationWindowState.CONFLICT,
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                horizon_unavailable_reason="authoritative_time_missing",
+            ),
+            exam_lab.EvaluationWindowState.MISSING,
+        ),
+    ],
+)
+def test_evaluation_window_state_has_distinct_maturity_and_conflict_semantics(
+    projection,
+    expected,
+):
+    assert exam_lab.resolve_evaluation_window_state(
+        projection=projection,
+        event_time=datetime(2026, 4, 26, 10),
+    ) is expected
+
+
+@pytest.mark.parametrize(
+    ("projection", "expected_reason"),
+    [
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                horizon_unavailable_reason="authoritative_time_missing",
+            ),
+            "authoritative_time_missing",
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                horizon_unavailable_reason="authoritative_time_conflict",
+            ),
+            "authoritative_time_conflict",
+        ),
+        (
+            ExamLabTextProjection(
+                context="", document_refs=frozenset(), course_times={},
+                precise_horizon=datetime(2026, 4, 27, 9),
+            ),
+            "evaluation_window_not_mature",
+        ),
+    ],
+)
+def test_lx012_data_gap_preserves_specific_evaluation_window_reason(
+    projection,
+    expected_reason,
+):
+    projection = ExamLabTextProjection(
+        **{
+            **projection.__dict__,
+            "document_refs": frozenset({"E01-01"}),
+            "imaging_event": ExamLabSingleEvent(
+                "exam", ("E01-01",), datetime(2026, 4, 26, 8),
+                datetime(2026, 4, 26, 10), frozenset(), positive_hint="positive",
+            ),
+        }
+    )
+    fact = ExamLabEventFact(
+        "LX0609-012", "applicable", "absent", "positive", (), ("E01-01",)
+    )
+
+    outcome = exam_lab._text_fact_outcome(
+        rule_id="LX0609-012", facts=(fact,), projection=projection
+    )
+
+    assert outcome.status == "data_gap"
+    assert outcome.reason_code == expected_reason
+
+
 def test_report_before_course_reference_needs_mature_horizon_before_defect():
     fact = ExamLabEventFact(
         "LX0609-011", "applicable", "present", "not_relevant",
@@ -1237,7 +1427,7 @@ def test_report_before_course_reference_needs_mature_horizon_before_defect():
 
 
 @pytest.mark.asyncio
-async def test_executor_passes_nonempty_discharge_horizon_into_post_rule(monkeypatch):
+async def test_executor_passes_controlled_evaluation_horizon_into_post_rule(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,
         exam_rows=({
@@ -1246,6 +1436,10 @@ async def test_executor_passes_nonempty_discharge_horizon_into_post_rule(monkeyp
         },),
         discharge_horizon_rows=({
             "discharge_datetime": "2026-04-27 10:00:00",
+        },),
+        evaluation_horizon_rows=({
+            "horizon_datetime": "2026-04-27 10:00:00",
+            "horizon_date": "2026-04-27",
         },),
     )
     client = _Client([

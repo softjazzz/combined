@@ -72,6 +72,18 @@ _DATA_GAP_EXPLANATIONS = {
         "missing_fields": ["用于计算质控时限的权威时间"],
         "customer_message": "缺少用于计算质控时限的权威时间，暂时无法完成本项质控。",
     },
+    "authoritative_time_conflict": {
+        "reason_label": "权威时间冲突",
+        "missing_sources": [],
+        "missing_fields": ["相互一致的报告时间与评价截止时间"],
+        "customer_message": "报告时间与本次住院的评价截止时间存在冲突，暂时无法完成本项质控。",
+    },
+    "evaluation_window_not_mature": {
+        "reason_label": "评价窗口尚未结束",
+        "missing_sources": [],
+        "missing_fields": [],
+        "customer_message": "截至本次评价日期尚未满规则要求的观察时限，本次暂不判定缺陷。",
+    },
     "applicability_source_gap": {
         "reason_label": "适用性资料缺失",
         "missing_sources": ["判断质控点是否适用的关键资料"],
@@ -139,13 +151,11 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     completed_details = (
         dict(existing_details) if isinstance(existing_details, Mapping) else {}
     )
-    completed_details.update({
-        "reason_code": reason_code,
-        "reason_label": defaults["reason_label"],
-        "missing_sources": missing_sources,
-        "missing_fields": missing_fields,
-        "customer_message": customer_message,
-    })
+    completed_details.setdefault("reason_code", reason_code)
+    completed_details.setdefault("reason_label", defaults["reason_label"])
+    completed_details.setdefault("missing_sources", missing_sources)
+    completed_details.setdefault("missing_fields", missing_fields)
+    completed_details.setdefault("customer_message", customer_message)
     result["data_gap_details"] = completed_details
 
 

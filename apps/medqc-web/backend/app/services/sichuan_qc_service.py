@@ -4506,6 +4506,7 @@ class SichuanQCService:
         rule_set_key: str = "",
         evaluation_as_of_date: str | None = None,
         evaluation_horizon_policy: str | None = None,
+        evaluation_horizon_unavailable_reason: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -4619,6 +4620,9 @@ class SichuanQCService:
                 source_schema=source_schema or None,
                 evaluation_as_of_date=evaluation_as_of_date,
                 evaluation_horizon_policy=evaluation_horizon_policy,
+                evaluation_horizon_unavailable_reason=(
+                    evaluation_horizon_unavailable_reason
+                ),
                 selected_customer_rule_ids=selected_customer_rule_ids,
             )
 

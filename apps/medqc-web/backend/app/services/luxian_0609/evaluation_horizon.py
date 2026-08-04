@@ -15,6 +15,8 @@ EVALUATION_HORIZON_POLICIES = frozenset(
         EVALUATION_HORIZON_POLICY_DISABLED,
     }
 )
+EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING = "authoritative_time_missing"
+EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT = "authoritative_time_conflict"
 
 
 def _normalized_text(value: Any) -> str:
@@ -69,6 +71,21 @@ def resolve_record_evaluation_horizon_policy(
     if basis == "discharge_datetime":
         return EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE
     return EVALUATION_HORIZON_POLICY_DISABLED
+
+
+def resolve_record_evaluation_horizon_unavailable_reason(
+    snapshot: Mapping[str, Any] | None,
+) -> str | None:
+    """为禁用终点的逐病例快照提供受控缺口原因。"""
+
+    if snapshot is None:
+        return None
+    status = _normalized_text(snapshot.get("resolution_status"))
+    if status == "time_conflict":
+        return EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_CONFLICT
+    if status in {"authoritative_time_missing", "scene_uncertain"}:
+        return EVALUATION_HORIZON_REASON_AUTHORITATIVE_TIME_MISSING
+    return None
 
 
 def resolve_record_evaluation_horizon(

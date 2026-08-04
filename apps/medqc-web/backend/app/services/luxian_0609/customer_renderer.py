@@ -408,6 +408,40 @@ _RULE_DATA_GAP_MESSAGES = {
         "请确认诊断变更及对应病程记录已完整同步后重新评估。",
     ),
 }
+
+_EVALUATION_WINDOW_RULE_LABELS = {
+    "LX0609-011": "CT/MRI 报告后病程记录",
+    "LX0609-012": "CT/MRI 阳性结果分析",
+    "LX0609-014": "细菌培养结果记录",
+    "LX0609-015": "阳性菌结果分析",
+}
+
+
+def _evaluation_window_gap_message(
+    *, rule_id: str, reason_code: str
+) -> tuple[str, str, str] | None:
+    label = _EVALUATION_WINDOW_RULE_LABELS.get(rule_id)
+    if label is None:
+        return None
+    if reason_code == "authoritative_time_missing":
+        return (
+            f"暂无法核对{label}是否满足 24 小时要求",
+            "缺少本次住院的评价截止日期或有效出院时间，无法确认 24 小时评价窗口是否已经结束。",
+            "请确认病例住院状态及有效出院时间后重新评估。",
+        )
+    if reason_code == "authoritative_time_conflict":
+        return (
+            f"暂无法核对{label}是否满足 24 小时要求",
+            "报告时间与本次住院的评价截止时间存在先后冲突，当前时间轴不能用于可靠判定。",
+            "请核对本次住院、报告及出院时间后重新评估。",
+        )
+    if reason_code == "evaluation_window_not_mature":
+        return (
+            f"{label}的 24 小时评价窗口尚未结束",
+            "截至本次冻结的评价日期，报告出具后尚未满 24 小时，本次暂不判定为质控问题。",
+            "待 24 小时评价窗口结束后再次质控。",
+        )
+    return None
 _RULE_NON_COMPLIANT_MESSAGES = {
     "LX0609-016": (
         "入院记录现病史与首次病程记录病例特点完全相同",
@@ -1619,12 +1653,18 @@ def render_luxian_0609_customer_result(
             criterion_results=decision.criterion_results,
         )
     elif decision.final_state is CustomerFinalState.DATA_GAP:
+        evaluation_window_gap = _evaluation_window_gap_message(
+            rule_id=decision.rule_id,
+            reason_code=decision.reason_code,
+        )
         controlled_gap = customer_gap_message(
             decision.reason_code,
             missing_items=_missing_item_labels(decision),
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
-        if controlled_gap is not None:
+        if evaluation_window_gap is not None:
+            findings, evidence, suggestion = evaluation_window_gap
+        elif controlled_gap is not None:
             findings, evidence, suggestion = (
                 controlled_gap.findings,
                 controlled_gap.evidence,

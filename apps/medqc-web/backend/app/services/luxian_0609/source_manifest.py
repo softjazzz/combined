@@ -147,8 +147,8 @@ class SourceManifestEntry:
         elif status is QueryStatus.EMPTY:
             if self.record_count != 0:
                 raise ValueError("empty requires record_count == 0")
-            if error_code or reason_code:
-                raise ValueError("empty cannot carry error_code or reason_code")
+            if error_code:
+                raise ValueError("empty cannot carry error_code")
         elif status is QueryStatus.UNAVAILABLE:
             if self.record_count is not None:
                 raise ValueError("unavailable requires record_count is None")
@@ -203,8 +203,8 @@ class SourceManifestEntry:
         elif status is QueryStatus.EMPTY:
             if record_count != 0:
                 raise ValueError("empty requires record_count == 0")
-            if normalized_error_code or normalized_reason_code:
-                raise ValueError("empty cannot carry error_code or reason_code")
+            if normalized_error_code:
+                raise ValueError("empty cannot carry error_code")
         elif status is QueryStatus.UNAVAILABLE:
             if record_count is not None:
                 raise ValueError("unavailable requires record_count is None")
