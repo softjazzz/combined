@@ -23,6 +23,13 @@ from .evidence_material import (
     Luxian0609EvidenceMaterialStore,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
+from .extended_document_critical_value import (
+    CRITICAL_VALUE_RULE_IDS,
+    CRITICAL_VALUE_SOURCE_KEYS,
+    CriticalValueInput,
+    CriticalValueItem,
+    evaluate_critical_value_rules,
+)
 from .source_evidence_reader import (
     authoritative_document_time_value,
     trusted_performed_surgery_times,
@@ -424,23 +431,6 @@ def _material_text(row: Mapping[str, Any]) -> str:
     )
 
 
-def _critical_rows(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
-    return tuple(
-        row
-        for row in rows
-        if any(
-            marker == _clean(row.get(key)).upper()
-            or marker in _clean(row.get(key)).upper().split()
-            for key in (
-                "result_flag", "abnormal_flag", "abnormal_indicator",
-                "result_status", "result_hint",
-            )
-            for marker in ("PL", "PH")
-        )
-        or any(marker in _material_text(row).upper() for marker in ("（PL）", "（PH）", "(PL)", "(PH)"))
-    )
-
-
 def _antimicrobial_orders(rows: Sequence[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
     return tuple(
         row for row in rows if any(name in _material_text(row) for name in _ANTIMICROBIALS)
@@ -740,6 +730,51 @@ async def execute_luxian_0609_native_extended_document_rules(
         if {"LX0609-064", "LX0609-065", "LX0609-066"}.intersection(selected)
         else None
     )
+    critical_value_outcomes = {
+        item.rule_id: item
+        for item in evaluate_critical_value_rules(
+            rule_ids=tuple(rule_id for rule_id in CRITICAL_VALUE_RULE_IDS if rule_id in selected),
+            inputs=CriticalValueInput(
+                lab_item_error=lab_item_error or None,
+                crisis_error=crisis_error or None,
+                lab_report_count=len(lab_master_rows),
+                lab_detail_count=len(lab_item_rows),
+                items=tuple(
+                    CriticalValueItem(
+                        item_name=_clean(row.get("item_name") or row.get("item_code")),
+                        flag_values=tuple(
+                            _clean(row.get(key))
+                            for key in (
+                                "result_flag",
+                                "abnormal_flag",
+                                "abnormal_indicator",
+                                "result_status",
+                                "result_hint",
+                            )
+                        ),
+                        marker_text=_material_text(row),
+                        display_flag=_clean(
+                            row.get("result_flag")
+                            or row.get("abnormal_flag")
+                            or row.get("abnormal_indicator")
+                        ),
+                        report_time=_parse_datetime(
+                            row.get("report_time")
+                            or row.get("report_datetime")
+                            or row.get("record_time")
+                        ),
+                    )
+                    for row in lab_item_rows
+                ),
+                disposition_times=tuple(
+                    parsed
+                    for row in crisis_rows
+                    for parsed in (_row_time(row),)
+                    if parsed is not None
+                ),
+            ),
+        )
+    } if set(selected).intersection(CRITICAL_VALUE_RULE_IDS) else {}
 
     for rule_id in selected:
         if rule_id == "LX0609-050":
@@ -799,115 +834,13 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {"LX0609-052", "LX0609-053"}:
-            critical = _critical_rows(lab_item_rows)
-            intervals: tuple[float | None, ...] = ()
-            if lab_item_error:
-                final_state, reason_code = "data_gap", lab_item_error
-            elif lab_master_rows and not lab_item_rows:
-                # 报告主表已有当前病例检验记录，但结果明细为空，不能据此证明
-                # “没有 PL/PH 危急值”。这是明确的主从资料缺口。
-                final_state, reason_code = "data_gap", "required_field_missing"
-                display.append((rule_id, {
-                    "failure_kind": "critical_value_result_detail_missing",
-                    "lab_report_count": len(lab_master_rows),
-                    "missing_source": "labtest_item_report",
-                }))
-            elif not critical:
-                final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif crisis_error:
-                final_state, reason_code = "data_gap", crisis_error
-            else:
-                report_times = tuple(
-                    _parse_datetime(
-                        row.get("report_time")
-                        or row.get("report_datetime")
-                        or row.get("record_time")
-                    )
-                    for row in critical
-                )
-                disposition_times = tuple(
-                    value for row in crisis_rows if (value := _row_time(row)) is not None
-                )
-                if any(value is None for value in report_times):
-                    final_state, reason_code = "data_gap", "authoritative_time_missing"
-                elif rule_id == "LX0609-053":
-                    handled = all(
-                        any(item >= report_time for item in disposition_times)
-                        for report_time in report_times
-                        if report_time is not None
-                    )
-                    final_state = "compliant" if handled else "non_compliant"
-                    reason_code = "requirement_satisfied" if handled else "required_document_missing"
-                else:
-                    intervals = tuple(
-                        min(
-                            (
-                                (item - report_time).total_seconds() / 3600
-                                for item in disposition_times
-                                if item >= report_time
-                            ),
-                            default=None,
-                        )
-                        for report_time in report_times
-                        if report_time is not None
-                    )
-                    handled = bool(intervals) and all(
-                        value is not None and value <= 6 for value in intervals
-                    )
-                    final_state = "compliant" if handled else "non_compliant"
-                    reason_code = "requirement_within_threshold" if handled else "threshold_exceeded"
-            if critical:
-                safe_report_times = [
-                    value.isoformat(sep=" ")
-                    for row in critical
-                    if (value := _parse_datetime(
-                        row.get("report_time")
-                        or row.get("report_datetime")
-                        or row.get("record_time")
-                    )) is not None
-                ]
-                safe_disposition_times = [
-                    value.isoformat(sep=" ")
-                    for row in crisis_rows
-                    if (value := _row_time(row)) is not None
-                ]
-                facts: dict[str, Any] = {
-                    "verification_kind": (
-                        "critical_value_timeliness_check"
-                        if rule_id == "LX0609-052"
-                        else "critical_value_disposition_presence_check"
-                    ),
-                    "critical_item_names": [
-                        _clean(row.get("item_name") or row.get("item_code"))[:40]
-                        for row in critical
-                    ],
-                    "critical_flags": [
-                        _clean(
-                            row.get("result_flag")
-                            or row.get("abnormal_flag")
-                            or row.get("abnormal_indicator")
-                        ).upper()
-                        for row in critical
-                    ],
-                    "report_times": safe_report_times,
-                    "disposition_times": safe_disposition_times,
-                }
-                if rule_id == "LX0609-052":
-                    facts["threshold_hours"] = 6
-                    facts["actual_interval_hours"] = [
-                        round(value, 2)
-                        for value in intervals
-                        if isinstance(value, (int, float))
-                    ]
-                display.append((rule_id, facts))
+            outcome = critical_value_outcomes[rule_id]
+            if outcome.display_facts is not None:
+                display.append((rule_id, outcome.display_facts))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=(
-                    "labtest_master",
-                    "labtest_item_report",
-                    "crisis_value_record",
-                ),
-                final_state=final_state, reason_code=reason_code,
+                source_keys=CRITICAL_VALUE_SOURCE_KEYS,
+                final_state=outcome.final_state, reason_code=outcome.reason_code,
             ))
             continue
 
