@@ -949,6 +949,77 @@ async def test_critical_value_rules_freeze_dual_rule_outcomes(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("marker", ("（PL）", "（PH）", "(PL)", "(PH)"))
+async def test_critical_value_rules_recognize_all_existing_text_markers(
+    marker: str,
+) -> None:
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "record_content": f"检验结果提示危急值{marker}",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+        },
+    )
+
+    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.NON_COMPLIANT,
+        CustomerFinalState.NON_COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "threshold_exceeded",
+        "required_document_missing",
+    ]
+    display = dict(result.customer_display_facts)
+    assert display["LX0609-052"]["critical_item_names"] == ["血钾"]
+    assert display["LX0609-053"]["critical_item_names"] == ["血钾"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> None:
+    snapshot, materials = _session({
+        "labtest_item_report": ({
+            "item_name": "血钾",
+            "result_flag": "PH",
+            "report_time": "2026-06-01 14:00:00",
+        },),
+        "crisis_value_record": ({"record_time": "2026-06-01 16:00:00"},),
+    })
+    result = await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=("LX0609-053", "LX0609-052"),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-053", "LX0609-052"),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-052", "LX0609-053"),
+        snapshot=snapshot,
+    )
+
+    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert [item.rule_id for item in result.decisions] == [
+        "LX0609-052", "LX0609-053",
+    ]
+    assert [item.rule_id for item in reduced] == ["LX0609-052", "LX0609-053"]
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "requirement_within_threshold",
+        "requirement_satisfied",
+    ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_critical_value_rules_are_repeatable_for_one_evidence_session() -> None:
     snapshot, materials = _session({
         "labtest_item_report": (
