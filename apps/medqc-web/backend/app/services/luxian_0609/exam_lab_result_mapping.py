@@ -68,6 +68,7 @@ def build_exam_lab_rule_decision(
             "authoritative_time_missing",
             "authoritative_time_conflict",
             "evaluation_window_not_mature",
+            "positive_assertion_not_explicit",
         }
         dimensions = (
             ApplicabilityState.UNKNOWN,

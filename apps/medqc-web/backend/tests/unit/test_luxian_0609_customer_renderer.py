@@ -471,6 +471,28 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     assert "已确认实施手术" in result["evidence"]
 
 
+def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-012",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.UNKNOWN,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="positive_assertion_not_explicit",
+            fact_refs=(FACT_REF,),
+            evaluator_version="exam-lab-ruledecision-shadow-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "data_gap"
+    assert result["reason_code"] == "positive_assertion_not_explicit"
+    assert result["findings"] == "检查报告未明确写明阳性，暂无法启动阳性结果分析核对"
+    assert "未明确标注“阳性”" in result["evidence"]
+
+
 @pytest.mark.parametrize(
     ("reason_code", "expected_evidence"),
     [

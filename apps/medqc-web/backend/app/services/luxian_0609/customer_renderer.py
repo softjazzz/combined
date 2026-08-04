@@ -409,6 +409,14 @@ _RULE_DATA_GAP_MESSAGES = {
     ),
 }
 
+_RULE_DATA_GAP_REASON_MESSAGES = {
+    ("LX0609-012", "positive_assertion_not_explicit"): (
+        "检查报告未明确写明阳性，暂无法启动阳性结果分析核对",
+        "当前报告虽有影像描述，但未明确标注“阳性”；按本规则口径，不能据此判断是否需要在24小时内完成分析。",
+        "请确认检查报告的阳性标志或补充明确阳性结论后重新评估。",
+    ),
+}
+
 _EVALUATION_WINDOW_RULE_LABELS = {
     "LX0609-011": "CT/MRI 报告后病程记录",
     "LX0609-012": "CT/MRI 阳性结果分析",
@@ -1653,6 +1661,9 @@ def render_luxian_0609_customer_result(
             criterion_results=decision.criterion_results,
         )
     elif decision.final_state is CustomerFinalState.DATA_GAP:
+        reason_specific_gap = _RULE_DATA_GAP_REASON_MESSAGES.get(
+            (decision.rule_id, decision.reason_code)
+        )
         evaluation_window_gap = _evaluation_window_gap_message(
             rule_id=decision.rule_id,
             reason_code=decision.reason_code,
@@ -1662,7 +1673,9 @@ def render_luxian_0609_customer_result(
             missing_items=_missing_item_labels(decision),
         )
         rule_gap = _RULE_DATA_GAP_MESSAGES.get(decision.rule_id)
-        if evaluation_window_gap is not None:
+        if reason_specific_gap is not None:
+            findings, evidence, suggestion = reason_specific_gap
+        elif evaluation_window_gap is not None:
             findings, evidence, suggestion = evaluation_window_gap
         elif controlled_gap is not None:
             findings, evidence, suggestion = (

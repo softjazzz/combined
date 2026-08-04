@@ -1227,6 +1227,47 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
                 for rule_id in tuple(eligible_rule_ids):
+                    if (
+                        rule_id == "LX0609-012"
+                        and projection.imaging_event is not None
+                        and projection.imaging_event.positive_hint == "unknown"
+                    ):
+                        # 客户口径仅接受报告原文明确“阳性”。未满足该门控时，
+                        # 后续病程语义无法使规则成立，也不应浪费一次 LLM 调用。
+                        event = projection.imaging_event
+                        fact = ExamLabEventFact(
+                            rule_id=rule_id,
+                            applicability="unknown",
+                            semantic_state="unknown",
+                            positive_state="unknown",
+                            course_doc_refs=(),
+                            evidence_refs=event.document_refs,
+                        )
+                        outcome = _ExamLabOutcome(
+                            rule_id,
+                            "data_gap",
+                            "positive_assertion_not_explicit",
+                            tuple(
+                                projection.safe_refs[ref]
+                                for ref in event.document_refs
+                                if ref in projection.safe_refs
+                            ),
+                        )
+                        emit_typed(
+                            rule_id,
+                            outcome.status,
+                            outcome.reason_code,
+                            outcome.fact_refs,
+                            display_facts=_text_outcome_display_facts(
+                                rule_id=rule_id,
+                                status=outcome.status,
+                                fact=fact,
+                                projection=projection,
+                            ),
+                        )
+                        typed_processed.add(rule_id)
+                        eligible_rule_ids.remove(rule_id)
+                        continue
                     fact = _strong_semantic_fact(
                         rule_id=rule_id,
                         projection=projection,

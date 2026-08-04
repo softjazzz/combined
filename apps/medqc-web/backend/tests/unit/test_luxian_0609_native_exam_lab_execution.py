@@ -1208,6 +1208,149 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monkeypatch):
+    """明确“阳性”触发012；仅记录结果不是分析。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": "阳性：右肺占位。",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": "胸部CT报告提示右肺占位。",
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    client = _Client([])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == ["non_compliant"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+    assert result.decisions[0].fact_refs
+    assert dict(result.customer_display_facts)["LX0609-012"]["subject"] == "ct_mri"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "imaging_conclusion,course_content,expected_state,expected_reason,expected_llm_calls",
+    (
+        (
+            "阳性：右肺占位。",
+            "胸部CT报告提示右肺占位，结合临床考虑肺部肿瘤，计划进一步检查。",
+            "compliant",
+            "requirement_satisfied",
+            0,
+        ),
+        (
+            "未见明确阳性表现。",
+            "",
+            "not_applicable",
+            "trigger_absent_complete",
+            0,
+        ),
+        (
+            "右肺占位，考虑恶性。",
+            "胸部CT报告提示右肺占位。",
+            "data_gap",
+            "positive_assertion_not_explicit",
+            0,
+        ),
+        (
+            "待排急性脑梗死。",
+            "头颅CT报告提示待排急性脑梗死。",
+            "data_gap",
+            "positive_assertion_not_explicit",
+            0,
+        ),
+    ),
+)
+async def test_lx0609_012_gold_positive_gate_outcomes(
+    monkeypatch,
+    imaging_conclusion,
+    course_content,
+    expected_state,
+    expected_reason,
+    expected_llm_calls,
+):
+    """012仅接受原文明示“阳性”；非明确表述不得触发模型升级。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-26 12:00:00",
+                "exam_conclusion": imaging_conclusion,
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-04-26 13:00:00",
+                "record_content": course_content,
+            },
+        )
+        if course_content
+        else (),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+    )
+    client = _Client(
+        [_fact_response(("LX0609-012",))] if expected_llm_calls else []
+    )
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-012",),
+        wrapper_rules=[_wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-012",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-012",),
+        snapshot=snapshot,
+    )
+
+    assert [item.final_state.value for item in reduced] == [expected_state]
+    assert reduced[0].reason_code == expected_reason
+    assert result.llm_call_count == expected_llm_calls
+    assert all(item.fact_refs for item in result.decisions)
+
+
+@pytest.mark.asyncio
 async def test_noncompliant_exam_lab_facts_keep_only_explicit_report_document_ids(
     monkeypatch,
 ):

@@ -41,7 +41,7 @@ _EXPLICIT_NON_TARGET_CULTURE_PATTERN = re.compile(
 )
 _IMAGING_NEGATIVE_PATTERN = re.compile(
     r"(?:未见|未发现|未提示|未显示|无)(?:明显|明确)?"
-    r"(?:异常|病变|占位|肿块|出血|梗死)|阴性"
+    r"(?:阳性(?:表现)?|异常|病变|占位|肿块|出血|梗死)|阴性"
 )
 _IMAGING_UNCERTAIN_PATTERN = re.compile(
     r"待排|不除外|不能除外|未排除|建议排除"
