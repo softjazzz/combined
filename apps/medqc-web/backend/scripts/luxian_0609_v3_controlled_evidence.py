@@ -92,6 +92,84 @@ _STATUS_OVERRIDES_BY_CASE = {
 }
 
 
+def _gold(
+    case_index: int,
+    rule_number: int,
+    expected_status: str,
+    expected_reason_code: str,
+    trigger_facts: tuple[str, ...],
+    required_sources: tuple[str, ...],
+    expected_evidence_roles: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "case_index": case_index,
+        "fixture_ref": f"0426-v3:case-{case_index:03d}",
+        "rule_id": f"LX0609-{rule_number:03d}",
+        "expected_status": expected_status,
+        "expected_reason_code": expected_reason_code,
+        "trigger_facts": list(trigger_facts),
+        "required_sources": list(required_sources),
+        "expected_evidence_roles": list(expected_evidence_roles),
+    }
+
+
+# 仅包含已经人工复核、用于正式验收的37条断言。它与134条探索覆盖矩阵分离，
+# 不参与规则执行；后续修复以这里冻结的状态、事实、资料和证据角色为准。
+GOLD_ACCEPTANCE_CONTRACTS: tuple[dict[str, Any], ...] = (
+    _gold(2, 1, "non_compliant", "timeliness_requirement_not_met", ("入院记录超过入院后24小时完成",), ("inpat_registration", "admission_record"), ("start_time", "target_document_time")),
+    _gold(2, 2, "non_compliant", "timeliness_requirement_not_met", ("首次病程超过入院后8小时完成",), ("inpat_registration", "first_course_record"), ("start_time", "target_document_time")),
+    _gold(2, 4, "non_compliant", "timeliness_requirement_not_met", ("抢救记录超过抢救结束后6小时完成",), ("rescue_record",), ("rescue_end_time", "target_document_time")),
+    _gold(2, 5, "non_compliant", "timeliness_requirement_not_met", ("主治医师首次查房超过入院后48小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
+    _gold(2, 6, "non_compliant", "timeliness_requirement_not_met", ("最高级别医师首次查房超过入院后72小时",), ("inpat_registration", "senior_course_record"), ("start_time", "target_document_time")),
+    _gold(6, 8, "compliant", "round_frequency_requirement_satisfied", ("存在病重医嘱且每两天至少一份查房病程",), ("inpat_nondrug_order", "daily_course_record", "inpat_registration"), ("severity_order", "course_timeline")),
+    _gold(6, 17, "compliant", "course_similarity_within_threshold", ("多份病程记录表达不同病情变化且最高相似度不超过70%",), ("daily_course_record",), ("compared_document", "similarity_measure")),
+    _gold(11, 10, "compliant", "exam_reason_documented", ("CT或MRI检查前病程已记录检查原因",), ("exam_master", "daily_course_record"), ("exam_event", "pre_exam_course")),
+    _gold(11, 11, "compliant", "exam_result_recorded_within_24h", ("影像报告出具后24小时内病程已记录结果",), ("exam_item_report", "daily_course_record"), ("report", "post_report_course")),
+    _gold(11, 12, "non_compliant", "positive_exam_analysis_missing", ("阳性影像报告出具已满24小时且病程仅记录结果未作分析",), ("exam_item_report", "daily_course_record", "evaluation_horizon"), ("positive_report", "post_report_course", "evaluation_horizon")),
+    _gold(11, 14, "compliant", "culture_result_recorded_within_24h", ("细菌培养报告出具后24小时内病程已记录结果",), ("labtest_item_report", "daily_course_record"), ("culture_report", "post_report_course")),
+    _gold(11, 15, "non_compliant", "positive_culture_analysis_missing", ("阳性培养报告出具已满24小时且病程未分析阳性菌",), ("labtest_item_report", "daily_course_record", "evaluation_horizon"), ("positive_culture_report", "post_report_course", "evaluation_horizon")),
+    _gold(11, 52, "non_compliant", "critical_value_disposition_late", ("危急值报告后超过6小时才记录处置",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
+    _gold(11, 53, "non_compliant", "critical_value_disposition_missing", ("存在PL或PH危急值且未找到处置记录",), ("labtest_item_report", "crisis_value_record"), ("critical_value_report", "disposition_record")),
+    _gold(14, 20, "non_compliant", "consultation_execution_missing", ("会诊意见形成且评价窗口成熟，完整执行资料中无执行记录",), ("consultation_record", "daily_course_record", "inpat_nondrug_order", "evaluation_horizon"), ("consultation_opinion", "execution_search_window")),
+    _gold(14, 21, "non_compliant", "purpose_vague", ("会诊申请仅写请相关科室协助诊治，目的不明确",), ("consultation_record",), ("consultation_request",)),
+    _gold(14, 22, "non_compliant", "opinion_vague", ("会诊意见仅写必要时检查或药物治疗，意见不明确",), ("consultation_record",), ("consultation_opinion",)),
+    _gold(14, 69, "non_compliant", "consultation_record_late", ("会诊记录超过申请后24小时完成",), ("consultation_record",), ("consultation_request_time", "consultation_record_time")),
+    _gold(18, 29, "compliant", "presurg_summary_present", ("当前住院存在手术医嘱且存在术前小结",), ("surgery_application", "inpat_nondrug_order", "presurg_summary"), ("surgery_order", "target_document")),
+    _gold(18, 30, "compliant", "surgery_record_present", ("当前住院存在手术医嘱且存在正式手术记录",), ("surgery_application", "inpat_nondrug_order", "surgery_record"), ("surgery_order", "target_document")),
+    _gold(18, 32, "compliant", "surgery_safecheck_present", ("当前住院存在正式手术记录且存在手术安全核查表",), ("surgery_record", "surgery_safecheck_record"), ("formal_surgery_record", "target_document")),
+    _gold(18, 33, "compliant", "surgery_consent_present", ("当前住院存在正式手术记录且存在手术知情同意书",), ("surgery_record", "surgery_inform_consent"), ("formal_surgery_record", "target_document")),
+    _gold(25, 42, "non_compliant", "transfusion_consent_incomplete", ("存在输血事实且输血知情同意书签名或签署时间不完整",), ("blood_transfusion_application", "transfusion_consent"), ("transfusion_event", "consent_document")),
+    _gold(25, 43, "non_compliant", "pretransfusion_nine_tests_incomplete", ("输血前九项检查不完整",), ("blood_transfusion_application", "labtest_item_report"), ("transfusion_event", "pretransfusion_tests")),
+    _gold(25, 44, "non_compliant", "pretransfusion_assessment_missing", ("存在输血事实但未找到输血前评估",), ("blood_transfusion_application", "daily_course_record"), ("transfusion_event", "pretransfusion_assessment")),
+    _gold(29, 13, "non_compliant", "pathology_result_not_documented", ("存在病理结果但手术记录或病程未记录",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_report", "clinical_document")),
+    _gold(29, 19, "non_compliant", "pathology_sampling_not_documented", ("存在病理取材事件但手术记录或病程未记录取材情况",), ("pathology_report", "surgery_record", "daily_course_record"), ("pathology_sampling", "clinical_document")),
+    _gold(29, 26, "non_compliant", "chemotherapy_order_course_mismatch", ("恶性肿瘤化疗病程与医嘱的药物、剂量、方法或时间不一致",), ("inpat_drug_order", "daily_course_record", "diagnosis"), ("chemotherapy_order", "chemotherapy_course")),
+    _gold(29, 27, "non_compliant", "tumor_discharge_plan_missing", ("恶性肿瘤患者出院记录缺少肿瘤后续治疗计划",), ("diagnosis", "discharge_record"), ("tumor_diagnosis", "discharge_plan")),
+    _gold(32, 50, "non_compliant", "difficult_case_discussion_missing", ("入院7天后诊断仍不明确且无疑难病历讨论",), ("inpat_registration", "diagnosis", "difficult_case_discussion"), ("diagnostic_timeline", "target_document")),
+    _gold(35, 54, "non_compliant", "antimicrobial_reason_missing", ("抗菌药物使用或调整时病程未记录理由",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "reason_documentation")),
+    _gold(35, 55, "non_compliant", "antimicrobial_effect_evaluation_missing", ("抗菌药物使用48至72小时内无效果评价",), ("inpat_drug_order", "daily_course_record"), ("antimicrobial_order", "effect_evaluation")),
+    _gold(35, 57, "non_compliant", "empiric_antimicrobial_reason_missing", ("经验用药未说明理由且未记录无样可采原因",), ("inpat_drug_order", "daily_course_record", "labtest_master"), ("empiric_antimicrobial_order", "reason_documentation")),
+    _gold(35, 58, "non_compliant", "special_antimicrobial_expert_support_missing", ("使用特殊级抗菌药物但缺少专家查房或会诊记录",), ("inpat_drug_order", "senior_course_record", "consultation_record"), ("special_antimicrobial_order", "expert_support")),
+    _gold(37, 71, "non_compliant", "handover_record_missing_or_late", ("经治医师变更且缺少按时完成的交接班记录",), ("doctor_assignment", "handover_record"), ("doctor_change_event", "handover_document")),
+    _gold(37, 72, "non_compliant", "transfer_record_late", ("转科后24小时内未完成转入或转出记录",), ("transfer_order", "transfer_record"), ("transfer_event", "transfer_document")),
+    _gold(37, 74, "non_compliant", "diagnosis_revision_rationale_missing", ("修正或补充诊断时未记录理由及诊断依据",), ("diagnosis", "daily_course_record"), ("diagnosis_change", "rationale_documentation")),
+)
+
+
+def build_gold_acceptance_contracts() -> list[dict[str, Any]]:
+    """返回37条经人工复核的正式验收合同，调用方可安全修改返回值。"""
+
+    return [
+        {
+            **row,
+            "trigger_facts": list(row["trigger_facts"]),
+            "required_sources": list(row["required_sources"]),
+            "expected_evidence_roles": list(row["expected_evidence_roles"]),
+        }
+        for row in GOLD_ACCEPTANCE_CONTRACTS
+    ]
+
+
 def expected_status_for_case(case_index: int, rule_id: str) -> str:
     override = _STATUS_OVERRIDES_BY_CASE.get(case_index, {}).get(rule_id)
     if override:

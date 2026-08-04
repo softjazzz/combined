@@ -28,6 +28,7 @@ from app.services.luxian_0609.rule_contracts import (  # noqa: E402
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
     RULE_NUMBERS_BY_CASE,
     apply_controlled_evidence,
+    build_gold_acceptance_contracts,
     expected_status_for_case,
 )
 

@@ -298,6 +298,38 @@ def test_v3_full_validation_upgrade_assigns_all_rules_and_preserves_real_status_
         } == {"compliant", "non_compliant", "not_applicable"}
 
 
+def test_v3_gold_acceptance_contracts_freeze_37_reviewed_assertions() -> None:
+    contracts = module.build_gold_acceptance_contracts()
+
+    assert len(contracts) == 37
+    assert len({row["rule_id"] for row in contracts}) == 37
+    assert len(
+        {(row["case_index"], row["rule_id"]) for row in contracts}
+    ) == 37
+    assert all(
+        {
+            "case_index",
+            "fixture_ref",
+            "rule_id",
+            "expected_status",
+            "expected_reason_code",
+            "trigger_facts",
+            "required_sources",
+            "expected_evidence_roles",
+        }
+        <= row.keys()
+        for row in contracts
+    )
+    assert all(row["trigger_facts"] for row in contracts)
+    assert all(row["required_sources"] for row in contracts)
+    assert all(row["expected_evidence_roles"] for row in contracts)
+
+    case_017 = next(row for row in contracts if row["rule_id"] == "LX0609-017")
+    assert case_017["case_index"] == 6
+    assert case_017["expected_status"] == "compliant"
+    assert case_017["expected_reason_code"] == "course_similarity_within_threshold"
+
+
 def test_v3_020_explains_actual_multidisciplinary_participation() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()

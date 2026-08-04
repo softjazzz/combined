@@ -9,11 +9,24 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = ROOT / "scripts" / "qc" / "run_luxian_0609_mainline_synthetic_eval.py"
+BUILD_SCRIPT_PATH = (
+    ROOT / "backend" / "scripts" / "build_luxian_0609_0426_synthetic_v3.py"
+)
 
 
 def _load_script():
     spec = importlib.util.spec_from_file_location(
         "run_luxian_0609_mainline_synthetic_eval", SCRIPT_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_build_script():
+    spec = importlib.util.spec_from_file_location(
+        "build_luxian_0609_0426_synthetic_v3_for_eval", BUILD_SCRIPT_PATH
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -103,4 +116,38 @@ def test_validation_matrix_summary_separates_rules_from_assertions() -> None:
         "visit_count": 2,
         "unique_rule_count": 2,
         "assertion_count": 3,
+    }
+
+
+def test_mainline_eval_can_consume_the_37_gold_acceptance_contracts(
+    tmp_path: Path,
+) -> None:
+    module = _load_script()
+    build_module = _load_build_script()
+    contracts = build_module.build_gold_acceptance_contracts()
+    matrix_path = tmp_path / "gold-validation-matrix.csv"
+    with matrix_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=("visit_id", "rule_id", "expected_status")
+        )
+        writer.writeheader()
+        for contract in contracts:
+            writer.writerow(
+                {
+                    "visit_id": (
+                        "LX0609_0426_SYN_V3_"
+                        f"{int(contract['case_index']):03d}"
+                    ),
+                    "rule_id": contract["rule_id"],
+                    "expected_status": contract["expected_status"],
+                }
+            )
+
+    grouped = module.load_validation_matrix(matrix_path, defined_only=False)
+    summary = module.summarize_validation_matrix(grouped)
+
+    assert summary == {
+        "visit_count": 10,
+        "unique_rule_count": 37,
+        "assertion_count": 37,
     }
