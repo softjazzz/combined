@@ -137,6 +137,24 @@ async def _evaluate(rule_id, rows_by_source, *, unavailable_sources=frozenset())
     return result, reduced[0]
 
 
+async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=frozenset()):
+    snapshot, materials = _session(
+        rows_by_source, unavailable_sources=unavailable_sources
+    )
+    result = await execute_luxian_0609_native_extended_document_rules(
+        rule_ids=rule_ids,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=rule_ids,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=rule_ids,
+        snapshot=snapshot,
+    )
+    return snapshot, materials, result, reduced
+
+
 def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(
         ("LX0609-064", "LX0609-065", "LX0609-066", "LX0609-070")
@@ -732,6 +750,237 @@ async def test_critical_value_accepts_customer_abnormal_indicator() -> None:
         },)},
     )
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_critical_value_rules_use_one_public_execution_with_timely_disposition() -> None:
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result": "6.8",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "crisis_value_record": ({
+                "record_time": "2026-06-01 16:00:00",
+                "record_content": "已复查并完成危急值处置。",
+            },),
+        },
+    )
+
+    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert [item.rule_id for item in result.decisions] == [
+        "LX0609-052", "LX0609-053",
+    ]
+    assert [item.reason_code for item in result.decisions] == [
+        "requirement_within_threshold",
+        "requirement_satisfied",
+    ]
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    display = dict(result.customer_display_facts)
+    assert display["LX0609-052"] == {
+        "verification_kind": "critical_value_timeliness_check",
+        "critical_item_names": ["血钾"],
+        "critical_flags": ["PH"],
+        "report_times": ["2026-06-01 14:00:00"],
+        "disposition_times": ["2026-06-01 16:00:00"],
+        "threshold_hours": 6,
+        "actual_interval_hours": [2.0],
+    }
+    assert display["LX0609-053"] == {
+        "verification_kind": "critical_value_disposition_presence_check",
+        "critical_item_names": ["血钾"],
+        "critical_flags": ["PH"],
+        "report_times": ["2026-06-01 14:00:00"],
+        "disposition_times": ["2026-06-01 16:00:00"],
+    }
+    assert all(item.fact_refs for item in result.decisions)
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == 0
+    assert result.completion_tokens == 0
+    assert result.total_tokens == 0
+    assert result.api_time == 0.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "rows_by_source",
+        "unavailable_sources",
+        "expected_states",
+        "expected_reasons",
+    ),
+    [
+        (
+            {},
+            frozenset({"labtest_item_report"}),
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("source_unavailable", "source_unavailable"),
+        ),
+        (
+            {
+                "labtest_master": ({"report_id": "LAB-1"},),
+                "labtest_item_report": (),
+            },
+            frozenset(),
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("required_field_missing", "required_field_missing"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "result_flag": "N",
+                    "report_time": "2026-06-01 14:00:00",
+                },),
+            },
+            frozenset(),
+            (CustomerFinalState.NOT_APPLICABLE, CustomerFinalState.NOT_APPLICABLE),
+            ("trigger_absent_complete", "trigger_absent_complete"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "result_status": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },),
+                "crisis_value_record": ({"record_time": "2026-06-01 20:00:00"},),
+            },
+            frozenset(),
+            (CustomerFinalState.COMPLIANT, CustomerFinalState.COMPLIANT),
+            ("requirement_within_threshold", "requirement_satisfied"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "abnormal_flag": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },),
+                "crisis_value_record": ({"record_time": "2026-06-01 22:00:00"},),
+            },
+            frozenset(),
+            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.COMPLIANT),
+            ("threshold_exceeded", "requirement_satisfied"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },),
+            },
+            frozenset(),
+            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.NON_COMPLIANT),
+            ("threshold_exceeded", "required_document_missing"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "result_flag": "PH",
+                    "report_time": "2026-06-01 14:00:00",
+                },),
+            },
+            frozenset({"crisis_value_record"}),
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("source_unavailable", "source_unavailable"),
+        ),
+        (
+            {
+                "labtest_item_report": ({
+                    "item_name": "血钾",
+                    "record_content": "检验报告提示危急值（PH）",
+                },),
+            },
+            frozenset(),
+            (CustomerFinalState.DATA_GAP, CustomerFinalState.DATA_GAP),
+            ("authoritative_time_missing", "authoritative_time_missing"),
+        ),
+        (
+            {
+                "labtest_item_report": (
+                    {
+                        "item_name": "血钾",
+                        "result_flag": "PH",
+                        "report_time": "2026-06-01 14:00:00",
+                    },
+                    {
+                        "item_name": "血钙",
+                        "result_hint": "PH",
+                        "report_time": "2026-06-01 16:00:00",
+                    },
+                ),
+                "crisis_value_record": (
+                    {"record_time": "2026-06-01 15:00:00"},
+                    {"record_time": "2026-06-01 23:00:00"},
+                ),
+            },
+            frozenset(),
+            (CustomerFinalState.NON_COMPLIANT, CustomerFinalState.COMPLIANT),
+            ("threshold_exceeded", "requirement_satisfied"),
+        ),
+    ],
+)
+async def test_critical_value_rules_freeze_dual_rule_outcomes(
+    rows_by_source,
+    unavailable_sources,
+    expected_states,
+    expected_reasons,
+) -> None:
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        rows_by_source,
+        unavailable_sources=unavailable_sources,
+    )
+
+    assert result.planned_rule_ids == ("LX0609-052", "LX0609-053")
+    assert [item.final_state for item in reduced] == list(expected_states)
+    assert [item.reason_code for item in reduced] == list(expected_reasons)
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_rules_are_repeatable_for_one_evidence_session() -> None:
+    snapshot, materials = _session({
+        "labtest_item_report": (
+            {
+                "item_name": "血钾",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },
+            {
+                "item_name": "血钙",
+                "abnormal_indicator": "PL",
+                "report_time": "2026-06-01 16:00:00",
+            },
+        ),
+        "crisis_value_record": (
+            {"record_time": "2026-06-01 15:00:00"},
+            {"record_time": "2026-06-01 18:00:00"},
+        ),
+    })
+    kwargs = {
+        "rule_ids": ("LX0609-052", "LX0609-053"),
+        "evidence_snapshot": snapshot,
+        "evidence_materials": materials,
+        "decision_rule_ids": ("LX0609-052", "LX0609-053"),
+    }
+
+    first = await execute_luxian_0609_native_extended_document_rules(**kwargs)
+    second = await execute_luxian_0609_native_extended_document_rules(**kwargs)
+
+    assert first == second
+    assert first.llm_call_count == 0
+    assert first.total_tokens == 0
 
 
 def test_discharge_medication_labels_form_a_structured_contract() -> None:
