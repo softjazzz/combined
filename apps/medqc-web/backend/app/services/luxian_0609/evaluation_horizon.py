@@ -57,9 +57,6 @@ def resolve_record_evaluation_horizon(
 
     admission_text = _normalized_text(admission_datetime)
     discharge_text = _normalized_text(discharge_datetime)
-    admission_time = _parse_datetime(admission_text, field_name="admission_datetime")
-    discharge_time = _parse_datetime(discharge_text, field_name="discharge_datetime")
-
     if normalized_scene == "running":
         return RecordEvaluationHorizon(
             record_id=normalized_record_id,
@@ -80,6 +77,8 @@ def resolve_record_evaluation_horizon(
             evaluation_basis="",
             resolution_status="scene_uncertain",
         )
+    admission_time = _parse_datetime(admission_text, field_name="admission_datetime")
+    discharge_time = _parse_datetime(discharge_text, field_name="discharge_datetime")
     if admission_time is None or discharge_time is None:
         return RecordEvaluationHorizon(
             record_id=normalized_record_id,

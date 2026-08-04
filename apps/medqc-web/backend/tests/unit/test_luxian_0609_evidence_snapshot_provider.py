@@ -111,6 +111,26 @@ HORIZON_SOURCE_KEY = "inpat_registration.discharge_horizon"
                 "resolution_status": "scene_uncertain",
             },
         ),
+        (
+            "running",
+            "invalid-admission",
+            "invalid-discharge",
+            {
+                "evaluation_horizon": "2026-08-04",
+                "evaluation_basis": "task_frozen_date",
+                "resolution_status": "resolved",
+            },
+        ),
+        (
+            "unknown",
+            "invalid-admission",
+            "invalid-discharge",
+            {
+                "evaluation_horizon": "",
+                "evaluation_basis": "",
+                "resolution_status": "scene_uncertain",
+            },
+        ),
     ],
 )
 def test_record_evaluation_horizon_is_resolved_per_record(

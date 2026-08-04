@@ -15,6 +15,14 @@ from app.services.sichuan_qc_service import SichuanQCService
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
+from app.services.luxian_0609.evidence_snapshot_provider import (
+    SnapshotSourceRows,
+    build_luxian_0609_evidence_read_session,
+)
+from app.services.luxian_0609.source_evidence_reader import (
+    CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
+    EVALUATION_HORIZON_SOURCE_KEY,
+)
 
 
 def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
@@ -1815,10 +1823,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 "record_id": "visit-001",
                 "record_scene": "final",
                 "admission_datetime": "2026-06-01 08:00:00",
-                "discharge_datetime": "",
-                "evaluation_horizon": "",
-                "evaluation_basis": "",
-                "resolution_status": "authoritative_time_missing",
+                "discharge_datetime": "2026-06-13 18:00:00",
+                "evaluation_horizon": "2026-06-13",
+                "evaluation_basis": "discharge_datetime",
+                "resolution_status": "resolved",
             },
             {
                 "record_id": "visit-002",
@@ -1966,6 +1974,163 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
             ][2],
             "evaluation_as_of_date": None,
         },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_worker_and_real_provider_keep_unresolved_record_horizons_empty(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    snapshots = [
+        {
+            "record_id": "visit-missing",
+            "record_scene": "final",
+            "admission_datetime": "2026-06-01 08:00:00",
+            "discharge_datetime": "",
+            "evaluation_horizon": "",
+            "evaluation_basis": "",
+            "resolution_status": "authoritative_time_missing",
+        },
+        {
+            "record_id": "visit-conflict",
+            "record_scene": "final",
+            "admission_datetime": "2026-07-10 08:00:00",
+            "discharge_datetime": "2026-07-03 08:00:00",
+            "evaluation_horizon": "",
+            "evaluation_basis": "",
+            "resolution_status": "time_conflict",
+        },
+        {
+            "record_id": "visit-unknown",
+            "record_scene": "unknown",
+            "admission_datetime": "invalid-admission",
+            "discharge_datetime": "invalid-discharge",
+            "evaluation_horizon": "",
+            "evaluation_basis": "",
+            "resolution_status": "scene_uncertain",
+        },
+    ]
+    workspace.job["scope"] = "all"
+    workspace.job["record_ids"] = [item["record_id"] for item in snapshots]
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-012"],
+        "selected_rule_ids": ["LX0609-012"],
+        "scoped_customer_rule_ids": ["LX0609-012"],
+        "record_rule_map": {
+            item["record_id"]: ["LX0609-012"] for item in snapshots
+        },
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+        "record_evaluation_snapshot": snapshots,
+    }
+
+    def _collect_records(**_: Any) -> List[Dict[str, Any]]:
+        return [
+            {
+                "record_id": item["record_id"],
+                "visit_id": item["record_id"],
+                "scope": item["record_scene"],
+            }
+            for item in snapshots
+        ]
+
+    workspace.collect_records = _collect_records  # type: ignore[method-assign]
+    workspace.hydrate_records_with_medical_text = lambda records: [  # type: ignore[method-assign]
+        {
+            **record,
+            "institute_id": "HOSP-001",
+            "patient_id": f"PAT-{record['visit_id']}",
+            "medical_text": "病历文本",
+        }
+        for record in records
+    ]
+    provider_results: List[Dict[str, Any]] = []
+
+    class _ProviderBackedService(_ServiceStub):
+        async def evaluate_running_final_bundle_input(self, **kwargs: Any) -> Dict[str, Any]:
+            bundle = kwargs["bundle"]
+            visit_id = str(bundle["visit_id"])
+
+            def _reader(**reader_kwargs: Any) -> SnapshotSourceRows:
+                source_key = str(reader_kwargs["source_key"])
+                rows: List[Dict[str, Any]] = []
+                if source_key == "inpat_registration":
+                    rows = [
+                        {
+                            "admission_datetime": (
+                                "2026-07-10 08:00:00"
+                                if visit_id == "visit-conflict"
+                                else "2026-06-01 08:00:00"
+                            )
+                        }
+                    ]
+                elif (
+                    source_key == CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY
+                    and visit_id == "visit-conflict"
+                ):
+                    rows = [{"discharge_datetime": "2026-07-03 08:00:00"}]
+                return SnapshotSourceRows.create(
+                    source_key=source_key,
+                    rows=rows,
+                    truncated=False,
+                    limit_rows=1 if rows else 50,
+                )
+
+            session = build_luxian_0609_evidence_read_session(
+                selected_rule_ids=("LX0609-012",),
+                institute_id=str(bundle["institute_id"]),
+                patient_id=str(bundle["patient_id"]),
+                visit_id=visit_id,
+                source_schema=None,
+                created_at="2026-08-04T12:00:00+08:00",
+                evaluation_as_of_date=kwargs["evaluation_as_of_date"],
+                row_reader=_reader,
+            )
+            provider_results.append(
+                {
+                    "record_id": visit_id,
+                    "evaluation_as_of_date": kwargs["evaluation_as_of_date"],
+                    "horizon_rows": session.materials.rows(
+                        EVALUATION_HORIZON_SOURCE_KEY
+                    ),
+                }
+            )
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": "LX0609-012",
+                        "status": "data_gap",
+                        "is_compliant": None,
+                        "reason_code": "required_field_missing",
+                        "metadata": {"execution_source": "lx0609_native"},
+                    }
+                ],
+                "token_usage": {"total_tokens": 0},
+            }
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "load_running_final_bundle",
+        lambda **_: {"medical_text": "bundle text"},
+    )
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+
+    async def _get_service():
+        return _ProviderBackedService()
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert provider_results == [
+        {
+            "record_id": item["record_id"],
+            "evaluation_as_of_date": None,
+            "horizon_rows": (),
+        }
+        for item in snapshots
     ]
 
 
