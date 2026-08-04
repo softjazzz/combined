@@ -14,6 +14,10 @@ from app.services.luxian_0609.exam_lab_fact_extraction import (
     build_exam_lab_text_projection,
     parse_exam_lab_fact_response,
 )
+from app.services.luxian_0609.exam_lab_result_mapping import (
+    ExamLabOutcome,
+    build_exam_lab_rule_decision,
+)
 from app.services.luxian_0609 import source_registry
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609.evidence_material import (
@@ -212,6 +216,29 @@ def _payload(*, exam: str = "", culture: str = "") -> dict:
             }
         }
     }
+
+
+def test_result_mapping_binds_only_explicit_allowed_source_keys(monkeypatch):
+    snapshot, _ = _typed_session(monkeypatch)
+
+    decision = build_exam_lab_rule_decision(
+        outcome=ExamLabOutcome(
+            rule_id="LX0609-011",
+            status="compliant",
+            reason_code="ignored_for_compliant",
+        ),
+        snapshot=snapshot,
+        allowed_source_keys=("exam_master",),
+        evaluator_version="exam-lab-ruledecision-shadow-v1",
+    )
+
+    expected_ref = next(
+        observation.snapshot_ref.removeprefix("sha256:")
+        for observation in snapshot.observations
+        if observation.source_key == "exam_master"
+    )
+    assert decision.fact_refs == (expected_ref,)
+    assert decision.reason_code == "requirement_satisfied"
 
 
 def _wrapper(rule_id: str) -> dict:
