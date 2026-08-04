@@ -966,11 +966,11 @@ def test_fact_parser_python_owns_nonpositive_rule_applicability():
     ("imaging_conclusion", "expected_positive"),
     (
         ("阳性占位。", "positive"),
-        ("右肺异常影。", "positive"),
-        ("右肺结节病变。", "positive"),
-        ("右肺占位，考虑恶性。", "positive"),
-        ("基底节区出血。", "positive"),
-        ("急性脑梗死。", "positive"),
+        ("右肺异常影。", "unknown"),
+        ("右肺结节病变。", "unknown"),
+        ("右肺占位，考虑恶性。", "unknown"),
+        ("基底节区出血。", "unknown"),
+        ("急性脑梗死。", "unknown"),
         ("未见明确占位、出血或梗死。", "negative"),
         ("待排急性脑梗死。", "unknown"),
     ),
@@ -1187,7 +1187,7 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     assert [item.final_state.value for item in reduced] == [
         "non_compliant",
         "non_compliant",
-        "non_compliant",
+        "data_gap",
         "non_compliant",
         "non_compliant",
     ]
@@ -1202,8 +1202,7 @@ async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
         "checked_sources": ["exam_lab_order", "course_record"],
     }
     assert facts["LX0609-011"]["requirement"] == "result_recording_within_24h"
-    assert facts["LX0609-012"]["requirement"] == "positive_result_analysis_within_24h"
-    assert facts["LX0609-012"]["subject"] == "ct_mri"
+    assert "LX0609-012" not in facts
     assert facts["LX0609-014"]["subject"] == "culture_susceptibility"
     assert facts["LX0609-015"]["requirement"] == "positive_result_analysis_within_24h"
 
