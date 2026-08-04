@@ -25,6 +25,9 @@ from app.services.luxian_0609.evidence_snapshot import (
 from app.services.luxian_0609.native_extended_document_execution import (
     execute_luxian_0609_native_extended_document_rules,
 )
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+)
 from app.services.luxian_0609.source_evidence_reader import SnapshotSourceRows
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import (
@@ -805,6 +808,92 @@ async def test_critical_value_rules_use_one_public_execution_with_timely_disposi
     assert result.completion_tokens == 0
     assert result.total_tokens == 0
     assert result.api_time == 0.0
+
+
+@pytest.mark.asyncio
+async def test_critical_value_rules_preserve_canonical_customer_delivery() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-052", "LX0609-053"),
+        {
+            "labtest_item_report": ({
+                "item_name": "血钾",
+                "result": "6.8",
+                "result_flag": "PH",
+                "report_time": "2026-06-01 14:00:00",
+            },),
+            "crisis_value_record": ({
+                "record_time": "2026-06-01 16:00:00",
+                "record_content": "已复查并完成危急值处置。",
+            },),
+        },
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[
+            {"rule_id": "LX0609-052"},
+            {"rule_id": "LX0609-053"},
+        ],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert [
+        (
+            item["rule_id"],
+            item["status"],
+            item["reason_code"],
+            item["is_compliant"],
+            item["findings"],
+            item["evidence"],
+            item["suggestion"],
+        )
+        for item in canonical
+    ] == [
+        (
+            "LX0609-052",
+            "compliant",
+            "requirement_within_threshold",
+            True,
+            "危急值项目：血钾；报告时间：2026-06-01 14:00:00；"
+            "处置时间：2026-06-01 16:00:00；实际间隔 2.0 小时，规定时限 6 小时。",
+            "已根据受控证据完成判断。",
+            "继续保持。",
+        ),
+        (
+            "LX0609-053",
+            "compliant",
+            "requirement_satisfied",
+            True,
+            "危急值项目：血钾；报告后已找到危急值处置记录（2026-06-01 16:00:00）。",
+            "已根据受控证据完成判断。",
+            "继续保持。",
+        ),
+    ]
+    assert [item["customer_display_facts"] for item in canonical] == [
+        {
+            "verification_kind": "critical_value_timeliness_check",
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_times": ["2026-06-01 14:00:00"],
+            "disposition_times": ["2026-06-01 16:00:00"],
+            "threshold_hours": 6,
+            "actual_interval_hours": [2.0],
+        },
+        {
+            "verification_kind": "critical_value_disposition_presence_check",
+            "critical_item_names": ["血钾"],
+            "critical_flags": ["PH"],
+            "report_times": ["2026-06-01 14:00:00"],
+            "disposition_times": ["2026-06-01 16:00:00"],
+        },
+    ]
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
 
 
 @pytest.mark.asyncio
