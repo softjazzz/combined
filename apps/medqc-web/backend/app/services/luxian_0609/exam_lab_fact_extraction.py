@@ -112,6 +112,43 @@ class ExamLabEventFact:
     evidence_refs: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ExamLabControlledTerminal:
+    """由资料事实直接决定、无需再调用模型的受控终止结果。"""
+
+    rule_id: str
+    status: str
+    reason_code: str
+    fact: ExamLabEventFact
+
+
+def resolve_exam_lab_controlled_terminal(
+    *, rule_id: str, projection: ExamLabTextProjection
+) -> ExamLabControlledTerminal | None:
+    """只处理已由客户口径明确、不能由后续语义升级的事实门控。"""
+
+    if (
+        rule_id != "LX0609-012"
+        or projection.imaging_event is None
+        or projection.imaging_event.positive_hint != "unknown"
+    ):
+        return None
+    event = projection.imaging_event
+    return ExamLabControlledTerminal(
+        rule_id=rule_id,
+        status="data_gap",
+        reason_code="positive_assertion_not_explicit",
+        fact=ExamLabEventFact(
+            rule_id=rule_id,
+            applicability="unknown",
+            semantic_state="unknown",
+            positive_state="unknown",
+            course_doc_refs=(),
+            evidence_refs=event.document_refs,
+        ),
+    )
+
+
 def _clean(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 

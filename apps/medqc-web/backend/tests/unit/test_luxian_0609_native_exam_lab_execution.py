@@ -34,6 +34,7 @@ from app.services.luxian_0609.evidence_snapshot import (
 from app.services.luxian_0609.decision_binding import (
     bind_and_reduce_luxian_0609_rule_decisions,
 )
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
 from app.services.luxian_0609.evidence_snapshot_provider import (
     build_luxian_0609_evidence_read_session,
 )
@@ -1348,6 +1349,22 @@ async def test_lx0609_012_gold_positive_gate_outcomes(
     assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == expected_llm_calls
     assert all(item.fact_refs for item in result.decisions)
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+    assert canonical[0]["status"] == expected_state
+    assert canonical[0]["reason_code"] == expected_reason
+    if expected_reason == "positive_assertion_not_explicit":
+        assert canonical[0]["findings"] == "检查报告未明确写明阳性，暂无法启动阳性结果分析核对"
+        assert "未明确标注“阳性”" in canonical[0]["evidence"]
+        assert "确认检查报告的阳性标志" in canonical[0]["suggestion"]
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from .exam_lab_fact_extraction import (
     build_exam_lab_fact_prompt,
     build_exam_lab_text_projection,
     parse_exam_lab_fact_response,
+    resolve_exam_lab_controlled_terminal,
 )
 from .exam_lab_result_mapping import (
     ExamLabOutcome as _ExamLabOutcome,
@@ -1227,29 +1228,18 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 对报告及病程中可由明确短语直接验证的事实优先使用 Python。
                 # 含混、否定不清或条件性表述仍保留给一次受控 LLM。
                 for rule_id in tuple(eligible_rule_ids):
-                    if (
-                        rule_id == "LX0609-012"
-                        and projection.imaging_event is not None
-                        and projection.imaging_event.positive_hint == "unknown"
-                    ):
-                        # 客户口径仅接受报告原文明确“阳性”。未满足该门控时，
-                        # 后续病程语义无法使规则成立，也不应浪费一次 LLM 调用。
-                        event = projection.imaging_event
-                        fact = ExamLabEventFact(
-                            rule_id=rule_id,
-                            applicability="unknown",
-                            semantic_state="unknown",
-                            positive_state="unknown",
-                            course_doc_refs=(),
-                            evidence_refs=event.document_refs,
-                        )
+                    terminal = resolve_exam_lab_controlled_terminal(
+                        rule_id=rule_id,
+                        projection=projection,
+                    )
+                    if terminal is not None:
                         outcome = _ExamLabOutcome(
                             rule_id,
-                            "data_gap",
-                            "positive_assertion_not_explicit",
+                            terminal.status,
+                            terminal.reason_code,
                             tuple(
                                 projection.safe_refs[ref]
-                                for ref in event.document_refs
+                                for ref in terminal.fact.evidence_refs
                                 if ref in projection.safe_refs
                             ),
                         )
@@ -1261,7 +1251,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             display_facts=_text_outcome_display_facts(
                                 rule_id=rule_id,
                                 status=outcome.status,
-                                fact=fact,
+                                fact=terminal.fact,
                                 projection=projection,
                             ),
                         )
