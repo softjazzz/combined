@@ -574,6 +574,60 @@ def _rows(source_key: str, rows, *, truncated: bool = False, limit_rows: int = 5
     )
 
 
+def test_033_reads_only_surgery_record_and_surgery_consent_sources() -> None:
+    """033 只读取手术记录及手术知情同意书，不能被无关术前文书阻断。"""
+
+    calls: list[str] = []
+
+    def reader(**kwargs):
+        source_key = kwargs["source_key"]
+        calls.append(source_key)
+        rows_by_source = {
+            "surgery_record": (
+                {"document_id": "surgery-001", "surgery_begin_time": "2026-06-01 08:00:00+08"},
+            ),
+            "surgery_inform_consent": (
+                {
+                    "document_id": "consent-001",
+                    "document_title": "手术知情同意书",
+                    "record_content": "患者已获手术风险告知。",
+                    "patient_sign": "患者签名",
+                    "surgeon_sign": "术者签名",
+                },
+            ),
+        }
+        return _rows(source_key, rows_by_source.get(source_key, ()))
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-033",),
+        institute_id="I-033",
+        patient_id="P-033",
+        visit_id="V-033",
+        source_schema=None,
+        created_at=CREATED_AT,
+        row_reader=reader,
+    )
+
+    assert calls == [
+        "consent_form",
+        "mr_surgery",
+        "surgery_inform_consent",
+        "surgery_record",
+    ]
+    observations = {item.source_key: item for item in session.snapshot.observations}
+    assert "surgery_risk_assessment" not in observations
+    assert observations["surgery_inform_consent"].query_state is SourceQueryState.AVAILABLE
+    assert session.materials.rows("surgery_inform_consent")[0]["document_id"] == "consent-001"
+    readiness = [
+        fact
+        for fact in session.snapshot.facts
+        if fact.fact_type == "current_visit_surgery_consent_source_readiness"
+    ]
+    assert len(readiness) == 1
+    assert readiness[0].source_key == "surgery_inform_consent"
+    assert readiness[0].normalized_value == {"complete": True}
+
+
 @pytest.mark.parametrize(
     ("present", "query_state", "assertion"),
     [

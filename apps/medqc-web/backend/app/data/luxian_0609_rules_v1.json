@@ -2265,26 +2265,8 @@
     "complexity": "高复杂度",
     "defect_level": "严重缺陷",
     "score_deduction": 2,
-    "applicable_documents": [
-      "anesthesia_record",
-      "consent_form",
-      "postsurg_firstcourse_record",
-      "presurg_discussion",
-      "presurg_summary",
-      "surgery_record",
-      "surgery_risk_assessment",
-      "surgery_safecheck_record"
-    ],
-    "applicable_document_labels": [
-      "麻醉记录",
-      "知情同意书",
-      "postsurg_firstcourse_record",
-      "presurg_discussion",
-      "presurg_summary",
-      "surgery_record",
-      "surgery_risk_assessment",
-      "surgery_safecheck_record"
-    ],
+    "applicable_documents": ["consent_form", "surgery_record"],
+    "applicable_document_labels": ["知情同意书", "手术记录"],
     "medical_domain": "泸县0609专项",
     "requires_rag": false,
     "requires_cot": false,

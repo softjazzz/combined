@@ -471,6 +471,46 @@ def build_luxian_0609_evidence_read_session(
             snapshot_ref=snapshot_ref,
         )
         observations.append(observation)
+        if source_key == "surgery_inform_consent":
+            facts.append(
+                FactV2.create(
+                    visit_ref=build_luxian_0609_visit_ref(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                    ),
+                    family="surgery_anesthesia",
+                    fact_type="current_visit_surgery_consent_source_readiness",
+                    normalized_value={
+                        "complete": completeness is SourceCompleteness.COMPLETE,
+                    },
+                    trigger_scope="current_visit",
+                    current_visit_relevance="relevant",
+                    assertion=(
+                        "affirmed"
+                        if completeness is SourceCompleteness.COMPLETE
+                        else "unknown"
+                    ),
+                    assertion_context="other",
+                    event_status="unknown",
+                    source_key=source_key,
+                    source_document_id="",
+                    source_document_type=source_key,
+                    record_time=None,
+                    submit_time=None,
+                    update_time=None,
+                    quote="",
+                    redaction_terms=(),
+                    confidence=1.0,
+                    extractor="deterministic",
+                    extractor_version="snapshot-provider-surgery-consent-readiness-v1",
+                    fact_schema_version=FACT_SCHEMA_VERSION,
+                    source_snapshot_hash=snapshot_ref.removeprefix("sha256:"),
+                    created_at=created_at,
+                    extensions={},
+                    known_upstream_fact_ids=(),
+                )
+            )
         if source_key == "surgery_record" or (
             source_key == "mr_surgery" and "LX0609-039" in selected_rule_ids
         ):

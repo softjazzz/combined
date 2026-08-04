@@ -279,7 +279,14 @@ def _with_consent_readiness_fact(session, *, complete: bool):
         snapshot_schema_version=session.snapshot.snapshot_schema_version,
         source_registry_version=session.snapshot.source_registry_version,
         observations=session.snapshot.observations,
-        facts=(*session.snapshot.facts, readiness_fact),
+        facts=(
+            *(
+                fact
+                for fact in session.snapshot.facts
+                if fact.fact_type != "current_visit_surgery_consent_source_readiness"
+            ),
+            readiness_fact,
+        ),
         document_refs=session.snapshot.document_refs,
         created_at=session.snapshot.created_at,
     )
@@ -697,14 +704,18 @@ async def test_typed_remaining_surgery_gates_are_ordered_zero_model_and_fail_clo
     # 033直接不适用，不再继续要求同意书。
     if source_mode in {"empty", "mr_only"}:
         expected_states[-1] = "not_applicable"
+    elif source_mode == "available":
+        # 同一快照已完整读取手术知情同意书来源且为空，可确定为缺少文书。
+        expected_states[-1] = "non_compliant"
     assert [item.final_state.value for item in reduced] == expected_states
     if expected_reason is not None:
         expected_reasons = {expected_reason}
         assert {item.reason_code for item in result.decisions} == expected_reasons
     elif source_mode == "available":
-        assert {item.reason_code for item in result.decisions} == {
+        assert [item.reason_code for item in result.decisions[:-1]] == [
             "required_field_missing",
-        }
+        ] * 4
+        assert result.decisions[-1].reason_code == "requirement_violated"
     assert result.total_tokens == 0
     assert client.prompts == []
 
@@ -732,7 +743,10 @@ def _empty_033_consent_session(*, readiness_complete: bool):
         created_at=CREATED_AT,
         row_reader=reader,
     )
-    return _with_consent_readiness_fact(session, complete=readiness_complete)
+    if readiness_complete:
+        # 生产快照已从同一条完整查询的 Observation 派生来源完整性事实。
+        return session.snapshot, session.materials
+    return _with_consent_readiness_fact(session, complete=False)
 
 
 @pytest.mark.asyncio
