@@ -41,18 +41,6 @@ ROOT_CAUSES = frozenset(
         "other_with_evidence",
     }
 )
-_EVALUATION_HORIZON_RULE_IDS = frozenset(
-    {
-        "LX0609-008",
-        "LX0609-009",
-        "LX0609-011",
-        "LX0609-012",
-        "LX0609-014",
-        "LX0609-015",
-        "LX0609-020",
-        "LX0609-023",
-    }
-)
 CSV_COLUMNS = (
     "record_id",
     "visit_id",
@@ -176,8 +164,6 @@ def _source_keys_for_rule(rule_id: str) -> tuple[str, ...]:
     ]
     keys.extend(resolve_luxian_0609_controlled_fact_source_keys((rule_id,)))
     keys.extend(resolve_luxian_0609_decision_support_source_keys((rule_id,)))
-    if rule_id in _EVALUATION_HORIZON_RULE_IDS:
-        keys.append("evaluation_context.horizon")
     return tuple(dict.fromkeys(key for key in keys if key))
 
 
@@ -309,12 +295,19 @@ def classify_gap(
             "confirmed",
             "任务原始项明确缺少适用性判断资料；未将其误判为确定的不适用。",
         )
-    if reason_code == "source_unavailable" or _is_empty(observations):
+    if _is_empty(observations):
         return (
             "source_truly_absent",
             "source_pg",
             "indicated",
             "重建 Snapshot 显示至少一个必需来源为空；需以规则具体必需字段确认是否为临床资料本身不存在。",
+        )
+    if reason_code == "source_unavailable":
+        return (
+            "other_with_evidence",
+            "native_result_projection",
+            "unresolved",
+            "历史任务报告来源不可用，但当前重建 Snapshot 的必需来源均可读；未持久化历史 Decision/Trace，不能反推为源库资料缺失。",
         )
     if reason_code == "required_field_missing":
         return (

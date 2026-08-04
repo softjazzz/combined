@@ -144,6 +144,40 @@ def test_classify_gap_checks_reader_capability_before_native_time_reason() -> No
     )
 
 
+def test_classify_gap_does_not_call_currently_readable_sources_absent() -> None:
+    cause, layer, confidence, _evidence = classify_gap(
+        reason_code="source_unavailable",
+        observations={
+            "daily_course_record": {"query_state": "available"},
+            "surgery_record": {"query_state": "available"},
+            "mr_surgery": {"query_state": "available"},
+            "pathology_exam_master": {"query_state": "available"},
+            "pathology_exam_report": {"query_state": "available"},
+        },
+        material_summary={
+            "daily_course_record": {"present": True, "row_count": 1},
+            "surgery_record": {"present": True, "row_count": 1},
+            "mr_surgery": {"present": True, "row_count": 1},
+            "pathology_exam_master": {"present": True, "row_count": 1},
+            "pathology_exam_report": {"present": True, "row_count": 1},
+        },
+        required_source_keys=(
+            "daily_course_record",
+            "surgery_record",
+            "mr_surgery",
+            "pathology_exam_master",
+            "pathology_exam_report",
+        ),
+        workspace_envelope_match=True,
+    )
+
+    assert (cause, layer, confidence) == (
+        "other_with_evidence",
+        "native_result_projection",
+        "unresolved",
+    )
+
+
 def test_evidence_trace_marks_unlocatable_canonical_items_without_claiming_delivery_loss() -> None:
     trace = _evidence_delivery_trace(
         {

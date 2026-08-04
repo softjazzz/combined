@@ -2,7 +2,7 @@
 
 ## 冻结基线
 
-- 审计 Git：`fa9b7b24a2f1403bbd98eaede661b515abb58212`
+- 审计 Git：`2bcd1e16e99ecbfa4629b1cc334334077bb3f704`
 - 冻结任务：`1f63f39e-6ce2-44f7-a86b-5d65032e93a9`（运行完成：2026-08-03 20:21:07.832675）
 - 病例 / 规则：38 / 75
 - 三坐标集合哈希：`fcaa891604a95ea308afc278c485b56026e766687a4172a5e668b3fd375c5126`
@@ -14,29 +14,29 @@
 ## data_gap 汇总
 
 - data_gap：**651** 条，涉及 **38** 份病例。
-- 已证实的真实/保守资料缺口：233 条；存在资料缺口指征、但尚不能定性：268 条；存在关联失败指征、但尚不能定性为引擎缺陷：37 条；已证实的交付/读取错误：0 条；证据不足、不得臆断：58 条。
-- 分类置信度：`{"confirmed":288,"indicated":305,"unresolved":58}`。
+- 已证实的真实/保守资料缺口：233 条；存在资料缺口指征、但尚不能定性：263 条；存在关联失败指征、但尚不能定性为引擎缺陷：37 条；已证实的交付/读取错误：0 条；证据不足、不得臆断：63 条。
+- 分类置信度：`{"confirmed":288,"indicated":300,"unresolved":63}`。
 
 ### 按主要根因
 
 | 根因                       | 条数 |
 | -------------------------- | ---: |
-| source_truly_absent        |  268 |
+| source_truly_absent        |  263 |
 | authoritative_time_missing |  118 |
+| other_with_evidence        |  118 |
 | applicability_unresolved   |  115 |
-| other_with_evidence        |  113 |
 | event_linkage_failed       |   37 |
 
 ### 影响最大的三个根因
 
-- `source_truly_absent`：268 条。
+- `source_truly_absent`：263 条。
 - `authoritative_time_missing`：118 条。
-- `applicability_unresolved`：115 条。
+- `other_with_evidence`：118 条。
 
 ### 真实缺失与错误 data_gap 比例
 
 - 仅以可证实结果计：真实/保守资料缺口 233，错误 data_gap 0；比例为 `233:0`。
-- 另有 268 条来源为空指征、37 条关联失败指征和 58 条未解析项，均不得强行并入任一侧。
+- 另有 263 条来源为空指征、37 条关联失败指征和 63 条未解析项，均不得强行并入任一侧。
 
 ### 按规则（全部见 CSV）
 
