@@ -199,8 +199,11 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
       '比对范围入院记录现病史、首次病程记录病例特点',
     )
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).not.toContain(
+      '判定类型',
+    )
     expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
-      '判定类型入院记录现病史与首次病程记录病例特点高度重复',
+      '问题说明入院记录现病史与首次病程记录病例特点高度重复',
     )
   })
 
@@ -356,7 +359,6 @@ describe('SingleRecordQcResultPanel', () => {
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
-    expect(wrapper.text()).toContain('判定类型')
     expect(wrapper.text()).toContain('未检索到手术知情同意书')
     expect(wrapper.text()).toContain('手术知情同意书')
     expect(wrapper.text()).toContain('已实施手术')
@@ -406,14 +408,15 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).not.toContain('本次保存结果缺少具体判定说明')
   })
 
-  it('受控事实存在时展示缺失字段，并保留安全证据定位入口', async () => {
+  it('不向客户展示缺失字段和判定类型，并保留安全证据定位入口', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items: [items[2]!] } })
 
     await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
 
     expect(wrapper.text()).toContain('判定事实')
     expect(wrapper.text()).toContain('植入物信息填写不完整')
-    expect(wrapper.text()).toContain('条码/批号、数量')
+    expect(wrapper.text()).not.toContain('缺失字段')
+    expect(wrapper.text()).not.toContain('条码/批号、数量')
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('手术记录')
   })
 
@@ -615,8 +618,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('待补资料')
     expect(wrapper.text()).toContain('缺少来源')
     expect(wrapper.text()).toContain('daily_course_record')
-    expect(wrapper.text()).toContain('缺少字段')
-    expect(wrapper.text()).toContain('daily_course_record.record_time')
+    expect(wrapper.text()).not.toContain('缺少字段')
+    expect(wrapper.text()).not.toContain('daily_course_record.record_time')
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain(
       'CT/MRI 检查报告',
     )

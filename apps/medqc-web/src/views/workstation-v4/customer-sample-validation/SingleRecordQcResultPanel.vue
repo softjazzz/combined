@@ -505,6 +505,10 @@ const dataGapLabels: Record<string, string> = {
   availability: '来源状态',
 }
 
+// 这些字段保留在服务端结果中供追踪和调试，但不直接暴露给客户。
+const hiddenCustomerFactKeys = new Set(['missing_fields'])
+const hiddenDataGapKeys = new Set(['reason_code', 'missing_fields'])
+
 const TIMELINESS_METRIC_KEYS = ['threshold_hours', 'elapsed_hours', 'overdue_hours'] as const
 const TIMELINESS_TIME_KEYS = ['anchor_time', 'observed_time'] as const
 
@@ -512,7 +516,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
   const facts = item.customer_display_facts
   if (!facts || typeof facts !== 'object') return []
   return Object.entries(facts)
-    .filter(([key]) => Boolean(factLabels[key]))
+    .filter(([key]) => Boolean(factLabels[key]) && !hiddenCustomerFactKeys.has(key))
     .map(([key, rawValue]) => {
       const values = Array.isArray(rawValue) ? rawValue : [rawValue]
       const value = values
@@ -542,6 +546,8 @@ function displayFactRows(item: SingleRecordQcResultItem) {
           ? '入院时间'
           : key === 'observed_time' && sourceLabel
             ? `${sourceLabel}时间`
+            : key === 'failure_kind'
+              ? '问题说明'
             : factLabels[key] || key
       return {
         key,
@@ -594,7 +600,7 @@ function dataGapRows(item: SingleRecordQcResultItem) {
   const details = item.data_gap_details
   if (!details || typeof details !== 'object') return []
   return Object.entries(details)
-    .filter(([key]) => Boolean(dataGapLabels[key]))
+    .filter(([key]) => Boolean(dataGapLabels[key]) && !hiddenDataGapKeys.has(key))
     .map(([key, value]) => ({
       key,
       label: dataGapLabels[key] || key,
