@@ -6,6 +6,7 @@ import pytest
 
 from app.services.luxian_0609.customer_renderer import (
     CUSTOMER_RESULT_KEYS,
+    compliant_customer_finding,
     customer_finding_from_controlled_facts,
     render_luxian_0609_customer_result,
 )
@@ -27,6 +28,19 @@ from app.services.luxian_0609.rule_contracts import load_luxian_0609_rule_contra
 
 SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
+
+
+def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() -> None:
+    finding = compliant_customer_finding(
+        rule_id="LX0609-068",
+        criterion_results=(),
+    )
+
+    assert "上级医师同意出院意见" in finding
+    assert "自动出院" in finding
+    assert "书面签署" in finding
+
+
 DEFINED_RULE_IDS = tuple(
     contract.rule_id
     for contract in load_luxian_0609_rule_contracts()

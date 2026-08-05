@@ -33,6 +33,7 @@ from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import (
     SOURCE_REGISTRY_VERSION,
     resolve_luxian_0609_decision_support_source_keys,
+    resolve_luxian_0609_rule_sources,
 )
 
 
@@ -172,6 +173,17 @@ def test_071_binds_authoritative_and_explicit_order_change_sources() -> None:
 
     assert "physician_change_event" in sources
     assert "inpat_nondrug_order" in sources
+
+
+def test_068_binds_daily_and_senior_course_sources() -> None:
+    sources = {
+        entry.document_type
+        for entry in resolve_luxian_0609_rule_sources(("LX0609-068",))["LX0609-068"]
+    }
+
+    assert "discharge_record" in sources
+    assert "daily_course_record" in sources
+    assert "senior_course_record" in sources
 
 
 @pytest.mark.asyncio
@@ -369,6 +381,7 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
         "checked_dates": ("2026-07-02", "2026-07-03"),
         "checked_source": "senior_course_record",
         "approval_present": True,
+        "approval_path": "senior_approval",
     }
 
 
@@ -394,9 +407,196 @@ async def test_068_missing_senior_discharge_opinion_exposes_checked_dates() -> N
         "failure_kind": "senior_discharge_approval_missing",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
-        "checked_source": "senior_course_record",
+        "checked_source": "daily_course_record,senior_course_record",
         "approval_present": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_068_accepts_complete_automatic_discharge_process_in_daily_course() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "daily_course_record": (
+                {
+                    "document_id": "daily-auto-discharge",
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": (
+                        "目前患者病情危重，家属要求自动出院，劝阻无效，"
+                        "请示上级医师及签《自动出院书》后办理出院。"
+                    ),
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-068"] == {
+        "failure_kind": "senior_discharge_approval_present",
+        "discharge_date": "2026-07-03",
+        "checked_dates": ("2026-07-02", "2026-07-03"),
+        "checked_source": "daily_course_record",
+        "approval_present": True,
+        "approval_path": "automatic_discharge",
+    }
+
+
+@pytest.mark.asyncio
+async def test_068_automatic_discharge_preserves_canonical_customer_delivery() -> None:
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-068",),
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "daily_course_record": (
+                {
+                    "document_id": "daily-auto-discharge",
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": (
+                        "目前患者病情危重，家属要求自动出院，劝阻无效，"
+                        "请示上级医师及签《自动出院书》后办理出院。"
+                    ),
+                },
+            ),
+        },
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-068"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=execution.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )
+
+    assert len(canonical) == 1
+    item = canonical[0]
+    assert item["status"] == "compliant"
+    assert item["reason_code"] == "requirement_satisfied"
+    assert item["is_compliant"] is True
+    assert "自动出院" in item["findings"]
+    assert item["customer_display_facts"]["approval_path"] == "automatic_discharge"
+    assert item["customer_display_facts"]["checked_source"] == "daily_course_record"
+    assert execution.llm_call_count == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_068_accepts_daily_course_evidence_when_senior_source_is_unavailable() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": (
+                        "患者病情危重，家属要求自动出院，劝阻无效，"
+                        "请示上级医师及签《自动出院书》后办理出院。"
+                    ),
+                },
+            ),
+        },
+        unavailable_sources=frozenset({"senior_course_record"}),
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_068_accepts_senior_approval_recorded_in_daily_course() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "daily_course_record": (
+                {
+                    "document_id": "daily-senior-approval",
+                    "record_time": "2026-07-02 09:00:00",
+                    "record_content": "今日请示李主任医师查看患者，同意明日出院。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-068"]["checked_source"] == (
+        "daily_course_record"
+    )
+    assert dict(result.customer_display_facts)["LX0609-068"]["approval_path"] == (
+        "senior_approval"
+    )
+
+
+@pytest.mark.asyncio
+async def test_068_does_not_accept_unsigned_automatic_discharge() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": (
+                        "家属坚持自动出院，已请示上级医师，但拒绝签署自动出院书。"
+                    ),
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_068_does_not_treat_senior_rejection_as_discharge_approval() -> None:
+    _, reduced = await _evaluate(
+        "LX0609-068",
+        {
+            "inpat_registration": (
+                {"patient_status": "出院", "discharge_datetime": "2026-07-03 12:00:00"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-03 12:00:00"},
+            ),
+            "senior_course_record": (
+                {
+                    "record_time": "2026-07-03 08:00:00",
+                    "record_content": "患者病情尚不稳定，上级医师不同意出院。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
 
 
 @pytest.mark.asyncio

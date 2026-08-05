@@ -126,10 +126,62 @@ _DISCHARGE_APPROVAL_PATTERN = re.compile(
     r"(?:同意|准予|可以)(?:患者)?(?:于|拟于)?"
     r"(?:今日|明日|次日)?(?:办理)?出院"
 )
+_DISCHARGE_APPROVAL_NEGATED_PATTERN = re.compile(
+    r"(?:不|未|未获|未取得|未得到|尚未|尚不|暂不).{0,12}"
+    r"(?:同意|准予|可以).{0,8}出院"
+)
+_SENIOR_PHYSICIAN_REFERENCE_PATTERN = re.compile(
+    r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
+)
+_AUTOMATIC_DISCHARGE_PATTERN = re.compile(r"自动出院")
+_SENIOR_PHYSICIAN_CONSULTED_PATTERN = re.compile(
+    r"(?:请示|报请|报告).{0,12}"
+    r"(?:上级医师|上级医生|主治医师|副主任医师|主任医师|[\u4e00-\u9fff]{1,4}(?:主任|主治))"
+)
+_AUTOMATIC_DISCHARGE_SIGNED_PATTERN = re.compile(
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)[》\"”]?"
+)
+_AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN = re.compile(
+    r"(?:未|未予|尚未|拒绝|拒不).{0,8}"
+    r"(?:签署|签订|签字|签)[《\"“]?自动出院(?:书|协议|知情同意书)"
+)
 
 
 def _clean(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _discharge_approval_path(
+    row: Mapping[str, Any],
+    *,
+    source_key: str,
+) -> str | None:
+    text = _row_text(row)
+    if not text:
+        return None
+
+    if (
+        _AUTOMATIC_DISCHARGE_PATTERN.search(text)
+        and _SENIOR_PHYSICIAN_CONSULTED_PATTERN.search(text)
+        and _AUTOMATIC_DISCHARGE_SIGNED_PATTERN.search(text)
+        and not _AUTOMATIC_DISCHARGE_UNSIGNED_PATTERN.search(text)
+    ):
+        return "automatic_discharge"
+
+    approval = _DISCHARGE_APPROVAL_PATTERN.search(text)
+    if approval is None:
+        return None
+    local_context = text[max(0, approval.start() - 80): approval.end() + 40]
+    if _DISCHARGE_APPROVAL_NEGATED_PATTERN.search(local_context):
+        return None
+    author_title = _clean(row.get("author_title"))
+    if (
+        source_key == "senior_course_record"
+        or _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(local_context)
+        or _SENIOR_PHYSICIAN_REFERENCE_PATTERN.search(author_title)
+    ):
+        return "senior_approval"
+    return None
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -1536,11 +1588,13 @@ async def execute_luxian_0609_native_extended_document_rules(
         if rule_id in {"LX0609-067", "LX0609-068"}:
             source_error = registration_error or discharge_error
             discharge_time = _discharge_time(registration_rows, discharge_rows)
+            approval_match: tuple[str, str] | None = None
+            render_display = False
             if source_error:
                 final_state, reason_code = "data_gap", source_error
             elif discharge_time is None:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
-            elif daily_error or senior_error:
+            elif rule_id == "LX0609-067" and (daily_error or senior_error):
                 final_state, reason_code = (
                     "data_gap",
                     daily_error or senior_error,
@@ -1557,19 +1611,42 @@ async def execute_luxian_0609_native_extended_document_rules(
                         )
                     )
                 else:
-                    present = any(
-                        _row_time(row) is not None
-                        and _row_time(row).date() in valid_dates
-                        and _DISCHARGE_APPROVAL_PATTERN.search(_row_text(row))
-                        for row in senior_rows
+                    approval_match = next(
+                        (
+                            (source_key, approval_path)
+                            for source_key, rows in (
+                                ("daily_course_record", daily_rows),
+                                ("senior_course_record", senior_rows),
+                            )
+                            for row in rows
+                            if _row_time(row) is not None
+                            and _row_time(row).date() in valid_dates
+                            if (
+                                approval_path := _discharge_approval_path(
+                                    row,
+                                    source_key=source_key,
+                                )
+                            )
+                        ),
+                        None,
                     )
-                final_state = "compliant" if present else "non_compliant"
-                reason_code = (
-                    "requirement_satisfied"
-                    if present
-                    else "required_document_missing"
-                )
-                if rule_id == "LX0609-068":
+                    present = approval_match is not None
+                if rule_id == "LX0609-068" and approval_match is None and (
+                    daily_error or senior_error
+                ):
+                    final_state, reason_code = (
+                        "data_gap",
+                        daily_error or senior_error,
+                    )
+                else:
+                    final_state = "compliant" if present else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if present
+                        else "required_document_missing"
+                    )
+                    render_display = True
+                if render_display and rule_id == "LX0609-068":
                     display.append(
                         (
                             rule_id,
@@ -1583,12 +1660,21 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 "checked_dates": tuple(
                                     sorted(item.isoformat() for item in valid_dates)
                                 ),
-                                "checked_source": "senior_course_record",
+                                "checked_source": (
+                                    approval_match[0]
+                                    if approval_match is not None
+                                    else "daily_course_record,senior_course_record"
+                                ),
                                 "approval_present": present,
+                                **(
+                                    {"approval_path": approval_match[1]}
+                                    if approval_match is not None
+                                    else {}
+                                ),
                             },
                         )
                     )
-                else:
+                elif render_display:
                     display.append((rule_id, {
                         "verification_kind": "predischarge_course_presence_check",
                         "discharge_date": discharge_time.date().isoformat(),
@@ -1603,6 +1689,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         (
                             "inpat_registration",
                             "discharge_record",
+                            "daily_course_record",
                             "senior_course_record",
                         )
                         if rule_id == "LX0609-068"
