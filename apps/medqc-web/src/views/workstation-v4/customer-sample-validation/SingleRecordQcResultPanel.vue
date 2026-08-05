@@ -975,6 +975,7 @@ watch(
   flex-direction: column;
   justify-content: center;
   padding: 12px 16px 11px;
+  overflow-wrap: anywhere;
 }
 
 .result-row-header {
@@ -1009,29 +1010,24 @@ watch(
   display: block;
   min-width: 0;
   margin-top: 1px;
-  overflow: hidden;
   color: rgba(29, 29, 31, 0.92);
   font-size: 14px;
   line-height: 20px;
   font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .rule-conclusion {
-  display: -webkit-box;
+  display: block;
   margin-top: 4px;
   color: rgba(29, 29, 31, 0.62);
   font-size: 12px;
   line-height: 19px;
-  overflow: hidden;
   overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-}
-
-.result-row.is-expanded .rule-conclusion {
-  -webkit-line-clamp: 2;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .result-detail {
