@@ -3001,7 +3001,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                     institute_id=institute_id,
                                     patient_id=patient_id,
                                     visit_id=visit_id,
-                                    schema="cdm",
+                                    schema="public",
                                 )
                                 bundle_scene = scene
                                 break
