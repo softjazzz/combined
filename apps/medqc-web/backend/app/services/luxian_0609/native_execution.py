@@ -67,7 +67,7 @@ _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
 )
 _SAFE_CHECK_SURGERY_TIME_PATTERN = re.compile(
     r"(?<![\u4e00-\u9fffA-Za-z0-9_])手术时间\s*[:：]\s*"
-    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?![0-9A-Za-z_: .+-])"
+    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?=$|[\r\n])"
 )
 _COMPLETE_SURGERY_DATETIME_PATTERN = re.compile(
     r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"

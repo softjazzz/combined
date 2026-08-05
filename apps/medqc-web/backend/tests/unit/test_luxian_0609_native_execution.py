@@ -486,6 +486,69 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
         ),
         pytest.param(
             (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00０",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="full-width-numeric-tail-is-not-a-complete-time-token",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00/1",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="slash-suffix-is-not-a-complete-time-token",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00@bad",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="at-suffix-is-not-a-complete-time-token",
+        ),
+        pytest.param(
+            (
                 {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00"},
                 {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
             ),
