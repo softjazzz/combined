@@ -1871,8 +1871,12 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
     workspace.hydrate_records_with_medical_text = _hydrate  # type: ignore[assignment]
     load_calls: List[Dict[str, str]] = []
 
-    def _load_bundle(*, scene: str, visit_id: str, **_: Any) -> Dict[str, Any]:
-        load_calls.append({"visit_id": visit_id, "scene": scene})
+    def _load_bundle(
+        *, scene: str, visit_id: str, schema: str, **_: Any
+    ) -> Dict[str, Any]:
+        load_calls.append(
+            {"visit_id": visit_id, "scene": scene, "schema": schema}
+        )
         if visit_id == "visit-001" and scene == "final":
             raise RuntimeError("final bundle暂不可用")
         return {"scene": "stale-scene", "medical_text": "bundle text"}
@@ -1920,10 +1924,10 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert load_calls == [
-        {"visit_id": "visit-001", "scene": "final"},
-        {"visit_id": "visit-001", "scene": "running"},
-        {"visit_id": "visit-002", "scene": "running"},
-        {"visit_id": "visit-003", "scene": "running"},
+        {"visit_id": "visit-001", "scene": "final", "schema": "cdm"},
+        {"visit_id": "visit-001", "scene": "running", "schema": "cdm"},
+        {"visit_id": "visit-002", "scene": "running", "schema": "cdm"},
+        {"visit_id": "visit-003", "scene": "running", "schema": "cdm"},
     ]
     assert captured == [
         {
