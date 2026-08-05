@@ -73,6 +73,25 @@ const incompleteNonCompliantItem = {
   conclusion: '发现该质控点对应的明确问题。',
 }
 
+const surgeryConsentMissingItem = {
+  rule_id: 'LX0609-033',
+  rule_name: '手术知情同意书：无手术知情同意书（有手术记录）',
+  status: 'non_compliant',
+  conclusion: '已确认实施手术，未检索到手术知情同意书。',
+  customer_display_facts: {
+    failure_kind: 'surgery_consent_document_missing',
+    consent_state: 'missing',
+    performed_surgery_confirmed: true,
+  },
+  evidence: [
+    {
+      source_ref: 'src_surgery_record_033',
+      source_type: 'surgery_record',
+      source_label: '手术记录',
+    },
+  ],
+}
+
 const explainedCompliantItem = {
   rule_id: 'LX0609-008',
   rule_name: '病重患者查房记录',
@@ -313,6 +332,26 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('确定问题')
     expect(wrapper.text()).toContain('发现该质控点对应的明确问题。')
     expect(wrapper.text()).not.toContain('本次保存结果缺少具体判定说明')
+  })
+
+  it('033 原样展示服务端结论，并将手术同意书事实翻译为客户语言', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [surgeryConsentMissingItem] },
+    })
+
+    expect(wrapper.get('[data-testid="single-record-result-conclusion"]').text()).toBe(
+      '已确认实施手术，未检索到手术知情同意书。',
+    )
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.text()).toContain('判定类型')
+    expect(wrapper.text()).toContain('未检索到手术知情同意书')
+    expect(wrapper.text()).toContain('手术知情同意书')
+    expect(wrapper.text()).toContain('已实施手术')
+    expect(wrapper.text()).toContain('是')
+    expect(wrapper.text()).not.toContain('surgery_consent_document_missing')
+    expect(wrapper.text()).not.toContain('consent_state')
   })
 
   it('仅保存模型分析的LLM不合规结果仍可展开查看原始判断', async () => {

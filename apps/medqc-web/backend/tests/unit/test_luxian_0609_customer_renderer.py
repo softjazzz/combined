@@ -471,6 +471,28 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     assert "已确认实施手术" in result["evidence"]
 
 
+def test_lx0609_033_missing_consent_has_customer_readable_non_compliant_explanation():
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-033",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.SUFFICIENT,
+            qc_direction=QcDirection.DEFECT,
+            reason_code="requirement_violated",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-surgery-document-v1",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["status"] == "non_compliant"
+    assert result["reason_code"] == "requirement_violated"
+    assert result["findings"] == "已确认实施手术，未检索到手术知情同意书。"
+    assert "本次住院存在手术记录" in result["evidence"]
+
+
 def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(
