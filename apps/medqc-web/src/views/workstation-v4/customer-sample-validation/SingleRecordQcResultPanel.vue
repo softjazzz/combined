@@ -37,16 +37,6 @@
     </header>
 
     <div
-      v-if="viewItems.length"
-      class="result-column-header"
-      aria-hidden="true"
-    >
-      <span>状态</span>
-      <span>规则与结论</span>
-      <span>核对</span>
-    </div>
-
-    <div
       v-if="!visibleItems.length"
       class="empty-state"
     >
@@ -76,42 +66,44 @@
           :aria-expanded="isExpandable(item) ? expandedKey === item.key : undefined"
           @click="isExpandable(item) && toggle(item.key)"
         >
-          <span class="status-cell">
-            <span
-              class="status-pill"
-              :class="`is-${item.tone}`"
-            >{{ item.displayStatus }}</span>
-          </span>
           <span class="result-main">
             <span
               class="result-row-header"
               data-testid="single-record-result-row-header"
             >
-              <span class="rule-code">{{ item.rule_id }}</span>
-              <strong class="rule-name">{{ item.rule_name }}</strong>
+              <span class="result-row-meta">
+                <span class="status-cell">
+                  <span
+                    class="status-pill"
+                    :class="`is-${item.tone}`"
+                  >{{ item.displayStatus }}</span>
+                </span>
+                <span class="rule-code">{{ item.rule_id }}</span>
+              </span>
+              <span
+                v-if="isExpandable(item)"
+                class="toggle-mark"
+                aria-hidden="true"
+              >
+                <ChevronUp
+                  v-if="expandedKey === item.key"
+                  :size="17"
+                  :stroke-width="2"
+                />
+                <ChevronRight
+                  v-else
+                  :size="17"
+                  :stroke-width="2"
+                />
+              </span>
             </span>
+            <strong class="rule-name">{{ item.rule_name }}</strong>
             <span
               class="rule-conclusion"
               data-testid="single-record-result-conclusion"
             >{{
               item.conclusionText
             }}</span>
-          </span>
-          <span
-            v-if="isExpandable(item)"
-            class="toggle-mark"
-            aria-hidden="true"
-          >
-            <ChevronUp
-              v-if="expandedKey === item.key"
-              :size="17"
-              :stroke-width="2"
-            />
-            <ChevronRight
-              v-else
-              :size="17"
-              :stroke-width="2"
-            />
           </span>
         </button>
 
@@ -801,29 +793,29 @@ watch(
 }
 
 .status-pill {
-  position: relative;
-  display: block;
-  padding-left: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  padding: 2px 8px;
   color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
-  line-height: 20px;
+  line-height: 17px;
   white-space: nowrap;
 }
 
 .status-pill::before {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 3px;
-  height: 30px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: rgba(29, 29, 31, 0.28);
-  transform: translateY(-50%);
   content: '';
 }
 
 .is-danger.status-pill {
+  background: rgba(239, 68, 68, 0.08);
   color: #d92d20;
 }
 
@@ -832,6 +824,7 @@ watch(
 }
 
 .is-warning.status-pill {
+  background: rgba(245, 158, 11, 0.1);
   color: #a86500;
 }
 
@@ -840,6 +833,7 @@ watch(
 }
 
 .is-success.status-pill {
+  background: rgba(16, 185, 129, 0.09);
   color: #087443;
 }
 
@@ -895,28 +889,6 @@ watch(
   text-align: center;
 }
 
-.result-column-header {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 28px;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(247, 248, 250, 0.94);
-  color: rgba(29, 29, 31, 0.48);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.result-column-header span:nth-child(2) {
-  padding-left: 16px;
-}
-
-.result-column-header span:last-child {
-  text-align: center;
-}
-
 .empty-state {
   padding: 56px 18px;
   color: rgba(29, 29, 31, 0.5);
@@ -925,33 +897,44 @@ watch(
 }
 
 .result-list {
-  padding: 0;
+  display: grid;
+  gap: 9px;
+  padding: 10px 12px 16px;
+  background: #f5f5f7;
 }
 
 .result-row {
   position: relative;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.075);
-  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
   transition:
-    background 180ms ease,
-    box-shadow 180ms ease;
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .result-row:hover {
-  background: rgba(0, 0, 0, 0.018);
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.06),
+    0 6px 22px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
 }
 
 .result-row.is-expanded {
-  background: rgba(0, 102, 204, 0.022);
-  box-shadow: inset 2px 0 0 #0066cc;
+  border-color: rgba(0, 102, 204, 0.28);
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(0, 102, 204, 0.08);
 }
 
 .result-trigger {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 28px;
+  display: block;
   width: 100%;
-  min-height: 82px;
-  padding: 0 12px;
+  min-height: 0;
+  padding: 13px 14px 12px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -968,30 +951,36 @@ watch(
 }
 
 .status-cell {
-  display: flex;
+  display: inline-flex;
+  min-width: 0;
   align-items: center;
-  align-self: stretch;
-  padding-right: 12px;
-  border-right: 1px solid rgba(0, 0, 0, 0.065);
 }
 
 .result-main {
-  display: flex;
+  display: block;
   min-width: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding: 12px 16px 11px;
-  overflow-wrap: anywhere;
+  padding: 0;
 }
 
 .result-row-header {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.result-row-meta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
 }
 
 .rule-code {
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.035);
+  padding: 1px 5px;
   color: rgba(29, 29, 31, 0.46);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 11px;
@@ -1002,20 +991,25 @@ watch(
 
 .toggle-mark {
   display: inline-flex;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.035);
   color: rgba(29, 29, 31, 0.42);
 }
 
 .result-row.is-expanded .toggle-mark {
+  background: rgba(0, 102, 204, 0.08);
   color: #0066cc;
 }
 
 .rule-name {
   display: block;
   min-width: 0;
-  margin-top: 1px;
+  margin-top: 7px;
   color: rgba(29, 29, 31, 0.92);
   font-size: 14px;
   line-height: 20px;
@@ -1027,7 +1021,7 @@ watch(
 
 .rule-conclusion {
   display: block;
-  margin-top: 4px;
+  margin-top: 5px;
   color: rgba(29, 29, 31, 0.62);
   font-size: 12px;
   line-height: 19px;
@@ -1037,9 +1031,11 @@ watch(
 }
 
 .result-detail {
-  margin-left: 112px;
-  border-top: 1px solid rgba(0, 0, 0, 0.065);
-  background: rgba(255, 255, 255, 0.64);
+  margin: 0 14px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.74);
 }
 
 .compliant-detail {
@@ -1423,27 +1419,21 @@ watch(
 }
 
 @container (max-width: 560px) {
-  .result-column-header,
   .result-trigger {
-    grid-template-columns: 92px minmax(0, 1fr) 24px;
+    padding: 12px;
   }
 
   .result-detail {
-    margin-left: 92px;
-  }
-
-  .status-cell {
-    padding-right: 8px;
+    margin: 0 12px 12px;
   }
 
   .status-pill {
-    padding-left: 10px;
     font-size: 11px;
   }
 
-  .result-main {
-    padding-right: 10px;
-    padding-left: 12px;
+  .rule-name {
+    font-size: 13px;
+    line-height: 19px;
   }
 
   .timeliness-metric {

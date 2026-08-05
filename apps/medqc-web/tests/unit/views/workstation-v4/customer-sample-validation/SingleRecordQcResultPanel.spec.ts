@@ -211,6 +211,7 @@ describe('SingleRecordQcResultPanel', () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
 
     expect(wrapper.find('[data-testid="single-record-result-toolbar"]').exists()).toBe(true)
+    expect(wrapper.find('.result-column-header').exists()).toBe(false)
     expect(wrapper.get('[data-testid="single-record-result-summary"]').text()).toContain(
       '3 个质控点 · 已执行 3',
     )
@@ -220,6 +221,7 @@ describe('SingleRecordQcResultPanel', () => {
       'LX0609-018',
     )
     expect(rows[0]!.get('.status-cell').text()).toContain('确定问题')
+    expect(rows[0]!.get('.result-row-meta').text()).toContain('LX0609-018')
     expect(rows[0]!.get('[data-testid="single-record-result-conclusion"]').text()).toContain(
       '主诉共14字，未达到不超过20字的要求；诊断指向性未通过。',
     )
