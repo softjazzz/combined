@@ -1879,12 +1879,7 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         )
         if visit_id == "visit-001" and scene == "final":
             raise RuntimeError("final bundle暂不可用")
-        # Bundle 缓存属于 public；其来源元数据仍指向 split-mode 的 cdm 原始资料。
-        return {
-            "scene": "stale-scene",
-            "medical_text": "bundle text",
-            "source_schema": "cdm",
-        }
+        return {"scene": "stale-scene", "medical_text": "bundle text"}
 
     captured: List[Dict[str, Any]] = []
 
@@ -1894,7 +1889,6 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
                 {
                     "visit_id": kwargs["bundle"]["visit_id"],
                     "scene": kwargs["bundle"]["scene"],
-                    "source_schema": kwargs["bundle"].get("source_schema"),
                     "scene_resolution": dict(kwargs["bundle"]["scene_resolution"]),
                     "evaluation_horizon_snapshot": dict(
                         kwargs["bundle"]["evaluation_horizon_snapshot"]
@@ -1939,7 +1933,6 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         {
             "visit_id": "visit-001",
             "scene": "running",
-            "source_schema": "cdm",
             "scene_resolution": {
                 "query_scope": "all",
                 "record_scene": "final",
@@ -1958,7 +1951,6 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         {
             "visit_id": "visit-002",
             "scene": "running",
-            "source_schema": "cdm",
             "scene_resolution": {
                 "query_scope": "all",
                 "record_scene": "running",
@@ -1977,7 +1969,6 @@ async def test_luxian_batch_worker_uses_record_scene_and_records_loaded_fallback
         {
             "visit_id": "visit-003",
             "scene": "running",
-            "source_schema": "cdm",
             "scene_resolution": {
                 "query_scope": "all",
                 "record_scene": "unknown",
