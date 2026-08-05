@@ -234,6 +234,44 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('合规')
   })
 
+  it('合规项有现有核对说明或证据时，也可展开查看详细依据', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-045',
+            rule_name: '输血记录：无输血病程记录',
+            status: 'compliant',
+            conclusion: '已找到可核对的输血病程记录（3份）。',
+            detail: '已按输血发生时间核对后续病程记录，均可定位复核。',
+            actual: '共核对3份输血病程记录，记录时间均在本次住院期间。',
+            standard: '存在输血事件时，应有可定位的输血病程记录。',
+            evidence: [
+              {
+                source_ref: 'src_bloodtrans_record_045',
+                source_type: 'bloodtrans_record',
+                source_label: '输血病程记录',
+                field_path: '记录时间',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('.result-trigger').trigger('click')
+
+    expect(wrapper.get('[data-testid="single-record-compliant-detail"]').text()).toContain(
+      '核对说明已按输血发生时间核对后续病程记录，均可定位复核。',
+    )
+    expect(wrapper.get('[data-testid="single-record-compliant-detail"]').text()).toContain(
+      '核对情况共核对3份输血病程记录，记录时间均在本次住院期间。',
+    )
+    expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
+      '关键证据输血病程记录',
+    )
+  })
+
   it('占位结果单独计为未执行，不把质控点总数冒充执行完成数', () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {
@@ -568,8 +606,8 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="timeliness-timeline"]').text()).toContain(
       '2026-06-20 19:23:45',
     )
-    expect(wrapper.text()).not.toContain('判定事实')
-    expect(wrapper.text()).not.toContain('关键证据')
+    expect(wrapper.text()).toContain('核对依据')
+    expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('入院记录')
     expect(wrapper.text()).not.toContain('处理建议')
     expect(wrapper.text()).not.toContain('继续保持')
     expect(wrapper.text()).not.toContain('timeliness_requirement_satisfied')
@@ -588,9 +626,11 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-compliant-criteria"]').text()).toContain(
       '子项核对通过',
     )
-    expect(wrapper.text()).not.toContain(explainedCompliantItem.actual)
-    expect(wrapper.text()).not.toContain(explainedCompliantItem.standard)
-    expect(wrapper.text()).not.toContain('模型分析 / 医学判断')
+    expect(wrapper.text()).toContain('核对情况')
+    expect(wrapper.text()).toContain(explainedCompliantItem.actual)
+    expect(wrapper.text()).toContain('合规标准')
+    expect(wrapper.text()).toContain(explainedCompliantItem.standard)
+    expect(wrapper.text()).toContain('模型分析 / 医学判断')
     expect(wrapper.text()).not.toContain('无需处理。')
   })
 

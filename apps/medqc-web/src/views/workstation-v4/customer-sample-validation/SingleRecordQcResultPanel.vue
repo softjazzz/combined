@@ -116,11 +116,32 @@
               isCompliantResult(item) &&
                 (timelinessMetrics(item).length ||
                   timelinessTimeline(item).length ||
-                  item.criterion_results?.length)
+                  item.criterion_results?.length ||
+                  hasCompliantNarrative(item))
             "
             class="compliant-detail"
             data-testid="single-record-compliant-detail"
           >
+            <div
+              v-if="hasCompliantNarrative(item)"
+              class="summary-narrative compliant-narrative"
+            >
+              <DetailBlock
+                v-if="item.detail"
+                :title="detailTitle(item)"
+                :content="item.detail"
+              />
+              <DetailBlock
+                v-if="item.actual"
+                :title="actualTitle(item)"
+                :content="item.actual"
+              />
+              <DetailBlock
+                v-if="item.standard"
+                :title="standardTitle(item)"
+                :content="item.standard"
+              />
+            </div>
             <section
               v-if="timelinessMetrics(item).length"
               class="timeliness-metrics"
@@ -266,8 +287,12 @@
           </div>
 
           <div
-            v-if="!isCompliantResult(item)"
+            v-if="!isCompliantResult(item) || hasCompliantSupportingDetails(item)"
             class="detail-grid"
+            :class="{
+              'is-compliant': isCompliantResult(item),
+              'has-main-details': remainingDisplayFactRows(item).length,
+            }"
             data-testid="single-record-detail-grid"
           >
             <div class="detail-column detail-column-main">
@@ -275,7 +300,7 @@
                 v-if="remainingDisplayFactRows(item).length"
                 class="detail-block fact-block"
               >
-                <h4>判定事实</h4>
+                <h4>{{ isCompliantResult(item) ? '核对依据' : '判定事实' }}</h4>
                 <dl class="fact-list">
                   <template
                     v-for="row in remainingDisplayFactRows(item)"
@@ -287,7 +312,7 @@
                 </dl>
               </section>
               <section
-                v-if="dataGapRows(item).length"
+                v-if="!isCompliantResult(item) && dataGapRows(item).length"
                 class="detail-block fact-block"
               >
                 <h4>待补资料</h4>
@@ -302,7 +327,7 @@
                 </dl>
               </section>
               <section
-                v-if="item.criterion_results?.length"
+                v-if="!isCompliantResult(item) && item.criterion_results?.length"
                 class="detail-block criterion-block"
               >
                 <h4>逐项判定</h4>
@@ -693,7 +718,19 @@ function isExpandable(item: SingleRecordQcResultViewItem) {
   return Boolean(
     timelinessMetrics(item).length ||
       timelinessTimeline(item).length ||
-      item.criterion_results?.length,
+      item.criterion_results?.length ||
+      hasCompliantNarrative(item) ||
+      hasCompliantSupportingDetails(item),
+  )
+}
+
+function hasCompliantNarrative(item: SingleRecordQcResultItem) {
+  return Boolean(item.detail || item.actual || item.standard)
+}
+
+function hasCompliantSupportingDetails(item: SingleRecordQcResultItem) {
+  return Boolean(
+    remainingDisplayFactRows(item).length || item.evidence?.length || item.model_analysis,
   )
 }
 
@@ -706,14 +743,17 @@ function isPendingEvidenceStatus(item: SingleRecordQcResultItem) {
 }
 
 function detailTitle(item: SingleRecordQcResultItem) {
+  if (isCompliantResult(item)) return '核对说明'
   return isPendingEvidenceStatus(item) ? '缺口说明' : '完整判定说明'
 }
 
 function actualTitle(item: SingleRecordQcResultItem) {
+  if (isCompliantResult(item)) return '核对情况'
   return isPendingEvidenceStatus(item) ? '当前已知情况' : '实际情况'
 }
 
 function standardTitle(item: SingleRecordQcResultItem) {
+  if (isCompliantResult(item)) return '合规标准'
   return isPendingEvidenceStatus(item) ? '所需核对条件' : '核对标准'
 }
 
@@ -1178,6 +1218,18 @@ watch(
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(260px, 0.92fr);
+}
+
+.detail-grid.is-compliant:not(.has-main-details) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-grid.is-compliant:not(.has-main-details) .detail-column-main {
+  display: none;
+}
+
+.detail-grid.is-compliant .detail-column-evidence {
+  border-left: 0;
 }
 
 .detail-column {
