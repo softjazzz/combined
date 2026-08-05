@@ -773,11 +773,31 @@ def _build_transfusion(
     *,
     mode: str = "complete",
 ) -> list[str]:
-    _clear_visit_rows(rows, case, "mr_bloodtrans", "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
+    _clear_visit_rows(rows, case, "mr_bloodtrans", "blood_application", "bloodtrans_record", "inpat_drug_order", "inpat_nondrug_order", "inpat_bill_item", "labtest_master", "labtest_item_report", "daily_course_record", "surgery_record", "mr_surgery", "anesthesia_record", "postsurg_firstcourse_record", "consent_form")
     refs = [_append_registration(rows, case, v2)]
     request_time = v2._dt_for_case(case, 1, 10)
     transfusion_time = v2._dt_for_case(case, 1, 14)
     transfusion_end_time = v2._dt_for_case(case, 1, 16)
+    surgery_begin_time = v2._dt_for_case(case, 1, 12)
+    surgery_id = f"{case.target_visit_id}-transfusion-surgery"
+    v2._append_row(
+        rows,
+        "mr_surgery",
+        {
+            **v2._case_base_row(case),
+            "surgery_id": surgery_id,
+            "surgery_name": "胃大部切除术",
+            "surgery_code": "43.9900",
+            "surgical_level": "4",
+            "surgeon": "陈某医师",
+            "main_surgery_sign": "陈某医师",
+            "anesthesia_method": "全身麻醉",
+            "surgery_begin_datetime": surgery_begin_time,
+            "surgery_end_datetime": transfusion_end_time,
+            "record_content": "已实施胃大部切除术，术中输注悬浮红细胞2U。",
+        },
+    )
+    refs.append(surgery_id)
     bloodtrans_id = f"{case.target_visit_id}-blood-event"
     v2._append_row(
         rows,
@@ -842,8 +862,23 @@ def _build_transfusion(
             "患者乏力、心悸较前改善，无输血不良反应，复查Hb 82g/L，输血有效。"
         ),
     ))
-    for table, suffix, title in (("surgery_record","surgery-blood","手术记录"),("anesthesia_record","anesthesia-blood","麻醉记录单"),("postsurg_firstcourse_record","postop-blood","术后首次病程记录")):
-        refs.append(_append_document(rows, case, v2, table_name=table, suffix=suffix, title=title, record_time=v2._dt_for_case(case, 1, 16), content="术中输注悬浮红细胞2U，无输血不良反应。"))
+    refs.append(_append_document(
+        rows,
+        case,
+        v2,
+        table_name="surgery_record",
+        suffix="surgery-blood",
+        title="手术记录",
+        record_time=transfusion_end_time,
+        content="实施胃大部切除术；术中输注悬浮红细胞2U，无输血不良反应。",
+        surgery_id=surgery_id,
+        surgery_name="胃大部切除术",
+        surgeon="陈某医师",
+        surgery_begin_time=f"{surgery_begin_time:%Y-%m-%d %H:%M:%S}+08",
+        surgery_end_time=f"{transfusion_end_time:%Y-%m-%d %H:%M:%S}+08",
+    ))
+    for table, suffix, title in (("anesthesia_record", "anesthesia-blood", "麻醉记录单"), ("postsurg_firstcourse_record", "postop-blood", "术后首次病程记录")):
+        refs.append(_append_document(rows, case, v2, table_name=table, suffix=suffix, title=title, record_time=transfusion_end_time, content="术中输注悬浮红细胞2U，无输血不良反应。"))
     visit_id = case.target_visit_id
     if mode == "missing_consent":
         rows["consent_form"] = [
@@ -904,13 +939,33 @@ def _build_tumor(
     *,
     mode: str = "complete",
 ) -> list[str]:
-    _clear_visit_rows(rows, case, "pathology_exam_master", "pathology_exam_report", "surgery_record", "daily_course_record", "inpat_drug_order", "discharge_record", "diagnosis", "discharge_record_diagnosis")
+    _clear_visit_rows(rows, case, "pathology_exam_master", "pathology_exam_report", "surgery_record", "mr_surgery", "daily_course_record", "inpat_drug_order", "discharge_record", "diagnosis", "discharge_record_diagnosis")
     refs = [_append_registration(rows, case, v2, discharge_time=v2._dt_for_case(case, 8, 10))]
     pathology_id = f"{case.target_visit_id}-pathology"
     v2._append_row(rows, "pathology_exam_master", {**v2._case_base_row(case), "pathology_exam_id": pathology_id, "pathology_id": pathology_id, "specimen_name": "胃大部切除标本及淋巴结", "request_datetime": v2._dt_for_case(case, 2, 14), "record_content": "胃癌手术标本送病理"})
     v2._append_row(rows, "pathology_exam_report", {**v2._case_base_row(case), "pathology_exam_id": pathology_id, "pathology_id": pathology_id, "specimen_name": "胃大部切除标本及淋巴结", "diagnosis": "胃腺癌，淋巴结2/18枚转移", "report_datetime": v2._dt_for_case(case, 5, 10), "record_content": "病理结果：胃腺癌，淋巴结2/18枚转移。"})
     refs.append(pathology_id)
-    refs.append(_append_document(rows, case, v2, table_name="surgery_record", suffix="tumor-surgery", title="手术记录", record_time=v2._dt_for_case(case, 2, 16), content="行胃癌根治术，取胃大部切除标本及18枚淋巴结送病理检查。"))
+    surgery_id = f"{case.target_visit_id}-tumor-surgery"
+    surgery_begin_time = v2._dt_for_case(case, 2, 10)
+    surgery_end_time = v2._dt_for_case(case, 2, 15)
+    v2._append_row(rows, "mr_surgery", {
+        **v2._case_base_row(case), "surgery_id": surgery_id,
+        "surgery_name": "胃癌根治术", "surgery_code": "43.9900",
+        "surgical_level": "4", "surgeon": "陈某医师",
+        "main_surgery_sign": "陈某医师", "anesthesia_method": "全身麻醉",
+        "surgery_begin_datetime": surgery_begin_time,
+        "surgery_end_datetime": surgery_end_time,
+        "record_content": "已实施胃癌根治术，取胃大部切除标本及淋巴结送病理检查。",
+    })
+    refs.append(surgery_id)
+    refs.append(_append_document(
+        rows, case, v2, table_name="surgery_record", suffix="tumor-surgery",
+        title="手术记录", record_time=v2._dt_for_case(case, 2, 16),
+        content="行胃癌根治术，取胃大部切除标本及18枚淋巴结送病理检查。",
+        surgery_id=surgery_id, surgery_name="胃癌根治术", surgeon="陈某医师",
+        surgery_begin_time=f"{surgery_begin_time:%Y-%m-%d %H:%M:%S}+08",
+        surgery_end_time=f"{surgery_end_time:%Y-%m-%d %H:%M:%S}+08",
+    ))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="pathology-course", title="病程记录", record_time=v2._dt_for_case(case, 5, 14), content="病理报告胃腺癌、淋巴结2/18枚转移，结合分期拟行奥沙利铂联合卡培他滨化疗。"))
     refs.append(_append_order(rows, case, v2, table_name="inpat_drug_order", suffix="oxaliplatin", prescribed_time=v2._dt_for_case(case, 6, 9), content="奥沙利铂130mg/m²静滴，第1天", generic_name="奥沙利铂", drug_type="抗肿瘤药物", single_dose=130, single_dose_unit="mg/m²", drug_apply_method="静脉滴注"))
     refs.append(_append_document(rows, case, v2, table_name="daily_course_record", suffix="chemo-course", title="化疗病程记录", record_time=v2._dt_for_case(case, 6, 10), content="今日给予奥沙利铂130mg/m²静脉滴注，第1天，与医嘱一致，观察不良反应。"))

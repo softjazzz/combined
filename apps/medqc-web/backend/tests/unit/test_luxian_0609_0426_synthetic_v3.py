@@ -642,6 +642,53 @@ def test_transfusion_case_uses_typed_consent_form() -> None:
     assert fake_rows == []
 
 
+def test_v3_transfusion_and_tumor_surgery_records_are_current_stay_structured_events() -> None:
+    """048、病理场景中的手术资料不能退化为无结构化时间的文本占位。"""
+
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    cases_by_index = {case.target_index: case for case in cases}
+    registrations = {
+        row["visit_id"]: row
+        for row in rows_by_table["inpat_registration"]
+    }
+    for case_index in (*range(23, 28), 28, 29):
+        visit_id = cases_by_index[case_index].target_visit_id
+        surgery_record = next(
+            row
+            for row in rows_by_table["surgery_record"]
+            if row.get("visit_id") == visit_id
+        )
+        surgery_event = next(
+            row
+            for row in rows_by_table["mr_surgery"]
+            if row.get("visit_id") == visit_id
+        )
+        admission = registrations[visit_id]["admission_datetime"]
+        discharge = registrations[visit_id]["discharge_datetime"]
+
+        assert surgery_record["surgery_id"] == surgery_event["surgery_id"]
+        assert surgery_record["surgery_name"] == surgery_event["surgery_name"]
+        assert surgery_event["surgery_begin_datetime"] < surgery_event["surgery_end_datetime"]
+        assert admission <= surgery_event["surgery_begin_datetime"]
+        assert surgery_event["surgery_end_datetime"] <= discharge
+
+    assert "术中输注悬浮红细胞2U" in next(
+        row["record_content"]
+        for row in rows_by_table["surgery_record"]
+        if row.get("visit_id") == cases_by_index[23].target_visit_id
+    )
+    assert "胃癌根治术" in next(
+        row["record_content"]
+        for row in rows_by_table["surgery_record"]
+        if row.get("visit_id") == cases_by_index[28].target_visit_id
+    )
+
+
 def test_transfusion_complete_case_has_reviewable_process_and_24h_evaluation() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()
