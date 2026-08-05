@@ -4,6 +4,7 @@ import argparse
 import csv
 import importlib.util
 import json
+import re
 import sys
 from collections import Counter, defaultdict
 from dataclasses import replace
@@ -28,7 +29,7 @@ from app.services.luxian_0609.rule_contracts import (  # noqa: E402
 from scripts.luxian_0609_v3_controlled_evidence import (  # noqa: E402
     RULE_NUMBERS_BY_CASE,
     apply_controlled_evidence,
-    build_gold_acceptance_contracts,
+    build_gold_acceptance_contracts,  # noqa: F401
     expected_status_for_case,
     normalize_v3_stay_timeline,
 )
@@ -45,6 +46,59 @@ TARGET_MR_PREFIX = "LX0609V3-"
 TARGET_ITEM_PREFIX = "lx0609-v3"
 BUNDLE_POLICY_VERSION = "luxian_0609_0426_syn_v3"
 DEFAULT_OUTPUT_DIR = ROOT / "tmp-lx0609-0426-synthetic-v3"
+
+_V3_ADMISSION_CONTEXT: dict[str, tuple[str, str, str]] = {
+    "时限": (
+        "发热伴咳嗽3天",
+        "患者因发热伴咳嗽3天入院，现病史及入院查体已记录。",
+        "结合发热、咳嗽及入院查体，形成当前住院第一诊断。",
+    ),
+    "查房/病重病危": (
+        "发热、咳嗽伴气促2天",
+        "患者因发热、咳嗽伴气促2天入院，入院时精神差，需动态观察病情。",
+        "结合发热、咳嗽、气促及肺部阳性体征，形成当前住院第一诊断。",
+    ),
+    "检查检验": (
+        "腰痛伴右下肢麻木1周",
+        "患者因腰痛伴右下肢麻木1周入院，活动后疼痛加重。",
+        "结合腰痛、下肢麻木及神经根受压体征，形成当前住院第一诊断。",
+    ),
+    "会诊": (
+        "右上腹疼痛伴发热2天",
+        "患者因右上腹疼痛伴发热2天入院，伴食欲下降和乏力。",
+        "结合右上腹疼痛、发热及胆道相关体征，形成当前住院第一诊断。",
+    ),
+    "手术麻醉": (
+        "右下肢疼痛、肿胀伴活动受限1天",
+        "患者因右下肢疼痛、肿胀伴活动受限1天入院，患肢负重困难。",
+        "结合外伤史、局部疼痛肿胀及影像学表现，形成当前住院第一诊断。",
+    ),
+    "输血": (
+        "乏力、心悸伴面色苍白1个月",
+        "患者因乏力、心悸伴面色苍白1个月入院，活动后症状明显。",
+        "结合贫血症状、血红蛋白变化及原发病情况，形成当前住院第一诊断。",
+    ),
+    "肿瘤病理/化疗": (
+        "上腹部不适伴食欲下降1月",
+        "患者因上腹部不适伴食欲下降1月入院，近期体重下降。",
+        "结合上腹部症状、影像及病理相关资料，形成当前住院第一诊断。",
+    ),
+    "出院死亡": (
+        "发热、咳嗽3天",
+        "患者因发热、咳嗽3天入院，入院后完成相关检查和治疗。",
+        "结合主诉、查体及入院辅助检查，形成当前住院第一诊断。",
+    ),
+    "抗菌药物/医嘱": (
+        "发热伴咳痰3天",
+        "患者因发热伴咳痰3天入院，伴乏力和食欲下降。",
+        "结合感染症状、查体和实验室检查，形成当前住院第一诊断。",
+    ),
+    "交接转科": (
+        "头晕伴左侧肢体乏力6小时",
+        "患者因头晕伴左侧肢体乏力6小时入院，症状突然出现。",
+        "结合神经系统症状、查体及影像学资料，形成当前住院第一诊断。",
+    ),
+}
 
 
 FAMILY_RULE_NUMBERS: dict[str, tuple[int, ...]] = {
@@ -796,6 +850,7 @@ def upgrade_full_validation_evidence(
         v2=V2,
         rule_titles=rule_titles,
     )
+    admission_record_audit = ensure_v3_admission_record_evidence(rows_by_table, cases)
     timeline_audit = normalize_v3_stay_timeline(
         rows_by_table,
         cases,
@@ -804,7 +859,249 @@ def upgrade_full_validation_evidence(
     return {
         **controlled_audit,
         "exam_lab": exam_lab_audit,
+        "admission_record": admission_record_audit,
         "timeline": timeline_audit,
+    }
+
+
+def _admission_context_from_diagnosis(
+    case: Any,
+    diagnosis_name: str,
+) -> tuple[str, str, str]:
+    """按当前住院第一诊断选择相互一致的合成入院语境。
+
+    v3 是验证资料，不应把规则族名称当作临床诊断的替代品。仅在已有入院
+    记录缺失时补写资料；此处根据同一病例已有的入院诊断选择自然主诉，避免
+    018 的“主诉能否导出第一诊断”被无关的族级模板污染。
+    """
+
+    diagnosis = str(diagnosis_name or "").strip()
+    primary_diagnosis = re.split(r"[，,；;。]", diagnosis, maxsplit=1)[0].strip()
+    primary_diagnosis = re.sub(r"^\s*\d+\s*[、.．:]?\s*", "", primary_diagnosis)
+    diagnosis = primary_diagnosis or diagnosis
+    if any(token in diagnosis for token in ("骨折", "关节", "半月板", "颈椎", "腰椎")):
+        return (
+            "患处疼痛、肿胀伴活动受限1天",
+            f"患者因患处疼痛、肿胀伴活动受限1天入院，结合影像学检查考虑{diagnosis}。",
+            f"结合患处症状、查体及影像学表现，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("阑尾", "腹膜炎", "肠梗阻", "腹痛", "大便", "痔", "肛裂")):
+        return (
+            "右下腹疼痛伴恶心1天",
+            f"患者因右下腹疼痛伴恶心1天入院，结合腹部查体及辅助检查考虑{diagnosis}。",
+            f"结合腹痛、腹部查体及辅助检查，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("癌", "肿瘤", "白血病", "恶性")):
+        return (
+            "发现肿块伴乏力1月",
+            f"患者因发现肿块伴乏力1月入院，结合影像及病理资料考虑{diagnosis}。",
+            f"结合肿块、乏力及影像病理资料，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("肺炎", "肺病", "呼吸衰竭", "肺栓塞", "感染")):
+        return (
+            "发热、咳嗽伴气促2天",
+            f"患者因发热、咳嗽伴气促2天入院，结合胸部检查考虑{diagnosis}。",
+            f"结合发热、咳嗽、气促及胸部检查，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("心肌梗死", "冠心病", "心脏", "心房颤动")):
+        return (
+            "胸闷、胸痛伴活动后气促1天",
+            f"患者因胸闷、胸痛伴活动后气促1天入院，结合心电图及化验考虑{diagnosis}。",
+            f"结合胸闷胸痛、心电图及化验结果，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("脑梗", "脑卒中", "头晕", "面瘫", "椎动脉")):
+        return (
+            "头晕伴一侧肢体乏力6小时",
+            f"患者因头晕伴一侧肢体乏力6小时入院，结合神经系统查体及影像考虑{diagnosis}。",
+            f"结合神经系统症状、查体及影像学资料，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("肾", "输尿管", "泌尿", "结石")):
+        return (
+            "腰部疼痛伴尿频2天",
+            f"患者因腰部疼痛伴尿频2天入院，结合泌尿系检查考虑{diagnosis}。",
+            f"结合腰痛、排尿症状及泌尿系检查，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("胆", "肝硬化", "肝衰竭", "腹水")):
+        return (
+            "右上腹疼痛伴乏力2天",
+            f"患者因右上腹疼痛伴乏力2天入院，结合肝胆检查考虑{diagnosis}。",
+            f"结合右上腹症状及肝胆相关检查，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("贫血", "营养不良")):
+        return (
+            "乏力、心悸伴面色苍白1个月",
+            f"患者因乏力、心悸伴面色苍白1个月入院，结合血常规考虑{diagnosis}。",
+            f"结合乏力、心悸、面色苍白及血常规，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("妊娠", "胎膜", "孕", "子宫", "阴道", "宫内")):
+        return (
+            "下腹坠胀伴阴道流液1天",
+            f"患者因下腹坠胀伴阴道流液1天入院，结合妇科检查考虑{diagnosis}。",
+            f"结合下腹症状、妇科查体及超声资料，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("耳", "听力", "鼓膜")):
+        return (
+            "耳闷伴听力下降1周",
+            f"患者因耳闷伴听力下降1周入院，结合耳科检查考虑{diagnosis}。",
+            f"结合耳部症状、查体及听力检查，支持当前住院第一诊断{diagnosis}。",
+        )
+    if any(token in diagnosis for token in ("疱疹", "蛇串疮")):
+        return (
+            "皮疹伴局部灼痛1周",
+            f"患者因皮疹伴局部灼痛1周入院，结合皮肤及神经查体考虑{diagnosis}。",
+            f"结合皮疹、灼痛及专科查体，支持当前住院第一诊断{diagnosis}。",
+        )
+    return _V3_ADMISSION_CONTEXT.get(
+        str(case.family),
+        (
+            "不适伴症状加重",
+            f"患者因不适伴症状加重入院，结合入院查体及辅助检查考虑{diagnosis}。",
+            f"结合主诉、查体及入院辅助检查，支持当前住院第一诊断{diagnosis}。",
+        ),
+    )
+
+
+def ensure_v3_admission_record_evidence(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    cases: Sequence[Any],
+) -> dict[str, int]:
+    """为每份 v3 病例补齐当前住院入院记录和主诉。
+
+    018 的验证资料合同要求入院记录中的主诉。只在已有记录缺失或主诉为空时
+    补写，不改变已有受控时限病例的记录时间，也不生成第二份资料链。
+    """
+
+    added = 0
+    replaced_shell = 0
+    diagnosis_added = 0
+    for case in cases:
+        visit_id = str(case.target_visit_id)
+        stay_start = V2._dt_for_case(case, 0, 8, 0)
+        stay_end = V2._dt_for_case(case, 12, 18, 0)
+
+        def _has_current_record_time(row: dict[str, Any]) -> bool:
+            for field in (
+                "record_time",
+                "record_datetime",
+                "submit_datetime",
+                "last_modified_datetime",
+                "update_time",
+            ):
+                value = row.get(field)
+                if isinstance(value, datetime):
+                    parsed = value
+                elif isinstance(value, str):
+                    try:
+                        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+                    except ValueError:
+                        continue
+                    parsed = parsed.replace(tzinfo=None)
+                else:
+                    continue
+                if stay_start <= parsed <= stay_end:
+                    return True
+            return False
+
+        existing = [
+            row
+            for row in rows_by_table.get("admission_record", [])
+            if str(row.get("visit_id") or "") == visit_id
+        ]
+        admission_time = V2._dt_for_case(case, 0, 10, 0)
+        has_chief_complaint = any(
+            str(row.get("chief_complaint") or "").strip()
+            and _has_current_record_time(row)
+            for row in existing
+        )
+        if not has_chief_complaint:
+            if existing:
+                rows_by_table["admission_record"] = [
+                    row
+                    for row in rows_by_table.get("admission_record", [])
+                    if str(row.get("visit_id") or "") != visit_id
+                ]
+                replaced_shell += len(existing)
+            diagnosis_rows = [
+                row
+                for row in rows_by_table.get("admission_record_diagnosis", [])
+                if str(row.get("visit_id") or "") == visit_id
+                and str(row.get("diagnosis_type") or "").strip()
+                in {"初步诊断", "入院诊断"}
+                and str(row.get("diagnosis_name") or "").strip()
+            ]
+            diagnosis_name = str(
+                next(
+                    (
+                        row.get("diagnosis_name")
+                        for row in diagnosis_rows
+                        if str(row.get("diagnosis_main") or "") == "1"
+                    ),
+                    diagnosis_rows[0].get("diagnosis_name")
+                    if diagnosis_rows
+                    else V2._family_diagnosis(case)[0],
+                )
+            )
+            complaint, record_content, diagnosis_basis = _admission_context_from_diagnosis(
+                case,
+                diagnosis_name,
+            )
+            V2._append_row(
+                rows_by_table,
+                "admission_record",
+                {
+                    **V2._case_base_row(case),
+                    "document_id": f"{visit_id}-admission-record-v3-contract",
+                    "document_title": "入院记录",
+                    "document_status": "completed",
+                    "record_content": record_content,
+                    "record_time": admission_time,
+                    "record_datetime": admission_time,
+                    "submit_datetime": admission_time,
+                    "last_modified_datetime": admission_time,
+                    "update_time": admission_time,
+                    "submitter": "陈某医师",
+                    "submitter_id": "DEID",
+                    "admission_datetime": V2._dt_for_case(case, 0, 8, 0),
+                    "chief_complaint": complaint,
+                    "history_of_present_illness": "现病史已在入院记录中完整记录。",
+                    "checkup": "入院查体已记录。",
+                    "diagnose_based_on": diagnosis_basis,
+                },
+            )
+            added += 1
+        diagnosis_rows = [
+            row
+            for row in rows_by_table.get("admission_record_diagnosis", [])
+            if str(row.get("visit_id") or "") == visit_id
+            and str(row.get("diagnosis_type") or "").strip() in {"初步诊断", "入院诊断"}
+            and str(row.get("diagnosis_name") or "").strip()
+        ]
+        if not diagnosis_rows:
+            diagnosis_name, diagnosis_code = V2._family_diagnosis(case)
+            diagnosis_id = f"{visit_id}-admission-diagnosis-v3-contract"
+            V2._append_row(
+                rows_by_table,
+                "admission_record_diagnosis",
+                {
+                    **V2._case_base_row(case),
+                    "document_id": f"{visit_id}-admission-record-v3-contract",
+                    "diagnosis_id": diagnosis_id,
+                    "diagnosis_main": "1",
+                    "diagnosis_type": "入院诊断",
+                    "diagnosis_no": 1,
+                    "diagnosis_name": diagnosis_name,
+                    "diagnosis_code": diagnosis_code,
+                    "diagnosis_source": "v3_admission_record_contract",
+                    "diagnosis_time": admission_time,
+                    "record_time": admission_time,
+                    "update_time": admission_time,
+                },
+            )
+            diagnosis_added += 1
+    return {
+        "added": added,
+        "replaced_shell": replaced_shell,
+        "diagnosis_added": diagnosis_added,
     }
 
 

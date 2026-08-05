@@ -545,6 +545,92 @@ def test_v3_full_validation_upgrade_supplies_course_gate_facts_for_every_case() 
     assert primary_diagnosis["diagnosis_type"] == "入院诊断"
 
 
+def test_v3_validation_contract_has_admission_record_and_chief_complaint_for_every_case() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    audit = module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    admission_rows = rows_by_table["admission_record"]
+    assert len(admission_rows) == len(cases)
+    assert {
+        row.get("visit_id") for row in admission_rows
+    } == {case.target_visit_id for case in cases}
+    assert all(str(row.get("chief_complaint") or "").strip() for row in admission_rows)
+    assert all(
+        "v3" not in str(row.get("record_content") or "").lower()
+        and "资料合同" not in str(row.get("record_content") or "")
+        for row in admission_rows
+    )
+    assert audit["admission_record"] == {
+        "added": 32,
+        "replaced_shell": 0,
+        "diagnosis_added": 35,
+    }
+
+
+def test_v3_validation_contract_has_a_primary_admission_diagnosis_for_every_case() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    rows_by_table: dict[str, list[dict]] = {}
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    accepted_types = {"初步诊断", "入院诊断"}
+    for case in cases:
+        rows = [
+            row
+            for row in rows_by_table["admission_record_diagnosis"]
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("diagnosis_type") or "").strip() in accepted_types
+            and str(row.get("diagnosis_name") or "").strip()
+        ]
+        assert rows, case.target_visit_id
+
+
+@pytest.mark.parametrize(
+    ("case_index", "diagnosis_name", "expected_complaint"),
+    [
+        (9, "右侧股骨远端骨折", "患处疼痛"),
+        (17, "急性阑尾炎", "右下腹疼痛"),
+        (30, "1.回盲部印戒细胞癌伴腹膜转移；2.不全性肠梗阻", "发现肿块"),
+        (31, "宫内单活胎", "下腹坠胀"),
+        (36, "1、急性非ST段抬高型心肌梗死？2、急性脑梗死？", "胸闷、胸痛"),
+    ],
+)
+def test_v3_admission_context_follows_existing_primary_diagnosis(
+    case_index: int,
+    diagnosis_name: str,
+    expected_complaint: str,
+) -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    case = next(item for item in cases if item.target_index == case_index)
+    rows_by_table: dict[str, list[dict]] = {
+        "admission_record_diagnosis": [
+            {
+                "visit_id": case.target_visit_id,
+                "diagnosis_main": "1",
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": diagnosis_name,
+            }
+        ]
+    }
+
+    module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    admission = next(
+        row
+        for row in rows_by_table["admission_record"]
+        if row.get("visit_id") == case.target_visit_id
+    )
+    assert expected_complaint in admission["chief_complaint"]
+    primary_fragment = re.split(r"[，,；;。]", diagnosis_name, maxsplit=1)[0]
+    primary_fragment = re.sub(r"^\s*\d+\s*[、.．:]?\s*", "", primary_fragment)
+    assert primary_fragment in admission["record_content"]
+
+
 def test_v3_surgery_cases_replace_cloned_events_with_one_authoritative_event() -> None:
     module._configure_v2_compatibility()
     cases = _all_v3_cases()
