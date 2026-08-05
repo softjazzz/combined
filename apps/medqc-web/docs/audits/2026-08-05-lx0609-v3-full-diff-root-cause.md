@@ -182,6 +182,7 @@ DG-1 651 条到当前任务的主要状态转移：
 ## 7. 交付物与限制
 
 - 差分明细：`C:\tmp\medqc-lx0609-review\v3-full-diff-details.csv`（651 条 DG-1 data_gap + 47 条新增 data_gap 候选，共 698 行）
+- 差分明细 SHA256：`8987071345713D4984E38BD222A679530D3ECC2F44D2698771EE2E5CE4E6F1EE`
 - 本报告：`D:\LLM\LX888\apps\medqc-web\docs\audits\2026-08-05-lx0609-v3-full-diff-root-cause.md`
 - 结果来源：固定后端 8001 的任务 `b2feba05-b9e9-4296-a29b-255e78594991`；对照 DG-1 任务 `1f63f39e-6ce2-44f7-a86b-5d65032e93a9` 与 DG-1 CSV。
 - 本轮只读，未提交规则或资料修改；下一步如需修复，必须先批准具体候选并用同一资料快照建立失败测试。
