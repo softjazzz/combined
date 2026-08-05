@@ -30,6 +30,8 @@ def _typed_session(
     visit_id: str = "safe-visit",
     surgery_record_rows: tuple[dict, ...] = (),
     surgery_safecheck_record_rows: tuple[dict, ...] = (),
+    mr_surgery_rows: tuple[dict, ...] = (),
+    truncated_source_keys: frozenset[str] = frozenset(),
 ):
     query_versions = {
         "presurg_summary": "snapshot-provider-presurg_summary-v1",
@@ -47,13 +49,20 @@ def _typed_session(
             if source_key == "surgery_record"
             else surgery_safecheck_record_rows
             if source_key == "surgery_safecheck_record"
+            else mr_surgery_rows
+            if source_key == "mr_surgery"
             else ()
         )
         query_state = QueryStatus.AVAILABLE if rows else QueryStatus.EMPTY
+        completeness = (
+            SourceCompleteness.TRUNCATED
+            if source_key in truncated_source_keys
+            else SourceCompleteness.COMPLETE
+        )
         material = SnapshotSourceRows(
             source_key=source_key,
             rows=rows,
-            truncated=False,
+            truncated=source_key in truncated_source_keys,
             limit_rows=50,
         )
         sources[source_key] = material
@@ -61,14 +70,14 @@ def _typed_session(
             SourceObservation.create(
                 source_key=source_key,
                 query_state=query_state,
-                completeness=SourceCompleteness.COMPLETE,
+                completeness=completeness,
                 record_count=len(rows),
                 query_version=query_version,
                 snapshot_ref=build_material_snapshot_ref(
                     source_key=source_key,
                     query_version=query_version,
                     query_state=query_state,
-                    completeness=SourceCompleteness.COMPLETE,
+                    completeness=completeness,
                     document_refs=build_material_document_refs(source_key, rows),
                 ),
             )
@@ -249,19 +258,23 @@ def test_native_core_emits_direct_rule_decisions_on_shared_snapshot(monkeypatch)
 def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monkeypatch):
     snapshot, materials = _typed_session(
         surgery_record_rows=(
-            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
-            {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-07 16:30:00+08"},
+            {"document_id": "surgery-1", "surgery_begin_time": "2026-07-07 16:30:00+08"},
+            {"document_id": "surgery-2", "surgery_begin_time": "2026-07-08 15:55:00+08"},
         ),
         surgery_safecheck_record_rows=(
             {
                 "document_id": "safecheck-1",
-                "record_content": "手术时间：2026-07-30 08:00:00",
+                "record_content": "手术时间：2026-07-07 16:30:00",
             },
             {
                 "document_id": "safecheck-2",
-                "record_content": "手术时间：2026-07-30 10:00:00",
+                "record_content": "手术时间：2026-07-08 15:55:00",
             },
+        ),
+        mr_surgery_rows=tuple(
+            {"document_id": f"operation-detail-{index}"}
+            for index in range(8)
         ),
     )
     plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-032")])
@@ -340,7 +353,14 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
 
 
 @pytest.mark.parametrize(
-    ("surgery_record_rows", "surgery_safecheck_record_rows", "expected_state", "expected_reason"),
+    (
+        "surgery_record_rows",
+        "surgery_safecheck_record_rows",
+        "truncated_source_keys",
+        "omit_safecheck_source",
+        "expected_state",
+        "expected_reason",
+    ),
     (
         pytest.param(
             (
@@ -357,6 +377,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
                     "record_content": "手术时间：2026-07-30 10:00:00",
                 },
             ),
+            frozenset(),
+            False,
             "data_gap",
             "association_failed",
             id="missing-explicit-surgery-time-is-not-an-arbitrary-date-match",
@@ -376,6 +398,8 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
                     "record_content": "手术时间：2026-07-30 08:00:00",
                 },
             ),
+            frozenset(),
+            False,
             "data_gap",
             "association_failed",
             id="duplicate-minute-is-ambiguous",
@@ -391,9 +415,179 @@ def test_native_032_multiple_surgeries_with_exact_minute_pairs_is_compliant(monk
                     "record_content": "手术时间：2026-07-30 08:00:00",
                 },
             ),
+            frozenset(),
+            False,
             "non_compliant",
             "required_document_missing",
             id="complete-source-with-one-surgery-unmatched-is-non-compliant",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:xx",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="invalid-seconds-are-not-truncated-to-a-minute",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="seconds-are-required",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:000",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="seconds-token-must-not-have-a-numeric-tail",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="formal-surgery-time-also-requires-complete-seconds",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset(),
+            True,
+            "data_gap",
+            "association_failed",
+            id="unavailable-safecheck-source-fails-closed",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+            ),
+            frozenset({"surgery_safecheck_record"}),
+            False,
+            "data_gap",
+            "association_failed",
+            id="truncated-safecheck-source-fails-closed",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 10:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+                {
+                    "document_id": "safecheck-2",
+                    "record_content": "手术时间：2026-07-30 10:00:00",
+                },
+                {
+                    "document_id": "safecheck-extra",
+                    "record_content": "手术时间：2026-07-30 11:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="extra-safecheck-candidate-fails-closed",
+        ),
+        pytest.param(
+            (
+                {"document_id": "surgery-1", "surgery_begin_time": "2026-07-30 08:00:00"},
+                {"document_id": "surgery-2", "surgery_begin_time": "2026-07-30 08:00:00"},
+            ),
+            (
+                {
+                    "document_id": "safecheck-1",
+                    "record_content": "手术时间：2026-07-30 08:00:00",
+                },
+            ),
+            frozenset(),
+            False,
+            "data_gap",
+            "association_failed",
+            id="duplicate-formal-surgery-minute-fails-closed",
         ),
     ),
 )
@@ -401,13 +595,23 @@ def test_native_032_multiple_surgery_safecheck_linkage_failure_states(
     monkeypatch,
     surgery_record_rows,
     surgery_safecheck_record_rows,
+    truncated_source_keys,
+    omit_safecheck_source,
     expected_state,
     expected_reason,
 ):
     snapshot, materials = _typed_session(
         surgery_record_rows=surgery_record_rows,
         surgery_safecheck_record_rows=surgery_safecheck_record_rows,
+        truncated_source_keys=truncated_source_keys,
     )
+    if omit_safecheck_source:
+        sources = dict(materials._sources)
+        del sources["surgery_safecheck_record"]
+        materials = Luxian0609EvidenceMaterialStore.create(
+            snapshot=snapshot,
+            sources=sources,
+        )
     plan = SimpleNamespace(planned_rules=[SimpleNamespace(rule_id="LX0609-032")])
     provided = SimpleNamespace(
         evidence_payload={"programmatic_timeline": {"documents": {}}},

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import re
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import planner, runtime_shadow_assembler, runtime_shadow_input_provider, shadow_execution
 from .decision_model import (
@@ -67,7 +67,11 @@ _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
 )
 _SAFE_CHECK_SURGERY_TIME_PATTERN = re.compile(
     r"(?<![\u4e00-\u9fffA-Za-z0-9_])手术时间\s*[:：]\s*"
-    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)"
+    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?![0-9A-Za-z_: .+-])"
+)
+_COMPLETE_SURGERY_DATETIME_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"
+    r"(Z|[+-]\d{2}(?::\d{2})?)?$"
 )
 
 
@@ -177,10 +181,16 @@ def _minute_key(value: object) -> tuple[int, int, int, int, int] | None:
         parsed = value
     else:
         text = str(value or "").strip()
-        if not text:
+        matched = _COMPLETE_SURGERY_DATETIME_PATTERN.fullmatch(text)
+        if matched is None:
             return None
+        date_time, offset = matched.groups()
+        if offset and re.fullmatch(r"[+-]\d{2}", offset):
+            offset = f"{offset}:00"
         try:
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(
+                f"{date_time}{'+00:00' if offset == 'Z' else offset or ''}"
+            )
         except ValueError:
             return None
     return (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute)
@@ -197,7 +207,7 @@ def _safecheck_surgery_minute(row: Mapping[str, Any]) -> tuple[int, int, int, in
 def _unique_document_minutes(
     rows: Sequence[Mapping[str, Any]],
     *,
-    minute_resolver: Any,
+    minute_resolver: Callable[[Mapping[str, Any]], tuple[int, int, int, int, int] | None],
 ) -> dict[tuple[int, int, int, int, int], str] | None:
     """按文书 ID 去重后建立唯一分钟索引；任一歧义均失败关闭。"""
     minute_by_document_id: dict[str, tuple[int, int, int, int, int]] = {}
@@ -468,7 +478,7 @@ def execute_luxian_0609_native_rules(
                 ),
             )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-            linkage_outcome = None
+            linkage_outcome = ("data_gap", "association_failed")
         if linkage_outcome is not None:
             final_state_by_rule_id["LX0609-032"], reason_by_rule_id[
                 "LX0609-032"
