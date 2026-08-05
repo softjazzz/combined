@@ -471,26 +471,43 @@ def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     assert "已确认实施手术" in result["evidence"]
 
 
-def test_lx0609_033_missing_consent_has_customer_readable_non_compliant_explanation():
-    decision = reduce_luxian_0609_rule_decision(
-        RuleDecision(
-            rule_id="LX0609-033",
-            snapshot_hash=SNAPSHOT_HASH,
-            applicability=ApplicabilityState.APPLICABLE,
-            evidence_state=EvidenceState.SUFFICIENT,
-            qc_direction=QcDirection.DEFECT,
-            reason_code="requirement_violated",
-            fact_refs=(FACT_REF,),
-            evaluator_version="native-surgery-document-v1",
-        )
-    )
-
-    result = render_luxian_0609_customer_result(decision=decision)
-
-    assert result["status"] == "non_compliant"
-    assert result["reason_code"] == "requirement_violated"
-    assert result["findings"] == "已确认实施手术，未检索到手术知情同意书。"
-    assert "本次住院存在手术记录" in result["evidence"]
+@pytest.mark.parametrize(
+    ("facts", "expected"),
+    [
+        (
+            {
+                "failure_kind": "surgery_consent_document_missing",
+                "consent_state": "missing",
+                "performed_surgery_confirmed": True,
+            },
+            "已确认实施手术，未检索到手术知情同意书。",
+        ),
+        (
+            {
+                "failure_kind": "surgery_consent_body_missing",
+                "consent_state": "blank",
+                "performed_surgery_confirmed": True,
+            },
+            "已确认实施手术，但手术知情同意书正文为空。",
+        ),
+        (
+            {
+                "failure_kind": "surgery_consent_signature_missing",
+                "consent_state": "signature_missing",
+                "performed_surgery_confirmed": True,
+                "missing_signature_roles": ["surgeon"],
+            },
+            "已确认实施手术，但手术知情同意书缺少术者签名。",
+        ),
+    ],
+)
+def test_lx0609_033_controlled_consent_facts_have_distinct_customer_explanations(
+    facts, expected
+):
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-033",
+        facts=facts,
+    ) == expected
 
 
 def test_lx0609_012_non_explicit_positive_has_customer_readable_gap_explanation():

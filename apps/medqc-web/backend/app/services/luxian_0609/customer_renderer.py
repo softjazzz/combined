@@ -451,11 +451,6 @@ def _evaluation_window_gap_message(
         )
     return None
 _RULE_NON_COMPLIANT_MESSAGES = {
-    "LX0609-033": (
-        "已确认实施手术，未检索到手术知情同意书。",
-        "已确认本次住院存在手术记录，但未检索到可核对的手术知情同意书。",
-        "请补充并归档本次手术知情同意书。",
-    ),
     "LX0609-016": (
         "入院记录现病史与首次病程记录病例特点完全相同",
         "已按受控结构化段落逐字规范化比较，两段内容完全相同。",
@@ -1135,6 +1130,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
+        "LX0609-033",
         "LX0609-026",
         "LX0609-027",
         "LX0609-037",
@@ -1158,6 +1154,27 @@ def customer_finding_from_controlled_facts(
     def joined(key: str) -> str:
         values = facts.get(key)
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
+
+    if rule_id == "LX0609-033":
+        if facts.get("performed_surgery_confirmed") is not True:
+            return ""
+        consent_state = str(facts.get("consent_state") or "")
+        if kind == "surgery_consent_document_missing" and consent_state == "missing":
+            return "已确认实施手术，未检索到手术知情同意书。"
+        if kind == "surgery_consent_body_missing" and consent_state == "blank":
+            return "已确认实施手术，但手术知情同意书正文为空。"
+        if kind == "surgery_consent_signature_missing" and consent_state == "signature_missing":
+            role_labels = {"patient": "患者或代理人", "surgeon": "术者"}
+            roles = facts.get("missing_signature_roles")
+            if not isinstance(roles, list) or not roles:
+                return ""
+            labels_text = "、".join(
+                role_labels[role] for role in roles if role in role_labels
+            )
+            if not labels_text:
+                return ""
+            return f"已确认实施手术，但手术知情同意书缺少{labels_text}签名。"
+        return ""
 
     if rule_id == "LX0609-009":
         required_values = facts.get("required_dates")

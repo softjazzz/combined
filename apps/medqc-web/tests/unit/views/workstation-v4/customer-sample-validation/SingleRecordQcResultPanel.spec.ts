@@ -92,6 +92,17 @@ const surgeryConsentMissingItem = {
   ],
 }
 
+const surgeryConsentSignatureMissingItem = {
+  ...surgeryConsentMissingItem,
+  conclusion: '已确认实施手术，但手术知情同意书缺少术者签名。',
+  customer_display_facts: {
+    failure_kind: 'surgery_consent_signature_missing',
+    consent_state: 'signature_missing',
+    performed_surgery_confirmed: true,
+    missing_signature_roles: ['surgeon'],
+  },
+}
+
 const explainedCompliantItem = {
   rule_id: 'LX0609-008',
   rule_name: '病重患者查房记录',
@@ -352,6 +363,25 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('是')
     expect(wrapper.text()).not.toContain('surgery_consent_document_missing')
     expect(wrapper.text()).not.toContain('consent_state')
+  })
+
+  it('033 签名缺失不误写为整份同意书缺失，也不展示原始枚举', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: [surgeryConsentSignatureMissingItem] },
+    })
+
+    expect(wrapper.get('[data-testid="single-record-result-conclusion"]').text()).toBe(
+      '已确认实施手术，但手术知情同意书缺少术者签名。',
+    )
+    expect(wrapper.text()).not.toContain('未检索到手术知情同意书')
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    expect(wrapper.text()).toContain('缺少签名')
+    expect(wrapper.text()).toContain('术者')
+    expect(wrapper.text()).not.toContain('surgery_consent_signature_missing')
+    expect(wrapper.text()).not.toContain('signature_missing')
+    expect(wrapper.text()).not.toContain('surgeon')
   })
 
   it('仅保存模型分析的LLM不合规结果仍可展开查看原始判断', async () => {

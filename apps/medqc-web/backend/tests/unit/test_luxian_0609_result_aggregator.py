@@ -537,6 +537,59 @@ def test_reduced_decision_preserves_controlled_customer_display_facts():
     }
 
 
+@pytest.mark.parametrize(
+    ("facts", "expected_finding"),
+    [
+        (
+            {
+                "failure_kind": "surgery_consent_document_missing",
+                "consent_state": "missing",
+                "performed_surgery_confirmed": True,
+            },
+            "已确认实施手术，未检索到手术知情同意书。",
+        ),
+        (
+            {
+                "failure_kind": "surgery_consent_body_missing",
+                "consent_state": "blank",
+                "performed_surgery_confirmed": True,
+            },
+            "已确认实施手术，但手术知情同意书正文为空。",
+        ),
+        (
+            {
+                "failure_kind": "surgery_consent_signature_missing",
+                "consent_state": "signature_missing",
+                "performed_surgery_confirmed": True,
+                "missing_signature_roles": ["surgeon"],
+            },
+            "已确认实施手术，但手术知情同意书缺少术者签名。",
+        ),
+    ],
+)
+def test_lx0609_033_public_aggregation_keeps_each_consent_defect_explanation(
+    facts, expected_finding
+):
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-033", "name": "手术知情同意书"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-033", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-033", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == "non_compliant"
+    assert result["reason_code"] == "requirement_violated"
+    assert result["findings"] == expected_finding
+    assert result["customer_display_facts"] == facts
+
+
 def test_002_late_result_renders_actual_interval_and_overdue_duration():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

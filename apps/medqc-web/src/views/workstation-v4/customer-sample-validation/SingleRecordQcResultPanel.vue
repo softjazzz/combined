@@ -445,6 +445,7 @@ const factLabels: Record<string, string> = {
   target_document: '目标文书',
   performed_surgery_confirmed: '已实施手术',
   consent_state: '手术知情同意书',
+  missing_signature_roles: '缺少签名',
   procedure_kind: '操作类型',
   effective_surgery_level: '手术等级',
   surgery_level_source: '等级来源',
@@ -466,6 +467,8 @@ const factValueLabels: Record<string, string> = {
   surgery_document_missing: '目标手术文书缺失',
   surgery_document_blank: '目标手术文书内容为空',
   surgery_consent_document_missing: '未检索到手术知情同意书',
+  surgery_consent_body_missing: '手术知情同意书正文为空',
+  surgery_consent_signature_missing: '手术知情同意书签名不完整',
   admission_first_course_copy_detected: '入院记录现病史与首次病程记录病例特点高度重复',
   implant_name: '名称',
   implant_category: '种类',
@@ -487,6 +490,10 @@ const factValueLabels: Record<string, string> = {
   structured_field: '病历结构化字段',
   completed: '已完成',
   missing: '未完成',
+  blank: '正文为空',
+  signature_missing: '签名不完整',
+  patient: '患者或代理人',
+  surgeon: '术者',
 }
 
 const dataGapLabels: Record<string, string> = {
