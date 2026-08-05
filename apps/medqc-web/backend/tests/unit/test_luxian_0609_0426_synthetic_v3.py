@@ -4,6 +4,7 @@ import importlib.util
 import re
 import sys
 from collections import Counter
+from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -565,6 +566,7 @@ def test_v3_validation_contract_has_admission_record_and_chief_complaint_for_eve
     )
     assert audit["admission_record"] == {
         "added": 32,
+        "preserved_existing": 6,
         "replaced_shell": 0,
         "diagnosis_added": 35,
     }
@@ -587,6 +589,50 @@ def test_v3_validation_contract_has_a_primary_admission_diagnosis_for_every_case
             and str(row.get("diagnosis_name") or "").strip()
         ]
         assert rows, case.target_visit_id
+
+
+def test_v3_preserves_existing_admission_record_when_source_time_is_outside_synthetic_window() -> None:
+    module._configure_v2_compatibility()
+    cases = _all_v3_cases()
+    # 选择未被受控规则族 builder 重写的病例，确保测试经过公开生成入口时，
+    # 已有源入院记录仍在入口前后可被观察到。
+    case = cases[7]
+    source_record_time = datetime(2025, 10, 1, 9, 30)
+    rows_by_table: dict[str, list[dict]] = {
+        "admission_record": [
+            {
+                "visit_id": case.target_visit_id,
+                "document_id": "source-admission-record",
+                "record_content": "源入院记录正文：被发现头晕伴乏力后入院。",
+                "chief_complaint": "被发现头晕伴乏力6小时",
+                "record_time": source_record_time,
+                "submit_datetime": source_record_time,
+                "admission_datetime": source_record_time,
+            }
+        ],
+        "admission_record_diagnosis": [
+            {
+                "visit_id": case.target_visit_id,
+                "diagnosis_main": "是",
+                "diagnosis_type": "入院诊断",
+                "diagnosis_name": "急性脑梗死",
+            }
+        ],
+    }
+
+    audit = module.upgrade_full_validation_evidence(rows_by_table, cases)
+
+    admission = next(
+        row
+        for row in rows_by_table["admission_record"]
+        if row.get("visit_id") == case.target_visit_id
+        and row.get("document_id") == "source-admission-record"
+    )
+    assert admission["document_id"] == "source-admission-record"
+    assert admission["chief_complaint"] == "被发现头晕伴乏力6小时"
+    assert admission["record_content"] == "源入院记录正文：被发现头晕伴乏力后入院。"
+    assert admission["record_time"] == module.V2._dt_for_case(case, 0, 10, 0)
+    assert audit["admission_record"]["preserved_existing"] >= 1
 
 
 @pytest.mark.parametrize(

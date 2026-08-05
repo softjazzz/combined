@@ -967,52 +967,45 @@ def ensure_v3_admission_record_evidence(
 ) -> dict[str, int]:
     """为每份 v3 病例补齐当前住院入院记录和主诉。
 
-    018 的验证资料合同要求入院记录中的主诉。只在已有记录缺失或主诉为空时
-    补写，不改变已有受控时限病例的记录时间，也不生成第二份资料链。
+    018 的验证资料合同要求入院记录中的主诉。已有源记录即使带有旧住院时间，
+    也必须保留正文、主诉和诊断依据；这里只把记录时间重基准到合成住院窗口。
+    只有源记录确实缺失或主诉为空时才补写，不生成第二份资料链。
     """
 
     added = 0
+    preserved_existing = 0
     replaced_shell = 0
     diagnosis_added = 0
     for case in cases:
         visit_id = str(case.target_visit_id)
         stay_start = V2._dt_for_case(case, 0, 8, 0)
-        stay_end = V2._dt_for_case(case, 12, 18, 0)
-
-        def _has_current_record_time(row: dict[str, Any]) -> bool:
-            for field in (
-                "record_time",
-                "record_datetime",
-                "submit_datetime",
-                "last_modified_datetime",
-                "update_time",
-            ):
-                value = row.get(field)
-                if isinstance(value, datetime):
-                    parsed = value
-                elif isinstance(value, str):
-                    try:
-                        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-                    except ValueError:
-                        continue
-                    parsed = parsed.replace(tzinfo=None)
-                else:
-                    continue
-                if stay_start <= parsed <= stay_end:
-                    return True
-            return False
-
         existing = [
             row
             for row in rows_by_table.get("admission_record", [])
             if str(row.get("visit_id") or "") == visit_id
         ]
         admission_time = V2._dt_for_case(case, 0, 10, 0)
-        has_chief_complaint = any(
-            str(row.get("chief_complaint") or "").strip()
-            and _has_current_record_time(row)
-            for row in existing
-        )
+        source_rows_with_complaint = [
+            row for row in existing if str(row.get("chief_complaint") or "").strip()
+        ]
+        for row in source_rows_with_complaint:
+            # 克隆行的正文和主诉属于源资料；只重基准时间字段，避免后续时间窗清理
+            # 把已有真实入院记录误删后再用诊断模板反向生成主诉。
+            for field in (
+                "record_time",
+                "record_datetime",
+                "submit_time",
+                "submit_datetime",
+                "last_modified_datetime",
+                "update_time",
+            ):
+                if field in row or field in {"record_time", "record_datetime"}:
+                    row[field] = admission_time
+            if "admission_datetime" in row:
+                row["admission_datetime"] = stay_start
+        has_chief_complaint = bool(source_rows_with_complaint)
+        if has_chief_complaint:
+            preserved_existing += len(source_rows_with_complaint)
         if not has_chief_complaint:
             if existing:
                 rows_by_table["admission_record"] = [
@@ -1034,7 +1027,8 @@ def ensure_v3_admission_record_evidence(
                     (
                         row.get("diagnosis_name")
                         for row in diagnosis_rows
-                        if str(row.get("diagnosis_main") or "") == "1"
+                        if str(row.get("diagnosis_main") or "").strip().lower()
+                        in {"1", "是", "y", "yes", "true"}
                     ),
                     diagnosis_rows[0].get("diagnosis_name")
                     if diagnosis_rows
@@ -1100,6 +1094,7 @@ def ensure_v3_admission_record_evidence(
             diagnosis_added += 1
     return {
         "added": added,
+        "preserved_existing": preserved_existing,
         "replaced_shell": replaced_shell,
         "diagnosis_added": diagnosis_added,
     }
