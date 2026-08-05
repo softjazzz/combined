@@ -24,7 +24,18 @@
 6. 全部基准手术均唯一关联时，才允许合规。
 7. 关联不足、多个候选或来源不完整时，保持 `data_gap / association_failed`，并保存手术记录与核查表两端 source ref。
 
-关联优先级必须是：
+原始审计未发现结构化业务关联键，因此此前停止 Task 1。现客户已书面确认：核查表正文的受控字段 `手术时间：YYYY-MM-DD HH:MM:SS` 表示其所对应手术的开始时间。仅对 `LX0609-032`，该字段成为本次住院内的唯一关联键，替代下列原先无法满足的优先级。
+
+受控关联必须同时满足：
+
+1. 只解析核查表正文中精确字段名 `手术时间` 后的完整日期时间；不得把任意日期、记录时间或术式文本当作手术时间；
+2. 与正式 `surgery_record.surgery_begin_time` 精确到分钟完全相等；
+3. 两端均唯一，一份核查表和一份正式手术记录只能互相配对一次；
+4. 两端时间缺失、格式不合法、重复或存在额外候选时，一律 `data_gap / association_failed`；
+5. 两来源均完整、所有有效核查表均可解释但仍有正式手术没有匹配时，才 `non_compliant / required_document_missing`；
+6. 不使用同日匹配、数量配对、模糊术式、文本相似度、关键词推断或 LLM。
+
+原始关联优先级（仅保留为后续资料接口升级的参考，不在本 Task 实现）是：
 
 1. 同一业务手术 ID、申请 ID、父子文书 ID 或其他明确结构化关联键；
 2. 完整手术时间与结构化术式代码/名称同时一致；
@@ -69,16 +80,14 @@
 
 ## 3. Task 1：TDD 最小修复 032 的一对一关联
 
-**前置条件：** Task 0A 判定为 `linkage_logic_missing`，且所需关联键已经存在于当前 MaterialStore。
+**前置条件：** Task 0A 判定为 `source_key_absent_or_ambiguous`；但客户已确认当前 MaterialStore 中核查表的受控正文时间字段可以作为单病例、精确到分钟的关联键。
 
 **允许改动文件：**
 
-- `backend/app/services/luxian_0609/surgery_safecheck_linkage.py`（新建，仅处理正式手术记录与安全核查表的纯函数）
 - `backend/app/services/luxian_0609/native_execution.py`
-- `backend/tests/unit/test_luxian_0609_surgery_safecheck_linkage.py`（新建）
 - `backend/tests/unit/test_luxian_0609_native_execution.py`
 
-新模块只能接收已读取的行和已有 source ref；不得导入 MaterialStore、Snapshot、数据库、Bundle、LLM 或任何执行器。它不是可扩展事件平台，只提供 032 的固定输入、固定输出和受控失败原因。
+关联辅助函数保留在 `native_execution.py` 内，只接收该执行器已从 MaterialStore 读取的行；不得导入数据库、Bundle、LLM 或新增通用事件平台。
 
 ### 3.1 先写公开入口失败测试
 
@@ -95,7 +104,7 @@
 
 ### 3.2 最小实现
 
-1. 在 `surgery_safecheck_linkage.py` 中固定实现：基准手术去重、三档严格关联、双向一对一占用检查、受控 `association_failed` 结果和 source ref 输出。
+1. 在 `native_execution.py` 内固定实现：基准手术去重、客户确认的精确分钟关联、双向一对一占用检查和受控 `association_failed` 结果。
 2. 仅替换 `native_execution.py` 中 032 的“手术记录数量大于 1即失败”分支；030 的正式手术记录存在性规则保持原路径。
 3. 032 只根据关联输出决定：
    - 所有基准手术都有唯一核查表 → 沿用既有合规逻辑；
@@ -106,7 +115,7 @@
 **聚焦验证：**
 
 ```powershell
-python -m pytest backend/tests/unit/test_luxian_0609_surgery_safecheck_linkage.py backend/tests/unit/test_luxian_0609_native_execution.py -q
+python -m pytest backend/tests/unit/test_luxian_0609_native_execution.py -q
 ```
 
 **提交：**

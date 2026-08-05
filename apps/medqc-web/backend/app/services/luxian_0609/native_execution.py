@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import re
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
@@ -63,6 +64,10 @@ _TYPED_RULE_SOURCE_KEYS = MappingProxyType(
             {"surgery_safecheck_record", "surgery_record", "mr_surgery"}
         ),
     }
+)
+_SAFE_CHECK_SURGERY_TIME_PATTERN = re.compile(
+    r"(?<![\u4e00-\u9fffA-Za-z0-9_])手术时间\s*[:：]\s*"
+    r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)"
 )
 
 
@@ -165,6 +170,83 @@ def _technical_results(rule_ids: Sequence[str], *, reason_code: str) -> NativeEx
         planned_rule_ids=tuple(rule_ids),
         terminal_reason_code=reason_code,
     )
+
+
+def _minute_key(value: object) -> tuple[int, int, int, int, int] | None:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute)
+
+
+def _safecheck_surgery_minute(row: Mapping[str, Any]) -> tuple[int, int, int, int, int] | None:
+    content = str(row.get("record_content") or "")
+    matches = _SAFE_CHECK_SURGERY_TIME_PATTERN.findall(content)
+    if len(matches) != 1:
+        return None
+    return _minute_key(matches[0])
+
+
+def _unique_document_minutes(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    minute_resolver: Any,
+) -> dict[tuple[int, int, int, int, int], str] | None:
+    """按文书 ID 去重后建立唯一分钟索引；任一歧义均失败关闭。"""
+    minute_by_document_id: dict[str, tuple[int, int, int, int, int]] = {}
+    for row in rows:
+        document_id = str(row.get("document_id") or "").strip()
+        minute = minute_resolver(row)
+        if not document_id or minute is None:
+            return None
+        previous = minute_by_document_id.get(document_id)
+        if previous is not None:
+            if previous != minute:
+                return None
+            continue
+        minute_by_document_id[document_id] = minute
+
+    document_id_by_minute: dict[tuple[int, int, int, int, int], str] = {}
+    for document_id, minute in minute_by_document_id.items():
+        if minute in document_id_by_minute:
+            return None
+        document_id_by_minute[minute] = document_id
+    return document_id_by_minute
+
+
+def _resolve_multi_surgery_safecheck_linkage(
+    *,
+    surgery_rows: Sequence[Mapping[str, Any]],
+    safecheck_rows: Sequence[Mapping[str, Any]],
+) -> tuple[str, str] | None:
+    """仅为032按客户确认的“手术时间”字段做精确分钟双向唯一关联。"""
+    surgery_by_minute = _unique_document_minutes(
+        surgery_rows,
+        minute_resolver=lambda row: _minute_key(row.get("surgery_begin_time")),
+    )
+    if surgery_by_minute is None:
+        return "data_gap", "association_failed"
+    if len(surgery_by_minute) <= 1:
+        return None
+
+    safecheck_by_minute = _unique_document_minutes(
+        safecheck_rows,
+        minute_resolver=_safecheck_surgery_minute,
+    )
+    if safecheck_by_minute is None:
+        return "data_gap", "association_failed"
+    if set(safecheck_by_minute).difference(surgery_by_minute):
+        return "data_gap", "association_failed"
+    if set(surgery_by_minute).difference(safecheck_by_minute):
+        return "non_compliant", "required_document_missing"
+    return "compliant", "requirement_satisfied"
 
 
 def build_luxian_0609_native_technical_results(
@@ -379,14 +461,18 @@ def execute_luxian_0609_native_rules(
     }
     if "LX0609-032" in typed_selected and evidence_materials is not None:
         try:
-            surgery_record_count = len(tuple(evidence_materials.rows("surgery_record")))
+            linkage_outcome = _resolve_multi_surgery_safecheck_linkage(
+                surgery_rows=tuple(evidence_materials.rows("surgery_record")),
+                safecheck_rows=tuple(
+                    evidence_materials.rows("surgery_safecheck_record")
+                ),
+            )
         except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
-            surgery_record_count = 0
-        if surgery_record_count > 1:
-            # 手术安全核查表当前没有可审计的单台手术关联键；多台手术时
-            # 不允许用就诊级“存在一张表”替代逐台核对。
-            final_state_by_rule_id["LX0609-032"] = "data_gap"
-            reason_by_rule_id["LX0609-032"] = "association_failed"
+            linkage_outcome = None
+        if linkage_outcome is not None:
+            final_state_by_rule_id["LX0609-032"], reason_by_rule_id[
+                "LX0609-032"
+            ] = linkage_outcome
     all_results = tuple(
         build_luxian_0609_native_result(
             rule_id=result.rule_id,
