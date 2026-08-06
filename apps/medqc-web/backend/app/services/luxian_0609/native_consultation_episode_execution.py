@@ -71,6 +71,7 @@ _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS = frozenset((
     "daily_course_record",
     "senior_course_record",
 ))
+_COURSE_EXECUTION_SOURCE_KEYS = _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS
 _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS = frozenset(
     source_key
     for source_key in _EXECUTION_SOURCE_KEYS
@@ -96,16 +97,8 @@ _ACTION_TYPE_SOURCE_KEYS = {
     )),
     "other": frozenset(_EXECUTION_SOURCE_KEYS),
 }
-# 020/023 业务口径按“会诊后有具体医嘱”为主证据。病程/查房只给 LLM
-# 作上下文，不能因这些上下文截断而把结构化医嘱判断降为资料不足。
-_ACTION_TYPE_REQUIRED_SOURCE_KEYS = {
-    "medication": frozenset(("inpat_drug_order", "inpat_nondrug_order")),
-    "test": frozenset(("inpat_nondrug_order",)),
-    "procedure": frozenset(("inpat_nondrug_order",)),
-    "transfer": frozenset(("inpat_nondrug_order", "inpat_drug_order")),
-    "monitoring": frozenset(("inpat_nondrug_order",)),
-    "other": frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
-}
+# 4.20.4 要求申请会诊医师在会诊后的病程记录中记录会诊意见及执行情况。
+# 医嘱可辅助语义关联，但不能替代病程记录，也不能成为 020 合规的硬前提。
 _STAY_ADMISSION_SOURCE_KEY = "inpat_registration"
 _STAY_DISCHARGE_SOURCE_KEY = "inpat_registration.discharge_horizon"
 _STAY_HORIZON_SOURCE_KEY = "evaluation_context.horizon"
@@ -120,10 +113,6 @@ _EXECUTION_RECORD_STATES = frozenset({
     "unknown",
 })
 _RECOMMENDATION_TYPES = frozenset({"medication", "test", "procedure", "transfer", "monitoring", "other"})
-_SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN = re.compile(
-    r"(?:遵|按|依照|根据).{0,12}(?:会诊|专科).{0,12}(?:意见|建议).{0,12}"
-    r"(?:执行|处理|落实|治疗)"
-)
 _EXPLICIT_REQUEST_CLEAR_PATTERN = re.compile(
     r"(?:会诊目的|申请.{0,12}会诊).{0,80}"
     r"(?:评估.{0,24}(?:适应证|病情|方案)|明确.{0,24}(?:诊断|原因|方案)|"
@@ -807,13 +796,17 @@ def _strong_explicit_consultation_statuses(
             statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
     if "LX0609-020" in selected and execution_projection is not None:
         if any(
-            _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
+            item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+            and _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
             for item in execution_projection.candidates
         ):
             statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
         elif (
-            not execution_projection.candidates
-            and set(_EXECUTION_SOURCE_KEYS).issubset(
+            not any(
+                item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+                for item in execution_projection.candidates
+            )
+            and set(_COURSE_EXECUTION_SOURCE_KEYS).issubset(
                 execution_projection.source_complete_keys
             )
         ):
@@ -967,54 +960,6 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     return tuple(episodes)
 
 
-def _all_completed_episodes_have_same_document_generic_execution(
-    episodes: Sequence[_Episode],
-    documents: Sequence[Mapping[str, str]],
-) -> bool:
-    """识别会诊文书自身明确写出的笼统执行痕迹。
-
-    这里只处理可逐字验证的“遵/按会诊意见执行”类表达：它足以证明存在
-    请会诊执行记录（020），但仍未归纳具体执行情况（023）。
-    """
-
-    documents_by_ref = {str(item["ref"]): item for item in documents}
-    completed = tuple(
-        item
-        for item in episodes
-        if item.opinion_state == "clear"
-        and item.confidence == "high"
-        and item.recommendations
-    )
-    if not completed:
-        return False
-    return all(
-        any(
-            _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(
-                _clean(documents_by_ref.get(ref, {}).get("text"))
-            )
-            for ref in item.opinion_refs
-        )
-        for item in completed
-    )
-
-
-def _generic_execution_display_facts(
-    documents: Sequence[Mapping[str, str]],
-) -> Mapping[str, Any]:
-    document_ids = [
-        document_id
-        for row in documents
-        if _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(_clean(row.get("text")))
-        if (document_id := _clean(row.get("document_id")))
-    ]
-    return {
-        "failure_kind": "consultation_execution_too_generic",
-        "observed_expression": "仅笼统记录已按会诊意见执行",
-        "missing_details": ["具体执行措施", "执行结果或后续安排"],
-        "source_document_ids": list(dict.fromkeys(document_ids))[:8],
-    }
-
-
 def _consultation_semantic_display_facts(
     *,
     rule_id: str,
@@ -1118,7 +1063,6 @@ def _consultation_execution_display_facts(
         ),
         "specific_execution_count": sum(
             item.execution_record_state == "specific_trace"
-            and item.execution_state == "linked_specific"
             for item in assessment_rows
         ),
         "generic_execution_count": sum(
@@ -1224,12 +1168,13 @@ def _execution_prompt(
         raise _SourceGap()
     prompt = (
         "你分两步判断每条会诊建议的后续落实，不得补充病历之外的信息。"
-        "第一步先识别病程/查房中是否存在请会诊执行记录痕迹："
+        "第一步先识别会诊后病程/查房中是否记录会诊意见及执行情况："
         "specific_trace=明确写出按会诊意见采取的具体措施；"
         "generic_trace=仅写遵会诊意见执行/已按建议处理等笼统表述；"
         "copied_opinion=照抄会诊意见、没有归纳执行情况；"
         "no_trace=未见请会诊执行记录痕迹；unknown=无法判断。"
-        "第二步再判断结构化医嘱/操作候选是否与该建议存在动作对应关系。"
+        "第二步可辅助判断结构化医嘱/操作候选是否与该建议存在动作对应关系，"
+        "但结构化匹配不是020或023的合规硬条件。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
         "execution_state只描述结构化动作匹配：linked_specific=结构化候选明确落实同一条建议，"
         "linked_vague=结构化候选仅笼统相关，absent=无结构化动作匹配，unknown=无法判断。"
@@ -1419,56 +1364,40 @@ def _execution_outcome(
         if source_technical:
             return "technical_error", "source_query_error"
         return "evaluation_unknown", "semantic_low_confidence"
-    action_states = tuple(item.execution_state for item in assessments)
     trace_states = tuple(item.execution_record_state for item in assessments)
-    complete_specific_links = all(
-        item.execution_record_state == "specific_trace"
-        and item.execution_state == "linked_specific"
+    course_source_incomplete = bool(
+        _COURSE_EXECUTION_SOURCE_KEYS.intersection(source_incomplete_keys)
+    )
+    complete_course_traces = all(
+        item.execution_record_state in {"specific_trace", "generic_trace", "copied_opinion"}
         and bool(item.trace_refs)
-        and bool(item.execution_refs)
         for item in assessments
     )
-    no_trace_no_action_refs = {
+    no_course_trace_refs = {
         item.recommendation_ref
         for item in assessments
-        if item.execution_record_state == "no_trace" and not item.execution_refs
+        if item.execution_record_state == "no_trace"
     }
-    no_trace_with_action_refs = {
-        item.recommendation_ref
-        for item in assessments
-        if item.execution_record_state == "no_trace" and item.execution_refs
-    }
-    if no_trace_no_action_refs and any(
-        item.recommendation.recommendation_ref in no_trace_no_action_refs
-        and bool(
-            _ACTION_TYPE_REQUIRED_SOURCE_KEYS.get(
-                item.recommendation.action_type,
-                frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
-            ).intersection(source_incomplete_keys)
-        )
-        for item in completed_recommendations
-    ):
-        return "data_gap", "candidate_scope_incomplete"
     if rule_id == "LX0609-020":
-        if no_trace_no_action_refs:
+        if no_course_trace_refs:
+            if course_source_incomplete:
+                return "data_gap", "candidate_scope_incomplete"
             if source_technical:
                 return "technical_error", "source_query_error"
             return "non_compliant", "requirement_violated"
-        if complete_specific_links:
+        if complete_course_traces:
             return "compliant", "requirement_satisfied"
         return "evaluation_unknown", "semantic_output_unknown"
+    # 020 没有找到执行记录时，023 不重复判“无记录”；023 只评价已找到的
+    # 执行病程是否笼统、照抄或已明确说明具体落实情况。
+    if no_course_trace_refs:
+        if course_source_incomplete:
+            return "data_gap", "candidate_scope_incomplete"
+        return "not_applicable", "trigger_absent_complete"
     if any(state in {"generic_trace", "copied_opinion"} for state in trace_states):
         return "non_compliant", "requirement_violated"
-    if no_trace_no_action_refs:
-        if any(state != "no_trace" for state in trace_states) or any(
-            state != "absent" for state in action_states
-        ):
-            return "evaluation_unknown", "semantic_output_unknown"
-        return "not_applicable", "trigger_absent_complete"
-    if "linked_vague" in action_states:
-        return "non_compliant", "requirement_violated"
-    if complete_specific_links:
-        return "evaluation_unknown", "semantic_output_unknown"
+    if all(state == "specific_trace" for state in trace_states):
+        return "compliant", "requirement_satisfied"
     if source_technical:
         return "technical_error", "source_query_error"
     return "evaluation_unknown", "semantic_output_unknown"
@@ -1542,14 +1471,10 @@ def _link_diagnostics(
     diagnostics: list[dict[str, Any]] = []
     for item in completed_recommendations:
         recommendation = item.recommendation
-        relevant_source_keys = _ACTION_TYPE_SOURCE_KEYS.get(
-            recommendation.action_type,
-            frozenset(_EXECUTION_SOURCE_KEYS),
-        )
-        required_source_keys = _ACTION_TYPE_REQUIRED_SOURCE_KEYS.get(
-            recommendation.action_type,
-            frozenset(_ORDER_EXECUTION_SOURCE_KEYS),
-        )
+        # 020/023 的主核对对象固定为会诊后的病程/查房；医嘱等不能作为
+        # “已记录执行情况”的替代来源，也不能主导资料缺口解释。
+        relevant_source_keys = _COURSE_EXECUTION_SOURCE_KEYS
+        required_source_keys = _COURSE_EXECUTION_SOURCE_KEYS
         relevant_candidates = tuple(
             candidate
             for candidate in candidates
@@ -1807,15 +1732,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             stage_two_boundary_status = ("technical_error", "source_query_error")
         except _SourceGap:
             stage_two_boundary_status = ("data_gap", "linkage_unresolved")
-        if stage_two_boundary_status is not None and (
-            stage_two_boundary_status[0] == "technical_error"
-            or not any(
-                _SAME_DOCUMENT_GENERIC_EXECUTION_PATTERN.search(
-                    _clean(document.get("text"))
-                )
-                for document in documents
-            )
-        ):
+        if stage_two_boundary_status is not None:
             return _finish(
                 selected=selected,
                 status=stage_two_boundary_status[0],
@@ -1874,14 +1791,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
         for rule_id in selected
         if rule_id in {"LX0609-021", "LX0609-022"}
     }
-    if _all_completed_episodes_have_same_document_generic_execution(
-        episodes,
-        documents,
-    ):
-        if "LX0609-020" in stage_two_rule_ids:
-            statuses["LX0609-020"] = ("compliant", "requirement_satisfied")
-        if "LX0609-023" in stage_two_rule_ids:
-            statuses["LX0609-023"] = ("non_compliant", "requirement_violated")
     execution_assessments: tuple[_ExecutionAssessment, ...] | None = None
     execution_source_technical = False
     execution_source_incomplete_keys: frozenset[str] = frozenset()
@@ -1940,30 +1849,40 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                 if execution_source_technical:
                     for rule_id in stage_two_rule_ids:
                         statuses[rule_id] = ("technical_error", "source_query_error")
+                elif (
+                    _COURSE_EXECUTION_SOURCE_KEYS.intersection(
+                        projection.source_incomplete_keys
+                    )
+                    and not any(
+                        item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+                        for item in projection.candidates
+                    )
+                ):
+                    # 没有任何可核对的后续病程时，病程来源的截断、不可用或
+                    # 行级时间/正文缺失不能由医嘱补足。已有可定位病程痕迹时，
+                    # 则交由受控事实判断其是否已充分支持正向结论。
+                    for rule_id in stage_two_rule_ids:
+                        statuses[rule_id] = (
+                            "data_gap",
+                            "candidate_scope_incomplete",
+                        )
                 elif not projection.candidates:
                     # 候选因截断、超限、无权威时间或正文预算而无法投给模型时，
                     # 不是模型的 absent 结论，必须单列为资料不足。反之，已成功
                     # 查询且本次住院窗口内确无后续候选时，才可作为未观察到执行。
-                    if projection.source_incomplete_keys:
-                        for rule_id in stage_two_rule_ids:
-                            statuses[rule_id] = (
-                                "evaluation_unknown",
-                                "candidate_scope_incomplete",
-                            )
-                    else:
-                        execution_assessments = tuple(
-                            _ExecutionAssessment(
-                                item.recommendation.recommendation_ref,
-                                "absent",
-                                (),
-                                "high",
-                                (),
-                                "no_trace",
-                                (),
-                                (),
-                            )
-                            for item in completed_recommendations
+                    execution_assessments = tuple(
+                        _ExecutionAssessment(
+                            item.recommendation.recommendation_ref,
+                            "absent",
+                            (),
+                            "high",
+                            (),
+                            "no_trace",
+                            (),
+                            (),
                         )
+                        for item in completed_recommendations
+                    )
                 else:
                     try:
                         second_prompt, allowed_refs = _execution_prompt(
@@ -2091,10 +2010,6 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     documents=documents,
                 ),
             )
-        )
-    if statuses.get("LX0609-023") == ("non_compliant", "requirement_violated"):
-        display_facts.append(
-            ("LX0609-023", _generic_execution_display_facts(documents))
         )
     return NativeConsultationEpisodeExecutionResult(
         results=tuple(item for item in results if item["rule_id"] not in typed), planned_rule_ids=selected,
