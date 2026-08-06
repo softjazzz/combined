@@ -630,8 +630,10 @@ def _performed_surgery_event_count(
     qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
         mr_surgery_rows, surgery_record_rows
     )
-    authoritative_rows = qualified_mr_rows or qualified_record_rows
-    source_key = "mr_surgery" if qualified_mr_rows else "surgery_record"
+    # 正式手术记录是一台手术事件的主依据；mr_surgery 是操作目录补充，
+    # 同一台手术可包含多行操作，不能在正式记录存在时用它虚增台次。
+    authoritative_rows = qualified_record_rows or qualified_mr_rows
+    source_key = "surgery_record" if qualified_record_rows else "mr_surgery"
     return sum(
         1
         for row in authoritative_rows
@@ -768,6 +770,47 @@ def _postoperative_surgery_events(
             surgeon_tokens=_surgery_event_surgeon_tokens(row),
         )
         for index, row in enumerate(source_rows, start=1)
+    )
+
+
+def _link_postoperative_first_course_records(
+    *,
+    surgery_events: Sequence[_PostoperativeSurgeryEvent],
+    postoperative_rows: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[tuple[_PostoperativeSurgeryEvent, tuple[Mapping[str, Any], ...]], ...], str]:
+    """按最近一台已结束的正式手术，将术后首次病程唯一归属到单个事件。
+
+    仅使用实际手术结束时间和文书权威记录时间；结束时间相同或任一待核对文书
+    缺时间时无法做安全归属，保持数据不足而不猜测。
+    """
+
+    if any(event.surgery_end_time is None for event in surgery_events):
+        return (), "authoritative_time_missing"
+    ordered_events = tuple(sorted(surgery_events, key=lambda item: item.surgery_end_time))
+    if len({item.surgery_end_time for item in ordered_events}) != len(ordered_events):
+        return (), "association_failed"
+
+    linked_rows = {event.document_id: [] for event in ordered_events}
+    for row in postoperative_rows:
+        record_time = _row_time(row)
+        if record_time is None:
+            return (), "authoritative_time_missing"
+        eligible_events = tuple(
+            event
+            for event in ordered_events
+            if event.surgery_end_time is not None and event.surgery_end_time <= record_time
+        )
+        if not eligible_events:
+            continue
+        # 归属最近一台已经结束的手术，一份术后首次病程不会复用到更早手术。
+        linked_rows[eligible_events[-1].document_id].append(row)
+
+    return (
+        tuple(
+            (event, tuple(linked_rows[event.document_id]))
+            for event in ordered_events
+        ),
+        "",
     )
 
 
@@ -1581,24 +1624,58 @@ async def execute_luxian_0609_native_extended_document_rules(
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
-            elif _performed_surgery_event_count(mr_surgery_rows, surgery_record_rows) > 1:
-                final_state, reason_code = "data_gap", "association_failed"
-            elif postop_first_error:
-                final_state, reason_code = "data_gap", postop_first_error
-            elif postop_first_rows:
-                final_state, reason_code = "compliant", "requirement_satisfied"
             else:
-                final_state, reason_code = (
-                    "non_compliant",
-                    "required_document_missing",
+                surgery_events = _postoperative_surgery_events(
+                    mr_surgery_rows=mr_surgery_rows,
+                    surgery_record_rows=surgery_record_rows,
                 )
+                linked_events: tuple[
+                    tuple[_PostoperativeSurgeryEvent, tuple[Mapping[str, Any], ...]], ...
+                ] = ()
+                linkage_error = postop_first_error
+                if not linkage_error:
+                    linked_events, linkage_error = _link_postoperative_first_course_records(
+                        surgery_events=surgery_events,
+                        postoperative_rows=postop_first_rows,
+                    )
+                if linkage_error:
+                    final_state, reason_code = "data_gap", linkage_error
+                else:
+                    unmet_events = [
+                        event.document_id
+                        for event, linked_rows in linked_events
+                        if not linked_rows
+                    ]
+                    final_state = "compliant" if not unmet_events else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if not unmet_events
+                        else "required_document_missing"
+                    )
             if gate_outcome is None:
                 display.append((rule_id, {
                     "verification_kind": "postoperative_first_course_presence_check",
-                    "performed_surgery_count": _performed_surgery_event_count(
-                        mr_surgery_rows, surgery_record_rows
-                    ),
+                    "performed_surgery_count": len(surgery_events),
                     "postoperative_first_course_count": len(postop_first_rows),
+                    "surgery_events": [
+                        {
+                            **_event_display_base(event),
+                            "postoperative_first_course_document_ids": [
+                                _clean(row.get("document_id") or row.get("id"))
+                                for row in linked_rows
+                            ],
+                        }
+                        for event, linked_rows in linked_events
+                    ],
+                    "unmet_surgery_events": (
+                        [
+                            event.document_id
+                            for event, linked_rows in linked_events
+                            if not linked_rows
+                        ]
+                        if not linkage_error
+                        else []
+                    ),
                 }))
             decisions.append(
                 _decision(

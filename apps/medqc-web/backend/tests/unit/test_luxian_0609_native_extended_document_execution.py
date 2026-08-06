@@ -2263,11 +2263,101 @@ async def test_066_missing_postoperative_first_course_is_non_compliant() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-066"] == {
-        "verification_kind": "postoperative_first_course_presence_check",
-        "performed_surgery_count": 1,
-        "postoperative_first_course_count": 0,
-    }
+    facts = dict(result.customer_display_facts)["LX0609-066"]
+    assert facts["verification_kind"] == "postoperative_first_course_presence_check"
+    assert facts["performed_surgery_count"] == 1
+    assert facts["postoperative_first_course_count"] == 0
+    assert facts["unmet_surgery_events"]
+
+
+@pytest.mark.asyncio
+async def test_066_uses_formal_surgery_records_and_links_postoperative_courses_per_event() -> None:
+    """正式手术记录存在时，操作目录不能虚增手术台次或阻断逐台核对。"""
+    result, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "血肿清除术",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "再次血肿清除术",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                },
+            ),
+            "mr_surgery": tuple(
+                {
+                    "surgery_code": "01.2400X013",
+                    "surgery_begin_datetime": datetime(2026, 7, 7, 16, 30),
+                    "surgery_end_datetime": datetime(2026, 7, 7, 18, 30),
+                }
+                for _index in range(8)
+            ),
+            "postsurg_firstcourse_record": (
+                {"document_id": "P1", "record_time": "2026-07-07 19:39:10"},
+                {"document_id": "P2", "record_time": "2026-07-08 18:22:47"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-066"]
+    assert facts["performed_surgery_count"] == 2
+    assert facts["postoperative_first_course_count"] == 2
+    assert [item["document_id"] for item in facts["surgery_events"]] == ["E1", "E2"]
+    assert all(item["postoperative_first_course_document_ids"] for item in facts["surgery_events"])
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_066_reports_the_specific_formal_surgery_without_a_linked_postoperative_course() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                },
+            ),
+            "postsurg_firstcourse_record": (
+                {"document_id": "P1", "record_time": "2026-07-07 19:39:10"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-066"]
+    assert facts["unmet_surgery_events"] == ["E2"]
+
+
+@pytest.mark.asyncio
+async def test_066_requires_authoritative_postoperative_course_time_for_per_event_linkage() -> None:
+    _result, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "surgery_record": ({
+                "document_id": "E1",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+            },),
+            "postsurg_firstcourse_record": ({"document_id": "P1"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
 
 
 @pytest.mark.asyncio
