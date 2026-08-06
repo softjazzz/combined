@@ -110,6 +110,7 @@ def _session(
     consent_source_unavailable: bool = False,
     surgery_source_unavailable: bool = False,
     surgery_rows: tuple[dict[str, object], ...] | None = None,
+    mr_surgery_rows: tuple[dict[str, object], ...] | None = None,
 ):
     rows = {
         "surgery_record": ({
@@ -137,6 +138,8 @@ def _session(
         rows["surgery_inform_consent"] = consent_rows
     if surgery_rows is not None:
         rows["surgery_record"] = surgery_rows
+    if mr_surgery_rows is not None:
+        rows["mr_surgery"] = mr_surgery_rows
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -373,7 +376,12 @@ async def test_025_llm_extracts_actual_artificial_dura_and_ignores_unconfirmed_b
                 "surgery_name": "再次手术",
                 "surgery_process": "本次仅行血肿清除，未使用植入物。",
             },
-        )
+        ),
+        # 025 只需正式手术记录。历史操作行再多，也不能抢占该规则的LLM输入预算。
+        mr_surgery_rows=tuple(
+            {"surgery_name": f"历史操作-{index}"}
+            for index in range(8)
+        ),
     )
     event = _event(
         implant_use="actual_permanent_implant",

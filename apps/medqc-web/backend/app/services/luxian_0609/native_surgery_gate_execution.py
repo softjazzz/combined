@@ -68,7 +68,9 @@ _TYPED_TEXT_SOURCES = {
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "diagnosis",
     ),
-    "LX0609-025": ("surgery_record", "mr_surgery"),
+    # 025 的永久性植入事实只能由正式手术记录正文确认；mr_surgery 仅是操作
+    # 清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
+    "LX0609-025": ("surgery_record",),
     "LX0609-028": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),
