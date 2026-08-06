@@ -657,7 +657,9 @@ _PHYSICIAN_TITLE_SUFFIXES = (
     "医师",
 )
 _TITLE_ROUND_MARKER_PATTERN = re.compile(r"(?:查房|巡诊)")
-_TITLE_ROUND_DISQUALIFYING_CONTEXT = ("术者", "手术由", "手术", "完成")
+_TITLE_ROUND_ROLE_DESCRIPTION_PATTERN = re.compile(
+    r"(?:术者\s*[:：]|手术由[^，,；;。]*完成)"
+)
 
 
 def _normalized_physician_token(value: Any) -> str:
@@ -691,6 +693,7 @@ def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
         token
         for key in (
             "author_name",
+            "author_id",
             "physician_sign",
             "author_signature",
             "doctor_signature",
@@ -711,9 +714,9 @@ def _title_round_physician_tokens(
     if marker is None:
         return frozenset()
     title_header = title[: marker.start()]
-    # 标题中的普通叙述（如“手术由…完成”）不构成查房医师名单；
+    # 标题中的角色说明（如“手术由…完成”）不构成查房医师名单；
     # 不从正文、科室或查房标记后的附注反向推断术者。
-    if any(item in title_header for item in _TITLE_ROUND_DISQUALIFYING_CONTEXT):
+    if _TITLE_ROUND_ROLE_DESCRIPTION_PATTERN.search(title_header):
         return frozenset()
     return frozenset(
         token
@@ -1683,17 +1686,26 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if not unmet_events
                         else "required_document_missing"
                     )
+                    senior_round_delivery_values = sorted({
+                        value
+                        for item in event_facts
+                        for value in item["senior_round_times"]
+                    })
+                    if unmet_events:
+                        senior_round_delivery_values = [
+                            (
+                                f"{item['document_id']}（手术结束{item['surgery_end_time']}）："
+                                f"{'、'.join(item['senior_round_times']) or '未找到'}"
+                            )
+                            for item in event_facts
+                        ]
                     legacy_summary_facts = {
                         "surgery_time": "；".join(
                             str(item["surgery_end_time"])
                             for item in event_facts
                             if item.get("surgery_end_time")
                         ),
-                        "senior_round_times": sorted({
-                            value
-                            for item in event_facts
-                            for value in item["senior_round_times"]
-                        }),
+                        "senior_round_times": senior_round_delivery_values,
                     }
                     display.append((rule_id, {
                         "verification_kind": "postoperative_senior_round_check",

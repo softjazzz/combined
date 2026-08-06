@@ -1019,6 +1019,62 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
 
 
 @pytest.mark.asyncio
+async def test_064_matches_surgeon_physician_code_only_to_course_author_id() -> None:
+    """术者编号仅与同一资料链中的病程作者编号精确匹配。"""
+    result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": ({
+                "document_id": "E-code",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "surgeon_physician_code": "DOC-001",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_id": "DOC-001"},
+                {"record_time": "2026-07-09 08:00:00", "author_id": "DOC-002"},
+                {"record_time": "2026-07-10 08:00:00", "author_id": "DOC-002"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-064"]["surgeon_round_present"] is True
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
+    """“术后查房”是查房标题，不应被误认为术者说明。"""
+    result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": ({
+                "document_id": "E-postop-round",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "surgeon": "韩平",
+            },),
+            "daily_course_record": tuple(
+                {
+                    "record_time": record_time,
+                    "document_title": "韩平副主任医师手术后查房记录",
+                }
+                for record_time in (
+                    "2026-07-08 08:00:00",
+                    "2026-07-09 08:00:00",
+                    "2026-07-10 08:00:00",
+                )
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-064"]["surgeon_round_present"] is True
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -> None:
     """多台手术的汇总事实必须穿过 Reducer、Aggregator 和 Renderer。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
@@ -1103,6 +1159,45 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
         "2026-07-11 10:03:29",
     ]
     assert "术后 72 小时内上级医师查房时间" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_065_partial_multievent_delivery_names_the_unmet_surgery() -> None:
+    """任一手术缺上级查房时，交付文案必须明确具体失败手术。"""
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-065",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-01 18:30:00+08",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-10 18:30:00+08",
+                },
+            ),
+            "senior_course_record": (
+                {"record_time": "2026-07-02 08:00:00"},
+            ),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-065",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "non_compliant"
+    assert "E2（手术结束2026-07-10 18:30:00）：未找到" in canonical[
+        "customer_display_facts"
+    ]["senior_round_times"]
+    assert "E2（手术结束2026-07-10 18:30:00）：未找到" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -2129,7 +2224,9 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == []
+    assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == [
+        "mr_surgery:1（手术结束2026-07-01 10:00:00）：未找到"
+    ]
 
 
 @pytest.mark.asyncio
