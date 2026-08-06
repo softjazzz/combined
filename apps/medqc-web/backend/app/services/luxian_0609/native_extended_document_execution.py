@@ -98,6 +98,7 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
     "labtest_master",
     "inpat_drug_order",
     "discharge_record_diagnosis",
+    "mr_bloodtrans",
     "bloodtrans_record",
 )
 
@@ -910,8 +911,8 @@ async def execute_luxian_0609_native_extended_document_rules(
     discharge_diagnosis_rows, discharge_diagnosis_error = _source_rows(
         evidence_materials, "discharge_record_diagnosis"
     )
-    bloodtrans_rows, bloodtrans_error = _source_rows(
-        evidence_materials, "bloodtrans_record"
+    mr_bloodtrans_rows, mr_bloodtrans_error = _source_rows(
+        evidence_materials, "mr_bloodtrans"
     )
     death_state, death_time = _death_context(
         registration_rows=registration_rows,
@@ -1225,16 +1226,16 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-070":
-            if bloodtrans_error:
-                final_state, reason_code = "data_gap", bloodtrans_error
-            elif not bloodtrans_rows:
+            if mr_bloodtrans_error:
+                final_state, reason_code = "data_gap", mr_bloodtrans_error
+            elif not mr_bloodtrans_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
             elif lab_item_error:
                 final_state, reason_code = "data_gap", lab_item_error
             else:
                 final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
                     {
-                        "mr_bloodtrans": list(bloodtrans_rows),
+                        "mr_bloodtrans": list(mr_bloodtrans_rows),
                         "labtest_item_report": list(lab_item_rows),
                         "blood_application": [],
                         "__logical_source_states__": {
@@ -1255,7 +1256,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                     display.append((rule_id, dict(facts)))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("bloodtrans_record", "labtest_item_report"),
+                source_keys=("mr_bloodtrans", "labtest_item_report"),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue

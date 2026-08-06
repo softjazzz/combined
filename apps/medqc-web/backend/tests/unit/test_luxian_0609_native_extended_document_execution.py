@@ -63,6 +63,7 @@ def _session(rows_by_source, *, unavailable_sources=frozenset()):
         "labtest_master": "snapshot-provider-labtest_master-v1",
         "inpat_drug_order": "snapshot-provider-inpat_drug_order-v1",
         "discharge_record_diagnosis": "snapshot-provider-discharge_record_diagnosis-v1",
+        "mr_bloodtrans": "snapshot-provider-bloodtrans_record-v1",
         "bloodtrans_record": "snapshot-provider-bloodtrans_record-v1",
     }
     observations = []
@@ -2064,7 +2065,7 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-070",
         {
-            "bloodtrans_record": ({"record_time": "2026-06-02 14:00:00", "record_content": "输注红细胞2U"},),
+            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -2077,6 +2078,7 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
         },
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert reduced.reason_code == "requirement_satisfied"
 
 
 @pytest.mark.asyncio
@@ -2091,7 +2093,7 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
     result, reduced = await _evaluate(
         "LX0609-070",
         {
-            "bloodtrans_record": ({"record_time": "2026-06-02 14:00:00"},),
+            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
                     "item_code": code,
@@ -2108,6 +2110,23 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-070"]["late_items"] == ["hiv"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_without_authoritative_transfusion_time_is_data_gap() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "mr_bloodtrans": ({"record_content": "已输注红细胞2U"},),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
