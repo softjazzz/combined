@@ -159,6 +159,19 @@ async def _evaluate_selected(rule_ids, rows_by_source, *, unavailable_sources=fr
     return snapshot, materials, result, reduced
 
 
+def _canonical_extended_result(*, rule_id, snapshot, materials, result, reduced):
+    return aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": rule_id}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )[0]
+
+
 def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sources() -> None:
     sources = resolve_luxian_0609_decision_support_source_keys(
         ("LX0609-064", "LX0609-065", "LX0609-066", "LX0609-070")
@@ -924,6 +937,235 @@ async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_ro
     assert [item["document_id"] for item in facts_by_rule["LX0609-065"]["surgery_events"]] == ["E1", "E2"]
     assert result.llm_call_count == result.total_tokens == 0
     assert snapshot.snapshot_hash
+
+
+@pytest.mark.asyncio
+async def test_064_requires_surgeon_title_before_round_marker_not_later_mention() -> None:
+    """术者姓名出现在“查房记录”之后或普通叙述中，不能算术者查房。"""
+    _snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": ({
+                "document_id": "E1",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "surgeon": "韩平",
+            },),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-07-08 08:00:00",
+                    "document_title": "李四主任医师查房记录（术者：韩平副主任医师）",
+                },
+                {
+                    "record_time": "2026-07-09 08:00:00",
+                    "document_title": "李四主任医师查房记录，手术由韩平副主任医师完成",
+                },
+                {
+                    "record_time": "2026-07-10 08:00:00",
+                    "document_title": "手术由韩平副主任医师完成，李四主任医师查房记录",
+                },
+            ),
+        },
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-064"]
+    assert facts["surgery_events"][0]["surgeon_round_present"] is False
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_surgeon() -> None:
+    """手术事件仅采纳术者专属字段，病程作者字段仍可作为查房医师。"""
+    signed_result, signed_reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": ({
+                "document_id": "E-signed",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "surgeon_sign": "韩平",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
+            ),
+        },
+    )
+    generic_result, generic_reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": ({
+                "document_id": "E-generic",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "author_name": "韩平",
+                "submitter": "韩平",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
+            ),
+        },
+    )
+
+    assert signed_reduced.final_state is CustomerFinalState.COMPLIANT
+    assert generic_reduced.final_state is CustomerFinalState.DATA_GAP
+    assert generic_reduced.reason_code == "required_field_missing"
+    assert signed_result.llm_call_count == signed_result.total_tokens == 0
+    assert generic_result.llm_call_count == generic_result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -> None:
+    """多台手术的汇总事实必须穿过 Reducer、Aggregator 和 Renderer。"""
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                    "surgeon": "韩平",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                    "surgeon": "曾亚丽",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-11 08:00:00", "author_name": "曾亚丽"},
+            ),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-064",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "compliant"
+    assert canonical["customer_display_facts"]["surgery_time"] == (
+        "2026-07-07 18:30:00；2026-07-08 17:15:00"
+    )
+    assert canonical["customer_display_facts"]["surgeon_round_present"] is True
+    assert "手术时间 2026-07-07 18:30:00；2026-07-08 17:15:00" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-065",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                },
+            ),
+            "senior_course_record": (
+                {"record_time": "2026-07-08 10:01:55"},
+                {"record_time": "2026-07-11 10:03:29"},
+            ),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-065",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "compliant"
+    assert canonical["customer_display_facts"]["surgery_time"] == (
+        "2026-07-07 18:30:00；2026-07-08 17:15:00"
+    )
+    assert canonical["customer_display_facts"]["senior_round_times"] == [
+        "2026-07-08 10:01:55",
+        "2026-07-11 10:03:29",
+    ]
+    assert "术后 72 小时内上级医师查房时间" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_non_compliant_multievent_delivery_keeps_missing_day_summary() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": ({
+                "document_id": "E1",
+                "surgery_code": "01.2400X013",
+                "surgery_end_time": "2026-07-07 18:30:00+08",
+                "surgeon": "韩平",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-064",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["covered_postop_dates"] == [
+        "2026-07-08",
+        "2026-07-09",
+    ]
+    assert "实际覆盖 2026-07-08、2026-07-09" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_data_gap_delivery_keeps_missing_surgery_time_explanation() -> None:
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": ({
+                "document_id": "E1",
+                "surgery_code": "01.2400X013",
+                "record_time": "2026-07-07 20:00:00+08",
+                "surgeon": "韩平",
+            },),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-064",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "data_gap"
+    assert "暂无法核对术后三日连续病程及术者查房" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
 
 
 @pytest.mark.asyncio

@@ -657,6 +657,7 @@ _PHYSICIAN_TITLE_SUFFIXES = (
     "医师",
 )
 _TITLE_ROUND_MARKER_PATTERN = re.compile(r"(?:查房|巡诊)")
+_TITLE_ROUND_DISQUALIFYING_CONTEXT = ("术者", "手术由", "手术", "完成")
 
 
 def _normalized_physician_token(value: Any) -> str:
@@ -668,16 +669,31 @@ def _normalized_physician_token(value: Any) -> str:
     return token
 
 
-def _structured_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
+def _surgery_event_surgeon_tokens(row: Mapping[str, Any]) -> frozenset[str]:
+    """正式手术事件只接受术者专属字段，不能把文书作者当作术者。"""
+
     return frozenset(
         token
         for key in (
             "surgeon",
-            "surgeon_name",
+            "surgeon_sign",
+            "surgeon_physician_code",
             "main_surgery_sign",
+        )
+        if (token := _normalized_physician_token(row.get(key)))
+    )
+
+
+def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
+    """病程记录仅从受控的作者或签名字段获取记录医师。"""
+
+    return frozenset(
+        token
+        for key in (
             "author_name",
             "physician_sign",
-            "submitter",
+            "author_signature",
+            "doctor_signature",
         )
         if (token := _normalized_physician_token(row.get(key)))
     )
@@ -688,10 +704,16 @@ def _title_round_physician_tokens(
     *,
     candidate_tokens: frozenset[str],
 ) -> frozenset[str]:
-    """仅确认标题中明确列出的当前术者；禁止从正文或科室文字推断姓名。"""
+    """仅确认查房标题中、查房标记前明确列出的当前术者。"""
 
     title = _clean(row.get("document_title"))
-    if not _TITLE_ROUND_MARKER_PATTERN.search(title):
+    marker = _TITLE_ROUND_MARKER_PATTERN.search(title)
+    if marker is None:
+        return frozenset()
+    title_header = title[: marker.start()]
+    # 标题中的普通叙述（如“手术由…完成”）不构成查房医师名单；
+    # 不从正文、科室或查房标记后的附注反向推断术者。
+    if any(item in title_header for item in _TITLE_ROUND_DISQUALIFYING_CONTEXT):
         return frozenset()
     return frozenset(
         token
@@ -699,7 +721,7 @@ def _title_round_physician_tokens(
         if token
         and re.search(
             rf"{re.escape(token)}(?:副主任医师|主任医师|主治医师|住院医师|医师)",
-            title,
+            title_header,
         )
     )
 
@@ -741,7 +763,7 @@ def _postoperative_surgery_events(
                 or row.get("procedure_name")
             ),
             surgery_end_time=_actual_surgery_end_time(source_key=source_key, row=row),
-            surgeon_tokens=_structured_physician_tokens(row),
+            surgeon_tokens=_surgery_event_surgeon_tokens(row),
         )
         for index, row in enumerate(source_rows, start=1)
     )
@@ -1661,18 +1683,25 @@ async def execute_luxian_0609_native_extended_document_rules(
                         if not unmet_events
                         else "required_document_missing"
                     )
-                    legacy_single_event_facts = (
-                        {"senior_round_times": event_facts[0]["senior_round_times"]}
-                        if len(event_facts) == 1
-                        else {}
-                    )
+                    legacy_summary_facts = {
+                        "surgery_time": "；".join(
+                            str(item["surgery_end_time"])
+                            for item in event_facts
+                            if item.get("surgery_end_time")
+                        ),
+                        "senior_round_times": sorted({
+                            value
+                            for item in event_facts
+                            for value in item["senior_round_times"]
+                        }),
+                    }
                     display.append((rule_id, {
                         "verification_kind": "postoperative_senior_round_check",
                         "threshold_hours": 72,
                         "performed_surgery_count": len(surgery_events),
                         "surgery_events": event_facts,
                         "unmet_surgery_events": unmet_events,
-                        **legacy_single_event_facts,
+                        **legacy_summary_facts,
                     }))
                 else:
                     event_facts = []
@@ -1694,7 +1723,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                         surgeon_round = bool(event.surgeon_tokens) and any(
                             bool(
                                 event.surgeon_tokens.intersection(
-                                    _structured_physician_tokens(row)
+                                    _course_record_physician_tokens(row)
                                     | _title_round_physician_tokens(
                                         row,
                                         candidate_tokens=event.surgeon_tokens,
@@ -1737,15 +1766,27 @@ async def execute_luxian_0609_native_extended_document_rules(
                             if not unmet_events
                             else "requirement_violated"
                         )
-                    legacy_single_event_facts = (
-                        {
-                            "required_postop_dates": event_facts[0]["required_postop_dates"],
-                            "covered_postop_dates": event_facts[0]["covered_postop_dates"],
-                            "surgeon_round_present": event_facts[0]["surgeon_round_present"],
-                        }
-                        if len(event_facts) == 1
-                        else {}
-                    )
+                    legacy_summary_facts = {
+                        "surgery_time": "；".join(
+                            str(item["surgery_end_time"])
+                            for item in event_facts
+                            if item.get("surgery_end_time")
+                        ),
+                        "required_postop_dates": sorted({
+                            value
+                            for item in event_facts
+                            for value in item["required_postop_dates"]
+                        }),
+                        "covered_postop_dates": sorted({
+                            value
+                            for item in event_facts
+                            for value in item["covered_postop_dates"]
+                        }),
+                        "surgeon_round_present": all(
+                            item["surgeon_round_present"] is True
+                            for item in event_facts
+                        ),
+                    }
                     display.append(
                         (
                             rule_id,
@@ -1755,7 +1796,7 @@ async def execute_luxian_0609_native_extended_document_rules(
                                 "surgery_events": event_facts,
                                 "unmet_surgery_events": unmet_events,
                                 "missing_surgeon_events": missing_surgeon_events,
-                                **legacy_single_event_facts,
+                                **legacy_summary_facts,
                             },
                         )
                     )
