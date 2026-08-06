@@ -5,6 +5,7 @@
     :class="[
       presentation?.statusClass,
       presentation?.normalizedStatus ? `is-${presentation.normalizedStatus}` : 'is-unknown',
+      presentation?.isRunning ? 'is-expanded' : 'is-collapsed',
     ]"
     data-testid="customer-sample-qc-task-status"
     aria-live="polite"
@@ -21,8 +22,11 @@
               <div>
                 <strong>{{ presentation?.statusTitle }}</strong>
                 <span class="qc-task-status__badge">{{ presentation?.statusLabel }}</span>
+                <span class="qc-task-status__rule-set">{{ presentation?.ruleSetText }}</span>
               </div>
-              <p>{{ presentation?.phaseText }}</p>
+              <p v-if="presentation?.isRunning">
+                {{ presentation.phaseText }}
+              </p>
             </div>
           </div>
 
@@ -49,12 +53,16 @@
             <i :style="{ width: `${presentation.progressPercent}%` }" />
           </div>
 
-          <div class="qc-task-status__summary">
-            <strong>{{ presentation?.ruleSetText }}</strong>
+          <div
+            class="qc-task-status__summary"
+            :data-testid="
+              presentation?.isRunning ? 'qc-task-running-summary' : 'qc-task-settled-summary'
+            "
+          >
             <span>{{ presentation?.recordProgressText }}</span>
             <span>{{ presentation?.resultProgressText }}</span>
             <span>{{ presentation?.scopeText }}</span>
-            <span>更新 {{ presentation?.updatedText }}</span>
+            <span v-if="presentation?.isRunning">更新 {{ presentation?.updatedText }}</span>
           </div>
 
           <div
@@ -154,9 +162,9 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
 <style scoped>
 .qc-task-status {
   border: 1px solid rgba(0, 102, 204, 0.18);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.07);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
 }
 
 .qc-task-status.is-failed {
@@ -169,15 +177,27 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
 
 .qc-task-status__layout {
   display: flex;
-  min-height: 82px;
+  min-height: 64px;
   align-items: center;
-  gap: 18px;
-  padding: 14px 16px;
+  gap: 16px;
+  padding: 10px 14px;
+}
+
+.qc-task-status.is-expanded .qc-task-status__layout {
+  min-height: 96px;
+  padding-block: 12px;
 }
 
 .qc-task-status__main {
   min-width: 0;
   flex: 1;
+}
+
+.qc-task-status.is-collapsed .qc-task-status__main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px 14px;
 }
 
 .qc-task-status__heading,
@@ -190,7 +210,7 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
 }
 
 .qc-task-status__heading {
-  gap: 10px;
+  gap: 9px;
 }
 
 .qc-task-status__indicator {
@@ -226,13 +246,25 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
 }
 
 .qc-task-status__title > div {
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .qc-task-status__title strong {
   color: #1d1d1f;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 650;
+}
+
+.qc-task-status__rule-set {
+  max-width: 280px;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qc-task-status__title p {
@@ -342,22 +374,28 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
 
 .qc-task-status__summary {
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 8px;
+  gap: 2px 10px;
+  margin: 6px 0 0 18px;
   color: rgba(29, 29, 31, 0.58);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 18px;
 }
 
-.qc-task-status__summary strong {
-  color: rgba(29, 29, 31, 0.82);
-  font-weight: 600;
+.qc-task-status.is-collapsed .qc-task-status__summary {
+  flex: none;
+  margin: 0;
 }
 
 .qc-task-status__chips {
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin: 6px 0 0 18px;
+}
+
+.qc-task-status.is-collapsed .qc-task-status__chips {
+  flex: 1;
+  justify-content: flex-end;
+  margin: 0;
 }
 
 .qc-task-status__chips > span {
@@ -365,8 +403,8 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
   background: rgba(0, 0, 0, 0.035);
   color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
-  line-height: 22px;
-  padding: 0 8px;
+  line-height: 20px;
+  padding: 0 7px;
 }
 
 .qc-task-status__chips .is-danger {
@@ -394,7 +432,7 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 360px;
+  max-width: 400px;
 }
 
 .qc-task-status__actions :deep(.ant-btn) {
@@ -410,6 +448,15 @@ const presentation = computed(() => (props.task ? buildBatchJobPresentation(prop
   .qc-task-status__actions {
     justify-content: flex-start;
     max-width: none;
+  }
+
+  .qc-task-status.is-collapsed .qc-task-status__main {
+    flex-wrap: wrap;
+  }
+
+  .qc-task-status.is-collapsed .qc-task-status__chips {
+    flex-basis: 100%;
+    justify-content: flex-start;
   }
 }
 

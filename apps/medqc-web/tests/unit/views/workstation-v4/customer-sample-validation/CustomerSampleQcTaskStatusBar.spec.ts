@@ -110,6 +110,10 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     })
 
     expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.classes()).toContain('is-collapsed')
+    expect(wrapper.get('[data-testid="qc-task-settled-summary"]').text()).toContain(
+      '病历进度：已完成 1 / 2 份',
+    )
     expect(wrapper.text()).toContain('查看结果')
     expect(wrapper.text()).toContain('复核本次结果')
     expect(wrapper.text()).toContain('导出 HTML')

@@ -44,6 +44,14 @@
   padding-bottom: 108px;
 }
 
+.customer-sample-scroll.has-recent-task-dock {
+  padding-bottom: 104px;
+}
+
+.customer-sample-scroll.has-selection-run-bar.has-recent-task-dock {
+  padding-bottom: 190px;
+}
+
 .customer-sample-container {
   padding-top: 2px;
 }
@@ -600,6 +608,20 @@
     0 1px 2px rgba(15, 23, 42, 0.06);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
+}
+
+.customer-sample-recent-task-dock {
+  position: fixed;
+  right: max(24px, calc((100vw - 1440px) / 2 + 24px));
+  bottom: 22px;
+  left: max(24px, calc((100vw - 1440px) / 2 + 24px));
+  z-index: 110;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.customer-sample-recent-task-dock.is-above-selection-run-bar {
+  bottom: 104px;
 }
 
 .customer-sample-selection-run-summary {
@@ -2581,6 +2603,20 @@
     left: 12px;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .customer-sample-recent-task-dock {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+  }
+
+  .customer-sample-recent-task-dock.is-above-selection-run-bar {
+    bottom: 148px;
+  }
+
+  .customer-sample-scroll.has-selection-run-bar.has-recent-task-dock {
+    padding-bottom: 254px;
   }
 
   .customer-sample-selection-run-actions {

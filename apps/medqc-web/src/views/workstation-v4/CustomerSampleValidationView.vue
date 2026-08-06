@@ -2,7 +2,10 @@
   <main class="customer-sample-page relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5"
-      :class="{ 'has-selection-run-bar': selectedRecordStats.selectedCount > 0 }"
+      :class="{
+        'has-selection-run-bar': selectedRecordStats.selectedCount > 0,
+        'has-recent-task-dock': Boolean(currentQcTask),
+      }"
     >
       <div class="customer-sample-container mx-auto w-full max-w-[1440px]">
         <div class="customer-sample-workspace">
@@ -241,18 +244,6 @@
                   </button>
                 </div>
               </div>
-
-              <CustomerSampleQcTaskStatusBar
-                :task="currentQcTask"
-                :loading="currentQcTaskLoading"
-                :canceling="cancelBatchJobLoading"
-                :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
-                @view-result="openBatchJob"
-                @cancel="confirmCancelBatchJob"
-                @review="handleReviewCurrentTask"
-                @export="handleExportCurrentTask"
-                @open-history="openTaskHistoryPage"
-              />
 
               <section
                 v-if="importWorkflow"
@@ -662,6 +653,24 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="currentQcTask"
+      class="customer-sample-recent-task-dock"
+      :class="{ 'is-above-selection-run-bar': selectedRecordStats.selectedCount > 0 }"
+    >
+      <CustomerSampleQcTaskStatusBar
+        :task="currentQcTask"
+        :loading="currentQcTaskLoading"
+        :canceling="cancelBatchJobLoading"
+        :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
+        @view-result="openBatchJob"
+        @cancel="confirmCancelBatchJob"
+        @review="handleReviewCurrentTask"
+        @export="handleExportCurrentTask"
+        @open-history="openTaskHistoryPage"
+      />
     </div>
 
     <div
