@@ -1772,6 +1772,10 @@ describe('CustomerSampleValidationView', () => {
   it('选中病历后显示底部开始质控操作条并可取消选择', async () => {
     const wrapper = await mountView()
 
+    const scrollArea = wrapper.get('.customer-sample-scroll')
+    expect(scrollArea.classes()).not.toContain('pb-5')
+    expect(scrollArea.classes()).toContain('has-recent-task-dock')
+
     expect(wrapper.find('[data-testid="customer-sample-selection-run-bar"]').exists()).toBe(false)
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
@@ -1780,6 +1784,10 @@ describe('CustomerSampleValidationView', () => {
 
     const runBar = wrapper.find('[data-testid="customer-sample-selection-run-bar"]')
     expect(runBar.exists()).toBe(true)
+    expect(scrollArea.classes()).toContain('has-selection-run-bar')
+    expect(wrapper.find('.customer-sample-recent-task-dock').classes()).toContain(
+      'is-above-selection-run-bar',
+    )
     expect(runBar.text()).toContain('已选择 1 份病历')
     expect(runBar.text()).toContain('可质控 1 份')
     expect(runBar.text()).toContain('当前范围：全量0609')

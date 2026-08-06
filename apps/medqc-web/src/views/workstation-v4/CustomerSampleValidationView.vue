@@ -1,7 +1,7 @@
 <template>
   <main class="customer-sample-page relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div
-      class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5"
+      class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
       :class="{
         'has-selection-run-bar': selectedRecordStats.selectedCount > 0,
         'has-recent-task-dock': Boolean(currentQcTask),

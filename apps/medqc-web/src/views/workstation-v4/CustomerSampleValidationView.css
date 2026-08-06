@@ -38,6 +38,7 @@
 
 .customer-sample-scroll {
   background: var(--customer-sample-canvas);
+  padding-bottom: 20px;
 }
 
 .customer-sample-scroll.has-selection-run-bar {
