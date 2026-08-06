@@ -32,6 +32,7 @@ from .extended_document_critical_value import (
 )
 from .source_evidence_reader import (
     authoritative_document_time_value,
+    parse_strict_performed_time,
     trusted_performed_surgery_times,
 )
 from .native_transfusion_execution import evaluate_pretransfusion_nine_items
@@ -635,6 +636,127 @@ def _performed_surgery_event_count(
         for row in authoritative_rows
         if trusted_performed_surgery_times(source_key=source_key, row=row)
     )
+
+
+@dataclass(frozen=True)
+class _PostoperativeSurgeryEvent:
+    """064/065 的最小事件投影：正式手术记录一行即一台手术。"""
+
+    source_key: str
+    document_id: str
+    surgery_name: str
+    surgery_end_time: datetime | None
+    surgeon_tokens: frozenset[str]
+
+
+_PHYSICIAN_TITLE_SUFFIXES = (
+    "副主任医师",
+    "主任医师",
+    "主治医师",
+    "住院医师",
+    "医师",
+)
+_TITLE_ROUND_MARKER_PATTERN = re.compile(r"(?:查房|巡诊)")
+
+
+def _normalized_physician_token(value: Any) -> str:
+    token = re.sub(r"\s+", "", _clean(value)).lower()
+    for suffix in _PHYSICIAN_TITLE_SUFFIXES:
+        if token.endswith(suffix):
+            token = token[: -len(suffix)]
+            break
+    return token
+
+
+def _structured_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
+    return frozenset(
+        token
+        for key in (
+            "surgeon",
+            "surgeon_name",
+            "main_surgery_sign",
+            "author_name",
+            "physician_sign",
+            "submitter",
+        )
+        if (token := _normalized_physician_token(row.get(key)))
+    )
+
+
+def _title_round_physician_tokens(
+    row: Mapping[str, Any],
+    *,
+    candidate_tokens: frozenset[str],
+) -> frozenset[str]:
+    """仅确认标题中明确列出的当前术者；禁止从正文或科室文字推断姓名。"""
+
+    title = _clean(row.get("document_title"))
+    if not _TITLE_ROUND_MARKER_PATTERN.search(title):
+        return frozenset()
+    return frozenset(
+        token
+        for token in candidate_tokens
+        if token
+        and re.search(
+            rf"{re.escape(token)}(?:副主任医师|主任医师|主治医师|住院医师|医师)",
+            title,
+        )
+    )
+
+
+def _actual_surgery_end_time(
+    *, source_key: str, row: Mapping[str, Any]
+) -> datetime | None:
+    """术后规则只能读取实际结束字段；不得回退到申请或文书时间。"""
+
+    for field in ("surgery_end_time", "surgery_end_datetime"):
+        value = row.get(field)
+        if source_key == "surgery_record":
+            if (parsed := parse_strict_performed_time(value)) is not None:
+                return parsed
+        elif source_key == "mr_surgery" and isinstance(value, datetime) and value.tzinfo is None:
+            return value
+    return None
+
+
+def _postoperative_surgery_events(
+    *,
+    mr_surgery_rows: Sequence[Mapping[str, Any]],
+    surgery_record_rows: Sequence[Mapping[str, Any]],
+) -> tuple[_PostoperativeSurgeryEvent, ...]:
+    """正式手术记录优先；仅在正式记录缺失时兼容既有 mr_surgery 触发。"""
+
+    _qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
+        mr_surgery_rows, surgery_record_rows
+    )
+    source_key = "surgery_record" if qualified_record_rows else "mr_surgery"
+    source_rows = qualified_record_rows if qualified_record_rows else _qualified_mr_rows
+    return tuple(
+        _PostoperativeSurgeryEvent(
+            source_key=source_key,
+            document_id=_clean(row.get("document_id") or row.get("id")) or f"{source_key}:{index}",
+            surgery_name=_clean(
+                row.get("surgery_name")
+                or row.get("operation_name")
+                or row.get("procedure_name")
+            ),
+            surgery_end_time=_actual_surgery_end_time(source_key=source_key, row=row),
+            surgeon_tokens=_structured_physician_tokens(row),
+        )
+        for index, row in enumerate(source_rows, start=1)
+    )
+
+
+def _event_display_base(event: _PostoperativeSurgeryEvent) -> dict[str, Any]:
+    return {
+        "document_id": event.document_id,
+        "surgery_name": event.surgery_name,
+        "surgery_end_time": (
+            event.surgery_end_time.isoformat(sep=" ")
+            if event.surgery_end_time is not None
+            else None
+        ),
+    }
 
 
 def _person_tokens(row: Mapping[str, Any]) -> set[str]:
@@ -1472,103 +1594,171 @@ async def execute_luxian_0609_native_extended_document_rules(
         if rule_id in {"LX0609-064", "LX0609-065"}:
             assert surgery_applicability is not None
             gate_outcome = _surgery_applicability_outcome(surgery_applicability)
-            qualified_mr_rows, qualified_record_rows = _qualified_surgery_rows(
-                mr_surgery_rows, surgery_record_rows
-            )
-            surgery_times = _performed_surgery_times(
-                mr_surgery_rows, surgery_record_rows
+            surgery_events = _postoperative_surgery_events(
+                mr_surgery_rows=mr_surgery_rows,
+                surgery_record_rows=surgery_record_rows,
             )
             if gate_outcome is not None:
                 final_state, reason_code = gate_outcome
-            elif not surgery_times:
+            elif not surgery_events:
                 final_state, reason_code = "data_gap", "authoritative_time_missing"
-            elif _performed_surgery_event_count(mr_surgery_rows, surgery_record_rows) > 1:
+            elif (
+                len(surgery_events) > 1
+                and all(event.source_key == "mr_surgery" for event in surgery_events)
+            ):
+                # 没有正式手术记录时，多个操作目录行仍无法安全证明逐台关联。
+                # 本轮仅收敛“正式手术记录一行即一事件”的主路径。
                 final_state, reason_code = "data_gap", "association_failed"
-            elif daily_error or senior_error:
-                final_state, reason_code = "data_gap", daily_error or senior_error
-            else:
-                surgery_time = surgery_times[-1]
-                deadline = surgery_time + timedelta(hours=72)
-                postop_rows = tuple(
-                    row
-                    for row in (*daily_rows, *senior_rows)
-                    if (record_time := _row_time(row)) is not None
-                    and surgery_time <= record_time <= deadline
+            elif any(event.surgery_end_time is None for event in surgery_events):
+                final_state, reason_code = "data_gap", "authoritative_time_missing"
+                display.append((rule_id, {
+                    "verification_kind": "postoperative_surgery_event_time_check",
+                    "performed_surgery_count": len(surgery_events),
+                    "surgery_events": [_event_display_base(event) for event in surgery_events],
+                    "missing_surgery_end_events": [
+                        event.document_id
+                        for event in surgery_events
+                        if event.surgery_end_time is None
+                    ],
+                }))
+            elif (
+                (daily_error or senior_error)
+                if rule_id == "LX0609-064"
+                else senior_error
+            ):
+                final_state, reason_code = "data_gap", (
+                    daily_error or senior_error
+                    if rule_id == "LX0609-064"
+                    else senior_error
                 )
+            else:
                 if rule_id == "LX0609-065":
-                    present = any(
-                        (record_time := _row_time(row)) is not None
-                        and surgery_time <= record_time <= deadline
-                        for row in senior_rows
-                    )
-                    final_state = "compliant" if present else "non_compliant"
-                    reason_code = (
-                        "requirement_satisfied"
-                        if present
-                        else "required_document_missing"
-                    )
-                    display.append((rule_id, {
-                        "verification_kind": "postoperative_senior_round_check",
-                        "surgery_time": surgery_time.isoformat(sep=" "),
-                        "threshold_hours": 72,
-                        "senior_round_times": [
+                    event_facts: list[dict[str, Any]] = []
+                    unmet_events: list[dict[str, Any]] = []
+                    for event in surgery_events:
+                        assert event.surgery_end_time is not None
+                        deadline = event.surgery_end_time + timedelta(hours=72)
+                        senior_round_times = [
                             value.isoformat(sep=" ")
                             for row in senior_rows
                             if (value := _row_time(row)) is not None
-                            and surgery_time <= value <= deadline
-                        ],
+                            and event.surgery_end_time <= value <= deadline
+                        ]
+                        event_fact = {
+                            **_event_display_base(event),
+                            "deadline": deadline.isoformat(sep=" "),
+                            "senior_round_times": senior_round_times,
+                        }
+                        event_facts.append(event_fact)
+                        if not senior_round_times:
+                            unmet_events.append({
+                                "document_id": event.document_id,
+                                "senior_round_times": [],
+                            })
+                    final_state = "compliant" if not unmet_events else "non_compliant"
+                    reason_code = (
+                        "requirement_satisfied"
+                        if not unmet_events
+                        else "required_document_missing"
+                    )
+                    legacy_single_event_facts = (
+                        {"senior_round_times": event_facts[0]["senior_round_times"]}
+                        if len(event_facts) == 1
+                        else {}
+                    )
+                    display.append((rule_id, {
+                        "verification_kind": "postoperative_senior_round_check",
+                        "threshold_hours": 72,
+                        "performed_surgery_count": len(surgery_events),
+                        "surgery_events": event_facts,
+                        "unmet_surgery_events": unmet_events,
+                        **legacy_single_event_facts,
                     }))
                 else:
-                    required_dates = {
-                        (surgery_time + timedelta(days=offset)).date()
-                        for offset in (1, 2, 3)
-                    }
-                    postop_rows = tuple(
-                        row
-                        for row in (*daily_rows, *senior_rows)
-                        if (record_time := _row_time(row)) is not None
-                        and record_time.date() in required_dates
-                    )
-                    covered_dates = _course_dates(postop_rows)
-                    surgeon_tokens = set().union(
-                        *(
-                            _person_tokens(row)
-                            for row in (*qualified_mr_rows, *qualified_record_rows)
+                    event_facts = []
+                    unmet_events = []
+                    missing_surgeon_events = []
+                    for event in surgery_events:
+                        assert event.surgery_end_time is not None
+                        required_dates = {
+                            (event.surgery_end_time + timedelta(days=offset)).date()
+                            for offset in (1, 2, 3)
+                        }
+                        postop_rows = tuple(
+                            row
+                            for row in (*daily_rows, *senior_rows)
+                            if (record_time := _row_time(row)) is not None
+                            and record_time.date() in required_dates
                         )
-                    )
-                    if not surgeon_tokens:
+                        covered_dates = _course_dates(postop_rows)
+                        surgeon_round = bool(event.surgeon_tokens) and any(
+                            bool(
+                                event.surgeon_tokens.intersection(
+                                    _structured_physician_tokens(row)
+                                    | _title_round_physician_tokens(
+                                        row,
+                                        candidate_tokens=event.surgeon_tokens,
+                                    )
+                                )
+                            )
+                            for row in postop_rows
+                        )
+                        missing_dates = sorted(
+                            item.isoformat()
+                            for item in required_dates.difference(covered_dates)
+                        )
+                        event_facts.append({
+                            **_event_display_base(event),
+                            "required_postop_dates": sorted(
+                                item.isoformat() for item in required_dates
+                            ),
+                            "covered_postop_dates": sorted(
+                                item.isoformat() for item in covered_dates
+                            ),
+                            "surgeon_round_present": surgeon_round,
+                        })
+                        if not event.surgeon_tokens:
+                            missing_surgeon_events.append(event.document_id)
+                        if missing_dates or not surgeon_round:
+                            unmet_events.append({
+                                "document_id": event.document_id,
+                                "missing_postop_dates": missing_dates,
+                                "surgeon_round_present": surgeon_round,
+                            })
+                    if missing_surgeon_events:
                         final_state, reason_code = (
                             "data_gap",
                             "required_field_missing",
                         )
                     else:
-                        surgeon_round = any(
-                            bool(surgeon_tokens.intersection(_person_tokens(row)))
-                            for row in postop_rows
-                        )
-                        complete = required_dates.issubset(covered_dates) and surgeon_round
-                        final_state = "compliant" if complete else "non_compliant"
+                        final_state = "compliant" if not unmet_events else "non_compliant"
                         reason_code = (
                             "requirement_satisfied"
-                            if complete
+                            if not unmet_events
                             else "requirement_violated"
                         )
-                        display.append(
-                            (
-                                rule_id,
-                                {
-                                    "verification_kind": "postoperative_three_day_coverage_check",
-                                    "surgery_time": surgery_time.isoformat(sep=" "),
-                                    "required_postop_dates": list(
-                                        sorted(item.isoformat() for item in required_dates)
-                                    ),
-                                    "covered_postop_dates": list(
-                                        sorted(item.isoformat() for item in covered_dates)
-                                    ),
-                                    "surgeon_round_present": surgeon_round,
-                                },
-                            )
+                    legacy_single_event_facts = (
+                        {
+                            "required_postop_dates": event_facts[0]["required_postop_dates"],
+                            "covered_postop_dates": event_facts[0]["covered_postop_dates"],
+                            "surgeon_round_present": event_facts[0]["surgeon_round_present"],
+                        }
+                        if len(event_facts) == 1
+                        else {}
+                    )
+                    display.append(
+                        (
+                            rule_id,
+                            {
+                                "verification_kind": "postoperative_three_day_coverage_check",
+                                "performed_surgery_count": len(surgery_events),
+                                "surgery_events": event_facts,
+                                "unmet_surgery_events": unmet_events,
+                                "missing_surgeon_events": missing_surgeon_events,
+                                **legacy_single_event_facts,
+                            },
                         )
+                    )
             decisions.append(
                 _decision(
                     rule_id=rule_id,

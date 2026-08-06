@@ -864,6 +864,172 @@ async def test_multiple_surgeries_without_document_linkage_are_data_gap() -> Non
 
 
 @pytest.mark.asyncio
+async def test_064_065_count_formal_surgery_records_as_distinct_events_not_mr_rows() -> None:
+    """正式手术记录是一台手术的唯一事件基准，操作目录不能增加台次。"""
+    snapshot, _materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064", "LX0609-065"),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "血肿清除术+硬脑膜修补术",
+                    "surgery_begin_time": "2026-07-07 16:30:00+08",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                    "surgeon": "韩平",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_name": "再次血肿清除术",
+                    "surgery_begin_time": "2026-07-08 15:55:00+08",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                    "surgeon": "曾亚丽",
+                },
+            ),
+            "mr_surgery": tuple(
+                {
+                    "surgery_code": "01.2400X013",
+                    "surgery_begin_datetime": datetime(2026, 7, 7, 16, 30),
+                    "surgery_end_datetime": datetime(2026, 7, 7, 18, 30),
+                }
+                for _index in range(8)
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "其他医师"},
+                {
+                    "record_time": "2026-07-09 08:00:00",
+                    "document_title": (
+                        "石跃主治医师联合神经疾病中心韩平副主任医师、"
+                        "眼科曾亚丽主治医师查房记录"
+                    ),
+                },
+                {"record_time": "2026-07-10 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-11 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
+            ),
+            "senior_course_record": (
+                {"record_time": "2026-07-08 20:00:00", "document_title": "上级医师查房记录"},
+                {"record_time": "2026-07-09 20:00:00", "document_title": "上级医师查房记录"},
+            ),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.COMPLIANT,
+        CustomerFinalState.COMPLIANT,
+    ]
+    facts_by_rule = dict(result.customer_display_facts)
+    assert facts_by_rule["LX0609-064"]["performed_surgery_count"] == 2
+    assert [item["document_id"] for item in facts_by_rule["LX0609-064"]["surgery_events"]] == ["E1", "E2"]
+    assert [item["document_id"] for item in facts_by_rule["LX0609-065"]["surgery_events"]] == ["E1", "E2"]
+    assert result.llm_call_count == result.total_tokens == 0
+    assert snapshot.snapshot_hash
+
+
+@pytest.mark.asyncio
+async def test_064_reports_the_specific_formal_surgery_missing_a_postoperative_day() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-064",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                    "surgeon": "韩平",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                    "surgeon": "曾亚丽",
+                },
+            ),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "document_title": "韩平主治医师查房记录"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "其他医师"},
+                {"record_time": "2026-07-10 08:00:00", "document_title": "曾亚丽主治医师查房记录"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-064"]
+    assert facts["unmet_surgery_events"] == [
+        {
+            "document_id": "E2",
+            "missing_postop_dates": ["2026-07-11"],
+            "surgeon_round_present": True,
+        }
+    ]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_065_does_not_allow_one_surgery_senior_round_to_cover_another() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-065",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                },
+            ),
+            "senior_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-065"]
+    assert facts["unmet_surgery_events"] == [
+        {"document_id": "E2", "senior_round_times": []}
+    ]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_065_do_not_use_record_time_when_formal_surgery_end_time_is_missing() -> None:
+    _snapshot, _materials, _result, reduced = await _evaluate_selected(
+        ("LX0609-064", "LX0609-065"),
+        {
+            "surgery_record": ({
+                "document_id": "E1",
+                "surgery_code": "01.2400X013",
+                "surgery_begin_time": "2026-07-07 16:30:00+08",
+                "record_time": "2026-07-07 21:00:00+08",
+                "surgeon": "韩平",
+            },),
+            "daily_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-09 08:00:00", "author_name": "韩平"},
+                {"record_time": "2026-07-10 08:00:00", "author_name": "韩平"},
+            ),
+            "senior_course_record": (
+                {"record_time": "2026-07-08 08:00:00", "document_title": "上级医师查房记录"},
+            ),
+        },
+    )
+
+    assert [item.final_state for item in reduced] == [
+        CustomerFinalState.DATA_GAP,
+        CustomerFinalState.DATA_GAP,
+    ]
+    assert [item.reason_code for item in reduced] == [
+        "authoritative_time_missing",
+        "authoritative_time_missing",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_050_uncertain_diagnosis_after_seven_days_requires_discussion() -> None:
     _, reduced = await _evaluate(
         "LX0609-050",
