@@ -936,8 +936,12 @@ async def execute_luxian_0609_native_extended_document_rules(
                     final_state, reason_code = "data_gap", "authoritative_time_missing"
                 else:
                     first_order = min(order_times)
+                    eligible_evaluation_times = tuple(
+                        value for value in evaluation_times if value >= first_order
+                    )
                     intervals = tuple(
-                        (value - first_order).total_seconds() / 3600 for value in evaluation_times
+                        (value - first_order).total_seconds() / 3600
+                        for value in eligible_evaluation_times
                     )
                     complete = any(48 <= value <= 72 for value in intervals)
                     final_state = "compliant" if complete else "non_compliant"

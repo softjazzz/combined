@@ -1366,7 +1366,7 @@ def test_discharge_medication_labels_form_a_structured_contract() -> None:
     ["LX0609-054", "LX0609-055", "LX0609-056", "LX0609-057", "LX0609-058", "LX0609-059"],
 )
 async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> None:
-    _, reduced = await _evaluate(
+    result, reduced = await _evaluate(
         rule_id,
         {
             "inpat_drug_order": (
@@ -1388,6 +1388,10 @@ async def test_controlled_antimicrobial_evidence_is_compliant(rule_id: str) -> N
         },
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == 0
+    assert result.completion_tokens == 0
+    assert result.total_tokens == 0
 
 
 @pytest.mark.asyncio
@@ -1425,6 +1429,77 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
     )
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("evaluation_time", "expected_interval"),
+    [
+        ("2026-06-03 10:00:00", 48.0),
+        ("2026-06-04 10:00:00", 72.0),
+    ],
+)
+async def test_055_keeps_exact_48_to_72_hour_post_order_effect_evaluation(
+    evaluation_time: str,
+    expected_interval: float,
+) -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "prescribed_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": evaluation_time,
+                    "record_content": "抗菌药物效果评价：体温下降，白细胞降低。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == [
+        expected_interval
+    ]
+
+
+@pytest.mark.asyncio
+async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "prescribed_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-01 08:00:00",
+                    "record_content": "既往效果评价：体温下降、白细胞下降。",
+                },
+                {
+                    "record_time": "2026-06-03 10:00:00",
+                    "record_content": "抗菌药物效果评价：体温下降、白细胞下降。",
+                },
+                {
+                    "record_time": "2026-06-04 12:00:00",
+                    "record_content": "抗菌药物效果评价：CRP下降。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == [
+        48.0,
+        74.0,
+    ]
 
 
 @pytest.mark.asyncio
