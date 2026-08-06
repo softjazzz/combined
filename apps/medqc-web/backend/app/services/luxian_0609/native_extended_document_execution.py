@@ -679,7 +679,6 @@ def _surgery_event_surgeon_tokens(row: Mapping[str, Any]) -> frozenset[str]:
         for key in (
             "surgeon",
             "surgeon_sign",
-            "surgeon_physician_code",
             "main_surgery_sign",
         )
         if (token := _normalized_physician_token(row.get(key)))
@@ -693,7 +692,6 @@ def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
         token
         for key in (
             "author_name",
-            "author_id",
             "physician_sign",
             "author_signature",
             "doctor_signature",
@@ -1692,10 +1690,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         for value in item["senior_round_times"]
                     })
                     if unmet_events:
-                        observed_rounds = "、".join(senior_round_delivery_values) or "无"
                         senior_round_delivery_values = [
                             f"共{len(event_facts)}台手术中，{len(unmet_events)}台手术结束后72小时内"
-                            f"未查到上级医师查房（已查到：{observed_rounds}）"
+                            "未查到上级医师查房",
+                            *senior_round_delivery_values,
                         ]
                     legacy_summary_facts = {
                         "surgery_time": "；".join(

@@ -1019,31 +1019,6 @@ async def test_064_uses_surgeon_sign_but_not_generic_surgery_author_as_event_sur
 
 
 @pytest.mark.asyncio
-async def test_064_matches_surgeon_physician_code_only_to_course_author_id() -> None:
-    """术者编号仅与同一资料链中的病程作者编号精确匹配。"""
-    result, reduced = await _evaluate(
-        "LX0609-064",
-        {
-            "surgery_record": ({
-                "document_id": "E-code",
-                "surgery_code": "01.2400X013",
-                "surgery_end_time": "2026-07-07 18:30:00+08",
-                "surgeon_physician_code": "DOC-001",
-            },),
-            "daily_course_record": (
-                {"record_time": "2026-07-08 08:00:00", "author_id": "DOC-001"},
-                {"record_time": "2026-07-09 08:00:00", "author_id": "DOC-002"},
-                {"record_time": "2026-07-10 08:00:00", "author_id": "DOC-002"},
-            ),
-        },
-    )
-
-    assert reduced.final_state is CustomerFinalState.COMPLIANT
-    assert dict(result.customer_display_facts)["LX0609-064"]["surgeon_round_present"] is True
-    assert result.llm_call_count == result.total_tokens == 0
-
-
-@pytest.mark.asyncio
 async def test_064_accepts_surgeon_named_in_postoperative_round_title() -> None:
     """“术后查房”是查房标题，不应被误认为术者说明。"""
     result, reduced = await _evaluate(
@@ -1182,6 +1157,13 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
             ),
             "senior_course_record": (
                 {"record_time": "2026-07-02 08:00:00"},
+                {"record_time": "2026-07-02 09:00:00"},
+                {"record_time": "2026-07-02 10:00:00"},
+                {"record_time": "2026-07-02 11:00:00"},
+                {"record_time": "2026-07-02 12:00:00"},
+                {"record_time": "2026-07-02 13:00:00"},
+                {"record_time": "2026-07-02 14:00:00"},
+                {"record_time": "2026-07-02 15:00:00"},
             ),
         },
     )
@@ -1198,6 +1180,22 @@ async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
         "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in value
         for value in canonical["customer_display_facts"]["senior_round_times"]
     )
+    assert set(canonical["customer_display_facts"]) == {
+        "verification_kind",
+        "surgery_time",
+        "threshold_hours",
+        "senior_round_times",
+    }
+    assert canonical["customer_display_facts"]["senior_round_times"][1:] == [
+        "2026-07-02 08:00:00",
+        "2026-07-02 09:00:00",
+        "2026-07-02 10:00:00",
+        "2026-07-02 11:00:00",
+        "2026-07-02 12:00:00",
+        "2026-07-02 13:00:00",
+        "2026-07-02 14:00:00",
+        "2026-07-02 15:00:00",
+    ]
     assert "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
@@ -2226,7 +2224,7 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == [
-        "共1台手术中，1台手术结束后72小时内未查到上级医师查房（已查到：无）"
+        "共1台手术中，1台手术结束后72小时内未查到上级医师查房"
     ]
 
 
