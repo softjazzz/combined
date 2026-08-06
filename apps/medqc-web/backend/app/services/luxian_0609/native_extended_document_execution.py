@@ -1692,12 +1692,10 @@ async def execute_luxian_0609_native_extended_document_rules(
                         for value in item["senior_round_times"]
                     })
                     if unmet_events:
+                        observed_rounds = "、".join(senior_round_delivery_values) or "无"
                         senior_round_delivery_values = [
-                            (
-                                f"{item['document_id']}（手术结束{item['surgery_end_time']}）："
-                                f"{'、'.join(item['senior_round_times']) or '未找到'}"
-                            )
-                            for item in event_facts
+                            f"共{len(event_facts)}台手术中，{len(unmet_events)}台手术结束后72小时内"
+                            f"未查到上级医师查房（已查到：{observed_rounds}）"
                         ]
                     legacy_summary_facts = {
                         "surgery_time": "；".join(

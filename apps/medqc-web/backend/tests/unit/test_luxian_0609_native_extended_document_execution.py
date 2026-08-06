@@ -1163,8 +1163,8 @@ async def test_065_multievent_compatible_summary_reaches_customer_conclusion() -
 
 
 @pytest.mark.asyncio
-async def test_065_partial_multievent_delivery_names_the_unmet_surgery() -> None:
-    """任一手术缺上级查房时，交付文案必须明确具体失败手术。"""
+async def test_065_partial_multievent_delivery_summarizes_unmet_count() -> None:
+    """任一手术缺上级查房时，交付文案说明缺失台数而不归属具体文书。"""
     snapshot, materials, result, reduced = await _evaluate_selected(
         ("LX0609-065",),
         {
@@ -1194,10 +1194,11 @@ async def test_065_partial_multievent_delivery_names_the_unmet_surgery() -> None
     )
 
     assert canonical["status"] == "non_compliant"
-    assert "E2（手术结束2026-07-10 18:30:00）：未找到" in canonical[
-        "customer_display_facts"
-    ]["senior_round_times"]
-    assert "E2（手术结束2026-07-10 18:30:00）：未找到" in canonical["findings"]
+    assert any(
+        "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in value
+        for value in canonical["customer_display_facts"]["senior_round_times"]
+    )
+    assert "共2台手术中，1台手术结束后72小时内未查到上级医师查房" in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
 
@@ -2225,7 +2226,7 @@ async def test_065_missing_postoperative_senior_round_is_non_compliant() -> None
 
     assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-065"]["senior_round_times"] == [
-        "mr_surgery:1（手术结束2026-07-01 10:00:00）：未找到"
+        "共1台手术中，1台手术结束后72小时内未查到上级医师查房（已查到：无）"
     ]
 
 
