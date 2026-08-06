@@ -1755,6 +1755,45 @@ async def test_020_023_without_authoritative_stay_window_is_data_gap_without_llm
     assert client.prompts == []
 
 
+@pytest.mark.asyncio
+async def test_stage_two_stay_window_gap_does_not_downgrade_021_022(monkeypatch):
+    """020/023 的住院窗口缺口不能污染独立的会诊文书内容判定。"""
+
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda **_: _rows("申请会诊以协助诊治；会诊意见：必要时完善检查。", action_suffix=False),
+    )
+    monkeypatch.setattr(
+        episode,
+        "_resolve_execution_stay_window",
+        lambda **_: (_ for _ in ()).throw(episode._SourceGap()),
+    )
+    client = _SequentialClient(_payload(episodes=[_episode(
+        "consultation_record-1",
+        ["consultation_record-1"],
+        application="clear",
+        opinion="vague",
+    )]))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "data_gap", "compliant", "non_compliant", "data_gap",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "linkage_unresolved", "requirement_satisfied", "requirement_violated", "linkage_unresolved",
+    ]
+    assert result.llm_call_count == 1
+
+
 @pytest.mark.parametrize(
     "horizon_reason",
     ("authoritative_time_missing", "authoritative_time_conflict"),

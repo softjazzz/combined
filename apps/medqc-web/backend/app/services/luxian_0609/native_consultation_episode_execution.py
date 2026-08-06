@@ -1732,7 +1732,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
             stage_two_boundary_status = ("technical_error", "source_query_error")
         except _SourceGap:
             stage_two_boundary_status = ("data_gap", "linkage_unresolved")
-        if stage_two_boundary_status is not None:
+        # 住院窗口仅是020/023的关联前提。即使窗口缺失或读取异常，021/022
+        # 仍须继续基于会诊申请、会诊意见本身完成独立文书内容判定。
+        if stage_two_boundary_status is not None and not any(
+            rule_id in {"LX0609-021", "LX0609-022"}
+            for rule_id in selected
+        ):
             return _finish(
                 selected=selected,
                 status=stage_two_boundary_status[0],
@@ -1798,9 +1803,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
     execution_candidate_projection: _CandidateProjection | None = None
     completed_recommendations: tuple[_CompletedRecommendation, ...] = ()
     if stage_two_rule_ids:
-        if stage_two_boundary_status is not None and not any(
-            rule_id in statuses for rule_id in stage_two_rule_ids
-        ):
+        if stage_two_boundary_status is not None:
             for rule_id in stage_two_rule_ids:
                 statuses[rule_id] = stage_two_boundary_status
             completed_recommendations = ()
