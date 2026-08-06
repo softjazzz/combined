@@ -262,81 +262,6 @@ def _deterministic_024_outcome(
     return None
 
 
-_IMPLANT_FIELD_PATTERNS = {
-    "implant_name": re.compile(r"植入物名称\s*[:：]\s*([^；;。\n]{1,80})"),
-    "implant_type": re.compile(r"(?:植入物)?种类\s*[:：]\s*([^；;。\n]{1,80})"),
-    "implant_specification": re.compile(
-        r"(?:规格/型号|规格型号|型号)\s*[:：]\s*([^；;。\n]{1,80})"
-    ),
-    "implant_material": re.compile(r"材质\s*[:：]\s*([^；;。\n]{1,80})"),
-    "implant_quantity": re.compile(r"数量\s*[:：]\s*([^；;。\n]{1,40})"),
-    "implant_barcode": re.compile(
-        r"(?:植入物)?(?:条码|追溯码)\s*[:：]\s*([^；;。\n]{1,100})"
-    ),
-}
-_EMPTY_IMPLANT_FIELD_PATTERN = re.compile(r"^(?:无|暂无|未填|未记录|不详|/|-)$")
-
-
-def _deterministic_025_outcome(
-    surgery_rows: Sequence[Mapping[str, Any]],
-) -> _SurgeryTextOutcome | None:
-    """025：只收口正文中明确标为“植入物”的六字段事实。"""
-
-    for row in surgery_rows:
-        text = _clean(" ".join((_row_text(row), _clean(row.get("surgery_process")))))
-        if not text or "植入物" not in text:
-            continue
-        if re.search(r"(?:未使用|未植入|无)植入物", text):
-            return _SurgeryTextOutcome(
-                "LX0609-025",
-                "not_applicable",
-                "surgery_text_fact_absent",
-                {
-                    "verification_kind": "implant_not_used",
-                    "performed_surgery_confirmed": True,
-                    "source_label": "手术记录",
-                },
-            )
-        values = {
-            field: (match.group(1).strip() if (match := pattern.search(text)) else "")
-            for field, pattern in _IMPLANT_FIELD_PATTERNS.items()
-        }
-        # 空模板或计划性描述不证明本次实际植入，继续交给受控模型。
-        if not values["implant_name"] or re.search(r"(?:拟|计划|备)植入", text):
-            continue
-        missing = sorted(
-            field
-            for field, value in values.items()
-            if not value or _EMPTY_IMPLANT_FIELD_PATTERN.fullmatch(value)
-        )
-        document_id = _clean(row.get("document_id"))
-        if missing:
-            return _SurgeryTextOutcome(
-                "LX0609-025",
-                "non_compliant",
-                "surgery_text_fact_defect",
-                {
-                    "failure_kind": "implant_information_incomplete",
-                    "missing_fields": missing,
-                    "source_label": "手术记录",
-                    **({"source_document_id": document_id} if document_id else {}),
-                },
-            )
-        return _SurgeryTextOutcome(
-            "LX0609-025",
-            "compliant",
-            "surgery_text_fact_satisfied",
-            {
-                "verification_kind": "implant_information_complete",
-                "performed_surgery_confirmed": True,
-                "checked_fields": list(_IMPLANT_FIELD_PATTERNS),
-                "source_label": "手术记录",
-                **({"source_document_id": document_id} if document_id else {}),
-            },
-        )
-    return None
-
-
 def _deterministic_033_outcome(
     consent_rows: Sequence[Mapping[str, Any]],
 ) -> _SurgeryTextOutcome | None:
@@ -439,7 +364,7 @@ def _prompt(wrapper: Mapping[str, Any], context: str) -> str:
         prompt += (
             "\n补充输出要求：若判定不合规，必须同时返回 missing_fields 数组；仅可使用"
             "implant_name、implant_type、implant_specification、implant_material、"
-            "implant_quantity、implant_barcode。数组只列本次手术记录中明确缺失的字段；"
+            "implant_quantity。数组只列本次手术记录中明确缺失的字段；"
             "无法确定时返回空数组。"
         )
     return prompt
@@ -483,7 +408,7 @@ def _parse_implant_missing_fields(response: Mapping[str, Any]) -> tuple[str, ...
         return ()
     allowed = {
         "implant_name", "implant_type", "implant_specification",
-        "implant_material", "implant_quantity", "implant_barcode",
+        "implant_material", "implant_quantity",
     }
     return tuple(value for value in values if value in allowed)
 
@@ -1230,7 +1155,6 @@ def _surgery_text_outcome(
                     ("implant_specification", fact.implant_specification),
                     ("implant_material", fact.implant_material),
                     ("implant_quantity", fact.implant_quantity),
-                    ("implant_barcode", fact.implant_barcode),
                 )
                 missing_implant_fields.update(
                     field_name
@@ -1411,7 +1335,6 @@ def _surgery_text_outcome(
                         "implant_specification",
                         "implant_material",
                         "implant_quantity",
-                        "implant_barcode",
                     ],
                     "source_label": "手术记录",
                     **(
@@ -1781,11 +1704,6 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                     surgery_rows=rows_by_source["surgery_record"],
                 )
                 if rule_id == "LX0609-024"
-                and states_by_source.get("surgery_record") == "available"
-                else _deterministic_025_outcome(
-                    rows_by_source["surgery_record"]
-                )
-                if rule_id == "LX0609-025"
                 and states_by_source.get("surgery_record") == "available"
                 else _deterministic_033_outcome(
                     rows_by_source["surgery_inform_consent"]

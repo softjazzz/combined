@@ -3021,7 +3021,7 @@ def safe_luxian_0609_customer_display_facts(
     if rule_id == "LX0609-025":
         checked_implant_fields = [
             "implant_name", "implant_type", "implant_specification",
-            "implant_material", "implant_quantity", "implant_barcode",
+            "implant_material", "implant_quantity",
         ]
         if (
             raw.get("verification_kind") == "implant_information_complete"
@@ -3054,7 +3054,7 @@ def safe_luxian_0609_customer_display_facts(
                 for value in missing
                 if value in {
                     "implant_name", "implant_type", "implant_specification",
-                    "implant_material", "implant_quantity", "implant_barcode",
+                    "implant_material", "implant_quantity",
                 }
             ]
         }

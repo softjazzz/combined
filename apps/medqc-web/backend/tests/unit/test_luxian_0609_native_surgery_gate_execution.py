@@ -961,23 +961,6 @@ def test_031_single_event_fallback_requires_same_surgeon() -> None:
     assert (status, reason, facts) == ("data_gap", "association_failed", None)
 
 
-def test_025_explicit_six_implant_fields_are_programmatic() -> None:
-    outcome = surgery._deterministic_025_outcome(
-        ({
-            "document_id": "surgery-025",
-            "record_content": (
-                "植入物名称：止血材料；种类：医用材料；规格/型号：5cm×8cm；"
-                "材质：氧化纤维素；数量：1片；植入物条码：TRACE-001。"
-            ),
-        },)
-    )
-
-    assert outcome is not None
-    assert outcome.status == "compliant"
-    assert outcome.customer_display_facts is not None
-    assert outcome.customer_display_facts["source_document_id"] == "surgery-025"
-
-
 @pytest.mark.asyncio
 async def test_typed_024_uses_explicit_nonmalignant_rescue_fact_without_llm() -> None:
     selected = ("LX0609-024",)
@@ -1802,9 +1785,9 @@ def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) ->
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     (
-        ("implant_barcode", "missing", "non_compliant"),
-        ("implant_barcode", "unknown", "data_gap"),
-        ("implant_barcode", "present", "compliant"),
+        ("implant_type", "missing", "non_compliant"),
+        ("implant_type", "unknown", "data_gap"),
+        ("implant_type", "present", "compliant"),
     ),
 )
 def test_025_actual_implant_field_contract_is_python_owned(

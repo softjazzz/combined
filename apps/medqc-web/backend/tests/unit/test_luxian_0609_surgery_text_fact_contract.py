@@ -31,6 +31,9 @@ from app.services.luxian_0609.native_surgery_gate_execution import (
     _surgery_text_outcome,
     execute_luxian_0609_native_surgery_gate_rules,
 )
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
+)
 from app.services.luxian_0609.surgery_text_fact_contract import (
     SCHEMA_VERSION,
     SurgeryEventFact,
@@ -106,6 +109,7 @@ def _session(
     consent_source_error: bool = False,
     consent_source_unavailable: bool = False,
     surgery_source_unavailable: bool = False,
+    surgery_rows: tuple[dict[str, object], ...] | None = None,
 ):
     rows = {
         "surgery_record": ({
@@ -131,6 +135,8 @@ def _session(
     }
     if consent_rows is not None:
         rows["surgery_inform_consent"] = consent_rows
+    if surgery_rows is not None:
+        rows["surgery_record"] = surgery_rows
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -319,7 +325,7 @@ async def test_selected_surgery_text_rules_use_bounded_calls_and_python_maps_sta
         # 已实施手术且模型明确本次未使用植入物，025 不适用。
         (_event(implant_use="explicit_no_implant"), "not_applicable"),
         # 已确认实际植入物，字段明确缺失才可以输出确定性不合规。
-        (_event(implant_barcode="missing"), "non_compliant"),
+        (_event(implant_type="missing"), "non_compliant"),
     ),
 )
 async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
@@ -348,6 +354,85 @@ async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
 
     assert [item.final_state.value for item in reduced] == [expected_state]
     assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_025_llm_extracts_actual_artificial_dura_and_ignores_unconfirmed_barcode_requirement() -> None:
+    """025由受控LLM识别实际永久性植入，条码不属于本阶段客户必填项。"""
+    session = _session(
+        surgery_rows=(
+            {
+                "document_id": "5039223||1",
+                "surgery_begin_time": "2026-07-07 16:30:00+08",
+                "surgery_name": "颅内血肿清除术",
+                "surgery_process": "缺损区用人工硬脑膜一张覆盖，完成硬脑膜修补。",
+            },
+            {
+                "document_id": "5039223||2",
+                "surgery_begin_time": "2026-07-08 15:55:00+08",
+                "surgery_name": "再次手术",
+                "surgery_process": "本次仅行血肿清除，未使用植入物。",
+            },
+        )
+    )
+    event = _event(
+        implant_use="actual_permanent_implant",
+        implant_name="present",
+        implant_type="missing",
+        implant_specification="missing",
+        implant_material="missing",
+        implant_quantity="present",
+    )
+    event.pop("implant_barcode")
+    client = _Client({"schema_version": SCHEMA_VERSION, "events": [event]})
+
+    native = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions,
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=native.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+
+    assert native.llm_call_count == 1
+    assert native.total_tokens == 100
+    assert len(client.prompts) == 1
+    assert "人工硬脑膜一张覆盖" in client.prompts[0]
+    assert "implant_barcode" not in client.prompts[0]
+    assert reduced[0].final_state.value == "non_compliant"
+    assert reduced[0].reason_code == "requirement_violated"
+    assert canonical[0]["status"] == "non_compliant"
+    assert canonical[0]["reason_code"] == "requirement_violated"
+    assert canonical[0]["customer_display_facts"] == {
+        "failure_kind": "implant_information_incomplete",
+        "source_label": "手术记录",
+        "missing_fields": [
+            "implant_material",
+            "implant_specification",
+            "implant_type",
+        ],
+    }
 
 
 @pytest.mark.asyncio

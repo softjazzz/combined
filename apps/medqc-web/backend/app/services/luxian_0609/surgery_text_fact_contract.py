@@ -61,6 +61,8 @@ class SurgeryEventFact:
     implant_specification: str
     implant_material: str
     implant_quantity: str
+    # 历史模型响应可能仍携带该字段；025 已不再将其作为客户确认的必填项。
+    # 保留解析兼容性，但禁止它参与任何判定或缺项展示。
     implant_barcode: str
     incision_class: str
     antimicrobial_intent: str
@@ -112,7 +114,6 @@ _RULE_FACT_FIELDS = {
     "LX0609-025": (
         "surgery_occurrence", "implant_use", "implant_name", "implant_type",
         "implant_specification", "implant_material", "implant_quantity",
-        "implant_barcode",
     ),
     "LX0609-028": (
         "surgery_occurrence", "incision_class", "antimicrobial_intent",
@@ -135,7 +136,6 @@ _EXAMPLE_VALUES = {
     "implant_specification": "present|missing|unknown",
     "implant_material": "present|missing|unknown",
     "implant_quantity": "present|missing|unknown",
-    "implant_barcode": "present|missing|unknown",
     "incision_class": "I|II|other|unknown",
     "antimicrobial_intent": "prophylactic|therapeutic|both|explicit_none|unknown",
     "start_time_ref": None,
@@ -362,7 +362,7 @@ def build_surgery_text_fact_prompt(
             "patient_signature/surgeon_signature=present|missing|unknown。"
         )
     return f"""你是泸县0609手术事实抽取器。只抽取事实，不直接输出质控状态。本次规则：{','.join(selected)}。
-每个本次手术事件单独输出。只有已实施的本次手术才是performed，拟行、计划、申请均为planned。024只在本次已实施手术与恶性原发治疗、淋巴结清扫或术中冰冻恶性有直接关联时，malignant_relation才可输出qualifying；既往恶性史、普通送病理、当前良性手术、术后并发症/造口/救治均必须输出explicit_nonqualifying，不能借此认定本次恶性手术。仅实际永久性植入物才可输出actual_permanent_implant；缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。治疗性抗菌药不能当预防用药；时间只能选择给定T候选。麻醉、输血、其他治疗同意书及空模板不能当手术知情同意书，且必须关联本次手术。
+每个本次手术事件单独输出。只有已实施的本次手术才是performed，拟行、计划、申请均为planned。024只在本次已实施手术与恶性原发治疗、淋巴结清扫或术中冰冻恶性有直接关联时，malignant_relation才可输出qualifying；既往恶性史、普通送病理、当前良性手术、术后并发症/造口/救治均必须输出explicit_nonqualifying，不能借此认定本次恶性手术。仅实际永久性植入物才可输出actual_permanent_implant；材料名称本身不能证明植入，必须结合同一条手术记录中本次实际使用、置入、覆盖或修补等明确动作与语境判断。缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。治疗性抗菌药不能当预防用药；时间只能选择给定T候选。麻醉、输血、其他治疗同意书及空模板不能当手术知情同意书，且必须关联本次手术。
 {consent_033_instruction}
 只能引用给定S/T；无法确定必须unknown，禁止猜测。028引用start_time_ref或end_time_ref时，每个T所在文书的S引用都必须加入evidence_refs，不能只引用手术文书。
 材料：
