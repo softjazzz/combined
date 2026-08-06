@@ -61,6 +61,7 @@ from ..services.luxian_0609.surgery_procedure_catalog import (
     load_surgery_procedure_catalog,
 )
 from ..services.luxian_0609.rule_decision_settings import (
+    assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
 from ..services.sample_validation_rule_sets import (
@@ -2393,6 +2394,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             is_direct_native_selection
             and getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
         )
+        if is_direct_native_selection:
+            assert_luxian_0609_customer_native_delivery_ready(
+                settings,
+                context=f"workspace_batch_job:{job_id}",
+            )
         compatibility_rule_ids = (
             _luxian_0609_compatibility_rule_ids(
                 native_requested_rule_ids,
@@ -4200,6 +4206,15 @@ async def create_workspace_batch_job(
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
+    if is_direct_native_selection:
+        effective_settings = resolve_mainline_rule_decision_settings(get_settings())
+        try:
+            assert_luxian_0609_customer_native_delivery_ready(
+                effective_settings,
+                context="workspace_batch_create",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     compatibility_rule_ids = (
         _luxian_0609_compatibility_rule_ids(
             direct_native_rule_ids,

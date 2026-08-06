@@ -128,6 +128,11 @@ PREPRODUCTION_ONLY_OVERRIDES: dict[str, bool] = {
     "LUXIAN_0609_RUNTIME_SHADOW_ENABLED": False,
 }
 
+_MAINLINE_ROLLBACK_OVERRIDES: dict[str, bool] = {
+    "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": False,
+    "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
+}
+
 
 class ReadOnlySettingsOverlay:
     """按请求覆盖 LX0609 开关，不修改进程环境或基础 Settings。"""
@@ -177,12 +182,56 @@ def build_full_rule_decision_settings(
 
 
 def resolve_mainline_rule_decision_settings(base_settings: Any) -> Any:
+    """解析正式主链或受控兼容回滚的唯一有效配置。"""
+
+    if not hasattr(base_settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED"):
+        # 仅兼容历史测试与离线适配对象；这类对象没有声明主链合同，
+        # 必须保持其原始开关，不能隐式覆盖成正式主链。
+        # 真实 Settings 始终显式声明总开关。
+        return base_settings
     if not bool(
         getattr(
             base_settings,
             "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED",
-            False,
+            True,
         )
     ):
-        return base_settings
-    return build_full_rule_decision_settings(base_settings)
+        # 总开关关闭时，禁止保留“客户聚合开启、统一引擎关闭”的矛盾组合。
+        return ReadOnlySettingsOverlay(base_settings, _MAINLINE_ROLLBACK_OVERRIDES)
+    if not bool(getattr(base_settings, "LUXIAN_0609_NATIVE_CONSULTATION_ENABLED", True)):
+        # 保留会诊族独立回滚，不影响其他已正式发布的规则族。
+        return ReadOnlySettingsOverlay(
+            base_settings,
+            {
+                "LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED": False,
+                "LUXIAN_0609_CONSULTATION_EXECUTION_LINK_ENABLED": False,
+            },
+        )
+    # 正式默认值已在 Settings 中声明，正常主链不再依赖隐式运行时 overlay。
+    return base_settings
+
+
+def assert_luxian_0609_customer_native_delivery_ready(
+    settings: Any,
+    *,
+    context: str,
+) -> None:
+    """拒绝会静默落入兼容链的客户主链错配配置。"""
+
+    # 历史离线适配对象没有声明主链合同，保留其既有行为；真实 Settings
+    # 与所有客户任务入口均显式声明该字段，必须接受下面的失败关闭校验。
+    if not hasattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED"):
+        return
+
+    aggregation_enabled = bool(
+        getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
+    )
+    unified_engine_enabled = bool(
+        # Settings 始终声明该字段；缺字段仅兼容历史测试/适配对象，不能把它当成显式关闭。
+        getattr(settings, "LUXIAN_0609_UNIFIED_ENGINE_ENABLED", True)
+    )
+    if aggregation_enabled and not unified_engine_enabled:
+        raise ValueError(
+            "LX0609客户质控配置不一致：客户结果聚合已开启，但统一Native引擎未启用"
+            f"（入口：{context}）。请启用主链，或关闭客户结果聚合后再执行受控回滚。"
+        )

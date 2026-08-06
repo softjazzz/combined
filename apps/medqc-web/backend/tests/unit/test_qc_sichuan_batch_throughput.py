@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from app.routers import qc_sichuan
 import app.services.custom_qc_workspace_service as workspace_module
@@ -28,6 +29,7 @@ from app.services.luxian_0609.source_evidence_reader import (
 def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
     values = {
         "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+        "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
         "LUXIAN_0609_NATIVE_EXECUTION_ENABLED": True,
         "LUXIAN_0609_NATIVE_MDT_040_ENABLED": True,
         "LUXIAN_0609_NATIVE_BASIC_TIMELINESS_ENABLED": True,
@@ -45,6 +47,64 @@ def _luxian_native_settings(**overrides: Any) -> SimpleNamespace:
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+@pytest.mark.asyncio
+async def test_luxian_batch_worker_rejects_customer_aggregation_without_unified_engine(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-001"],
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+        "date_field": "admission",
+    }
+    service = _ServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False),
+    )
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert "客户结果聚合已开启，但统一Native引擎未启用" in workspace.job["error_message"]
+    assert service.evaluate_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_luxian_batch_create_rejects_customer_aggregation_without_unified_engine(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False),
+    )
+
+    with pytest.raises(HTTPException, match="客户结果聚合已开启，但统一Native引擎未启用"):
+        await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+                rule_ids=["LX0609-001"],
+                scope="final",
+                record_ids=["visit-001"],
+            ),
+            qc_service=_ServiceStub(),  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
+
+    assert workspace.created_job is None
 
 
 def test_luxian_target_document_type_uses_catalog_document_not_final_scene_fallback():

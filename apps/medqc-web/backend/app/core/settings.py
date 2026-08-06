@@ -155,38 +155,26 @@ class Settings(BaseSettings):
     LUXIAN_0609_NATIVE_SURGERY_DOCUMENT_ENABLED: bool = True
     # 040 使用“结构化四级手术 + 裁剪 MDT LLM”原生执行；关闭时精确回退旧映射链。
     LUXIAN_0609_NATIVE_MDT_040_ENABLED: bool = True
-    # 只读构建统一证据快照并保存在内部执行上下文；默认关闭且不改变客户结果。
-    LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = False
-    # 统一执行信封迁移开关；关闭时保留冻结旧调度链作为回滚。
-    LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = False
-    # 49条 RuleDecision 接入正式 LX0609 主链；关闭后恢复接入前的执行行为。
+    # 正式客户主链默认直接使用统一证据快照，不依赖运行时覆盖层。
+    LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED: bool = True
+    # 正式客户主链默认使用统一执行信封；关闭总开关时受控回滚到兼容链。
+    LUXIAN_0609_UNIFIED_ENGINE_ENABLED: bool = True
+    # LX0609 RuleDecision 主链总开关；关闭后受控回滚到兼容链。
     LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED: bool = True
-    # 007 使用 EvidenceSnapshot 权威 record_time 生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = False
-    # 008/009 使用受控病重/病危医嘱来源形成适用性 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED: bool = False
-    # 001/005/006 共用权威入院锚点生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED: bool = False
-    # 041-049 从同一 Evidence Session 材料直接生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED: bool = False
-    # 020/021/022/023 从同一 Evidence Session 材料直接生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED: bool = False
-    # 017 复制病历从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED: bool = False
-    # 016/018 入院记录语义规则从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED: bool = False
-    # 013/019/026/027 病理与肿瘤记录从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED: bool = False
-    # 040 四级手术 MDT 从同一 Evidence Session 材料生成 RuleDecision；独立回滚。
-    LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED: bool = False
-    # 003 手术记录24小时完成时限的纯 RuleDecision 路径；默认关闭便于回滚。
-    LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED: bool = False
-    # 024/025/028/031/033 高风险手术门控使用同一 Evidence Session；默认关闭便于回滚。
-    LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED: bool = False
-    # 010/011/012/014/015 检查检验族使用同一 Evidence Session；默认关闭便于回滚。
-    LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED: bool = False
-    # 034-039 麻醉及手术文书族使用同一 Evidence Session；默认关闭便于回滚。
-    LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED: bool = False
+    # 以下规则族默认进入正式 Typed Decision 主链；每个开关仍可独立回滚。
+    LUXIAN_0609_RULE_DECISION_007_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED: bool = True
+    LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED: bool = True
     # 仅输出影子元数据，永不具备发布资格。
     LUXIAN_0609_RUNTIME_SHADOW_ENABLED: bool = False
     # LX0609 独立准生产 API；默认关闭，人工验收后才允许显式开启。

@@ -10,7 +10,9 @@ from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_res
 from app.services.luxian_0609_evidence_formatter import format_luxian_0609_evidence
 from app.services.luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 from app.services.luxian_0609_result_schema import apply_luxian_0609_result_schema
+from app.services.luxian_0609.rule_decision_settings import FULL_RULE_DECISION_OVERRIDES
 from app.services.sichuan_qc_service import SichuanQCService
+import app.services.sichuan_qc_service as sichuan_qc_service_module
 from app.services.luxian_0609_trigger_gate import (
     TRIGGER_ABSENT,
     TRIGGER_DATA_GAP,
@@ -52,6 +54,28 @@ from app.services.luxian_0609.native_package import Luxian0609PackagePlan
 from app.services.luxian_0609.source_manifest import QueryStatus
 from app.services.luxian_0609.source_registry import SOURCE_REGISTRY_VERSION
 from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
+
+
+@pytest.mark.asyncio
+async def test_luxian_direct_service_rejects_customer_aggregation_without_unified_engine(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        sichuan_qc_service_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
+            LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED=True,
+            LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="客户结果聚合已开启，但统一Native引擎未启用"):
+        await SichuanQCService().evaluate_running_final_bundle_input(
+            bundle={"scene": "running", "structured_context": {"documents": {}}},
+            rule_ids=["LX0609-001"],
+            rule_set_key=LUXIAN_0609_RULE_SET_KEY,
+        )
 
 
 def _wrapper(
@@ -1780,21 +1804,7 @@ async def test_mainline_master_switch_enables_all_rule_decisions_and_freezes_as_
     captured: dict[str, object] = {}
     base_settings = _all_native_settings(
         LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED=True,
-        LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False,
-        LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_007_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_COURSE_COPY_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_COURSE_ADMISSION_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_TUMOR_PATHOLOGY_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_MDT_040_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_SURGERY_TIMELINESS_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_SURGERY_GATE_REMAINING_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_EXAM_LAB_ENABLED=False,
-        LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED=False,
+        **FULL_RULE_DECISION_OVERRIDES,
     )
 
     async def _prepare(**kwargs):

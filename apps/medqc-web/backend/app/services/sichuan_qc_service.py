@@ -72,6 +72,7 @@ from .luxian_0609.execution import (
 )
 from .luxian_0609 import source_evidence_reader
 from .luxian_0609.rule_decision_settings import (
+    assert_luxian_0609_customer_native_delivery_ready,
     resolve_mainline_rule_decision_settings,
 )
 from .luxian_0609_trigger_gate import build_luxian_0609_033_live_source_decision
@@ -4551,6 +4552,10 @@ class SichuanQCService:
                 ):
                     raise ValueError("LX0609 package entry does not accept mixed rule ids")
                 selected_customer_rule_ids = normalized_requested_ids
+                assert_luxian_0609_customer_native_delivery_ready(
+                    settings,
+                    context="evaluate_running_final_bundle_input",
+                )
                 dependency_inventory = load_luxian_0609_dependency_inventory()
                 if settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED:
                     package_plan = build_luxian_0609_package_plan_from_settings(

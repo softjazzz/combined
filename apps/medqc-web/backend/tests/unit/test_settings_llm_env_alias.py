@@ -3,6 +3,8 @@ from pydantic import ValidationError
 
 from app.core.settings import Settings
 from app.services.luxian_0609.rule_decision_settings import (
+    FULL_RULE_DECISION_OVERRIDES,
+    assert_luxian_0609_customer_native_delivery_ready,
     build_full_rule_decision_settings,
     resolve_mainline_rule_decision_settings,
 )
@@ -57,17 +59,37 @@ def test_luxian_mainline_rule_decision_defaults_on_and_explicit_false_rolls_back
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     default_settings = Settings(_env_file=None)
     assert default_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
-    assert resolve_mainline_rule_decision_settings(default_settings) is not default_settings
+    assert resolve_mainline_rule_decision_settings(default_settings) is default_settings
+    for setting_name in FULL_RULE_DECISION_OVERRIDES:
+        assert getattr(default_settings, setting_name) is True
 
     monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "false")
     rollback_settings = Settings(_env_file=None)
     assert rollback_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is False
-    assert resolve_mainline_rule_decision_settings(rollback_settings) is rollback_settings
+    rollback_effective = resolve_mainline_rule_decision_settings(rollback_settings)
+    assert rollback_effective.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED is False
+    assert rollback_effective.LUXIAN_0609_UNIFIED_ENGINE_ENABLED is False
 
     monkeypatch.setenv("LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", "true")
     enabled_settings = Settings(_env_file=None)
     assert enabled_settings.LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED is True
-    assert resolve_mainline_rule_decision_settings(enabled_settings) is not enabled_settings
+    assert resolve_mainline_rule_decision_settings(enabled_settings) is enabled_settings
+
+
+def test_luxian_customer_native_delivery_rejects_aggregation_without_unified_engine():
+    with pytest.raises(ValueError, match="客户结果聚合已开启，但统一Native引擎未启用"):
+        assert_luxian_0609_customer_native_delivery_ready(
+            type(
+                "SettingsMismatch",
+                (),
+                {
+                    "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED": True,
+                    "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED": True,
+                    "LUXIAN_0609_UNIFIED_ENGINE_ENABLED": False,
+                },
+            )(),
+            context="test",
+        )
 
 
 def _clear_env(monkeypatch):
@@ -154,74 +176,74 @@ def test_luxian_native_execution_defaults_on_and_can_be_disabled(monkeypatch):
     assert Settings(_env_file=None).LUXIAN_0609_NATIVE_EXECUTION_ENABLED is False
 
 
-def test_luxian_evidence_snapshot_sidecar_defaults_off_and_can_be_enabled(monkeypatch):
+def test_luxian_evidence_snapshot_sidecar_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED is True
 
+    monkeypatch.setenv("LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_EVIDENCE_SNAPSHOT_SIDECAR_ENABLED is False
 
-def test_luxian_unified_engine_defaults_off_and_can_be_enabled(monkeypatch):
+
+def test_luxian_unified_engine_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_UNIFIED_ENGINE_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_UNIFIED_ENGINE_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_UNIFIED_ENGINE_ENABLED is True
 
+    monkeypatch.setenv("LUXIAN_0609_UNIFIED_ENGINE_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_UNIFIED_ENGINE_ENABLED is False
 
-def test_luxian_rule_decision_007_defaults_off_and_can_be_enabled(monkeypatch):
+
+def test_luxian_rule_decision_007_defaults_on_and_can_be_disabled(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_007_ENABLED is False
-
-    monkeypatch.setenv("LUXIAN_0609_RULE_DECISION_007_ENABLED", "true")
     assert Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_007_ENABLED is True
 
+    monkeypatch.setenv("LUXIAN_0609_RULE_DECISION_007_ENABLED", "false")
+    assert Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_007_ENABLED is False
 
-def test_luxian_rule_decision_basic_timeliness_defaults_off_and_can_be_enabled(
+
+def test_luxian_rule_decision_basic_timeliness_defaults_on_and_can_be_disabled(
     monkeypatch,
 ):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     assert (
         Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED
-        is False
+        is True
     )
 
     monkeypatch.setenv(
         "LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED",
-        "true",
+        "false",
     )
     assert (
         Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_BASIC_TIMELINESS_ENABLED
-        is True
+        is False
     )
 
 
-def test_luxian_rule_decision_course_severity_defaults_off_and_can_be_enabled(
+def test_luxian_rule_decision_course_severity_defaults_on_and_can_be_disabled(
     monkeypatch,
 ):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     assert (
         Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED
-        is False
+        is True
     )
 
     monkeypatch.setenv(
         "LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED",
-        "true",
+        "false",
     )
     assert (
         Settings(_env_file=None).LUXIAN_0609_RULE_DECISION_COURSE_SEVERITY_ENABLED
-        is True
+        is False
     )
 
 
-def test_luxian_rule_decision_transfusion_defaults_off_and_can_be_enabled(
+def test_luxian_rule_decision_transfusion_defaults_on_and_can_be_disabled(
     monkeypatch,
 ):
     _clear_env(monkeypatch)
@@ -229,21 +251,21 @@ def test_luxian_rule_decision_transfusion_defaults_off_and_can_be_enabled(
     assert (
         Settings(_env_file=None)
         .LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED
-        is False
+        is True
     )
 
     monkeypatch.setenv(
         "LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED",
-        "true",
+        "false",
     )
     assert (
         Settings(_env_file=None)
         .LUXIAN_0609_RULE_DECISION_TRANSFUSION_ENABLED
-        is True
+        is False
     )
 
 
-def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
+def test_luxian_rule_decision_consultation_defaults_on_and_can_be_disabled(
     monkeypatch,
 ):
     _clear_env(monkeypatch)
@@ -251,17 +273,17 @@ def test_luxian_rule_decision_consultation_defaults_off_and_can_be_enabled(
     assert (
         Settings(_env_file=None)
         .LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED
-        is False
+        is True
     )
 
     monkeypatch.setenv(
         "LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED",
-        "true",
+        "false",
     )
     assert (
         Settings(_env_file=None)
         .LUXIAN_0609_RULE_DECISION_CONSULTATION_ENABLED
-        is True
+        is False
     )
 
 
@@ -293,16 +315,16 @@ def test_mainline_respects_explicit_consultation_family_rollback(monkeypatch):
         "LUXIAN_0609_RULE_DECISION_SURGERY_DOCUMENT_ENABLED",
     ),
 )
-def test_luxian_rule_decision_next_batch_defaults_off_and_can_be_enabled(
+def test_luxian_rule_decision_next_batch_defaults_on_and_can_be_disabled(
     monkeypatch,
     setting_name,
 ):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
-    assert getattr(Settings(_env_file=None), setting_name) is False
-
-    monkeypatch.setenv(setting_name, "true")
     assert getattr(Settings(_env_file=None), setting_name) is True
+
+    monkeypatch.setenv(setting_name, "false")
+    assert getattr(Settings(_env_file=None), setting_name) is False
 
 
 def test_luxian_native_basic_timeliness_defaults_on_and_can_be_disabled(monkeypatch):
