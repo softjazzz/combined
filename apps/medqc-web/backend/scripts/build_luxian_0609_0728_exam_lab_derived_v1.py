@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-"""为 0728 样本池的两份真实病历生成可追溯的检查检验补件副本。
+"""为 0728 样本池的两份真实病历生成可追溯的受控资料补件副本。
 
 这是一次性、受控的验证资料构建器：不修改源病例；每份副本使用新三坐标，
 并把原始三坐标、补件清单和 recipe 版本写入样本池 raw_payload。它不试图
-解决其他真实缺失资料，只补检查/检验报告与核对病程，验证 010/011/012/014/015。
+解决其他真实缺失资料；本轮补齐检查检验、输血、收费、会诊及交接班受控资料。
 """
 
 import argparse
@@ -37,11 +37,14 @@ from app.services.bundles.assembly import (  # noqa: E402
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService  # noqa: E402
 
 
-RECIPE_VERSION = "lx0609-0728-exam-lab-derived-v1"
+RECIPE_VERSION = "lx0609-0728-controlled-supplement-v2"
 POOL_ID = "aacc704a-ef30-47bf-a74c-86fc91d29273"
 TARGET_INSTITUTE_ID = "LX0609_0728_DERIVED_V1"
-RULE_IDS = ["LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"]
-OUTPUT_PATH = ROOT / "tmp-0728-exam-lab-derived-v1-manifest.json"
+RULE_IDS = [
+    "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
+    "LX0609-043", "LX0609-049", "LX0609-069", "LX0609-070", "LX0609-071",
+]
+OUTPUT_PATH = ROOT / "tmp-0728-controlled-supplement-v2-manifest.json"
 
 
 @dataclass(frozen=True)
@@ -338,6 +341,229 @@ def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]],
     ]
 
 
+def _append_transfusion_supplements(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> list[dict[str, Any]]:
+    """补一笔受控单次输血及其九项、医嘱和收费资料，不覆盖来源病例原始行。"""
+
+    admission, discharge = _case_times(rows_by_table, case)
+    transfusion_time = admission + timedelta(days=2, hours=5)
+    test_report_time = transfusion_time - timedelta(hours=2)
+    application_time = transfusion_time - timedelta(hours=3)
+    order_time = transfusion_time - timedelta(minutes=30)
+    billing_time = transfusion_time + timedelta(minutes=30)
+    if not (admission <= application_time < test_report_time < transfusion_time < billing_time <= discharge):
+        raise ValueError(f"{case.source_mr_no} 住院时间窗不足，无法补齐受控输血资料")
+
+    prefix = f"{case.target_visit_id}-transfusion-controlled-001"
+    bloodtrans_id = f"{prefix}-event"
+    order_id = f"{prefix}-order"
+    application_id = f"{prefix}-application"
+    test_id = f"{prefix}-pretest"
+    component = "去白细胞悬浮红细胞"
+    _append(rows_by_table, "mr_bloodtrans", {
+        **_base(case, transfusion_time),
+        "document_id": f"{prefix}-record",
+        "bloodtrans_id": bloodtrans_id,
+        "transfuse_variety": component,
+        "blood_transfusion_volume": "2",
+        "blood_transfusion_unit": "U",
+        "transfution_datetime": transfusion_time,
+        "transfusion_reason": "受控验证：纠正贫血",
+    })
+    _append(rows_by_table, "blood_application", {
+        **_base(case, application_time),
+        "application_id": application_id,
+        "dept_name": "重症医学科（ICU）",
+        "patient_bloodtype_abo": "O",
+        "patient_bloodtype_rhd": "阳性(+)",
+        "transfuse_variety": component,
+        "transfuse_volume": "2",
+        "transfuse_volume_unit": "U",
+        "request_datetime": application_time,
+        "physician_name": "合成验证医师",
+        "record_content": "受控验证输血申请：纠正贫血，拟输注去白细胞悬浮红细胞2U。",
+    })
+    _append(rows_by_table, "inpat_nondrug_order", {
+        **_base(case, order_time),
+        "order_id": order_id,
+        "application_id": application_id,
+        "dept_name": "重症医学科（ICU）",
+        "order_type": "临时医嘱",
+        "order_name": f"输注{component}",
+        "quantity": "2",
+        "quantity_unit": "U",
+        "prescribed_datetime": order_time,
+        "prescribed_doctor": "合成验证医师",
+        "order_status": "已执行",
+        "record_content": "受控验证输血医嘱，与补充输血事件及收费使用同一医嘱编号。",
+    })
+    _append(rows_by_table, "inpat_bill_item", {
+        **_base(case, billing_time),
+        "bill_item_id": f"{prefix}-bill",
+        "receipt_id": f"{prefix}-receipt",
+        "order_id": order_id,
+        "item_type": "治疗",
+        "medical_catalog_code": "SYNTHETIC-RBC",
+        "medical_catalog_name": component,
+        "item_specification": "2U",
+        "quantity": "2",
+        "quantity_unit": "U",
+        "unit_price": "200",
+        "cost": "400",
+        "charge": "400",
+        "billing_datetime": billing_time,
+        "order_dept_name": "重症医学科（ICU）",
+        "executive_dept_name": "输血科",
+        "record_content": "受控验证收费：与补充输血医嘱同一order_id，不用于推断真实病例收费。",
+    })
+    _append(rows_by_table, "labtest_master", {
+        **_base(case, test_report_time),
+        "test_id": test_id,
+        "order_id": f"{prefix}-pretest-order",
+        "labtest_subject": "输血前九项检查（合成补件）",
+        "labtest_cause": "输血前感染性筛查",
+        "specimen": "静脉血",
+        "request_dept": "重症医学科（ICU）",
+        "request_physician": "合成验证医师",
+        "request_datetime": application_time,
+        "report_datetime": test_report_time,
+        "labtest_result_status": "Final",
+        "record_content": "受控验证：输血前九项检查，报告时间早于受控输血时间。",
+    })
+    for item_no, (item_name, abbreviation, result) in enumerate((
+        ("乙肝表面抗原", "HBsAg", "阴性"),
+        ("乙肝表面抗体", "HBsAb", "阳性"),
+        ("乙肝e抗原", "HBeAg", "阴性"),
+        ("乙肝e抗体", "HBeAb", "阳性"),
+        ("乙肝核心抗体", "HBcAb", "阳性"),
+        ("丙肝抗体", "抗-HCV", "阴性"),
+        ("艾滋病抗体", "HIV", "阴性"),
+        ("梅毒螺旋体抗体", "TP", "阴性"),
+        ("谷丙转氨酶", "ALT", "18 U/L"),
+    ), start=1):
+        _append(rows_by_table, "labtest_item_report", {
+            **_base(case, test_report_time),
+            "document_id": f"{prefix}-pretest-{item_no:02d}",
+            "document_title": "输血前九项检验报告（合成补件）",
+            "document_status": "Submitted",
+            "submitter": "检验科报告医师",
+            "submitter_id": "SYNTHETIC-LAB",
+            "submit_datetime": test_report_time,
+            "record_time": test_report_time,
+            "test_no": test_id,
+            "test_id": test_id,
+            "item_no": str(item_no),
+            "item_id": f"{test_id}-item-{item_no:02d}",
+            "item_code": abbreviation,
+            "item_name": item_name,
+            "item_abbreviation": abbreviation,
+            "result": result,
+            "reference_range": "阴性",
+            "record_content": f"输血前九项受控补件：{item_name} {result}。",
+            "report_time": test_report_time,
+        })
+    return [
+        {"table": "mr_bloodtrans", "reason": "controlled_single_transfusion_event"},
+        {"table": "blood_application", "reason": "controlled_pretransfusion_application"},
+        {"table": "labtest_master", "reason": "controlled_pretransfusion_nine_items"},
+        {"table": "labtest_item_report", "reason": "controlled_pretransfusion_nine_items"},
+        {"table": "inpat_nondrug_order", "reason": "controlled_transfusion_order"},
+        {"table": "inpat_bill_item", "reason": "controlled_transfusion_billing"},
+    ]
+
+
+def _append_consultation_and_handover_supplements(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> list[dict[str, Any]]:
+    """补一组单次会诊和一组经治医师变更/交接班，均使用现有主资料链。"""
+
+    admission, discharge = _case_times(rows_by_table, case)
+    consultation_request_time = admission + timedelta(days=1, hours=4)
+    consultation_record_time = consultation_request_time + timedelta(hours=4)
+    physician_change_time = admission + timedelta(days=3, hours=2)
+    handoff_time = physician_change_time - timedelta(minutes=10)
+    handover_time = physician_change_time + timedelta(hours=1)
+    all_times = (
+        consultation_request_time,
+        consultation_record_time,
+        handoff_time,
+        physician_change_time,
+        handover_time,
+    )
+    if not all(admission <= value <= discharge for value in all_times):
+        raise ValueError(f"{case.source_mr_no} 住院时间窗不足，无法补齐会诊或交接班资料")
+
+    consultation_prefix = f"{case.target_visit_id}-consultation-controlled-001"
+    _append(rows_by_table, "consultation_record", {
+        **_base(case, consultation_request_time),
+        "document_id": f"{consultation_prefix}-application",
+        "document_title": "会诊申请单（合成补件）",
+        "document_status": "Submitted",
+        "submitter": "合成验证医师",
+        "submitter_id": "SYNTHETIC",
+        "submit_datetime": consultation_request_time,
+        "record_time": consultation_request_time,
+        "record_content": "会诊目的：请相关专科协助评估并提出诊疗建议。",
+    })
+    _append(rows_by_table, "consultation_record", {
+        **_base(case, consultation_record_time),
+        "document_id": f"{consultation_prefix}-record",
+        "document_title": "会诊记录单（合成补件）",
+        "document_status": "Submitted",
+        "submitter": "会诊医师",
+        "submitter_id": "SYNTHETIC-CONSULT",
+        "submit_datetime": consultation_record_time,
+        "record_time": consultation_record_time,
+        "record_content": "会诊意见：建议继续监测病情，结合检查结果调整治疗方案。",
+    })
+
+    handover_prefix = f"{case.target_visit_id}-physician-change-controlled-001"
+    _append(rows_by_table, "inpat_nondrug_order", {
+        **_base(case, physician_change_time),
+        "order_id": f"{handover_prefix}-order",
+        "dept_name": "重症医学科（ICU）",
+        "order_type": "临时医嘱",
+        "order_name": "经治医师变更",
+        "quantity": "1",
+        "quantity_unit": "次",
+        "prescribed_datetime": physician_change_time,
+        "prescribed_doctor": "合成验证医师",
+        "order_status": "已执行",
+        "record_content": "经治医师由合成甲医师变更为合成乙医师，已按要求交接班。",
+    })
+    _append(rows_by_table, "handoff_record", {
+        **_base(case, handoff_time),
+        "document_id": f"{handover_prefix}-handoff",
+        "document_title": "交班记录（合成补件）",
+        "document_status": "Submitted",
+        "submitter": "合成甲医师",
+        "submitter_id": "SYNTHETIC-A",
+        "submit_datetime": handoff_time,
+        "record_time": handoff_time,
+        "record_content": "交班医师：合成甲医师；接班医师：合成乙医师。已交接当前病情、治疗计划及风险事项。",
+    })
+    _append(rows_by_table, "handover_record", {
+        **_base(case, handover_time),
+        "document_id": f"{handover_prefix}-handover",
+        "document_title": "接班记录（合成补件）",
+        "document_status": "Submitted",
+        "submitter": "合成乙医师",
+        "submitter_id": "SYNTHETIC-B",
+        "submit_datetime": handover_time,
+        "record_time": handover_time,
+        "record_content": "接班医师：合成乙医师。已完成接班，确认病情、治疗计划及重点风险。",
+    })
+    return [
+        {"table": "consultation_record", "reason": "controlled_consultation_timeliness_pair"},
+        {"table": "inpat_nondrug_order", "reason": "controlled_physician_change_event"},
+        {"table": "handoff_record", "reason": "controlled_physician_handoff"},
+        {"table": "handover_record", "reason": "controlled_physician_handover"},
+    ]
+
+
 def _ensure_authoritative_registration(rows_by_table: dict[str, list[dict[str, Any]]], case: SourceCase) -> None:
     """派生 final 病例固定一条本次住院的登记时间，避免 Provider 回退到 mr。"""
     if any(row.get("visit_id") == case.target_visit_id for row in rows_by_table.get("inpat_registration", [])):
@@ -385,7 +611,13 @@ def build_rows() -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
                     source_counts.setdefault(case.target_visit_id, {})[table_name] = count
     for case in CASES:
         _ensure_authoritative_registration(rows_by_table, case)
-    supplements = {case.target_visit_id: _append_exam_lab_supplements(rows_by_table, case) for case in CASES}
+    supplements: dict[str, list[dict[str, Any]]] = {}
+    for case in CASES:
+        supplements[case.target_visit_id] = [
+            *_append_exam_lab_supplements(rows_by_table, case),
+            *_append_transfusion_supplements(rows_by_table, case),
+            *_append_consultation_and_handover_supplements(rows_by_table, case),
+        ]
     return dict(rows_by_table), {"source_counts": source_counts, "supplements": supplements}
 
 
@@ -418,15 +650,65 @@ def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> No
         visit_rows = [row for rows in rows_by_table.values() for row in rows if row.get("visit_id") == case.target_visit_id]
         if not visit_rows:
             raise ValueError(f"{case.source_mr_no} 未生成任何派生资料")
-        for table_name in ("exam_master", "exam_item_report", "labtest_master", "labtest_item_report"):
+        for table_name in (
+            "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
+            "mr_bloodtrans", "blood_application", "inpat_bill_item", "consultation_record",
+            "handoff_record", "handover_record",
+        ):
             if not any(row.get("visit_id") == case.target_visit_id for row in rows_by_table.get(table_name, [])):
                 raise ValueError(f"{case.source_mr_no} 缺少 {table_name} 补件")
         admission, discharge = _case_times(rows_by_table, case)
+        prefix = case.target_visit_id
+        controlled_mr_bloodtrans = [
+            row for row in rows_by_table.get("mr_bloodtrans", [])
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("bloodtrans_id") or "").startswith(f"{prefix}-transfusion-controlled-")
+        ]
+        controlled_lab_items = [
+            row for row in rows_by_table.get("labtest_item_report", [])
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("test_id") or "").startswith(f"{prefix}-transfusion-controlled-")
+        ]
+        if len(controlled_mr_bloodtrans) != 1 or len(controlled_lab_items) != 9:
+            raise ValueError(f"{case.source_mr_no} 未生成完整的受控单次输血与九项检验资料")
+        transfusion_time = controlled_mr_bloodtrans[0].get("transfution_datetime")
+        if not isinstance(transfusion_time, datetime) or any(
+            not isinstance(row.get("report_time"), datetime) or row["report_time"] >= transfusion_time
+            for row in controlled_lab_items
+        ):
+            raise ValueError(f"{case.source_mr_no} 的输血前九项报告时间不满足早于输血时间的合同")
+        controlled_consultation = [
+            row for row in rows_by_table.get("consultation_record", [])
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("document_id") or "").startswith(f"{prefix}-consultation-controlled-")
+        ]
+        if len(controlled_consultation) != 2:
+            raise ValueError(f"{case.source_mr_no} 未生成受控会诊申请/记录对")
+        consultation_times = sorted(
+            row.get("record_time") for row in controlled_consultation if isinstance(row.get("record_time"), datetime)
+        )
+        if len(consultation_times) != 2 or not timedelta(0) <= consultation_times[1] - consultation_times[0] <= timedelta(hours=24):
+            raise ValueError(f"{case.source_mr_no} 的受控会诊完成时间不满足24小时合同")
+        handoff_times = [
+            row.get("record_time") for row in rows_by_table.get("handoff_record", [])
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("document_id") or "").startswith(f"{prefix}-physician-change-controlled-")
+        ]
+        handover_times = [
+            row.get("record_time") for row in rows_by_table.get("handover_record", [])
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("document_id") or "").startswith(f"{prefix}-physician-change-controlled-")
+        ]
+        if len(handoff_times) != 1 or len(handover_times) != 1:
+            raise ValueError(f"{case.source_mr_no} 未生成完整的受控交班/接班资料")
         for row in visit_rows:
             document_id = str(row.get("document_id") or "")
             is_controlled_supplement = (
                 document_id.startswith(case.target_visit_id)
-                and any(token in document_id for token in ("exam-item-report", "lab-item-report", "course-exam", "course-lab"))
+                and any(token in document_id for token in (
+                    "exam-item-report", "lab-item-report", "course-exam", "course-lab",
+                    "transfusion-controlled", "consultation-controlled", "physician-change-controlled",
+                ))
             ) or str(row.get("exam_id") or "").startswith(case.target_visit_id) or str(row.get("test_id") or "").startswith(case.target_visit_id)
             if not is_controlled_supplement:
                 continue
@@ -438,7 +720,7 @@ def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> No
 
 def _pool_item_values(case: SourceCase, now: datetime, source_tables: list[str], supplement_manifest: list[dict[str, Any]]) -> dict[str, Any]:
     raw_payload = {
-        "source": "0728_real_record_derived_exam_lab",
+        "source": "0728_real_record_derived_controlled_supplement",
         "recipe_version": RECIPE_VERSION,
         "record_scene": "final",
         "derivation_key": f"{RECIPE_VERSION}:{case.source_institute_id}:{case.source_patient_id}:{case.source_visit_id}",
@@ -466,13 +748,13 @@ def _pool_item_values(case: SourceCase, now: datetime, source_tables: list[str],
         "department": "重症医学科（ICU）",
         "patient_name": case.target_patient_name,
         "mr_no": case.target_mr_no,
-        "manual_issue_text": "基于真实病历结构派生，仅补齐检查检验报告与核对病程，用于验证相关质控点。",
-        "normalized_issue_text": "基于真实病历结构派生补齐检查检验报告与核对病程",
+        "manual_issue_text": "基于真实病历结构派生，受控补齐检查检验、输血前九项、会诊时限和交接班资料，用于验证相关质控点。",
+        "normalized_issue_text": "基于真实病历结构派生受控补齐检查检验输血会诊交接班资料",
         "doctor_name": "合成验证",
         "qc_date": now.date(),
         "qc_user": "system",
         "coverage_type": "programmatic",
-        "issue_category": "检查检验补件验证",
+        "issue_category": "受控资料补件验证",
         "expected_scene": "final",
         "candidate_rule_ids_json": json.dumps(RULE_IDS, ensure_ascii=False),
         "include_in_batch_1": True,
