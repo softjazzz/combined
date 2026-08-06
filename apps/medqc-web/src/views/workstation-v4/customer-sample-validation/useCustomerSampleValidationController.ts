@@ -405,17 +405,18 @@ export function useCustomerSampleValidationController() {
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
+  const luxianDefaultRuleCount = computed(() => Number(selectedRuleSet.value?.rule_count || 75))
   const luxianScopeModeText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? isAllLuxianRulesSelected.value
         ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
         : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-      : '当前将运行：全部 49 个0609质控点',
+      : `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点`,
   )
   const luxianScopeHelperText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? '已限定本次质控范围；只会验证勾选的 LX0609 质控点。'
-      : '未选择时默认运行全部 0609 质控点；也可按质控族快速限定范围。',
+      : `未选择时默认运行全部 ${luxianDefaultRuleCount.value} 个 0609 质控点；也可按质控族快速限定范围。`,
   )
   const mainRuleSets = computed(() =>
     ruleSets.value.filter((item) => !item.advanced && (item.display_group || 'main') === 'main'),
