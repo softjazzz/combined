@@ -80,6 +80,39 @@ async def test_luxian_batch_worker_rejects_customer_aggregation_without_unified_
 
 
 @pytest.mark.asyncio
+async def test_luxian_batch_worker_rejects_gate_only_customer_job_without_unified_engine(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": [],
+        "gate_only_customer_rule_ids": ["LX0609-033"],
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+        "date_field": "admission",
+    }
+    service = _ServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "get_settings",
+        lambda: _luxian_native_settings(LUXIAN_0609_UNIFIED_ENGINE_ENABLED=False),
+    )
+
+    async def _get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.job["status"] == "failed"
+    assert "客户结果聚合已开启，但统一Native引擎未启用" in workspace.job["error_message"]
+    assert service.evaluate_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_luxian_batch_create_rejects_customer_aggregation_without_unified_engine(
     monkeypatch,
 ):

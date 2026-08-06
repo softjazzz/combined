@@ -4536,6 +4536,10 @@ class SichuanQCService:
         settings = get_settings()
         if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY:
             settings = resolve_mainline_rule_decision_settings(settings)
+            assert_luxian_0609_customer_native_delivery_ready(
+                settings,
+                context="evaluate_running_final_bundle_input",
+            )
         selected_customer_rule_ids: tuple[str, ...] | None = None
         if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY and resolved_rule_ids:
             normalized_requested_ids = tuple(
@@ -4552,10 +4556,6 @@ class SichuanQCService:
                 ):
                     raise ValueError("LX0609 package entry does not accept mixed rule ids")
                 selected_customer_rule_ids = normalized_requested_ids
-                assert_luxian_0609_customer_native_delivery_ready(
-                    settings,
-                    context="evaluate_running_final_bundle_input",
-                )
                 dependency_inventory = load_luxian_0609_dependency_inventory()
                 if settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED:
                     package_plan = build_luxian_0609_package_plan_from_settings(

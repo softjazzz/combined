@@ -2382,6 +2382,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             validation_mode == "programmatic" or rule_set_key == programmatic_rule_set.key
         )
         settings = resolve_mainline_rule_decision_settings(get_settings())
+        if rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+            assert_luxian_0609_customer_native_delivery_ready(
+                settings,
+                context=f"workspace_batch_job:{job_id}",
+            )
         native_requested_rule_ids = _ordered_luxian_0609_customer_rule_ids(
             requested_rule_ids
         )
@@ -2394,11 +2399,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             is_direct_native_selection
             and getattr(settings, "LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED", False)
         )
-        if is_direct_native_selection:
-            assert_luxian_0609_customer_native_delivery_ready(
-                settings,
-                context=f"workspace_batch_job:{job_id}",
-            )
         compatibility_rule_ids = (
             _luxian_0609_compatibility_rule_ids(
                 native_requested_rule_ids,

@@ -57,8 +57,10 @@ from app.services.luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("rule_ids", (["LX0609-001"], [], None))
 async def test_luxian_direct_service_rejects_customer_aggregation_without_unified_engine(
     monkeypatch,
+    rule_ids,
 ):
     monkeypatch.setattr(
         sichuan_qc_service_module,
@@ -73,7 +75,7 @@ async def test_luxian_direct_service_rejects_customer_aggregation_without_unifie
     with pytest.raises(ValueError, match="客户结果聚合已开启，但统一Native引擎未启用"):
         await SichuanQCService().evaluate_running_final_bundle_input(
             bundle={"scene": "running", "structured_context": {"documents": {}}},
-            rule_ids=["LX0609-001"],
+            rule_ids=rule_ids,
             rule_set_key=LUXIAN_0609_RULE_SET_KEY,
         )
 
