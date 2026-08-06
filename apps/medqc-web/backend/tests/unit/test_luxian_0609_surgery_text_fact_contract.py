@@ -721,6 +721,47 @@ def test_024_prompt_explicitly_rejects_historical_and_postoperative_false_eviden
     assert "explicit_nonqualifying" in prompt
 
 
+@pytest.mark.parametrize(
+    "selected_rule_ids",
+    (
+        ("LX0609-024",),
+        ("LX0609-028",),
+        ("LX0609-033",),
+    ),
+)
+def test_non_025_prompt_does_not_include_025_implant_specific_instruction(
+    selected_rule_ids: tuple[str, ...],
+) -> None:
+    prompt = build_surgery_text_fact_prompt(
+        selected_rule_ids=selected_rule_ids,
+        projection=SurgeryTextProjection(
+            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+        ),
+    )
+
+    assert "材料名称本身不能证明植入" not in prompt
+
+
+@pytest.mark.parametrize(
+    "selected_rule_ids",
+    (
+        ("LX0609-025",),
+        ("LX0609-024", "LX0609-025"),
+    ),
+)
+def test_025_prompt_includes_its_implant_specific_instruction(
+    selected_rule_ids: tuple[str, ...],
+) -> None:
+    prompt = build_surgery_text_fact_prompt(
+        selected_rule_ids=selected_rule_ids,
+        projection=SurgeryTextProjection(
+            context="<redacted>", time_candidates={}, document_refs=frozenset({"S01-01"})
+        ),
+    )
+
+    assert "材料名称本身不能证明植入" in prompt
+
+
 @pytest.mark.asyncio
 async def test_028_truncated_drug_source_still_extracts_text_but_cannot_claim_compliant() -> None:
     session = _session(exact_performed_time=False, drug_source_truncated=True)
