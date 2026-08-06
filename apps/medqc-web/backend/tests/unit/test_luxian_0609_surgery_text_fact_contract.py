@@ -739,6 +739,10 @@ def test_non_025_prompt_does_not_include_025_implant_specific_instruction(
         ),
     )
 
+    assert (
+        "仅实际永久性植入物才可输出actual_permanent_implant；"
+        "缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。"
+    ) in prompt
     assert "材料名称本身不能证明植入" not in prompt
 
 
@@ -759,6 +763,10 @@ def test_025_prompt_includes_its_implant_specific_instruction(
         ),
     )
 
+    assert (
+        "仅实际永久性植入物才可输出actual_permanent_implant；"
+        "缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。"
+    ) in prompt
     assert "材料名称本身不能证明植入" in prompt
 
 
