@@ -790,25 +790,27 @@ def _link_postoperative_first_course_records(
     if len({item.surgery_end_time for item in ordered_events}) != len(ordered_events):
         return (), "association_failed"
 
-    linked_rows = {event.document_id: [] for event in ordered_events}
+    # 事件身份按本次有序事件序号保存，不能用展示用 document_id 作字典键：
+    # 上游允许不同正式记录行复用同一个 document_id。
+    linked_rows: list[list[Mapping[str, Any]]] = [[] for _event in ordered_events]
     for row in postoperative_rows:
         record_time = _row_time(row)
         if record_time is None:
             return (), "authoritative_time_missing"
-        eligible_events = tuple(
-            event
-            for event in ordered_events
+        eligible_event_indexes = tuple(
+            index
+            for index, event in enumerate(ordered_events)
             if event.surgery_end_time is not None and event.surgery_end_time <= record_time
         )
-        if not eligible_events:
+        if not eligible_event_indexes:
             continue
         # 归属最近一台已经结束的手术，一份术后首次病程不会复用到更早手术。
-        linked_rows[eligible_events[-1].document_id].append(row)
+        linked_rows[eligible_event_indexes[-1]].append(row)
 
     return (
         tuple(
-            (event, tuple(linked_rows[event.document_id]))
-            for event in ordered_events
+            (event, tuple(rows))
+            for event, rows in zip(ordered_events, linked_rows)
         ),
         "",
     )

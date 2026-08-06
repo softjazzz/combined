@@ -2343,6 +2343,39 @@ async def test_066_reports_the_specific_formal_surgery_without_a_linked_postoper
 
 
 @pytest.mark.asyncio
+async def test_066_does_not_reuse_one_postoperative_course_when_formal_document_ids_repeat() -> None:
+    """一行正式手术记录即一台事件，即使文书ID重复也不能复用术后首次病程。"""
+    result, reduced = await _evaluate(
+        "LX0609-066",
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                },
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                },
+            ),
+            "postsurg_firstcourse_record": (
+                {"document_id": "P2", "record_time": "2026-07-08 18:22:47"},
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-066"]
+    assert [
+        item["postoperative_first_course_document_ids"]
+        for item in facts["surgery_events"]
+    ] == [[], ["P2"]]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_066_requires_authoritative_postoperative_course_time_for_per_event_linkage() -> None:
     _result, reduced = await _evaluate(
         "LX0609-066",
