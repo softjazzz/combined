@@ -1503,6 +1503,41 @@ async def test_055_excludes_pre_order_course_records_from_effect_evidence() -> N
 
 
 @pytest.mark.asyncio
+async def test_055_only_pre_order_effect_records_leave_no_evaluation_intervals() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-055",
+        {
+            "inpat_drug_order": (
+                {
+                    "generic_name": "美罗培南",
+                    "prescribed_datetime": "2026-06-01 10:00:00",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-06-01 08:00:00",
+                    "record_content": "既往效果评价：体温下降、白细胞下降。",
+                },
+            ),
+            "senior_course_record": (
+                {
+                    "record_time": "2026-06-01 09:00:00",
+                    "record_content": "上级医师记录既往效果评价：CRP下降。",
+                },
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced.reason_code == "threshold_exceeded"
+    assert dict(result.customer_display_facts)["LX0609-055"]["evaluation_intervals"] == []
+    assert result.llm_call_count == 0
+    assert result.prompt_tokens == 0
+    assert result.completion_tokens == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_063_matching_authoritative_and_discharge_diagnoses_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-063",
