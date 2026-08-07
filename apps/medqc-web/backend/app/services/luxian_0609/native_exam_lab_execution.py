@@ -16,6 +16,7 @@ from .evidence_material import (
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot, SourceCompleteness
 from .exam_lab_fact_extraction import (
+    ExamLabFactParseError,
     ExamLabEventFact,
     ExamLabTextProjection,
     build_exam_lab_fact_prompt,
@@ -206,6 +207,8 @@ class NativeExamLabExecutionResult:
     completion_tokens: int = 0
     total_tokens: int = 0
     api_time: float = 0.0
+    # 仅保留受控枚举，不保存 Prompt、模型正文或病历内容。
+    parse_failure_kinds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1170,6 +1173,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
     customer_display_facts: list[tuple[str, Mapping[str, Any]]] = []
     llm_call_count = prompt_tokens = completion_tokens = total_tokens = 0
     api_time = 0.0
+    parse_failure_kinds: list[str] = []
     # 仅在当前一次 Evidence Session 已读取的行内查找显式 document_id；不回读 DB。
     display_rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]] = {}
 
@@ -1565,7 +1569,12 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             selected_rule_ids=eligible_rule_ids,
                             projection=projection,
                         )
+                    except ExamLabFactParseError as exc:
+                        parse_failure_kinds.append(exc.failure_kind)
+                        text_facts = None
                     except ValueError:
+                        # 防御性兜底：解析器以外的 ValueError 也不得泄露正文。
+                        parse_failure_kinds.append("value")
                         text_facts = None
                     for rule_id in eligible_rule_ids:
                         outcome = (
@@ -1688,4 +1697,5 @@ async def execute_luxian_0609_native_exam_lab_rules(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         api_time=api_time,
+        parse_failure_kinds=tuple(dict.fromkeys(parse_failure_kinds)),
     )

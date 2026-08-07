@@ -26,6 +26,9 @@ COURSE_SOURCE_KEYS = frozenset(
 _ALLOWED_APPLICABILITY = frozenset({"applicable", "not_applicable", "unknown"})
 _ALLOWED_SEMANTIC = frozenset({"present", "absent", "unknown"})
 _ALLOWED_POSITIVE = frozenset({"positive", "negative", "not_relevant", "unknown"})
+_PARSE_FAILURE_KINDS = frozenset(
+    {"not_json", "json_decode", "schema_version", "scope", "value", "evidence_ref"}
+)
 _IMAGING_CANDIDATE_PATTERN = re.compile(
     r"(?<![A-Z])(?:CT|MRI)(?![A-Z])|计算机断层|磁共振",
     flags=re.IGNORECASE,
@@ -110,6 +113,24 @@ class ExamLabEventFact:
     positive_state: str
     course_doc_refs: tuple[str, ...]
     evidence_refs: tuple[str, ...]
+
+
+class ExamLabFactParseError(ValueError):
+    """不含模型正文的受控解析失败类别，仅用于运行诊断。"""
+
+    def __init__(self, failure_kind: str) -> None:
+        if failure_kind not in _PARSE_FAILURE_KINDS:
+            raise ValueError("unsupported exam lab parse failure kind")
+        self.failure_kind = failure_kind
+        legacy_message = {
+            "not_json": "is not JSON",
+            "json_decode": "is not JSON",
+            "schema_version": "schema mismatch",
+            "scope": "scope mismatch",
+            "value": "schema mismatch",
+            "evidence_ref": "evidence ref mismatch",
+        }[failure_kind]
+        super().__init__(f"exam lab fact response {legacy_message}")
 
 
 @dataclass(frozen=True)
@@ -592,22 +613,22 @@ def parse_exam_lab_fact_response(
     cleaned = re.sub(r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.I).strip()
     match = re.search(r"\{[\s\S]*\}", cleaned)
     if not match:
-        raise ValueError("exam lab fact response is not JSON")
+        raise ExamLabFactParseError("not_json")
     try:
         payload = json.loads(match.group(0))
     except (TypeError, ValueError) as exc:
-        raise ValueError("exam lab fact response is not JSON") from exc
+        raise ExamLabFactParseError("json_decode") from exc
     if (
         not isinstance(payload, Mapping)
         or set(payload) != {"schema_version", "facts"}
         or payload.get("schema_version") != SCHEMA_VERSION
         or not isinstance(payload.get("facts"), list)
     ):
-        raise ValueError("exam lab fact response schema mismatch")
+        raise ExamLabFactParseError("schema_version")
 
     expected = tuple(str(item).strip().upper() for item in selected_rule_ids)
     if not expected or len(expected) != len(set(expected)):
-        raise ValueError("exam lab fact response scope mismatch")
+        raise ExamLabFactParseError("scope")
     allowed_course = set(projection.course_times)
     required_keys = {
         "rule_id", "applicability", "semantic_state", "positive_state",
@@ -621,7 +642,7 @@ def parse_exam_lab_fact_response(
             or not required_keys.issubset(raw)
             or set(raw) - required_keys - {"evidence_refs"}
         ):
-            raise ValueError("exam lab fact schema mismatch")
+            raise ExamLabFactParseError("value")
         rule_id = str(raw.get("rule_id") or "").strip().upper()
         if rule_id in ALLOWED_RULE_IDS and rule_id not in expected:
             # 同病例先被 Python 强证据收口的规则可能仍被模型冗余返回；只忽略
@@ -636,13 +657,12 @@ def parse_exam_lab_fact_response(
             or applicability not in _ALLOWED_APPLICABILITY
             or semantic not in _ALLOWED_SEMANTIC
             or positive not in _ALLOWED_POSITIVE
-            or not isinstance(course_docs, list)
-            or (
-                "evidence_refs" in raw
-                and not isinstance(raw.get("evidence_refs"), list)
-            )
         ):
-            raise ValueError("exam lab fact value mismatch")
+            raise ExamLabFactParseError("scope" if rule_id not in expected or rule_id in covered else "value")
+        if not isinstance(course_docs, list) or (
+            "evidence_refs" in raw and not isinstance(raw.get("evidence_refs"), list)
+        ):
+            raise ExamLabFactParseError("evidence_ref")
         normalized_course = tuple(dict.fromkeys(str(item).strip() for item in course_docs))
         event = projection.imaging_event if rule_id in EXAM_RULE_IDS else projection.culture_event
         event_refs = set(event.document_refs) if event is not None else set()
@@ -716,7 +736,7 @@ def parse_exam_lab_fact_response(
                 and positive != "not_relevant"
             )
         ):
-            raise ValueError("exam lab fact evidence ref mismatch")
+            raise ExamLabFactParseError("evidence_ref")
         covered.add(rule_id)
         facts.append(ExamLabEventFact(
             rule_id=rule_id,
@@ -727,5 +747,5 @@ def parse_exam_lab_fact_response(
             evidence_refs=normalized_evidence,
         ))
     if covered != set(expected) or len(facts) != len(expected):
-        raise ValueError("exam lab fact response scope mismatch")
+        raise ExamLabFactParseError("scope")
     return tuple(facts)

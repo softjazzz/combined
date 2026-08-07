@@ -2844,6 +2844,112 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
 
 
 @pytest.mark.asyncio
+async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkeypatch):
+    """同批事实抽取失败须可诊断，但不得改变客户状态或泄露模型原文。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_type": "血培养",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "阳性",
+            },
+        ),
+    )
+    client = _Client(["not-json Bearer_secret_13800138000"])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-014", "LX0609-015"),
+        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-014", "LX0609-015"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "model_invalid_output",
+        "model_invalid_output",
+    ]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert result.parse_failure_kinds == ("not_json",)
+    assert "Bearer_secret_13800138000" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response", "expected_failure_kind"),
+    [
+        ("plain text", "not_json"),
+        ("{not-json}", "json_decode"),
+        ({"schema_version": "unsupported", "facts": []}, "schema_version"),
+        (_fact_response(("LX0609-014",)), "scope"),
+        (
+            {
+                **_fact_response(("LX0609-014", "LX0609-015")),
+                "facts": [
+                    {
+                        **item,
+                        "semantic_state": "unsupported",
+                    }
+                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                ],
+            },
+            "value",
+        ),
+        (
+            {
+                **_fact_response(("LX0609-014", "LX0609-015")),
+                "facts": [
+                    {
+                        **item,
+                        "course_doc_refs": ["D99-99"],
+                    }
+                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                ],
+            },
+            "evidence_ref",
+        ),
+    ],
+)
+async def test_typed_parse_failures_keep_same_public_status_and_budget(
+    monkeypatch,
+    response,
+    expected_failure_kind,
+):
+    """任何受控解析失败均保持技术异常，且只输出类别而非模型正文。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_type": "血培养",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "阳性",
+            },
+        ),
+    )
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-014", "LX0609-015"),
+        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=_Client([response]),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-014", "LX0609-015"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "model_invalid_output",
+        "model_invalid_output",
+    ]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert result.parse_failure_kinds == (expected_failure_kind,)
+
+
+@pytest.mark.asyncio
 async def test_typed_scope_and_wrapper_duplicates_fail_closed(monkeypatch):
     snapshot, materials = _typed_session(monkeypatch)
 
