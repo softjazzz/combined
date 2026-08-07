@@ -12,7 +12,7 @@
   >
     <a-spin :spinning="loading">
       <div class="qc-task-status__layout">
-        <div class="qc-task-status__main">
+        <div class="qc-task-status__header">
           <div class="qc-task-status__heading">
             <span
               class="qc-task-status__indicator"
@@ -30,6 +30,66 @@
             </div>
           </div>
 
+          <div class="qc-task-status__actions">
+            <a-button
+              size="small"
+              type="primary"
+              data-testid="qc-task-view-result"
+              @click="emit('view-result', task.id)"
+            >
+              {{ presentation?.isRunning ? '查看实时结果' : '查看结果' }}
+            </a-button>
+            <a-button
+              v-if="presentation?.isRunning"
+              danger
+              size="small"
+              :loading="canceling"
+              data-testid="qc-task-cancel"
+              @click="emit('cancel', task.id)"
+            >
+              停止质控
+            </a-button>
+            <a-dropdown
+              v-if="task.status === 'completed'"
+              placement="bottomRight"
+            >
+              <a-button
+                size="small"
+                data-testid="qc-task-more-actions"
+              >
+                更多
+              </a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item
+                    key="review"
+                    data-testid="qc-task-review"
+                    @click="emit('review', task.id)"
+                  >
+                    复核本次结果
+                  </a-menu-item>
+                  <a-menu-item
+                    key="export"
+                    data-testid="qc-task-export"
+                    @click="emit('export', task.id)"
+                  >
+                    导出 HTML
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+            <a-button
+              type="link"
+              size="small"
+              data-testid="qc-task-open-history"
+              @click="emit('open-history')"
+            >
+              质控记录
+            </a-button>
+          </div>
+        </div>
+
+        <div class="qc-task-status__body">
           <div
             v-if="presentation?.isRunning"
             class="qc-task-status__progress"
@@ -109,75 +169,52 @@
             </div>
           </div>
 
-          <div
-            class="qc-task-status__summary"
-            :data-testid="
-              presentation?.isRunning ? 'qc-task-running-summary' : 'qc-task-settled-summary'
-            "
-          >
-            <span>{{ presentation?.recordProgressText }}</span>
-            <span>{{ presentation?.resultProgressText }}</span>
-            <span>{{ presentation?.scopeText }}</span>
-            <span v-if="presentation?.isRunning">更新 {{ presentation?.updatedText }}</span>
-          </div>
-
-          <div
-            v-if="presentation?.statusChips.length"
-            class="qc-task-status__chips"
-          >
-            <span
-              v-for="chip in presentation.statusChips"
-              :key="chip.key"
-              :class="chip.className"
+          <div class="qc-task-status__details">
+            <div
+              class="qc-task-status__summary"
+              :data-testid="
+                presentation?.isRunning ? 'qc-task-running-summary' : 'qc-task-settled-summary'
+              "
             >
-              {{ chip.label }} <strong>{{ chip.value }}</strong>
-            </span>
-          </div>
-        </div>
+              <span>{{ presentation?.recordProgressText }}</span>
+              <span>{{ presentation?.resultProgressText }}</span>
+              <span>{{ presentation?.scopeText }}</span>
+              <span>更新 {{ presentation?.updatedText }}</span>
+            </div>
 
-        <div class="qc-task-status__actions">
-          <a-button
-            size="small"
-            data-testid="qc-task-view-result"
-            @click="emit('view-result', task.id)"
-          >
-            {{ presentation?.isRunning ? '查看实时结果' : '查看结果' }}
-          </a-button>
-          <a-button
-            v-if="presentation?.isRunning"
-            danger
-            size="small"
-            :loading="canceling"
-            data-testid="qc-task-cancel"
-            @click="emit('cancel', task.id)"
-          >
-            停止质控
-          </a-button>
-          <a-button
-            v-if="task.status === 'completed'"
-            size="small"
-            :loading="reviewing"
-            data-testid="qc-task-review"
-            @click="emit('review', task.id)"
-          >
-            复核本次结果
-          </a-button>
-          <a-button
-            v-if="task.status === 'completed'"
-            size="small"
-            data-testid="qc-task-export"
-            @click="emit('export', task.id)"
-          >
-            导出 HTML
-          </a-button>
-          <a-button
-            type="link"
-            size="small"
-            data-testid="qc-task-open-history"
-            @click="emit('open-history')"
-          >
-            质控记录
-          </a-button>
+            <div
+              v-if="attentionStatusChips.length || neutralStatusChips.length"
+              class="qc-task-status__result-groups"
+            >
+              <div
+                v-if="attentionStatusChips.length"
+                class="qc-task-status__chips qc-task-status__chips--attention"
+                data-testid="qc-task-attention-statuses"
+              >
+                <span
+                  v-for="chip in attentionStatusChips"
+                  :key="chip.key"
+                  :class="chip.className"
+                >
+                  {{ chip.label }} <strong>{{ chip.value }}</strong>
+                </span>
+              </div>
+              <div
+                v-if="neutralStatusChips.length"
+                class="qc-task-status__other-results"
+                data-testid="qc-task-other-statuses"
+              >
+                <span>其他结果</span>
+                <span
+                  v-for="chip in neutralStatusChips"
+                  :key="chip.key"
+                  :class="chip.className"
+                >
+                  {{ chip.label }} <strong>{{ chip.value }}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </a-spin>
@@ -213,6 +250,19 @@ const emit = defineEmits<{
 }>()
 
 const presentation = computed(() => (props.task ? buildBatchJobPresentation(props.task) : null))
+const attentionStatusKeys = new Set([
+  'technical_error',
+  'non_compliant',
+  'data_gap',
+  'uncertain',
+  'ai_suggested_non_compliant',
+])
+const attentionStatusChips = computed(() =>
+  (presentation.value?.statusChips || []).filter((chip) => attentionStatusKeys.has(chip.key)),
+)
+const neutralStatusChips = computed(() =>
+  (presentation.value?.statusChips || []).filter((chip) => !attentionStatusKeys.has(chip.key)),
+)
 const liveResultIndex = ref(0)
 let liveResultTimer: ReturnType<typeof setInterval> | null = null
 
@@ -274,28 +324,34 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__layout {
-  display: flex;
-  min-height: 64px;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
+  padding: 14px 16px;
 }
 
 .qc-task-status.is-expanded .qc-task-status__layout {
-  min-height: 154px;
   padding-block: 16px;
 }
 
-.qc-task-status__main {
-  min-width: 0;
-  flex: 1;
-}
-
-.qc-task-status.is-collapsed .qc-task-status__main {
+.qc-task-status__header,
+.qc-task-status__details,
+.qc-task-status__result-groups {
   display: flex;
   min-width: 0;
+}
+
+.qc-task-status__header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.qc-task-status__body {
+  min-width: 0;
+}
+
+.qc-task-status__details {
+  justify-content: space-between;
   align-items: center;
-  gap: 10px 14px;
+  gap: 14px 24px;
+  margin-top: 10px;
 }
 
 .qc-task-status__heading,
@@ -401,7 +457,7 @@ onBeforeUnmount(stopLiveResultRotation)
 .qc-task-status__progress {
   position: relative;
   height: 8px;
-  margin: 12px 0 7px 20px;
+  margin: 14px 0 7px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(0, 102, 204, 0.1);
@@ -412,7 +468,6 @@ onBeforeUnmount(stopLiveResultRotation)
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-left: 20px;
   color: rgba(29, 29, 31, 0.62);
   font-size: 12px;
   line-height: 18px;
@@ -428,7 +483,7 @@ onBeforeUnmount(stopLiveResultRotation)
   min-height: 40px;
   align-items: center;
   gap: 10px;
-  margin: 10px 0 0 20px;
+  margin: 10px 0 0;
   padding: 7px 10px;
   overflow: hidden;
   border: 1px solid rgba(0, 102, 204, 0.12);
@@ -603,28 +658,29 @@ onBeforeUnmount(stopLiveResultRotation)
 
 .qc-task-status__summary {
   flex-wrap: wrap;
-  gap: 2px 10px;
-  margin: 8px 0 0 20px;
+  gap: 2px 12px;
+  margin: 0;
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
   line-height: 20px;
 }
 
-.qc-task-status.is-collapsed .qc-task-status__summary {
+.qc-task-status__result-groups {
   flex: none;
-  margin: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
 
 .qc-task-status__chips {
   flex-wrap: wrap;
   gap: 5px;
-  margin: 8px 0 0 20px;
+  margin: 0;
 }
 
-.qc-task-status.is-collapsed .qc-task-status__chips {
-  flex: 1;
+.qc-task-status__chips--attention {
+  display: flex;
   justify-content: flex-end;
-  margin: 0;
 }
 
 .qc-task-status__chips > span {
@@ -656,12 +712,29 @@ onBeforeUnmount(stopLiveResultRotation)
   color: #047857;
 }
 
+.qc-task-status__other-results {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.qc-task-status__other-results > span:not(:first-child) {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.035);
+  color: rgba(29, 29, 31, 0.62);
+  padding: 0 7px;
+}
+
 .qc-task-status__actions {
   flex: none;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 400px;
+  max-width: 440px;
 }
 
 .qc-task-status__actions :deep(.ant-btn) {
@@ -669,7 +742,8 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 @media (max-width: 1080px) {
-  .qc-task-status__layout {
+  .qc-task-status__header,
+  .qc-task-status__details {
     align-items: stretch;
     flex-direction: column;
   }
@@ -679,27 +753,36 @@ onBeforeUnmount(stopLiveResultRotation)
     max-width: none;
   }
 
-  .qc-task-status.is-collapsed .qc-task-status__main {
-    flex-wrap: wrap;
-  }
-
-  .qc-task-status.is-collapsed .qc-task-status__chips {
-    flex-basis: 100%;
+  .qc-task-status__result-groups {
     justify-content: flex-start;
+    width: 100%;
   }
 
-  .qc-task-status__live-result,
-  .qc-task-status__progress,
-  .qc-task-status__progress-detail,
-  .qc-task-status__summary,
-  .qc-task-status__chips {
-    margin-left: 0;
+  .qc-task-status__chips--attention {
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 640px) {
   .qc-task-status__layout {
     padding: 14px;
+  }
+
+  .qc-task-status__actions {
+    gap: 5px;
+  }
+
+  .qc-task-status__heading {
+    align-items: flex-start;
+  }
+
+  .qc-task-status__rule-set {
+    max-width: min(100%, 260px);
+  }
+
+  .qc-task-status__result-groups {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .qc-task-status__progress-detail,

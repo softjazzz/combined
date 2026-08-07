@@ -13,6 +13,17 @@ const stubs = {
     template: '<div><slot /></div>',
     props: ['spinning'],
   },
+  'a-dropdown': {
+    template: '<div><slot /><slot name="overlay" /></div>',
+    props: ['placement'],
+  },
+  'a-menu': {
+    template: '<div><slot /></div>',
+  },
+  'a-menu-item': {
+    template: '<button @click="$emit(\'click\')"><slot /></button>',
+    emits: ['click'],
+  },
 }
 
 function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
@@ -219,6 +230,7 @@ describe('CustomerSampleQcTaskStatusBar', () => {
       '病历进度：已完成 1 / 2 份',
     )
     expect(wrapper.text()).toContain('查看结果')
+    expect(wrapper.get('[data-testid="qc-task-more-actions"]').text()).toContain('更多')
     expect(wrapper.text()).toContain('复核本次结果')
     expect(wrapper.text()).toContain('导出 HTML')
 
@@ -227,6 +239,49 @@ describe('CustomerSampleQcTaskStatusBar', () => {
 
     expect(wrapper.emitted('review')).toEqual([['job-1']])
     expect(wrapper.emitted('export')).toEqual([['job-1']])
+  })
+
+  it('将关注状态与其他结果分开呈现，完成态在窄屏结构中仍保留摘要和操作', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      attachTo: document.body,
+      props: {
+        task: buildJob({
+          status: 'completed',
+          summary: {
+            ...buildJob().summary,
+            display_status_counts: {
+              technical_error: 2,
+              non_compliant: 8,
+              data_gap: 13,
+              uncertain: 3,
+              compliant: 28,
+              not_applicable: 17,
+              not_executed: 4,
+            },
+          },
+        }),
+      },
+      global: { stubs },
+    })
+
+    const attention = wrapper.get('[data-testid="qc-task-attention-statuses"]').text()
+    const other = wrapper.get('[data-testid="qc-task-other-statuses"]').text()
+
+    expect(attention).toContain('技术异常 2')
+    expect(attention).toContain('不合规 8')
+    expect(attention).toContain('数据不足 13')
+    expect(attention).toContain('AI判断 3')
+    expect(attention).not.toContain('合规 28')
+    expect(other).toContain('其他结果')
+    expect(other).toContain('合规 28')
+    expect(other).toContain('不适用 17')
+    expect(other).toContain('未执行 4')
+    expect(wrapper.get('[data-testid="qc-task-settled-summary"]').text()).toContain('更新')
+    expect(wrapper.get('[data-testid="qc-task-view-result"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="qc-task-more-actions"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="qc-task-open-history"]').exists()).toBe(true)
+
+    wrapper.unmount()
   })
 
   it.each([
