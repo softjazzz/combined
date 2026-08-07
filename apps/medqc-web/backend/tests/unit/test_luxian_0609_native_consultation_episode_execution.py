@@ -72,6 +72,10 @@ class _ExternalStageFailure(RuntimeError):
     pass
 
 
+def test_stage_two_exception_origin_without_traceback_is_unknown():
+    assert episode._stage_two_exception_origin(ValueError("ORIGIN_SECRET")) == "unknown"
+
+
 def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {
@@ -2085,7 +2089,8 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
         "consultation_stage_two_failed "
         f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted} "
         f"exception_type={expected_exception_type} "
-        f"exception_module={expected_exception_module}"
+        f"exception_module={expected_exception_module} "
+        "exception_origin=test_luxian_0609_native_consultation_episode_execution:generate"
     ]
     logged = "\n".join(warning_messages)
     assert "STAGE_TWO_TIMEOUT_SECRET" not in logged
@@ -2094,6 +2099,7 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
     assert "CONFIGURATION_SECRET" not in logged
     assert "UNCLASSIFIED_SECRET" not in logged
     assert "EXTERNAL_MODULE_SECRET" not in logged
+    assert "backend/tests" not in logged
 
 
 @pytest.mark.asyncio

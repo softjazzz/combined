@@ -11,8 +11,10 @@ from datetime import date, datetime
 import httpx
 import json
 import logging
+from pathlib import Path
 import re
 import time
+import traceback
 import unicodedata
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -172,6 +174,7 @@ _GENERIC_APPLICATION_PURPOSE_PATTERN = re.compile(
     r"^(?:申请)?请?[\u4e00-\u9fff]{0,8}科?"
     r"(?:会诊|协诊|协助诊治|协助处理|指导治疗|进一步诊治)$"
 )
+_SAFE_EXCEPTION_ORIGIN_PART = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class ConsultationEpisodeLLMClient(Protocol):
@@ -221,6 +224,25 @@ def _stage_two_exception_module(error: Exception) -> str:
     if module in {"httpx", "asyncio", "builtins", "aiohttp"}:
         return module
     return "other"
+
+
+def _stage_two_exception_origin(error: Exception) -> str:
+    """从 traceback 最末帧提取脱敏来源；不记录路径、行号或源码。"""
+
+    if error.__traceback__ is None:
+        return "unknown"
+    frames = traceback.extract_tb(error.__traceback__)
+    if not frames:
+        return "unknown"
+    frame = frames[-1]
+    module_basename = Path(frame.filename).stem
+    function_name = frame.name
+    if not (
+        _SAFE_EXCEPTION_ORIGIN_PART.fullmatch(module_basename)
+        and _SAFE_EXCEPTION_ORIGIN_PART.fullmatch(function_name)
+    ):
+        return "unknown"
+    return f"{module_basename}:{function_name}"
 
 
 @dataclass(frozen=True)
@@ -2007,11 +2029,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             logger.warning(
                                 "consultation_stage_two_failed "
                                 "stage_two_failure_kind=%s retry_attempted=%s "
-                                "exception_type=%s exception_module=%s",
+                                "exception_type=%s exception_module=%s exception_origin=%s",
                                 _stage_two_failure_kind(error),
                                 retry_attempted,
                                 type(error).__name__,
                                 _stage_two_exception_module(error),
+                                _stage_two_exception_origin(error),
                             )
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = ("technical_error", "model_transport_error")
