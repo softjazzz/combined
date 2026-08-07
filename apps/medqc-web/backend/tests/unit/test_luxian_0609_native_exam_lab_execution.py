@@ -283,7 +283,6 @@ def _fact_response(
 ) -> dict:
     facts = []
     for rule_id in rule_ids:
-        is_exam = rule_id in exam_lab.EXAM_RULE_IDS
         facts.append(
             {
                 "rule_id": rule_id,
@@ -294,19 +293,11 @@ def _fact_response(
                     if rule_id in {"LX0609-012", "LX0609-015"}
                     else "not_relevant"
                 ),
-                "course_doc_refs": (
+                "course_doc_positions": (
                     []
                     if applicability != "applicable" or semantic_state != "present"
-                    else ["D06-01"]
+                    else [1]
                 ),
-                "evidence_refs": [
-                    "E01-01" if is_exam else "L03-01",
-                    *(
-                        ["D06-01"]
-                        if applicability == "applicable" and semantic_state == "present"
-                        else []
-                    ),
-                ],
             }
         )
     return {
@@ -896,7 +887,7 @@ def test_fact_prompt_supplies_one_replaceable_json_slot_per_selected_rule():
             "applicability": "applicable",
             "semantic_state": "present",
             "positive_state": "not_relevant",
-            "course_doc_refs": ["D06-01"],
+            "course_doc_positions": [1],
         }],
     },
 ))
@@ -1041,12 +1032,16 @@ def test_fact_parser_strong_negative_event_overrides_model_not_relevant():
     assert facts[0].semantic_state == "absent"
 
 
-def test_fact_parser_accepts_omitted_model_evidence_refs():
+def test_fact_parser_maps_model_course_positions_to_real_evidence_refs():
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": ({
                 "exam_type": "CT",
                 "exam_time": "2026-04-26 08:00:00",
+            },),
+            "first_course_record": ({
+                "record_time": "2026-04-26 06:00:00",
+                "record_content": "首次病程记录。",
             },),
             "daily_course_record": ({
                 "record_time": "2026-04-26 07:00:00",
@@ -1055,15 +1050,90 @@ def test_fact_parser_accepts_omitted_model_evidence_refs():
         }
     )
     payload = _fact_response(("LX0609-010",))
-    del payload["facts"][0]["evidence_refs"]
-
+    payload["facts"][0]["course_doc_positions"] = [2]
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
         selected_rule_ids=("LX0609-010",),
         projection=projection,
     )
 
+    assert facts[0].course_doc_refs == ("D06-01",)
     assert facts[0].evidence_refs == ("D06-01", "E01-01")
+
+
+@pytest.mark.parametrize(
+    "course_doc_positions",
+    ([0], [-1], [2], [1, 1], ["1"], [True]),
+)
+def test_fact_parser_rejects_invalid_course_doc_positions(course_doc_positions):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 07:00:00",
+                "record_content": "已记录检查原因。",
+            },),
+        }
+    )
+    payload = _fact_response(("LX0609-010",))
+    payload["facts"][0]["course_doc_positions"] = course_doc_positions
+
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-010",),
+            projection=projection,
+        )
+
+
+@pytest.mark.parametrize(
+    ("semantic_state", "course_doc_positions"),
+    (("present", []), ("absent", [1]), ("unknown", [1])),
+)
+def test_fact_parser_rejects_course_positions_inconsistent_with_semantic_state(
+    semantic_state,
+    course_doc_positions,
+):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 07:00:00",
+                "record_content": "已记录检查原因。",
+            },),
+        }
+    )
+    payload = _fact_response(("LX0609-010",), semantic_state=semantic_state)
+    payload["facts"][0]["course_doc_positions"] = course_doc_positions
+
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-010",),
+            projection=projection,
+        )
+
+
+@pytest.mark.parametrize("legacy_field", ("course_doc_refs", "evidence_refs"))
+def test_fact_parser_rejects_legacy_model_reference_fields(legacy_field):
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({"exam_type": "CT", "exam_time": "2026-04-26 08:00:00"},),
+            "daily_course_record": ({
+                "record_time": "2026-04-26 07:00:00",
+                "record_content": "已记录检查原因。",
+            },),
+        }
+    )
+    payload = _fact_response(("LX0609-010",))
+    payload["facts"][0][legacy_field] = ["D06-01"]
+
+    with pytest.raises(ValueError, match="schema mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(payload)},
+            selected_rule_ids=("LX0609-010",),
+            projection=projection,
+        )
 
 
 def test_fact_parser_ignores_known_family_ids_already_resolved_by_python():
@@ -1103,8 +1173,7 @@ def test_fact_parser_no_course_normalizes_impossible_present_to_absent():
         }
     )
     response = _fact_response(("LX0609-011",))
-    response["facts"][0]["course_doc_refs"] = []
-    response["facts"][0]["evidence_refs"] = ["E01-01"]
+    response["facts"][0]["course_doc_positions"] = []
 
     facts = parse_exam_lab_fact_response(
         response={"choices": [{"message": {"content": json.dumps(response)}}]},
@@ -2270,13 +2339,7 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
     for fact in response["facts"]:
         if fact["rule_id"] == "LX0609-010":
             continue
-        event_ref = (
-            "E01-01"
-            if fact["rule_id"] in exam_lab.EXAM_RULE_IDS
-            else "L03-01"
-        )
-        fact["course_doc_refs"] = ["D06-02"]
-        fact["evidence_refs"] = [event_ref, "D06-02"]
+        fact["course_doc_positions"] = [2]
     client = _Client([response])
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -2512,7 +2575,10 @@ def test_exam_lab_fact_prompt_contains_per_rule_decision_table_for_single_event(
     assert "逐规则决策表" in prompt
     assert "unknown 不是默认答案" in prompt
     assert "最小有效引用示例" in prompt
-    assert '"D06-01"' in prompt
+    assert "COURSE_DOC_POSITION=[1]" in prompt
+    assert '"course_doc_positions":[1]' in prompt
+    assert '"course_doc_refs":' not in prompt
+    assert '"evidence_refs":' not in prompt
 
 
 @pytest.mark.asyncio
@@ -2953,12 +3019,25 @@ async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeyp
                 "facts": [
                     {
                         **item,
-                        "course_doc_refs": ["D99-99"],
+                        "course_doc_positions": [99],
                     }
                     for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
                 ],
             },
             "evidence_ref",
+        ),
+        (
+            {
+                **_fact_response(("LX0609-014", "LX0609-015")),
+                "facts": [
+                    {
+                        **item,
+                        "course_doc_refs": ["D06-01"],
+                    }
+                    for item in _fact_response(("LX0609-014", "LX0609-015"))["facts"]
+                ],
+            },
+            "value",
         ),
     ],
 )
