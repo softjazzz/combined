@@ -1205,28 +1205,114 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     )
 
     created = workspace_service.create_batch_job_calls[0]
+    expected_task_rule_ids = [
+        rule_id
+        for rule_id in luxian_rule_set.rule_ids
+        if rule_id not in {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+    ]
     assert len(luxian_rule_set.rule_ids) == 75
     assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
     assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
-    assert created["draft_ids"] == list(luxian_rule_set.rule_ids)
+    assert created["draft_ids"] == expected_task_rule_ids
     assert created["filters"]["validation_mode"] == "customer"
     assert created["filters"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
     assert created["filters"]["rule_set_version"] == luxian_rule_set.version
-    assert created["filters"]["rule_count"] == len(luxian_rule_set.rule_ids)
-    assert created["filters"]["customer_rule_count"] == len(qc_sample_pools.load_luxian_0609_rules())
-    assert created["filters"]["execution_rule_count"] == len(luxian_rule_set.rule_ids)
+    assert created["filters"]["rule_count"] == len(expected_task_rule_ids)
+    assert created["filters"]["customer_rule_count"] == len(expected_task_rule_ids)
+    assert created["filters"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert created["filters"]["selected_rule_ids"] == []
     assert created["filters"]["scoped_customer_rule_ids"] == []
     assert "record_rule_map" not in created["filters"]
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
-    assert response["data"]["rule_count"] == len(luxian_rule_set.rule_ids)
-    assert response["data"]["customer_rule_count"] == len(qc_sample_pools.load_luxian_0609_rules())
-    assert response["data"]["execution_rule_count"] == len(luxian_rule_set.rule_ids)
+    assert response["data"]["rule_count"] == len(expected_task_rule_ids)
+    assert response["data"]["customer_rule_count"] == len(expected_task_rule_ids)
+    assert response["data"]["execution_rule_count"] == len(expected_task_rule_ids)
     assert response["data"]["selected_rule_ids"] == []
     assert response["data"]["scoped_customer_rule_ids"] == []
-    assert response["data"]["rule_ids"] == list(luxian_rule_set.rule_ids)
+    assert response["data"]["rule_ids"] == expected_task_rule_ids
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_should_skip_paused_consent_rules_but_keep_catalog_rule_set(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            rule_set_key="luxian_0609_qc_v1",
+        ),
+        current_user={"id": "tester"},
+    )
+
+    paused = {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+    created = workspace_service.create_batch_job_calls[0]
+    assert paused.isdisjoint(created["filters"]["rule_ids"])
+    assert created["filters"]["rule_count"] == 71
+    assert response["data"]["rule_count"] == 71
+    # 规则目录仍是完整75条；只改变本次任务执行范围。
+    assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 75
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_should_filter_paused_consent_rules_from_explicit_scope(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            rule_set_key="luxian_0609_qc_v1",
+            selected_rule_ids=["LX0609-020", "LX0609-033", "LX0609-042"],
+        ),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["filters"]["rule_ids"] == ["LX0609-020"]
+    assert created["filters"]["selected_rule_ids"] == ["LX0609-020"]
+    assert response["data"]["rule_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_should_reject_scope_with_only_paused_consent_rules(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_ids=["V001"],
+                sample_item_ids=["item-1"],
+                rule_set_key="luxian_0609_qc_v1",
+                selected_rule_ids=["LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"],
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "暂不执行" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio

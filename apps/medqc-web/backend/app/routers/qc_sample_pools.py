@@ -32,8 +32,6 @@ from ..services.customer_rule_sets import (
 from ..services.detached_task_runner import submit_detached_task
 from ..services.luxian_0609 import (
     build_family_scopes as _build_luxian_0609_family_scopes,
-    customer_rule_count as _luxian_0609_customer_rule_count,
-    load_luxian_0609_rules,
     normalize_customer_rule_ids as _normalize_rule_id_list,
     resolve_execution_scope as _resolve_luxian_0609_execution_scope,
 )
@@ -73,6 +71,11 @@ _LUXIAN_0609_REPORT_FILES = {
 }
 _SAMPLE_VALIDATION_DEDUP_WINDOW = timedelta(minutes=2)
 _SAMPLE_VALIDATION_DEDUP_STATUSES = {"queued", "running"}
+# 当前 LX0609 目标病例缺少可核验的同意书资料。规则仍保留在目录和历史结果中，
+# 仅暂停新建样本池 LX0609 任务的执行，避免把资料能力缺口伪装成质控结论。
+_LUXIAN_0609_PAUSED_CONSENT_RULE_IDS = frozenset(
+    {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+)
 
 
 def _service() -> CustomQCSamplePoolService:
@@ -1105,6 +1108,28 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_name = formal_rule_set.name
         rule_set_version = formal_rule_set.version
 
+    if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
+        paused_selected_rule_ids = [
+            rule_id
+            for rule_id in requested_selected_rule_ids
+            if rule_id in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+        ]
+        requested_selected_rule_ids = [
+            rule_id
+            for rule_id in requested_selected_rule_ids
+            if rule_id not in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+        ]
+        rule_ids = [
+            rule_id
+            for rule_id in rule_ids
+            if str(rule_id).strip().upper() not in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+        ]
+        if paused_selected_rule_ids and not requested_selected_rule_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="所选质控点均为暂不执行的知情同意书规则，请调整质控范围",
+            )
+
     if requested_selected_rule_ids:
         if rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY:
             raise HTTPException(status_code=422, detail="selected_rule_ids 当前仅支持泸县0609质控点验证")
@@ -1128,7 +1153,7 @@ async def run_sample_pool_intrinsic_validation(
     customer_rule_count = (
         len(requested_selected_rule_ids)
         if requested_selected_rule_ids
-        else _luxian_0609_customer_rule_count()
+        else len(rule_ids)
         if rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
         else len(rule_ids)
     )
@@ -1250,12 +1275,7 @@ async def run_sample_pool_intrinsic_validation(
     if payload.group_by_luxian_family and rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY:
         luxian_scope_rule_ids = requested_selected_rule_ids
         if not luxian_scope_rule_ids:
-            luxian_scope_rule_ids = _normalize_rule_id_list(
-                [
-                    str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
-                    for wrapper in load_luxian_0609_rules()
-                ]
-            )
+            luxian_scope_rule_ids = _normalize_rule_id_list(rule_ids)
         luxian_family_scopes = _build_luxian_0609_family_scopes(luxian_scope_rule_ids)
 
     selected_sample_item_ids = [
@@ -1264,12 +1284,7 @@ async def run_sample_pool_intrinsic_validation(
         if str(item.get("id") or "").strip()
     ]
     if rule_set_key in {CUSTOMER_LUXIAN_RULE_SET_KEY, LUXIAN_0609_QC_RULE_SET_KEY}:
-        identity_rule_ids = requested_selected_rule_ids or _normalize_rule_id_list(
-            [
-                str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip()
-                for wrapper in load_luxian_0609_rules()
-            ]
-        )
+        identity_rule_ids = requested_selected_rule_ids or _normalize_rule_id_list(rule_ids)
     else:
         identity_rule_ids = list(rule_ids)
     created_by = _current_user_id(current_user)
