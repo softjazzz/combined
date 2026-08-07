@@ -80,6 +80,14 @@ _TRANSFUSION_COURSE_SHELL_PATTERN = re.compile(
 _TRANSFUSION_COMPONENT_PATTERN = re.compile(
     r"红细胞|血浆|血小板|冷沉淀|全血|白蛋白|粒细胞"
 )
+_BLOOD_TYPE_OR_RH_PATTERN = re.compile(
+    r"(?:AB|A|B|O)型|Rh\s*\(?D\)?\s*(?:阳性|阴性|[+-])?",
+    flags=re.IGNORECASE,
+)
+_TRANSFUSION_PRODUCT_IDENTIFIER_PATTERN = re.compile(
+    r"(?:血袋|产品|条码|编号|批号)|\d{8,}",
+    flags=re.IGNORECASE,
+)
 _TRANSFUSION_DOSE_PATTERN = re.compile(
     r"\d+(?:\.\d+)?\s*(?:U|单位|m[lL]|毫升|袋|(?:个)?治疗量)",
     flags=re.IGNORECASE,
@@ -1216,6 +1224,58 @@ def _is_complete_transfusion_course_entry(entry: str) -> bool:
     )
 
 
+def _transfusion_046_field_checks(
+    entry: str,
+    *,
+    component_confirmed: bool = False,
+) -> dict[str, bool]:
+    """逐份输血记录核验046必填项；受控LLM只能补齐component。"""
+
+    return {
+        "reason_or_indication": bool(
+            _PRETRANSFUSION_PURPOSE_PATTERN.search(entry)
+            or _PRETRANSFUSION_CORE_PATTERNS[0].search(entry)
+        ),
+        "start_and_end_time": bool(
+            _TRANSFUSION_START_PATTERN.search(entry)
+            and _TRANSFUSION_COURSE_END_PATTERN.search(entry)
+        ),
+        "component": bool(
+            _TRANSFUSION_COMPONENT_PATTERN.search(entry) or component_confirmed
+        ),
+        "dose": bool(_TRANSFUSION_DOSE_PATTERN.search(entry)),
+        "process_observation": bool(_TRANSFUSION_OBSERVATION_PATTERN.search(entry)),
+        "reaction_and_handling": bool(_TRANSFUSION_REACTION_PATTERN.search(entry)),
+    }
+
+
+def _transfusion_record_ref(record: Mapping[str, Any], index: int) -> str:
+    """只标识本次输血记录，不把文书正文或其他来源传给模型。"""
+
+    return _clean(record.get("document_id")) or f"bloodtrans_record-{index}"
+
+
+def _046_component_llm_candidate(
+    documents: Mapping[str, Any],
+) -> tuple[str, str] | None:
+    """仅在全部其他字段齐备、唯一成分字段未确定时允许一次模型调用。"""
+
+    rows = _source_document_rows(documents, "bloodtrans_record")
+    candidates: list[tuple[str, str]] = []
+    for index, record in enumerate(rows, start=1):
+        entry = _row_text(record)
+        if not _is_substantive_transfusion_course_entry(entry):
+            return None
+        checks = _transfusion_046_field_checks(entry)
+        if checks["component"]:
+            continue
+        if not all(present for name, present in checks.items() if name != "component"):
+            return None
+        candidates.append((_transfusion_record_ref(record, index), entry))
+    # 一次事实提取不能安全覆盖多份待判文书；多候选保持现有确定性不合规。
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _programmatic_046_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
@@ -1224,6 +1284,8 @@ def _programmatic_046_status(
         _TRANSFUSION_COURSE_INCOMPLETE_PATTERN.search(entry) for entry in entries
     ):
         return "non_compliant", "transfusion_course_record_incomplete"
+    if _046_component_llm_candidate(documents) is not None:
+        return None
     if entries and all(_is_complete_transfusion_course_entry(entry) for entry in entries):
         return "compliant", "transfusion_course_record_complete"
     if entries and all(
@@ -1240,6 +1302,78 @@ def _programmatic_046_status(
         # 的“不完整”，不能再交给只返回布尔值、无法给出字段事实的通用模型。
         return "non_compliant", "transfusion_course_record_incomplete"
     return None
+
+
+def _046_component_prompt(*, document_ref: str, record_text: str) -> str:
+    """046专用受控事实提取：禁止从血型、剂量或编号推断输血成分。"""
+
+    return (
+        "你只核对下面这一份输血记录单是否明确写出实际输注血液成分。\n"
+        "不得根据血型、Rh、产品/血袋编号、剂量或医学常识推断成分。\n"
+        "仅输出严格JSON，不要解释："
+        '{"assertion":"explicit|not_explicit|unclear","component_text":"",'
+        '"quote":"","document_ref":""}\n'
+        f"document_ref: {document_ref}\n"
+        "输血记录单正文：\n"
+        f"{record_text}"
+    )
+
+
+def _parse_046_component_response(
+    response: Mapping[str, Any],
+) -> Mapping[str, str] | None:
+    cleaned = re.sub(
+        r"<think>[\s\S]*?</think>", "", _response_text(response), flags=re.IGNORECASE
+    ).strip()
+    try:
+        payload = json.loads(cleaned)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, Mapping) or set(payload) != {
+        "assertion", "component_text", "quote", "document_ref"
+    }:
+        return None
+    if any(not isinstance(value, str) for value in payload.values()):
+        return None
+    assertion = payload["assertion"].strip()
+    if assertion not in {"explicit", "not_explicit", "unclear"}:
+        return None
+    return {key: payload[key].strip() for key in payload}
+
+
+def _validated_046_component_assertion(
+    payload: Mapping[str, str],
+    *,
+    document_ref: str,
+    record_text: str,
+) -> str | None:
+    """验证模型引用仍落在同一原文，且成分不能只是血型、编号或剂量。"""
+
+    if payload.get("document_ref") != document_ref:
+        return None
+    quote = payload.get("quote") or ""
+    component_text = payload.get("component_text") or ""
+    assertion = payload.get("assertion") or ""
+    if not quote or quote not in record_text:
+        return None
+    if assertion == "explicit":
+        component_remainder = _BLOOD_TYPE_OR_RH_PATTERN.sub("", component_text)
+        component_remainder = _TRANSFUSION_PRODUCT_IDENTIFIER_PATTERN.sub(
+            "", component_remainder
+        )
+        component_remainder = _TRANSFUSION_DOSE_PATTERN.sub("", component_remainder)
+        component_remainder = re.sub(r"[\s,，;；:：()（）\[\]【】\-]+", "", component_remainder)
+        if (
+            not component_text
+            or component_text not in quote
+            # 仅血型/Rh、产品编号或剂量不能被升级为血液成分；但“AB型血浆”
+            # 一类表述去掉血型后仍保留制品名称，应允许通过同原文校验。
+            or not component_remainder
+        ):
+            return None
+    elif component_text:
+        return None
+    return assertion
 
 
 def _datetime_from_match(match: re.Match[str]) -> datetime | None:
@@ -1660,6 +1794,7 @@ def _programmatic_transfusion_display_facts(
     status: str,
     reason_code: str,
     documents: Mapping[str, Any],
+    component_evidence_document_refs: Sequence[str] = (),
 ) -> Mapping[str, Any] | None:
     """从已参与裁决的同一份资料中生成受控事实，不回显正文。"""
 
@@ -1710,17 +1845,18 @@ def _programmatic_transfusion_display_facts(
                 "checked_sources": ["bloodtrans_record", "daily_course_record"],
             }
     if rule_id == "LX0609-046":
+        llm_component_refs = set(component_evidence_document_refs)
         checks_by_record = []
-        for record in records:
+        for index, record in enumerate(records, start=1):
             text = _row_text(record)
-            checks_by_record.append({
-                "reason_or_indication": bool(_PRETRANSFUSION_PURPOSE_PATTERN.search(text) or _PRETRANSFUSION_CORE_PATTERNS[0].search(text)),
-                "start_and_end_time": bool(_TRANSFUSION_START_PATTERN.search(text) and _TRANSFUSION_COURSE_END_PATTERN.search(text)),
-                "component": bool(_TRANSFUSION_COMPONENT_PATTERN.search(text)),
-                "dose": bool(_TRANSFUSION_DOSE_PATTERN.search(text)),
-                "process_observation": bool(_TRANSFUSION_OBSERVATION_PATTERN.search(text)),
-                "reaction_and_handling": bool(_TRANSFUSION_REACTION_PATTERN.search(text)),
-            })
+            checks_by_record.append(
+                _transfusion_046_field_checks(
+                    text,
+                    component_confirmed=(
+                        _transfusion_record_ref(record, index) in llm_component_refs
+                    ),
+                )
+            )
         field_names = (
             "reason_or_indication", "start_and_end_time", "component", "dose",
             "process_observation", "reaction_and_handling",
@@ -2124,6 +2260,81 @@ async def execute_luxian_0609_native_transfusion_rules(
                         status=status,
                         reason_code=reason_code,
                         documents=documents,
+                    ),
+                )
+                continue
+            candidate = _046_component_llm_candidate(documents)
+            if candidate is not None:
+                document_ref, record_text = candidate
+                if llm_client is None:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_unavailable",
+                        executor_type="program",
+                    )
+                    continue
+                llm_call_count += 1
+                try:
+                    response = await llm_client.generate(
+                        _046_component_prompt(
+                            document_ref=document_ref,
+                            record_text=record_text,
+                        )
+                    )
+                except Exception:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_failure",
+                        executor_type="llm",
+                    )
+                    continue
+                prompt, completion, total, elapsed = _usage(response)
+                prompt_tokens += prompt
+                completion_tokens += completion
+                total_tokens += total
+                api_time += elapsed
+                component_payload = _parse_046_component_response(response)
+                assertion = (
+                    _validated_046_component_assertion(
+                        component_payload,
+                        document_ref=document_ref,
+                        record_text=record_text,
+                    )
+                    if component_payload is not None
+                    else None
+                )
+                if assertion in {"unclear", None}:
+                    emit_outcome(
+                        rule_id,
+                        "data_gap",
+                        "transfusion_llm_invalid_output",
+                        executor_type="llm",
+                    )
+                    continue
+                status = (
+                    "compliant" if assertion == "explicit" else "non_compliant"
+                )
+                emit_outcome(
+                    rule_id,
+                    status,
+                    "transfusion_course_record_complete"
+                    if status == "compliant"
+                    else "transfusion_course_record_incomplete",
+                    executor_type="llm",
+                    display_facts=_programmatic_transfusion_display_facts(
+                        rule_id=rule_id,
+                        status=status,
+                        reason_code=(
+                            "transfusion_course_record_complete"
+                            if status == "compliant"
+                            else "transfusion_course_record_incomplete"
+                        ),
+                        documents=documents,
+                        component_evidence_document_refs=(
+                            (document_ref,) if assertion == "explicit" else ()
+                        ),
                     ),
                 )
                 continue

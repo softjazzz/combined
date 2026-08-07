@@ -41,6 +41,23 @@ def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() ->
     assert "书面签署" in finding
 
 
+def test_046_component_gap_uses_actual_transfused_component_copy_only_for_course_record() -> None:
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-046",
+        facts={
+            "failure_kind": "transfusion_course_record_incomplete",
+            "missing_fields": ["component"],
+        },
+    ) == "输血记录单未明确记录实际输注血液成分。"
+    assert customer_finding_from_controlled_facts(
+        rule_id="LX0609-042",
+        facts={
+            "failure_kind": "transfusion_consent_incomplete",
+            "missing_fields": ["component"],
+        },
+    ) == "输血知情同意书缺少：拟输血成分。"
+
+
 DEFINED_RULE_IDS = tuple(
     contract.rule_id
     for contract in load_luxian_0609_rule_contracts()

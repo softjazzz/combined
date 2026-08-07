@@ -1618,6 +1618,9 @@ def customer_finding_from_controlled_facts(
         if kind == "transfusion_course_record_complete":
             return "输血病程已记录指征、起止时间、血液成分、输注量、过程观察及反应处理。"
         if kind == "transfusion_course_record_incomplete":
+            raw_missing = facts.get("missing_fields")
+            if isinstance(raw_missing, list) and raw_missing == ["component"]:
+                return "输血记录单未明确记录实际输注血液成分。"
             missing = labels("missing_fields", _TRANSFUSION_FIELD_LABELS)
             return f"输血病程记录缺少：{missing}。" if missing else ""
 

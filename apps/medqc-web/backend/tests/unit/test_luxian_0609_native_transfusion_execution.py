@@ -1552,6 +1552,189 @@ async def test_046_incomplete_or_cross_record_fields_are_deterministic_defect(
 
 
 @pytest.mark.asyncio
+async def test_046_llm_confirms_explicit_component_from_same_record_and_preserves_typed_decision(
+    monkeypatch,
+):
+    """词典未覆盖的“红悬”只能由同一输血记录的受控 LLM 事实补齐。"""
+
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    record = (
+        "输血目的：纠正贫血；2026年07月07日17:53开始输入红悬2U，"
+        "2026年07月07日18:27输注完毕。输血过程中严密观察，"
+        "患者生命体征平稳，未见寒战、皮疹及输血不良反应。"
+    )
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-046",),
+        bloodtrans_content=record,
+    )
+    client = _Client([
+        {
+            "assertion": "explicit",
+            "component_text": "红悬",
+            "quote": "开始输入红悬2U",
+            "document_ref": "typed-transfusion-document",
+        }
+    ])
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"document_id": "typed-transfusion-document", "content": record}],
+            daily_course_record=[{"content": "不得进入046成分识别提示词。"}],
+        ),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=client,
+        evidence_materials=session.materials,
+        evidence_snapshot=session.snapshot,
+        decision_rule_ids=("LX0609-046",),
+    )
+
+    assert result.results == ()
+    assert reduce_luxian_0609_rule_decision(result.decisions[0]).final_state.value == "compliant"
+    canonical = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-046",),
+        snapshot=session.snapshot,
+    )
+    assert canonical[0].final_state.value == "compliant"
+    assert canonical[0].reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-046"]
+    assert facts["missing_fields"] == []
+    assert facts["source_document_ids"] == ["typed-transfusion-document"]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
+    assert record in client.prompts[0]
+    assert "不得进入046成分识别提示词" not in client.prompts[0]
+    assert "SHOULD_NOT_LEAK" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model_output", "expected_status", "expected_reason"),
+    (
+        (
+            {
+                "assertion": "explicit",
+                "component_text": "A型Rh(D)阳性",
+                "quote": "A型Rh(D)阳性2u",
+                "document_ref": "blood-046-type-only",
+            },
+            "data_gap",
+            "transfusion_llm_invalid_output",
+        ),
+        (
+            {
+                "assertion": "unclear",
+                "component_text": "",
+                "quote": "A型Rh(D)阳性2u",
+                "document_ref": "blood-046-type-only",
+            },
+            "data_gap",
+            "transfusion_llm_invalid_output",
+        ),
+        (
+            {
+                "assertion": "not_explicit",
+                "component_text": "",
+                "quote": "A型Rh(D)阳性2u",
+                "document_ref": "blood-046-type-only",
+            },
+            "non_compliant",
+            "transfusion_course_record_incomplete",
+        ),
+        (
+            {
+                "assertion": "explicit",
+                "component_text": "红悬",
+                "quote": "并不存在的原文",
+                "document_ref": "blood-046-type-only",
+            },
+            "data_gap",
+            "transfusion_llm_invalid_output",
+        ),
+    ),
+)
+async def test_046_llm_rejects_inferred_component_or_invalid_quote(
+    monkeypatch,
+    model_output,
+    expected_status,
+    expected_reason,
+):
+    """血型、Rh、产品编号和剂量均不能被模型升级为输血成分。"""
+
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    record = (
+        "患者冯丽平，输血目的：纠正贫血；2026年07月07日17:53开始输入"
+        "0231126007830A型Rh(D)阳性2u，于2026年07月07日18:27输注完毕。"
+        "输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。"
+    )
+    client = _Client([model_output])
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=[{"document_id": "blood-046-type-only", "content": record}],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == expected_status
+    assert result.results[0]["metadata"]["reason_code"] == expected_reason
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    if expected_status == "non_compliant":
+        assert dict(result.customer_display_facts)["LX0609-046"]["missing_fields"] == ["component"]
+
+
+@pytest.mark.asyncio
+async def test_046_llm_accepts_component_that_includes_blood_type_but_not_type_only(
+    monkeypatch,
+):
+    """“AB型红悬”仍含制品名；不能因前缀血型而被错误拒绝。"""
+
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    record = (
+        "输血目的：纠正贫血；17:53开始输入AB型红悬2U，18:27输注完毕。"
+        "输血过程顺利，生命体征平稳，未见发热及输血不良反应。"
+    )
+    client = _Client([
+        {
+            "assertion": "explicit",
+            "component_text": "AB型红悬",
+            "quote": "输入AB型红悬2U",
+            "document_ref": "blood-046-ab-red-suspension",
+        }
+    ])
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(
+            bloodtrans_record=[
+                {"document_id": "blood-046-ab-red-suspension", "content": record}
+            ],
+        ),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert result.results[0]["status"] == "compliant"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+
+
+@pytest.mark.asyncio
 async def test_missing_consent_projection_is_data_gap_and_other_rules_are_not_blocked(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": True}])
