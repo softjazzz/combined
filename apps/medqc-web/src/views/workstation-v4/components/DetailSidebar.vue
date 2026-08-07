@@ -115,6 +115,13 @@
                     >
                       暂无正文
                     </span>
+                    <span
+                      v-else-if="node.projection_incomplete"
+                      class="mt-0.5 block text-[10px] font-semibold text-amber-600"
+                      :title="node.projection_notice || ''"
+                    >
+                      更多文书待查看
+                    </span>
                   </span>
                 </button>
               </div>

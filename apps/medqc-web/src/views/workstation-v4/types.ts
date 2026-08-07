@@ -37,6 +37,19 @@ export interface DeptInfo {
   warningCount: number
 }
 
+export interface DocumentAuthor {
+  role?: string
+  name?: string
+  code?: string
+}
+
+export interface DocumentSignature {
+  role?: string
+  name?: string
+  signed_at?: string
+  source_field?: string
+}
+
 export interface DocItem {
   id?: string
   doc_id?: string
@@ -70,18 +83,25 @@ export interface DocItem {
   }>
   assembly_status?: string
   data_quality_flags?: string[]
+  authors?: DocumentAuthor[]
+  signatures?: DocumentSignature[]
+  projection_incomplete?: boolean
+  projection_notice?: string
 }
 
 export interface DocTreeNode {
   id: string
   doc_key: string
   doc_type: string
+  document_id?: string
   title: string
   record_time?: string
   source_table?: string
   group_key?: string
   has_content: boolean
   length: number
+  projection_incomplete?: boolean
+  projection_notice?: string
 }
 
 export interface DocTreeGroup {

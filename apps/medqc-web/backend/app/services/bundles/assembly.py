@@ -456,7 +456,7 @@ def _material_limits_for_variants(
             _merge_material_limit(
                 limits,
                 table_name,
-                _DOMAIN_FETCH_LIMITS.get(table_name, 50),
+                _DOMAIN_FETCH_LIMITS.get(table_name, 50) + 1,
             )
     return limits
 
@@ -2502,21 +2502,39 @@ def assemble_domain_bundle(
     effective_schema = source_schema or _default_source_schema()
     priority = _DOMAIN_DOC_PRIORITY[execution_domain]
     docs: dict[str, list[dict[str, Any]]] = {}
+    domain_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in priority:
-        docs[table_name] = _material_rows(
+        projection_limit = _DOMAIN_FETCH_LIMITS.get(table_name, 50)
+        fetched_rows = _material_rows(
             material_snapshot=material_snapshot,
             source_schema=effective_schema,
             table=table_name,
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,
-            limit=_DOMAIN_FETCH_LIMITS.get(table_name, 50),
+            limit=projection_limit + 1,
         )
+        docs[table_name] = fetched_rows[:projection_limit]
+        domain_projection_per_source[table_name] = {
+            "projected_count": len(docs[table_name]),
+            "projection_limit": projection_limit,
+            "has_more": len(fetched_rows) > projection_limit,
+        }
 
     document_hits = _build_document_hits(docs, priority)
     source_table_coverage = _build_source_table_coverage(docs, priority)
     assembly_coverage = _build_assembly_coverage(docs, priority)
     source_documents = _build_document_inventory(docs, effective_schema)
+    for document in source_documents:
+        source_table = str(document.get("source_table") or "").strip()
+        projection = domain_projection_per_source.get(source_table) or {}
+        projection_incomplete = projection.get("has_more") is True
+        document["projection_incomplete"] = projection_incomplete
+        document["projection_notice"] = (
+            f"已展示{projection.get('projected_count', 0)}条，仍有更多。"
+            if projection_incomplete
+            else ""
+        )
     timeline_facts = _build_timeline_facts_from_docs(docs)
     data_quality_flags = [f"missing:{table_name}" for table_name, hit in document_hits.items() if not hit]
 
@@ -2538,6 +2556,11 @@ def assemble_domain_bundle(
             "timeline_facts": timeline_facts,
             "source_table_coverage": source_table_coverage,
             "assembly_coverage": assembly_coverage,
+            "domain_projection": {
+                "projection_kind": "domain_documents",
+                "is_evidence_source": False,
+                "per_source": domain_projection_per_source,
+            },
         },
     }
 

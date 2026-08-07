@@ -322,7 +322,7 @@ def test_course_domain_bundle_should_keep_contentful_bloodtrans_record(monkeypat
         for item in bundle["source_documents"]
     )
     bloodtrans_call = next(item for item in select_calls if item["table"] == "bloodtrans_record")
-    assert bloodtrans_call["limit"] == 50
+    assert bloodtrans_call["limit"] == 51
 
 
 def test_assemble_domain_bundle_should_keep_more_than_three_course_documents(monkeypatch):
@@ -359,7 +359,7 @@ def test_assemble_domain_bundle_should_keep_more_than_three_course_documents(mon
     assert len(docs["daily_course_record"]) == 5
 
     daily_call = next(item for item in select_calls if item["table"] == "daily_course_record")
-    assert daily_call["limit"] == 200
+    assert daily_call["limit"] == 201
 
 
 def test_assemble_domain_bundle_should_emit_source_and_assembly_coverage(monkeypatch):
@@ -704,9 +704,9 @@ def test_unified_refresh_should_read_each_material_once_and_keep_variant_limits(
         ).append(call)
     assert all(len(calls) == 1 for calls in calls_by_visit_table.values())
     for visit_id in ("V1", "V2"):
-        assert calls_by_visit_table[(visit_id, "daily_course_record")][0]["limit"] == 200
-        assert calls_by_visit_table[(visit_id, "exam_master")][0]["limit"] == 500
-        assert calls_by_visit_table[(visit_id, "labtest_item_report")][0]["limit"] == 5000
+        assert calls_by_visit_table[(visit_id, "daily_course_record")][0]["limit"] == 201
+        assert calls_by_visit_table[(visit_id, "exam_master")][0]["limit"] == 501
+        assert calls_by_visit_table[(visit_id, "labtest_item_report")][0]["limit"] == 5001
         assert len(
             domain_bundles[(visit_id, "course")]["structured_context"]["documents"][
                 "daily_course_record"
@@ -958,3 +958,141 @@ def test_unified_refresh_should_raise_on_variant_failure_when_requested(monkeypa
             domains=("surgery", "terminal"),
             continue_on_error=False,
         )
+
+
+def test_domain_bundle_should_mark_projection_when_rows_exceed_existing_limit(monkeypatch):
+    calls: list[tuple[str, int]] = []
+
+    def _fake_material_rows(**kwargs):
+        table_name = kwargs["table"]
+        calls.append((table_name, kwargs["limit"]))
+        if table_name != "admission_record":
+            return []
+        return [
+            {
+                "document_id": f"admission-{index}",
+                "record_time": f"2026-08-{index + 1:02d} 08:00:00",
+                "record_content": f"入院记录 {index}",
+            }
+            for index in range(21)
+        ]
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_material_rows", _fake_material_rows)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="admission",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    assert ("admission_record", 21) in calls
+    assert len(bundle["structured_context"]["documents"]["admission_record"]) == 20
+    assert bundle["structured_context"]["domain_projection"] == {
+        "projection_kind": "domain_documents",
+        "is_evidence_source": False,
+        "per_source": {
+            "admission_record": {
+                "projected_count": 20,
+                "projection_limit": 20,
+                "has_more": True,
+            },
+            "admission_record_diagnosis": {
+                "projected_count": 0,
+                "projection_limit": 50,
+                "has_more": False,
+            },
+        },
+    }
+    admission_documents = bundle["source_documents"]
+    assert len(admission_documents) == 20
+    assert all(item["projection_incomplete"] is True for item in admission_documents)
+    assert all("已展示20条，仍有更多" in item["projection_notice"] for item in admission_documents)
+
+
+def test_domain_bundle_should_not_present_partial_lab_report_as_complete(monkeypatch):
+    calls: list[tuple[str, int]] = []
+
+    def _fake_material_rows(**kwargs):
+        table_name = kwargs["table"]
+        calls.append((table_name, kwargs["limit"]))
+        if table_name != "labtest_item_report":
+            return []
+        return [
+            {
+                "test_no": "LAB-001",
+                "item_no": str(index + 1),
+                "item_name": f"项目{index + 1}",
+                "result": str(index + 1),
+                "report_time": "2026-08-01 09:00:00",
+            }
+            for index in range(4)
+        ]
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_material_rows", _fake_material_rows)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    monkeypatch.setitem(assembly_module._DOMAIN_FETCH_LIMITS, "labtest_item_report", 3)
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="course",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    assert ("labtest_item_report", 4) in calls
+    report = next(
+        item
+        for item in bundle["source_documents"]
+        if item["document_type"] == "labtest_item_report"
+    )
+    assert [item["item_name"] for item in report["report_items"]] == ["项目1", "项目2", "项目3"]
+    assert report["projection_incomplete"] is True
+    assert "已展示3条，仍有更多" in report["projection_notice"]
+    assert bundle["structured_context"]["domain_projection"]["per_source"][
+        "labtest_item_report"
+    ] == {
+        "projected_count": 3,
+        "projection_limit": 3,
+        "has_more": True,
+    }
+
+
+def test_domain_bundle_projection_should_mark_within_limit_as_complete_projection(monkeypatch):
+    def _fake_material_rows(**kwargs):
+        if kwargs["table"] != "admission_record":
+            return []
+        return [
+            {
+                "document_id": "admission-1",
+                "record_time": "2026-08-01 08:00:00",
+                "record_content": "入院记录",
+            }
+        ]
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_material_rows", _fake_material_rows)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="admission",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    projection = bundle["structured_context"]["domain_projection"]["per_source"][
+        "admission_record"
+    ]
+    assert projection == {
+        "projected_count": 1,
+        "projection_limit": 20,
+        "has_more": False,
+    }
+    assert bundle["source_documents"][0]["projection_incomplete"] is False

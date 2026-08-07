@@ -43,11 +43,17 @@
         <div class="emr-struct__title">
           {{ displayMetadataTitle }}
         </div>
+        <div class="emr-struct__meta-row">
+          <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
+          <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
+          <span v-if="authorSummary">作者：{{ authorSummary }}</span>
+          <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
+        </div>
         <div
-          v-if="metadata.record_time"
-          class="emr-struct__time"
+          v-if="projectionNotice"
+          class="emr-struct__projection-notice"
         >
-          记录时间：{{ metadata.record_time }}
+          {{ projectionNotice }}
         </div>
       </div>
 
@@ -141,13 +147,26 @@
       </section>
     </div>
 
-    <div
-      v-else-if="renderedContent"
-      ref="contentRef"
-      class="emr-content overflow-auto"
-      :style="{ maxHeight: maxHeight + 'px' }"
-      v-html="renderedContent"
-    />
+    <template v-else-if="renderedContent">
+      <div class="emr-content-meta">
+        <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
+        <span v-if="metadata.record_time">记录时间：{{ metadata.record_time }}</span>
+        <span v-if="authorSummary">作者：{{ authorSummary }}</span>
+        <span v-if="signatureSummary">签名：{{ signatureSummary }}</span>
+        <span
+          v-if="projectionNotice"
+          class="emr-content-meta__projection-notice"
+        >{{
+          projectionNotice
+        }}</span>
+      </div>
+      <div
+        ref="contentRef"
+        class="emr-content overflow-auto"
+        :style="{ maxHeight: maxHeight + 'px' }"
+        v-html="renderedContent"
+      />
+    </template>
 
     <div
       v-else
@@ -257,6 +276,29 @@ interface EmrRenderBlock {
   empty_text?: string
 }
 
+interface EmrDocumentPerson {
+  role?: string
+  name?: string
+  code?: string
+  signed_at?: string
+  source_field?: string
+}
+
+interface EmrDocumentMetadata {
+  doc_type?: string
+  doc_name?: string
+  doc_id?: string
+  document_id?: string
+  doc_key?: string
+  group_key?: string
+  record_time?: string
+  source?: string
+  authors?: EmrDocumentPerson[]
+  signatures?: EmrDocumentPerson[]
+  projection_incomplete?: boolean
+  projection_notice?: string
+}
+
 const props = withDefaults(
   defineProps<{
     recordId?: string
@@ -283,7 +325,7 @@ const emit = defineEmits<{
 const loading = ref(false)
 const rawContent = ref('')
 const contentType = ref<'text' | 'html'>('text')
-const metadata = ref<Record<string, string>>({})
+const metadata = ref<EmrDocumentMetadata>({})
 const annotations = ref<DefectAnnotation[]>([])
 const documents = ref<EmrDocumentSummary[]>([])
 const activeDocId = ref<string | null>(null)
@@ -324,6 +366,29 @@ const displayMetadataTitle = computed(() =>
     doc_type: String(metadata.value.doc_type || ''),
     doc_name: String(metadata.value.doc_name || ''),
   }),
+)
+
+function summarizePeople(people: EmrDocumentPerson[] | undefined): string {
+  if (!Array.isArray(people)) return ''
+  const labels = people
+    .map((person) => {
+      const name = String(person.name || '').trim()
+      const role = String(person.role || '').trim()
+      return name || role
+    })
+    .filter(Boolean)
+  return [...new Set(labels)].join('、')
+}
+
+const displayDocumentId = computed(() =>
+  String(metadata.value.document_id || metadata.value.doc_id || '').trim(),
+)
+const authorSummary = computed(() => summarizePeople(metadata.value.authors))
+const signatureSummary = computed(() => summarizePeople(metadata.value.signatures))
+const projectionNotice = computed(() =>
+  metadata.value.projection_incomplete === true
+    ? String(metadata.value.projection_notice || '当前仅展示部分文书，请按需查看后续资料。').trim()
+    : '',
 )
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -630,7 +695,7 @@ async function loadDocument(doc?: EmrDocumentSummary) {
     const data = result.data
     rawContent.value = data.content || ''
     contentType.value = data.content_type || 'text'
-    metadata.value = data.metadata || {}
+    metadata.value = data.metadata && typeof data.metadata === 'object' ? data.metadata : {}
     annotations.value = data.defect_annotations || []
     layoutVersion.value = data.layout_version || ''
     renderBlocks.value = Array.isArray(data.render_blocks) ? data.render_blocks : []
@@ -776,6 +841,37 @@ watch(
   margin-top: 3px;
   font-size: 12px;
   color: #64748b;
+}
+
+.emr-struct__meta-row,
+.emr-content-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.emr-struct__projection-notice,
+.emr-content-meta__projection-notice {
+  margin-top: 8px;
+  border-left: 2px solid rgba(245, 158, 11, 0.75);
+  padding-left: 8px;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.emr-content-meta {
+  max-width: 112ch;
+  margin: 0 auto 8px;
+  padding: 0 4px;
+}
+
+.emr-content-meta__projection-notice {
+  flex-basis: 100%;
 }
 
 .emr-struct__block {

@@ -1,9 +1,11 @@
+from app.services.bundles import emr_view as emr_view_module
 from app.services.bundles.contracts import BUNDLE_SCHEMA_VERSION_CURRENT
 from app.services.bundles.emr_view import (
     _course_bundle_needs_exam_lab_refresh,
     build_documents_from_domain_bundles,
     build_documents_tree,
     build_render_view,
+    load_bundle_documents,
     pick_document,
 )
 
@@ -777,11 +779,28 @@ def test_build_render_view_with_sections_and_kv():
                 "raw_value_preview": "间断疼痛",
             },
         ],
+        "document_id": "ADM-001",
+        "authors": [{"role": "submitter", "name": "张医生", "code": "D001"}],
+        "signatures": [
+            {
+                "role": "physician",
+                "name": "李医生",
+                "signed_at": "2026-08-01 08:30:00",
+                "source_field": "physician_sign",
+            }
+        ],
+        "projection_incomplete": True,
+        "projection_notice": "已展示20条，仍有更多。",
     }
 
     payload = build_render_view(document)
     assert payload["layout_version"] == "bundle_struct_v1"
     assert payload["document_meta"]["doc_type"] == "admission_record"
+    assert payload["document_meta"]["document_id"] == "ADM-001"
+    assert payload["document_meta"]["authors"] == [{"role": "submitter", "name": "张医生", "code": "D001"}]
+    assert payload["document_meta"]["signatures"][0]["name"] == "李医生"
+    assert payload["document_meta"]["projection_incomplete"] is True
+    assert payload["document_meta"]["projection_notice"] == "已展示20条，仍有更多。"
     assert len(payload["render_blocks"]) >= 2
     assert payload["render_blocks"][0]["block_type"] == "kv_section"
     assert payload["render_blocks"][1]["block_type"] == "paragraph"
@@ -850,3 +869,64 @@ def test_build_documents_tree_should_group_exam_and_lab_documents():
     assert by_key["lab_results"]["count"] == 1
     assert by_key["lab_results"]["label"] == "检验报告"
     assert by_key["exam_results"]["count"] == 1
+
+
+def test_bundle_documents_response_should_expose_domain_projection_and_tree_marker(monkeypatch):
+    bundle = {
+        "bundle_schema_version": BUNDLE_SCHEMA_VERSION_CURRENT,
+        "source_documents": [
+            {
+                "document_type": "labtest_item_report",
+                "document_id": "LAB-001",
+                "document_title": "血常规检验报告",
+                "display_time": "2026-08-01 09:00:00",
+                "record_time": "2026-08-01 09:00:00",
+                "content": "白细胞计数：4.5",
+                "authors": [{"role": "reporter", "name": "检验师"}],
+                "signatures": [{"role": "verifier", "name": "审核医师"}],
+                "projection_incomplete": True,
+                "projection_notice": "已展示3条，仍有更多。",
+            }
+        ],
+        "structured_context": {
+            "domain_projection": {
+                "projection_kind": "domain_documents",
+                "is_evidence_source": False,
+                "per_source": {
+                    "labtest_item_report": {
+                        "projected_count": 3,
+                        "projection_limit": 3,
+                        "has_more": True,
+                    }
+                },
+            }
+        },
+    }
+
+    monkeypatch.setattr(emr_view_module, "load_domain_bundle", lambda **_kwargs: bundle)
+    monkeypatch.setattr(
+        emr_view_module,
+        "load_or_assemble_domain_bundle",
+        lambda **_kwargs: bundle,
+    )
+
+    payload = load_bundle_documents(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        bundle_schema="public",
+    )
+
+    assert payload["domain_projection"]["projection_kind"] == "domain_documents"
+    assert payload["domain_projection"]["is_evidence_source"] is False
+    assert payload["domain_projection"]["domains"]["course"]["per_source"][
+        "labtest_item_report"
+    ]["has_more"] is True
+    document = payload["documents"][0]
+    assert document["document_id"] == "LAB-001"
+    assert document["record_time"] == "2026-08-01 09:00:00"
+    assert document["signatures"][0]["name"] == "审核医师"
+    tree_node = payload["documents_tree"][0]["children"][0]
+    assert tree_node["document_id"] == "LAB-001"
+    assert tree_node["projection_incomplete"] is True
+    assert tree_node["projection_notice"] == "已展示3条，仍有更多。"

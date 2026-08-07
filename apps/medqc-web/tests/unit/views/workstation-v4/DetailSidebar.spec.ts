@@ -272,4 +272,63 @@ describe('DetailSidebar', () => {
     const payload = ((emitted?.[0] || [])[0] || {}) as { doc_key?: string }
     expect(payload.doc_key).toBe('senior_course_record::round-0419')
   })
+
+  it('对截断投影文书仅显示必要的更多标记，不把它当资料缺失', () => {
+    const documents: DocItem[] = [
+      {
+        id: 'lab-1',
+        doc_key: 'labtest_item_report::lab-1',
+        doc_type: 'labtest_item_report',
+        type: 'labtest_item_report',
+        label: '血常规检验报告',
+        has_content: true,
+        content: '白细胞计数：4.5',
+        length: 10,
+        record_time: '2026-08-01 09:00:00',
+        projection_incomplete: true,
+        projection_notice: '已展示3条，仍有更多。',
+      },
+    ]
+    const tree: DocTreeGroup[] = [
+      {
+        key: 'lab_results',
+        label: '检验报告',
+        count: 1,
+        children: [
+          {
+            id: 'lab-1',
+            doc_key: 'labtest_item_report::lab-1',
+            doc_type: 'labtest_item_report',
+            title: '血常规检验报告',
+            record_time: '2026-08-01 09:00:00',
+            has_content: true,
+            length: 10,
+            projection_incomplete: true,
+            projection_notice: '已展示3条，仍有更多。',
+          },
+        ],
+      },
+    ]
+
+    const wrapper = mount(DetailSidebar, {
+      props: {
+        record: mockRecord,
+        documents,
+        documentsTree: tree,
+        documentsLoading: false,
+        activeDocType: '',
+      },
+      global: {
+        stubs: {
+          SyncOutlined: true,
+          FileTextOutlined: true,
+          EyeOutlined: true,
+          CaretRightOutlined: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('更多')
+    expect(wrapper.text()).not.toContain('资料缺失')
+  })
 })

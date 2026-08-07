@@ -1395,6 +1395,42 @@ function pickNumber(source: Record<string, unknown>, keys: string[]): number {
   return 0
 }
 
+function normalizeDocumentAuthors(raw: unknown): DocItem['authors'] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const source = item as Record<string, unknown>
+    const name = pickText(source, ['name'])
+    const role = pickText(source, ['role'])
+    const code = pickText(source, ['code'])
+    return name || role || code
+      ? [{ name: name || undefined, role: role || undefined, code: code || undefined }]
+      : []
+  })
+}
+
+function normalizeDocumentSignatures(raw: unknown): DocItem['signatures'] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const source = item as Record<string, unknown>
+    const name = pickText(source, ['name'])
+    const role = pickText(source, ['role'])
+    const signedAt = pickText(source, ['signed_at'])
+    const sourceField = pickText(source, ['source_field'])
+    return name || role || signedAt || sourceField
+      ? [
+          {
+            name: name || undefined,
+            role: role || undefined,
+            signed_at: signedAt || undefined,
+            source_field: sourceField || undefined,
+          },
+        ]
+      : []
+  })
+}
+
 function normalizeDocItem(raw: unknown): DocItem {
   const source = (raw || {}) as Record<string, unknown>
   const docType = pickText(source, ['doc_type', 'type', 'document_type'])
@@ -1432,6 +1468,10 @@ function normalizeDocItem(raw: unknown): DocItem {
     record_time: pickText(source, ['record_time', 'sort_time']) || undefined,
     source_table: pickText(source, ['source_table']) || undefined,
     group_key: pickText(source, ['group_key']) || undefined,
+    authors: normalizeDocumentAuthors(source.authors),
+    signatures: normalizeDocumentSignatures(source.signatures),
+    projection_incomplete: source.projection_incomplete === true,
+    projection_notice: pickText(source, ['projection_notice']) || undefined,
   }
 }
 
@@ -1443,12 +1483,15 @@ function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
     id,
     doc_key: docKey,
     doc_type: docType,
+    document_id: String(doc.document_id || doc.id || doc.doc_id || '') || undefined,
     title: String(doc.label || doc.doc_name || doc.document_title || docType || '未命名文书'),
     record_time: String(doc.record_time || doc.sort_time || ''),
     source_table: String(doc.source_table || ''),
     group_key: String(doc.group_key || ''),
     has_content: Boolean(doc.has_content),
     length: Number(doc.length || 0),
+    projection_incomplete: doc.projection_incomplete === true,
+    projection_notice: String(doc.projection_notice || '') || undefined,
   }
 }
 
@@ -1623,12 +1666,15 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
             id: id || docKey || title,
             doc_key: docKey || `${docType || 'unknown'}::${id || title}`,
             doc_type: docType || '',
+            document_id: pickText(nodeSource, ['document_id']) || id || undefined,
             title,
             record_time: pickText(nodeSource, ['record_time', 'sort_time']) || undefined,
             source_table: pickText(nodeSource, ['source_table']) || undefined,
             group_key: pickText(nodeSource, ['group_key']) || groupKey || undefined,
             has_content: hasContent,
             length: pickNumber(nodeSource, ['length']),
+            projection_incomplete: nodeSource.projection_incomplete === true,
+            projection_notice: pickText(nodeSource, ['projection_notice']) || undefined,
           } as DocTreeNode
         })
         .filter((node) => Boolean(node.id))

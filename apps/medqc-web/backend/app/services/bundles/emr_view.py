@@ -378,6 +378,8 @@ def _normalize_source_document(
         "participants": list(raw_doc.get("participants") or []),
         "report_items": list(raw_doc.get("report_items") or []),
         "report_metadata": dict(raw_doc.get("report_metadata") or {}),
+        "projection_incomplete": raw_doc.get("projection_incomplete") is True,
+        "projection_notice": _safe_text(raw_doc.get("projection_notice")),
         "source": "bundle",
     }
 
@@ -739,6 +741,44 @@ def _course_bundle_needs_exam_lab_refresh(bundle: dict[str, Any] | None) -> bool
     return not _COURSE_SOURCE_COVERAGE_KEYS.issubset(source_coverage)
 
 
+def _domain_bundle_needs_projection_refresh(bundle: dict[str, Any] | None) -> bool:
+    if not isinstance(bundle, dict):
+        return False
+    structured_context = bundle.get("structured_context")
+    if not isinstance(structured_context, dict):
+        return True
+    projection = structured_context.get("domain_projection")
+    if not isinstance(projection, dict):
+        return True
+    return not isinstance(projection.get("per_source"), dict)
+
+
+def _build_domain_projection_summary(
+    domain_bundles: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    domains: dict[str, dict[str, Any]] = {}
+    for domain, bundle in domain_bundles.items():
+        structured_context = bundle.get("structured_context")
+        if not isinstance(structured_context, dict):
+            continue
+        projection = structured_context.get("domain_projection")
+        if not isinstance(projection, dict):
+            continue
+        per_source = projection.get("per_source")
+        if not isinstance(per_source, dict):
+            continue
+        domains[domain] = {
+            "projection_kind": "domain_documents",
+            "is_evidence_source": False,
+            "per_source": per_source,
+        }
+    return {
+        "projection_kind": "domain_documents",
+        "is_evidence_source": False,
+        "domains": domains,
+    }
+
+
 def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_group: dict[str, list[dict[str, Any]]] = {group["key"]: [] for group in _GROUP_DEFS}
 
@@ -747,10 +787,13 @@ def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]
             "id": _safe_text(doc.get("id") or doc.get("doc_key")),
             "doc_key": _safe_text(doc.get("doc_key")),
             "doc_type": _safe_text(doc.get("doc_type")),
+            "document_id": _safe_text(doc.get("document_id")),
             "title": _safe_text(doc.get("doc_name") or doc.get("label")),
             "record_time": _safe_text(doc.get("sort_time") or doc.get("record_time")),
             "has_content": bool(doc.get("has_content")),
             "length": int(doc.get("length") or 0),
+            "projection_incomplete": doc.get("projection_incomplete") is True,
+            "projection_notice": _safe_text(doc.get("projection_notice")),
         }
         by_group["all"].append(node)
         group_key = _safe_text(doc.get("group_key"))
@@ -795,6 +838,24 @@ def load_bundle_documents(
         domain_hits[domain] = bool(payload)
         if payload:
             domain_bundles[domain] = payload
+
+    for domain, bundle in tuple(domain_bundles.items()):
+        if not _domain_bundle_needs_projection_refresh(bundle):
+            continue
+        try:
+            refreshed_bundle = load_or_assemble_domain_bundle(
+                execution_domain=domain,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                bundle_schema=bundle_schema,
+                force_refresh=True,
+            )
+        except Exception:
+            refreshed_bundle = None
+        if refreshed_bundle:
+            domain_bundles[domain] = refreshed_bundle
+            domain_hits[f"{domain}_projection_refresh"] = True
 
     course_bundle = domain_bundles.get("course")
     if _course_bundle_needs_exam_lab_refresh(course_bundle):
@@ -853,6 +914,7 @@ def load_bundle_documents(
         "layout_version": "bundle_struct_v1",
         "documents": documents,
         "documents_tree": tree,
+        "domain_projection": _build_domain_projection_summary(domain_bundles),
         "domain_bundle_hits": domain_hits,
         "empty_reason": "" if documents else "bundle_documents_empty",
     }
@@ -1130,9 +1192,14 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             "doc_type": doc_type,
             "doc_name": doc_name or _DOC_TYPE_LABELS.get(doc_type, "病历文书"),
             "doc_id": doc_id,
+            "document_id": _safe_text(document.get("document_id")),
             "doc_key": doc_key,
             "group_key": group_key,
             "record_time": _safe_text(document.get("sort_time") or document.get("record_time")),
+            "authors": list(document.get("authors") or []),
+            "signatures": list(document.get("signatures") or []),
+            "projection_incomplete": document.get("projection_incomplete") is True,
+            "projection_notice": _safe_text(document.get("projection_notice")),
             "source": "bundle",
         },
         "render_blocks": render_blocks,
