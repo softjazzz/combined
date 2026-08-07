@@ -373,7 +373,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "diagnosis",
     ),
-    "LX0609-025": ("surgery_record", "mr_surgery"),
+    "LX0609-025": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-028": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),

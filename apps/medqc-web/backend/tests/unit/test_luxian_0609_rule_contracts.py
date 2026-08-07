@@ -85,6 +85,15 @@ def test_009_phase1_decision_support_only_loads_daily_coverage_sources() -> None
 
 
 @pytest.mark.unit
+def test_025_decision_support_loads_surgery_and_course_record_sources() -> None:
+    assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-025",))) == {
+        "surgery_record",
+        "mr_surgery",
+        "daily_course_record",
+    }
+
+
+@pytest.mark.unit
 def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() -> None:
     contracts = load_luxian_0609_rule_contracts()
     program_only = {
