@@ -10,6 +10,7 @@ const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guid
 
 const {
   message,
+  Modal,
   listManualSamplePools,
   getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
@@ -28,6 +29,7 @@ const {
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
+  cancelSichuanWorkspaceBatchJob,
   routeQuery,
   routerPush,
   routerReplace,
@@ -43,6 +45,9 @@ const {
     info: vi.fn(),
     loading: vi.fn(),
     destroy: vi.fn(),
+  },
+  Modal: {
+    confirm: vi.fn(({ onOk }: { onOk?: () => unknown }) => onOk?.()),
   },
   listManualSamplePools: vi.fn(),
   getSheet2ExactReviewAcceptancePackage: vi.fn(),
@@ -62,6 +67,7 @@ const {
   listSichuanWorkspaceBatchJobs: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   reviewSichuanWorkspaceBatchJob: vi.fn(),
+  cancelSichuanWorkspaceBatchJob: vi.fn(),
   routeQuery: {} as Record<string, unknown>,
   routerPush: vi.fn(),
   routerReplace: vi.fn(),
@@ -73,6 +79,7 @@ const {
 
 vi.mock('ant-design-vue', () => ({
   message,
+  Modal,
 }))
 
 vi.mock('vue-router', () => ({
@@ -107,6 +114,7 @@ vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   listSichuanWorkspaceBatchJobs,
   exportSichuanWorkspaceBatchJob,
   reviewSichuanWorkspaceBatchJob,
+  cancelSichuanWorkspaceBatchJob,
 }))
 
 vi.mock('xlsx', () => ({
@@ -3885,5 +3893,167 @@ describe('CustomerSampleValidationView', () => {
       only_intrinsic: false,
       include_in_batch_1: false,
     })
+  })
+
+  it('停止当前任务成功后立即重跑会创建新任务，不复用已取消任务', async () => {
+    runManualSamplePool
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool_id: 'pool-1',
+          job_id: 'job-canceled',
+          sample_item_count: 1,
+          record_count: 1,
+          rule_count: 5,
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool_id: 'pool-1',
+          job_id: 'job-new',
+          sample_item_count: 1,
+          record_count: 1,
+          rule_count: 5,
+          rule_set_key: 'luxian_0609_qc_v1',
+          rule_set_name: '泸县0609质控点验证 v1',
+        },
+      })
+    getSichuanWorkspaceBatchJob.mockImplementation(async (jobId: string) => ({
+      success: true,
+      data: {
+        id: jobId,
+        status: jobId === 'job-canceled' ? 'running' : 'queued',
+      },
+    }))
+    cancelSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+      success: true,
+      data: { id: 'job-canceled', status: 'canceled' },
+    })
+
+    const wrapper = await mountView()
+    const checkbox = wrapper.findAll('input.record-checkbox')[0]
+    await checkbox.setValue(true)
+    await nextTick()
+
+    const firstRunButton = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '开始质控')
+    expect(firstRunButton).toBeTruthy()
+    await firstRunButton!.trigger('click')
+    await flushPromises()
+
+    const cancelButton = wrapper.find('[data-testid="qc-task-cancel"]')
+    expect(cancelButton.exists()).toBe(true)
+    await cancelButton.trigger('click')
+    await flushPromises()
+    expect(cancelSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-canceled')
+
+    await checkbox.setValue(true)
+    await nextTick()
+    const rerunButton = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '开始质控')
+    expect(rerunButton).toBeTruthy()
+    await rerunButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledTimes(2)
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-new')
+    expect(message.info).not.toHaveBeenCalledWith('任务已创建，正在执行质控')
+  })
+
+  it('停止任务失败时保留去重状态，不会误发新的重复任务', async () => {
+    runManualSamplePool.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'job-still-running',
+        sample_item_count: 1,
+        record_count: 1,
+        rule_count: 5,
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_set_name: '泸县0609质控点验证 v1',
+      },
+    })
+    getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-still-running', status: 'running' },
+    })
+    cancelSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+      success: false,
+      message: '停止任务失败',
+    })
+
+    const wrapper = await mountView()
+    const checkbox = wrapper.findAll('input.record-checkbox')[0]
+    await checkbox.setValue(true)
+    await nextTick()
+    const runButton = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '开始质控')
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="qc-task-cancel"]').trigger('click')
+    await flushPromises()
+    expect(message.error).toHaveBeenCalledWith('停止任务失败')
+
+    await checkbox.setValue(true)
+    await nextTick()
+    const rerunButton = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '开始质控')
+    await rerunButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledTimes(1)
+    expect(message.info).toHaveBeenCalledWith('任务已创建，正在执行质控')
+  })
+
+  it('创建质控任务时在底部工作条显示清晰进度，完成后自动隐藏', async () => {
+    let resolveRun: (value: unknown) => void = () => {}
+    runManualSamplePool.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRun = resolve
+      }),
+    )
+
+    const wrapper = await mountView()
+    await wrapper.findAll('input.record-checkbox')[0].setValue(true)
+    await nextTick()
+    const runButton = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '开始质控')
+    await runButton!.trigger('click')
+    await nextTick()
+
+    const workDock = wrapper.get('[data-testid="customer-sample-work-dock"]')
+    expect(workDock.text()).toContain('正在创建质控任务')
+    expect(workDock.text()).toContain('任务创建完成后将自动显示实时执行进度')
+    expect(workDock.text()).toContain('正在创建…')
+
+    resolveRun({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'job-created',
+        sample_item_count: 1,
+        record_count: 1,
+        rule_count: 5,
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_set_name: '泸县0609质控点验证 v1',
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('正在创建质控任务')
   })
 })

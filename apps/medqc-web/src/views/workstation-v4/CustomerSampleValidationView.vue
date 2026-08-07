@@ -655,7 +655,7 @@
     </div>
 
     <div
-      v-if="currentQcTask || selectedRecordStats.selectedCount > 0"
+      v-if="currentQcTask || selectedRecordStats.selectedCount > 0 || runLoading"
       class="customer-sample-work-dock"
       data-testid="customer-sample-work-dock"
       aria-live="polite"
@@ -696,6 +696,21 @@
             </template>
             · 当前范围：{{ selectedRunScopeSummary }}
           </span>
+          <div
+            v-if="runLoading"
+            class="customer-sample-selection-run-notice"
+            data-testid="customer-sample-run-creating-notice"
+            role="status"
+          >
+            <span
+              class="customer-sample-selection-run-notice__spinner"
+              aria-hidden="true"
+            />
+            <span>
+              <strong>正在创建质控任务</strong>
+              <small>任务创建完成后将自动显示实时执行进度</small>
+            </span>
+          </div>
         </div>
         <div class="customer-sample-selection-run-actions">
           <a-button
@@ -718,7 +733,7 @@
             :loading="runLoading"
             @click="handleRunPool"
           >
-            开始质控
+            {{ runLoading ? '正在创建…' : '开始质控' }}
           </a-button>
         </div>
       </div>

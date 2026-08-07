@@ -749,7 +749,9 @@ export function useCustomerSampleValidationController() {
   )
 
   const runButtonText = computed(() =>
-    isFormalFastScreenMode.value
+    runLoading.value
+      ? '正在创建…'
+      : isFormalFastScreenMode.value
       ? selectedRecordStats.value.selectedCount > 0
         ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
         : '请先选择病历'
@@ -2779,12 +2781,24 @@ export function useCustomerSampleValidationController() {
       stopBatchJobPolling()
       batchJobDetail.value = result.data
       updateCurrentQcTask(result.data)
+      clearLastRunSubmissionForCanceledJob(normalizedJobId)
       message.success('已停止本次质控任务，已返回结果仍可查看')
       await loadPools()
       await loadRecords()
     } finally {
       cancelBatchJobLoading.value = false
     }
+  }
+
+  function clearLastRunSubmissionForCanceledJob(jobId: string) {
+    const submission = lastRunSubmission.value
+    if (!submission) return
+    const submittedJobIds = [submission.jobId, ...(submission.jobIds || [])]
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+    if (!submittedJobIds.includes(jobId)) return
+    message.destroy(submission.key)
+    lastRunSubmission.value = undefined
   }
 
   function confirmCancelBatchJob(jobId: string) {
