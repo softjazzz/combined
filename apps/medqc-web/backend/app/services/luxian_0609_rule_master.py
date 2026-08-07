@@ -29,6 +29,14 @@ _EXPECTED_STATUS_COUNTS = {
     "contract_ready": 0,
     "pending_definition": 0,
 }
+_POLICY_SOURCE_ORDER = (
+    "sichuan_2026_handbook",
+    "sichuan_2023_standard",
+    "customer_confirmed",
+    "hospital_local_extension",
+)
+_POLICY_SOURCE_CODES = frozenset(_POLICY_SOURCE_ORDER)
+_MAX_POLICY_TEXT_LENGTH = 240
 
 
 def _clean(value: Any) -> str:
@@ -42,6 +50,9 @@ class Luxian0609RuleMasterEntry:
     qc_point: str
     implementation_status: str
     definition_note: str = ""
+    policy_sources: tuple[str, ...] = ()
+    policy_summary: str = ""
+    pending_definition_note: str = ""
 
     def __post_init__(self) -> None:
         if self.implementation_status not in _IMPLEMENTATION_STATUSES:
@@ -52,6 +63,35 @@ class Luxian0609RuleMasterEntry:
             raise ValueError(f"active LX0609 rule cannot contain a pending note: {self.rule_id}")
         if self.implementation_status != "active" and not self.definition_note:
             raise ValueError(f"inactive LX0609 rule must explain its status: {self.rule_id}")
+
+        if not isinstance(self.policy_sources, tuple):
+            raise ValueError(f"LX0609 policy sources must be a tuple: {self.rule_id}")
+        policy_sources = tuple(_clean(source) for source in self.policy_sources)
+        if not policy_sources:
+            raise ValueError(f"LX0609 policy sources cannot be empty: {self.rule_id}")
+        if len(set(policy_sources)) != len(policy_sources):
+            raise ValueError(f"LX0609 policy sources cannot contain duplicates: {self.rule_id}")
+        unknown_sources = set(policy_sources) - _POLICY_SOURCE_CODES
+        if unknown_sources:
+            raise ValueError(f"LX0609 unknown policy source: {self.rule_id}")
+        canonical_sources = tuple(
+            source for source in _POLICY_SOURCE_ORDER if source in policy_sources
+        )
+        if policy_sources != canonical_sources:
+            raise ValueError(f"LX0609 policy sources must use stable order: {self.rule_id}")
+        object.__setattr__(self, "policy_sources", policy_sources)
+
+        policy_summary = _clean(self.policy_summary)
+        if not policy_summary or len(policy_summary) > _MAX_POLICY_TEXT_LENGTH:
+            raise ValueError(f"LX0609 policy summary is invalid: {self.rule_id}")
+        object.__setattr__(self, "policy_summary", policy_summary)
+
+        pending_definition_note = _clean(self.pending_definition_note)
+        if len(pending_definition_note) > _MAX_POLICY_TEXT_LENGTH:
+            raise ValueError(
+                f"LX0609 pending definition note is too long: {self.rule_id}"
+            )
+        object.__setattr__(self, "pending_definition_note", pending_definition_note)
 
     @property
     def title(self) -> str:
@@ -74,6 +114,9 @@ def compile_luxian_0609_rule_master(
     for raw in raw_rules:
         if not isinstance(raw, Mapping):
             raise ValueError("invalid LX0609 rule master entry")
+        raw_policy_sources = raw.get("policy_sources")
+        if not isinstance(raw_policy_sources, list):
+            raise ValueError("LX0609 rule master policy sources must be a list")
         entries.append(
             Luxian0609RuleMasterEntry(
                 rule_id=_clean(raw.get("rule_id")).upper(),
@@ -81,6 +124,9 @@ def compile_luxian_0609_rule_master(
                 qc_point=_clean(raw.get("qc_point")),
                 implementation_status=_clean(raw.get("implementation_status")),
                 definition_note=_clean(raw.get("definition_note")),
+                policy_sources=tuple(raw_policy_sources),
+                policy_summary=_clean(raw.get("policy_summary")),
+                pending_definition_note=_clean(raw.get("pending_definition_note")),
             )
         )
 
