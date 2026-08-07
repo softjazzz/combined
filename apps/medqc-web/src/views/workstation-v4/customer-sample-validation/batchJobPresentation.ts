@@ -19,6 +19,11 @@ export type BatchJobLiveResult = {
   text: string
 }
 
+export type BatchJobExecutionPhase = {
+  label: string
+  text: string
+}
+
 export type BatchJobPresentation = {
   normalizedStatus: string
   statusLabel: string
@@ -41,6 +46,7 @@ export type BatchJobPresentation = {
   statusCounts: Record<string, number>
   statusChips: BatchJobStatusChip[]
   liveResultLines: BatchJobLiveResult[]
+  liveExecutionPhase: BatchJobExecutionPhase | null
   overviewText: string
   issueSummaryText: string
   createdText: string
@@ -79,6 +85,20 @@ const ATTENTION_STATUSES = new Set(
 )
 
 const STATUS_META_BY_KEY = new Map(STATUS_META.map((item) => [item.key, item]))
+
+const EXECUTOR_LABELS: Record<string, string> = {
+  surgery_presence: '手术记录',
+  basic_timeliness: '病历时效',
+  exam_lab: '检查检验',
+  consultation_quality: '会诊记录',
+  transfusion: '输血相关',
+  tumor_pathology: '肿瘤与病理',
+  course_quality: '病程质量',
+  surgery_gate: '手术适用性',
+  surgery_document: '手术文书',
+  surgery_mdt: '术前讨论',
+  extended_document: '扩展病历文书',
+}
 
 const BRIEF_BY_RULE_ID: Record<string, string> = {
   'LX0609-001': '入院记录未在24小时内完成',
@@ -224,6 +244,28 @@ function resolveLiveResultLines(job: SichuanBatchJob): BatchJobLiveResult[] {
   return lines
 }
 
+function resolveLiveExecutionPhase(job: SichuanBatchJob): BatchJobExecutionPhase | null {
+  const summary = asRecord(job.summary)
+  const streamState = asRecord(summary.stream_state)
+  if (String(streamState.kind || '').trim() !== 'native_executor_phase') return null
+  const executorKey = String(streamState.executor_key || '').trim()
+  const executorLabel = EXECUTOR_LABELS[executorKey] || '质控规则组'
+  const event = String(streamState.event || '').trim().toLowerCase()
+  const completedBatches = numeric(streamState.completed_batches)
+  const totalBatches = numeric(streamState.total_batches)
+  const countText = totalBatches > 0 ? `（${completedBatches} / ${totalBatches}）` : ''
+  if (event === 'started') {
+    return { label: '执行动态', text: `正在核对${executorLabel}${countText}` }
+  }
+  if (event === 'completed') {
+    return { label: '执行动态', text: `${executorLabel}已完成${countText}，正在继续下一规则组` }
+  }
+  if (event === 'failed') {
+    return { label: '执行动态', text: `${executorLabel}未完成，正在安全处理本次任务` }
+  }
+  return null
+}
+
 function resolveIssueSummaryText(job: SichuanBatchJob): string {
   const summary = asRecord(job.summary)
   const compactSummaries = Array.isArray(summary.history_issue_summaries)
@@ -311,11 +353,15 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
   const expectedResultCount =
     recordCount > 0 && customerRuleCount > 0 ? recordCount * customerRuleCount : 0
   const directProgress = numeric(summary.progress_percent || progress.progress_percent)
+  const streamRuleIndex = numeric(progress.rule_index)
+  const streamRuleCount = numeric(progress.rule_count)
   const progressPercent =
     directProgress > 0
       ? Math.min(100, Math.max(0, Math.round(directProgress)))
       : recordCount > 0 && completedRecordCount > 0
         ? Math.min(100, Math.round((completedRecordCount / recordCount) * 100))
+        : streamRuleCount > 0 && streamRuleIndex > 0
+          ? Math.min(100, Math.round((streamRuleIndex / streamRuleCount) * 100))
         : expectedResultCount > 0 && resultCount > 0
           ? Math.min(100, Math.round((resultCount / expectedResultCount) * 100))
           : 0
@@ -400,6 +446,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     statusCounts,
     statusChips,
     liveResultLines: resolveLiveResultLines(job),
+    liveExecutionPhase: resolveLiveExecutionPhase(job),
     overviewText,
     issueSummaryText: resolveIssueSummaryText(job),
     createdText: formatBatchJobDateTime(job.created_at),

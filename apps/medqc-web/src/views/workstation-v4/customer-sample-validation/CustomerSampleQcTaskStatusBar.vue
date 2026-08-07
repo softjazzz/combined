@@ -75,7 +75,7 @@
           >
             <div class="qc-task-status__live-result-label">
               <span aria-hidden="true" />
-              实时结果
+              {{ presentation.liveResultLines.length ? '已回写结果' : presentation.liveExecutionPhase?.label || '实时结果' }}
             </div>
             <div class="qc-task-status__live-result-content">
               <Transition
@@ -97,10 +97,13 @@
                 </div>
                 <div
                   v-else
-                  key="waiting-for-first-result"
-                  class="qc-task-status__live-result-waiting"
+                  :key="presentation.liveExecutionPhase?.text || 'waiting-for-first-result'"
+                  :class="[
+                    'qc-task-status__live-result-waiting',
+                    { 'is-stage': Boolean(presentation.liveExecutionPhase) },
+                  ]"
                 >
-                  等待首条质控结果回写…
+                  {{ presentation.liveExecutionPhase?.text || '等待首条质控结果回写…' }}
                 </div>
               </Transition>
             </div>

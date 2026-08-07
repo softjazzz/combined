@@ -161,6 +161,31 @@ describe('batchJobPresentation', () => {
     ])
   })
 
+  it('无最终结果时只展示安全的规则族执行阶段', () => {
+    const model = buildBatchJobPresentation(
+      buildJob({
+        status: 'running',
+        summary: {
+          ...buildJob().summary,
+          stream_state: {
+            kind: 'native_executor_phase',
+            event: 'started',
+            executor_key: 'exam_lab',
+            completed_batches: 2,
+            total_batches: 10,
+          },
+        },
+        items: [],
+      }),
+    )
+
+    expect(model.liveResultLines).toEqual([])
+    expect(model.liveExecutionPhase).toEqual({
+      label: '执行动态',
+      text: '正在核对检查检验（2 / 10）',
+    })
+  })
+
   it('缺少状态和统计字段时使用中性回退，不伪造排队中或合规结论', () => {
     const model = buildBatchJobPresentation(
       buildJob({

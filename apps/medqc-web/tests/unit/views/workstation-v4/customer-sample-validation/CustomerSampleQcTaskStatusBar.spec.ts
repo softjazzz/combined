@@ -139,6 +139,33 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     )
   })
 
+  it('单病历尚未形成Canonical结果时展示真实执行阶段，不伪造结论', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          items: [],
+          summary: {
+            ...buildJob().summary,
+            stream_state: {
+              kind: 'native_executor_phase',
+              event: 'started',
+              executor_key: 'course_quality',
+              completed_batches: 4,
+              total_batches: 10,
+            },
+          },
+        }),
+      },
+      global: { stubs },
+    })
+
+    const liveResult = wrapper.get('[data-testid="qc-task-live-result"]').text()
+    expect(liveResult).toContain('执行动态')
+    expect(liveResult).toContain('正在核对病程质量（4 / 10）')
+    expect(liveResult).not.toContain('合规')
+    expect(liveResult).not.toContain('不合规')
+  })
+
   it('运行中放大进度并轮播服务端已回写的真实结果', async () => {
     vi.useFakeTimers()
     const wrapper = mount(CustomerSampleQcTaskStatusBar, {
