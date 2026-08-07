@@ -23,6 +23,7 @@ def test_resync_should_refresh_bundle_projections_while_lx0609_reads_same_cdm_ro
     domain_writes: dict[str, list[dict]] = {"course": []}
 
     def _select_records(**kwargs):
+        assert kwargs["schema"] == "cdm"
         return list(cdm_rows.get(kwargs["table"], []))
 
     def _save_scene(**kwargs):
@@ -84,6 +85,8 @@ def test_resync_should_refresh_bundle_projections_while_lx0609_reads_same_cdm_ro
     } >= {"COURSE-1", "COURSE-2"}
 
     def _read_luxian_source(**kwargs):
+        assert kwargs["source_schema"] == "cdm"
+        assert "domain_bundle" not in kwargs
         source_key = kwargs["source_key"]
         rows = cdm_rows["daily_course_record"] if source_key == "daily_course_record" else []
         return SnapshotSourceRows.create(
