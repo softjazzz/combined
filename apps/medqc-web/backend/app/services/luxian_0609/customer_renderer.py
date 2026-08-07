@@ -1227,6 +1227,12 @@ def customer_finding_from_controlled_facts(
             return "已识别可能的病情变化，但缺少可核验的变化发生时间，暂无法核对 24 小时内记录要求。"
         if kind == "critical_change_course_association_failed":
             return "已识别明确病情变化，但无法确认其与对应病程记录的关联关系，暂无法核对 24 小时内记录要求。"
+        if kind == "critical_change_window_not_mature":
+            return (
+                f"病情变化发生于 {facts.get('event_time') or '时间待核对'}，"
+                f"截至评价终点尚未满 24 小时（截止 {facts.get('deadline_time') or '待核对'}），"
+                "本次暂不判定为质控问题。"
+            )
         required_values = facts.get("required_dates")
         required_dates = (
             [str(value) for value in required_values]

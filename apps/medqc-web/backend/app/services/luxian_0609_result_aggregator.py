@@ -3361,6 +3361,56 @@ def safe_luxian_0609_customer_display_facts(
             "recorded_dates": list(recorded_dates),
         }
     if rule_id == "LX0609-009":
+        failure_kind = raw.get("failure_kind")
+        if failure_kind == "critical_change_time_unavailable":
+            if raw.get("threshold_hours") != 24:
+                return None
+            return {
+                "failure_kind": failure_kind,
+                "threshold_hours": 24,
+            }
+        if failure_kind == "critical_change_course_association_failed":
+            event_ref = raw.get("event_ref")
+            course_ref = raw.get("corresponding_course_ref")
+            if (
+                raw.get("threshold_hours") != 24
+                or not isinstance(event_ref, str)
+                or not event_ref.strip()
+                or len(event_ref) > 256
+                or not isinstance(course_ref, str)
+                or not course_ref.strip()
+                or len(course_ref) > 256
+            ):
+                return None
+            return {
+                "failure_kind": failure_kind,
+                "event_ref": event_ref,
+                "corresponding_course_ref": course_ref,
+                "threshold_hours": 24,
+            }
+        if failure_kind == "critical_change_window_not_mature":
+            event_ref = raw.get("event_ref")
+            event_time = raw.get("event_time")
+            deadline_time = raw.get("deadline_time")
+            if (
+                raw.get("threshold_hours") != 24
+                or not isinstance(event_ref, str)
+                or not event_ref.strip()
+                or len(event_ref) > 256
+                or any(
+                    not isinstance(value, str)
+                    or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value)
+                    for value in (event_time, deadline_time)
+                )
+            ):
+                return None
+            return {
+                "failure_kind": failure_kind,
+                "event_ref": event_ref,
+                "event_time": event_time,
+                "deadline_time": deadline_time,
+                "threshold_hours": 24,
+            }
         change_kinds = {
             "critical_change_course_timely",
             "critical_change_course_not_timely",

@@ -1549,7 +1549,14 @@ def _rule_009_semantic_context(
     *,
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
-) -> tuple[str, bool, bool, Mapping[str, datetime], Mapping[str, datetime]]:
+) -> tuple[
+    str,
+    bool,
+    bool,
+    Mapping[str, datetime | None],
+    Mapping[str, datetime | None],
+    datetime | date,
+]:
     """返回完整语义投影及截断标记；不允许静默裁剪后交给模型。"""
 
     if (
@@ -1557,7 +1564,7 @@ def _rule_009_semantic_context(
         or type(materials) is not Luxian0609EvidenceMaterialStore
         or materials.snapshot_hash != snapshot.snapshot_hash
     ):
-        return "", False, False, {}, {}
+        return "", False, False, {}, {}, date.min
     try:
         critical_dates = tuple(
             _authoritative_natural_date(row.get("prescribed_datetime"))
@@ -1566,20 +1573,24 @@ def _rule_009_semantic_context(
         )
         horizon_rows = tuple(materials.rows(EVALUATION_HORIZON_SOURCE_KEY))
     except Exception:
-        return "", False, False, {}, {}
+        return "", False, False, {}, {}, date.min
     if (
         not critical_dates
         or any(item is None for item in critical_dates)
         or len(horizon_rows) != 1
     ):
-        return "", False, False, {}, {}
+        return "", False, False, {}, {}, date.min
     anchor_date = min(item for item in critical_dates if item is not None)
     horizon_date = _authoritative_natural_date(horizon_rows[0].get("horizon_date"))
     if horizon_date is None or horizon_date < anchor_date:
-        return "", False, False, {}, {}
+        return "", False, False, {}, {}, date.min
+    horizon_datetime = _authoritative_course_time(
+        horizon_rows[0].get("horizon_datetime")
+    )
+    evaluation_horizon: datetime | date = horizon_datetime or horizon_date
 
     observation_by_source = {item.source_key: item for item in snapshot.observations}
-    external_events: list[tuple[datetime, str, str, str]] = []
+    external_events: list[tuple[datetime | None, str, str, str]] = []
     for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
         observation = observation_by_source.get(source_key)
         if (
@@ -1587,65 +1598,75 @@ def _rule_009_semantic_context(
             or observation.query_state.value not in {"available", "empty"}
             or observation.completeness.value == "truncated"
         ):
-            return "", False, False, {}, {}
+            return "", False, False, {}, {}, evaluation_horizon
         try:
             source_rows = materials.rows(source_key)
         except Exception:
-            return "", False, False, {}, {}
+            return "", False, False, {}, {}, evaluation_horizon
         for index, row in enumerate(source_rows):
             content = _rule_009_external_event_text(source_key, row)
             if not content:
                 continue
             event_time = _rule_009_external_event_time(source_key, row)
-            if event_time is None:
-                return "", False, False, {}, {}
-            if anchor_date <= event_time.date() <= horizon_date:
+            # 不能因为一条尚未被模型识别为病情变化的外部行缺时间，就把整条
+            # 规则降级。只有模型明确引用的事件才进入后续权威时间校验。
+            if event_time is None or anchor_date <= event_time.date() <= horizon_date:
                 external_events.append((event_time, source_key, _rule_009_row_ref(source_key, index, row), content))
-    external_events.sort(key=lambda item: (item[0], item[1], item[2]))
+    external_events.sort(
+        key=lambda item: (
+            item[0] is None,
+            item[0] or datetime.max,
+            item[1],
+            item[2],
+        )
+    )
     if len(external_events) > _MAX_RULE_009_EXTERNAL_EVENT_ROWS:
-        return "", True, False, {}, {}
+        return "", True, False, {}, {}, evaluation_horizon
     if not external_events:
-        return "", False, True, {}, {}
+        return "", False, True, {}, {}, evaluation_horizon
 
     parts: list[str] = []
-    course_times: dict[str, datetime] = {}
-    event_times: dict[str, datetime] = {}
+    course_times: dict[str, datetime | None] = {}
+    # 保留全部可投递事件引用。时间是否权威只能在模型明确引用该事件后
+    # 校验，不能因无关外部行缺时间而提前降级整条规则。
+    event_times: dict[str, datetime | None] = {}
     substantive_dates: set[date] = set()
     for source_key in _RULE_007_RECORD_SOURCES:
         try:
             rows = materials.rows(source_key)
         except Exception:
-            return "", False, False, {}, {}
-        eligible: list[tuple[date, datetime, str, str]] = []
+            return "", False, False, {}, {}, evaluation_horizon
+        eligible: list[tuple[date | None, datetime | None, str, str]] = []
         for index, row in enumerate(rows):
             record_time = _authoritative_course_time(authoritative_document_time_value(row))
             record_date = record_time.date() if record_time is not None else None
             content = _rule_009_substantive_text(row)
-            if (
-                record_date is None
-                or not anchor_date <= record_date <= horizon_date
-                or not content
+            if not content or (
+                record_date is not None
+                and not anchor_date <= record_date <= horizon_date
             ):
                 continue
             ref = _rule_009_row_ref(source_key, index, row)
             eligible.append((record_date, record_time, ref, content))
             substantive_dates.add(record_date)
         if len(eligible) > _MAX_ROWS_PER_SOURCE:
-            return "", True, False, {}, {}
+            return "", True, False, {}, {}, evaluation_horizon
         for record_date, record_time, ref, content in eligible:
             if len(content) > _MAX_ROW_CHARS:
-                return "", True, False, {}, {}
+                return "", True, False, {}, {}, evaluation_horizon
             course_times[ref] = record_time
             parts.append(
-                f"[course_ref={ref}] 记录时间={record_time.strftime('%Y-%m-%d %H:%M:%S')}；"
+                f"[course_ref={ref}] 记录时间="
+                f"{record_time.strftime('%Y-%m-%d %H:%M:%S') if record_time else '待核验'}；"
                 f"内容={content}"
             )
     for event_time, source_key, ref, content in external_events:
         if len(content) > _MAX_ROW_CHARS:
-            return "", True, False, {}, {}
+            return "", True, False, {}, {}, evaluation_horizon
         event_times[ref] = event_time
         parts.append(
-            f"[event_ref={ref}] 事件时间={event_time.strftime('%Y-%m-%d %H:%M:%S')}；"
+            f"[event_ref={ref}] 事件时间="
+            f"{event_time.strftime('%Y-%m-%d %H:%M:%S') if event_time else '待核验'}；"
             f"内容={content}"
         )
     expected_dates = {
@@ -1653,12 +1674,12 @@ def _rule_009_semantic_context(
         for offset in range((horizon_date - anchor_date).days + 1)
     }
     if expected_dates.difference(substantive_dates):
-        return "", False, False, {}, {}
+        return "", False, False, {}, {}, evaluation_horizon
     context = "\n".join(parts)
     return (
-        ("", True, False, {}, {})
+        ("", True, False, {}, {}, evaluation_horizon)
         if len(context) > _MAX_CONTEXT_CHARS
-        else (context, False, True, event_times, course_times)
+        else (context, False, True, event_times, course_times, evaluation_horizon)
     )
 
 
@@ -1702,7 +1723,7 @@ def _rule_009_semantic_prompt(*, context: str) -> str:
 
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
 只抽取“相对既往基线发生明确改变”的事件：主观症状(subjective)、客观体征(objective)、检查检验(exam_lab)、并发症/合并症(complication)、特殊状态(special_state)。
-“病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref、course_ref 和时间，不得编造或改写时间。
+"病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref、course_ref 和时间，不得编造或改写时间；若材料标注“待核验”，仍可引用明确变化事件，但 change_time 必须留空。
 若同一病程已经明确记录变化及处置，可把该病程作为对应病程。
 
 只能使用以下当前就诊、评价区间内的裁剪病程和最小外部事件：
@@ -1725,7 +1746,9 @@ def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[
             return None
         event_ref = _clean(item.get("event_ref"))
         change_time = _clean(item.get("change_time"))
-        if not event_ref or _authoritative_course_time(change_time) is None:
+        if not event_ref or (
+            change_time and _authoritative_course_time(change_time) is None
+        ):
             return None
         parsed.append({
             "event_ref": event_ref,
@@ -1806,8 +1829,9 @@ def _rule_009_change_event_decision(
     *,
     base_decision: RuleDecision,
     events: Sequence[Mapping[str, Any]],
-    event_times: Mapping[str, datetime],
-    course_times: Mapping[str, datetime],
+    event_times: Mapping[str, datetime | None],
+    course_times: Mapping[str, datetime | None],
+    evaluation_horizon: datetime | date,
 ) -> tuple[RuleDecision, Mapping[str, Any]]:
     """模型仅抽取事件，逐事件24小时及时性由Python唯一裁决。"""
 
@@ -1823,18 +1847,55 @@ def _rule_009_change_event_decision(
                     base_decision=base_decision,
                     data_gap_reason="authoritative_time_missing",
                 ),
-                {"failure_kind": "critical_change_time_unavailable"},
+                {
+                    "failure_kind": "critical_change_time_unavailable",
+                    "threshold_hours": 24,
+                },
+            )
+        deadline = event_time + _RULE_009_CHANGE_WINDOW
+        if isinstance(evaluation_horizon, datetime):
+            window_mature = evaluation_horizon >= deadline
+        else:
+            window_mature = evaluation_horizon > deadline.date()
+        if not window_mature:
+            return (
+                _rule_009_semantic_decision(
+                    base_decision=base_decision,
+                    data_gap_reason="evaluation_window_not_mature",
+                ),
+                {
+                    "failure_kind": "critical_change_window_not_mature",
+                    "event_ref": event_ref,
+                    "event_time": event_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "deadline_time": deadline.strftime("%Y-%m-%d %H:%M:%S"),
+                    "threshold_hours": 24,
+                },
+            )
+        if course_ref and course_ref not in course_times:
+            return (
+                _rule_009_semantic_decision(
+                    base_decision=base_decision,
+                    data_gap_reason="association_failed",
+                ),
+                {
+                    "failure_kind": "critical_change_course_association_failed",
+                    "event_ref": event_ref,
+                    "corresponding_course_ref": course_ref,
+                    "threshold_hours": 24,
+                },
             )
         course_time = course_times.get(course_ref) if course_ref else None
         if course_ref and course_time is None:
             return (
                 _rule_009_semantic_decision(
                     base_decision=base_decision,
-                    data_gap_reason="association_failed",
+                    data_gap_reason="authoritative_time_missing",
                 ),
-                {"failure_kind": "critical_change_course_association_failed"},
+                {
+                    "failure_kind": "critical_change_time_unavailable",
+                    "threshold_hours": 24,
+                },
             )
-        deadline = event_time + _RULE_009_CHANGE_WINDOW
         timely = course_time is not None and event_time <= course_time <= deadline
         facts.append(
             {
@@ -2994,7 +3055,14 @@ async def execute_luxian_0609_native_course_quality_rules(
                 customer_display_facts.extend(base_display_facts)
                 decisions.append(terminal_decision)
                 continue
-            context, context_truncated, context_ready, event_times, course_times = (
+            (
+                context,
+                context_truncated,
+                context_ready,
+                event_times,
+                course_times,
+                evaluation_horizon,
+            ) = (
                 _rule_009_semantic_context(
                     snapshot=evidence_snapshot,
                     materials=evidence_materials,
@@ -3050,6 +3118,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 events=events,
                 event_times=event_times,
                 course_times=course_times,
+                evaluation_horizon=evaluation_horizon,
             )
             daily_facts = dict(base_display_facts[0][1]) if base_display_facts else {}
             daily_facts.update(change_facts)
