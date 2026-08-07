@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,6 +25,15 @@ _CROSS_FAMILY_RULE_IDS = (
     "LX0609-045",  # 输血
     "LX0609-052",  # 扩展文书（危急值）
 )
+
+_FAMILY_REPRESENTATIVE_RULE_IDS = {
+    "course": "LX0609-016",
+    "consultation": "LX0609-021",
+    "surgery": "LX0609-033",
+    "exam_lab": "LX0609-012",
+    "transfusion": "LX0609-045",
+    "extended": "LX0609-052",
+}
 
 
 class _FrozenExecutionDatetime(datetime):
@@ -96,6 +106,36 @@ def _material_counts(session: Any) -> tuple[tuple[str, int], ...]:
     )
 
 
+def _normalize_native_value(value: Any) -> Any:
+    """保留 Native 交付字段，移除对象类型差异以比较两个真实执行结果。"""
+
+    if is_dataclass(value) and not isinstance(value, type):
+        return _normalize_native_value(asdict(value))
+    if isinstance(value, Mapping):
+        return {
+            str(key): _normalize_native_value(item)
+            for key, item in sorted(value.items(), key=lambda entry: str(entry[0]))
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalize_native_value(item) for item in value]
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return _normalize_native_value(model_dump())
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return _normalize_native_value(to_dict())
+    return value
+
+
+def _native_execution_projection(value: Any) -> dict[str, Any]:
+    """只比较 Native 公开执行结果的三类业务输出，不退化为最终聚合结果。"""
+
+    return {
+        field: _normalize_native_value(getattr(value, field, ()))
+        for field in ("results", "decisions", "customer_display_facts")
+    }
+
+
 @pytest.mark.asyncio
 async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_across_rule_families(
     monkeypatch,
@@ -112,7 +152,7 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
         "transfusion": execution.execute_luxian_0609_native_transfusion_rules,
         "extended": execution.execute_luxian_0609_native_extended_document_rules,
     }
-    executor_calls: list[tuple[str, tuple[str, ...], bool, bool]] = []
+    executor_calls: list[tuple[str, tuple[str, ...], bool, bool, dict[str, Any]]] = []
 
     def _build_session(**kwargs: Any):
         session = real_build_session(**kwargs, row_reader=_empty_source_reader)
@@ -123,15 +163,17 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
         real_executor = real_executors[name]
 
         async def _wrapped(**kwargs: Any):
+            native_result = await real_executor(**kwargs)
             executor_calls.append(
                 (
                     name,
                     tuple(kwargs["rule_ids"]),
                     kwargs.get("evidence_snapshot") is not None,
                     kwargs.get("evidence_materials") is not None,
+                    _native_execution_projection(native_result),
                 )
             )
-            return await real_executor(**kwargs)
+            return native_result
 
         return _wrapped
 
@@ -171,8 +213,24 @@ async def test_typed_native_mainline_is_invariant_to_scene_summary_projection_ac
     assert _projection(short) == _projection(long)
     assert short["token_usage"] == long["token_usage"]
     assert short["token_usage"]["total_tokens"] == 0
-    assert {name for name, _, has_snapshot, has_materials in executor_calls} == set(real_executors)
-    assert all(has_snapshot and has_materials for _, _, has_snapshot, has_materials in executor_calls)
+    calls_by_family: dict[str, list[tuple[tuple[str, ...], bool, bool, dict[str, Any]]]] = {
+        name: [] for name in real_executors
+    }
+    for name, rule_ids, has_snapshot, has_materials, native_result in executor_calls:
+        calls_by_family[name].append(
+            (rule_ids, has_snapshot, has_materials, native_result)
+        )
+
+    assert set(calls_by_family) == set(real_executors)
+    for family, representative_rule_id in _FAMILY_REPRESENTATIVE_RULE_IDS.items():
+        calls = calls_by_family[family]
+        assert len(calls) == 2
+        assert all(representative_rule_id in rule_ids for rule_ids, _, _, _ in calls)
+        assert all(
+            has_snapshot and has_materials
+            for _, has_snapshot, has_materials, _ in calls
+        )
+        assert calls[0][3] == calls[1][3]
 
 
 class _PromptCaptureClient:
