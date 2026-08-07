@@ -1308,6 +1308,14 @@ def _parse_executions(
             or (refs is not None and not isinstance(refs, list))
             or (raw_trace_refs is not None and not isinstance(raw_trace_refs, list))
             or (raw_structured_refs is not None and not isinstance(raw_structured_refs, list))
+            or (
+                isinstance(raw_trace_refs, list)
+                and not all(isinstance(ref, str) for ref in raw_trace_refs)
+            )
+            or (
+                isinstance(raw_structured_refs, list)
+                and not all(isinstance(ref, str) for ref in raw_structured_refs)
+            )
             or not isinstance(raw_quotes, list)
         ):
             raise _SemanticInvalid()

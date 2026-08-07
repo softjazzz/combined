@@ -2137,6 +2137,55 @@ async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field_name", "invalid_ref"),
+    (
+        ("trace_refs", {"ref": "daily_course_record-1"}),
+        ("structured_action_refs", ["daily_course_record-1"]),
+    ),
+)
+async def test_020_023_rejects_nested_stage_two_reference_values_as_semantic_unknown(
+    field_name,
+    invalid_ref,
+):
+    """二阶段引用必须是受控字符串，嵌套值不能升级为传输异常。"""
+
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    execution = _execution({
+        "recommendation_ref": "consultation_record-1#r1",
+        "execution_record_state": "specific_trace",
+        "trace_refs": ["daily_course_record-1"],
+        "execution_state": "absent",
+        "structured_action_refs": [],
+        "execution_quotes": ["已具体落实会诊意见"],
+        "confidence": "high",
+    })
+    execution["executions"][0][field_name] = [invalid_ref]
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        execution,
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "uncertain", "compliant", "compliant", "uncertain",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "semantic_output_unknown", "requirement_satisfied", "requirement_satisfied", "semantic_output_unknown",
+    ]
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+
+
+@pytest.mark.asyncio
 async def test_020_023_window_allows_later_specific_execution_when_admission_registry_is_empty():
     """同一就诊坐标 + 权威horizon足以约束会诊后的候选，不能因登记表未同步阻断。"""
     session = _window_session(
