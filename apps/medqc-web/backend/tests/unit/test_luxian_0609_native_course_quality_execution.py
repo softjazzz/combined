@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -3217,7 +3218,7 @@ async def test_016_admission_preview_shell_is_data_gap_without_model():
 
 
 @pytest.mark.asyncio
-async def test_017_similarity_threshold_is_programmatic_and_never_outputs_review_pending():
+async def test_017_similarity_threshold_is_inclusive_and_never_outputs_review_pending():
     one_record = course._copy_result(
         {"daily_course_record": [_row("患者病情稳定，继续观察治疗。")]},
         source_complete=True,
@@ -3268,8 +3269,8 @@ async def test_017_similarity_threshold_is_programmatic_and_never_outputs_review
         source_complete=True,
     )
     assert exact_threshold["metadata"]["maximum_similarity"] == 0.7
-    assert exact_threshold["status"] == "compliant"
-    assert exact_threshold["metadata"]["reason_code"] == "copy_similarity_within_threshold"
+    assert exact_threshold["status"] == "non_compliant"
+    assert exact_threshold["metadata"]["reason_code"] == "copy_similarity_threshold_exceeded"
 
 
 @pytest.mark.parametrize(
@@ -3815,6 +3816,99 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
     assert result.llm_call_count == 0
     assert private_marker not in repr(result)
     assert "private-left" not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("similarity", "expected_state", "expected_reason", "expected_failure_kind"),
+    [
+        (0.6999, CustomerFinalState.COMPLIANT, "requirement_within_threshold", "copy_similarity_within_threshold"),
+        (0.7000, CustomerFinalState.NON_COMPLIANT, "threshold_exceeded", "copy_similarity_threshold_exceeded"),
+        (0.7001, CustomerFinalState.NON_COMPLIANT, "threshold_exceeded", "copy_similarity_threshold_exceeded"),
+    ],
+)
+async def test_typed_017_similarity_threshold_is_inclusive_without_model(
+    monkeypatch,
+    similarity,
+    expected_state,
+    expected_reason,
+    expected_failure_kind,
+):
+    """017 的 70% 边界必须经公开 Native 入口成为受控终态。"""
+
+    class _FixedSimilarityMatcher:
+        def __init__(self, _isjunk, left, right, *, autojunk=False):
+            self._shortest_length = min(len(left), len(right))
+
+        def ratio(self):
+            return similarity
+
+        def get_matching_blocks(self):
+            return [SimpleNamespace(size=self._shortest_length)]
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [
+                {**_row("甲" * 60), "document_id": "copy-left"},
+                {
+                    **_row("乙" * 60, "2026-06-02 09:00:00"),
+                    "document_id": "copy-right",
+                },
+            ]
+            if source_key == "daily_course_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    monkeypatch.setattr(course, "SequenceMatcher", _FixedSimilarityMatcher)
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is expected_state
+    assert reduced[0].reason_code == expected_reason
+    assert result.decisions[0].reason_code == expected_reason
+    assert dict(result.customer_display_facts)["LX0609-017"] == {
+        "failure_kind": expected_failure_kind,
+        "copy_similarity": round(similarity, 4),
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": ["daily_course_record", "daily_course_record"],
+        "copy_document_record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 09:00:00",
+        ],
+    }
+    assert result.llm_call_count == result.prompt_tokens == result.total_tokens == 0
 
 
 @pytest.mark.asyncio

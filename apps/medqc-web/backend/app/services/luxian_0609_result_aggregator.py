@@ -3434,11 +3434,11 @@ def safe_luxian_0609_customer_display_facts(
             or not isinstance(threshold, (int, float))
             or (
                 failure_kind == "copy_similarity_threshold_exceeded"
-                and float(similarity) <= float(threshold)
+                and float(similarity) < float(threshold)
             )
             or (
                 failure_kind == "copy_similarity_within_threshold"
-                and float(similarity) > float(threshold)
+                and float(similarity) >= float(threshold)
             )
         ):
             return None

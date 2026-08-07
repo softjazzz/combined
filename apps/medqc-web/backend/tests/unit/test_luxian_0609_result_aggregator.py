@@ -2159,6 +2159,56 @@ def test_native_copy_result_keeps_only_safe_structured_similarity_metrics():
     assert "LXE-21" not in repr(result)
 
 
+@pytest.mark.parametrize(
+    ("similarity", "failure_kind"),
+    [
+        (0.6999, "copy_similarity_within_threshold"),
+        (0.7000, "copy_similarity_threshold_exceeded"),
+    ],
+)
+def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
+    similarity, failure_kind
+):
+    facts = {
+        "failure_kind": failure_kind,
+        "copy_similarity": similarity,
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": ["daily_course_record", "daily_course_record"],
+        "copy_document_record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 09:00:00",
+        ],
+    }
+    assert safe_luxian_0609_customer_display_facts(
+        rule_id="LX0609-017", raw=facts
+    ) == facts
+
+    direction = (
+        QcDirection.DEFECT
+        if failure_kind == "copy_similarity_threshold_exceeded"
+        else QcDirection.SATISFIED
+    )
+    result = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-017", direction=direction),),
+        customer_display_facts=(("LX0609-017", facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["status"] == (
+        "non_compliant"
+        if failure_kind == "copy_similarity_threshold_exceeded"
+        else "compliant"
+    )
+    assert result["customer_display_facts"] == facts
+    if failure_kind == "copy_similarity_within_threshold":
+        assert "达到或超过 70%" in result["findings"]
+
+
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
 def test_attestation_rejects_every_safe_provenance_tamper(field):
     gate, finding = _pair(FindingKind.REQUIREMENT_SATISFIED)

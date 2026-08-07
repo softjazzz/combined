@@ -140,7 +140,7 @@
       "qc_point": "2次以上病程记录完全相同（相似度大于70%）",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "当前本院扩展为病程相似度≥70%即不合规；省手册的完全相同要点作为参考，本任务不改变现有行为。"
+      "policy_summary": "当前本院扩展已按病程相似度≥70%即不合规执行；省手册的完全相同要点作为参考。"
     },
     {
       "rule_id": "LX0609-018",

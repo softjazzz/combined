@@ -2222,7 +2222,7 @@ def _render_copy_outcome(outcome: _CopyRuleOutcome) -> dict[str, Any]:
 
 
 def _copy_similarity_band(value: float) -> str:
-    return "threshold_exceeded" if value > _COPY_SIMILARITY_THRESHOLD else "within_threshold"
+    return "threshold_exceeded" if value >= _COPY_SIMILARITY_THRESHOLD else "within_threshold"
 
 
 def _assess_copy(
@@ -2349,7 +2349,7 @@ def _assess_copy(
             "template_shell_only": template_shell_only,
         }
     )
-    if maximum <= _COPY_SIMILARITY_THRESHOLD:
+    if maximum < _COPY_SIMILARITY_THRESHOLD:
         return _CopyRuleOutcome(
             status="compliant",
             reason_code="copy_similarity_within_threshold",

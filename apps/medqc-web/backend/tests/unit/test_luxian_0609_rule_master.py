@@ -150,6 +150,8 @@ def test_confirmed_policy_metadata_preserves_key_rule_contracts():
         "hospital_local_extension",
     )
     assert "相似度≥70%" in entries["LX0609-017"].policy_summary
+    assert "已按" in entries["LX0609-017"].policy_summary
+    assert "不改变现有行为" not in entries["LX0609-017"].policy_summary
     assert entries["LX0609-018"].policy_sources == (
         "customer_confirmed",
         "hospital_local_extension",
