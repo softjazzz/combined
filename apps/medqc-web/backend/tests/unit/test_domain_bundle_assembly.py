@@ -791,6 +791,128 @@ def test_material_snapshot_should_match_legacy_assembly_key_fields(monkeypatch):
     assert snapshot_domain["source_documents"] == legacy_domain["source_documents"]
 
 
+def test_scene_bundle_should_mark_normal_source_summary_projection_truncation(monkeypatch):
+    def _fake_select_records(**kwargs):
+        if kwargs["table"] == "daily_course_record":
+            return [
+                {
+                    "document_id": f"course-{index}",
+                    "record_time": f"2026-08-0{index} 08:00:00",
+                    "record_content": f"第{index}份病程记录",
+                }
+                for index in range(1, 5)
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    monkeypatch.setattr(
+        assembly_module,
+        "_build_scene_attention_artifacts",
+        lambda **_kwargs: ({}, []),
+    )
+
+    bundle = assembly_module._assemble_scene_bundle(
+        scene="running",
+        source_schema="cdm",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+    )
+
+    projection = bundle["structured_context"]["scene_projection"]
+    daily_projection = projection["per_source"]["daily_course_record"]
+    assert projection["projection_kind"] == "scene_summary"
+    assert projection["is_evidence_source"] is False
+    assert daily_projection == {
+        "projected_count": 3,
+        "projection_limit": 3,
+        "has_more": True,
+    }
+    assert len(bundle["structured_context"]["documents"]["daily_course_record"]) == 3
+    assert len(
+        [
+            item
+            for item in bundle["source_documents"]
+            if item["document_type"] == "daily_course_record"
+        ]
+    ) == 3
+
+
+def test_scene_bundle_should_mark_complete_normal_source_summary_projection(monkeypatch):
+    def _fake_select_records(**kwargs):
+        if kwargs["table"] == "daily_course_record":
+            return [
+                {
+                    "document_id": f"course-{index}",
+                    "record_time": f"2026-08-0{index} 08:00:00",
+                    "record_content": f"第{index}份病程记录",
+                }
+                for index in range(1, 4)
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    monkeypatch.setattr(
+        assembly_module,
+        "_build_scene_attention_artifacts",
+        lambda **_kwargs: ({}, []),
+    )
+
+    bundle = assembly_module._assemble_scene_bundle(
+        scene="running",
+        source_schema="cdm",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+    )
+
+    assert bundle["structured_context"]["scene_projection"]["per_source"][
+        "daily_course_record"
+    ] == {
+        "projected_count": 3,
+        "projection_limit": 3,
+        "has_more": False,
+    }
+
+
+def test_scene_bundle_should_mark_attention_projection_has_more_as_unknown(monkeypatch):
+    attention_row = {
+        "document_id": "exam-attention-1",
+        "document_title": "检查关注摘要",
+        "record_time": "2026-08-01 08:00:00",
+        "record_content": "检查关注摘要正文",
+    }
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", lambda **_kwargs: [])
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda *_args: set())
+    monkeypatch.setattr(
+        assembly_module,
+        "_build_scene_attention_artifacts",
+        lambda **_kwargs: ({"exam_attention_report": [attention_row]}, []),
+    )
+
+    bundle = assembly_module._assemble_scene_bundle(
+        scene="running",
+        source_schema="cdm",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+    )
+
+    assert bundle["structured_context"]["scene_projection"]["per_source"][
+        "exam_attention_report"
+    ] == {
+        "projected_count": 1,
+        "projection_limit": None,
+        "has_more": None,
+    }
+
+
 def test_unified_refresh_should_isolate_variant_failures(monkeypatch):
     def _fake_select_records(**kwargs):
         if kwargs["table"] == "presurg_summary":

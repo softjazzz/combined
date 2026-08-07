@@ -184,6 +184,8 @@ _SCENE_ATTENTION_FETCH_LIMITS: dict[str, int] = {
     "labtest_master": 20,
     "labtest_item_report": 400,
 }
+_SCENE_SUMMARY_PROJECTION_LIMIT = 3
+_SCENE_SUMMARY_FETCH_LIMIT = _SCENE_SUMMARY_PROJECTION_LIMIT + 1
 _LAB_ABNORMAL_FLAGS: set[str] = {"H", "L", "HH", "LL", "+", "++", "+++", "++++"}
 _LAB_POSITIVE_KEYWORDS: tuple[str, ...] = ("阳性", "弱阳性", "强阳性", "可疑", "异常")
 _LAB_EXCLUDED_NAME_KEYWORDS: tuple[str, ...] = ("备注", "ABO", "RH", "血型", "配血")
@@ -441,7 +443,7 @@ def _material_limits_for_variants(
             )
         )
         for table_name in fetch_priority:
-            _merge_material_limit(limits, table_name, 3)
+            _merge_material_limit(limits, table_name, _SCENE_SUMMARY_FETCH_LIMIT)
         if scene == "final":
             _merge_material_limit(limits, "mr", 1)
         for table_name, limit in _SCENE_ATTENTION_FETCH_LIMITS.items():
@@ -2090,16 +2092,23 @@ def _assemble_scene_bundle(
         )
     )
     docs: dict[str, list[dict[str, Any]]] = {}
+    scene_projection_per_source: dict[str, dict[str, Any]] = {}
     for table_name in fetch_priority:
-        docs[table_name] = _material_rows(
+        fetched_rows = _material_rows(
             material_snapshot=material_snapshot,
             source_schema=source_schema,
             table=table_name,
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,
-            limit=3,
+            limit=_SCENE_SUMMARY_FETCH_LIMIT,
         )
+        docs[table_name] = fetched_rows[:_SCENE_SUMMARY_PROJECTION_LIMIT]
+        scene_projection_per_source[table_name] = {
+            "projected_count": len(docs[table_name]),
+            "projection_limit": _SCENE_SUMMARY_PROJECTION_LIMIT,
+            "has_more": len(fetched_rows) > _SCENE_SUMMARY_PROJECTION_LIMIT,
+        }
     context_rows: dict[str, list[dict[str, Any]]] = {}
     if scene == "final":
         context_rows["mr"] = _material_rows(
@@ -2121,6 +2130,12 @@ def _assemble_scene_bundle(
     for table_name, rows in attention_docs.items():
         if rows:
             docs[table_name] = rows
+            # 关注摘要按既有专用算法产生，未以 limit + 1 证实其是否仍有更多。
+            scene_projection_per_source[table_name] = {
+                "projected_count": len(rows),
+                "projection_limit": None,
+                "has_more": None,
+            }
 
     patient_profile = _fetch_patient_profile(
         source_schema=source_schema,
@@ -2212,6 +2227,11 @@ def _assemble_scene_bundle(
     bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
     bundle["source_documents"] = source_documents
     bundle["timeline_facts"] = timeline_facts
+    bundle["structured_context"]["scene_projection"] = {
+        "projection_kind": "scene_summary",
+        "is_evidence_source": False,
+        "per_source": scene_projection_per_source,
+    }
     bundle["structured_context"]["source_table_coverage"] = source_table_coverage
     bundle["structured_context"]["assembly_coverage"] = assembly_coverage
     if scene in {"frontpage", "coding"}:
