@@ -225,6 +225,7 @@ _NATIVE_SOURCE_FIELDS = {
     ),
     "exam_master": (
         "exam_id",
+        "order_id",
         "exam_type",
         "exam_name",
         "exam_item_name",
@@ -235,6 +236,7 @@ _NATIVE_SOURCE_FIELDS = {
         "exam_datetime",
         "report_time",
         "report_datetime",
+        "exam_result_status",
         "record_content",
     ),
     "exam_item_report": (

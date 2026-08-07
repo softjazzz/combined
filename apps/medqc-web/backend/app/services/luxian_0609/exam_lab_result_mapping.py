@@ -69,6 +69,9 @@ def build_exam_lab_rule_decision(
             "authoritative_time_conflict",
             "evaluation_window_not_mature",
             "positive_assertion_not_explicit",
+            # 010 已明确要求以业务键唯一关联医嘱、检查和报告。关联不唯一时
+            # 必须将真实原因原样交付，不能压缩成笼统字段缺失。
+            "association_failed",
         }
         dimensions = (
             ApplicabilityState.UNKNOWN,
