@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 import httpx
 import json
+import logging
 import re
 import time
 import unicodedata
@@ -29,6 +30,9 @@ from .source_evidence_reader import (
     SourceEvidenceUnavailable,
     read_luxian_0609_native_source_rows,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 CONSULTATION_EPISODE_RULE_IDS = (
@@ -183,6 +187,31 @@ def _is_retryable_execution_transport_failure(error: Exception) -> bool:
     if status_match is None:
         return False
     return 500 <= int(status_match.group(1)) <= 599
+
+
+def _stage_two_failure_kind(error: Exception) -> str:
+    """将二阶段模型异常收敛为安全枚举，绝不将原始异常写入日志。"""
+
+    if isinstance(error, httpx.TimeoutException):
+        return "timeout"
+    status_match = re.search(r"\bupstream_http_status=(\d{3})\b", str(error))
+    if status_match is not None:
+        status_code = int(status_match.group(1))
+        if status_code == 429:
+            return "upstream_429"
+        if 500 <= status_code <= 599:
+            return "upstream_5xx"
+    if isinstance(error, httpx.TransportError):
+        return "http_transport"
+    normalized = str(error).lower()
+    if any(marker in normalized for marker in (
+        "not configured",
+        "configuration",
+        "missing api key",
+        "missing endpoint",
+    )):
+        return "configuration"
+    return "unclassified"
 
 
 @dataclass(frozen=True)
@@ -1929,6 +1958,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             )
                     else:
                         calls += 1
+                        retry_attempted = False
                         try:
                             started = time.perf_counter()
                             try:
@@ -1938,6 +1968,7 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 if not _is_retryable_execution_transport_failure(first_error):
                                     raise
                                 calls += 1
+                                retry_attempted = True
                                 retry_started = time.perf_counter()
                                 try:
                                     response = await llm_client.generate(second_prompt)
@@ -1963,7 +1994,13 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                             reason = "source_query_error" if execution_source_technical else "semantic_output_unknown"
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = (status, reason)
-                        except Exception:
+                        except Exception as error:
+                            logger.warning(
+                                "consultation_stage_two_failed "
+                                "stage_two_failure_kind=%s retry_attempted=%s",
+                                _stage_two_failure_kind(error),
+                                retry_attempted,
+                            )
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = ("technical_error", "model_transport_error")
             else:

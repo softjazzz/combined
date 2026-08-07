@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime
 
 import httpx
@@ -1985,6 +1986,75 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
     assert len(client.prompts) == 3
     assert client.prompts[1] == client.prompts[2]
     assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (12, 4, 16)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stage_two_errors", "expected_kind", "retry_attempted", "expected_call_count"),
+    (
+        (
+            (
+                httpx.ReadTimeout("STAGE_TWO_TIMEOUT_SECRET"),
+                httpx.ReadTimeout("RETRY_TIMEOUT_SECRET"),
+            ),
+            "timeout",
+            True,
+            3,
+        ),
+        (
+            (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),),
+            "upstream_429",
+            False,
+            2,
+        ),
+        (
+            (RuntimeError("LLM endpoint not configured CONFIGURATION_SECRET"),),
+            "configuration",
+            False,
+            2,
+        ),
+    ),
+)
+async def test_020_023_logs_only_safe_stage_two_transport_failure_classification(
+    caplog,
+    stage_two_errors,
+    expected_kind,
+    retry_attempted,
+    expected_call_count,
+):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        *stage_two_errors,
+    )
+
+    with caplog.at_level(logging.WARNING, logger=episode.__name__):
+        result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+            rule_ids=("LX0609-020", "LX0609-023"),
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None,
+            llm_client=client, evidence_snapshot=session.snapshot,
+            evidence_materials=session.materials,
+        )
+
+    assert [item["status"] for item in result.results] == ["technical_error", "technical_error"]
+    assert result.llm_call_count == expected_call_count
+    warning_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == episode.__name__
+    ]
+    assert warning_messages == [
+        "consultation_stage_two_failed "
+        f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted}"
+    ]
+    logged = "\n".join(warning_messages)
+    assert "STAGE_TWO_TIMEOUT_SECRET" not in logged
+    assert "RETRY_TIMEOUT_SECRET" not in logged
+    assert "UPSTREAM_429_SECRET" not in logged
+    assert "CONFIGURATION_SECRET" not in logged
 
 
 @pytest.mark.asyncio
