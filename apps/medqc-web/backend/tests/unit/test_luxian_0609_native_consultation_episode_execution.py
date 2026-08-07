@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 
+import httpx
 import pytest
 
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
@@ -44,6 +45,24 @@ class _SequentialClient:
         self.prompts.append(prompt)
         return {
             "content": _materialize_recommendation_quotes(self.payloads.pop(0), prompt),
+            "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
+        }
+
+
+class _PlannedStageClient:
+    """按调用顺序返回受控响应或抛出指定异常。"""
+
+    def __init__(self, *responses_or_errors):
+        self.responses_or_errors = list(responses_or_errors)
+        self.prompts: list[str] = []
+
+    async def generate(self, prompt: str):
+        self.prompts.append(prompt)
+        item = self.responses_or_errors.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return {
+            "content": _materialize_recommendation_quotes(item, prompt),
             "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16},
         }
 
@@ -1895,6 +1914,111 @@ async def test_020_023_window_allows_in_stay_specific_execution_and_binds_window
     )
     assert all(daily_ref in item.fact_refs for item in result.decisions)
     assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "transient_failure",
+    (
+        httpx.ReadTimeout("temporary transport failure"),
+        RuntimeError("upstream_http_error upstream_http_status=503"),
+    ),
+)
+async def test_020_023_retries_one_transient_stage_two_transport_failure_without_changing_phase_one(
+    transient_failure,
+):
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        transient_failure,
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["daily_course_record-1"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "compliant", "compliant", "compliant", "compliant",
+    ]
+    assert result.llm_call_count == 3
+    assert len(client.prompts) == 3
+    assert client.prompts[1] == client.prompts[2]
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (24, 8, 32)
+
+
+@pytest.mark.asyncio
+async def test_020_023_stops_after_second_transient_stage_two_transport_failure():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    client = _PlannedStageClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        httpx.ConnectError("temporary transport failure"),
+        httpx.ConnectError("temporary transport failure"),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+        evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "technical_error", "compliant", "compliant", "technical_error",
+    ]
+    assert [item["metadata"]["reason_code"] for item in result.results] == [
+        "model_transport_error", "requirement_satisfied", "requirement_satisfied", "model_transport_error",
+    ]
+    assert result.llm_call_count == 3
+    assert len(client.prompts) == 3
+    assert client.prompts[1] == client.prompts[2]
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (12, 4, 16)
+
+
+@pytest.mark.asyncio
+async def test_020_023_does_not_retry_stage_two_4xx_or_semantic_contract_failure():
+    session = _window_session(rows_by_source={
+        "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
+        "daily_course_record": tuple(_rows("已具体落实会诊意见", day=3)),
+    })
+    for second_stage_response, expected_status, expected_reason in (
+        (
+            RuntimeError("upstream_http_error upstream_http_status=429"),
+            "technical_error",
+            "model_transport_error",
+        ),
+        ("not-json", "uncertain", "semantic_output_unknown"),
+    ):
+        client = _PlannedStageClient(
+            _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+            second_stage_response,
+        )
+        result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+            rule_ids=("LX0609-020", "LX0609-021", "LX0609-022", "LX0609-023"),
+            institute_id="I", patient_id="P", visit_id="V", source_schema=None, llm_client=client,
+            evidence_snapshot=session.snapshot, evidence_materials=session.materials,
+        )
+
+        assert [item["status"] for item in result.results] == [
+            expected_status, "compliant", "compliant", expected_status,
+        ]
+        assert [item["metadata"]["reason_code"] for item in result.results] == [
+            expected_reason, "requirement_satisfied", "requirement_satisfied", expected_reason,
+        ]
+        assert result.llm_call_count == 2
+        assert len(client.prompts) == 2
 
 
 @pytest.mark.asyncio

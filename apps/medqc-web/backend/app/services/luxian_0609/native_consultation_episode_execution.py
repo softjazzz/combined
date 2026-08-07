@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+import httpx
 import json
 import re
 import time
@@ -171,6 +172,17 @@ _GENERIC_APPLICATION_PURPOSE_PATTERN = re.compile(
 
 class ConsultationEpisodeLLMClient(Protocol):
     async def generate(self, prompt: str) -> dict[str, Any]: ...
+
+
+def _is_retryable_execution_transport_failure(error: Exception) -> bool:
+    """仅识别第二阶段可安全重试一次的瞬时上游失败。"""
+
+    if isinstance(error, (httpx.TransportError, httpx.TimeoutException)):
+        return True
+    status_match = re.search(r"\bupstream_http_status=(\d{3})\b", str(error))
+    if status_match is None:
+        return False
+    return 500 <= int(status_match.group(1)) <= 599
 
 
 @dataclass(frozen=True)
@@ -1919,7 +1931,20 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         calls += 1
                         try:
                             started = time.perf_counter()
-                            response = await llm_client.generate(second_prompt)
+                            try:
+                                response = await llm_client.generate(second_prompt)
+                            except Exception as first_error:
+                                api_time += time.perf_counter() - started
+                                if not _is_retryable_execution_transport_failure(first_error):
+                                    raise
+                                calls += 1
+                                retry_started = time.perf_counter()
+                                try:
+                                    response = await llm_client.generate(second_prompt)
+                                except Exception:
+                                    api_time += time.perf_counter() - retry_started
+                                    raise
+                                started = retry_started
                             if not isinstance(response, Mapping):
                                 raise _SemanticInvalid()
                             next_prompt, next_completion, next_total, response_time = _usage(response)
