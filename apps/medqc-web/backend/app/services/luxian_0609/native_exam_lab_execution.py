@@ -809,6 +809,7 @@ def _target_source_document_ids(
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     *,
     fact_kind: str,
+    include_order_document: bool = False,
 ) -> tuple[str, ...]:
     """返回当前单事件目标行中显式给出的文书 ID。
 
@@ -817,10 +818,10 @@ def _target_source_document_ids(
     """
 
     source_keys = (
-        (*_EXAM_SOURCE_KEYS, _ORDER_SOURCE_KEY)
-        if fact_kind == "exam"
-        else (*_CULTURE_SOURCE_KEYS, _ORDER_SOURCE_KEY)
+        _EXAM_SOURCE_KEYS if fact_kind == "exam" else _CULTURE_SOURCE_KEYS
     )
+    if include_order_document:
+        source_keys = (*source_keys, _ORDER_SOURCE_KEY)
     pattern = _target_order_pattern(fact_kind)
     document_ids: list[str] = []
     for source_key in source_keys:
@@ -1186,6 +1187,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
             source_document_ids = _target_source_document_ids(
                 display_rows_by_source,
                 fact_kind=fact_kind,
+                include_order_document=rule_id == "LX0609-010",
             )
         if display_facts is None:
             display_facts = _customer_display_facts_for_outcome(

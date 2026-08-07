@@ -460,6 +460,47 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain('手术记录')
   })
 
+  it('012只把触发报告作为关键证据，并以中文说明已核对的病程范围', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-012',
+            rule_name: 'CT/MRI 阳性结果无分析',
+            status: 'non_compliant',
+            conclusion:
+              'CT/MRI 报告于 2026-07-08 17:55:17 出具。已核对首次病程记录及后续病程记录，未找到报告后 24 小时内的阳性结果分析记录。',
+            customer_display_facts: {
+              failure_kind: 'exam_lab_requirement_not_documented',
+              checked_sources: ['exam_lab_report', 'course_record'],
+              reviewed_record_scope: '首次病程记录及后续病程记录',
+              threshold_hours: 24,
+            },
+            evidence: [
+              {
+                source_ref: 'src_ct_report_012',
+                source_type: 'exam_master',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
+
+    const detail = wrapper.get('[data-testid="single-record-detail-grid"]').text()
+    expect(detail).toContain('已核对病程首次病程记录及后续病程记录')
+    expect(detail).not.toContain('exam_lab_requirement_not_documented')
+    expect(detail).not.toContain('已核对来源')
+    expect(wrapper.get('[data-testid="single-record-evidence"]').text()).toContain(
+      'CT/MRI 检查报告',
+    )
+    expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain(
+      '首次病程记录',
+    )
+  })
+
   it('四级手术MDT问题展示手术等级、等级来源和讨论事实', async () => {
     const wrapper = mount(SingleRecordQcResultPanel, {
       props: {

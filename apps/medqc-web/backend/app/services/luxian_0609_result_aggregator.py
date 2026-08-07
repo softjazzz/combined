@@ -69,6 +69,12 @@ _EXACT_CUSTOMER_EVIDENCE_SOURCES_BY_RULE: dict[str, frozenset[str]] = {
     "LX0609-026": frozenset({"inpat_drug_order", "daily_course_record"}),
     # 038 只核对麻醉记录单是否存在；手术/同意书仅参与麻醉适用性门控。
     "LX0609-038": frozenset({"anesthesia_record"}),
+    # 011/012 和 014/015 的病程是已核对范围；未命中时不能把它们展示为
+    # 支持结论的“关键证据”。客户可定位的触发证据仅为对应报告。
+    "LX0609-011": frozenset({"exam_master", "exam_item_report"}),
+    "LX0609-012": frozenset({"exam_master", "exam_item_report"}),
+    "LX0609-014": frozenset({"labtest_master", "labtest_item_report"}),
+    "LX0609-015": frozenset({"labtest_master", "labtest_item_report"}),
 }
 
 
@@ -2577,6 +2583,11 @@ def safe_luxian_0609_customer_display_facts(
             if not isinstance(interval_hours, (int, float)) or interval_hours < 0:
                 return None
             facts["interval_hours"] = round(float(interval_hours), 2)
+        reviewed_record_scope = raw.get("reviewed_record_scope")
+        if reviewed_record_scope is not None:
+            if reviewed_record_scope != "首次病程记录及后续病程记录":
+                return None
+            facts["reviewed_record_scope"] = reviewed_record_scope
         return facts
     if rule_id == "LX0609-013":
         trigger_sources = raw.get("pathology_trigger_sources")
@@ -4118,6 +4129,10 @@ def _customer_evidence_from_display_facts(
         if rule_id in {"LX0609-020", "LX0609-021", "LX0609-022"}
         else "bloodtrans_record"
         if rule_id == "LX0609-046"
+        else "exam_master"
+        if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012"}
+        else "labtest_item_report"
+        if rule_id in {"LX0609-014", "LX0609-015"}
         else "document"
     )
     return [

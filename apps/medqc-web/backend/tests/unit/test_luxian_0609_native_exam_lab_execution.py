@@ -1512,6 +1512,7 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
         monkeypatch,
         exam_rows=(
             {
+                "document_id": "ct-report-012",
                 "exam_name": "胸部CT",
                 "report_time": "2026-04-26 12:00:00",
                 "exam_conclusion": "阳性：右肺占位。",
@@ -1551,7 +1552,28 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
     assert result.decisions[0].fact_refs
-    assert dict(result.customer_display_facts)["LX0609-012"]["subject"] == "ct_mri"
+    facts = dict(result.customer_display_facts)["LX0609-012"]
+    assert facts["subject"] == "ct_mri"
+    assert facts["reviewed_record_scope"] == "首次病程记录及后续病程记录"
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-012"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )[0]
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["reviewed_record_scope"] == (
+        "首次病程记录及后续病程记录"
+    )
+    assert canonical["customer_evidence"] == [{
+        "source_type": "exam_master",
+        "source_document_id": "ct-report-012",
+    }]
+    assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
 
 
 @pytest.mark.asyncio
@@ -1734,6 +1756,25 @@ def test_exam_lab_document_locator_refuses_non_document_business_ids():
         },
         fact_kind="exam",
     ) == ()
+
+
+def test_post_report_rules_do_not_turn_the_order_document_into_key_evidence():
+    rows = {
+        "exam_item_report": ({
+            "document_id": "ct-report-document",
+            "item_name": "胸部CT",
+        },),
+        "inpat_nondrug_order.exam_lab_order": ({
+            "document_id": "ct-order-document",
+            "order_name": "胸部CT",
+        },),
+    }
+
+    assert exam_lab._target_source_document_ids(
+        rows,
+        fact_kind="exam",
+        include_order_document=False,
+    ) == ("ct-report-document",)
 
 
 @pytest.mark.parametrize("mutation", ("missing", "duplicate", "extra"))

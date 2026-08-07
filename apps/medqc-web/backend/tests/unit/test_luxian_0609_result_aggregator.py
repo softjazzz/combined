@@ -1529,7 +1529,20 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
                 "checked_sources": ["exam_lab_order", "course_record"],
                 "source_document_ids": ["private-exam-document-id"],
             },
-            [{"source_type": "document", "source_document_id": "private-exam-document-id"}],
+            [{"source_type": "exam_master", "source_document_id": "private-exam-document-id"}],
+        ),
+        (
+            "LX0609-012",
+            {
+                "failure_kind": "exam_lab_requirement_not_documented",
+                "subject": "ct_mri",
+                "requirement": "positive_result_analysis_within_24h",
+                "event_phase": "report",
+                "checked_sources": ["exam_lab_report", "course_record"],
+                "reviewed_record_scope": "首次病程记录及后续病程记录",
+                "source_document_ids": ["private-ct-report-document-id"],
+            },
+            [{"source_type": "exam_master", "source_document_id": "private-ct-report-document-id"}],
         ),
         (
             "LX0609-034",

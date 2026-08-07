@@ -1281,6 +1281,9 @@ def customer_finding_from_controlled_facts(
         response_count = facts.get("response_record_count")
         response_time = facts.get("response_record_time")
         interval = facts.get("interval_hours")
+        reviewed_scope = str(
+            facts.get("reviewed_record_scope") or "首次病程记录及后续病程记录"
+        )
         if kind == "exam_lab_requirement_not_documented":
             if isinstance(response_count, int) and response_count > 0:
                 timing = (
@@ -1293,9 +1296,15 @@ def customer_finding_from_controlled_facts(
                     if analysis_rule
                     else "但病程未记录报告结果"
                 )
-                return f"{subject} 报告于 {report_time} 出具，找到 {response_count} 份相关病程{timing}，{missing_content}。"
+                return (
+                    f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
+                    f"找到 {response_count} 份报告后相关病程{timing}，{missing_content}。"
+                )
             requirement = "阳性结果分析" if analysis_rule else "报告结果记录"
-            return f"{subject} 报告于 {report_time} 出具，未找到报告后 24 小时内的{requirement}。"
+            return (
+                f"{subject} 报告于 {report_time} 出具。已核对{reviewed_scope}，"
+                f"未找到报告后 24 小时内的{requirement}记录。"
+            )
 
     if rule_id == "LX0609-013" and kind == "pathology_result_documentation_check":
         return f"病理报告于 {facts.get('report_time')} 出具；已核对手术记录和病程记录，未找到病理结果记录。"

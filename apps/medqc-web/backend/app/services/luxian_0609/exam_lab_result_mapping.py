@@ -229,6 +229,9 @@ def build_text_outcome_display_facts(
         "threshold_hours": 24,
         "response_record_count": len(response_times),
     }
+    # 对报告后病程规则，向客户明确“查找范围”，而不是把内部 source key
+    # 直接交给界面。该字段描述的是已核对范围，不是命中的关键证据。
+    facts["reviewed_record_scope"] = "首次病程记录及后续病程记录"
     if status != "not_applicable":
         facts["requirement_met"] = status == "compliant"
     if event.report_time is not None:

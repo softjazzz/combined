@@ -76,7 +76,9 @@
                   <span
                     class="status-pill"
                     :class="`is-${item.tone}`"
-                  >{{ item.displayStatus }}</span>
+                  >{{
+                    item.displayStatus
+                  }}</span>
                 </span>
                 <span class="rule-code">{{ item.rule_id }}</span>
               </span>
@@ -459,6 +461,7 @@ const factLabels: Record<string, string> = {
   missing_fields: '缺失字段',
   failure_kind: '判定类型',
   checked_sources: '已核对来源',
+  reviewed_record_scope: '已核对病程',
   target_document: '目标文书',
   performed_surgery_confirmed: '已实施手术',
   consent_state: '手术知情同意书',
@@ -524,6 +527,7 @@ const dataGapLabels: Record<string, string> = {
 
 // 这些字段保留在服务端结果中供追踪和调试，但不直接暴露给客户。
 const hiddenCustomerFactKeys = new Set(['missing_fields'])
+const examLabInternalFactKeys = new Set(['failure_kind', 'checked_sources'])
 const hiddenDataGapKeys = new Set(['reason_code', 'missing_fields'])
 
 const TIMELINESS_METRIC_KEYS = ['threshold_hours', 'elapsed_hours', 'overdue_hours'] as const
@@ -533,7 +537,14 @@ function displayFactRows(item: SingleRecordQcResultItem) {
   const facts = item.customer_display_facts
   if (!facts || typeof facts !== 'object') return []
   return Object.entries(facts)
-    .filter(([key]) => Boolean(factLabels[key]) && !hiddenCustomerFactKeys.has(key))
+    .filter(([key]) => {
+      if (!factLabels[key] || hiddenCustomerFactKeys.has(key)) return false
+      return !(
+        item.status === 'non_compliant' &&
+        ['LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(item.rule_id) &&
+        examLabInternalFactKeys.has(key)
+      )
+    })
     .map(([key, rawValue]) => {
       const values = Array.isArray(rawValue) ? rawValue : [rawValue]
       const value = values
@@ -565,7 +576,7 @@ function displayFactRows(item: SingleRecordQcResultItem) {
             ? `${sourceLabel}时间`
             : key === 'failure_kind'
               ? '问题说明'
-            : factLabels[key] || key
+              : factLabels[key] || key
       return {
         key,
         label,
@@ -679,6 +690,10 @@ function evidenceLabel(evidence: SingleRecordQcEvidence) {
     first_course_record: '首次病程记录',
     daily_course_record: '日常病程记录',
     senior_course_record: '上级医师查房记录',
+    exam_master: 'CT/MRI 检查报告',
+    exam_item_report: 'CT/MRI 检查报告',
+    labtest_master: '细菌培养报告',
+    labtest_item_report: '细菌培养报告',
     surgery_record: '手术记录',
     inpat_drug_order: '药物医嘱',
     inpat_nondrug_order: '医嘱',
