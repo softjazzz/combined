@@ -1129,6 +1129,15 @@ async def run_sample_pool_intrinsic_validation(
                 status_code=422,
                 detail="所选质控点均为暂不执行的知情同意书规则，请调整质控范围",
             )
+        # 目录仍展示全部 75 条规则；将本次未进入执行器的规则明确传给 worker，
+        # 避免客户结果层把“策略暂停”误投影为“未返回执行结果”。
+        paused_customer_rule_ids = (
+            paused_selected_rule_ids
+            if requested_selected_rule_ids
+            else sorted(_LUXIAN_0609_PAUSED_CONSENT_RULE_IDS)
+        )
+    else:
+        paused_customer_rule_ids = []
 
     if requested_selected_rule_ids:
         if rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY:
@@ -1235,6 +1244,8 @@ async def run_sample_pool_intrinsic_validation(
         "execution_rule_count": len(rule_ids),
         "gate_only_customer_rule_ids": gate_only_customer_rule_ids,
         "gate_only_customer_rule_count": len(gate_only_customer_rule_ids),
+        "paused_customer_rule_ids": paused_customer_rule_ids,
+        "paused_customer_rule_count": len(paused_customer_rule_ids),
         "execution_strategy": execution_strategy,
         "quality_profile": "throughput_v1",
         "bucket_strategy": "fixed_packs",

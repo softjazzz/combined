@@ -2931,6 +2931,72 @@ async def test_native_criterion_result_persists_canonical_contract_fields_for_si
 
 
 @pytest.mark.asyncio
+async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_missing_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """样本池策略暂停必须经 worker 投影为客户可懂结果，而不是执行异常。"""
+
+    active_rule = get_luxian_0609_rule("LX0609-020")
+    paused_rule = get_luxian_0609_rule("LX0609-033")
+    assert active_rule is not None and paused_rule is not None
+    workspace = _WorkspaceStub()
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "rule_ids": ["LX0609-020"],
+        "paused_customer_rule_ids": ["LX0609-033"],
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+
+    async def _evaluate_running_final_bundle_input(**_: Any) -> Dict[str, Any]:
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "LX0609-020",
+                    "status": "compliant",
+                    "result_status": "compliant",
+                    "reason_code": "requirement_satisfied",
+                    "is_compliant": True,
+                    "metadata": {"executor_type": "program"},
+                }
+            ],
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "load_luxian_0609_rules",
+        lambda: [active_rule, paused_rule],
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    paused_item = next(item for item in workspace.items if item["rule_id"] == "LX0609-033")
+    assert workspace.failed_records == []
+    assert paused_item["status"] == "not_executed"
+    assert paused_item["result_status"] == "not_executed"
+    assert paused_item["is_compliant"] is None
+    assert paused_item["metadata"]["result_fallback"] == "paused_customer_rule"
+    assert paused_item["metadata"]["customer_rule_paused"] is True
+    assert "不纳入本次质控结论" in paused_item["findings"]
+    assert "资料缺失" in paused_item["evidence"]
+    assert "重新执行" not in paused_item["suggestion"]
+
+
+@pytest.mark.asyncio
 async def test_native_copy_result_is_not_reinterpreted_by_legacy_batch_guard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

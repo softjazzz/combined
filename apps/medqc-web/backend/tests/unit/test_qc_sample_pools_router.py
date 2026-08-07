@@ -1221,6 +1221,13 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["rule_count"] == len(expected_task_rule_ids)
     assert created["filters"]["customer_rule_count"] == len(expected_task_rule_ids)
     assert created["filters"]["execution_rule_count"] == len(expected_task_rule_ids)
+    assert created["filters"]["paused_customer_rule_ids"] == [
+        "LX0609-033",
+        "LX0609-034",
+        "LX0609-041",
+        "LX0609-042",
+    ]
+    assert created["filters"]["paused_customer_rule_count"] == 4
     assert created["filters"]["selected_rule_ids"] == []
     assert created["filters"]["scoped_customer_rule_ids"] == []
     assert "record_rule_map" not in created["filters"]

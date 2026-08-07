@@ -2371,7 +2371,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for item in (filters.get("gate_only_customer_rule_ids") or [])
             if str(item).strip()
         ]
-        if not requested_rule_ids and not gate_only_customer_rule_ids_for_validation:
+        paused_customer_rule_ids_for_validation = [
+            str(item).strip()
+            for item in (filters.get("paused_customer_rule_ids") or [])
+            if str(item).strip()
+        ]
+        if (
+            not requested_rule_ids
+            and not gate_only_customer_rule_ids_for_validation
+            and not paused_customer_rule_ids_for_validation
+        ):
             raise ValueError("批量任务缺少 rule_ids")
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
@@ -2547,6 +2556,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         gate_only_customer_rule_ids = {
             str(rule_id or "").strip().upper()
             for rule_id in list(filters.get("gate_only_customer_rule_ids") or [])
+            if str(rule_id or "").strip()
+        }
+        paused_customer_rule_ids = {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(filters.get("paused_customer_rule_ids") or [])
             if str(rule_id or "").strip()
         }
         output_rule_states: Dict[str, Dict[str, Any]] = rule_states
@@ -3443,7 +3457,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             use_luxian_customer_results
                             and normalized_rule_id in gate_only_customer_rule_ids
                         )
-                        if not is_gate_only_missing:
+                        is_paused_customer_rule = (
+                            use_luxian_customer_results
+                            and normalized_rule_id in paused_customer_rule_ids
+                        )
+                        if not is_gate_only_missing and not is_paused_customer_rule:
                             failed_by_rule[rule_id].append(
                                 {
                                     "rule_job_id": rule_job_id,
@@ -3459,7 +3477,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 }
                             )
                         if use_luxian_customer_results:
-                            if is_gate_only_missing:
+                            if is_paused_customer_rule:
+                                eval_item = {
+                                    "rule_id": rule_id,
+                                    "rule_name": rule_name,
+                                    "status": "not_executed",
+                                    "is_compliant": None,
+                                    "findings": "本次暂未启用：该知情同意书质控点不纳入本次质控结论。",
+                                    "evidence": "本次未执行该规则；这不是资料缺失，也不表示存在质控问题。",
+                                    "suggestion": "无需处理；该质控点恢复启用后将重新纳入质控范围。",
+                                    "confidence": 0,
+                                    "metadata": {
+                                        "executor_type": "program",
+                                        "result_fallback": "paused_customer_rule",
+                                        "customer_rule_paused": True,
+                                    },
+                                }
+                            elif is_gate_only_missing:
                                 eval_item = {
                                     "rule_id": rule_id,
                                     "rule_name": rule_name,
