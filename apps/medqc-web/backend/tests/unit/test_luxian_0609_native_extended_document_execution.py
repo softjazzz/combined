@@ -180,6 +180,8 @@ def test_extended_surgery_and_transfusion_rules_bind_authoritative_trigger_sourc
 
     assert "mr_surgery" in sources
     assert "mr_bloodtrans" in sources
+    assert "inpat_registration" in sources
+    assert "labtest_item_report" in sources
 
 
 def test_071_binds_authoritative_and_explicit_order_change_sources() -> None:
@@ -2065,6 +2067,9 @@ async def test_070_complete_pretransfusion_nine_tests_is_compliant() -> None:
     _, reduced = await _evaluate(
         "LX0609-070",
         {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
             "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
@@ -2093,6 +2098,9 @@ async def test_070_rejects_nine_tests_reported_after_transfusion() -> None:
     result, reduced = await _evaluate(
         "LX0609-070",
         {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
             "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
             "labtest_item_report": tuple(
                 {
@@ -2119,12 +2127,193 @@ async def test_070_without_authoritative_transfusion_time_is_data_gap() -> None:
     result, reduced = await _evaluate(
         "LX0609-070",
         {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
             "mr_bloodtrans": ({"record_content": "已输注红细胞2U"},),
         },
     )
 
     assert reduced.final_state is CustomerFinalState.DATA_GAP
     assert reduced.reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
+            "mr_bloodtrans": (
+                {"transfution_datetime": "2026-06-02 14:00:00"},
+                {"transfution_datetime": "2026-06-04 14:00:00"},
+            ),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-02 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-070"]
+    assert facts["transfusion_event_count"] == 2
+    assert facts["checked_transfusion_times"] == [
+        "2026-06-02 14:00:00",
+        "2026-06-04 14:00:00",
+    ]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
+            "mr_bloodtrans": (
+                {"transfution_datetime": "2026-06-02 14:00:00"},
+                {"transfution_datetime": "2026-06-04 14:00:00"},
+            ),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-03 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    facts = dict(result.customer_display_facts)["LX0609-070"]
+    assert facts["failed_transfusion_times"] == ["2026-06-02 14:00:00"]
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_rejects_nine_items_from_before_current_admission() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    _, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-02 08:00:00"},
+            ),
+            "mr_bloodtrans": ({"transfution_datetime": "2026-06-03 14:00:00"},),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-01 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_070_without_authoritative_admission_time_is_data_gap() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-02 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_070_without_authoritative_nine_item_report_time_is_data_gap() -> None:
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    result, reduced = await _evaluate(
+        "LX0609-070",
+        {
+            "inpat_registration": (
+                {"admission_datetime": "2026-06-01 08:00:00"},
+            ),
+            "mr_bloodtrans": ({"transfution_datetime": "2026-06-02 14:00:00"},),
+            "labtest_item_report": tuple(
+                {
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    **({} if code == "HIV" else {"report_time": "2026-06-02 10:00:00"}),
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "authoritative_time_missing"
+    facts = dict(result.customer_display_facts)["LX0609-070"]
+    assert facts["missing_time_items"] == ["hiv"]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0
 

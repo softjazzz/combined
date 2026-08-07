@@ -373,7 +373,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "diagnosis",
     ),
-    "LX0609-025": ("surgery_record", "mr_surgery"),
+    "LX0609-025": ("surgery_record", "mr_surgery", "daily_course_record"),
     "LX0609-028": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),
@@ -502,7 +502,13 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-064": ("mr_surgery",),
     "LX0609-065": ("mr_surgery",),
     "LX0609-066": ("mr_surgery",),
-    "LX0609-070": ("mr_bloodtrans",),
+    # 070 的九项必须属于本次住院、且早于每一笔实际输血；住院登记、输血事件
+    # 与检验结果均需进入同一 Evidence Session。
+    "LX0609-070": (
+        "inpat_registration",
+        "mr_bloodtrans",
+        "labtest_item_report",
+    ),
     # 第一阶段扩展规则的触发事实不扩张客户文书范围，但必须进入同一
     # Evidence Session，供适用性、时限和关联判定绑定。
     "LX0609-051": ("inpat_registration",),

@@ -876,6 +876,8 @@ def _lab_report_time(row: Mapping[str, Any]) -> datetime | None:
 
 def evaluate_pretransfusion_nine_items(
     documents: Mapping[str, Any],
+    *,
+    require_current_stay: bool = False,
 ) -> tuple[str, str, Mapping[str, Any] | None]:
     # 九项检查本身就可能超过模型上下文使用的 8 行上限；确定性核对必须消费
     # 已进入同一 Evidence Session 的完整有界材料，不能把第九项误判为缺失。
@@ -890,14 +892,39 @@ def evaluate_pretransfusion_nine_items(
         return "data_gap", "pretransfusion_item_contract_unavailable", None
     if state == "error":
         return "technical_error", "source_query_error", None
+    raw_event_rows = _source_document_rows(documents, "mr_bloodtrans")
     event_times = sorted(
-        value
-        for row in _transfusion_event_rows(documents)
-        if (value := _transfusion_event_time(row)) is not None
+        {
+            value
+            for row in raw_event_rows
+            if (value := _transfusion_event_time(row)) is not None
+        }
     )
     if not event_times:
         return "data_gap", "transfusion_time_unavailable", None
-    transfusion_time = event_times[0]
+
+    if len(raw_event_rows) != sum(
+        1 for row in raw_event_rows if _transfusion_event_time(row) is not None
+    ):
+        return "data_gap", "transfusion_time_unavailable", None
+
+    admission_time: datetime | None = None
+    if require_current_stay:
+        admission_times = {
+            parsed
+            for row in _source_document_rows(documents, "inpat_registration")
+            if (
+                parsed := _parse_document_datetime(
+                    row.get("admission_datetime")
+                    or row.get("admission_time")
+                    or row.get("inpat_datetime")
+                )
+            ) is not None
+        }
+        if len(admission_times) != 1:
+            return "data_gap", "admission_time_unavailable", None
+        admission_time = next(iter(admission_times))
+
     matched: dict[str, list[Mapping[str, Any]]] = {
         item: [] for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS
     }
@@ -907,66 +934,168 @@ def evaluate_pretransfusion_nine_items(
             if any(_lab_item_alias_matches(key, alias) for alias in aliases):
                 matched[item].append(row)
                 break
-    missing = sorted(item for item, item_rows in matched.items() if not item_rows)
-    if missing:
-        return (
-            "non_compliant",
-            "pretransfusion_items_incomplete",
+    event_checks: list[dict[str, Any]] = []
+    for transfusion_time in event_times:
+        missing_items: list[str] = []
+        missing_time_items: list[str] = []
+        late_items: list[str] = []
+        outside_current_stay_items: list[str] = []
+        valid_item_times: list[datetime] = []
+        for item, item_rows in matched.items():
+            if not item_rows:
+                missing_items.append(item)
+                continue
+            report_times = [
+                value
+                for row in item_rows
+                if (value := _lab_report_time(row)) is not None
+            ]
+            if not report_times:
+                missing_time_items.append(item)
+                continue
+            valid_times = [
+                value
+                for value in report_times
+                if value < transfusion_time
+                and (admission_time is None or value >= admission_time)
+            ]
+            if valid_times:
+                valid_item_times.append(max(valid_times))
+                continue
+            if admission_time is not None and any(
+                value < admission_time for value in report_times
+            ):
+                outside_current_stay_items.append(item)
+            else:
+                late_items.append(item)
+        event_checks.append(
             {
-                "failure_kind": "pretransfusion_items_incomplete",
-                "performed_transfusion_confirmed": True,
-                "required_items": [item for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS],
-                "missing_items": missing,
-            },
+                "transfusion_time": transfusion_time.isoformat(sep=" "),
+                "missing_items": sorted(missing_items),
+                "missing_time_items": sorted(missing_time_items),
+                "late_items": sorted(late_items),
+                "outside_current_stay_items": sorted(outside_current_stay_items),
+                "latest_valid_test_time": (
+                    max(valid_item_times).isoformat(sep=" ")
+                    if valid_item_times
+                    else None
+                ),
+            }
         )
-    item_times = {
-        item: max(
-            (time for row in item_rows if (time := _lab_report_time(row)) is not None),
-            default=None,
-        )
-        for item, item_rows in matched.items()
+
+    base_facts: dict[str, Any] = {
+        "performed_transfusion_confirmed": True,
+        "required_items": [item for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS],
+        "transfusion_event_count": len(event_times),
+        "checked_transfusion_times": [
+            value.isoformat(sep=" ") for value in event_times
+        ],
+        "event_checks": event_checks,
     }
-    missing_time = sorted(item for item, value in item_times.items() if value is None)
-    if missing_time:
-        return (
-            "data_gap",
-            "authoritative_time_missing",
+    if admission_time is not None:
+        base_facts["admission_time"] = admission_time.isoformat(sep=" ")
+
+    failed_checks = [
+        item
+        for item in event_checks
+        if any(
+            item[key]
+            for key in (
+                "missing_items",
+                "missing_time_items",
+                "late_items",
+                "outside_current_stay_items",
+            )
+        )
+    ]
+    if failed_checks:
+        base_facts["failed_transfusion_times"] = [
+            str(item["transfusion_time"]) for item in failed_checks
+        ]
+    time_gap_checks = [item for item in failed_checks if item["missing_time_items"]]
+    if time_gap_checks:
+        base_facts.update(
             {
                 "failure_kind": "pretransfusion_test_time_missing",
-                "missing_time_items": missing_time,
-            },
+                "missing_time_items": sorted(
+                    {
+                        name
+                        for item in time_gap_checks
+                        for name in item["missing_time_items"]
+                    }
+                ),
+            }
         )
-    late = sorted(item for item, value in item_times.items() if value and value >= transfusion_time)
-    if late:
-        return (
-            "non_compliant",
-            "pretransfusion_tests_after_transfusion",
+        return "data_gap", "authoritative_time_missing", base_facts
+    missing_checks = [item for item in failed_checks if item["missing_items"]]
+    if missing_checks:
+        base_facts.update(
+            {
+                "failure_kind": "pretransfusion_items_incomplete",
+                "missing_items": sorted(
+                    {
+                        name
+                        for item in missing_checks
+                        for name in item["missing_items"]
+                    }
+                ),
+            }
+        )
+        return "non_compliant", "pretransfusion_items_incomplete", base_facts
+    outside_checks = [
+        item for item in failed_checks if item["outside_current_stay_items"]
+    ]
+    if outside_checks:
+        base_facts.update(
+            {
+                "failure_kind": "pretransfusion_tests_outside_current_stay",
+                "outside_current_stay_items": sorted(
+                    {
+                        name
+                        for item in outside_checks
+                        for name in item["outside_current_stay_items"]
+                    }
+                ),
+            }
+        )
+        return "non_compliant", "pretransfusion_tests_outside_current_stay", base_facts
+    late_checks = [item for item in failed_checks if item["late_items"]]
+    if late_checks:
+        base_facts.update(
             {
                 "failure_kind": "pretransfusion_tests_after_transfusion",
-                "performed_transfusion_confirmed": True,
-                "late_items": late,
-                "transfusion_time": transfusion_time.isoformat(sep=" "),
-            },
+                "late_items": sorted(
+                    {
+                        name
+                        for item in late_checks
+                        for name in item["late_items"]
+                    }
+                ),
+            }
         )
-    latest = max(value for value in item_times.values() if value is not None)
+        return "non_compliant", "pretransfusion_tests_after_transfusion", base_facts
+
+    latest = max(
+        datetime.fromisoformat(str(item["latest_valid_test_time"]))
+        for item in event_checks
+        if item["latest_valid_test_time"] is not None
+    )
     application_rows = _source_document_rows(documents, "blood_application")
     abo_present = any(_clean(row.get("patient_bloodtype_abo") or row.get("blood_type")) for row in application_rows)
     rh_present = any(_clean(row.get("patient_bloodtype_rhd")) for row in application_rows)
     antibody_present = any("抗体筛查" in _lab_item_key(row) or "不规则抗体" in _lab_item_key(row) for row in rows)
-    return (
-        "compliant",
-        "pretransfusion_items_complete",
+    base_facts.update(
         {
             "verification_kind": "pretransfusion_items_complete",
-            "performed_transfusion_confirmed": True,
             "checked_items": [item for item, _ in _PRETRANSFUSION_REQUIRED_ITEMS],
             "latest_test_time": latest.isoformat(sep=" "),
-            "transfusion_time": transfusion_time.isoformat(sep=" "),
+            "transfusion_time": event_times[-1].isoformat(sep=" "),
             "abo_present": abo_present,
             "rh_present": rh_present,
             "antibody_screen_present": antibody_present,
-        },
+        }
     )
+    return "compliant", "pretransfusion_items_complete", base_facts
 
 
 def _context(rule_id: str, documents: Mapping[str, Any]) -> str:

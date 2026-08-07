@@ -1275,33 +1275,44 @@ async def execute_luxian_0609_native_extended_document_rules(
                 final_state, reason_code = "data_gap", mr_bloodtrans_error
             elif not mr_bloodtrans_rows:
                 final_state, reason_code = "not_applicable", "trigger_absent_complete"
+            elif registration_error:
+                final_state, reason_code = "data_gap", registration_error
             elif lab_item_error:
                 final_state, reason_code = "data_gap", lab_item_error
             else:
                 final_state, detail_reason, facts = evaluate_pretransfusion_nine_items(
                     {
+                        "inpat_registration": list(registration_rows),
                         "mr_bloodtrans": list(mr_bloodtrans_rows),
                         "labtest_item_report": list(lab_item_rows),
                         "blood_application": [],
                         "__logical_source_states__": {
                             "labtest_item_report": "available" if lab_item_rows else "empty",
                         },
-                    }
+                    },
+                    require_current_stay=True,
                 )
                 reason_code = {
                     "pretransfusion_items_complete": "requirement_satisfied",
                     "pretransfusion_items_incomplete": "requirement_violated",
                     "pretransfusion_tests_after_transfusion": "requirement_violated",
                     "pretransfusion_test_time_missing": "authoritative_time_missing",
+                    "authoritative_time_missing": "authoritative_time_missing",
                     "transfusion_time_unavailable": "authoritative_time_missing",
+                    "admission_time_unavailable": "authoritative_time_missing",
                     "pretransfusion_item_contract_unavailable": "source_unavailable",
+                    "pretransfusion_tests_outside_current_stay": "requirement_violated",
                     "source_query_error": "source_query_error",
                 }.get(detail_reason, "required_field_missing")
                 if facts is not None:
                     display.append((rule_id, dict(facts)))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
-                source_keys=("mr_bloodtrans", "labtest_item_report"),
+                source_keys=(
+                    "inpat_registration",
+                    "mr_bloodtrans",
+                    "labtest_item_report",
+                ),
                 final_state=final_state, reason_code=reason_code,
             ))
             continue
