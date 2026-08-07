@@ -124,6 +124,43 @@ describe('batchJobPresentation', () => {
     expect(model.overviewText).toBe('发现需关注结果：AI建议复核 1，未执行 1')
   })
 
+  it('只把服务端已回写的安全结果整理为实时展示行', () => {
+    const model = buildBatchJobPresentation(
+      buildJob({
+        status: 'running',
+        items: [
+          {
+            rule_id: 'LX0609-020',
+            rule_name: '会诊意见及执行情况',
+            status: 'non_compliant',
+            is_compliant: false,
+            conclusion: '后续病程未记录会诊意见及执行情况。',
+          },
+          {
+            rule_id: 'LX0609-045',
+            rule_name: '输血记录',
+            status: 'compliant',
+            is_compliant: true,
+            conclusion: '已找到输血记录。',
+          },
+        ],
+      }),
+    )
+
+    expect(model.liveResultLines).toEqual([
+      expect.objectContaining({
+        ruleId: 'LX0609-045',
+        statusLabel: '合规',
+        text: '已找到输血记录。',
+      }),
+      expect.objectContaining({
+        ruleId: 'LX0609-020',
+        statusLabel: '不合规',
+        text: '后续病程未记录会诊意见及执行情况。',
+      }),
+    ])
+  })
+
   it('缺少状态和统计字段时使用中性回退，不伪造排队中或合规结论', () => {
     const model = buildBatchJobPresentation(
       buildJob({

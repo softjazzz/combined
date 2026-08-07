@@ -11,6 +11,14 @@ export type BatchJobStatusChip = {
   className: string
 }
 
+export type BatchJobLiveResult = {
+  key: string
+  ruleId: string
+  statusLabel: string
+  className: string
+  text: string
+}
+
 export type BatchJobPresentation = {
   normalizedStatus: string
   statusLabel: string
@@ -32,6 +40,7 @@ export type BatchJobPresentation = {
   progressPercent: number
   statusCounts: Record<string, number>
   statusChips: BatchJobStatusChip[]
+  liveResultLines: BatchJobLiveResult[]
   overviewText: string
   issueSummaryText: string
   createdText: string
@@ -68,6 +77,8 @@ const STATUS_META: Array<{
 const ATTENTION_STATUSES = new Set(
   STATUS_META.filter((item) => item.attention).map((item) => item.key),
 )
+
+const STATUS_META_BY_KEY = new Map(STATUS_META.map((item) => [item.key, item]))
 
 const BRIEF_BY_RULE_ID: Record<string, string> = {
   'LX0609-001': '入院记录未在24小时内完成',
@@ -175,9 +186,42 @@ function resolveCustomerRuleCount(job: SichuanBatchJob, ruleIds: string[]): numb
 }
 
 function resolveIssueStatus(item: SichuanBatchIssueItem): string {
-  return String(item.result_status || item.status || '')
+  return String(item.canonical_status || item.display_status || item.status || '')
     .trim()
     .toLowerCase()
+}
+
+function resolveLiveResultText(item: SichuanBatchIssueItem, ruleId: string): string {
+  return String(
+    item.conclusion ||
+      item.findings ||
+      item.rule_name ||
+      BRIEF_BY_RULE_ID[ruleId] ||
+      '已回写质控结果',
+  ).trim()
+}
+
+function resolveLiveResultLines(job: SichuanBatchJob): BatchJobLiveResult[] {
+  const items = Array.isArray(job.items) ? job.items : []
+  const lines = items
+    .slice(-6)
+    .reverse()
+    .map((item, index) => {
+      const ruleId = String(item.qc_point_id || item.rule_code || item.rule_id || '').trim()
+      const status = resolveIssueStatus(item)
+      const statusMeta = STATUS_META_BY_KEY.get(status)
+      const text = resolveLiveResultText(item, ruleId)
+      if (!text) return null
+      return {
+        key: `${ruleId || 'result'}|${status || 'unknown'}|${text}|${index}`,
+        ruleId: ruleId || '质控结果',
+        statusLabel: statusMeta?.label || '结果已回写',
+        className: statusMeta?.className || 'is-muted',
+        text,
+      }
+    })
+    .filter((item): item is BatchJobLiveResult => Boolean(item))
+  return lines
 }
 
 function resolveIssueSummaryText(job: SichuanBatchJob): string {
@@ -355,6 +399,7 @@ export function buildBatchJobPresentation(job: SichuanBatchJob): BatchJobPresent
     progressPercent,
     statusCounts,
     statusChips,
+    liveResultLines: resolveLiveResultLines(job),
     overviewText,
     issueSummaryText: resolveIssueSummaryText(job),
     createdText: formatBatchJobDateTime(job.created_at),

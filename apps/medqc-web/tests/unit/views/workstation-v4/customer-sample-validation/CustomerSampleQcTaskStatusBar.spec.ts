@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import CustomerSampleQcTaskStatusBar from '@/views/workstation-v4/customer-sample-validation/CustomerSampleQcTaskStatusBar.vue'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
@@ -48,6 +48,10 @@ function buildJob(overrides: Partial<SichuanBatchJob> = {}): SichuanBatchJob {
 }
 
 describe('CustomerSampleQcTaskStatusBar', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('没有任务时不渲染状态条', () => {
     const wrapper = mount(CustomerSampleQcTaskStatusBar, {
       props: { task: null },
@@ -99,6 +103,79 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(progress.classes()).toContain('is-running')
     expect(progress.classes()).toContain('is-indeterminate')
     expect(progress.attributes('aria-label')).toBe('质控执行中，等待首份病历完成')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
+      '等待首条质控结果回写',
+    )
+  })
+
+  it('轮询回写首条结果后立即替换等待提示', async () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: { task: buildJob({ items: [] }) },
+      global: { stubs },
+    })
+
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
+      '等待首条质控结果回写',
+    )
+
+    await wrapper.setProps({
+      task: buildJob({
+        items: [
+          {
+            rule_id: 'LX0609-012',
+            rule_name: 'CT/MRI阳性结果无分析',
+            status: 'data_gap',
+            is_compliant: null,
+            conclusion: '缺少评价截止日期或有效出院时间。',
+          },
+        ],
+      }),
+    })
+
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-012')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('数据不足')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
+      '缺少评价截止日期或有效出院时间。',
+    )
+  })
+
+  it('运行中放大进度并轮播服务端已回写的真实结果', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          items: [
+            {
+              rule_id: 'LX0609-020',
+              rule_name: '会诊意见及执行情况',
+              status: 'non_compliant',
+              is_compliant: false,
+              conclusion: '后续病程未记录会诊意见及执行情况。',
+            },
+            {
+              rule_id: 'LX0609-045',
+              rule_name: '输血记录',
+              status: 'compliant',
+              is_compliant: true,
+              conclusion: '已找到输血记录。',
+            },
+          ],
+        }),
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.classes()).toContain('is-expanded')
+    expect(wrapper.text()).toContain('当前进度 50%')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-045')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('已找到输血记录。')
+
+    await vi.advanceTimersByTimeAsync(3600)
+
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain('LX0609-020')
+    expect(wrapper.get('[data-testid="qc-task-live-result"]').text()).toContain(
+      '后续病程未记录会诊意见及执行情况。',
+    )
   })
 
   it('完成后保留查看、复核、导出和历史入口', async () => {
