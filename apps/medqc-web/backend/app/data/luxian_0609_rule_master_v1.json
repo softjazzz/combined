@@ -204,7 +204,7 @@
       "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed", "hospital_local_extension"],
-      "policy_summary": "省标主项为条码、种类、数量，手术记录或病程均可记录；名称、型号、材质保留为本院扩展，本任务不改变现有行为。"
+      "policy_summary": "省标主项为条码、种类、数量，手术记录或病程均可记录；名称、型号、材质保留为本院扩展，不影响本规则主状态。永久植入物由单次受控LLM事实提取确认。"
     },
     {
       "rule_id": "LX0609-026",
@@ -564,7 +564,7 @@
       "qc_point": "未做输血前相关九项检查",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2023_standard", "customer_confirmed"],
-      "policy_summary": "输血前九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶；结果必须属于本次住院且不晚于输血。",
+      "policy_summary": "已执行：输血前九项为乙肝五项、艾滋、丙肝、梅毒、谷丙转氨酶；每笔输血均核对本次住院内且早于该笔输血的结果，任一笔不满足即不合规。",
       "pending_definition_note": "急诊补检规则尚未由客户确认，需补充受控口径后接入。"
     },
     {

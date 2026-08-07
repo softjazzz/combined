@@ -1587,7 +1587,7 @@ async def test_025_legacy_llm_requires_field_level_implant_evidence_for_non_comp
     assert result.results[0]["status"] == "non_compliant"
     assert result.results[0]["metadata"]["customer_display_facts"] == {
         "failure_kind": "implant_information_incomplete",
-        "missing_fields": ["implant_material", "implant_quantity"],
+        "missing_fields": ["implant_quantity"],
         "source_label": "手术记录",
         "source_document_id": "surgery-document-025",
     }
@@ -1785,9 +1785,11 @@ def test_025_nonactual_or_ambiguous_implant_use_is_data_gap(implant_use: str) ->
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     (
-        ("implant_type", "missing", "non_compliant"),
-        ("implant_type", "unknown", "data_gap"),
-        ("implant_type", "present", "compliant"),
+    ("implant_barcode", "missing", "non_compliant"),
+    ("implant_type", "missing", "non_compliant"),
+    ("implant_quantity", "missing", "non_compliant"),
+    ("implant_type", "unknown", "data_gap"),
+    ("implant_type", "present", "compliant"),
     ),
 )
 def test_025_actual_implant_field_contract_is_python_owned(
@@ -1809,10 +1811,11 @@ def test_025_actual_implant_field_contract_is_python_owned(
             "failure_kind": "implant_information_incomplete",
             "missing_fields": [field],
             "source_label": "手术记录",
+            "source_document_type": "surgery_record",
         }
 
 
-def test_025_binds_missing_fields_to_the_model_validated_surgery_document_only() -> None:
+def test_025_keeps_local_extension_fields_without_changing_provincial_result() -> None:
     outcome = surgery._surgery_text_outcome(
         rule_id="LX0609-025",
         facts=(_surgery_text_fact(implant_material="missing"),),
@@ -1828,10 +1831,14 @@ def test_025_binds_missing_fields_to_the_model_validated_surgery_document_only()
         ),
     )
 
+    assert outcome.status == "compliant"
     assert outcome.customer_display_facts == {
-        "failure_kind": "implant_information_incomplete",
-        "missing_fields": ["implant_material"],
+        "verification_kind": "implant_information_complete",
+        "performed_surgery_confirmed": True,
+        "checked_fields": ["implant_barcode", "implant_type", "implant_quantity"],
         "source_label": "手术记录",
+        "source_document_type": "surgery_record",
+        "local_extension_missing_fields": ["implant_material"],
         "source_document_id": "surgery-document-1",
     }
 

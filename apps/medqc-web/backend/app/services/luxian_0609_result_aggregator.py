@@ -3020,20 +3020,8 @@ def safe_luxian_0609_customer_display_facts(
         return facts
     if rule_id == "LX0609-025":
         checked_implant_fields = [
-            "implant_name", "implant_type", "implant_specification",
-            "implant_material", "implant_quantity",
+            "implant_barcode", "implant_type", "implant_quantity",
         ]
-        if (
-            raw.get("verification_kind") == "implant_information_complete"
-            and raw.get("performed_surgery_confirmed") is True
-            and raw.get("checked_fields") == checked_implant_fields
-        ):
-            return {
-                "verification_kind": "implant_information_complete",
-                "performed_surgery_confirmed": True,
-                "checked_fields": list(checked_implant_fields),
-                "source_label": "手术记录",
-            }
         if (
             raw.get("verification_kind") == "implant_not_used"
             and raw.get("performed_surgery_confirmed") is True
@@ -3043,18 +3031,46 @@ def safe_luxian_0609_customer_display_facts(
                 "performed_surgery_confirmed": True,
                 "source_label": "手术记录",
             }
+        source_document_type = raw.get("source_document_type")
+        source_label = raw.get("source_label")
+        if source_document_type not in {"surgery_record", "daily_course_record"}:
+            return None
+        expected_label = (
+            "手术记录" if source_document_type == "surgery_record" else "病程记录"
+        )
+        if source_label != expected_label:
+            return None
+        if (
+            raw.get("verification_kind") == "implant_information_complete"
+            and raw.get("performed_surgery_confirmed") is True
+            and raw.get("checked_fields") == checked_implant_fields
+        ):
+            facts = {
+                "verification_kind": "implant_information_complete",
+                "performed_surgery_confirmed": True,
+                "checked_fields": list(checked_implant_fields),
+                "source_label": expected_label,
+                "source_document_type": source_document_type,
+            }
+            extension_missing = raw.get("local_extension_missing_fields")
+            if isinstance(extension_missing, list) and all(
+                item in {"implant_name", "implant_specification", "implant_material"}
+                for item in extension_missing
+            ):
+                facts["local_extension_missing_fields"] = list(extension_missing)
+            return facts
         missing = raw.get("missing_fields")
         if not isinstance(missing, list):
             return None
         facts = {
             "failure_kind": "implant_information_incomplete",
-            "source_label": "手术记录",
+            "source_label": expected_label,
+            "source_document_type": source_document_type,
             "missing_fields": [
                 value
                 for value in missing
                 if value in {
-                    "implant_name", "implant_type", "implant_specification",
-                    "implant_material", "implant_quantity",
+                    "implant_barcode", "implant_type", "implant_quantity",
                 }
             ]
         }
@@ -3814,7 +3830,7 @@ def _customer_evidence_from_display_facts(
         "LX0609-004": "rescue_record",
         "LX0609-005": "senior_course_record",
         "LX0609-006": "senior_course_record",
-        "LX0609-025": "surgery_record",
+        "LX0609-025": str(raw.get("source_document_type") or ""),
         "LX0609-034": "anesthesia_record",
         "LX0609-036": "anesthesia_record",
     }

@@ -1130,6 +1130,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-020",
         "LX0609-021",
         "LX0609-022",
+        "LX0609-025",
         "LX0609-033",
         "LX0609-026",
         "LX0609-027",
@@ -1175,6 +1176,29 @@ def customer_finding_from_controlled_facts(
                 return ""
             return f"已确认实施手术，但手术知情同意书缺少{labels_text}签名。"
         return ""
+
+    if rule_id == "LX0609-025":
+        primary_labels = {
+            "implant_barcode": "植入物条码",
+            "implant_type": "植入物种类",
+            "implant_quantity": "植入物数量",
+        }
+        source = str(facts.get("source_label") or "手术记录或病程记录")
+        if kind == "implant_information_incomplete":
+            missing = labels("missing_fields", primary_labels)
+            return f"已确认实际使用永久性植入物，但{source}缺少：{missing}。" if missing else ""
+        if kind == "implant_information_complete":
+            checked = labels("checked_fields", primary_labels)
+            extension = labels(
+                "local_extension_missing_fields",
+                {
+                    "implant_name": "名称",
+                    "implant_specification": "规格/型号",
+                    "implant_material": "材质",
+                },
+            )
+            suffix = f"本院扩展字段待补：{extension}。" if extension else ""
+            return f"已核对{source}，{checked}均有记录。{suffix}"
 
     if rule_id == "LX0609-009":
         required_values = facts.get("required_dates")

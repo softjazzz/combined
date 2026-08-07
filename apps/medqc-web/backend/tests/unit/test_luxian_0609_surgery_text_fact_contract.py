@@ -111,6 +111,7 @@ def _session(
     surgery_source_unavailable: bool = False,
     surgery_rows: tuple[dict[str, object], ...] | None = None,
     mr_surgery_rows: tuple[dict[str, object], ...] | None = None,
+    daily_course_rows: tuple[dict[str, object], ...] | None = None,
 ):
     rows = {
         "surgery_record": ({
@@ -140,6 +141,8 @@ def _session(
         rows["surgery_record"] = surgery_rows
     if mr_surgery_rows is not None:
         rows["mr_surgery"] = mr_surgery_rows
+    if daily_course_rows is not None:
+        rows["daily_course_record"] = daily_course_rows
 
     def reader(**kwargs):
         source_key = kwargs["source_key"]
@@ -360,15 +363,15 @@ async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
 
 
 @pytest.mark.asyncio
-async def test_025_llm_extracts_actual_artificial_dura_and_ignores_unconfirmed_barcode_requirement() -> None:
-    """025由受控LLM识别实际永久性植入，条码不属于本阶段客户必填项。"""
+async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extensions_nonblocking() -> None:
+    """025主项只核对条码、种类、数量；本院扩展字段不改变主结论。"""
     session = _session(
         surgery_rows=(
             {
                 "document_id": "5039223||1",
                 "surgery_begin_time": "2026-07-07 16:30:00+08",
                 "surgery_name": "颅内血肿清除术",
-                "surgery_process": "缺损区用人工硬脑膜一张覆盖，完成硬脑膜修补。",
+                "surgery_process": "缺损区用人工硬脑膜一张覆盖，植入物条码已粘贴，完成硬脑膜修补。",
             },
             {
                 "document_id": "5039223||2",
@@ -386,12 +389,12 @@ async def test_025_llm_extracts_actual_artificial_dura_and_ignores_unconfirmed_b
     event = _event(
         implant_use="actual_permanent_implant",
         implant_name="present",
-        implant_type="missing",
+        implant_type="present",
         implant_specification="missing",
         implant_material="missing",
         implant_quantity="present",
+        implant_barcode="present",
     )
-    event.pop("implant_barcode")
     client = _Client({"schema_version": SCHEMA_VERSION, "events": [event]})
 
     native = await execute_luxian_0609_native_surgery_gate_rules(
@@ -427,20 +430,94 @@ async def test_025_llm_extracts_actual_artificial_dura_and_ignores_unconfirmed_b
     assert native.total_tokens == 100
     assert len(client.prompts) == 1
     assert "人工硬脑膜一张覆盖" in client.prompts[0]
-    assert "implant_barcode" not in client.prompts[0]
-    assert reduced[0].final_state.value == "non_compliant"
-    assert reduced[0].reason_code == "requirement_violated"
-    assert canonical[0]["status"] == "non_compliant"
-    assert canonical[0]["reason_code"] == "requirement_violated"
+    assert "implant_barcode" in client.prompts[0]
+    assert reduced[0].final_state.value == "compliant"
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert canonical[0]["status"] == "compliant"
+    assert canonical[0]["reason_code"] == "requirement_satisfied"
     assert canonical[0]["customer_display_facts"] == {
-        "failure_kind": "implant_information_incomplete",
+        "verification_kind": "implant_information_complete",
+        "performed_surgery_confirmed": True,
         "source_label": "手术记录",
-        "missing_fields": [
+        "source_document_type": "surgery_record",
+        "checked_fields": [
+            "implant_barcode",
+            "implant_type",
+            "implant_quantity",
+        ],
+        "local_extension_missing_fields": [
             "implant_material",
             "implant_specification",
-            "implant_type",
         ],
     }
+
+
+@pytest.mark.asyncio
+async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_source() -> None:
+    """病程中的永久植入事实也可满足025省标主项，且交付层必须如实保留来源类型。"""
+    session = _session(
+        surgery_rows=(
+            {
+                "document_id": "surgery-025-anchor",
+                "surgery_begin_time": "2026-07-07 16:30:00+08",
+                "surgery_name": "颅内血肿清除术",
+                "surgery_process": "已完成本次手术。",
+            },
+        ),
+        daily_course_rows=(
+            {
+                "document_id": "daily-025-implant",
+                "record_time": "2026-07-07 19:30:00+08",
+                "record_content": "术中已置入永久植入物；条码已粘贴，种类为人工硬脑膜，数量一张。",
+            },
+        ),
+    )
+    event = _event(
+        evidence_refs=["S07-01"],
+        implant_name="missing",
+        implant_type="present",
+        implant_specification="missing",
+        implant_material="missing",
+        implant_quantity="present",
+        implant_barcode="present",
+    )
+    native = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({"schema_version": SCHEMA_VERSION, "events": [event]}),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions,
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=native.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+
+    assert native.llm_call_count == 1
+    assert reduced[0].final_state.value == "compliant"
+    assert canonical[0]["status"] == "compliant"
+    assert canonical[0]["customer_display_facts"]["source_label"] == "病程记录"
+    assert {
+        "source_type": "daily_course_record",
+        "source_document_id": "daily-025-implant",
+    } in canonical[0]["customer_evidence"]
 
 
 @pytest.mark.asyncio

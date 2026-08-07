@@ -68,9 +68,9 @@ _TYPED_TEXT_SOURCES = {
         "surgery_record", "mr_surgery", "pathology_exam_master",
         "pathology_exam_report", "diagnosis",
     ),
-    # 025 的永久性植入事实只能由正式手术记录正文确认；mr_surgery 仅是操作
-    # 清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
-    "LX0609-025": ("surgery_record",),
+    # 025 的永久性植入事实可由正式手术记录或病程记录确认；mr_surgery 仅是
+    # 操作清单，既不能补充字段事实，也不能因行数多而截断本规则的一次受控抽取。
+    "LX0609-025": ("surgery_record", "daily_course_record"),
     "LX0609-028": (
         "surgery_record", "mr_surgery", "inpat_drug_order", "daily_course_record",
     ),
@@ -105,7 +105,7 @@ _MALIGNANT_SURGERY_PATTERN = re.compile(r"恶性|癌|肿瘤|淋巴结清扫|根�
 _RULE_SOURCES = {
     "LX0609-003": ("surgery_record", "anesthesia_record"),
     "LX0609-024": ("surgery_record", "pathology_exam_report"),
-    "LX0609-025": ("surgery_record", "implant_usage"),
+    "LX0609-025": ("surgery_record", "daily_course_record", "implant_usage"),
     "LX0609-028": ("surgery_record", "inpat_drug_order", "daily_course_record"),
     "LX0609-031": ("surgery_record", "presurg_summary", "presurg_discussion"),
     "LX0609-033": ("surgery_record", "surgery_inform_consent", "consent_form"),
@@ -365,8 +365,8 @@ def _prompt(wrapper: Mapping[str, Any], context: str) -> str:
     if rule_id == "LX0609-025":
         prompt += (
             "\n补充输出要求：若判定不合规，必须同时返回 missing_fields 数组；仅可使用"
-            "implant_name、implant_type、implant_specification、implant_material、"
-            "implant_quantity。数组只列本次手术记录中明确缺失的字段；"
+            "implant_barcode、implant_type、implant_quantity。数组只列本次手术记录"
+            "或病程记录中明确缺失的省标主项；"
             "无法确定时返回空数组。"
         )
     return prompt
@@ -409,8 +409,7 @@ def _parse_implant_missing_fields(response: Mapping[str, Any]) -> tuple[str, ...
     if not isinstance(values, list):
         return ()
     allowed = {
-        "implant_name", "implant_type", "implant_specification",
-        "implant_material", "implant_quantity",
+        "implant_barcode", "implant_type", "implant_quantity",
     }
     return tuple(value for value in values if value in allowed)
 
@@ -1105,7 +1104,9 @@ def _surgery_text_outcome(
 
     event_states: list[str] = []
     missing_implant_fields: set[str] = set()
+    missing_implant_extension_fields: set[str] = set()
     implant_source_document_id = ""
+    implant_source_key = ""
     missing_consent_signatures: set[str] = set()
     lymph_node_checked_sources: tuple[str, ...] = ()
     prophylaxis_display_facts: Mapping[str, Any] | None = None
@@ -1151,29 +1152,39 @@ def _surgery_text_outcome(
             elif fact.implant_use != "actual_permanent_implant":
                 event_states.append("data_gap")
             else:
-                field_states = (
-                    ("implant_name", fact.implant_name),
+                primary_field_states = (
+                    ("implant_barcode", fact.implant_barcode),
                     ("implant_type", fact.implant_type),
+                    ("implant_quantity", fact.implant_quantity),
+                )
+                extension_field_states = (
+                    ("implant_name", fact.implant_name),
                     ("implant_specification", fact.implant_specification),
                     ("implant_material", fact.implant_material),
-                    ("implant_quantity", fact.implant_quantity),
                 )
                 missing_implant_fields.update(
                     field_name
-                    for field_name, field_state in field_states
+                    for field_name, field_state in primary_field_states
+                    if field_state == "missing"
+                )
+                missing_implant_extension_fields.update(
+                    field_name
+                    for field_name, field_state in extension_field_states
                     if field_state == "missing"
                 )
                 if not implant_source_document_id:
                     for evidence_ref in fact.evidence_refs:
-                        if projection.document_source_keys.get(evidence_ref) != "surgery_record":
+                        source_key = projection.document_source_keys.get(evidence_ref)
+                        if source_key not in {"surgery_record", "daily_course_record"}:
                             continue
                         candidate = _clean(projection.document_source_ids.get(evidence_ref))
                         if candidate:
                             implant_source_document_id = candidate
+                            implant_source_key = source_key
                             break
-                if any(field_state == "missing" for _, field_state in field_states):
+                if any(field_state == "missing" for _, field_state in primary_field_states):
                     event_states.append("non_compliant")
-                elif any(field_state == "unknown" for _, field_state in field_states):
+                elif any(field_state == "unknown" for _, field_state in primary_field_states):
                     event_states.append("data_gap")
                 else:
                     event_states.append("compliant")
@@ -1315,7 +1326,10 @@ def _surgery_text_outcome(
                 {
                     "failure_kind": "implant_information_incomplete",
                     "missing_fields": sorted(missing_implant_fields),
-                    "source_label": "手术记录",
+                    "source_label": (
+                        "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
+                    ),
+                    "source_document_type": implant_source_key or "surgery_record",
                     **(
                         {"source_document_id": implant_source_document_id}
                         if implant_source_document_id
@@ -1332,13 +1346,19 @@ def _surgery_text_outcome(
                     "verification_kind": "implant_information_complete",
                     "performed_surgery_confirmed": True,
                     "checked_fields": [
-                        "implant_name",
+                        "implant_barcode",
                         "implant_type",
-                        "implant_specification",
-                        "implant_material",
                         "implant_quantity",
                     ],
-                    "source_label": "手术记录",
+                    "source_label": (
+                        "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
+                    ),
+                    "source_document_type": implant_source_key or "surgery_record",
+                    **(
+                        {"local_extension_missing_fields": sorted(missing_implant_extension_fields)}
+                        if missing_implant_extension_fields
+                        else {}
+                    ),
                     **(
                         {"source_document_id": implant_source_document_id}
                         if implant_source_document_id
@@ -1823,6 +1843,12 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 )
             ):
                 partial_source_rule_ids.add(rule_id)
+                active_rule_ids.append(rule_id)
+            elif (
+                rule_id == "LX0609-025"
+                and states_by_source.get("surgery_record") != "available"
+                and states_by_source.get("daily_course_record") == "available"
+            ):
                 active_rule_ids.append(rule_id)
             elif states.intersection({"unavailable", "truncated", "missing"}):
                 pending_outcomes[rule_id] = _SurgeryTextOutcome(
