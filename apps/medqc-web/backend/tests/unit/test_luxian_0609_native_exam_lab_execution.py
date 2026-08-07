@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 import pytest
@@ -2844,7 +2845,7 @@ async def test_typed_model_failure_and_invalid_output_are_technical_errors_witho
 
 
 @pytest.mark.asyncio
-async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkeypatch):
+async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkeypatch, caplog):
     """同批事实抽取失败须可诊断，但不得改变客户状态或泄露模型原文。"""
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -2857,6 +2858,7 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
         ),
     )
     client = _Client(["not-json Bearer_secret_13800138000"])
+    caplog.set_level(logging.WARNING, logger=exam_lab.__name__)
 
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
         rule_ids=("LX0609-014", "LX0609-015"),
@@ -2876,6 +2878,52 @@ async def test_typed_invalid_model_output_records_safe_parse_failure_kind(monkey
     assert result.total_tokens == 110
     assert result.parse_failure_kinds == ("not_json",)
     assert "Bearer_secret_13800138000" not in repr(result)
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == ["exam_lab_fact_parse_failed parse_failure_kind=not_json"]
+    assert "Bearer_secret_13800138000" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_typed_unexpected_value_error_logs_safe_parse_failure_kind(monkeypatch, caplog):
+    """防御性 ValueError 也只能输出受控枚举，不能泄露异常正文。"""
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_type": "血培养",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "阳性",
+            },
+        ),
+    )
+    secret = "Bearer_secret_13800138000"
+
+    def raise_value_error(**_kwargs):
+        raise ValueError(secret)
+
+    monkeypatch.setattr(exam_lab, "parse_exam_lab_fact_response", raise_value_error)
+    caplog.set_level(logging.WARNING, logger=exam_lab.__name__)
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-014", "LX0609-015"),
+        wrapper_rules=[_wrapper("LX0609-014"), _wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=_Client([_fact_response(("LX0609-014", "LX0609-015"))]),
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-014", "LX0609-015"),
+    )
+
+    assert [item.reason_code for item in result.decisions] == [
+        "model_invalid_output",
+        "model_invalid_output",
+    ]
+    assert result.llm_call_count == 1
+    assert result.parse_failure_kinds == ("value",)
+    assert [record.getMessage() for record in caplog.records] == [
+        "exam_lab_fact_parse_failed parse_failure_kind=value"
+    ]
+    assert secret not in caplog.text
 
 
 @pytest.mark.asyncio

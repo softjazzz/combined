@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
+import logging
 import re
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -41,6 +42,9 @@ from .source_evidence_reader import (
     EVALUATION_HORIZON_SOURCE_KEY,
     authoritative_document_time_value,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 EXAM_LAB_RULE_IDS = (
@@ -1571,10 +1575,17 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         )
                     except ExamLabFactParseError as exc:
                         parse_failure_kinds.append(exc.failure_kind)
+                        logger.warning(
+                            "exam_lab_fact_parse_failed parse_failure_kind=%s",
+                            exc.failure_kind,
+                        )
                         text_facts = None
                     except ValueError:
                         # 防御性兜底：解析器以外的 ValueError 也不得泄露正文。
                         parse_failure_kinds.append("value")
+                        logger.warning(
+                            "exam_lab_fact_parse_failed parse_failure_kind=value"
+                        )
                         text_facts = None
                     for rule_id in eligible_rule_ids:
                         outcome = (
