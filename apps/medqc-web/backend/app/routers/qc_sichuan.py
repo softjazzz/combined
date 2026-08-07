@@ -2616,6 +2616,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         )
         enable_incremental_results = bool(filters.get("sample_pool_id"))
         job_started_at = datetime.now(timezone.utc)
+        completed_records_state = {"count": 0}
 
         def _is_cancelled() -> bool:
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -2877,6 +2878,105 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 list(record_rule_map.get(visit_id) or record_rule_map.get(record_id) or [])
                 or list(valid_rule_ids)
             )
+            execution_trace_sink = None
+            if enable_incremental_results and native_direct_enabled:
+                try:
+                    executor_batches = tuple(
+                        build_luxian_0609_package_plan_from_settings(
+                            inventory=load_luxian_0609_dependency_inventory(),
+                            selected_rule_ids=tuple(active_rule_ids),
+                            settings=settings,
+                        ).native_executor_batches
+                    )
+                except Exception:
+                    # 阶段展示仅是安全旁路；无法生成批次计划时不影响质控主链。
+                    logger.exception("LX0609 执行阶段计划解析失败: job_id=%s", job_id)
+                    executor_batches = ()
+
+                trace_state = {
+                    "completed_batches": 0,
+                    "completed_executor_keys": set(),
+                    "active_executor_keys": set(),
+                    "total_batches": len(executor_batches),
+                    "completed_rule_count": 0,
+                    "total_rule_count": len(active_rule_ids),
+                }
+
+                def _execution_trace_sink(trace: Dict[str, Any]) -> None:
+                    """仅回写族执行阶段，未完成Canonical结果绝不写入任务详情。"""
+                    try:
+                        if _is_cancelled():
+                            return
+                        event = str((trace or {}).get("event") or "").strip().lower()
+                        executor_key = str(
+                            (trace or {}).get("executor_key") or ""
+                        ).strip()
+                        if event not in {"started", "completed", "failed"} or not executor_key:
+                            return
+                        if event == "started":
+                            trace_state["active_executor_keys"].add(executor_key)
+                        elif event == "completed":
+                            trace_state["active_executor_keys"].discard(executor_key)
+                            if executor_key not in trace_state["completed_executor_keys"]:
+                                trace_state["completed_executor_keys"].add(executor_key)
+                                trace_state["completed_batches"] = min(
+                                    trace_state["total_batches"],
+                                    trace_state["completed_batches"] + 1,
+                                )
+                                try:
+                                    rule_count = max(
+                                        0, int((trace or {}).get("rule_count") or 0)
+                                    )
+                                except (TypeError, ValueError):
+                                    rule_count = 0
+                                trace_state["completed_rule_count"] = min(
+                                    trace_state["total_rule_count"],
+                                    trace_state["completed_rule_count"] + rule_count,
+                                )
+                        else:
+                            # failed 只是可见的执行失败阶段，绝不能伪装为完成进度。
+                            trace_state["active_executor_keys"].discard(executor_key)
+                        workspace.update_batch_job_progress(
+                            job_id=job_id,
+                            step_key="run",
+                            rule_index=int(trace_state["completed_rule_count"]),
+                            rule_count=int(trace_state["total_rule_count"]),
+                            processed_records=int(completed_records_state["count"]),
+                            total_records=total_records,
+                            summary_patch={
+                                "stream_state": {
+                                    "enabled": True,
+                                    "kind": "native_executor_phase",
+                                    "event": event,
+                                    "executor_key": executor_key,
+                                    "completed_batches": int(
+                                        trace_state["completed_batches"]
+                                    ),
+                                    "total_batches": int(trace_state["total_batches"]),
+                                    "active_executor_keys": sorted(
+                                        trace_state["active_executor_keys"]
+                                    ),
+                                    "record_id": record_id,
+                                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                                    "current_rule_count": max(
+                                        0, int((trace or {}).get("rule_count") or 0)
+                                    ),
+                                    "completed_rule_count": int(
+                                        trace_state["completed_rule_count"]
+                                    ),
+                                    "total_rule_count": int(
+                                        trace_state["total_rule_count"]
+                                    ),
+                                },
+                                "updated_at": datetime.now(timezone.utc).isoformat(),
+                            },
+                        )
+                    except Exception:
+                        # 回调数据库失败不能反向影响原生执行或客户结果。
+                        logger.exception("LX0609 执行阶段回写失败: job_id=%s", job_id)
+
+                execution_trace_sink = _execution_trace_sink
+
             active_rules = [
                 dict(rule_states[rule_id]["rule"])
                 for rule_id in active_rule_ids
@@ -3103,6 +3203,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 evaluation_horizon_unavailable_reason
                             ),
                             cancellation_check=_is_cancelled,
+                            execution_trace_sink=execution_trace_sink,
                         )
                         used_bundle_path = True
                     else:
@@ -3789,6 +3890,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             nonlocal total_single_rule_retries
             nonlocal total_context_tokens_estimate
             nonlocal total_refined_rule_count
+
+            completed_records_state["count"] = max(
+                int(completed_records_state["count"]), processed_records_count
+            )
 
             record_id = str(record_result.get("record_id") or "").strip()
             if record_result.get("issue_record") is True:

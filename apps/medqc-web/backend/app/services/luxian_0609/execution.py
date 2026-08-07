@@ -197,6 +197,7 @@ async def prepare_luxian_0609_execution(
     evaluation_horizon_policy: str | None = None,
     evaluation_horizon_unavailable_reason: str | None = None,
     selected_customer_rule_ids: Iterable[str] | None = None,
+    trace_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
 
@@ -421,6 +422,7 @@ async def prepare_luxian_0609_execution(
                 ),
                 default_deadline_seconds=300.0,
                 max_concurrency=1,
+                trace_sink=trace_sink,
             )
         except Exception:
             # 开关开启后禁止重跑冻结旧链：引擎可能已调用过部分模型，回退会造成

@@ -4509,6 +4509,7 @@ class SichuanQCService:
         evaluation_horizon_policy: str | None = None,
         evaluation_horizon_unavailable_reason: str | None = None,
         cancellation_check: Optional[Callable[[], bool]] = None,
+        execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         """
         通过 running/final bundle 输入复用旧规则链入口（evaluate_document）。
@@ -4629,6 +4630,7 @@ class SichuanQCService:
                     evaluation_horizon_unavailable_reason
                 ),
                 selected_customer_rule_ids=selected_customer_rule_ids,
+                trace_sink=execution_trace_sink,
             )
 
         if not execution_rules and luxian_context is not None:

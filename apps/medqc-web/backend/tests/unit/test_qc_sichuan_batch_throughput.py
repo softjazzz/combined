@@ -2674,6 +2674,7 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
         captured_rule_ids.append(list(kwargs["rule_ids"]))
+        assert kwargs.get("execution_trace_sink") is None
         return {
             "evaluation_results": [
                 {
@@ -2734,6 +2735,127 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
         assert hidden_native_fields.isdisjoint(item)
         assert hidden_native_fields.isdisjoint(dict(item.get("metadata") or {}))
         assert hidden_native_fields.isdisjoint(dict(item.get("audit") or {}))
+
+
+@pytest.mark.asyncio
+async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_canonical_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Native族阶段可实时回写，但结果只能在完整交付后写入。"""
+    workspace = _WorkspaceStub()
+    original_update_progress = workspace.update_batch_job_progress
+
+    def _update_incremental_progress(**kwargs: Any) -> None:
+        items = kwargs.pop("items", None)
+        failed_records = kwargs.pop("failed_records", None)
+        original_update_progress(**kwargs)
+        if items is not None:
+            workspace.items = list(items)
+        if failed_records is not None:
+            workspace.failed_records = list(failed_records)
+
+    workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
+    native_rule_ids = ["LX0609-029", "LX0609-030"]
+    workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["filters"] = {
+        "sample_pool_id": "pool-live-phase-001",
+        "rule_ids": native_rule_ids,
+        "selected_rule_ids": native_rule_ids,
+        "scoped_customer_rule_ids": native_rule_ids,
+        "record_rule_map": {"visit-001": native_rule_ids},
+        "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+        "validation_mode": "programmatic",
+    }
+    service = _ServiceStub()
+    observed_stream_states: List[Dict[str, Any]] = []
+
+    async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        trace_sink = kwargs.get("execution_trace_sink")
+        assert callable(trace_sink)
+        trace_sink(
+            {
+                "event": "failed",
+                "executor_key": "exam_lab",
+                "rule_count": 1,
+            }
+        )
+        observed_stream_states.append(
+            dict((workspace.summary or {}).get("stream_state") or {})
+        )
+        trace_sink(
+            {
+                "event": "started",
+                "executor_key": "surgery_document",
+                "rule_count": 2,
+            }
+        )
+        assert workspace.items == []
+        observed_stream_states.append(
+            dict((workspace.summary or {}).get("stream_state") or {})
+        )
+        trace_sink(
+            {
+                "event": "completed",
+                "executor_key": "surgery_document",
+                "rule_count": 2,
+            }
+        )
+        assert workspace.items == []
+        observed_stream_states.append(
+            dict((workspace.summary or {}).get("stream_state") or {})
+        )
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "metadata": {},
+                }
+                for rule_id in native_rule_ids
+            ],
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+        }
+
+    service.evaluate_running_final_bundle_input = _evaluate_running_final_bundle_input  # type: ignore[attr-defined]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _get_qc_service() -> _ServiceStub:
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _get_qc_service)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert observed_stream_states, workspace.failed_records
+    assert observed_stream_states[0]["event"] == "failed"
+    assert observed_stream_states[0]["completed_batches"] == 0
+    assert observed_stream_states[0]["completed_rule_count"] == 0
+    assert observed_stream_states[0]["active_executor_keys"] == []
+    assert observed_stream_states[1] == {
+        "enabled": True,
+        "kind": "native_executor_phase",
+        "event": "started",
+        "executor_key": "surgery_document",
+        "completed_batches": 0,
+        "total_batches": 2,
+        "active_executor_keys": ["surgery_document"],
+        "record_id": "visit-001",
+        "updated_at": observed_stream_states[1]["updated_at"],
+        "current_rule_count": 2,
+        "completed_rule_count": 0,
+        "total_rule_count": 2,
+    }
+    assert observed_stream_states[2]["event"] == "completed"
+    assert observed_stream_states[2]["completed_batches"] == 1
+    assert observed_stream_states[2]["completed_rule_count"] == 2
+    assert observed_stream_states[2]["active_executor_keys"] == []
+    assert workspace.job["status"] == "completed"
 
 
 @pytest.mark.asyncio
