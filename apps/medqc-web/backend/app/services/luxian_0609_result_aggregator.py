@@ -2187,6 +2187,101 @@ def safe_luxian_0609_customer_display_facts(
         return None
     if rule_id in {"LX0609-043", "LX0609-070"}:
         allowed_items = {"hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hcv", "hiv", "syphilis", "alt"}
+
+        def controlled_event_checks(value: Any) -> list[dict[str, Any]] | None:
+            if not isinstance(value, list) or not value or len(value) > 100:
+                return None
+            safe_events: list[dict[str, Any]] = []
+            for item in value:
+                if not isinstance(item, Mapping):
+                    return None
+                transfusion_time = item.get("transfusion_time")
+                latest_valid_test_time = item.get("latest_valid_test_time")
+                if (
+                    not isinstance(transfusion_time, str)
+                    or len(transfusion_time) > 160
+                    or "\n" in transfusion_time
+                    or (
+                        latest_valid_test_time is not None
+                        and (
+                            not isinstance(latest_valid_test_time, str)
+                            or len(latest_valid_test_time) > 160
+                            or "\n" in latest_valid_test_time
+                        )
+                    )
+                ):
+                    return None
+                safe_event: dict[str, Any] = {
+                    "transfusion_time": transfusion_time,
+                    "latest_valid_test_time": latest_valid_test_time,
+                }
+                for key in (
+                    "missing_items",
+                    "missing_time_items",
+                    "late_items",
+                    "outside_current_stay_items",
+                ):
+                    values = controlled_list(item.get(key), allowed=allowed_items)
+                    if values is None:
+                        return None
+                    safe_event[key] = values
+                safe_events.append(safe_event)
+            return safe_events
+
+        def append_lx070_event_facts(result: dict[str, Any]) -> dict[str, Any] | None:
+            """仅交付070逐笔输血的受控时间、项目与缺口，不改变043的摘要。"""
+            if rule_id != "LX0609-070":
+                return result
+            event_count = raw.get("transfusion_event_count")
+            event_times = controlled_list(raw.get("checked_transfusion_times"))
+            event_checks = controlled_event_checks(raw.get("event_checks"))
+            # 兼容历史 070 结果：旧任务没有逐笔事实时，保留既有受控摘要；
+            # 但三项中仅出现一部分则拒绝，避免交付不完整的逐笔结论。
+            if (
+                raw.get("transfusion_event_count") is None
+                and raw.get("checked_transfusion_times") is None
+                and raw.get("event_checks") is None
+            ):
+                return result
+            if (
+                not isinstance(event_count, int)
+                or isinstance(event_count, bool)
+                or event_count <= 0
+                or event_times is None
+                or event_checks is None
+                or event_count != len(event_times)
+                or event_count != len(event_checks)
+            ):
+                return None
+            result.update(
+                {
+                    "transfusion_event_count": event_count,
+                    "checked_transfusion_times": event_times,
+                    "event_checks": event_checks,
+                }
+            )
+            for key in ("failed_transfusion_times", "admission_time"):
+                value = raw.get(key)
+                if value is None:
+                    continue
+                if key == "failed_transfusion_times":
+                    values = controlled_list(value)
+                    if values is None:
+                        return None
+                    result[key] = values
+                elif isinstance(value, str) and len(value) <= 160 and "\n" not in value:
+                    result[key] = value
+                else:
+                    return None
+            outside_items = controlled_list(
+                raw.get("outside_current_stay_items"), allowed=allowed_items
+            )
+            if outside_items is not None:
+                result["outside_current_stay_items"] = outside_items
+            elif raw.get("outside_current_stay_items") is not None:
+                return None
+            return result
+
         kind = raw.get("verification_kind") or raw.get("failure_kind")
         if kind == "pretransfusion_items_complete":
             checked = controlled_list(raw.get("checked_items"), allowed=allowed_items)
@@ -2198,7 +2293,7 @@ def safe_luxian_0609_customer_display_facts(
                 or any(not isinstance(raw.get(key), bool) for key in ("abo_present", "rh_present", "antibody_screen_present"))
             ):
                 return None
-            return {
+            return append_lx070_event_facts({
                 "verification_kind": kind,
                 "performed_transfusion_confirmed": True,
                 "checked_items": checked,
@@ -2207,7 +2302,7 @@ def safe_luxian_0609_customer_display_facts(
                 "abo_present": raw["abo_present"],
                 "rh_present": raw["rh_present"],
                 "antibody_screen_present": raw["antibody_screen_present"],
-            }
+            })
         list_key = {
             "pretransfusion_items_incomplete": "missing_items",
             "pretransfusion_tests_after_transfusion": "late_items",
@@ -2227,7 +2322,7 @@ def safe_luxian_0609_customer_display_facts(
                 if required is None:
                     return None
                 result["required_items"] = required
-            return result
+            return append_lx070_event_facts(result)
         return None
     if rule_id == "LX0609-048" and (
         raw.get("failure_kind") == "system_data_contract_gap"

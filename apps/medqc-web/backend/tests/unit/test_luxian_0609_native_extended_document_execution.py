@@ -2183,6 +2183,116 @@ async def test_070_reuses_same_stay_nine_items_for_each_later_transfusion() -> N
 
 
 @pytest.mark.asyncio
+async def test_070_multi_transfusion_preserves_canonical_decision_facts_and_evidence() -> None:
+    """070 的逐笔核对必须真实穿过 Native、Decision 与生产聚合器。"""
+    names = (
+        ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
+        ("HBeAg", "乙肝e抗原"), ("HBeAb", "乙肝e抗体"),
+        ("HBcAb", "乙肝核心抗体"), ("HIV", "艾滋抗体"),
+        ("HCV", "丙肝抗体"), ("TP", "梅毒抗体"),
+        ("ALT", "谷丙转氨酶"),
+    )
+    snapshot, materials, execution, reduced = await _evaluate_selected(
+        ("LX0609-070",),
+        {
+            "inpat_registration": ({
+                "document_id": "admission-070",
+                "admission_datetime": "2026-06-01 08:00:00",
+            },),
+            "mr_bloodtrans": (
+                {
+                    "document_id": "transfusion-record-070",
+                    "transfution_datetime": "2026-06-02 14:00:00",
+                },
+                {
+                    "document_id": "transfusion-record-070",
+                    "transfution_datetime": "2026-06-04 14:00:00",
+                },
+            ),
+            "labtest_item_report": tuple(
+                {
+                    "document_id": "lab-report-070",
+                    "item_code": code,
+                    "item_name": name,
+                    "result": "阴性",
+                    "report_time": "2026-06-02 10:00:00",
+                }
+                for code, name in names
+            ),
+        },
+    )
+
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-070",
+        snapshot=snapshot,
+        materials=materials,
+        result=execution,
+        reduced=reduced,
+    )
+
+    assert execution.decisions[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert canonical["status"] == "compliant"
+    assert canonical["reason_code"] == "requirement_satisfied"
+    # Native 的逐笔事实是判定唯一所有者；生产 Aggregator 仅保留当前已受控的
+    # 客户摘要，不能借本次测试扩大其展示字段白名单。
+    native_facts = dict(execution.customer_display_facts)["LX0609-070"]
+    assert native_facts["transfusion_event_count"] == 2
+    assert native_facts["checked_transfusion_times"] == [
+        "2026-06-02 14:00:00",
+        "2026-06-04 14:00:00",
+    ]
+    assert "failed_transfusion_times" not in native_facts
+    canonical_facts = canonical["customer_display_facts"]
+    assert canonical_facts["verification_kind"] == "pretransfusion_items_complete"
+    assert canonical_facts["performed_transfusion_confirmed"] is True
+    assert set(canonical_facts["checked_items"]) == {
+        "hbsag", "hbsab", "hbeag", "hbeab", "hbcab", "hiv", "hcv", "syphilis", "alt",
+    }
+    assert canonical_facts["latest_test_time"] == "2026-06-02 10:00:00"
+    assert canonical_facts["transfusion_time"] == "2026-06-04 14:00:00"
+    assert canonical_facts["abo_present"] is False
+    assert canonical_facts["rh_present"] is False
+    assert canonical_facts["antibody_screen_present"] is False
+    assert canonical_facts["transfusion_event_count"] == 2
+    assert canonical_facts["checked_transfusion_times"] == [
+        "2026-06-02 14:00:00",
+        "2026-06-04 14:00:00",
+    ]
+    assert canonical_facts["event_checks"] == [
+        {
+            "transfusion_time": "2026-06-02 14:00:00",
+            "missing_items": [],
+            "missing_time_items": [],
+            "late_items": [],
+            "outside_current_stay_items": [],
+            "latest_valid_test_time": "2026-06-02 10:00:00",
+        },
+        {
+            "transfusion_time": "2026-06-04 14:00:00",
+            "missing_items": [],
+            "missing_time_items": [],
+            "late_items": [],
+            "outside_current_stay_items": [],
+            "latest_valid_test_time": "2026-06-02 10:00:00",
+        },
+    ]
+    assert canonical_facts["admission_time"] == "2026-06-01 08:00:00"
+    assert {
+        (item["source_type"], item["source_document_id"])
+        for item in canonical["customer_evidence"]
+    } == {
+        ("inpat_registration", "admission-070"),
+        ("mr_bloodtrans", "transfusion-record-070"),
+        ("labtest_item_report", "lab-report-070"),
+    }
+    assert execution.llm_call_count == 0
+    assert execution.prompt_tokens == 0
+    assert execution.completion_tokens == 0
+    assert execution.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_070_does_not_use_nine_items_reported_after_earlier_transfusion() -> None:
     names = (
         ("HBsAg", "乙肝表面抗原"), ("HBsAb", "乙肝表面抗体"),
