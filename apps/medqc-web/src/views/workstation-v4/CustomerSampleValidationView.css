@@ -41,16 +41,8 @@
   padding-bottom: 20px;
 }
 
-.customer-sample-scroll.has-selection-run-bar {
-  padding-bottom: 108px;
-}
-
-.customer-sample-scroll.has-recent-task-dock {
-  padding-bottom: 104px;
-}
-
-.customer-sample-scroll.has-selection-run-bar.has-recent-task-dock {
-  padding-bottom: 190px;
+.customer-sample-scroll.has-work-dock {
+  padding-bottom: 220px;
 }
 
 .customer-sample-container {
@@ -588,19 +580,14 @@
   color: #0066cc;
 }
 
-.customer-sample-selection-run-bar {
+.customer-sample-work-dock {
   position: fixed;
   right: max(24px, calc((100vw - 1440px) / 2 + 24px));
   bottom: 22px;
   left: max(24px, calc((100vw - 1440px) / 2 + 24px));
   z-index: 120;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 12px 14px 12px 16px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
@@ -611,18 +598,26 @@
   backdrop-filter: blur(18px);
 }
 
-.customer-sample-recent-task-dock {
-  position: fixed;
-  right: max(24px, calc((100vw - 1440px) / 2 + 24px));
-  bottom: 22px;
-  left: max(24px, calc((100vw - 1440px) / 2 + 24px));
-  z-index: 110;
-  max-width: 1440px;
-  margin: 0 auto;
+.customer-sample-work-dock :deep(.qc-task-status) {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.customer-sample-recent-task-dock.is-above-selection-run-bar {
-  bottom: 104px;
+.customer-sample-work-dock__divider {
+  height: 1px;
+  margin: 0 16px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.customer-sample-work-dock__selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px 12px 16px;
 }
 
 .customer-sample-selection-run-summary {
@@ -2598,26 +2593,19 @@
     max-width: calc(100vw - 32px);
   }
 
-  .customer-sample-selection-run-bar {
+  .customer-sample-work-dock {
     right: 12px;
     bottom: 12px;
     left: 12px;
+  }
+
+  .customer-sample-work-dock__selection {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .customer-sample-recent-task-dock {
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
-  }
-
-  .customer-sample-recent-task-dock.is-above-selection-run-bar {
-    bottom: 148px;
-  }
-
-  .customer-sample-scroll.has-selection-run-bar.has-recent-task-dock {
-    padding-bottom: 254px;
+  .customer-sample-scroll.has-work-dock {
+    padding-bottom: 306px;
   }
 
   .customer-sample-selection-run-actions {

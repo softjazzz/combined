@@ -1769,37 +1769,68 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalled()
   })
 
-  it('选中病历后显示底部开始质控操作条并可取消选择', async () => {
+  it('将最近任务与选中病历操作合并为唯一工作底栏，并保留全部主操作', async () => {
     const wrapper = await mountView()
 
     const scrollArea = wrapper.get('.customer-sample-scroll')
     expect(scrollArea.classes()).not.toContain('pb-5')
-    expect(scrollArea.classes()).toContain('has-recent-task-dock')
+    expect(scrollArea.classes()).toContain('has-work-dock')
 
-    expect(wrapper.find('[data-testid="customer-sample-selection-run-bar"]').exists()).toBe(false)
+    const taskOnlyDock = wrapper.get('[data-testid="customer-sample-work-dock"]')
+    expect(taskOnlyDock.find('[data-testid="customer-sample-qc-task-status"]').exists()).toBe(true)
+    expect(taskOnlyDock.text()).not.toContain('已选择 1 份病历')
+    expect(wrapper.find('.customer-sample-recent-task-dock').exists()).toBe(false)
+    expect(wrapper.find('.customer-sample-selection-run-bar').exists()).toBe(false)
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
     await nextTick()
 
-    const runBar = wrapper.find('[data-testid="customer-sample-selection-run-bar"]')
-    expect(runBar.exists()).toBe(true)
-    expect(scrollArea.classes()).toContain('has-selection-run-bar')
-    expect(wrapper.find('.customer-sample-recent-task-dock').classes()).toContain(
-      'is-above-selection-run-bar',
-    )
-    expect(runBar.text()).toContain('已选择 1 份病历')
-    expect(runBar.text()).toContain('可质控 1 份')
-    expect(runBar.text()).toContain('当前范围：全量0609')
-    expect(runBar.text()).toContain('开始质控')
+    const workDock = wrapper.get('[data-testid="customer-sample-work-dock"]')
+    expect(workDock.findAll('[data-testid="customer-sample-qc-task-status"]')).toHaveLength(1)
+    expect(workDock.text()).toContain('已选择 1 份病历')
+    expect(workDock.text()).toContain('可质控 1 份')
+    expect(workDock.text()).toContain('当前范围：全量0609')
+    expect(workDock.text()).toContain('开始质控')
+    expect(workDock.find('.customer-sample-work-dock__divider').exists()).toBe(true)
+    expect(scrollArea.classes()).toContain('has-work-dock')
+    expect(wrapper.find('.customer-sample-recent-task-dock').exists()).toBe(false)
+    expect(wrapper.find('.customer-sample-selection-run-bar').exists()).toBe(false)
 
-    const clearButton = runBar.findAll('button').find((node) => node.text() === '清空选择')
+    const clearButton = workDock.findAll('button').find((node) => node.text() === '清空选择')
     expect(clearButton).toBeTruthy()
     await clearButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.find('[data-testid="customer-sample-selection-run-bar"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="customer-sample-work-dock"]').find('.customer-sample-work-dock__selection').exists()).toBe(false)
     expect((recordCheckboxes[0].element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('无最近任务但选中病历时仍显示唯一工作底栏和开始质控操作', async () => {
+    getSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+      success: false,
+      message: '当前没有可恢复的质控任务',
+    })
+    listManualSamplePools.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [buildPool({ latest_job_id: '', latest_job_status: '' })],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+
+    const wrapper = await mountView()
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await nextTick()
+
+    const workDock = wrapper.get('[data-testid="customer-sample-work-dock"]')
+    expect(workDock.find('[data-testid="customer-sample-qc-task-status"]').exists()).toBe(false)
+    expect(workDock.find('.customer-sample-work-dock__selection').exists()).toBe(true)
+    expect(workDock.text()).toContain('开始质控')
+    expect(wrapper.get('.customer-sample-scroll').classes()).toContain('has-work-dock')
   })
 
   it('客户样本复现模式未选择病历时提示先选择病历', async () => {

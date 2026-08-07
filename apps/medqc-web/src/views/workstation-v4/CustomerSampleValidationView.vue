@@ -3,8 +3,7 @@
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
       :class="{
-        'has-selection-run-bar': selectedRecordStats.selectedCount > 0,
-        'has-recent-task-dock': Boolean(currentQcTask),
+        'has-work-dock': Boolean(currentQcTask) || selectedRecordStats.selectedCount > 0,
       }"
     >
       <div class="customer-sample-container mx-auto w-full max-w-[1440px]">
@@ -656,62 +655,72 @@
     </div>
 
     <div
-      v-if="currentQcTask"
-      class="customer-sample-recent-task-dock"
-      :class="{ 'is-above-selection-run-bar': selectedRecordStats.selectedCount > 0 }"
-    >
-      <CustomerSampleQcTaskStatusBar
-        :task="currentQcTask"
-        :loading="currentQcTaskLoading"
-        :canceling="cancelBatchJobLoading"
-        :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
-        @view-result="openBatchJob"
-        @cancel="confirmCancelBatchJob"
-        @review="handleReviewCurrentTask"
-        @export="handleExportCurrentTask"
-        @open-history="openTaskHistoryPage"
-      />
-    </div>
-
-    <div
-      v-if="selectedRecordStats.selectedCount > 0"
-      class="customer-sample-selection-run-bar"
-      data-testid="customer-sample-selection-run-bar"
+      v-if="currentQcTask || selectedRecordStats.selectedCount > 0"
+      class="customer-sample-work-dock"
+      data-testid="customer-sample-work-dock"
       aria-live="polite"
     >
-      <div class="customer-sample-selection-run-summary">
-        <strong>已选择 {{ selectedRecordStats.selectedCount }} 份病历</strong>
-        <span>
-          可质控 {{ selectedRecordStats.runnableCount }} 份
-          <template v-if="selectedRecordStats.blockedCount > 0">
-            ，{{ selectedRecordStats.blockedCount }} 份当前阻塞（不会缩小范围执行）
-          </template>
-          · 当前范围：{{ selectedRunScopeSummary }}
-        </span>
+      <div
+        v-if="currentQcTask"
+        class="customer-sample-work-dock__task"
+      >
+        <CustomerSampleQcTaskStatusBar
+          :task="currentQcTask"
+          :loading="currentQcTaskLoading"
+          :canceling="cancelBatchJobLoading"
+          :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
+          @view-result="openBatchJob"
+          @cancel="confirmCancelBatchJob"
+          @review="handleReviewCurrentTask"
+          @export="handleExportCurrentTask"
+          @open-history="openTaskHistoryPage"
+        />
       </div>
-      <div class="customer-sample-selection-run-actions">
-        <a-button
-          class="!rounded-lg"
-          @click="clearSelectedRecords"
-        >
-          清空选择
-        </a-button>
-        <a-button
-          v-if="isLuxian0609Mode"
-          class="!rounded-lg"
-          @click="scrollToLuxianScope"
-        >
-          调整质控范围
-        </a-button>
-        <a-button
-          type="primary"
-          class="!rounded-lg"
-          :disabled="runButtonDisabled"
-          :loading="runLoading"
-          @click="handleRunPool"
-        >
-          开始质控
-        </a-button>
+
+      <div
+        v-if="currentQcTask && selectedRecordStats.selectedCount > 0"
+        class="customer-sample-work-dock__divider"
+        aria-hidden="true"
+      />
+
+      <div
+        v-if="selectedRecordStats.selectedCount > 0"
+        class="customer-sample-work-dock__selection"
+      >
+        <div class="customer-sample-selection-run-summary">
+          <strong>已选择 {{ selectedRecordStats.selectedCount }} 份病历</strong>
+          <span>
+            可质控 {{ selectedRecordStats.runnableCount }} 份
+            <template v-if="selectedRecordStats.blockedCount > 0">
+              ，{{ selectedRecordStats.blockedCount }} 份当前阻塞（不会缩小范围执行）
+            </template>
+            · 当前范围：{{ selectedRunScopeSummary }}
+          </span>
+        </div>
+        <div class="customer-sample-selection-run-actions">
+          <a-button
+            class="!rounded-lg"
+            @click="clearSelectedRecords"
+          >
+            清空选择
+          </a-button>
+          <a-button
+            v-if="isLuxian0609Mode"
+            class="!rounded-lg"
+            @click="scrollToLuxianScope"
+          >
+            调整质控范围
+          </a-button>
+          <a-button
+            type="primary"
+            class="!rounded-lg"
+            :disabled="runButtonDisabled"
+            :loading="runLoading"
+            @click="handleRunPool"
+          >
+            开始质控
+          </a-button>
+        </div>
       </div>
     </div>
 
