@@ -481,6 +481,11 @@ describe('SingleRecordQcResultPanel', () => {
                 source_ref: 'src_ct_report_012',
                 source_type: 'exam_master',
               },
+              {
+                source_ref: 'src_daily_course_012',
+                source_type: 'daily_course_record',
+                source_label: '日常病程记录',
+              },
             ],
           },
         ],
@@ -497,7 +502,7 @@ describe('SingleRecordQcResultPanel', () => {
       'CT/MRI 检查报告',
     )
     expect(wrapper.get('[data-testid="single-record-evidence"]').text()).not.toContain(
-      '首次病程记录',
+      '日常病程记录',
     )
   })
 

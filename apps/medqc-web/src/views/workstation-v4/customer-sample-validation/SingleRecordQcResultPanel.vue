@@ -360,11 +360,11 @@
               <section class="detail-block evidence-block">
                 <h4>关键证据</h4>
                 <div
-                  v-if="item.evidence?.length"
+                  v-if="displayEvidence(item).length"
                   class="evidence-list"
                 >
                   <button
-                    v-for="evidence in item.evidence"
+                    v-for="evidence in displayEvidence(item)"
                     :key="evidence.source_ref"
                     type="button"
                     class="evidence-link evidence-row"
@@ -699,6 +699,25 @@ function evidenceLabel(evidence: SingleRecordQcEvidence) {
     inpat_nondrug_order: '医嘱',
   }
   return labels[evidence.source_type || ''] || '来源文书'
+}
+
+const examLabCourseEvidenceTypes = new Set([
+  'first_course_record',
+  'daily_course_record',
+  'senior_course_record',
+  'rescue_record',
+])
+
+function displayEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence[] {
+  const evidence = Array.isArray(item.evidence) ? item.evidence : []
+  if (
+    item.status !== 'non_compliant' ||
+    !['LX0609-011', 'LX0609-012', 'LX0609-014', 'LX0609-015'].includes(item.rule_id)
+  ) {
+    return evidence
+  }
+  // 这类“未记录”结果中，病程仅代表已核对范围，并不是支持缺陷的命中文书。
+  return evidence.filter((item) => !examLabCourseEvidenceTypes.has(item.source_type || ''))
 }
 
 function criterionStatusText(status: string) {
