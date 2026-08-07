@@ -214,6 +214,15 @@ def _stage_two_failure_kind(error: Exception) -> str:
     return "unclassified"
 
 
+def _stage_two_exception_module(error: Exception) -> str:
+    """日志仅保留受控模块分类，禁止把异常上下文带出。"""
+
+    module = type(error).__module__.partition(".")[0]
+    if module in {"httpx", "asyncio", "builtins", "aiohttp"}:
+        return module
+    return "other"
+
+
 @dataclass(frozen=True)
 class NativeConsultationEpisodeExecutionResult:
     results: tuple[dict[str, Any], ...]
@@ -1997,9 +2006,12 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                         except Exception as error:
                             logger.warning(
                                 "consultation_stage_two_failed "
-                                "stage_two_failure_kind=%s retry_attempted=%s",
+                                "stage_two_failure_kind=%s retry_attempted=%s "
+                                "exception_type=%s exception_module=%s",
                                 _stage_two_failure_kind(error),
                                 retry_attempted,
+                                type(error).__name__,
+                                _stage_two_exception_module(error),
                             )
                             for rule_id in stage_two_rule_ids:
                                 statuses[rule_id] = ("technical_error", "model_transport_error")

@@ -68,6 +68,10 @@ class _PlannedStageClient:
         }
 
 
+class _ExternalStageFailure(RuntimeError):
+    pass
+
+
 def _rows(*contents: str, day: int = 20, hour_start: int = 1, action_suffix: bool = True):
     return [
         {
@@ -1990,7 +1994,14 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("stage_two_errors", "expected_kind", "retry_attempted", "expected_call_count"),
+    (
+        "stage_two_errors",
+        "expected_kind",
+        "retry_attempted",
+        "expected_call_count",
+        "expected_exception_type",
+        "expected_exception_module",
+    ),
     (
         (
             (
@@ -2000,18 +2011,40 @@ async def test_020_023_stops_after_second_transient_stage_two_transport_failure(
             "timeout",
             True,
             3,
+            "ReadTimeout",
+            "httpx",
         ),
         (
             (RuntimeError("upstream_http_status=429 UPSTREAM_429_SECRET"),),
             "upstream_429",
             False,
             2,
+            "RuntimeError",
+            "builtins",
         ),
         (
             (RuntimeError("LLM endpoint not configured CONFIGURATION_SECRET"),),
             "configuration",
             False,
             2,
+            "RuntimeError",
+            "builtins",
+        ),
+        (
+            (ValueError("UNCLASSIFIED_SECRET"),),
+            "unclassified",
+            False,
+            2,
+            "ValueError",
+            "builtins",
+        ),
+        (
+            (_ExternalStageFailure("EXTERNAL_MODULE_SECRET"),),
+            "unclassified",
+            False,
+            2,
+            "_ExternalStageFailure",
+            "other",
         ),
     ),
 )
@@ -2021,6 +2054,8 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
     expected_kind,
     retry_attempted,
     expected_call_count,
+    expected_exception_type,
+    expected_exception_module,
 ):
     session = _window_session(rows_by_source={
         "consultation_record": tuple(_rows("申请与明确会诊意见", day=2)),
@@ -2048,13 +2083,17 @@ async def test_020_023_logs_only_safe_stage_two_transport_failure_classification
     ]
     assert warning_messages == [
         "consultation_stage_two_failed "
-        f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted}"
+        f"stage_two_failure_kind={expected_kind} retry_attempted={retry_attempted} "
+        f"exception_type={expected_exception_type} "
+        f"exception_module={expected_exception_module}"
     ]
     logged = "\n".join(warning_messages)
     assert "STAGE_TWO_TIMEOUT_SECRET" not in logged
     assert "RETRY_TIMEOUT_SECRET" not in logged
     assert "UPSTREAM_429_SECRET" not in logged
     assert "CONFIGURATION_SECRET" not in logged
+    assert "UNCLASSIFIED_SECRET" not in logged
+    assert "EXTERNAL_MODULE_SECRET" not in logged
 
 
 @pytest.mark.asyncio
