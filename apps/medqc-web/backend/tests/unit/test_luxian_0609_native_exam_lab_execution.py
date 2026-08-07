@@ -1396,6 +1396,51 @@ async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_010_effective_order_without_exam_master_stays_data_gap(monkeypatch):
+    """O1 已完整关联而 O2 缺主表时，不得把整条010误判合规。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-1",
+                "exam_name": "头颅CT平扫",
+                "exam_time": "2026-07-07 09:00:00",
+                "report_time": "2026-07-07 10:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-1",
+                "order_name": "头颅CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+            {
+                "order_id": "ORD-2",
+                "order_name": "胸部CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 11:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 07:30:00",
+                "record_content": "因头部外伤拟行头颅CT明确颅脑损伤。",
+            },
+        ),
+    )
+
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "association_failed"
+    assert dict(result.customer_display_facts)["LX0609-010"]["failure_kind"] == "exam_order_exam_association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_complete_empty_course_uses_python_and_zero_model(monkeypatch):
     snapshot, materials = _typed_session(
         monkeypatch,

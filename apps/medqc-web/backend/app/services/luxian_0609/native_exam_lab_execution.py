@@ -648,7 +648,12 @@ def _order_based_exam_reason_outcome(
         if not order_id or not exam_id or order_id not in orders_by_id:
             return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
         exams_by_order.setdefault(order_id, []).append(exam)
-    if any(len(exams) != 1 for exams in exams_by_order.values()):
+    # 关联是双向完整合同：不能只确认“已有主表的医嘱”唯一，还必须确认每条
+    # 有效 CT/MRI 医嘱都有且仅有一条检查主表。缺少主表时不能擅自视为未执行。
+    if (
+        set(exams_by_order) != set(orders_by_id)
+        or any(len(exams) != 1 for exams in exams_by_order.values())
+    ):
         return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
 
     executed = tuple(
