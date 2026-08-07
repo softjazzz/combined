@@ -21,7 +21,8 @@ const stubs = {
     template: '<div><slot /></div>',
   },
   'a-menu-item': {
-    template: '<button @click="$emit(\'click\')"><slot /></button>',
+    template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
+    props: ['disabled'],
     emits: ['click'],
   },
 }
@@ -239,6 +240,20 @@ describe('CustomerSampleQcTaskStatusBar', () => {
 
     expect(wrapper.emitted('review')).toEqual([['job-1']])
     expect(wrapper.emitted('export')).toEqual([['job-1']])
+  })
+
+  it('复核执行中在更多菜单内保留禁用与进行中反馈', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({ status: 'completed' }),
+        reviewing: true,
+      },
+      global: { stubs },
+    })
+
+    const reviewAction = wrapper.get('[data-testid="qc-task-review"]')
+    expect(reviewAction.text()).toBe('复核中…')
+    expect(reviewAction.attributes('disabled')).toBeDefined()
   })
 
   it('将关注状态与其他结果分开呈现，完成态在窄屏结构中仍保留摘要和操作', () => {

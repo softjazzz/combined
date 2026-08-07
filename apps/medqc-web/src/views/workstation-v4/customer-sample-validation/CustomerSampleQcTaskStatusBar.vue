@@ -64,9 +64,10 @@
                   <a-menu-item
                     key="review"
                     data-testid="qc-task-review"
+                    :disabled="reviewing"
                     @click="emit('review', task.id)"
                   >
-                    复核本次结果
+                    {{ reviewing ? '复核中…' : '复核本次结果' }}
                   </a-menu-item>
                   <a-menu-item
                     key="export"
