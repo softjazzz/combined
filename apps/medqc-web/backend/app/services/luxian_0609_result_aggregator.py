@@ -3361,6 +3361,105 @@ def safe_luxian_0609_customer_display_facts(
             "recorded_dates": list(recorded_dates),
         }
     if rule_id == "LX0609-009":
+        change_kinds = {
+            "critical_change_course_timely",
+            "critical_change_course_not_timely",
+        }
+        if raw.get("failure_kind") in change_kinds:
+            change_events = raw.get("change_events")
+            unmet_events = raw.get("unmet_events")
+            threshold_hours = raw.get("threshold_hours")
+            allowed_categories = {
+                "subjective",
+                "objective",
+                "exam_lab",
+                "complication",
+                "special_state",
+            }
+
+            def safe_change_event(item: Any) -> dict[str, Any] | None:
+                if not isinstance(item, Mapping) or set(item) != {
+                    "event_ref",
+                    "change_category",
+                    "event_time",
+                    "corresponding_course_ref",
+                    "corresponding_course_time",
+                    "deadline_time",
+                    "threshold_hours",
+                    "timely",
+                }:
+                    return None
+                if (
+                    not isinstance(item.get("event_ref"), str)
+                    or not item["event_ref"].strip()
+                    or len(item["event_ref"]) > 256
+                    or not isinstance(item.get("corresponding_course_ref"), str)
+                    or len(item["corresponding_course_ref"]) > 256
+                    or item.get("change_category") not in allowed_categories
+                    or item.get("threshold_hours") != 24
+                    or type(item.get("timely")) is not bool
+                    or any(
+                        not isinstance(item.get(key), str)
+                        or not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", item[key])
+                        for key in ("event_time", "deadline_time")
+                    )
+                    or (
+                        item["corresponding_course_ref"]
+                        and not re.fullmatch(
+                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
+                            str(item.get("corresponding_course_time") or ""),
+                        )
+                    )
+                    or (
+                        not item["corresponding_course_ref"]
+                        and item.get("corresponding_course_time") != ""
+                    )
+                ):
+                    return None
+                return {
+                    key: item[key]
+                    for key in (
+                        "event_ref",
+                        "change_category",
+                        "event_time",
+                        "corresponding_course_ref",
+                        "corresponding_course_time",
+                        "deadline_time",
+                        "threshold_hours",
+                        "timely",
+                    )
+                }
+
+            if (
+                not isinstance(change_events, list)
+                or not change_events
+                or len(change_events) > 20
+                or threshold_hours != 24
+            ):
+                return None
+            safe_events = [safe_change_event(item) for item in change_events]
+            if any(item is None for item in safe_events):
+                return None
+            facts: dict[str, Any] = {
+                "failure_kind": raw["failure_kind"],
+                "change_events": safe_events,
+                "threshold_hours": 24,
+            }
+            if raw["failure_kind"] == "critical_change_course_timely":
+                if any(not item["timely"] for item in safe_events):
+                    return None
+                return facts
+            if not isinstance(unmet_events, list) or not unmet_events:
+                return None
+            safe_unmet = [safe_change_event(item) for item in unmet_events]
+            if (
+                any(item is None for item in safe_unmet)
+                or any(item["timely"] for item in safe_unmet)
+                or any(item not in safe_events for item in safe_unmet)
+            ):
+                return None
+            facts["unmet_events"] = safe_unmet
+            return facts
         scope_valid = (
             raw.get("evaluated_scope") == "critical_daily_course_coverage"
             and raw.get("pending_scope")

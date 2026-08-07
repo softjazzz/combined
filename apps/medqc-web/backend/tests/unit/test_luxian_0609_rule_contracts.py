@@ -74,13 +74,16 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
 
 
 @pytest.mark.unit
-def test_009_phase1_decision_support_only_loads_daily_coverage_sources() -> None:
+def test_009_decision_support_loads_daily_coverage_and_minimal_change_sources() -> None:
     assert set(resolve_luxian_0609_decision_support_source_keys(("LX0609-009",))) == {
         "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
         "inpat_nondrug_order.severity_order",
         "daily_course_record",
         "senior_course_record",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
     }
 
 
@@ -116,7 +119,6 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         "LX0609-006",
         "LX0609-007",
         "LX0609-008",
-        "LX0609-009",
         "LX0609-016",
         "LX0609-017",
         "LX0609-026",

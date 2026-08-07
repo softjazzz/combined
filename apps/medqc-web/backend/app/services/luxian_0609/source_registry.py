@@ -293,6 +293,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_nondrug_order.severity_order",
         "daily_course_record",
         "senior_course_record",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
     ),
     # 017 仅在灰区语义核对时读取同一快照中的当前就诊事件；
     # 不加入术后病程或治疗过程来源，避免把非相邻病程内容混入复制判定。

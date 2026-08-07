@@ -1201,6 +1201,32 @@ def customer_finding_from_controlled_facts(
             return f"已核对{source}，{checked}均有记录。{suffix}"
 
     if rule_id == "LX0609-009":
+        change_events = facts.get("change_events")
+        event_rows = change_events if isinstance(change_events, list) else []
+        if kind == "critical_change_course_timely":
+            return (
+                f"已核对 {len(event_rows)} 个明确病情变化事件；"
+                "均在变化后 24 小时内找到对应病程记录。"
+            )
+        if kind == "critical_change_course_not_timely":
+            unmet = facts.get("unmet_events")
+            first = unmet[0] if isinstance(unmet, list) and unmet else {}
+            if isinstance(first, Mapping):
+                category_labels = {
+                    "subjective": "症状变化", "objective": "体征变化",
+                    "exam_lab": "检查检验变化", "complication": "并发症或合并症变化",
+                    "special_state": "特殊状态变化",
+                }
+                label = category_labels.get(str(first.get("change_category") or ""), "病情变化")
+                return (
+                    f"{label}发生于 {first.get('event_time') or '时间待核对'}，"
+                    f"截至 24 小时阈值 {first.get('deadline_time') or '待核对'}"
+                    "未找到对应病程记录。"
+                )
+        if kind == "critical_change_time_unavailable":
+            return "已识别可能的病情变化，但缺少可核验的变化发生时间，暂无法核对 24 小时内记录要求。"
+        if kind == "critical_change_course_association_failed":
+            return "已识别明确病情变化，但无法确认其与对应病程记录的关联关系，暂无法核对 24 小时内记录要求。"
         required_values = facts.get("required_dates")
         required_dates = (
             [str(value) for value in required_values]

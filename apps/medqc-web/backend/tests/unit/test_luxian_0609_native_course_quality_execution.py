@@ -16,13 +16,15 @@ from app.services.luxian_0609.evidence_snapshot_provider import (
     SnapshotSourceRows,
     build_luxian_0609_evidence_read_session,
 )
-from app.services.luxian_0609.evidence_material import build_material_document_refs
 from app.services.luxian_0609.source_evidence_reader import (
     CURRENT_VISIT_DISCHARGE_HORIZON_SOURCE_KEY,
     CURRENT_VISIT_SEVERITY_ORDER_SOURCE_KEY,
     CURRENT_VISIT_UNSTABLE_ORDER_SOURCE_KEY,
     SourceEvidenceQueryError,
     SourceEvidenceUnavailable,
+)
+from app.services.luxian_0609_result_aggregator import (
+    aggregate_luxian_0609_results,
 )
 
 
@@ -1517,8 +1519,8 @@ async def test_course_009_semantic_call_binds_same_snapshot_external_event() -> 
     result, reduced = await _run_typed_009(session, client)
 
     assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert result.llm_call_count == 0
-    assert client.prompts == []
+    assert result.llm_call_count == 1
+    assert external_marker in client.prompts[0]
     assert external_marker not in repr(result)
 
 
@@ -1573,12 +1575,6 @@ async def test_course_009_daily_complete_invalid_json_keeps_frequency_pass() -> 
 
 @pytest.mark.asyncio
 async def test_course_009_semantic_prompt_ignores_unbound_payload_text() -> None:
-    forbidden = {
-        "first_course_record": "FIRST_MUST_NOT_LEAK",
-        "rescue_record": "RESCUE_MUST_NOT_LEAK",
-        "exam_attention_report": "EXAM_MUST_NOT_LEAK",
-        "lab_attention_report": "LAB_MUST_NOT_LEAK",
-    }
     session = _severity_session(
         rows=[
             {
@@ -1644,8 +1640,8 @@ async def test_course_009_external_event_without_authoritative_date_keeps_freque
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -1671,8 +1667,8 @@ async def test_course_009_external_query_error_keeps_frequency_pass() -> None:
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
+    assert reduced[0].reason_code == "source_query_error"
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -1710,8 +1706,8 @@ async def test_course_009_external_unavailable_or_truncated_keeps_frequency_pass
 
     result, reduced = await _run_typed_009(session, client)
 
-    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
-    assert reduced[0].reason_code == "requirement_satisfied"
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == expected_reason
     assert result.llm_call_count == 0
     assert client.prompts == []
 
@@ -1914,6 +1910,141 @@ async def test_course_009_semantic_projection_overflow_keeps_frequency_pass(
     assert reduced[0].reason_code == "requirement_satisfied"
     assert result.llm_call_count == 0
     assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_course_009_explicit_external_change_within_24h_is_compliant() -> None:
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("患者突发胸痛，已评估并处理。", "2026-01-02 14:00:00"),
+        ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变",
+        }]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
+        "corresponding_course_ref": "daily_course_record:row-2",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+    facts = dict(result.customer_display_facts)["LX0609-009"]
+    assert facts["failure_kind"] == "critical_change_course_timely"
+    assert facts["change_events"][0]["threshold_hours"] == 24
+
+
+@pytest.mark.asyncio
+async def test_course_009_explicit_change_without_course_within_24h_is_non_compliant() -> None:
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[_row("首日病危记录。", "2026-01-01 08:00:00"), _row("次日病危记录。", "2026-01-02 09:00:00")],
+        external_rows={"exam_item_report": [{"report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变"}]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
+        "corresponding_course_ref": "",
+    }]}])
+    result, reduced = await _run_typed_009(session, client)
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
+    assert result.llm_call_count == 1
+    assert dict(result.customer_display_facts)["LX0609-009"]["unmet_events"][0]["event_ref"] == "exam_item_report:row-1"
+
+
+@pytest.mark.asyncio
+async def test_course_009_change_deadline_is_delivered_through_production_canonical_result() -> None:
+    """009 的变化类别、时间、阈值和受控引用必须穿透真实客户交付出口。"""
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 09:00:00"),
+        ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变",
+        }]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "change_time": "2026-01-02 10:00:00", "is_explicit_change": True,
+        "corresponding_course_ref": "",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-009"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )[0]
+
+    assert canonical["status"] == "non_compliant"
+    assert canonical["reason_code"] == "requirement_violated"
+    facts = canonical["customer_display_facts"]
+    assert facts["failure_kind"] == "critical_change_course_not_timely"
+    assert facts["threshold_hours"] == 24
+    assert facts["unmet_events"] == [{
+        "event_ref": "exam_item_report:row-1",
+        "change_category": "exam_lab",
+        "event_time": "2026-01-02 10:00:00",
+        "corresponding_course_ref": "",
+        "corresponding_course_time": "",
+        "deadline_time": "2026-01-03 10:00:00",
+        "threshold_hours": 24,
+        "timely": False,
+    }]
+    assert "检查检验变化" in canonical["findings"]
+    assert "2026-01-03 10:00:00" in canonical["findings"]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 45
+
+
+@pytest.mark.asyncio
+async def test_course_009_change_time_or_reference_not_verifiable_is_data_gap() -> None:
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[_row("首日病危记录。", "2026-01-01 08:00:00"), _row("次日病危记录。", "2026-01-02 09:00:00")],
+        external_rows={"exam_item_report": [{"report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变"}]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
+        "change_time": "2026-01-02 10:01:00", "is_explicit_change": True,
+        "corresponding_course_ref": "",
+    }]}])
+    result, reduced = await _run_typed_009(session, client)
+    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
+    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_course_009_model_unknown_does_not_overturn_daily_coverage() -> None:
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[_row("首日病危记录。", "2026-01-01 08:00:00"), _row("次日病危记录。", "2026-01-02 09:00:00")],
+        external_rows={"exam_item_report": [{"report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变"}]},
+        evaluation_as_of_date="2026-01-02",
+    )
+    result, reduced = await _run_typed_009(session, _Client([{"events": []}]))
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
