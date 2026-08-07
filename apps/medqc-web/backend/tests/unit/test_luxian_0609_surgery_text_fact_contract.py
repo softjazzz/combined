@@ -109,6 +109,7 @@ def _session(
     consent_source_error: bool = False,
     consent_source_unavailable: bool = False,
     surgery_source_unavailable: bool = False,
+    daily_course_source_unavailable: bool = False,
     surgery_rows: tuple[dict[str, object], ...] | None = None,
     mr_surgery_rows: tuple[dict[str, object], ...] | None = None,
     daily_course_rows: tuple[dict[str, object], ...] | None = None,
@@ -153,6 +154,8 @@ def _session(
         if consent_source_unavailable and source_key == "surgery_inform_consent":
             raise SourceEvidenceUnavailable()
         if surgery_source_unavailable and source_key == "surgery_record":
+            raise SourceEvidenceUnavailable()
+        if daily_course_source_unavailable and source_key == "daily_course_record":
             raise SourceEvidenceUnavailable()
         return SnapshotSourceRows.create(
             source_key=source_key,
@@ -456,14 +459,7 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
 async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_source() -> None:
     """病程中的永久植入事实也可满足025省标主项，且交付层必须如实保留来源类型。"""
     session = _session(
-        surgery_rows=(
-            {
-                "document_id": "surgery-025-anchor",
-                "surgery_begin_time": "2026-07-07 16:30:00+08",
-                "surgery_name": "颅内血肿清除术",
-                "surgery_process": "已完成本次手术。",
-            },
-        ),
+        surgery_source_unavailable=True,
         daily_course_rows=(
             {
                 "document_id": "daily-025-implant",
@@ -511,6 +507,7 @@ async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_sourc
     )
 
     assert native.llm_call_count == 1
+    assert native.total_tokens == 100
     assert reduced[0].final_state.value == "compliant"
     assert canonical[0]["status"] == "compliant"
     assert canonical[0]["customer_display_facts"]["source_label"] == "病程记录"
@@ -521,9 +518,12 @@ async def test_025_accepts_course_record_as_evidence_and_delivers_its_real_sourc
 
 
 @pytest.mark.asyncio
-async def test_025_unavailable_surgery_source_is_data_gap_without_llm_call() -> None:
-    """手术文书来源不可读时，不能由其他来源沉默推断为未植入。"""
-    session = _session(surgery_source_unavailable=True)
+async def test_025_unavailable_course_source_is_data_gap_without_llm_call() -> None:
+    """手术和病程均不可读时，不能沉默推断为未植入。"""
+    session = _session(
+        surgery_source_unavailable=True,
+        daily_course_source_unavailable=True,
+    )
     client = _Client({"schema_version": SCHEMA_VERSION, "events": [_event()]})
     result = await execute_luxian_0609_native_surgery_gate_rules(
         rule_ids=("LX0609-025",),

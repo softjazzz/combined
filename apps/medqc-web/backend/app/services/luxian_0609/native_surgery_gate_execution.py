@@ -1673,6 +1673,12 @@ async def execute_luxian_0609_native_surgery_gate_rules(
             and item.completeness.value != "truncated"
             for item in evidence_snapshot.observations
         )
+        daily_course_record_available = any(
+            item.source_key == "daily_course_record"
+            and item.query_state.value == "available"
+            and item.completeness.value != "truncated"
+            for item in evidence_snapshot.observations
+        )
         if (
             rule_id in _TEXT_FACT_RULE_IDS
             and (
@@ -1685,6 +1691,9 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 # 因严格时间/字段缺失未形成 performed 事实，也不能提前跳过
                 # “明确未植入 / 已植入且字段缺失”的既有三分支。
                 or (rule_id == "LX0609-025" and surgery_record_available)
+                # 025 已声明病程记录可作为永久植入事实的唯一证据；正式手术
+                # 记录不可读时，仍允许沿同一MaterialStore做一次受控抽取。
+                or (rule_id == "LX0609-025" and daily_course_record_available)
                 or (
                     rule_id == "LX0609-028"
                     and performed_state == "unknown"
