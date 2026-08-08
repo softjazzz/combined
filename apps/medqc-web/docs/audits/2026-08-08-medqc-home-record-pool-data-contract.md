@@ -14,7 +14,7 @@
 - CDM 和 LX0609 Canonical Envelope 都已使用 `institute_id + patient_id + visit_id` 三坐标；
 - `custom_qc_batch_jobs → luxian_0609_record_result_envelopes` 已是单病历正式结果的权威交付链；
 - 演示病历在生产环境仍可能因文件配置混入，属于可独立修复的确定性问题；
-- 普通病历的单病历资料完整性没有可用的持久化事实，`source_state` 当前必须是 `unknown`；
+- 普通病历的单病历资料完整性没有可用的持久化事实；当前响应尚未提供 `source_state`，Task 2 若新增该投影只能先返回 `unknown`；
 - 现有首页 KPI 和病历池部分统计都不能代表真实全量范围。
 
 因此：
@@ -49,7 +49,7 @@ CDM mr（真实三坐标）
 → 单病历 latest-result API
 ```
 
-这两条链可以在 Task 2 受控汇合，但前提是先完成机构/科室隔离。不得从 Scene/Domain Bundle、文书条数或前端列表推断资料完整性，也不得让浏览器逐条调用单病历结果 API。
+这两条链可以在 Task 2 受控汇合，但前提是先完成机构/科室隔离和结果读取三坐标收紧。不得从 Scene/Domain Bundle、文书条数或前端列表推断资料完整性，也不得让浏览器逐条调用单病历结果 API。
 
 ## 3. 病历身份与关联风险
 
@@ -77,7 +77,16 @@ id = visit_id
 
 同时，床位、出院摘要、质控状态与队列状态的部分查询或映射只按 `visit_id`、或 `(patient_id, visit_id)` 聚合。跨机构存在相同就诊号时，可能发生床位、出院信息或质控状态串值。
 
-**结论：** `visit_id` 不能作为真实病历池的稳定行身份；Task 1B 必须把所有关联范围收紧到三坐标，并向前端提供受控 `record_key`。
+最新正式结果读取也存在同一类风险：`/workspace/records/{record_id}/latest-result` 只接收 `record_id`，任务和 Envelope 读取条件使用 `created_by + record_id/visit_id + 规则集版本`，没有使用表内已持久化的三坐标。当前 `record_id` 全部等于 `visit_id`；同一创建者下不同机构若出现相同 `visit_id`，读取路径会按完成时间选择较新的候选，不会因机构不同失败关闭。
+
+证据：
+
+- [qc_sichuan.py](D:/LLM/LX888/apps/medqc-web/backend/app/routers/qc_sichuan.py:4657)
+- [custom_qc_workspace_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py:3653)
+- [custom_qc_workspace_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py:4514)
+- [record_result_read_model.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py:73)
+
+**结论：** `visit_id` 不能作为真实病历池或 latest-result 的稳定病历身份；`created_by` 只表达结果创建者边界，不能替代机构隔离。Task 1B 必须把病历池、详情和 latest-result 的所有关联范围收紧到三坐标，并向前端提供受控 `record_key`。
 
 ## 4. 权限与机构隔离
 
@@ -141,7 +150,7 @@ id = visit_id
 - [visit_index_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/visit_index_service.py:48)
 - [custom_qc_sample_pool_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/custom_qc_sample_pool_service.py:3323)
 
-**当前合同：** 普通真实病历统一返回 `source_state.status=unknown`。Task 2 不得实现 `ready/syncing/partial/failed` 的筛选或统计，除非后续同步系统提供逐病历持久化事实。
+**当前合同：** `/api/medical-records/workstation` 目前不返回 `source_state` 字段。Task 2 若增加该投影，普通真实病历只能返回 `source_state.status=unknown`；在同步系统提供逐病历持久化事实前，不得实现 `ready/syncing/partial/failed` 的筛选或统计。
 
 ## 7. 最新 LX0609 正式结果
 
@@ -159,7 +168,7 @@ custom_qc_batch_jobs
 - [custom_qc_workspace_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/custom_qc_workspace_service.py:4430)
 - [record_result_read_model.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/luxian_0609/record_result_read_model.py:73)
 
-单病历最新结果读取只选择：同一创建者、完成态、根任务、当前 `rule_set_key/version`，按 `finished_at/created_at` 倒序；并列时失败关闭。它不回退任务 `items_json`。
+单病历最新结果读取只选择：同一创建者、完成态、根任务、当前 `rule_set_key/version`，按 `finished_at/created_at` 倒序；并列时失败关闭。它不回退任务 `items_json`。但当前选择和 Envelope 读取仍只按 `created_by + record_id/visit_id`，没有把三坐标加入条件，因此不能作为多机构安全读取合同。
 
 ### 可安全投影的字段
 
@@ -170,7 +179,7 @@ custom_qc_batch_jobs
 
 ### 仍需业务/权限合同确认的部分
 
-当前“最新结果”选择包含 `created_by`，是单病历客户结果交付合同，而不是全院病历池合同。准商用全院视图必须先明确：
+当前“最新结果”选择包含 `created_by`，是单病历客户结果交付合同，而不是全院病历池合同；它也不能隔离同一创建者下跨机构同 `record_id/visit_id` 的候选。准商用全院视图必须先明确：
 
 ```text
 同一病历被不同授权用户执行多次时，谁拥有“全院最新正式结果”？
@@ -180,20 +189,23 @@ custom_qc_batch_jobs
 
 ## 8. 首页与病历池统计真实性
 
-| 页面               | 当前来源                            | 首次异常层                                | 结论                   |
-| ------------------ | ----------------------------------- | ----------------------------------------- | ---------------------- |
-| 病历池             | `MedicalRecordFrontpage` 服务端分页 | 前端从当前页 `workbenchRows` 计算多项 KPI | 不可用于真实全量统计   |
-| 病历池科室 warning | 当前页 QCResult 映射                | 未覆盖非当前页                            | 不可用于全量科室风险   |
-| 首页热点           | 当日通知 + 工作流记录               | `hotspot_limit` 截断后再计算 KPI          | KPI 不可信             |
-| 首页待办           | 工作流记录                          | `todo_limit` 截断后再计算 KPI             | KPI 不可信             |
-| 首页趋势           | 前端静态 SVG/固定文本               | 前端展示层                                | 真实数据接入前必须移除 |
-| 首页 LX0609 结果   | 未读取 Envelope                     | 服务端聚合合同缺失                        | 不能称为全病历质控首页 |
+| 页面               | 当前来源                            | 首次异常层                                | 结论                                      |
+| ------------------ | ----------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| 病历池             | `MedicalRecordFrontpage` 服务端分页 | 前端从当前页 `workbenchRows` 计算多项 KPI | 不可用于真实全量统计                      |
+| 病历池科室 warning | 当前页 QCResult 映射                | 未覆盖非当前页                            | 不可用于全量科室风险                      |
+| 首页热点           | 当日通知 + 工作流记录               | `hotspot_limit` 截断后再计算 KPI          | KPI 不可信                                |
+| 首页待办           | 工作流记录                          | `todo_limit` 截断后再计算 KPI             | KPI 不可信                                |
+| 首页趋势           | 前端静态 SVG/固定文本               | 前端展示层                                | 真实数据接入前必须移除                    |
+| 首页 KPI 环比      | 固定 `+12/+5/+3/-6` 及百分比文案    | 前端展示层                                | P1 伪统计，必须移除或改为服务端真实比较值 |
+| 首页 LX0609 结果   | 未读取 Envelope                     | 服务端聚合合同缺失                        | 不能称为全病历质控首页                    |
 
 关键证据：
 
 - [WorkstationV4ListView.vue](D:/LLM/LX888/apps/medqc-web/src/views/workstation-v4/components/WorkstationV4ListView.vue:339)
 - [QCOverviewView.vue](D:/LLM/LX888/apps/medqc-web/src/views/workstation/QCOverviewView.vue:457)
 - [worklist_service.py](D:/LLM/LX888/apps/medqc-web/backend/app/services/workstation/worklist_service.py:800)
+
+其中首页四张 KPI 的 `+12（10.3%）`、`+5（16.1%）`、`+3（20.0%）`、`-6（7.5%）` 并不来自接口或真实比较期，是面向客户的独立展示层 P1；不能仅以“趋势静态”概括。
 
 ## 9. 后续任务冻结结论
 
@@ -222,13 +234,26 @@ backend/tests/unit/test_workstation_query_service.py
 
 收到该合同后，再冻结数据库迁移、认证服务、病历池路由、详情/结果入口和测试的准确白名单。禁止先实现“默认全院”或“前端筛选”版本。
 
+Task 1B 的必审影响路径至少包括：
+
+```text
+backend/app/routers/medical_records_query.py
+backend/app/services/medical_records/query_service.py
+backend/app/routers/qc_sichuan.py                         # latest-result 路由
+backend/app/services/custom_qc_workspace_service.py        # 任务与 Envelope 读取
+backend/app/services/luxian_0609/record_result_read_model.py
+```
+
+最终是否修改这些文件取决于权威身份源接入方式；但不得只修病历池列表而遗漏 latest-result 的三坐标和机构范围校验。
+
 ### Task 2：当前阻塞
 
 启动前必须同时满足：
 
 1. Task 1B 已实现并通过跨机构/跨科室越权测试；
-2. 客户确认全院最新正式结果的选择口径，尤其是跨 `created_by` 的所有权；
-3. 单病历同步状态仍保持 `unknown`，或同步系统提供逐病历权威状态。
+2. Task 1B 已将 latest-result 的路由、任务选择和 Envelope 读取收紧为三坐标，`created_by` 不再承担病历身份隔离；
+3. 客户确认全院最新正式结果的选择口径，尤其是跨 `created_by` 的所有权；
+4. 单病历同步状态仍保持 `unknown`，或同步系统提供逐病历权威状态。
 
 Task 2 只能增加既有病历池的服务端最新结果摘要投影；不得修改 Canonical/Envelope、规则引擎、Bundle 或新建结果表。
 
