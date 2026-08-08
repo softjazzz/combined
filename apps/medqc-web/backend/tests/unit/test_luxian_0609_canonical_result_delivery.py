@@ -169,6 +169,60 @@ def test_completed_projection_does_not_fall_back_when_newer_root_job_lacks_envel
     }
 
 
+def test_completed_projection_ignores_old_rule_version_envelopes(monkeypatch):
+    """旧版结果已存在不代表当前规则版本的 Envelope 缺失。"""
+
+    old_version_job = {
+        **_selected_job(),
+        "id": "job-old-version",
+        "created_at": "2026-08-08T09:00:00",
+        "finished_at": "2026-08-08T09:01:00",
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-08",
+        },
+        "record_ids_json": json.dumps(["visit-1"]),
+        "job_kind": "parent",
+        "parent_job_id": None,
+    }
+    newer_old_version_job = {
+        **old_version_job,
+        "id": "job-newer-old-version",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+    }
+    old_version_envelope = {
+        "root_job_id": "job-old-version",
+        "job_id": "job-old-version",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-08",
+        "envelope_json": "{}",
+    }
+    newer_old_version_envelope = {
+        **old_version_envelope,
+        "root_job_id": "job-newer-old-version",
+        "job_id": "job-newer-old-version",
+    }
+    session = _ReadSession(
+        [[old_version_job, newer_old_version_job], [old_version_envelope, newer_old_version_envelope]]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, **_kwargs: dict(row))
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")] == {"status": "not_run"}
+
+
 def test_single_record_result_returns_canonical_envelope_items_without_reprojection(
     monkeypatch,
 ):

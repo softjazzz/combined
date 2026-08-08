@@ -3925,8 +3925,6 @@ class CustomQCWorkspaceService:
                         and_(
                             self._record_result_envelope_table.c.root_job_id.in_(list(jobs_by_id)),
                             self._record_result_envelope_table.c.visit_id.in_(visit_ids),
-                            self._record_result_envelope_table.c.rule_set_key == normalized_rule_set_key,
-                            self._record_result_envelope_table.c.rule_set_version == normalized_rule_set_version,
                         )
                     )
                 )
@@ -3946,7 +3944,11 @@ class CustomQCWorkspaceService:
                 if not job_id or not all(identity):
                     continue
                 envelopes_by_job_visit.setdefault((job_id, identity[2]), []).append(row)
-                if identity in identities:
+                if (
+                    identity in identities
+                    and _safe_text(row.get("rule_set_key")) == normalized_rule_set_key
+                    and _safe_text(row.get("rule_set_version")) == normalized_rule_set_version
+                ):
                     envelopes_by_identity.setdefault(identity, {}).setdefault(job_id, []).append(row)
 
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
