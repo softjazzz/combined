@@ -330,21 +330,46 @@ def test_completed_projection_treats_current_job_with_only_old_version_envelope_
         ],
     ],
 )
-def test_completed_projection_rejects_canonical_items_without_unique_rule_id(items):
-    result = CustomQCWorkspaceService._summarize_completed_record_result_envelope(
-        envelope_row={
-            "envelope_json": json.dumps(
-                {
-                    "schema_version": "lx0609-record-result-envelope-v1",
-                    "delivery_mode": "canonical_straight_through",
-                    "items": items,
-                }
-            )
-        },
-        completed_at="2026-08-08T10:00:00",
+def test_completed_projection_rejects_canonical_items_without_unique_rule_id(
+    monkeypatch,
+    items,
+):
+    job = {
+        **_selected_job(),
+        "id": "job-invalid-items",
+        "record_ids_json": json.dumps(["visit-1"]),
+        "job_kind": "parent",
+        "parent_job_id": None,
+    }
+    envelope = {
+        "root_job_id": "job-invalid-items",
+        "job_id": "job-invalid-items",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "items": items,
+            }
+        ),
+    }
+    session = _ReadSession([[job], [envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, **_kwargs: dict(row))
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
     )
 
-    assert result == {
+    assert result[("inst-1", "patient-1", "visit-1")] == {
         "status": "technical_error",
         "reason_code": "canonical_envelope_invalid",
     }
