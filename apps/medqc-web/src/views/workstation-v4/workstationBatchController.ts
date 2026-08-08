@@ -24,7 +24,7 @@ interface RunBatchExtractParams {
   isAggregatedStageMode: boolean
   getBatchExtracting: () => boolean
   setBatchExtracting: (value: boolean) => void
-  findBatchRecordByVisitId: (visitId: string) => PatientRecord | null
+  findBatchRecordByKey: (recordKey: string) => PatientRecord | null
   setBatchRuntimeStatus: (
     stage: WorkflowStageKey | '',
     visitIds: string[],
@@ -50,7 +50,7 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
     isAggregatedStageMode,
     getBatchExtracting,
     setBatchExtracting,
-    findBatchRecordByVisitId,
+    findBatchRecordByKey,
     setBatchRuntimeStatus,
     setSingleBatchRuntimeStatus,
     setSelectedWorkbenchKeys,
@@ -63,7 +63,16 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
   if (!keys.length || getBatchExtracting()) return
   if (!isStageQueueMode) return
 
-  const visitIds = Array.from(new Set(keys.map((key) => String(key || '').trim()).filter(Boolean)))
+  const recordsByVisitId = new Map<string, { recordKey: string; record: PatientRecord }>()
+  for (const rawKey of keys) {
+    const recordKey = String(rawKey || '').trim()
+    if (!recordKey) continue
+    const record = findBatchRecordByKey(recordKey)
+    const visitId = String(record?.visitId || record?.id || '').trim()
+    if (!record || !visitId || recordsByVisitId.has(visitId)) continue
+    recordsByVisitId.set(visitId, { recordKey, record })
+  }
+  const visitIds = [...recordsByVisitId.keys()]
   if (!visitIds.length) return
   const stage = currentStageFilter
   setBatchRuntimeStatus(stage, visitIds, 'running')
@@ -83,12 +92,12 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
   let firstError = ''
 
   try {
+    const failedRecordKeys: string[] = []
     for (const visitId of visitIds) {
       try {
-        const record = findBatchRecordByVisitId(visitId)
-        if (!record) {
-          throw new Error(`未找到病历 ${visitId}，无法继续批量处理`)
-        }
+        const batchRecord = recordsByVisitId.get(visitId)
+        if (!batchRecord) throw new Error(`未找到病历 ${visitId}，无法继续批量处理`)
+        const { record } = batchRecord
 
         if (currentStageFilter === 'frontpage_generate') {
           const result = await requestFrontpageDraftAction(visitId)
@@ -112,6 +121,8 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
         successCount += 1
       } catch (error) {
         failedVisitIds.push(visitId)
+        const failedRecord = recordsByVisitId.get(visitId)
+        if (failedRecord) failedRecordKeys.push(failedRecord.recordKey)
         setSingleBatchRuntimeStatus(stage, visitId, 'failed')
         if (!firstError) {
           firstError = extractApiErrorMessageFromError(error, summary.failure)
@@ -133,14 +144,14 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
           firstError ||
           batchSuccessSummaryForStage(currentStageFilter, successCount, visitIds.length).failure,
       })
-      setSelectedWorkbenchKeys(failedVisitIds)
+      setSelectedWorkbenchKeys(failedRecordKeys)
     } else {
       message.warning({
         key: messageKey,
         content: batchSuccessSummaryForStage(currentStageFilter, successCount, visitIds.length)
           .partial,
       })
-      setSelectedWorkbenchKeys(failedVisitIds)
+      setSelectedWorkbenchKeys(failedRecordKeys)
     }
 
     if (visitIds.length > 0) {

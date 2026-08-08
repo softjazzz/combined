@@ -95,7 +95,8 @@ export function createDetailNavigation(options: CreateDetailNavigationOptions): 
     const selectedRecord = getSelectedRecord()
     if (!selectedRecord) return -1
     const filteredRecords = getFilteredRecords()
-    return filteredRecords.findIndex((item) => item.id === selectedRecord.id)
+    const selectedKey = selectedRecord.recordKey || selectedRecord.id
+    return filteredRecords.findIndex((item) => (item.recordKey || item.id) === selectedKey)
   })
 
   const goToPrevRecord = () => {

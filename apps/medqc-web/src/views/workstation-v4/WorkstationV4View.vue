@@ -2098,15 +2098,16 @@ function handleRowOpen(recordId: string) {
   })
 }
 
-function findBatchRecordByVisitId(visitId: string): PatientRecord | null {
-  const normalized = String(visitId || '').trim()
+function findBatchRecordByKey(recordKey: string): PatientRecord | null {
+  const normalized = String(recordKey || '').trim()
   if (!normalized) return null
   return (
     stageListRecords.value.find(
-      (record) => String(record.visitId || record.id || '').trim() === normalized,
+      (record) =>
+        String(record.recordKey || record.visitId || record.id || '').trim() === normalized,
     ) ||
     allRecords.value.find(
-      (record) => String(record.visitId || record.id || '').trim() === normalized,
+      (record) => String(record.recordKey || record.id || '').trim() === normalized,
     ) ||
     null
   )
@@ -2122,7 +2123,7 @@ async function handleBatchExtract(keys: string[]) {
     setBatchExtracting: (value) => {
       batchExtracting.value = value
     },
-    findBatchRecordByVisitId,
+    findBatchRecordByKey,
     setBatchRuntimeStatus,
     setSingleBatchRuntimeStatus,
     setSelectedWorkbenchKeys: (nextKeys) => {
