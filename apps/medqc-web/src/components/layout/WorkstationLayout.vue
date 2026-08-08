@@ -103,6 +103,12 @@
               </template>
               <span>病历池</span>
             </a-menu-item>
+            <a-menu-item key="/workstation-v4/stats">
+              <template #icon>
+                <ChartNoAxesColumnIncreasing class="sidebar-icon" />
+              </template>
+              <span>统计分析</span>
+            </a-menu-item>
             <a-menu-item key="/workstation-v4/records/running">
               <template #icon>
                 <PlayCircle class="sidebar-icon" />
