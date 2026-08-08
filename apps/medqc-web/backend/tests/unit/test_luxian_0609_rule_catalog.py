@@ -12,6 +12,11 @@ from app.services.luxian_0609 import (
     load_luxian_0609_rules,
     resolve_execution_scope,
 )
+from app.services import luxian_0609_rule_catalog
+from app.services.luxian_0609_rule_catalog import (
+    attach_luxian_0609_customer_policy,
+)
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
 def _assert_success_shell(body: dict) -> dict:
@@ -73,6 +78,66 @@ def test_luxian_0609_catalog_has_75_registered_rules_and_examples():
 
 
 @pytest.mark.unit
+def test_customer_policy_projection_uses_rule_master_without_mutating_execution_wrappers():
+    wrappers = load_luxian_0609_rules()
+    projected = attach_luxian_0609_customer_policy(wrappers)
+    master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
+
+    assert len(projected) == 75
+    assert all(rule.get("customer_policy") for rule in projected)
+    assert "customer_policy" not in wrappers[0]
+    for rule in projected:
+        policy = rule["customer_policy"]
+        assert isinstance(policy["source_document"], str) and policy["source_document"]
+        assert isinstance(policy["qc_point"], str) and policy["qc_point"]
+        assert isinstance(policy["summary"], str) and policy["summary"]
+        assert isinstance(policy["sources"], list) and policy["sources"]
+        assert all(isinstance(source, str) and source for source in policy["sources"])
+
+    wrapper_by_id = {rule["rule_id"]: rule for rule in wrappers}
+    projected_by_id = {rule["rule_id"]: rule for rule in projected}
+    for rule_id in ("LX0609-009", "LX0609-020", "LX0609-023", "LX0609-025", "LX0609-066", "LX0609-070"):
+        policy = projected_by_id[rule_id]["customer_policy"]
+        master = master_by_id[rule_id]
+        assert policy == {
+            "source_document": master.source_document,
+            "qc_point": master.qc_point,
+            "summary": master.policy_summary,
+            "sources": list(master.policy_sources),
+        }
+        assert projected_by_id[rule_id]["mapped_rule_ids"] == wrapper_by_id[rule_id]["mapped_rule_ids"]
+        assert (
+            projected_by_id[rule_id]["primary_execution_rule_id"]
+            == wrapper_by_id[rule_id]["primary_execution_rule_id"]
+        )
+
+    assert "条码、种类、数量" in projected_by_id["LX0609-025"]["customer_policy"]["summary"]
+    assert "本院扩展" in projected_by_id["LX0609-025"]["customer_policy"]["summary"]
+    assert not wrapper_by_id["LX0609-066"].get("customer_text")
+    assert projected_by_id["LX0609-066"]["customer_policy"]["summary"]
+    assert not wrapper_by_id["LX0609-070"].get("customer_text")
+    assert projected_by_id["LX0609-070"]["customer_policy"]["summary"]
+
+
+@pytest.mark.unit
+def test_customer_policy_projection_fails_closed_when_rule_master_entry_is_missing(monkeypatch):
+    wrappers = load_luxian_0609_rules()
+    incomplete_master = tuple(
+        entry
+        for entry in load_luxian_0609_rule_master()
+        if entry.rule_id != "LX0609-025"
+    )
+    monkeypatch.setattr(
+        luxian_0609_rule_catalog,
+        "load_luxian_0609_rule_master",
+        lambda: incomplete_master,
+    )
+
+    with pytest.raises(ValueError, match="customer policy is missing"):
+        attach_luxian_0609_customer_policy(wrappers)
+
+
+@pytest.mark.unit
 def test_luxian_0609_customer_rule_package_resolves_scope_and_families():
     execution_rule_ids, invalid_rule_ids, gate_only_customer_rule_ids = resolve_execution_scope(
         ["LX0609-020", "LX0609-021", "LX0609-028", "LX0609-999"],
@@ -110,6 +175,27 @@ def test_luxian_0609_rules_endpoint_returns_customer_rule_view(client):
     assert rules[0]["negative_example"]
     assert rules[0]["mapped_rule_ids"]
     assert rules[0]["primary_execution_rule_id"] == rules[0]["mapped_rule_ids"][0]
+    master_by_id = {entry.rule_id: entry for entry in load_luxian_0609_rule_master()}
+    assert rules[24]["customer_policy"]["summary"] == master_by_id["LX0609-025"].policy_summary
+
+    grouped_resp = client.get(
+        f"/api/v1/qc/sichuan/rules?rule_set_key={LUXIAN_0609_RULE_SET_KEY}&grouped=true",
+        headers=_headers(access_token),
+    )
+    assert grouped_resp.status_code == 200, grouped_resp.text
+    grouped = _assert_success_shell(grouped_resp.json())["rules_by_document_type"]
+    grouped_rules = [
+        rule
+        for rules_for_document in grouped.values()
+        for rule in rules_for_document
+    ]
+    grouped_by_id = {rule["rule_id"]: rule for rule in grouped_rules}
+    assert grouped_by_id["LX0609-020"]["customer_policy"] == {
+        "source_document": master_by_id["LX0609-020"].source_document,
+        "qc_point": master_by_id["LX0609-020"].qc_point,
+        "summary": master_by_id["LX0609-020"].policy_summary,
+        "sources": list(master_by_id["LX0609-020"].policy_sources),
+    }
 
 
 @pytest.mark.unit

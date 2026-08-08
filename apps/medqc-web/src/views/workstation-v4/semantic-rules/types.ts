@@ -1,3 +1,10 @@
+export interface SemanticRuleCustomerPolicy {
+  source_document: string
+  qc_point: string
+  summary: string
+  sources: string[]
+}
+
 export interface SemanticRuleItem {
   rule_id: string
   rule_code?: string
@@ -30,6 +37,8 @@ export interface SemanticRuleItem {
   non_trigger_condition?: string
   rule_basis?: string
   customer_text?: string
+  /** 仅 LX0609 规则详情使用的总表客户口径，不从包装器字段回退生成。 */
+  customer_policy?: SemanticRuleCustomerPolicy
   standardized_rule?: string
   required_documents_label?: string
   data_dependencies?: string[]

@@ -244,6 +244,7 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
       : undefined,
     rule_basis: raw.rule_basis ? String(raw.rule_basis) : undefined,
     customer_text: raw.customer_text ? String(raw.customer_text) : undefined,
+    customer_policy: normalizeCustomerPolicy(raw.customer_policy),
     standardized_rule: raw.standardized_rule ? String(raw.standardized_rule) : undefined,
     required_documents_label: raw.required_documents_label
       ? String(raw.required_documents_label)
@@ -256,6 +257,32 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     negative_example: normalizeSemanticRuleExample(raw.negative_example, '反例'),
     applicable_document_labels: applicableDocumentLabels,
   }
+}
+
+function normalizeCustomerPolicy(value: unknown): SemanticRuleItem['customer_policy'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+
+  const raw = value as Record<string, unknown>
+  const sourceDocument = normalizeNonEmptyText(raw.source_document)
+  const qcPoint = normalizeNonEmptyText(raw.qc_point)
+  const summary = normalizeNonEmptyText(raw.summary)
+  if (!sourceDocument || !qcPoint || !summary || !Array.isArray(raw.sources)) return undefined
+
+  const sources = raw.sources.map(normalizeNonEmptyText)
+  if (sources.some((source) => !source)) return undefined
+
+  return {
+    source_document: sourceDocument,
+    qc_point: qcPoint,
+    summary,
+    sources: sources as string[],
+  }
+}
+
+function normalizeNonEmptyText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  return text || undefined
 }
 
 function normalizeSemanticRuleExample(

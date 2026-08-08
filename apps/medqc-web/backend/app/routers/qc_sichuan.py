@@ -35,6 +35,7 @@ from ..services.luxian_0609 import (
     resolve_package_rollback_execution_rule_ids,
     review_luxian_0609_batch_job,
 )
+from ..services.luxian_0609_rule_catalog import attach_luxian_0609_customer_policy
 from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
     resolve_sc_intrinsic_launch_tier,
@@ -5162,6 +5163,7 @@ async def rules(
             load_luxian_0609_rules(),
             wanted_docs=wanted_docs,
         )
+        data = attach_luxian_0609_customer_policy(data)
 
         if grouped:
             by_type: dict[str, list[dict[str, Any]]] = {}

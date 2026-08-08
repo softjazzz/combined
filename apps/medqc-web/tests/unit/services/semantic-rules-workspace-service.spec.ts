@@ -162,6 +162,42 @@ describe('semantic rules workspace service', () => {
     ).toHaveLength(1)
   })
 
+  it('仅在客户政策对象完整时保留总表口径，不得用旧包装器字段补造', () => {
+    const withPolicy = normalizeSemanticRule({
+      rule_id: 'LX0609-025',
+      name: '植入物相关记录符合率',
+      description: '旧包装器描述',
+      customer_text: '旧客户说明',
+      customer_policy: {
+        source_document: '手术记录或病程记录',
+        qc_point: '植入物种类和数量无记录',
+        summary: '条码、种类和数量属于省标主项。',
+        sources: ['sichuan_2026_handbook', 'customer_confirmed'],
+      },
+    })
+
+    expect(withPolicy.customer_policy).toEqual({
+      source_document: '手术记录或病程记录',
+      qc_point: '植入物种类和数量无记录',
+      summary: '条码、种类和数量属于省标主项。',
+      sources: ['sichuan_2026_handbook', 'customer_confirmed'],
+    })
+
+    const incompletePolicy = normalizeSemanticRule({
+      rule_id: 'LX0609-025',
+      name: '植入物相关记录符合率',
+      customer_text: '旧客户说明',
+      customer_policy: {
+        source_document: '手术记录或病程记录',
+        qc_point: '植入物种类和数量无记录',
+        summary: '条码、种类和数量属于省标主项。',
+        sources: 'sichuan_2026_handbook',
+      },
+    })
+
+    expect(incompletePolicy.customer_policy).toBeUndefined()
+  })
+
   it('应生成固定四卡 KPI 展示模型', () => {
     const cards = buildSemanticKpiCards({
       stats: {

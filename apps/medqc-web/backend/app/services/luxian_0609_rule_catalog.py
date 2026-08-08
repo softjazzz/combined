@@ -71,6 +71,37 @@ def get_luxian_0609_rule(rule_id: str) -> dict[str, Any] | None:
     return None
 
 
+def attach_luxian_0609_customer_policy(
+    wrappers: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach the master-owned customer policy for rule-detail presentation.
+
+    执行包装器仍是运行期映射的唯一所有者；这里仅为规则详情投影总表中的
+    客户口径，不覆盖包装器任何已有字段。
+    """
+    master_by_id = {
+        entry.rule_id: entry
+        for entry in load_luxian_0609_rule_master()
+    }
+    projected: list[dict[str, Any]] = []
+    for wrapper in wrappers:
+        copied_wrapper = dict(wrapper)
+        rule_id = str(
+            copied_wrapper.get("rule_id") or copied_wrapper.get("rule_code") or ""
+        ).strip().upper()
+        master_entry = master_by_id.get(rule_id)
+        if master_entry is None:
+            raise ValueError(f"LX0609 customer policy is missing for {rule_id or '<blank>'}")
+        copied_wrapper["customer_policy"] = {
+            "source_document": master_entry.source_document,
+            "qc_point": master_entry.qc_point,
+            "summary": master_entry.policy_summary,
+            "sources": list(master_entry.policy_sources),
+        }
+        projected.append(copied_wrapper)
+    return projected
+
+
 def filter_luxian_0609_rules_by_documents(
     rules: list[dict[str, Any]],
     *,

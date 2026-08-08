@@ -17,17 +17,21 @@
           <div class="detail-title-block">
             <span class="detail-kicker">质控规则</span>
             <h3 class="detail-title">
-              {{ rule.name }}
+              {{ isLuxianRule ? luxianPolicyTitle : rule.name }}
             </h3>
           </div>
           <span class="detail-code">{{ rule.rule_code || rule.rule_id }}</span>
         </div>
-        <p class="detail-desc">
+        <p
+          v-if="!isLuxianRule"
+          class="detail-desc"
+        >
           {{ rule.description || '暂无描述' }}
         </p>
       </div>
 
       <a-descriptions
+        v-if="!isLuxianRule"
         :column="2"
         size="small"
         class="detail-descriptions"
@@ -62,90 +66,55 @@
         class="luxian-panel"
       >
         <div class="luxian-section">
-          <h4>客户质控点口径</h4>
-          <p>{{ rule.customer_text || rule.description || '暂无客户原文' }}</p>
+          <h4>客户规则口径</h4>
+          <p v-if="customerPolicy">
+            {{ customerPolicy.summary }}
+          </p>
+          <p
+            v-else
+            class="muted"
+          >
+            规则口径暂未同步
+          </p>
         </div>
 
-        <div class="luxian-grid">
-          <div class="luxian-section">
-            <h4>触发条件</h4>
-            <p>{{ rule.trigger_condition || '暂无触发条件' }}</p>
-          </div>
-          <div class="luxian-section">
-            <h4>不触发条件</h4>
-            <p>{{ rule.non_trigger_condition || '暂无不触发条件' }}</p>
+        <div
+          v-if="customerPolicy"
+          class="luxian-section"
+        >
+          <h4>政策依据</h4>
+          <div class="policy-source-list">
+            <span
+              v-for="source in customerPolicy.sources"
+              :key="source"
+              class="policy-source"
+            >
+              {{ formatPolicySource(source) }}
+            </span>
           </div>
         </div>
 
         <div class="luxian-section">
-          <h4>映射执行规则</h4>
+          <h4>执行映射（实现信息）</h4>
           <div class="rule-chip-list">
             <span
-              v-for="ruleId in rule.mapped_rule_ids || []"
+              v-for="ruleId in executionRuleIds"
               :key="ruleId"
               class="rule-chip"
               :class="{ primary: ruleId === rule.primary_execution_rule_id }"
             >
               {{ ruleId }}{{ ruleId === rule.primary_execution_rule_id ? ' · 主执行' : '' }}
             </span>
-          </div>
-        </div>
-
-        <div class="luxian-grid compact">
-          <div class="luxian-section">
-            <h4>执行依赖</h4>
-            <p>{{ formatDependencyType(rule.dependency_type) }}</p>
-            <p class="muted">
-              {{ rule.required_documents_label || '文书范围待确认' }}
-            </p>
-          </div>
-          <div class="luxian-section">
-            <h4>数据状态</h4>
-            <p>{{ formatDataStatus(rule.data_status) }}</p>
-            <p class="muted">
-              {{ formatImplementationStatus(rule.implementation_status) }}
-            </p>
-          </div>
-        </div>
-
-        <div class="example-grid">
-          <div
-            v-if="rule.negative_example"
-            class="example-card danger"
-          >
-            <h4>反例</h4>
-            <strong>{{ rule.negative_example.title }}</strong>
-            <p>{{ rule.negative_example.summary }}</p>
-            <ul>
-              <li
-                v-for="item in rule.negative_example.focusPoints || []"
-                :key="item"
-              >
-                {{ item }}
-              </li>
-            </ul>
-          </div>
-          <div
-            v-if="rule.positive_example"
-            class="example-card safe"
-          >
-            <h4>正例</h4>
-            <strong>{{ rule.positive_example.title }}</strong>
-            <p>{{ rule.positive_example.summary }}</p>
-            <ul>
-              <li
-                v-for="item in rule.positive_example.focusPoints || []"
-                :key="item"
-              >
-                {{ item }}
-              </li>
-            </ul>
+            <span
+              v-if="!executionRuleIds.length"
+              class="mapping-empty"
+            > 未提供映射规则 </span>
           </div>
         </div>
       </div>
 
       <div
-        v-if="isAdmin || isLuxianRule"
+        v-if="isAdmin && !isLuxianRule"
         class="prompt-panel"
       >
         <div class="prompt-header">
@@ -153,26 +122,16 @@
             <h4 class="prompt-title">
               检查模板管理
             </h4>
-            <p
-              v-if="isLuxianRule"
-              class="prompt-subtitle"
-            >
-              泸县0609客户专项规则包使用只读模板；如需调整执行逻辑，请修改映射的底层规则或规则包配置。
-            </p>
           </div>
           <div class="prompt-actions">
             <a-button
-              v-if="!isEditingPrompt && !isLuxianRule"
+              v-if="!isEditingPrompt"
               type="link"
               size="small"
               @click="emit('startEditPrompt')"
             >
               编辑
             </a-button>
-            <span
-              v-else-if="isLuxianRule"
-              class="readonly-badge"
-            > 只读模板 </span>
             <template v-else>
               <a-button
                 size="small"
@@ -230,14 +189,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SemanticRuleItem } from '../../types'
-import {
-  getCategoryZh,
-  getDataStatusZh,
-  getDependencyTypeZh,
-  getDocTypeZh,
-  getImplementationStatusZh,
-  getSeverityZh,
-} from '../../types'
+import { getCategoryZh, getDocTypeZh, getSeverityZh } from '../../types'
 
 const props = defineProps<{
   open: boolean
@@ -260,16 +212,33 @@ const emit = defineEmits<{
 
 const isLuxianRule = computed(() => props.rule?.rule_id.startsWith('LX0609-') || false)
 
-function formatImplementationStatus(value?: string): string {
-  return getImplementationStatusZh(value)
+const customerPolicy = computed(() =>
+  isLuxianRule.value ? props.rule?.customer_policy : undefined,
+)
+
+const luxianPolicyTitle = computed(() => {
+  const policy = customerPolicy.value
+  if (!policy) return props.rule?.name || '规则详情'
+  return `${policy.source_document}：${policy.qc_point}`
+})
+
+const executionRuleIds = computed(() => {
+  const rule = props.rule
+  if (!rule) return []
+  return [
+    ...new Set([rule.primary_execution_rule_id, ...(rule.mapped_rule_ids || [])].filter(Boolean)),
+  ]
+})
+
+const POLICY_SOURCE_LABELS: Record<string, string> = {
+  sichuan_2026_handbook: '四川省病案管理质量控制指标检查要点指导手册（2026版）',
+  sichuan_2023_standard: '四川省住院病历评定标准',
+  customer_confirmed: '客户确认口径',
+  hospital_local_extension: '本院扩展口径',
 }
 
-function formatDependencyType(value?: string): string {
-  return getDependencyTypeZh(value)
-}
-
-function formatDataStatus(value?: string): string {
-  return getDataStatusZh(value)
+function formatPolicySource(value: string): string {
+  return POLICY_SOURCE_LABELS[value] || '未识别政策来源'
 }
 </script>
 
@@ -443,35 +412,21 @@ function formatDataStatus(value?: string): string {
   padding: 14px;
 }
 
-.luxian-grid,
-.example-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.luxian-grid.compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.luxian-section,
-.example-card {
+.luxian-section {
   border-radius: 14px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: rgba(255, 255, 255, 0.86);
   padding: 12px;
 }
 
-.luxian-section h4,
-.example-card h4 {
+.luxian-section h4 {
   margin: 0 0 8px;
   color: #1d1d1f;
   font-size: 13px;
   font-weight: 650;
 }
 
-.luxian-section p,
-.example-card p {
+.luxian-section p {
   margin: 0;
   color: rgba(29, 29, 31, 0.62);
   font-size: 13px;
@@ -482,6 +437,25 @@ function formatDataStatus(value?: string): string {
   margin-top: 4px;
   color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
+}
+
+.policy-source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.policy-source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.06);
+  padding: 3px 8px;
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .rule-chip-list {
@@ -509,29 +483,9 @@ function formatDataStatus(value?: string): string {
   color: #0066cc;
 }
 
-.example-card strong {
-  display: block;
-  margin-bottom: 6px;
-  color: #1d1d1f;
-  font-size: 13px;
-}
-
-.example-card ul {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  color: rgba(29, 29, 31, 0.56);
+.mapping-empty {
+  color: rgba(29, 29, 31, 0.46);
   font-size: 12px;
-  line-height: 1.6;
-}
-
-.example-card.danger {
-  border-color: rgba(255, 69, 58, 0.16);
-  background: rgba(255, 69, 58, 0.04);
-}
-
-.example-card.safe {
-  border-color: rgba(16, 185, 129, 0.16);
-  background: rgba(16, 185, 129, 0.04);
 }
 
 .prompt-panel {
@@ -554,29 +508,9 @@ function formatDataStatus(value?: string): string {
   font-weight: 650;
 }
 
-.prompt-subtitle {
-  margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .prompt-actions {
   display: inline-flex;
   gap: 8px;
-}
-
-.readonly-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  background: rgba(0, 102, 204, 0.08);
-  padding: 0 8px;
-  color: #0066cc;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .prompt-content {
@@ -624,13 +558,5 @@ function formatDataStatus(value?: string): string {
 .detail-secondary-btn {
   border-color: rgba(0, 0, 0, 0.08);
   color: rgba(29, 29, 31, 0.66);
-}
-
-@media (max-width: 768px) {
-  .luxian-grid,
-  .luxian-grid.compact,
-  .example-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>
