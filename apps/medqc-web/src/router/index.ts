@@ -5,7 +5,7 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/workstation-v4',
   },
   // 认证相关路由
   {
@@ -61,7 +61,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: '',
         name: 'Dashboard',
-        component: () => import('@/views/dashboard/DashboardView.vue'),
+        redirect: (to) => ({
+          path: '/workstation-v4',
+          // 旧首页没有业务参数合同；保留原样 query/hash，避免丢失外部入口上下文。
+          query: to.query,
+          hash: to.hash,
+        }),
         meta: {
           title: '仪表板',
           icon: 'DashboardOutlined',
