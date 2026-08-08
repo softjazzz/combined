@@ -50,6 +50,8 @@ function buildDepartments(records: PatientRecord[]): DeptInfo[] {
 }
 
 export function usePatientRecords() {
+  const initialRouteQuery = new URLSearchParams(window.location.search)
+  const initialDepartment = initialRouteQuery.get('department')?.trim()
   const allRecords = ref<PatientRecord[]>([])
   const departments = ref<DeptInfo[]>([])
   const currentPage = ref(1)
@@ -61,7 +63,7 @@ export function usePatientRecords() {
   const loadError = ref(false)
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
 
-  const activeDept = ref('\u5168\u90e8\u79d1\u5ba4')
+  const activeDept = ref(initialDepartment || '\u5168\u90e8\u79d1\u5ba4')
   const searchText = ref('')
   const dateRange = ref<WorkstationDateRange>(null)
   const dateField = ref<WorkstationDateField>('visit')

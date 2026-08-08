@@ -24,7 +24,7 @@
 
 ## 下钻合同
 
-Dashboard 下钻统一带 `analytics_scope=final`，病历池服务端再按根任务完成时间、规则和结果状态筛选。默认统计范围也会进入 Canonical + 三坐标筛选；前端不以本页数组过滤病历。
+Dashboard 下钻统一带 `analytics_scope=final`，并将所点科室带入病历池的服务端查询；病历池再按根任务完成时间、规则和结果状态筛选。默认统计范围也会进入 Canonical + 三坐标筛选；前端不以本页数组过滤病历。
 
 接口响应只提供聚合计数、日期桶、科室/规则聚合与资料健康度；未包含病历正文、提示词、LLM 原文或完整规则结果列表。
 
@@ -42,7 +42,7 @@ Dashboard 下钻统一带 `analytics_scope=final`，病历池服务端再按根�
 ## 自动化验证
 
 - 后端聚焦：`test_luxian_0609_analytics_service.py`、`test_workstation_analytics_router.py` 共 9 通过；`test_workstation_query_service.py`、`test_workstation_analytics_drilldown_router.py`、`test_workstation_analytics_router.py` 共 25 通过。
-- 前端聚焦：`usePatientRecords.spec.ts`、`LuxianQcAnalyticsView.spec.ts`，共 9 通过。
+- 前端聚焦：`usePatientRecords.spec.ts`、`LuxianQcAnalyticsView.spec.ts`，共 10 通过。
 - `npm run type-check`、目标 ESLint、编码与 diff 检查通过。
 
 ## 剩余风险

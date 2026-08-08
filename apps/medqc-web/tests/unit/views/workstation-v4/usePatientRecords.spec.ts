@@ -47,7 +47,26 @@ async function flushPromises() {
 describe('usePatientRecords workstation filters', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.history.replaceState({}, '', '/')
     mockWorkstationResponse()
+  })
+
+  it('uses the analytics drill-down department from the URL for the server query', async () => {
+    window.history.replaceState({}, '', '/workstation-v4?department=ICU&analytics_scope=final')
+    const records = usePatientRecords()
+
+    await records.fetchData()
+
+    expect(records.activeDept.value).toBe('ICU')
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      params: {
+        page: 1,
+        page_size: 15,
+        date_field: 'visit',
+        dept: 'ICU',
+        analytics_scope: 'final',
+      },
+    })
   })
 
   it('fetchData sends department, keyword and date filters to backend', async () => {
