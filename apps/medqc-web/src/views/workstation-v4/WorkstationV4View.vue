@@ -2158,7 +2158,7 @@ function goToFinalRecords() {
 }
 
 function goToSichuanRules() {
-  router.push('/workstation-v4/rules?tab=semantic')
+  router.push('/workstation-v4/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1')
 }
 
 const { currentRecordIndex, goToPrevRecord, goToNextRecord, goBackToList } = createDetailNavigation(
