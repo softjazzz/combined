@@ -167,7 +167,7 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=semantic">
+            <a-menu-item key="/workstation-v4/rules?tab=semantic&ruleSetKey=luxian_0609_qc_v1">
               <template #icon>
                 <Workflow class="sidebar-icon" />
               </template>
