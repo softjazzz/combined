@@ -121,6 +121,43 @@ def test_home_clinical_qc_has_explicit_scope_and_no_synthetic_trend(monkeypatch)
     assert payload["trend"] is None
 
 
+def test_home_clinical_qc_keeps_non_compliant_before_data_gaps_at_priority_limit(monkeypatch):
+    records = [_record(1), _record(2), _record(3)]
+    summaries = {
+        ("hospital-a", "patient-1", "visit-1"): _ready(non_compliant=1),
+        ("hospital-a", "patient-2", "visit-2"): _ready(data_gap=1),
+        ("hospital-a", "patient-3", "visit-3"): _ready(uncertain=1),
+    }
+    service = _service(monkeypatch, records, summaries)
+
+    payload = service.get_home(hotspot_limit=1, todo_limit=1)["clinical_qc"]
+
+    assert [item["priority_kind"] for item in payload["priority_items"]] == ["non_compliant"]
+
+
+def test_home_department_options_come_from_full_clinical_scope_not_legacy_items(monkeypatch):
+    records = [
+        _record(1, department="神经外科"),
+        _record(2, department="骨科"),
+        _record(3, department="ICU"),
+    ]
+    summaries = {
+        ("hospital-a", "patient-1", "visit-1"): _ready(non_compliant=1),
+        ("hospital-a", "patient-2", "visit-2"): _ready(),
+        ("hospital-a", "patient-3", "visit-3"): {"status": "not_run"},
+    }
+    service = _service(monkeypatch, records, summaries)
+
+    payload = service.get_home(hotspot_limit=1, todo_limit=1)
+
+    assert set(payload["department_options"]) == {"神经外科", "骨科", "ICU"}
+    assert set(item["department"] for item in payload["clinical_qc"]["department_distribution"]) == {
+        "神经外科",
+        "骨科",
+        "ICU",
+    }
+
+
 def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
     """首页复用病历池筛选器时必须显式传全量住院状态，不能因漏参运行失败。"""
 

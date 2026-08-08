@@ -322,7 +322,9 @@ class WorkstationAggregationService:
                 "my_todo_summary": self._build_todo_summary(todo_items),
                 "my_todo_items": todo_items,
                 "batch_summaries": batch_summaries,
-                "department_options": self._build_home_departments(hotspots, todo_items),
+                # 首页科室筛选必须与全病历质控使用同一资料范围；保留旧字段名和
+                # string[] 契约，不能再从兼容工作流的热点/待办反推科室。
+                "department_options": clinical_qc["department_options"],
                 "team_summary": self._build_team_summary(hotspots, todo_items),
                 "scope": clinical_qc["scope"],
                 "clinical_qc": clinical_qc,
@@ -456,7 +458,7 @@ class WorkstationAggregationService:
 
         priority_items.sort(
             key=lambda item: (
-                int(item.get("_priority_rank") or 9),
+                int(item.get("_priority_rank", 9)),
                 -int(dict(item.get("status_counts") or {}).get("non_compliant", 0)),
                 -int(dict(item.get("status_counts") or {}).get("data_gap", 0)),
                 -_datetime_sort_number(item.get("completed_at")),
@@ -492,6 +494,7 @@ class WorkstationAggregationService:
             },
             "canonical_status_counts": dict(sorted(canonical_status_counts.items())),
             "priority_items": priority_items[: max(1, priority_limit)],
+            "department_options": sorted(department_distribution),
             "department_distribution": [
                 {"department": name, **counts}
                 for name, counts in sorted(
