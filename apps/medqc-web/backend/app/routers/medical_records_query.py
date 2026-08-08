@@ -1,7 +1,7 @@
 """病案数据 - 查询子域。"""
 
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -67,6 +67,10 @@ async def get_workstation_data_api(
     start_date: Optional[date] = Query(None, description="筛选开始日期"),
     end_date: Optional[date] = Query(None, description="筛选结束日期"),
     date_field: Optional[str] = Query("visit", description="日期字段：visit/admission/discharge/updated"),
+    hospital_status: Literal["all", "inpatient", "discharged"] = Query(
+        "all",
+        description="住院状态：all/inpatient/discharged；按权威出院时间判定",
+    ),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -78,6 +82,7 @@ async def get_workstation_data_api(
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
+            hospital_status=hospital_status,
             page=page,
             page_size=page_size,
         )

@@ -507,6 +507,7 @@ def _apply_workstation_filters(
     start_date: Optional[date],
     end_date: Optional[date],
     date_field: Optional[str],
+    hospital_status: Optional[str],
     include_department: bool,
     discharge_summary=None,
 ):
@@ -523,6 +524,13 @@ def _apply_workstation_filters(
     date_condition = _workstation_date_condition(start_date, end_date, date_field, discharge_summary)
     if date_condition is not None:
         query = query.filter(date_condition)
+    normalized_hospital_status = str(hospital_status or "all").strip().lower()
+    if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
+        raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    if normalized_hospital_status == "discharged":
+        query = query.filter(_workstation_resolved_discharge_expr(discharge_summary).is_not(None))
+    elif normalized_hospital_status == "inpatient":
+        query = query.filter(_workstation_resolved_discharge_expr(discharge_summary).is_(None))
     return query
 
 
@@ -550,6 +558,7 @@ def get_workstation_data(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     date_field: Optional[str] = "visit",
+    hospital_status: Optional[str] = "all",
     page: int = 1,
     page_size: int = 50,
     session_factory: Callable[[], Any] | None = None,
@@ -562,6 +571,9 @@ def get_workstation_data(
     ] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
+    normalized_hospital_status = str(hospital_status or "all").strip().lower()
+    if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
+        raise ValueError("hospital_status must be one of: all, inpatient, discharged")
 
     with session_factory() as session:
         settings, _ = settings_loader()
@@ -570,6 +582,13 @@ def get_workstation_data(
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
         include_demo = demo_policy(settings, int(real_total_count))
         visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
+        if normalized_hospital_status != "all":
+            visible_demos = [
+                demo
+                for demo in visible_demos
+                if (_parse_datetime_value(demo.get("dischargeDate")) is not None)
+                == (normalized_hospital_status == "discharged")
+            ]
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
         base_query = session.query(MedicalRecordFrontpage)
@@ -585,6 +604,7 @@ def get_workstation_data(
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
+            hospital_status=normalized_hospital_status,
             include_department=True,
             discharge_summary=discharge_summary,
         )
@@ -686,6 +706,7 @@ def get_workstation_data(
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
+            hospital_status=normalized_hospital_status,
             include_department=False,
             discharge_summary=discharge_summary,
         )
@@ -704,6 +725,7 @@ def get_workstation_data(
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
+            hospital_status=normalized_hospital_status,
             include_department=False,
             discharge_summary=discharge_summary,
         ).scalar() or 0

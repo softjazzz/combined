@@ -933,3 +933,101 @@ def test_get_workstation_data_orders_newly_synced_records_first_within_departmen
     ]
     assert result["records"][0]["updateTime"] == "2026-05-30 08:00:00"
     assert result["records"][0]["sortTime"] == "2026-05-30 08:00:00"
+
+
+def test_get_workstation_data_filters_hospital_status_on_resolved_discharge_time(
+    workstation_session_factory,
+):
+    """在院/出院筛选必须由权威出院时间决定，且汇总不受分页影响。"""
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="V-DISCHARGE-RECORD",
+            name="出院记录时间",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 1, 8, 0),
+            discharge_datetime=None,
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P2",
+            visit_id="V-FRONTPAGE-DISCHARGE",
+            name="首页出院时间",
+            admission_dept_name="外科",
+            admission_datetime=datetime(2026, 4, 2, 8, 0),
+            discharge_datetime=datetime(2026, 4, 5, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P3",
+            visit_id="V-INPATIENT",
+            name="仍在院",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 3, 8, 0),
+            discharge_datetime=None,
+        ),
+    )
+    _insert_discharge_records(
+        workstation_session_factory,
+        {
+            "institute_id": "I",
+            "patient_id": "P1",
+            "visit_id": "V-DISCHARGE-RECORD",
+            "document_id": "DR-1",
+            "dept_name": "内科",
+            "discharge_time": "2026-04-04 12:00:00",
+            "update_time": datetime(2026, 4, 4, 13, 0),
+        },
+        {
+            "institute_id": "I",
+            "patient_id": "P3",
+            "visit_id": "V-INPATIENT",
+            "document_id": "DR-EMPTY",
+            "dept_name": "内科",
+            "discharge_time": None,
+            "update_time": datetime(2026, 4, 3, 13, 0),
+        },
+    )
+
+    common_kwargs = {
+        "page_size": 1,
+        "session_factory": workstation_session_factory,
+        "settings_loader": _workstation_settings_loader,
+        "demo_policy": _no_demo_policy,
+    }
+    discharged_first_page = get_workstation_data(
+        hospital_status="discharged",
+        page=1,
+        **common_kwargs,
+    )
+    discharged_second_page = get_workstation_data(
+        hospital_status="discharged",
+        page=2,
+        **common_kwargs,
+    )
+    inpatient = get_workstation_data(hospital_status="inpatient", **common_kwargs)
+
+    assert discharged_first_page["total"] == 2
+    assert discharged_first_page["departments"][0]["total"] == 2
+    assert discharged_first_page["qc_summary"]["total_records"] == 2
+    assert discharged_second_page["qc_summary"] == discharged_first_page["qc_summary"]
+    assert {record["id"] for record in [*discharged_first_page["records"], *discharged_second_page["records"]]} == {
+        "V-DISCHARGE-RECORD",
+        "V-FRONTPAGE-DISCHARGE",
+    }
+    assert inpatient["total"] == 1
+    assert inpatient["departments"][0]["total"] == 1
+    assert inpatient["qc_summary"]["total_records"] == 1
+    assert [record["id"] for record in inpatient["records"]] == ["V-INPATIENT"]
+
+
+def test_get_workstation_data_rejects_unknown_hospital_status(workstation_session_factory):
+    with pytest.raises(ValueError, match="hospital_status"):
+        get_workstation_data(
+            hospital_status="pending_discharge",
+            session_factory=workstation_session_factory,
+            settings_loader=_workstation_settings_loader,
+            demo_policy=_no_demo_policy,
+        )

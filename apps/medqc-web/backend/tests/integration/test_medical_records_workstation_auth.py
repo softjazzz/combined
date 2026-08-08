@@ -38,3 +38,14 @@ def test_workstation_route_allows_any_authenticated_role(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["total"] == 0
+
+
+def test_workstation_route_rejects_unknown_hospital_status(monkeypatch):
+    client = _client_for_workstation_auth(
+        monkeypatch,
+        user={"id": "reader-1", "roles": ["read_only_observer"]},
+    )
+
+    response = client.get("/api/medical-records/workstation?hospital_status=unknown")
+
+    assert response.status_code == 422
