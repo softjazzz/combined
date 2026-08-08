@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const routeState = vi.hoisted(() => ({
   query: {} as Record<string, string>,
 }))
+const authState = vi.hoisted(() => ({
+  roles: [] as string[],
+}))
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -18,7 +21,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    hasRole: (role: string) => role === 'admin',
+    hasRole: (role: string) => authState.roles.includes(role),
   }),
 }))
 
@@ -71,6 +74,7 @@ function mountHomeEntry() {
 describe('WorkstationV4HomeEntry qc agent entry', () => {
   beforeEach(() => {
     routeState.query = {}
+    authState.roles = []
   })
 
   it('renders qc agent entry on workstation home and opens drawer', async () => {
@@ -86,6 +90,13 @@ describe('WorkstationV4HomeEntry qc agent entry', () => {
     const drawer = wrapper.find('[data-testid="qc-agent-home-drawer"]')
     expect(drawer.attributes('open')).toBe('true')
     expect(drawer.attributes('data-context-label')).toContain('工作台首页')
+  })
+
+  it('shows the all-hospital home for any authenticated session without an admin role gate', () => {
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(false)
   })
 
   it('does not render qc agent entry when route enters workstation list mode', () => {

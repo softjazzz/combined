@@ -173,6 +173,60 @@ export interface WorkstationHomeBatchSummary {
   workflow_type?: string
 }
 
+/** 全病历质控首页的权威聚合范围。三坐标只在下钻时使用，首页不以单一 visit_id 识别病历。 */
+export interface ClinicalQcHomeScope {
+  hospital_scope: 'all' | string
+  department: string | null
+  scene: string
+  rule_set_key: string
+  rule_set_version: string
+  generated_at: string
+}
+
+export interface ClinicalQcHomePriorityItem {
+  record_key: string
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  patient_name?: string
+  department: string
+  priority_kind: 'non_compliant' | 'data_gap' | 'uncertain' | string
+  status_counts: Record<string, number>
+  completed_at?: string | null
+}
+
+export interface ClinicalQcHomeDepartmentItem {
+  department: string
+  records_total: number
+  high_risk_review_total: number
+  data_gap_record_total: number
+  uncertain_record_total: number
+}
+
+export interface ClinicalQcHomeProjection {
+  scope: ClinicalQcHomeScope
+  kpis: {
+    records_total: number
+    qc_pending_total: number
+    qc_completed_total: number
+    high_risk_review_total: number
+  }
+  data_health: {
+    source_sync_status: 'unknown' | string
+    source_error_total: number
+    technical_error_total: number
+    running_task_total: number | null
+    running_task_state: 'unknown' | string
+    last_successful_qc_at: string | null
+  }
+  canonical_status_counts: Record<string, number>
+  priority_items: ClinicalQcHomePriorityItem[]
+  department_distribution: ClinicalQcHomeDepartmentItem[]
+  rule_family_distribution: unknown[]
+  trend: unknown | null
+  comparison: unknown | null
+}
+
 export interface WorkstationHomePayload {
   date: string
   kpis: HomeKpis
@@ -190,6 +244,9 @@ export interface WorkstationHomePayload {
     department_risk_distribution?: WorkstationHomeDepartmentRiskItem[]
     workflow_status_distribution?: WorkstationHomeWorkflowStatusItem[]
   }
+  /** 新首页唯一业务口径；旧热点/待办字段仅为旧页面兼容，不得混入该首页。 */
+  scope?: ClinicalQcHomeScope
+  clinical_qc?: ClinicalQcHomeProjection
 }
 
 /** 首页统一任务列表的前端聚合视图模型 */

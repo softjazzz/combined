@@ -1,276 +1,245 @@
 <template>
   <div class="qc-home-shell workstation-shell min-h-screen">
-    <div class="custom-scrollbar h-screen overflow-y-auto px-5 py-8 xl:px-8">
-      <div class="qc-home-canvas mx-auto w-full max-w-[1440px]">
-        <section class="qc-home-hero workstation-surface-enter">
-          <div class="qc-home-hero__header">
-            <div class="qc-home-hero__main">
-              <h2>质控首页概览</h2>
-              <p>高风险、超时与待处理任务的实时汇总</p>
-            </div>
-            <div class="qc-home-topbar">
-              <HomeHeroBar
-                v-model:keyword="keyword"
-                v-model:selected-date="selectedDate"
-                v-model:department-filter="departmentFilter"
-                v-model:workflow-filter="workflowFilter"
-                :department-options="departmentOptions"
-                :loading="loading"
-                :disabled-future-date="disabledFutureDate"
-                :show-refresh="false"
-                @refresh="void fetchHome()"
-              />
-              <div class="qc-home-profile">
-                <a-avatar :size="38">
-                  <template #icon>
-                    <UserOutlined />
-                  </template>
-                </a-avatar>
-                <div>
-                  <strong>张医生</strong>
-                  <span>质控管理员</span>
-                </div>
-                <DownOutlined />
-              </div>
-            </div>
+    <div class="custom-scrollbar h-screen overflow-y-auto px-5 py-7 xl:px-8">
+      <main class="qc-home-canvas mx-auto w-full max-w-[1440px]">
+        <section class="qc-home-header workstation-surface-enter">
+          <div>
+            <h1>质控首页概览</h1>
+            <p>查看全院病历的泸县0609质控结果，并优先处理需要复核的病历。</p>
           </div>
+          <HomeHeroBar
+            v-model:keyword="keyword"
+            v-model:department-filter="departmentFilter"
+            :selected-date="selectedDate"
+            workflow-filter="all"
+            :department-options="departmentOptions"
+            :loading="loading"
+            :disabled-future-date="disabledFutureDate"
+            :show-date="false"
+            :show-workflow="false"
+            @refresh="void fetchHome()"
+          />
         </section>
 
-        <section class="qc-home-kpis workstation-surface-enter workstation-surface-enter--delay-1">
-          <article
-            v-for="card in kpiCards"
-            :key="card.key"
-            :class="['qc-home-kpi-card', `qc-home-kpi-card--${card.tone}`]"
+        <section
+          v-if="loadError"
+          class="qc-home-notice qc-home-notice--error"
+          data-testid="home-load-error"
+        >
+          <strong>暂时无法加载质控首页</strong>
+          <span>请稍后刷新；不会以旧任务或缓存数据替代当前结果。</span>
+          <a-button
+            size="small"
+            @click="void fetchHome()"
           >
-            <div class="qc-home-kpi-icon">
-              <component :is="card.icon" />
-            </div>
-            <div class="qc-home-kpi-card__body">
-              <span>{{ card.label }}</span>
-              <strong>{{ card.value }}</strong>
-              <p>
-                较昨日
-                <em :class="card.deltaTone">{{ card.delta }}</em>
-              </p>
-            </div>
-          </article>
+            重新加载
+          </a-button>
         </section>
 
-        <section
-          class="qc-home-main-grid workstation-surface-enter workstation-surface-enter--delay-2"
-        >
-          <section class="qc-home-card qc-home-card--trend">
-            <div class="qc-home-card__head">
-              <div>
-                <h3>质控态势趋势</h3>
-              </div>
-              <div class="qc-home-range-switch">
-                <button type="button">
-                  近7天
-                </button>
-                <button type="button">
-                  近30天
-                </button>
-              </div>
-            </div>
-
-            <div class="qc-home-line-chart">
-              <div class="qc-home-line-legend">
-                <span><i class="qc-home-dot--blue" />待处理</span>
-                <span><i class="qc-home-dot--red" />高风险</span>
-                <span><i class="qc-home-dot--amber" />已超时</span>
-                <span><i class="qc-home-dot--cyan" />处理中</span>
-              </div>
-              <svg
-                viewBox="0 0 760 250"
-                role="img"
-                aria-label="质控态势趋势"
-              >
-                <defs>
-                  <linearGradient
-                    id="qcLineFill"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="0%"
-                      stop-color="#0066cc"
-                      stop-opacity="0.12"
-                    />
-                    <stop
-                      offset="100%"
-                      stop-color="#0066cc"
-                      stop-opacity="0"
-                    />
-                  </linearGradient>
-                </defs>
-                <g class="qc-home-grid-lines">
-                  <line
-                    v-for="y in [50, 95, 140, 185, 230]"
-                    :key="y"
-                    x1="42"
-                    :y1="y"
-                    x2="722"
-                    :y2="y"
-                  />
-                </g>
-                <path
-                  d="M42 168 C122 148 168 154 240 128 C320 98 398 134 462 112 C540 86 606 82 722 56 L722 230 L42 230 Z"
-                  fill="url(#qcLineFill)"
-                />
-                <path
-                  d="M42 168 C122 148 168 154 240 128 C320 98 398 134 462 112 C540 86 606 82 722 56"
-                  class="qc-home-series qc-home-series--blue"
-                />
-                <path
-                  d="M42 194 C128 176 188 180 246 160 C320 136 392 166 466 148 C552 126 610 118 722 132"
-                  class="qc-home-series qc-home-series--red"
-                />
-                <path
-                  d="M42 214 C124 202 196 204 252 188 C318 168 388 194 462 184 C548 166 620 170 722 166"
-                  class="qc-home-series qc-home-series--amber"
-                />
-                <path
-                  d="M42 226 C128 214 196 216 258 204 C326 190 402 206 470 196 C560 182 622 188 722 180"
-                  class="qc-home-series qc-home-series--cyan"
-                />
-                <g class="qc-home-axis-labels">
-                  <text
-                    v-for="(label, index) in trendAxisLabels"
-                    :key="label"
-                    :x="54 + index * 112"
-                    y="248"
-                  >
-                    {{ label }}
-                  </text>
-                </g>
-                <g class="qc-home-chart-values">
-                  <circle
-                    cx="722"
-                    cy="56"
-                    r="5"
-                    fill="#0066cc"
-                  />
-                  <text
-                    x="738"
-                    y="61"
-                    fill="#0066cc"
-                  >
-                    {{ Number(homeData.kpis.my_pending_total || 0) }}
-                  </text>
-                  <circle
-                    cx="722"
-                    cy="132"
-                    r="5"
-                    fill="#ef4444"
-                  />
-                  <text
-                    x="738"
-                    y="137"
-                    fill="#ef4444"
-                  >{{ highRiskTaskCount }}</text>
-                  <circle
-                    cx="722"
-                    cy="166"
-                    r="5"
-                    fill="#f59e0b"
-                  />
-                  <text
-                    x="738"
-                    y="171"
-                    fill="#f59e0b"
-                  >
-                    {{ Number(homeData.kpis.my_overdue_total || 0) }}
-                  </text>
-                  <circle
-                    cx="722"
-                    cy="180"
-                    r="5"
-                    fill="#06b6d4"
-                  />
-                  <text
-                    x="738"
-                    y="185"
-                    fill="#06b6d4"
-                  >{{ inProgressTaskCount }}</text>
-                </g>
-              </svg>
-            </div>
+        <template v-else-if="clinicalQc">
+          <section
+            class="qc-home-scope workstation-surface-enter"
+            data-testid="home-scope"
+          >
+            <span class="qc-home-scope__label">当前范围</span>
+            <span>{{ scopeHospitalText }}</span>
+            <i />
+            <span>{{ scopeDepartmentText }}</span>
+            <i />
+            <span>{{ scopeSceneText }}</span>
+            <i />
+            <span>{{ clinicalQc.scope.rule_set_key }} · {{ clinicalQc.scope.rule_set_version }}</span>
+            <span class="qc-home-scope__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
           </section>
 
-          <section class="qc-home-card qc-home-card--insight">
-            <div class="qc-home-card__head">
+          <section
+            class="qc-home-kpis workstation-surface-enter"
+            data-testid="home-kpis"
+          >
+            <article
+              v-for="card in kpiCards"
+              :key="card.key"
+              :class="['qc-home-kpi', `is-${card.tone}`]"
+            >
+              <component
+                :is="card.icon"
+                class="qc-home-kpi__icon"
+              />
               <div>
-                <h3>风险洞察</h3>
+                <span>{{ card.label }}</span>
+                <strong>{{ card.value }}</strong>
+                <small>{{ card.desc }}</small>
               </div>
-              <a-tag color="processing">
-                AI
-              </a-tag>
-            </div>
+            </article>
+          </section>
 
-            <div class="qc-home-insight-layout">
-              <div class="qc-home-insight-list">
-                <div
-                  v-for="item in riskReasonRanking.slice(0, 3)"
-                  :key="`insight-${item.label}`"
-                  class="qc-home-insight-row"
+          <section class="qc-home-grid workstation-surface-enter">
+            <section
+              class="qc-home-panel"
+              data-testid="priority-queue"
+            >
+              <header class="qc-home-panel__head">
+                <div>
+                  <h2>优先复核</h2>
+                  <p>按确定问题、资料待核实、待判断的结构化结果排序。</p>
+                </div>
+                <a-button
+                  type="link"
+                  @click="openRecordPool"
                 >
-                  <span>{{ item.label }}</span>
-                  <small>风险占比 {{ insightPercent(item.count) }}%</small>
-                  <RightOutlined />
-                </div>
+                  查看病历池
+                </a-button>
+              </header>
+
+              <div
+                v-if="clinicalQc.priority_items.length"
+                class="qc-home-priority-list"
+              >
+                <article
+                  v-for="item in clinicalQc.priority_items"
+                  :key="item.record_key"
+                  class="qc-home-priority-row"
+                >
+                  <div class="qc-home-priority-row__identity">
+                    <strong>{{ item.patient_name || '未返回患者姓名' }}</strong>
+                    <span>{{ item.department || '未分科室' }} · 住院号 {{ item.visit_id }}</span>
+                  </div>
+                  <div class="qc-home-priority-row__counts">
+                    <span
+                      v-if="countOf(item, 'non_compliant')"
+                      class="is-danger"
+                    >
+                      确定问题 {{ countOf(item, 'non_compliant') }} 项
+                    </span>
+                    <span
+                      v-if="countOf(item, 'data_gap')"
+                      class="is-warning"
+                    >
+                      资料待核实 {{ countOf(item, 'data_gap') }} 项
+                    </span>
+                    <span
+                      v-if="countOf(item, 'uncertain')"
+                      class="is-neutral"
+                    >
+                      待判断 {{ countOf(item, 'uncertain') }} 项
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="qc-home-text-action"
+                    @click="openRecordPool"
+                  >
+                    进入病历池
+                  </button>
+                </article>
               </div>
-              <div class="qc-home-medical-visual">
-                <div class="qc-home-medical-orbit qc-home-medical-orbit--one" />
-                <div class="qc-home-medical-orbit qc-home-medical-orbit--two" />
-                <div class="qc-home-medical-core">
-                  <MedicineBoxOutlined />
+              <a-empty
+                v-else
+                description="当前范围内没有需要优先复核的病历"
+                :image-style="{ height: '72px' }"
+              />
+            </section>
+
+            <aside class="qc-home-side-stack">
+              <section
+                class="qc-home-panel qc-home-panel--health"
+                data-testid="data-health"
+              >
+                <header class="qc-home-panel__head">
+                  <div>
+                    <h2>数据运行状态</h2>
+                    <p>系统数据状态不等同于医疗质控结论。</p>
+                  </div>
+                </header>
+                <dl class="qc-home-health-list">
+                  <div>
+                    <dt>资料同步状态</dt>
+                    <dd>{{ sourceStateText }}</dd>
+                  </div>
+                  <div>
+                    <dt>运行中任务</dt>
+                    <dd>{{ runningTaskText }}</dd>
+                  </div>
+                  <div>
+                    <dt>技术异常</dt>
+                    <dd :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }">
+                      技术异常 {{ clinicalQc.data_health.technical_error_total }} 份
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>最近成功质控</dt>
+                    <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section
+                class="qc-home-panel"
+                data-testid="department-distribution"
+              >
+                <header class="qc-home-panel__head">
+                  <div>
+                    <h2>科室分布</h2>
+                    <p>高风险待复核按科室汇总。</p>
+                  </div>
+                </header>
+                <div
+                  v-if="clinicalQc.department_distribution.length"
+                  class="qc-home-department-list"
+                >
+                  <div
+                    v-for="item in clinicalQc.department_distribution"
+                    :key="item.department"
+                    class="qc-home-department-row"
+                  >
+                    <div>
+                      <strong>{{ item.department }}</strong>
+                      <span>纳入 {{ item.records_total }} 份病历</span>
+                    </div>
+                    <div>
+                      <em>待复核 {{ item.high_risk_review_total }}</em>
+                      <span v-if="item.data_gap_record_total">资料待核实 {{ item.data_gap_record_total }}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+                <a-empty
+                  v-else
+                  description="当前范围内暂无科室汇总"
+                  :image-style="{ height: '58px' }"
+                />
+              </section>
+            </aside>
           </section>
-        </section>
+
+          <section
+            v-if="clinicalQc.trend"
+            class="qc-home-panel workstation-surface-enter"
+            data-testid="home-trend"
+          >
+            <header class="qc-home-panel__head">
+              <div><h2>质控趋势</h2><p>仅在后端返回真实时间序列时展示。</p></div>
+            </header>
+          </section>
+        </template>
 
         <section
-          class="qc-home-task-panel workstation-surface-enter workstation-surface-enter--delay-2"
+          v-else-if="!loading"
+          class="qc-home-empty workstation-surface-enter"
+          data-testid="home-empty"
         >
-          <div class="qc-home-task-panel__head">
-            <div>
-              <h3>{{ taskPanelTitle }}</h3>
-            </div>
-            <StatusBar
-              :kpis="homeData.kpis"
-              :active-key="activeStatusKey"
-              @select="handleStatusSelect"
-            />
-          </div>
-
-          <div class="qc-home-task-table">
-            <div class="qc-home-task-table__head">
-              <span>患者信息</span>
-              <span>科室</span>
-              <span>风险等级</span>
-              <span>风险原因</span>
-              <span>截止时间</span>
-              <span>操作</span>
-            </div>
-            <UnifiedTaskList
-              :tasks="taskListItems"
-              :preview-limit="activeStatusKey ? undefined : 3"
-              :format-date-time="formatDateTime"
-              :empty-title="activeStatusKey ? '当前筛选无任务' : '当前无高优先级任务'"
-              :empty-desc="
-                activeStatusKey
-                  ? '可以切换筛选条件或重置筛选后查看。'
-                  : '今日暂未发现 P0/P1 风险任务。'
-              "
-              @open="handleOpenTask"
-            />
-          </div>
+          <a-empty description="当前暂无可展示的全病历质控汇总">
+            <template #description>
+              <p>请先在病历池完成质控；系统不会用旧工作流数据代替正式质控结果。</p>
+            </template>
+            <a-button
+              type="primary"
+              @click="openRecordPool"
+            >
+              进入病历池
+            </a-button>
+          </a-empty>
         </section>
-      </div>
+      </main>
     </div>
   </div>
 </template>
@@ -279,413 +248,98 @@
 import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
-import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
-import type { UnifiedTaskItem, WorkstationHomePayload } from '@/views/workstation-v2/types'
-import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
+import type { ClinicalQcHomePriorityItem, WorkstationHomePayload } from '@/views/workstation-v2/types'
+import { FileDoneOutlined, SafetyCertificateOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import HomeHeroBar from './components/HomeHeroBar.vue'
-import StatusBar from './components/StatusBar.vue'
-import UnifiedTaskList from './components/UnifiedTaskList.vue'
-import {
-  ClockCircleOutlined,
-  DownOutlined,
-  FileDoneOutlined,
-  MedicineBoxOutlined,
-  RightOutlined,
-  SyncOutlined,
-  ThunderboltOutlined,
-  UserOutlined,
-} from '@ant-design/icons-vue'
-
-interface RankItem {
-  label: string
-  count: number
-}
 
 interface KpiCard {
   key: string
   label: string
-  value: string | number
+  value: number
   desc: string
-  tone: 'brand' | 'danger' | 'warning' | 'success'
+  tone: 'brand' | 'warning' | 'success' | 'danger'
   icon: Component
-  delta: string
-  deltaTone: 'is-up' | 'is-down' | 'is-neutral'
 }
 
 const router = useRouter()
 const route = useRoute()
-
 const loading = ref(false)
+const loadError = ref(false)
 const selectedDate = ref<Dayjs>(dayjs())
 const departmentFilter = ref('all')
-const workflowFilter = ref('all')
 const keyword = ref('')
-const activeStatusKey = ref('')
 const syncingFromRoute = ref(false)
+const homeData = ref<WorkstationHomePayload | null>(null)
 
-const homeData = ref<WorkstationHomePayload>({
-  date: dayjs().format('YYYY-MM-DD'),
-  kpis: {
-    hotspot_total: 0,
-    high_risk_total: 0,
-    my_pending_total: 0,
-    my_in_progress_total: 0,
-    my_overdue_total: 0,
-    batch_summary_total: 0,
-  },
-  hotspots: [],
-  my_todo_summary: {
-    pending_total: 0,
-    in_progress_total: 0,
-    overdue_total: 0,
-    high_priority_total: 0,
-  },
-  my_todo_items: [],
-  batch_summaries: [],
-  department_options: [],
+const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
+const departmentOptions = computed(() => homeData.value?.department_options ?? [])
+const scopeHospitalText = computed(() => (clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围'))
+const scopeDepartmentText = computed(() => clinicalQc.value?.scope.department || '全部科室')
+const scopeSceneText = computed(() => (clinicalQc.value?.scope.scene === 'final' ? '最终结果' : clinicalQc.value?.scope.scene || '场景待确认'))
+
+const kpiCards = computed<KpiCard[]>(() => {
+  const kpis = clinicalQc.value?.kpis
+  return [
+    { key: 'records', label: '纳入病历', value: Number(kpis?.records_total || 0), desc: '当前范围内三坐标完整的病历', tone: 'brand', icon: FileDoneOutlined },
+    { key: 'pending', label: '待质控', value: Number(kpis?.qc_pending_total || 0), desc: '尚未形成可用最终结论', tone: 'warning', icon: SyncOutlined },
+    { key: 'completed', label: '已完成', value: Number(kpis?.qc_completed_total || 0), desc: '已交付 Canonical 最终结论', tone: 'success', icon: SafetyCertificateOutlined },
+    { key: 'risk', label: '高风险待复核', value: Number(kpis?.high_risk_review_total || 0), desc: '至少含一项确定问题的病历', tone: 'danger', icon: WarningOutlined },
+  ]
 })
 
-const departmentOptions = computed(() => homeData.value.department_options || [])
-const trendAxisLabels = computed(() =>
-  Array.from({ length: 7 }, (_, index) =>
-    dayjs(selectedDate.value)
-      .subtract(6 - index, 'day')
-      .format('MM-DD'),
-  ),
-)
+const sourceStateText = computed(() => clinicalQc.value?.data_health.source_sync_status === 'unknown' ? '资料同步状态待核实' : '资料同步状态待核实')
+const runningTaskText = computed(() => clinicalQc.value?.data_health.running_task_state === 'unknown' ? '运行状态待接入' : '运行状态待接入')
 
-const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
-  const hotspotItems: UnifiedTaskItem[] = (homeData.value.hotspots || []).map((h) => ({
-    id: `hotspot-${h.id}`,
-    source_type: 'hotspot' as const,
-    record_id: h.record_id,
-    visit_id: h.visit_id,
-    patient_name: h.patient_name,
-    patient_age: h.patient_age,
-    patient_sex: h.patient_sex,
-    patient_gender: h.patient_gender,
-    department: h.department,
-    workflow_type: h.workflow_type,
-    severity: h.severity,
-    priority: h.severity === 'critical' ? 'critical' : h.severity === 'high' ? 'high' : 'normal',
-    summary: h.summary,
-    title: h.title,
-    active_defect_count: h.active_defect_count,
-    unread_count: h.unread_count,
-    task_status: undefined,
-    queue_status: h.queue_status,
-    latest_qc_score: h.latest_qc_score,
-    latest_qc_grade: h.latest_qc_grade,
-    latest_created_at: h.latest_created_at,
-    due_at: undefined,
-    launch_action: h.launch_action,
-    launch_stage: h.launch_stage,
-  }))
-
-  const todoItems: UnifiedTaskItem[] = (homeData.value.my_todo_items || []).map((t) => ({
-    id: `todo-${t.id}`,
-    source_type: 'todo' as const,
-    record_id: t.record_id,
-    visit_id: t.visit_id,
-    patient_name: t.patient_name,
-    patient_age: t.patient_age,
-    patient_sex: t.patient_sex,
-    patient_gender: t.patient_gender,
-    department: t.department,
-    workflow_type: t.workflow_type,
-    severity: t.priority === 'critical' ? 'critical' : t.priority === 'high' ? 'high' : 'info',
-    priority: t.priority,
-    summary: t.summary,
-    title: undefined,
-    active_defect_count: t.active_defect_count,
-    unread_count: 0,
-    task_status: t.task_status,
-    queue_status: t.queue_status,
-    latest_qc_score: t.latest_qc_score,
-    latest_qc_grade: t.latest_qc_grade,
-    latest_created_at: undefined,
-    due_at: t.due_at,
-    launch_action: t.launch_action,
-    launch_stage: t.launch_stage,
-  }))
-
-  const seen = new Set<string>()
-  const result: UnifiedTaskItem[] = []
-  for (const item of [...hotspotItems, ...todoItems]) {
-    const key = `${item.record_id}__${item.workflow_type}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(item)
-  }
-
-  if (activeStatusKey.value === 'high_risk_total') {
-    return result.filter((t) => {
-      const severity = (t.severity || '').toLowerCase()
-      return severity === 'critical' || severity === 'high'
-    })
-  }
-  if (activeStatusKey.value === 'my_overdue_total') {
-    return result.filter((t) => t.task_status === 'overdue')
-  }
-  if (activeStatusKey.value === 'my_in_progress_total') {
-    return result.filter((t) => t.task_status === 'in_progress')
-  }
-
-  return result
-})
-
-const totalTaskCount = computed(() => unifiedTasks.value.length)
-
-const highRiskTaskCount = computed(
-  () =>
-    unifiedTasks.value.filter((task) => {
-      const severity = (task.severity || task.priority || '').toLowerCase()
-      return severity === 'critical' || severity === 'high' || task.task_status === 'overdue'
-    }).length,
-)
-
-const inProgressTaskCount = computed(
-  () =>
-    unifiedTasks.value.filter((task) => {
-      const status = (task.task_status || '').toLowerCase()
-      const queue = (task.queue_status || '').toLowerCase()
-      return status === 'in_progress' || status === 'pending' || queue.includes('running')
-    }).length,
-)
-
-const kpiCards = computed<KpiCard[]>(() => [
-  {
-    key: 'pending',
-    label: '待处理',
-    value: Number(homeData.value.kpis.my_pending_total || 0),
-    desc: '等待进入处理队列',
-    tone: 'brand',
-    icon: FileDoneOutlined,
-    delta: '+12（10.3%）',
-    deltaTone: 'is-up',
-  },
-  {
-    key: 'risk',
-    label: '高风险任务',
-    value: highRiskTaskCount.value,
-    desc: '建议优先复核',
-    tone: 'danger',
-    icon: ThunderboltOutlined,
-    delta: '+5（16.1%）',
-    deltaTone: 'is-up',
-  },
-  {
-    key: 'overdue',
-    label: '已超时',
-    value: Number(homeData.value.kpis.my_overdue_total || 0),
-    desc: '已超过处理时限',
-    tone: 'warning',
-    icon: ClockCircleOutlined,
-    delta: '+3（20.0%）',
-    deltaTone: 'is-up',
-  },
-  {
-    key: 'progress',
-    label: '处理中',
-    value: inProgressTaskCount.value,
-    desc: '正在推进闭环',
-    tone: 'success',
-    icon: SyncOutlined,
-    delta: '-6（7.5%）',
-    deltaTone: 'is-down',
-  },
-])
-
-function classifyRiskReason(task: UnifiedTaskItem): string {
-  const text = `${task.title || ''} ${task.summary || ''}`
-  if (/(编码|icd|drg)/i.test(text)) return '编码规范风险'
-  if (/(首页|字段|漏填|缺失|主诊断|手术)/i.test(text)) return '首页完整性风险'
-  if (/(结算|费用|医保|支付|清单)/i.test(text)) return '结算费用风险'
-  if (/(超时|逾期|时效|截止)/i.test(text)) return '处理时效风险'
-  return '其他质控风险'
+function countOf(item: ClinicalQcHomePriorityItem, status: string): number {
+  return Math.max(0, Number(item.status_counts?.[status] || 0))
 }
 
-const riskReasonRanking = computed<RankItem[]>(() => {
-  const map = new Map<string, number>()
-  for (const task of unifiedTasks.value) {
-    const reason = classifyRiskReason(task)
-    map.set(reason, (map.get(reason) || 0) + 1)
-  }
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }))
-})
-
-function insightPercent(count: number): number {
-  if (highRiskTaskCount.value <= 0) return 0
-  return Math.round((count / highRiskTaskCount.value) * 1000) / 10
+function formatDateTime(value?: string | null): string {
+  if (!value) return '暂未返回'
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
-
-function isHighPriorityTask(task: UnifiedTaskItem): boolean {
-  const severity = (task.severity || task.priority || '').toLowerCase()
-  return (
-    task.task_status === 'overdue' ||
-    severity === 'critical' ||
-    severity === 'high' ||
-    task.priority === 'critical' ||
-    task.priority === 'high'
-  )
-}
-
-const highPriorityTasks = computed(() => unifiedTasks.value.filter(isHighPriorityTask))
-const taskListItems = computed(() =>
-  activeStatusKey.value ? unifiedTasks.value : highPriorityTasks.value,
-)
-const taskPanelTitle = computed(() => (activeStatusKey.value ? '筛选任务' : '高优先级任务'))
-const taskPanelSubtitle = computed(() => {
-  if (activeStatusKey.value) {
-    return `当前筛选下共 ${taskListItems.value.length} 条任务，支持继续按风险和时效聚焦。`
-  }
-  return `默认展示最需要处理的 ${Math.min(highPriorityTasks.value.length, 3)} 条任务，降低首屏干扰。`
-})
 
 function disabledFutureDate(current: Dayjs) {
   return current.isAfter(dayjs(), 'day')
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return '--'
-  const parsed = dayjs(value)
-  if (!parsed.isValid()) return String(value)
-  return parsed.format('MM-DD HH:mm')
-}
-
-function handleStatusSelect(key: string) {
-  activeStatusKey.value = activeStatusKey.value === key ? '' : key
-}
-
-function launchIntoWorklist(recordId: string, action?: string, fromStage?: string) {
-  if (!recordId) {
-    message.info('当前项未绑定具体病历')
-    return
-  }
-  const detailTab =
-    fromStage === 'frontpage_generate'
-      ? 'records'
-      : fromStage === 'settlement_qc'
-        ? 'settlement'
-        : fromStage === 'coding_qc' || fromStage === 'frontpage_qc'
-          ? 'frontpage'
-          : undefined
-  router.push({
-    path: '/workstation-v4',
-    query: {
-      source: 'dashboard',
-      record_id: recordId,
-      action: action as WorkstationLaunchAction,
-      from_stage: fromStage as WorkflowStageKey,
-      detail_tab: detailTab,
-    },
-  })
-}
-
-function handleOpenTask(task: UnifiedTaskItem) {
-  launchIntoWorklist(task.record_id, task.launch_action, task.launch_stage)
-}
-
 function applyRouteFilters() {
-  const queryDate =
-    typeof route.query.date === 'string' ? route.query.date : dayjs().format('YYYY-MM-DD')
-  const queryDepartment =
-    typeof route.query.department === 'string' ? route.query.department : 'all'
-  const queryWorkflow = typeof route.query.workflow === 'string' ? route.query.workflow : 'all'
+  const department = typeof route.query.department === 'string' ? route.query.department : 'all'
   const queryKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
-
   syncingFromRoute.value = true
-  selectedDate.value = dayjs(queryDate)
-  departmentFilter.value = queryDepartment || 'all'
-  workflowFilter.value = queryWorkflow || 'all'
+  departmentFilter.value = department || 'all'
   keyword.value = queryKeyword
   syncingFromRoute.value = false
 }
 
-function normalizeRouteValue(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    return value
-  }
-  if (Array.isArray(value)) {
-    const first = value[0]
-    return typeof first === 'string' ? first : undefined
-  }
-  return undefined
-}
-
-function buildNextQuery() {
-  return {
-    ...route.query,
-    date: selectedDate.value.format('YYYY-MM-DD'),
-    department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
-    workflow: workflowFilter.value !== 'all' ? workflowFilter.value : undefined,
-    keyword: keyword.value.trim() || undefined,
-  }
-}
-
-function routeQueryChanged(nextQuery: ReturnType<typeof buildNextQuery>): boolean {
-  const keys = new Set([...Object.keys(route.query), ...Object.keys(nextQuery)])
-  for (const key of keys) {
-    const current = normalizeRouteValue((route.query as Record<string, unknown>)[key])
-    const next = normalizeRouteValue((nextQuery as Record<string, unknown>)[key])
-    if (current !== next) return true
-  }
-  return false
-}
-
-async function syncFiltersToQuery() {
-  const nextQuery = buildNextQuery()
-  if (!routeQueryChanged(nextQuery)) {
-    return false
-  }
-  await router.replace({ path: route.path, query: nextQuery })
-  return true
-}
-
-async function handleQuery() {
-  const changed = await syncFiltersToQuery()
-  if (!changed) {
-    await fetchHome()
-  }
-}
-
-async function handleReset() {
-  syncingFromRoute.value = true
-  selectedDate.value = dayjs()
-  departmentFilter.value = 'all'
-  workflowFilter.value = 'all'
-  keyword.value = ''
-  activeStatusKey.value = ''
-  syncingFromRoute.value = false
-
-  const changed = await syncFiltersToQuery()
-  if (!changed) {
-    await fetchHome()
-  }
+function openRecordPool() {
+  void router.push({
+    path: '/workstation-v4',
+    query: {
+      source: 'dashboard',
+      department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
+      keyword: keyword.value.trim() || undefined,
+    },
+  })
 }
 
 async function fetchHome() {
   loading.value = true
+  loadError.value = false
   try {
     const res = await ApiService.get<WorkstationHomePayload>('/api/v1/workstation/home', {
-      date: selectedDate.value.format('YYYY-MM-DD'),
       department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
-      severity: undefined,
-      workflow_type: workflowFilter.value !== 'all' ? workflowFilter.value : undefined,
       keyword: keyword.value.trim() || undefined,
-      hotspot_limit: 60,
-      todo_limit: 30,
+      hotspot_limit: 20,
+      todo_limit: 1,
     })
-    if (!res.success || !res.data) {
-      throw new Error(String(res.error || '加载工作台首页失败'))
-    }
+    if (!res.success || !res.data?.clinical_qc) throw new Error(String(res.error || '首页聚合未返回'))
     homeData.value = res.data
-  } catch (error) {
-    message.error('加载工作台首页失败')
+  } catch {
+    homeData.value = null
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -700,1147 +354,37 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => [
-    selectedDate.value.format('YYYY-MM-DD'),
-    departmentFilter.value,
-    workflowFilter.value,
-    keyword.value,
-  ],
-  () => {
-    if (syncingFromRoute.value) return
-    void syncFiltersToQuery()
-  },
-)
+watch([departmentFilter, keyword], () => {
+  if (syncingFromRoute.value) return
+  void fetchHome()
+})
 </script>
 
-<style>
+<style scoped>
 @import '../workstation-v4/styles/workstation-v4-view.css';
 
-.qc-home-shell {
-  color: #1d1d1f;
-  font-family:
-    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  background: #f5f5f7;
-}
-
-.qc-home-canvas {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 30px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(20px);
-}
-
-.qc-home-hero,
-.qc-home-card,
-.qc-home-task-panel {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.055);
-  backdrop-filter: blur(18px);
-}
-
-.qc-home-hero {
-  padding: 22px;
-}
-
-.qc-home-hero__header,
-.qc-home-task-panel__head,
-.qc-home-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.qc-home-hero__main {
-  max-width: 560px;
-}
-
-.qc-home-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  margin-bottom: 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.qc-home-hero h2,
-.qc-home-card h3,
-.qc-home-task-panel h3 {
-  margin: 0;
-  color: #1d1d1f;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.qc-home-hero h2 {
-  font-size: 30px;
-  line-height: 1.16;
-}
-
-.qc-home-hero p,
-.qc-home-task-panel p {
-  margin: 8px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.qc-home-hero__actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.qc-home-hero__meta {
-  display: flex;
-  min-width: 92px;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 8px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.qc-home-hero__meta span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.qc-home-hero__meta strong {
-  color: #1d1d1f;
-  font-size: 20px;
-  line-height: 1.1;
-}
-
-.qc-home-action-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qc-home-action {
-  height: 32px;
-  border-radius: 999px;
-  font-weight: 700;
-}
-
-.qc-home-filter-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 20px;
-  padding: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.qc-home-kpis {
-  display: grid;
-  grid-template-columns: minmax(280px, 1.35fr) repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.qc-home-kpi-card {
-  min-height: 132px;
-  padding: 18px 20px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
-}
-
-.qc-home-kpi-card__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.qc-home-kpi-card__top i {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: #0066cc;
-  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-kpi-card strong {
-  display: block;
-  margin-top: 18px;
-  color: #1d1d1f;
-  font-size: 34px;
-  line-height: 1;
-}
-
-.qc-home-kpi-card p {
-  margin: 10px 0 0;
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 13px;
-}
-
-.qc-home-kpi-card--featured {
-  border-color: rgba(0, 102, 204, 0.16);
-  background: rgba(234, 242, 255, 0.82);
-  box-shadow: 0 8px 24px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-kpi-card--featured .qc-home-kpi-card__top,
-.qc-home-kpi-card--featured p {
-  color: rgba(29, 29, 31, 0.6);
-}
-
-.qc-home-kpi-card--featured strong {
-  color: #0066cc;
-}
-
-.qc-home-kpi-card--featured .qc-home-kpi-card__top i {
-  background: #0066cc;
-  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-kpi-card--danger .qc-home-kpi-card__top i {
-  background: #ef4444;
-  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08);
-}
-
-.qc-home-kpi-card--warning .qc-home-kpi-card__top i {
-  background: #f59e0b;
-  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.08);
-}
-
-.qc-home-kpi-card--success .qc-home-kpi-card__top i {
-  background: #10b981;
-  box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.08);
-}
-
-.qc-home-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.72fr);
-  gap: 16px;
-}
-
-.qc-home-card {
-  padding: 20px;
-}
-
-.qc-home-card--trend {
-  min-height: 440px;
-}
-
-.qc-home-card h3,
-.qc-home-task-panel h3 {
-  font-size: 20px;
-  line-height: 1.25;
-}
-
-.qc-home-score {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.qc-home-score strong {
-  color: #1d1d1f;
-  font-size: 28px;
-  line-height: 1;
-}
-
-.qc-home-score span {
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.qc-home-progress-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 22px;
-  margin-top: 24px;
-}
-
-.qc-home-progress-row__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.qc-home-chart-shell {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.58fr) minmax(0, 1fr);
-  gap: 18px;
-  min-height: 190px;
-  margin-top: 22px;
-  padding: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.qc-home-chart-summary {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.qc-home-chart-summary span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-chart-summary strong {
-  display: block;
-  margin-top: 8px;
-  color: #1d1d1f;
-  font-size: 42px;
-  line-height: 1;
-}
-
-.qc-home-chart-summary p {
-  max-width: 210px;
-  margin: 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.qc-home-chart-plot {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: end;
-  gap: 16px;
-  min-height: 150px;
-  padding-top: 14px;
-}
-
-.qc-home-chart-baseline {
-  position: absolute;
-  right: 0;
-  bottom: 26px;
-  left: 0;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.1));
-}
-
-.qc-home-chart-column {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-}
-
-.qc-home-chart-track {
-  display: flex;
-  width: 100%;
-  height: 120px;
-  align-items: end;
-  justify-content: center;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.02));
-}
-
-.qc-home-chart-bar {
-  width: min(54px, 58%);
-  min-height: 12px;
-  border-radius: 999px 999px 12px 12px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 8px 18px rgba(0, 0, 0, 0.08);
-}
-
-.qc-home-chart-column span {
-  overflow: hidden;
-  max-width: 100%;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-home-progress-row__meta strong {
-  color: #1d1d1f;
-}
-
-.qc-home-workflow-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 24px;
-}
-
-.qc-home-workflow-item {
-  min-height: 74px;
-  padding: 13px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.qc-home-workflow-item span {
-  display: block;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-home-workflow-item strong {
-  display: block;
-  margin-top: 8px;
-  color: #1d1d1f;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.qc-home-risk-summary {
-  margin-top: 18px;
-  padding: 18px;
-  border: 1px solid rgba(0, 102, 204, 0.12);
-  border-radius: 22px;
-  background: rgba(234, 242, 255, 0.58);
-}
-
-.qc-home-risk-summary__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.qc-home-risk-summary__top > div:last-child {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.qc-home-risk-donut {
-  display: grid;
-  width: 112px;
-  height: 112px;
-  flex: none;
-  place-items: center;
-  border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
-    0 10px 22px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-risk-donut > div {
-  display: grid;
-  width: 76px;
-  height: 76px;
-  place-items: center;
-  border-radius: 999px;
-  background: #fff;
-}
-
-.qc-home-risk-donut strong {
-  color: #0066cc;
-  font-size: 24px;
-  line-height: 1;
-}
-
-.qc-home-risk-donut span {
-  margin-top: -20px;
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.qc-home-risk-summary span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-risk-summary strong {
-  color: #0066cc;
-  font-size: 30px;
-  line-height: 1;
-}
-
-.qc-home-risk-summary small {
-  margin-top: 6px;
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-risk-summary p {
-  margin: 12px 0 0;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.qc-home-ranking-stack {
-  display: grid;
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.qc-home-mini-title {
-  margin-bottom: 9px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-ranking-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.qc-home-ranking-row span {
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.72);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-home-ranking-row strong {
-  color: #1d1d1f;
-  font-size: 14px;
-}
-
-.qc-home-task-panel {
-  overflow: hidden;
-}
-
-.qc-home-task-panel__head {
-  padding: 20px 22px 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.qc-home-shell {
-  background: #f5f5f7;
-}
-
-.qc-home-canvas {
-  min-height: calc(100vh - 64px);
-  padding: 32px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.qc-home-hero {
-  padding: 0 2px 4px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.qc-home-hero__header {
-  align-items: center;
-}
-
-.qc-home-hero__main h2 {
-  font-size: 30px;
-}
-
-.qc-home-topbar {
-  display: flex;
-  min-width: 680px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 18px;
-}
-
-.qc-home-topbar > .flex:first-child {
-  max-width: 690px;
-}
-
-.qc-home-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 148px;
-  color: rgba(29, 29, 31, 0.78);
-}
-
-.qc-home-profile .ant-avatar {
-  background: rgba(234, 242, 255, 0.92);
-  color: #0066cc;
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-profile strong,
-.qc-home-profile span {
-  display: block;
-  white-space: nowrap;
-}
-
-.qc-home-profile strong {
-  color: #1d1d1f;
-  font-size: 13px;
-  line-height: 1.1;
-}
-
-.qc-home-profile span {
-  margin-top: 3px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 11px;
-}
-
-.qc-home-kpis {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.qc-home-kpi-card {
-  display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
-  align-items: center;
-  min-height: 132px;
-  padding: 24px;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.055);
-}
-
-.qc-home-kpi-icon {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  border-radius: 999px;
-  background: #eef6ff;
-  color: #0066cc;
-  font-size: 28px;
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.08);
-}
-
-.qc-home-kpi-card--danger .qc-home-kpi-icon {
-  background: #fff1f2;
-  color: #ef4444;
-}
-
-.qc-home-kpi-card--warning .qc-home-kpi-icon {
-  background: #fff7ed;
-  color: #f59e0b;
-}
-
-.qc-home-kpi-card--success .qc-home-kpi-icon {
-  background: #f0fdf4;
-  color: #10b981;
-}
-
-.qc-home-kpi-card__body span {
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.qc-home-kpi-card__body strong {
-  margin-top: 8px;
-  font-size: 31px;
-}
-
-.qc-home-kpi-card__body p {
-  margin: 10px 0 0;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-}
-
-.qc-home-kpi-card__body em {
-  margin-left: 8px;
-  font-style: normal;
-  font-weight: 600;
-}
-
-.qc-home-kpi-card__body em.is-up {
-  color: #ef4444;
-}
-
-.qc-home-kpi-card__body em.is-down {
-  color: #10b981;
-}
-
-.qc-home-main-grid {
-  grid-template-columns: minmax(0, 1.6fr) minmax(360px, 0.94fr);
-  gap: 18px;
-}
-
-.qc-home-card,
-.qc-home-task-panel {
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.qc-home-card--trend {
-  min-height: 320px;
-  padding: 26px 26px 18px;
-}
-
-.qc-home-card h3,
-.qc-home-task-panel h3 {
-  font-size: 20px;
-}
-
-.qc-home-range-switch {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.035);
-}
-
-.qc-home-range-switch button {
-  height: 32px;
-  padding: 0 14px;
-  border: 0;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-range-switch button:first-child {
-  background: #fff;
-  color: #0066cc;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.qc-home-line-chart {
-  margin-top: 18px;
-}
-
-.qc-home-line-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px;
-  margin-bottom: 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-line-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.qc-home-line-legend i {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-}
-
-.qc-home-dot--blue {
-  background: #0066cc;
-}
-
-.qc-home-dot--red {
-  background: #ef4444;
-}
-
-.qc-home-dot--amber {
-  background: #f59e0b;
-}
-
-.qc-home-dot--cyan {
-  background: #06b6d4;
-}
-
-.qc-home-line-chart svg {
-  width: 100%;
-  height: 250px;
-  overflow: visible;
-}
-
-.qc-home-grid-lines line {
-  stroke: rgba(0, 0, 0, 0.08);
-  stroke-width: 1;
-}
-
-.qc-home-series {
-  fill: none;
-  stroke-linecap: round;
-  stroke-width: 2.2;
-}
-
-.qc-home-series--blue {
-  stroke: #0066cc;
-}
-
-.qc-home-series--red {
-  stroke: #ef4444;
-}
-
-.qc-home-series--amber {
-  stroke: #f59e0b;
-}
-
-.qc-home-series--cyan {
-  stroke: #06b6d4;
-}
-
-.qc-home-axis-labels text,
-.qc-home-chart-values text {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-axis-labels text {
-  fill: rgba(29, 29, 31, 0.38);
-}
-
-.qc-home-card--insight {
-  padding: 26px;
-}
-
-.qc-home-insight-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  align-items: center;
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.qc-home-insight-list {
-  display: grid;
-  gap: 17px;
-}
-
-.qc-home-insight-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 16px;
-  align-items: center;
-  gap: 12px;
-  color: rgba(29, 29, 31, 0.78);
-}
-
-.qc-home-insight-row span {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-home-insight-row small {
-  color: #0066cc;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-home-insight-row .anticon {
-  color: rgba(29, 29, 31, 0.38);
-  font-size: 12px;
-}
-
-.qc-home-medical-visual {
-  position: relative;
-  display: grid;
-  width: 180px;
-  height: 180px;
-  place-items: center;
-}
-
-.qc-home-medical-orbit {
-  position: absolute;
-  width: 150px;
-  height: 78px;
-  border: 1px solid rgba(0, 102, 204, 0.18);
-  border-radius: 50%;
-}
-
-.qc-home-medical-orbit--one {
-  transform: rotate(23deg);
-}
-
-.qc-home-medical-orbit--two {
-  transform: rotate(-28deg);
-}
-
-.qc-home-medical-core {
-  display: grid;
-  width: 110px;
-  height: 110px;
-  place-items: center;
-  border-radius: 38px;
-  background: rgba(234, 242, 255, 0.9);
-  color: #0066cc;
-  font-size: 54px;
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 102, 204, 0.1),
-    0 10px 24px rgba(0, 0, 0, 0.06);
-}
-
-.qc-home-task-panel {
-  padding: 0;
-}
-
-.qc-home-task-panel__head {
-  align-items: center;
-}
-
-.qc-home-task-table__head {
-  display: grid;
-  grid-template-columns:
-    minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1fr)
-    minmax(140px, 0.8fr) minmax(110px, 0.6fr);
-  gap: 16px;
-  padding: 0 26px 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-task-row {
-  display: grid;
-  grid-template-columns:
-    minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1fr)
-    minmax(140px, 0.8fr) minmax(110px, 0.6fr);
-  align-items: center;
-  gap: 16px;
-  min-height: 64px;
-  padding: 10px 26px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: #1d1d1f;
-}
-
-.qc-task-row:hover {
-  background: rgba(0, 0, 0, 0.025);
-}
-
-.qc-task-patient {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 12px;
-}
-
-.qc-task-avatar {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(234, 242, 255, 0.9);
-  color: #0066cc;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
-    0 6px 14px rgba(0, 0, 0, 0.06);
-}
-
-.qc-task-avatar img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.qc-task-patient__name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  color: #1d1d1f;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.qc-task-patient__name span {
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.qc-task-patient__id {
-  margin-top: 3px;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.38);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-task-cell {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qc-task-dept {
-  color: #1d1d1f;
-}
-
-.qc-task-risk {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.qc-task-risk--high {
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  background: rgba(255, 241, 242, 0.8);
-  color: #ef4444;
-}
-
-.qc-task-risk--medium {
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  background: rgba(255, 247, 237, 0.8);
-  color: #b45309;
-}
-
-.qc-task-risk--normal {
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  background: rgba(240, 253, 244, 0.78);
-  color: #047857;
-}
-
-.qc-task-reason {
-  color: rgba(29, 29, 31, 0.78);
-}
-
-.qc-task-deadline {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-  color: rgba(29, 29, 31, 0.78);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.qc-task-deadline strong {
-  font-size: 12px;
-}
-
-.qc-task-deadline .is-overdue {
-  color: #ef4444;
-}
-
-.qc-task-deadline .is-progress {
-  color: #0066cc;
-}
-
-.qc-task-deadline .is-pending {
-  color: #f59e0b;
-}
-
-.qc-task-action {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.qc-task-action button {
-  height: 34px;
-  min-width: 88px;
-  border: 1px solid rgba(0, 102, 204, 0.28);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.7);
-  color: #0066cc;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.18s ease;
-}
-
-.qc-task-action button:hover {
-  background: #0066cc;
-  color: #fff;
-  box-shadow: 0 10px 18px rgba(0, 102, 204, 0.14);
-}
-
-@media (max-width: 1180px) {
-  .qc-home-kpis,
-  .qc-home-main-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .qc-home-card--insight {
-    grid-column: span 2;
-  }
-}
-
-@media (max-width: 860px) {
-  .qc-home-canvas {
-    padding: 12px;
-    border-radius: 22px;
-  }
-
-  .qc-home-hero__header,
-  .qc-home-task-panel__head,
-  .qc-home-card__head {
-    flex-direction: column;
-  }
-
-  .qc-home-hero__actions,
-  .qc-home-filter-strip {
-    width: 100%;
-  }
-
-  .qc-home-filter-strip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .qc-home-kpis,
-  .qc-home-main-grid,
-  .qc-home-progress-list,
-  .qc-home-workflow-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .qc-home-card--insight {
-    grid-column: auto;
-  }
-}
+.qc-home-shell { background: #f5f5f7; color: #1d1d1f; }
+.qc-home-canvas { display: grid; gap: 18px; min-height: calc(100vh - 64px); }
+.qc-home-header, .qc-home-panel, .qc-home-scope, .qc-home-notice, .qc-home-empty {
+  border: 1px solid rgba(0, 0, 0, .08); border-radius: 20px; background: rgba(255,255,255,.88); box-shadow: 0 2px 12px rgba(0,0,0,.035); backdrop-filter: blur(18px);
+}
+.qc-home-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; }
+.qc-home-header h1, .qc-home-panel h2 { margin: 0; font-weight: 700; }
+.qc-home-header h1 { font-size: 28px; line-height: 31px; }
+.qc-home-header p, .qc-home-panel p { margin: 7px 0 0; color: rgba(29,29,31,.60); font-size: 13px; line-height: 20px; }
+.qc-home-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 12px 16px; color: rgba(29,29,31,.72); font-size: 12px; font-weight: 600; }
+.qc-home-scope i { width: 3px; height: 3px; border-radius: 50%; background: rgba(29,29,31,.28); }
+.qc-home-scope__label { color: #0066cc; }.qc-home-scope__time { margin-left: auto; color: rgba(29,29,31,.48); font-weight: 500; }
+.qc-home-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); overflow: hidden; border: 1px solid rgba(0,0,0,.08); border-radius: 18px; background: #fff; }
+.qc-home-kpi { display: flex; gap: 12px; min-height: 118px; padding: 21px; border-right: 1px solid rgba(0,0,0,.07); }.qc-home-kpi:last-child { border: 0; }
+.qc-home-kpi__icon { width: 34px; height: 34px; padding: 8px; border-radius: 10px; background: rgba(0,102,204,.09); color: #0066cc; }
+.qc-home-kpi.is-warning .qc-home-kpi__icon { background: rgba(245,158,11,.12); color: #b45309; }.qc-home-kpi.is-success .qc-home-kpi__icon { background: rgba(16,185,129,.11); color: #047857; }.qc-home-kpi.is-danger .qc-home-kpi__icon { background: rgba(239,68,68,.11); color: #dc2626; }
+.qc-home-kpi span, .qc-home-kpi small { display:block; color: rgba(29,29,31,.6); font-size:12px; line-height:18px; }.qc-home-kpi strong { display:block; margin:3px 0; font-size:25px; line-height:30px; }.qc-home-kpi small { color: rgba(29,29,31,.48); }
+.qc-home-grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(310px,.85fr); gap:18px; }.qc-home-panel { padding:20px 22px; }.qc-home-side-stack { display:grid; gap:18px; align-content:start; }.qc-home-panel__head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding-bottom:15px; border-bottom:1px solid rgba(0,0,0,.08); }.qc-home-panel h2 { font-size:17px; line-height:22px; }
+.qc-home-priority-list { display:grid; }.qc-home-priority-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:18px; padding:16px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-priority-row:last-child { border-bottom:0; }.qc-home-priority-row__identity { min-width:0; }.qc-home-priority-row__identity strong, .qc-home-priority-row__identity span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.qc-home-priority-row__identity strong { font-size:14px; }.qc-home-priority-row__identity span { margin-top:4px; color:rgba(29,29,31,.55); font-size:12px; }.qc-home-priority-row__counts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }.qc-home-priority-row__counts span { padding:3px 7px; border-radius:7px; background:rgba(0,0,0,.04); color:rgba(29,29,31,.68); font-size:12px; white-space:nowrap; }.qc-home-priority-row__counts .is-danger { background:rgba(239,68,68,.09); color:#c2410c; }.qc-home-priority-row__counts .is-warning { background:rgba(245,158,11,.11); color:#a16207; }.qc-home-text-action { border:0; background:none; color:#0066cc; font-size:13px; font-weight:600; cursor:pointer; }
+.qc-home-health-list { display:grid; gap:0; margin:0; }.qc-home-health-list > div { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-health-list > div:last-child { border-bottom:0; }.qc-home-health-list dt, .qc-home-health-list dd { margin:0; font-size:13px; }.qc-home-health-list dt { color:rgba(29,29,31,.6); }.qc-home-health-list dd { text-align:right; font-weight:600; }.qc-home-health-list .is-danger { color:#dc2626; }
+.qc-home-department-list { display:grid; }.qc-home-department-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:11px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-department-row:last-child { border-bottom:0; }.qc-home-department-row strong, .qc-home-department-row span, .qc-home-department-row em { display:block; font-size:12px; font-style:normal; }.qc-home-department-row strong { font-size:13px; }.qc-home-department-row span { margin-top:3px; color:rgba(29,29,31,.48); }.qc-home-department-row > div:last-child { text-align:right; }.qc-home-department-row em { color:#b45309; font-weight:650; }
+.qc-home-notice { display:flex; align-items:center; gap:12px; padding:14px 18px; }.qc-home-notice span { flex:1; color:rgba(29,29,31,.6); font-size:13px; }.qc-home-notice--error { border-color:rgba(239,68,68,.2); }.qc-home-notice--error strong { color:#b91c1c; }.qc-home-empty { display:grid; min-height:280px; place-items:center; padding:28px; }
+@media (max-width: 980px) { .qc-home-header { align-items:flex-start; flex-direction:column; }.qc-home-header :deep(.flex.min-w-\[280px\]) { width:100%; }.qc-home-kpis { grid-template-columns:repeat(2,1fr); }.qc-home-kpi:nth-child(2) { border-right:0; }.qc-home-kpi:nth-child(-n+2) { border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-grid { grid-template-columns:1fr; } }
+@media (max-width: 620px) { .qc-home-canvas { gap:12px; }.qc-home-header, .qc-home-panel { padding:17px; }.qc-home-header h1 { font-size:23px; }.qc-home-kpis { grid-template-columns:1fr; }.qc-home-kpi, .qc-home-kpi:nth-child(2) { border-right:0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-kpi:last-child { border-bottom:0; }.qc-home-priority-row { grid-template-columns:1fr; gap:9px; }.qc-home-priority-row__counts { justify-content:flex-start; }.qc-home-text-action { justify-self:start; }.qc-home-scope__time { width:100%; margin-left:0; } }
 </style>

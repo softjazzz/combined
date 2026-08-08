@@ -17,6 +17,7 @@
 
   <div class="flex flex-wrap items-center justify-end gap-2.5">
     <a-date-picker
+      v-if="showDate !== false"
       :value="selectedDate"
       :allow-clear="false"
       :disabled-date="disabledFutureDate"
@@ -42,6 +43,7 @@
     </a-select>
 
     <a-select
+      v-if="showWorkflow !== false"
       :value="workflowFilter"
       class="!h-10 !w-[148px] !text-[13px] shadow-sm [&_.ant-select-selector]:!h-10 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-black/10 [&_.ant-select-selector]:!bg-white/85 hover:[&_.ant-select-selector]:!border-black/15"
       @update:value="emit('update:workflowFilter', String($event || 'all'))"
@@ -96,6 +98,8 @@ defineProps<{
   loading: boolean
   disabledFutureDate: (current: Dayjs) => boolean
   showRefresh?: boolean
+  showDate?: boolean
+  showWorkflow?: boolean
 }>()
 
 const emit = defineEmits([

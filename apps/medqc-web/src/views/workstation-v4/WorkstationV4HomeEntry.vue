@@ -29,13 +29,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import QCOverviewView from '@/views/workstation/QCOverviewView.vue'
 import WorkstationV4View from './WorkstationV4View.vue'
 import QCAgentChatDrawer from './components/QCAgentChatDrawer.vue'
 
 const route = useRoute()
-const authStore = useAuthStore()
 const qcAgentOpen = ref(false)
 
 const hasLaunchQuery = computed(() => {
@@ -44,9 +42,9 @@ const hasLaunchQuery = computed(() => {
   })
 })
 
-const isHomeRole = computed(() => authStore.hasRole('admin') || authStore.hasRole('qc_manager'))
-
-const showHome = computed(() => isHomeRole.value && !hasLaunchQuery.value)
+// 当前为全院质控科单一工作台：登录由路由守卫负责，首页不再叠加角色门槛。
+// 后续机构/角色授权接入时，必须在数据范围层而非首页展示层收紧。
+const showHome = computed(() => !hasLaunchQuery.value)
 </script>
 
 <style scoped>
