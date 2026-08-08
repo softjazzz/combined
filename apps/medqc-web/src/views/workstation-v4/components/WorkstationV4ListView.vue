@@ -75,6 +75,22 @@
                 />
 
                 <a-select
+                  v-if="!isStageQueueMode"
+                  :value="hospFilter"
+                  class="workbench-hosp-select"
+                  size="large"
+                  @update:value="emit('selectHospFilter', normalizeHospFilterValue($event))"
+                >
+                  <a-select-option
+                    v-for="option in hospOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </a-select-option>
+                </a-select>
+
+                <a-select
                   :value="activeDept"
                   class="workbench-dept-select"
                   size="large"
@@ -260,6 +276,13 @@ interface StageMetaLike {
   singleActionText: string
 }
 
+type HospFilterValue = 'all' | 'inpatient' | 'discharged'
+
+interface HospFilterOption {
+  value: string
+  label: string
+}
+
 const props = defineProps<{
   activePriorityGroup: string
   priorityGroups: PriorityGroup[]
@@ -271,6 +294,8 @@ const props = defineProps<{
   departmentSelectOptions: DeptInfo[]
   quickDepartments: DeptInfo[]
   activeDept: string
+  hospFilter: string
+  hospOptions: HospFilterOption[]
   workbenchRows: WorkbenchRow[]
   selectedWorkbenchKeys: string[]
   tableSummaryText: string
@@ -296,6 +321,7 @@ const emit = defineEmits<{
   'priority-open': [recordId: string]
   'priority-defer': [recordId: string]
   selectDept: [deptName: string]
+  selectHospFilter: [value: HospFilterValue]
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
   'batch-defer': [keys: string[]]
@@ -321,6 +347,11 @@ function normalizePriorityGroup(value: unknown): string {
 
 function normalizeDepartmentValue(value: unknown): string {
   return String(value || '全部科室').trim() || '全部科室'
+}
+
+function normalizeHospFilterValue(value: unknown): HospFilterValue {
+  const normalized = String(value || 'all').trim()
+  return normalized === 'inpatient' || normalized === 'discharged' ? normalized : 'all'
 }
 
 function filterDepartmentSelectOption(

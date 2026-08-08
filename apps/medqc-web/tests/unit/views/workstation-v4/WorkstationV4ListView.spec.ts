@@ -86,6 +86,12 @@ function mountListView(overrides: Record<string, unknown> = {}) {
         { name: '中医科', total: 19, warningCount: 0 },
       ],
       activeDept: '全部科室',
+      hospFilter: 'all',
+      hospOptions: [
+        { value: 'all', label: '全部住院状态' },
+        { value: 'inpatient', label: '在院' },
+        { value: 'discharged', label: '已出院' },
+      ],
       workbenchRows: [],
       selectedWorkbenchKeys: [],
       tableSummaryText: '当前筛选：中医科 / 入出院日期 2026-05-25 至 2026-05-27 / 共 19 份',
@@ -216,6 +222,27 @@ describe('WorkstationV4ListView filters', () => {
     await wrapper.find('select.workbench-dept-select').setValue('中医科')
 
     expect(wrapper.emitted('selectDept')?.[0]).toEqual(['中医科'])
+  })
+
+  it('shows the current hospital status and emits a server-side filter change for the record pool', async () => {
+    const wrapper = mountListView({ hospFilter: 'inpatient' })
+
+    const hospitalSelect = wrapper.find('select.workbench-hosp-select')
+    expect(hospitalSelect.exists()).toBe(true)
+    expect((hospitalSelect.element as HTMLSelectElement).value).toBe('inpatient')
+
+    await hospitalSelect.setValue('discharged')
+
+    expect(wrapper.emitted('selectHospFilter')?.[0]).toEqual(['discharged'])
+  })
+
+  it('does not render the hospital-status filter for a stage queue', () => {
+    const wrapper = mountListView({
+      currentStageFilter: 'frontpage_generate',
+      isStageQueueMode: true,
+    })
+
+    expect(wrapper.find('select.workbench-hosp-select').exists()).toBe(false)
   })
 
   it('opens tender field validation drawer from frontpage generate queue', async () => {

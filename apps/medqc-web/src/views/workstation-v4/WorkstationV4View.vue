@@ -13,6 +13,8 @@
         :department-select-options="departmentSelectOptions"
         :quick-departments="quickDepartments"
         :active-dept="activeDept"
+        :hosp-filter="hospFilter"
+        :hosp-options="hospOptions"
         :workbench-rows="workbenchRows"
         :selected-workbench-keys="selectedWorkbenchKeys"
         :table-summary-text="tableSummaryText"
@@ -35,6 +37,7 @@
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
         @select-dept="selectDept"
+        @select-hosp-filter="selectHospFilter"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
         @batch-defer="handleBatchDefer"
@@ -444,6 +447,7 @@ const {
   handlePageChange: handleBasePageChange,
   refreshData,
   selectDept,
+  selectHospFilter,
   resetFilters,
 } = usePatientRecords()
 const departmentSelectOptions = computed(() =>
