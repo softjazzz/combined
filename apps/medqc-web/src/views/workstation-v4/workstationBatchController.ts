@@ -63,14 +63,29 @@ export async function runBatchExtract(params: RunBatchExtractParams): Promise<vo
   if (!keys.length || getBatchExtracting()) return
   if (!isStageQueueMode) return
 
+  const selectedRecordKeys = keys.map((key) => String(key || '').trim()).filter(Boolean)
   const recordsByVisitId = new Map<string, { recordKey: string; record: PatientRecord }>()
-  for (const rawKey of keys) {
-    const recordKey = String(rawKey || '').trim()
+  let hasAmbiguousVisitIdentity = false
+  for (const recordKey of selectedRecordKeys) {
     if (!recordKey) continue
     const record = findBatchRecordByKey(recordKey)
     const visitId = String(record?.visitId || record?.id || '').trim()
-    if (!record || !visitId || recordsByVisitId.has(visitId)) continue
+    if (!record || !visitId) continue
+    const existing = recordsByVisitId.get(visitId)
+    if (existing && existing.recordKey !== recordKey) {
+      hasAmbiguousVisitIdentity = true
+      break
+    }
+    if (existing) continue
     recordsByVisitId.set(visitId, { recordKey, record })
+  }
+  if (hasAmbiguousVisitIdentity) {
+    message.error({
+      key: 'workstation-v4-batch-extract',
+      content: '选中病历存在同一住院号对应多个不同病历身份，暂无法确认批量处理对象。',
+    })
+    setSelectedWorkbenchKeys(selectedRecordKeys)
+    return
   }
   const visitIds = [...recordsByVisitId.keys()]
   if (!visitIds.length) return

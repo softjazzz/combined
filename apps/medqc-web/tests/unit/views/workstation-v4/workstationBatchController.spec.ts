@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requestFrontpageDraft: vi.fn(),
   persistBatchFrontpageDraft: vi.fn(),
   createBatchSummaryNotification: vi.fn(),
+  messageError: vi.fn(),
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -11,7 +12,7 @@ vi.mock('ant-design-vue', () => ({
     loading: vi.fn(),
     success: vi.fn(),
     warning: vi.fn(),
-    error: vi.fn(),
+    error: mocks.messageError,
   },
 }))
 
@@ -102,6 +103,46 @@ describe('runBatchExtract', () => {
       'frontpage_generate',
       'V-100-B',
       'submitted',
+    )
+  })
+
+  it('fails closed when distinct triple record keys resolve to the same real visit ID', async () => {
+    const firstKey = '["H-1","P-1","V-100"]'
+    const secondKey = '["H-2","P-2","V-100"]'
+    const findBatchRecordByKey = vi.fn((key: string) =>
+      key === firstKey
+        ? record(firstKey, 'V-100')
+        : key === secondKey
+          ? record(secondKey, 'V-100')
+          : null,
+    )
+    const setBatchRuntimeStatus = vi.fn()
+    const setSingleBatchRuntimeStatus = vi.fn()
+    const setSelectedWorkbenchKeys = vi.fn()
+
+    await runBatchExtract({
+      keys: [firstKey, secondKey],
+      currentStageFilter: 'frontpage_generate',
+      isStageQueueMode: true,
+      isAggregatedStageMode: true,
+      getBatchExtracting: () => false,
+      setBatchExtracting: vi.fn(),
+      findBatchRecordByKey,
+      setBatchRuntimeStatus,
+      setSingleBatchRuntimeStatus,
+      setSelectedWorkbenchKeys,
+      fetchAssistNotifications: vi.fn().mockResolvedValue(undefined),
+      refreshActiveWorklist: vi.fn().mockResolvedValue(undefined),
+      refreshData: vi.fn().mockResolvedValue(undefined),
+      refreshSelectedSnapshots: vi.fn().mockResolvedValue(undefined),
+    })
+
+    expect(mocks.requestFrontpageDraft).not.toHaveBeenCalled()
+    expect(setBatchRuntimeStatus).not.toHaveBeenCalled()
+    expect(setSingleBatchRuntimeStatus).not.toHaveBeenCalled()
+    expect(setSelectedWorkbenchKeys).toHaveBeenCalledWith([firstKey, secondKey])
+    expect(mocks.messageError).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('无法确认') }),
     )
   })
 })
