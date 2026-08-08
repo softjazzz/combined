@@ -1051,8 +1051,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'stats',
         name: 'WorkstationV4Stats',
-        component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
-        props: { embedded: true, initialView: 'workbench' },
+        component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
         meta: { title: '统计分析' },
       },
       {
