@@ -70,6 +70,56 @@ function mountTable(summary: Record<string, unknown>) {
 }
 
 describe('BatchTablePanel 病历池质控投影', () => {
+  it('uses the backend triple record key for duplicate-visit rows and detail selection', async () => {
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [
+          {
+            id: 'V-100',
+            recordKey: '["H-1","P-1","V-100"]',
+            patientName: '患者甲',
+            visitId: 'V-100',
+            department: '内科',
+            stageStatus: '待处理',
+            riskReason: '',
+            updatedAt: '2026-08-08',
+            isDemo: false,
+          },
+          {
+            id: 'V-100',
+            recordKey: '["H-2","P-2","V-100"]',
+            patientName: '患者乙',
+            visitId: 'V-100',
+            department: '外科',
+            stageStatus: '待处理',
+            riskReason: '',
+            updatedAt: '2026-08-08',
+            isDemo: false,
+          },
+        ],
+        selectedRowKeys: [],
+        summaryText: '',
+        showSelection: false,
+        showPrimaryAction: false,
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          AButton: defineComponent({
+            name: 'AButton',
+            setup(_props, { attrs, slots }) {
+              return () => h('button', attrs, slots.default?.())
+            },
+          }),
+        },
+      },
+    })
+
+    await wrapper.findAll('button').at(1)?.trigger('click')
+
+    expect(wrapper.emitted('open-record')).toEqual([['["H-2","P-2","V-100"]']])
+  })
+
   it('separates unknown source state from a not-run QC result', () => {
     const wrapper = mountTable({ status: 'not_run' })
 

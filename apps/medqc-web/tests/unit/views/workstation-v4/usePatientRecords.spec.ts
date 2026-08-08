@@ -101,6 +101,33 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.allRecords.value[0].sortTime).toBe('2026-05-30 09:10:11')
   })
 
+  it('retains the backend triple record key instead of reducing a record to visit ID', async () => {
+    mocks.getRaw.mockResolvedValueOnce({
+      data: {
+        records: [
+          {
+            id: 'V1',
+            visit_id: 'V1',
+            record_key: '["H-2","P-2","V1"]',
+            name: '李四',
+            department: '外科',
+          },
+        ],
+        total: 1,
+        page: 1,
+      },
+    })
+    const records = usePatientRecords()
+
+    await records.fetchData()
+
+    expect(records.allRecords.value[0]).toMatchObject({
+      id: 'V1',
+      visitId: 'V1',
+      recordKey: '["H-2","P-2","V1"]',
+    })
+  })
+
   it('selectDept resets page and triggers backend query', async () => {
     const records = usePatientRecords()
     records.currentPage.value = 3

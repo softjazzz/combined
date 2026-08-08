@@ -29,7 +29,10 @@ export function findRecordById(
   records: PatientRecord[],
   recordId: string,
 ): PatientRecord | undefined {
-  return records.find((item) => item.id === recordId)
+  return (
+    records.find((item) => item.recordKey === recordId) ||
+    records.find((item) => item.id === recordId)
+  )
 }
 
 export function openRecordForStage(options: OpenRecordForStageOptions) {

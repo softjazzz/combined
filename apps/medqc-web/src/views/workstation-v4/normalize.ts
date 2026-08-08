@@ -146,6 +146,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
 
   return {
     id,
+    recordKey: pickString(source, ['recordKey', 'record_key']) || undefined,
     visitId,
     instituteId: pickString(source, ['instituteId', 'institute_id', 'hospital_code']) || undefined,
     patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
@@ -212,14 +213,17 @@ function normalizeRecordSourceState(raw: unknown): RecordSourceState {
 
 function normalizeStatusCounts(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  return Object.entries(raw as LooseRecord).reduce<Record<string, number>>((result, [status, count]) => {
-    const normalizedStatus = status.trim()
-    const normalizedCount = Number(count)
-    if (normalizedStatus && Number.isFinite(normalizedCount) && normalizedCount > 0) {
-      result[normalizedStatus] = normalizedCount
-    }
-    return result
-  }, {})
+  return Object.entries(raw as LooseRecord).reduce<Record<string, number>>(
+    (result, [status, count]) => {
+      const normalizedStatus = status.trim()
+      const normalizedCount = Number(count)
+      if (normalizedStatus && Number.isFinite(normalizedCount) && normalizedCount > 0) {
+        result[normalizedStatus] = normalizedCount
+      }
+      return result
+    },
+    {},
+  )
 }
 
 function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
@@ -248,9 +252,7 @@ export function normalizeRecordPoolQcSummary(raw: unknown): RecordPoolQcSummary 
     totalRecords: asNumber(source.totalRecords ?? source.total_records),
     readyRecords: asNumber(source.readyRecords ?? source.ready_records),
     notRunRecords: asNumber(source.notRunRecords ?? source.not_run_records),
-    technicalErrorRecords: asNumber(
-      source.technicalErrorRecords ?? source.technical_error_records,
-    ),
+    technicalErrorRecords: asNumber(source.technicalErrorRecords ?? source.technical_error_records),
     statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
     runningState: pickString(source, ['runningState', 'running_state']) || 'unknown',
   }

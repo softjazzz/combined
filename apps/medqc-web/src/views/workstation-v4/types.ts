@@ -2,6 +2,8 @@ import type { QueueStatusCode, QueueStatusSource } from '@/types/workflow'
 
 export interface PatientRecord {
   id: string
+  /** 病历池服务端返回的三坐标内部键；仅用于前端行身份，不能替代真实 visit_id。 */
+  recordKey?: string
   visitId?: string
   instituteId?: string
   patientId?: string

@@ -486,6 +486,8 @@ const stageLoading = ref(false)
 const batchExtracting = ref(false)
 const batchRuntimeStatusMap = ref<Record<string, BatchRuntimeStatus>>({})
 const selectedStageRecord = ref<PatientRecord | null>(null)
+// 仅用于当前前端选中行。真实请求仍从 selectedRecord 读取三坐标字段。
+const selectedRecordKey = ref<string | null>(null)
 const qcSnapshotState = ref<Partial<Record<SnapshotTabKey, WorkstationSnapshotState>>>({})
 
 const isAggregatedStageMode = computed(() =>
@@ -563,11 +565,11 @@ async function refreshActiveWorklist() {
 }
 
 async function refreshSelectedSnapshots() {
-  if (!selectedId.value) {
+  const visitId = selectedRecord.value?.visitId || selectedId.value
+  if (!visitId) {
     qcSnapshotState.value = {}
     return
   }
-  const visitId = selectedId.value
   const workflows: Array<[SnapshotTabKey, WorkstationWorklistItem['workflowType']]> = [
     ['form', 'frontpage'],
     ['coding', 'coding'],
@@ -772,9 +774,9 @@ const priorityCards = computed<PriorityCard[]>(() => {
     .filter((record) => !pinnedSet.has(record.id))
     .sort((a, b) => priorityScore(b) - priorityScore(a))
   return [...pinnedDemoRecords, ...rankedNormalRecords].map((record) => ({
-    id: record.id,
+    id: record.recordKey || record.id,
     patientName: displayRecordName(record),
-    visitId: record.id,
+    visitId: record.visitId || record.id,
     department: record.department || '未分科室',
     hospitalDays: Number(record.days || 0),
     riskType: riskTypeOf(record),
@@ -885,15 +887,16 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
   }
 
   return listRecords.value.map((record) => ({
-    id: record.id,
+    id: record.recordKey || record.id,
+    recordKey: record.recordKey,
     patientName: displayRecordName(record),
     patientSex: record.sex,
     patientAge: record.age,
-    visitId: record.id,
+    visitId: record.visitId || record.id,
     department: record.department || '未分科室',
     stageStatus: resolveStageStatus({
       stage: currentStageFilter.value,
-      visitId: record.id,
+      visitId: record.visitId || record.id,
       fallback:
         currentStageFilter.value === 'frontpage_generate' && record.frontpageGenerateQueueStatus
           ? record.frontpageGenerateQueueStatus
@@ -1777,11 +1780,16 @@ const combinedMedicalText = computed(() =>
     .join('\n\n'),
 )
 
-const selectedRecord = computed(
-  () =>
-    allRecords.value.find((r) => r.id === selectedId.value) ||
-    (selectedStageRecord.value?.id === selectedId.value ? selectedStageRecord.value : null),
-)
+const selectedRecord = computed(() => {
+  const selectedKey = selectedRecordKey.value || selectedId.value
+  if (!selectedKey) return null
+  return (
+    allRecords.value.find((record) => (record.recordKey || record.id) === selectedKey) ||
+    ((selectedStageRecord.value?.recordKey || selectedStageRecord.value?.id) === selectedKey
+      ? selectedStageRecord.value
+      : null)
+  )
+})
 
 const {
   assistIssues,
@@ -1933,7 +1941,7 @@ onMounted(() => {
 })
 
 // 鍒囨崲鐥呭巻鏃舵竻闄や笂娆＄敓鎴愮粨鏋滐紝骞跺姞杞芥枃涔﹀垪琛ㄤ笌缁撶畻娓呭崟
-watch(selectedId, (newId) => {
+watch(selectedRecordKey, (newKey) => {
   setDraftEmpty()
   resetPerRecordTransient()
   assistIssues.value = []
@@ -1945,14 +1953,15 @@ watch(selectedId, (newId) => {
   settlementQcReport.value = null
   detailMainTab.value = pendingDetailMainTab.value || 'records'
   pendingDetailMainTab.value = null
-  emrRenderState.value = newId ? 'loading' : 'idle'
-  if (newId) {
-    loadDocuments(newId)
+  emrRenderState.value = newKey ? 'loading' : 'idle'
+  const record = selectedRecord.value
+  const visitId = record?.visitId || record?.id || selectedId.value
+  if (newKey && visitId) {
+    loadDocuments(visitId)
     void refreshSelectedSnapshots()
-    const record = selectedRecord.value || allRecords.value.find((r) => r.id === newId)
     if (record?.patientId) {
       if (record.hasFrontpageOfficial) {
-        loadFrontpageSheet(record.patientId, newId)
+        loadFrontpageSheet(record.patientId, visitId)
       } else {
         frontpageSheetData.value = null
       }
@@ -2038,7 +2047,8 @@ const icdApplyLabel = computed(() => {
 
 function openRecord(record: PatientRecord) {
   selectedStageRecord.value = record
-  openSessionRecord(record.id)
+  selectedRecordKey.value = record.recordKey || record.id
+  openSessionRecord(record.visitId || record.id)
   assistPanelVisible.value = false
   icdDrawerVisible.value = false
 }

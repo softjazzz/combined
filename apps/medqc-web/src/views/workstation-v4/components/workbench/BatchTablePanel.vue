@@ -68,7 +68,7 @@
       :columns="columns"
       :data-source="displayRows"
       :loading="loading"
-      row-key="id"
+      :row-key="(record: WorkbenchRow) => record.recordKey || record.id"
       :pagination="tablePagination"
       :row-selection="rowSelection"
       :scroll="tableScroll"
@@ -115,7 +115,9 @@
         </template>
         <template v-else-if="column.key === 'dataState'">
           <div class="batch-table-panel__quality-cell">
-            <span class="batch-table-panel__quality-title">{{ sourceStateLabel(record.sourceState) }}</span>
+            <span class="batch-table-panel__quality-title">{{
+              sourceStateLabel(record.sourceState)
+            }}</span>
             <span class="batch-table-panel__quality-detail">不以文书数量推断资料完整性</span>
           </div>
         </template>
@@ -125,7 +127,9 @@
               class="batch-table-panel__tag batch-table-panel__quality-title"
               :class="qcSummaryClass(record.latestQcSummary)"
             >{{ latestQcSummaryLabel(record.latestQcSummary) }}</span>
-            <span class="batch-table-panel__quality-detail">{{ latestQcSummaryDetail(record.latestQcSummary) }}</span>
+            <span class="batch-table-panel__quality-detail">{{
+              latestQcSummaryDetail(record.latestQcSummary)
+            }}</span>
           </div>
         </template>
         <template v-else-if="column.key === 'risk'">
@@ -145,7 +149,7 @@
             type="default"
             size="small"
             class="batch-table-panel__detail-button"
-            @click="emit('open-record', record.id)"
+            @click="emit('open-record', record.recordKey || record.id)"
           >
             {{ rowActionLabel }}
           </a-button>
@@ -167,6 +171,7 @@ import patientIconWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 
 export interface WorkbenchRow {
   id: string
+  recordKey?: string
   patientName: string
   patientSex?: string
   patientAge?: number
