@@ -45,6 +45,15 @@ const payload = {
       uncertain_record_total: 1,
     },
   ],
+  physician_distribution: [
+    {
+      physician: '张医生',
+      distinct_record_total: 4,
+      non_compliant_record_total: 2,
+      data_gap_record_total: 1,
+      uncertain_record_total: 0,
+    },
+  ],
   rule_distribution: [
     {
       rule_id: 'LX0609-010',
@@ -100,6 +109,8 @@ describe('LuxianQcAnalyticsView', () => {
     expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
     expect(wrapper.get('[data-testid="analytics-department-chart"]').text()).toContain('ICU')
     expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('LX0609-010')
+    expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
+    expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('质控点问题 Top 5')
     expect(wrapper.text()).not.toContain('平均评分')
     expect(wrapper.text()).not.toContain('AI 准确率')
   })

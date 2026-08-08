@@ -182,6 +182,7 @@ def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
                         "patient_id": "P",
                         "visit_id": "V",
                         "patient_name": "患者",
+                        "attending_physician": "主治医生",
                         "department": "内科",
                     },
                 )()
@@ -213,6 +214,7 @@ def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
             "patient_id": "P",
             "visit_id": "V",
             "patient_name": "患者",
+            "attending_physician": "主治医生",
             "department": "内科",
         }
     ]

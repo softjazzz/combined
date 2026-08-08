@@ -10,12 +10,20 @@ class _FakeSession:
         return None
 
 
-def _record(institute_id: str, patient_id: str, visit_id: str, department: str) -> dict[str, str]:
+def _record(
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    department: str,
+    *,
+    attending_physician: str = "",
+) -> dict[str, str]:
     return {
         "institute_id": institute_id,
         "patient_id": patient_id,
         "visit_id": visit_id,
         "department": department,
+        "attending_physician": attending_physician,
     }
 
 
@@ -32,14 +40,15 @@ def _service(monkeypatch, records: list[dict], events: list[dict], invalid_total
 
 def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypatch):
     records = [
-        _record("inst-a", "patient-a", "same-visit", "神经外科"),
-        _record("inst-b", "patient-b", "same-visit", "骨科"),
+        _record("inst-a", "patient-a", "same-visit", "神经外科", attending_physician="张医生"),
+        _record("inst-b", "patient-b", "same-visit", "骨科", attending_physician="李医生"),
     ]
     events = [
         {
             "root_job_id": "job-1",
             "identity": ("inst-a", "patient-a", "same-visit"),
             "department": "神经外科",
+            "attending_physician": "张医生",
             "finished_at": datetime(2026, 8, 1, 9),
             "items": [
                 {"rule_id": "LX0609-001", "status": "non_compliant"},
@@ -50,6 +59,7 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
             "root_job_id": "job-1",
             "identity": ("inst-b", "patient-b", "same-visit"),
             "department": "骨科",
+            "attending_physician": "李医生",
             "finished_at": datetime(2026, 8, 2, 9),
             "items": [
                 {"rule_id": "LX0609-001", "status": "data_gap"},
@@ -80,6 +90,29 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
         {"bucket": "2026-08-02", "completed_event_total": 1},
     ]
     assert {item["department"] for item in payload["department_distribution"]} == {"神经外科", "骨科"}
+    assert payload["physician_distribution"] == [
+        {
+            "physician": "张医生",
+            "distinct_record_total": 1,
+            "non_compliant_record_total": 1,
+            "data_gap_record_total": 0,
+            "uncertain_record_total": 0,
+        },
+        {
+            "physician": "李医生",
+            "distinct_record_total": 1,
+            "non_compliant_record_total": 0,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 1,
+        },
+    ]
+    assert [
+        (item["rule_id"], item["non_compliant_count"], item["data_gap_count"], item["uncertain_count"])
+        for item in payload["rule_distribution"]
+    ] == [
+        ("LX0609-001", 1, 1, 0),
+        ("LX0609-002", 0, 0, 1),
+    ]
 
 
 def test_analytics_keeps_invalid_envelopes_out_of_clinical_statistics(monkeypatch):
@@ -114,8 +147,52 @@ def test_analytics_returns_zero_structure_for_empty_scope(monkeypatch):
         "canonical_invalid_or_missing_total": 0,
     }
     assert payload["department_distribution"] == []
+    assert payload["physician_distribution"] == []
     assert payload["rule_distribution"] == []
     assert payload["completion_time_series"] is None
+
+
+def test_analytics_keeps_missing_attending_physician_unassigned(monkeypatch):
+    records = [
+        _record("inst-a", "patient-a", "visit-a", "ICU", attending_physician=""),
+        _record("inst-a", "patient-b", "visit-b", "ICU", attending_physician="王医生"),
+    ]
+    events = [
+        {
+            "root_job_id": "job-1",
+            "identity": ("inst-a", "patient-a", "visit-a"),
+            "department": "ICU",
+            "finished_at": datetime(2026, 8, 1, 9),
+            "items": [{"rule_id": "LX0609-001", "status": "non_compliant"}],
+        },
+        {
+            "root_job_id": "job-2",
+            "identity": ("inst-a", "patient-b", "visit-b"),
+            "department": "ICU",
+            "attending_physician": "王医生",
+            "finished_at": datetime(2026, 8, 2, 9),
+            "items": [{"rule_id": "LX0609-001", "status": "data_gap"}],
+        },
+    ]
+
+    payload = _service(monkeypatch, records, events).get_luxian_0609_analytics()
+
+    assert payload["physician_distribution"] == [
+        {
+            "physician": "未登记主治医师",
+            "distinct_record_total": 1,
+            "non_compliant_record_total": 1,
+            "data_gap_record_total": 0,
+            "uncertain_record_total": 0,
+        },
+        {
+            "physician": "王医生",
+            "distinct_record_total": 1,
+            "non_compliant_record_total": 0,
+            "data_gap_record_total": 1,
+            "uncertain_record_total": 0,
+        },
+    ]
 
 
 def test_analytics_hides_completion_trend_when_only_one_real_time_bucket(monkeypatch):

@@ -394,6 +394,10 @@ class WorkstationAggregationService:
         department_non_compliant: Dict[str, set[tuple[str, str, str]]] = {}
         department_data_gap: Dict[str, set[tuple[str, str, str]]] = {}
         department_uncertain: Dict[str, set[tuple[str, str, str]]] = {}
+        physician_records: Dict[str, set[tuple[str, str, str]]] = {}
+        physician_non_compliant: Dict[str, set[tuple[str, str, str]]] = {}
+        physician_data_gap: Dict[str, set[tuple[str, str, str]]] = {}
+        physician_uncertain: Dict[str, set[tuple[str, str, str]]] = {}
         records_with_non_compliant: set[tuple[str, str, str]] = set()
         records_with_data_gap: set[tuple[str, str, str]] = set()
         event_identities: set[tuple[str, str, str, str]] = set()
@@ -435,6 +439,8 @@ class WorkstationAggregationService:
             event_identities.add(event_key)
             record_identities.add(identity)
             department_records.setdefault(department_name, set()).add(identity)
+            physician_name = _safe_text(event.get("attending_physician")).strip() or "未登记主治医师"
+            physician_records.setdefault(physician_name, set()).add(identity)
             for rule_id, status in validated_items:
                 status_counts[status] += 1
                 event_statuses.add(status)
@@ -453,11 +459,14 @@ class WorkstationAggregationService:
             if "non_compliant" in event_statuses:
                 records_with_non_compliant.add(identity)
                 department_non_compliant.setdefault(department_name, set()).add(identity)
+                physician_non_compliant.setdefault(physician_name, set()).add(identity)
             if "data_gap" in event_statuses:
                 records_with_data_gap.add(identity)
                 department_data_gap.setdefault(department_name, set()).add(identity)
+                physician_data_gap.setdefault(physician_name, set()).add(identity)
             if "uncertain" in event_statuses:
                 department_uncertain.setdefault(department_name, set()).add(identity)
+                physician_uncertain.setdefault(physician_name, set()).add(identity)
 
             completed_at = _to_datetime(event.get("finished_at"))
             if completed_at is not None:
@@ -480,6 +489,24 @@ class WorkstationAggregationService:
                 -item["non_compliant_record_total"],
                 -item["data_gap_record_total"],
                 item["department"],
+            )
+        )
+        physician_distribution = [
+            {
+                "physician": name,
+                "distinct_record_total": len(identities),
+                "non_compliant_record_total": len(physician_non_compliant.get(name, set())),
+                "data_gap_record_total": len(physician_data_gap.get(name, set())),
+                "uncertain_record_total": len(physician_uncertain.get(name, set())),
+            }
+            for name, identities in physician_records.items()
+        ]
+        physician_distribution.sort(
+            key=lambda item: (
+                -item["non_compliant_record_total"],
+                -item["data_gap_record_total"],
+                -item["uncertain_record_total"],
+                item["physician"],
             )
         )
         rule_distribution = [
@@ -531,6 +558,7 @@ class WorkstationAggregationService:
                 for status in status_order
             ],
             "department_distribution": department_distribution,
+            "physician_distribution": physician_distribution,
             "rule_distribution": rule_distribution[:10],
             "completion_time_series": time_series,
             "data_health": {
@@ -702,6 +730,7 @@ class WorkstationAggregationService:
                         "root_job_id": root_job_id,
                         "identity": identity,
                         "department": _safe_text(record.get("department"), "未分科室").strip() or "未分科室",
+                        "attending_physician": _safe_text(record.get("attending_physician")).strip(),
                         "finished_at": job["finished_at"],
                         "items": valid_items,
                     }
@@ -929,6 +958,7 @@ class WorkstationAggregationService:
             MedicalRecordFrontpage.patient_id,
             MedicalRecordFrontpage.visit_id,
             MedicalRecordFrontpage.name.label("patient_name"),
+            MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
             _workstation_department_expr(discharge_summary).label("department"),
         ).all()
         records_by_identity: Dict[tuple[str, str, str], Dict[str, str]] = {}
@@ -947,6 +977,7 @@ class WorkstationAggregationService:
                     "patient_id": identity[1],
                     "visit_id": identity[2],
                     "patient_name": _safe_text(row.patient_name).strip(),
+                    "attending_physician": _safe_text(row.attending_physician).strip(),
                     "department": _safe_text(row.department).strip() or "未分科室",
                 },
             )

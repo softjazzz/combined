@@ -62,9 +62,7 @@
           >
             <span>数据状态</span>
             <strong v-if="payload.data_health.canonical_invalid_or_missing_total">
-              {{
-                payload.data_health.canonical_invalid_or_missing_total.toLocaleString()
-              }}
+              {{ payload.data_health.canonical_invalid_or_missing_total.toLocaleString() }}
               份历史候选待核验
             </strong>
             <strong v-else>已交付结果可用</strong>
@@ -258,15 +256,71 @@
             </article>
 
             <article
+              class="analytics-surface analytics-panel analytics-physician-panel"
+              data-testid="analytics-physician-chart"
+            >
+              <header class="panel-heading">
+                <div>
+                  <p>责任归属</p>
+                  <h2>主治医师风险排行</h2>
+                </div>
+                <span class="panel-note">按首页主治医师签名归属</span>
+              </header>
+              <div
+                v-if="physicianItems.length"
+                class="physician-chart"
+              >
+                <div
+                  v-for="(item, index) in physicianItems"
+                  :key="item.physician"
+                  :class="[
+                    'physician-row',
+                    { 'is-unassigned': item.physician === '未登记主治医师' },
+                  ]"
+                >
+                  <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
+                  <span class="physician-name">{{ item.physician }}</span>
+                  <span class="department-track">
+                    <i
+                      class="bar-danger"
+                      :style="{
+                        width: `${barPercent(item.non_compliant_record_total, physicianMax)}%`,
+                      }"
+                    />
+                    <i
+                      class="bar-warning"
+                      :style="{ width: `${barPercent(item.data_gap_record_total, physicianMax)}%` }"
+                    />
+                    <i
+                      v-if="item.uncertain_record_total"
+                      class="bar-uncertain"
+                      :style="{
+                        width: `${barPercent(item.uncertain_record_total, physicianMax)}%`,
+                      }"
+                    />
+                  </span>
+                  <strong>{{
+                    item.non_compliant_record_total + item.data_gap_record_total
+                  }}</strong>
+                </div>
+              </div>
+              <a-empty
+                v-else
+                description="暂无可归属的医师风险统计"
+                :image-style="{ height: '56px' }"
+              />
+            </article>
+
+            <article
               class="analytics-surface analytics-panel analytics-rule-panel"
               data-testid="analytics-rule-chart"
             >
               <header class="panel-heading">
                 <div>
                   <p>问题聚焦</p>
-                  <h2>高频规则 Top 5</h2>
+                  <h2>质控点问题 Top 5</h2>
                 </div>
-                <span class="panel-note">点击查看病历</span>
+                <span class="panel-note">点击查看对应病历</span>
               </header>
               <ol
                 v-if="ruleItems.length"
@@ -284,19 +338,22 @@
                     <span class="rule-copy">
                       <small>{{ item.rule_id }}</small>
                       <strong>{{ item.rule_name }}</strong>
+                      <span class="rule-breakdown">
+                        <em v-if="item.non_compliant_count">确定 {{ item.non_compliant_count }}</em>
+                        <em v-if="item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
+                        <em v-if="item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
+                      </span>
                     </span>
                     <span class="rule-count">
-                      <strong>{{
-                        item.non_compliant_count + item.data_gap_count + item.uncertain_count
-                      }}</strong>
-                      <small>关注项</small>
+                      <strong>{{ ruleConcernTotal(item) }}</strong>
+                      <small>问题结果</small>
                     </span>
                   </button>
                 </li>
               </ol>
               <a-empty
                 v-else
-                description="暂无高频问题规则"
+                description="暂无可展示的质控点问题"
                 :image-style="{ height: '56px' }"
               />
             </article>
@@ -342,6 +399,13 @@ interface AnalyticsPayload {
   status_distribution: Array<{ status: Status; count: number }>
   department_distribution: Array<{
     department: string
+    distinct_record_total: number
+    non_compliant_record_total: number
+    data_gap_record_total: number
+    uncertain_record_total: number
+  }>
+  physician_distribution: Array<{
+    physician: string
     distinct_record_total: number
     non_compliant_record_total: number
     data_gap_record_total: number
@@ -432,6 +496,32 @@ const departmentMax = computed(() =>
     ),
   ),
 )
+const physicianItems = computed(() =>
+  [...(payload.value?.physician_distribution || [])]
+    .filter(
+      (item) =>
+        item.non_compliant_record_total ||
+        item.data_gap_record_total ||
+        item.uncertain_record_total,
+    )
+    .sort(
+      (a, b) =>
+        b.non_compliant_record_total - a.non_compliant_record_total ||
+        b.data_gap_record_total - a.data_gap_record_total ||
+        b.uncertain_record_total - a.uncertain_record_total ||
+        a.physician.localeCompare(b.physician),
+    )
+    .slice(0, 8),
+)
+const physicianMax = computed(() =>
+  Math.max(
+    1,
+    ...physicianItems.value.map(
+      (item) =>
+        item.non_compliant_record_total + item.data_gap_record_total + item.uncertain_record_total,
+    ),
+  ),
+)
 const ruleItems = computed(() =>
   [...(payload.value?.rule_distribution || [])]
     .sort(
@@ -482,6 +572,9 @@ function barPercent(value: number, maximum: number) {
 function trendPercent(value: number) {
   const maximum = Math.max(1, ...completionSeries.value.map((item) => item.completed_event_total))
   return Math.max(10, Math.round((value / maximum) * 100))
+}
+function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
+  return item.non_compliant_count + item.data_gap_count + item.uncertain_count
 }
 function resetFilters() {
   dateRange.value = undefined
@@ -778,7 +871,7 @@ onMounted(() => {
 }
 
 .analytics-detail-grid {
-  grid-template-columns: minmax(0, 1.18fr) minmax(360px, 0.82fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .analytics-panel {
@@ -1029,6 +1122,41 @@ onMounted(() => {
   text-align: right;
 }
 
+.physician-chart {
+  display: grid;
+  gap: 13px;
+  margin-top: 22px;
+}
+
+.physician-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) 32px;
+  padding: 4px 6px;
+}
+
+.physician-row.is-unassigned .physician-name {
+  color: rgba(29, 29, 31, 0.48);
+}
+
+.physician-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.physician-row strong {
+  color: rgba(29, 29, 31, 0.76);
+  font-size: 12px;
+  text-align: right;
+}
+
+.analytics-rule-panel {
+  grid-column: 1 / -1;
+}
+
 .rule-list {
   display: grid;
   list-style: none;
@@ -1081,6 +1209,32 @@ onMounted(() => {
 .rule-count small {
   color: rgba(29, 29, 31, 0.42);
   font-size: 10px;
+}
+
+.rule-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.rule-breakdown em {
+  background: rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 10px;
+  font-style: normal;
+  padding: 1px 6px;
+}
+
+.rule-breakdown em:first-child {
+  background: rgba(239, 68, 68, 0.1);
+  color: #c2410c;
+}
+
+.rule-breakdown em:nth-child(2) {
+  background: rgba(245, 158, 11, 0.12);
+  color: #a16207;
 }
 
 .rule-copy strong {
@@ -1189,6 +1343,10 @@ onMounted(() => {
   }
 
   .department-row {
+    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
+  }
+
+  .physician-row {
     grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
   }
 }
