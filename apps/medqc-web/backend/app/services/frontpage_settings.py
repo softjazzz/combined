@@ -81,6 +81,9 @@ def update_frontpage_settings(update_data: dict[str, Any]) -> FrontpageExtractio
 
 def should_include_demo_records(settings: FrontpageExtractionSettings, real_record_count: int) -> bool:
     """根据策略和真实数据量判断是否展示 demo 病历。"""
+    # 生产环境只展示真实病历；文件配置不能覆盖该安全边界。
+    if _is_production_env():
+        return False
     if not settings.include_demo_records:
         return False
     if not settings.auto_hide_demo_when_real_data:

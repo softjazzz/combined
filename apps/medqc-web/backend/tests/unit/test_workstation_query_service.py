@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import Base
 from app.database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
+from app.services.frontpage_settings import FrontpageExtractionSettings
 from app.services.medical_records.query_service import get_workstation_data
 
 
@@ -119,6 +120,46 @@ def _workstation_settings_loader():
 
 def _no_demo_policy(_settings, _real_total_count):
     return False
+
+
+def test_get_workstation_data_excludes_demo_records_in_production_even_when_enabled(
+    workstation_session_factory,
+    monkeypatch,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="V1",
+            name="真实病历",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+    )
+    monkeypatch.setattr("app.services.frontpage_settings._is_production_env", lambda: True)
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=lambda: (
+            FrontpageExtractionSettings(
+                include_demo_records=True,
+                auto_hide_demo_when_real_data=False,
+            ),
+            "file",
+        ),
+        demo_records_builder=lambda: [
+            {
+                "id": "DEMO-1",
+                "visitId": "DEMO-1",
+                "name": "演示病历",
+                "department": "内科",
+            }
+        ],
+    )
+
+    assert result["total"] == 1
+    assert [record["id"] for record in result["records"]] == ["V1"]
 
 
 def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_session_factory):

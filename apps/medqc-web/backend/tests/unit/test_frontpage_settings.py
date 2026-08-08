@@ -22,7 +22,7 @@ def test_frontpage_settings_default_production(monkeypatch):
     assert settings.include_demo_records is False
 
 
-def test_demo_decision_matrix():
+def test_demo_decision_matrix(monkeypatch):
     settings = FrontpageExtractionSettings(
         include_demo_records=True,
         auto_hide_demo_when_real_data=True,
@@ -35,6 +35,10 @@ def test_demo_decision_matrix():
     assert should_include_demo_records(settings, 999) is True
 
     settings.include_demo_records = False
+    assert should_include_demo_records(settings, 0) is False
+
+    monkeypatch.setattr("app.services.frontpage_settings._is_production_env", lambda: True)
+    settings.include_demo_records = True
     assert should_include_demo_records(settings, 0) is False
 
 
