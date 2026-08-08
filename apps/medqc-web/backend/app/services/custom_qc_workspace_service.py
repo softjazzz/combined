@@ -37,6 +37,7 @@ from .document_domain_alignment import (
 from .luxian_0609.customer_renderer import RULE_SET_VERSION
 from .luxian_0609.record_result_read_model import (
     _generation_key,
+    _rule_set_value,
     select_latest_authoritative_record_result_job,
 )
 from .luxian_0609_rule_catalog import (
@@ -3893,11 +3894,30 @@ class CustomQCWorkspaceService:
             )
             for visit_id in visit_ids
         ]
+        # 规则集身份仍由 Python 做精确校验；这里仅以文本预筛掉与当前 LX0609
+        # 代次无关的历史任务，避免全院首页解析大批无关 filters/summary JSON。
+        # 两处都保留，是为了维持读取模型“filters 优先、summary 兼容回退”的合同。
+        rule_set_candidate = or_(
+            self._batch_job_table.c.filters_json.ilike(f"%{normalized_rule_set_key}%"),
+            self._batch_job_table.c.summary_json.ilike(f"%{normalized_rule_set_key}%"),
+        )
+        rule_version_candidate = or_(
+            self._batch_job_table.c.filters_json.ilike(f"%{normalized_rule_set_version}%"),
+            self._batch_job_table.c.summary_json.ilike(f"%{normalized_rule_set_version}%"),
+        )
         session = (session_factory or _session)()
         try:
             job_rows = (
                 session.execute(
-                    select(self._batch_job_table).where(
+                    select(
+                        self._batch_job_table.c.id,
+                        self._batch_job_table.c.status,
+                        self._batch_job_table.c.created_at,
+                        self._batch_job_table.c.finished_at,
+                        self._batch_job_table.c.filters_json,
+                        self._batch_job_table.c.record_ids_json,
+                        self._batch_job_table.c.summary_json,
+                    ).where(
                         and_(
                             self._batch_job_table.c.status == "completed",
                             or_(
@@ -3905,17 +3925,97 @@ class CustomQCWorkspaceService:
                                 self._batch_job_table.c.parent_job_id == "",
                             ),
                             or_(*record_id_conditions),
+                            rule_set_candidate,
+                            rule_version_candidate,
                         )
                     )
                 )
                 .mappings()
                 .all()
             )
-            jobs_by_id = {
-                _safe_text(row.get("id")): _row_to_batch_job(dict(row), include_items=False)
-                for row in job_rows
-                if _safe_text(row.get("id"))
-            }
+            # 首页/病历池只需要“选择当前 Canonical 结果”的最小任务字段。
+            # 不能为每个候选完整反序列化 items、子任务和运行摘要；真实全院范围
+            # 会把同一批任务 JSON 反复解析数十万次，且不会增加任何判定事实。
+            jobs_by_id: Dict[str, Dict[str, Any]] = {}
+            current_jobs_by_visit: Dict[str, list[Dict[str, Any]]] = {}
+            requested_visit_ids = set(visit_ids)
+            for raw_row in job_rows:
+                row = dict(raw_row)
+                job_id = _safe_text(row.get("id"))
+                if not job_id:
+                    continue
+                raw_filters = row.get("filters")
+                raw_summary = row.get("summary")
+                raw_filters_text = _safe_text(row.get("filters_json"))
+                raw_summary_text = _safe_text(row.get("summary_json"))
+                if (
+                    not isinstance(raw_filters, dict)
+                    and not isinstance(raw_summary, dict)
+                    and (
+                        normalized_rule_set_key not in raw_filters_text
+                        and normalized_rule_set_key not in raw_summary_text
+                        or normalized_rule_set_version not in raw_filters_text
+                        and normalized_rule_set_version not in raw_summary_text
+                    )
+                ):
+                    continue
+                filters = (
+                    raw_filters
+                    if isinstance(raw_filters, dict)
+                    else _safe_json_loads(row.get("filters_json"), {})
+                )
+                filters_dict = filters if isinstance(filters, dict) else {}
+                filter_rule_set_key = _safe_text(filters_dict.get("rule_set_key"))
+                filter_rule_set_version = _safe_text(filters_dict.get("rule_set_version"))
+                if (
+                    (
+                        filter_rule_set_key
+                        and filter_rule_set_key != normalized_rule_set_key
+                    )
+                    or (
+                        filter_rule_set_version
+                        and filter_rule_set_version != normalized_rule_set_version
+                    )
+                ):
+                    continue
+                summary = (
+                    raw_summary
+                    if isinstance(raw_summary, dict)
+                    # filters 已具备当前规则集身份时，summary 不会参与读取模型的
+                    # 选择；避免解析其中可能很大的运行态/明细 JSON。
+                    else (
+                        None
+                        if (
+                            filter_rule_set_key == normalized_rule_set_key
+                            and filter_rule_set_version == normalized_rule_set_version
+                        )
+                        else _safe_json_loads(row.get("summary_json"), None)
+                    )
+                )
+                raw_record_ids = row.get("record_ids")
+                record_ids = (
+                    raw_record_ids
+                    if isinstance(raw_record_ids, list)
+                    else _safe_json_loads(row.get("record_ids_json"), [])
+                )
+                job = {
+                    "id": job_id,
+                    "status": _safe_text(row.get("status"), "queued"),
+                    "created_at": row.get("created_at"),
+                    "finished_at": row.get("finished_at"),
+                    "record_ids": record_ids if isinstance(record_ids, list) else [],
+                    "filters": filters if isinstance(filters, dict) else {},
+                    "summary": summary if isinstance(summary, dict) else None,
+                }
+                jobs_by_id[job_id] = job
+                if (
+                    _rule_set_value(job, "rule_set_key") != normalized_rule_set_key
+                    or _rule_set_value(job, "rule_set_version") != normalized_rule_set_version
+                ):
+                    continue
+                for visit_id in set(_safe_text(value) for value in job["record_ids"]):
+                    if visit_id in requested_visit_ids:
+                        current_jobs_by_visit.setdefault(visit_id, []).append(job)
             if not jobs_by_id:
                 return {identity: {"status": "not_run"} for identity in identities}
 
@@ -3951,6 +4051,14 @@ class CustomQCWorkspaceService:
                     if identity in identities:
                         envelopes_by_identity.setdefault(identity, {}).setdefault(job_id, []).append(row)
 
+            ambiguous_current_jobs_by_visit: Dict[str, list[Dict[str, Any]]] = {}
+            for visit_id, candidates in current_jobs_by_visit.items():
+                ambiguous_current_jobs_by_visit[visit_id] = [
+                    job
+                    for job in candidates
+                    if not current_envelopes_by_job_visit.get((_safe_text(job.get("id")), visit_id), [])
+                ]
+
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
             for identity in identities:
                 _, _, visit_id = identity
@@ -3969,20 +4077,7 @@ class CustomQCWorkspaceService:
                 # 只有当前规则版本、且没有任何当前版本同 visit Envelope 的根任务
                 # 才是无法确认三坐标归属的缺失候选。旧版本 Envelope 完全不参与
                 # 当前代次选择，也不能遮蔽当前版本的交付缺口。
-                ambiguous_candidates = []
-                for job_id, job in jobs_by_id.items():
-                    job_selection = select_latest_authoritative_record_result_job(
-                        [job],
-                        record_id=visit_id,
-                        rule_set_key=normalized_rule_set_key,
-                        rule_set_version=normalized_rule_set_version,
-                    )
-                    if job_selection.state != "ready":
-                        continue
-                    same_visit_envelopes = current_envelopes_by_job_visit.get((job_id, visit_id), [])
-                    if same_visit_envelopes:
-                        continue
-                    ambiguous_candidates.append(job)
+                ambiguous_candidates = ambiguous_current_jobs_by_visit.get(visit_id, [])
                 if ready_selection.state == "technical_error":
                     projections[identity] = {
                         "status": "technical_error",

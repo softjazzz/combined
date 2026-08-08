@@ -65,6 +65,85 @@ def _selected_job(*, legacy_items: list[dict[str, Any]] | None = None) -> dict[s
     }
 
 
+def test_completed_projection_indexes_summary_jobs_without_heavy_job_hydration(monkeypatch):
+    """全院投影只读取结果选择必需字段，不能为每份病历反复完整解析任务。"""
+
+    def job_row(job_id: str, visit_id: str) -> dict[str, Any]:
+        return {
+            "id": job_id,
+            "status": "completed",
+            "created_at": "2026-08-08T10:00:00",
+            "finished_at": "2026-08-08T10:01:00",
+            "filters_json": json.dumps(
+                {
+                    "rule_set_key": "luxian_0609_qc_v1",
+                    "rule_set_version": "2026-06-09",
+                }
+            ),
+            "record_ids_json": json.dumps([visit_id]),
+            "summary_json": "{}",
+        }
+
+    def envelope(job_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+        return {
+            "root_job_id": job_id,
+            "job_id": job_id,
+            "institute_id": "inst-1",
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-09",
+            "envelope_json": json.dumps(
+                {
+                    "schema_version": "lx0609-record-result-envelope-v1",
+                    "delivery_mode": "canonical_straight_through",
+                    "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+                }
+            ),
+        }
+
+    session = _ReadSession(
+        [
+            [job_row("job-1", "visit-1"), job_row("job-2", "visit-2")],
+            [envelope("job-1", "patient-1", "visit-1"), envelope("job-2", "patient-2", "visit-2")],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(
+        workspace_module,
+        "_row_to_batch_job",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("全院摘要不得完整水合任务 JSON")
+        ),
+    )
+    original_selector = workspace_module.select_latest_authoritative_record_result_job
+    selector_calls = 0
+
+    def counted_selector(*args, **kwargs):
+        nonlocal selector_calls
+        selector_calls += 1
+        return original_selector(*args, **kwargs)
+
+    monkeypatch.setattr(
+        workspace_module,
+        "select_latest_authoritative_record_result_job",
+        counted_selector,
+    )
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"},
+            {"institute_id": "inst-1", "patient_id": "patient-2", "visit_id": "visit-2"},
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")]["status"] == "ready"
+    assert result[("inst-1", "patient-2", "visit-2")]["status"] == "ready"
+    assert selector_calls <= 4
+
+
 def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_is_missing(
     monkeypatch,
 ):
