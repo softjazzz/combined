@@ -69,11 +69,15 @@ async function loadLatestResult() {
   latestResult.value = null
   authorizedRecordRef.value = ''
   loadError.value = ''
-  if (!props.open || !focus?.visitId) return
+  if (!props.open || !focus?.instituteId || !focus.patientId || !focus.visitId) return
 
   loading.value = true
   try {
-    const result = await getLatestLuxian0609RecordResult(focus.visitId)
+    const result = await getLatestLuxian0609RecordResult({
+      instituteId: focus.instituteId,
+      patientId: focus.patientId,
+      visitId: focus.visitId,
+    })
     if (!result.success || !result.data) {
       loadError.value = result.message || '这份病历暂无已保存质控结果，请先质控后查看'
       return
@@ -94,7 +98,14 @@ async function loadLatestResult() {
 }
 
 watch(
-  () => [props.open, props.focus?.visitId, props.focus?.recordId, props.focus?.recordRef],
+  () => [
+    props.open,
+    props.focus?.instituteId,
+    props.focus?.patientId,
+    props.focus?.visitId,
+    props.focus?.recordId,
+    props.focus?.recordRef,
+  ],
   () => void loadLatestResult(),
   { immediate: true },
 )

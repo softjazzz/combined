@@ -3653,75 +3653,96 @@ class CustomQCWorkspaceService:
     def build_latest_single_record_result_dto(
         self,
         *,
-        record_id: str,
-        created_by: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
         rule_set_version: str = RULE_SET_VERSION,
         expected_rule_ids: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """读取一份病历当前规则代次的唯一客户结果。
 
-        这是单病历结果页唯一允许使用的读取入口。任务的选择只由创建者、
-        已完成状态、明确病历归属、规则集和规则集版本决定；不得以结果状态、
+        这是单病历结果页唯一允许使用的读取入口。候选首先由三坐标
+        ``institute_id + patient_id + visit_id`` 限定，再从全院所有创建者的
+        已完成任务中选择当前规则代次最新的唯一根任务；不得以结果状态、
         文案丰富度、证据数量或完整度来替换较新的任务。
         """
 
-        normalized_record_id = _safe_text(record_id)
-        normalized_created_by = _safe_text(created_by)
+        normalized_institute_id = _safe_text(institute_id)
+        normalized_patient_id = _safe_text(patient_id)
+        normalized_visit_id = _safe_text(visit_id)
         normalized_rule_set_key = _safe_text(rule_set_key)
         normalized_rule_set_version = _safe_text(rule_set_version)
         if not all(
             (
-                normalized_record_id,
-                normalized_created_by,
+                normalized_institute_id,
+                normalized_patient_id,
+                normalized_visit_id,
                 normalized_rule_set_key,
                 normalized_rule_set_version,
             )
         ):
-            raise ValueError("单病历结果读取缺少必要身份或规则集参数")
+            raise ValueError("单病历结果读取缺少三坐标身份或规则集参数")
 
         session = _session()
         try:
-            escaped_record_id = (
-                normalized_record_id
+            escaped_visit_id = (
+                normalized_visit_id
                 .replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_")
                 .replace('"', '\\"')
             )
-            root_rows = (
-                session.execute(
-                    select(self._batch_job_table)
-                    .where(
-                        and_(
-                            self._batch_job_table.c.created_by == normalized_created_by,
-                            self._batch_job_table.c.status == "completed",
-                            or_(
-                                self._batch_job_table.c.parent_job_id.is_(None),
-                                self._batch_job_table.c.parent_job_id == "",
-                            ),
-                            self._batch_job_table.c.record_ids_json.ilike(
-                                f'%"{escaped_record_id}"%',
-                                escape="\\",
-                            ),
+            try:
+                root_rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .join(
+                            self._record_result_envelope_table,
+                            self._record_result_envelope_table.c.root_job_id
+                            == self._batch_job_table.c.id,
+                        )
+                        .where(
+                            and_(
+                                self._batch_job_table.c.status == "completed",
+                                or_(
+                                    self._batch_job_table.c.parent_job_id.is_(None),
+                                    self._batch_job_table.c.parent_job_id == "",
+                                ),
+                                self._batch_job_table.c.record_ids_json.ilike(
+                                    f'%"{escaped_visit_id}"%',
+                                    escape="\\",
+                                ),
+                                self._record_result_envelope_table.c.institute_id
+                                == normalized_institute_id,
+                                self._record_result_envelope_table.c.patient_id
+                                == normalized_patient_id,
+                                self._record_result_envelope_table.c.visit_id
+                                == normalized_visit_id,
+                                self._record_result_envelope_table.c.rule_set_key
+                                == normalized_rule_set_key,
+                                self._record_result_envelope_table.c.rule_set_version
+                                == normalized_rule_set_version,
+                            )
+                        )
+                        .distinct()
+                        .order_by(
+                            desc(self._batch_job_table.c.finished_at),
+                            desc(self._batch_job_table.c.created_at),
                         )
                     )
-                    .order_by(
-                        desc(self._batch_job_table.c.finished_at),
-                        desc(self._batch_job_table.c.created_at),
-                    )
+                    .mappings()
+                    .all()
                 )
-                .mappings()
-                .all()
-            )
+            except (sa.exc.ProgrammingError, sa.exc.OperationalError):
+                root_rows = []
             candidates = [
                 self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
                 for row in root_rows
             ]
             selection = select_latest_authoritative_record_result_job(
                 candidates,
-                record_id=normalized_record_id,
-                created_by=normalized_created_by,
+                record_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
                 rule_set_version=normalized_rule_set_version,
             )
@@ -3744,8 +3765,10 @@ class CustomQCWorkspaceService:
             envelope = self._load_record_result_envelope_items(
                 session,
                 job_id=_safe_text(selected_job.get("id")),
-                created_by=normalized_created_by,
-                record_id=normalized_record_id,
+                created_by=_safe_text(selected_job.get("created_by")),
+                institute_id=normalized_institute_id,
+                patient_id=normalized_patient_id,
+                visit_id=normalized_visit_id,
                 rule_set_key=normalized_rule_set_key,
                 rule_set_version=normalized_rule_set_version,
             )
@@ -3832,8 +3855,9 @@ class CustomQCWorkspaceService:
     def get_latest_luxian_0609_record_result(
         self,
         *,
-        created_by: str,
-        record_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
         expected_rule_ids: Optional[Sequence[str]] = None,
         rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
         rule_set_version: str = RULE_SET_VERSION,
@@ -3841,8 +3865,9 @@ class CustomQCWorkspaceService:
         """单病历结果接口的唯一服务入口。"""
 
         return self.build_latest_single_record_result_dto(
-            record_id=record_id,
-            created_by=created_by,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
             rule_set_key=rule_set_key,
             rule_set_version=rule_set_version,
             expected_rule_ids=expected_rule_ids,
@@ -4517,7 +4542,9 @@ class CustomQCWorkspaceService:
         *,
         job_id: str,
         created_by: str,
-        record_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
         rule_set_key: str,
         rule_set_version: str,
     ) -> Dict[str, Any]:
@@ -4531,7 +4558,10 @@ class CustomQCWorkspaceService:
                         and_(
                             self._record_result_envelope_table.c.job_id == job_id,
                             self._record_result_envelope_table.c.created_by == created_by,
-                            self._record_result_envelope_table.c.record_id == record_id,
+                            self._record_result_envelope_table.c.record_id == visit_id,
+                            self._record_result_envelope_table.c.institute_id == institute_id,
+                            self._record_result_envelope_table.c.patient_id == patient_id,
+                            self._record_result_envelope_table.c.visit_id == visit_id,
                             self._record_result_envelope_table.c.rule_set_key == rule_set_key,
                             self._record_result_envelope_table.c.rule_set_version == rule_set_version,
                         )

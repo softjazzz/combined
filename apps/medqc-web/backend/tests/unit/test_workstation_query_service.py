@@ -162,6 +162,79 @@ def test_get_workstation_data_excludes_demo_records_in_production_even_when_enab
     assert [record["id"] for record in result["records"]] == ["V1"]
 
 
+def test_get_workstation_data_keeps_same_visit_id_records_isolated_by_three_coordinate(
+    workstation_session_factory,
+):
+    """同名 visit_id 不能让床位或传统质控状态串到另一机构病历。"""
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V-SHARED",
+            name="机构一患者",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="H2",
+            patient_id="P2",
+            visit_id="V-SHARED",
+            name="机构二患者",
+            admission_dept_name="外科",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+    )
+    with workstation_session_factory() as session:
+        session.add_all(
+            [
+                AdmissionRecord(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="V-SHARED",
+                    bed_no="01",
+                ),
+                AdmissionRecord(
+                    institute_id="H2",
+                    patient_id="P2",
+                    visit_id="V-SHARED",
+                    bed_no="02",
+                ),
+                QCResult(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="V-SHARED",
+                    qc_type="form",
+                    severity="error",
+                    status="open",
+                ),
+                QCResult(
+                    institute_id="H2",
+                    patient_id="P2",
+                    visit_id="V-SHARED",
+                    qc_type="form",
+                    severity="info",
+                    status="resolved",
+                ),
+            ]
+        )
+        session.commit()
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    records_by_key = {record["recordKey"]: record for record in result["records"]}
+    assert records_by_key["H1|P1|V-SHARED"]["id"] == "V-SHARED"
+    assert records_by_key["H1|P1|V-SHARED"]["bedNo"] == "01"
+    assert records_by_key["H1|P1|V-SHARED"]["status"] == "has_defects"
+    assert records_by_key["H2|P2|V-SHARED"]["id"] == "V-SHARED"
+    assert records_by_key["H2|P2|V-SHARED"]["bedNo"] == "02"
+    assert records_by_key["H2|P2|V-SHARED"]["status"] == "completed"
+
+
 def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_session_factory):
     _insert_workstation_records(
         workstation_session_factory,

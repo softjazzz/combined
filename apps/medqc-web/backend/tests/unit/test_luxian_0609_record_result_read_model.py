@@ -39,15 +39,14 @@ def test_select_latest_authoritative_record_job_uses_only_identity_and_current_g
             _job("old-version", created_at="2026-07-29T11:00:00", rule_set_version="2026-01-01"),
         ],
         record_id="visit-1",
-        created_by="reviewer-a",
         rule_set_key="luxian_0609",
         rule_set_version="2026-06-09",
     )
 
     assert selection.state == "ready"
     assert selection.job is not None
-    assert selection.job["id"] == "new"
-    assert selection.candidate_count == 2
+    assert selection.job["id"] == "other-user"
+    assert selection.candidate_count == 3
 
 
 def test_select_latest_authoritative_record_job_fails_closed_for_current_generation_tie():
@@ -57,7 +56,6 @@ def test_select_latest_authoritative_record_job_fails_closed_for_current_generat
             _job("second", created_at="2026-07-29T10:00:00"),
         ],
         record_id="visit-1",
-        created_by="reviewer-a",
         rule_set_key="luxian_0609",
         rule_set_version="2026-06-09",
     )
@@ -75,7 +73,6 @@ def test_select_latest_authoritative_record_job_does_not_choose_a_candidate_by_e
     selection = select_latest_authoritative_record_result_job(
         [verbose_old, sparse_new],
         record_id="visit-1",
-        created_by="reviewer-a",
         rule_set_key="luxian_0609",
         rule_set_version="2026-06-09",
     )
@@ -95,7 +92,6 @@ def test_select_latest_authoritative_record_job_prefers_latest_finished_generati
     selection = select_latest_authoritative_record_result_job(
         [earlier_finished, later_finished],
         record_id="visit-1",
-        created_by="reviewer-a",
         rule_set_key="luxian_0609",
         rule_set_version="2026-06-09",
     )
@@ -103,3 +99,19 @@ def test_select_latest_authoritative_record_job_prefers_latest_finished_generati
     assert selection.state == "ready"
     assert selection.job is not None
     assert selection.job["id"] == "later"
+
+
+def test_select_latest_authoritative_record_job_uses_latest_completed_job_across_creators():
+    selection = select_latest_authoritative_record_result_job(
+        [
+            _job("older-owner", created_at="2026-07-29T10:00:00", created_by="reviewer-a"),
+            _job("newer-owner", created_at="2026-07-29T11:00:00", created_by="reviewer-b"),
+        ],
+        record_id="visit-1",
+        rule_set_key="luxian_0609",
+        rule_set_version="2026-06-09",
+    )
+
+    assert selection.state == "ready"
+    assert selection.job is not None
+    assert selection.job["id"] == "newer-owner"

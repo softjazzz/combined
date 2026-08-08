@@ -74,36 +74,32 @@ def select_latest_authoritative_record_result_job(
     candidates: Iterable[Mapping[str, Any]],
     *,
     record_id: str,
-    created_by: str,
     rule_set_key: str,
     rule_set_version: str,
 ) -> LatestRecordResultJobSelection:
     """按任务身份选唯一权威任务，不以状态、文案或解释完整度裁决。
 
-    只有同一创建者、已完成、明确包含目标病历、且规则集与当前版本完全
-    一致的任务才进入候选。完成时间与创建时间均并列时无法确定当前代次，
-    必须 fail-closed。
+    上游已使用三坐标把候选限制为同一病历；本函数再只保留已完成、明确
+    包含目标就诊号、且规则集与当前版本完全一致的任务。全院质控视图按
+    跨创建者的最新完成代次选择；完成时间与创建时间均并列时无法确定当前
+    代次，必须 fail-closed。
     """
 
     normalized_record_id = _text(record_id)
-    normalized_created_by = _text(created_by)
     normalized_rule_set_key = _text(rule_set_key)
     normalized_rule_set_version = _text(rule_set_version)
     if not all(
         (
             normalized_record_id,
-            normalized_created_by,
             normalized_rule_set_key,
             normalized_rule_set_version,
         )
     ):
-        raise ValueError("record_id、created_by、rule_set_key、rule_set_version 均不能为空")
+        raise ValueError("record_id、rule_set_key、rule_set_version 均不能为空")
 
     eligible: list[dict[str, Any]] = []
     for candidate in candidates:
         if not isinstance(candidate, Mapping):
-            continue
-        if _text(candidate.get("created_by")) != normalized_created_by:
             continue
         if _text(candidate.get("status")).lower() != "completed":
             continue

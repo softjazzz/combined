@@ -28,6 +28,26 @@ def _session_factory() -> Session:
     return Session(engine)
 
 
+def _workstation_record_key(institute_id: Any, patient_id: Any, visit_id: Any) -> str:
+    """工作台内存关联唯一使用的病历三坐标键。"""
+
+    parts = [str(value or "").strip() for value in (institute_id, patient_id, visit_id)]
+    return "|".join(parts) if all(parts) else ""
+
+
+def _workstation_identity_condition():
+    """缺少任一三坐标的首页不能进入可点击的工作台病历池。"""
+
+    return and_(
+        MedicalRecordFrontpage.institute_id.is_not(None),
+        MedicalRecordFrontpage.institute_id != "",
+        MedicalRecordFrontpage.patient_id.is_not(None),
+        MedicalRecordFrontpage.patient_id != "",
+        MedicalRecordFrontpage.visit_id.is_not(None),
+        MedicalRecordFrontpage.visit_id != "",
+    )
+
+
 def list_medical_records(
     dept: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -63,12 +83,14 @@ def get_departments() -> list[str]:
 
 def _serialize_real_workstation_record(
     record,
-    bed_map: dict[tuple[str, str], str],
+    bed_map: dict[str, str],
     status_map: dict[str, dict],
     frontpage_generate_state_map: dict[str, dict[str, Any]],
-    discharge_summary_map: dict[tuple[str, str], dict[str, Any]],
+    discharge_summary_map: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    key = (record.patient_id, record.visit_id)
+    key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
+    if not key:
+        return {}
     discharge_summary = discharge_summary_map.get(key) or {}
     resolved_discharge_datetime = (
         _parse_datetime_value(discharge_summary.get("discharge_time"))
@@ -80,7 +102,7 @@ def _serialize_real_workstation_record(
         or record.admission_dept_name
         or ""
     )
-    qc_info = status_map.get(record.visit_id)
+    qc_info = status_map.get(key)
     if qc_info is None:
         record_status = "pending"
     elif qc_info["has_error"]:
@@ -96,7 +118,7 @@ def _serialize_real_workstation_record(
         record.discharge_dept_name,
         record.record_content,
     ])
-    frontpage_generate_state = frontpage_generate_state_map.get(record.visit_id) or {}
+    frontpage_generate_state = frontpage_generate_state_map.get(key) or {}
     queue_status = str(frontpage_generate_state.get("queue_status") or "pending").strip().lower()
     if queue_status not in {"unknown", "pending", "running", "succeeded", "failed"}:
         queue_status = "pending"
@@ -119,6 +141,7 @@ def _serialize_real_workstation_record(
 
     return {
         "id": record.visit_id,
+        "recordKey": key,
         "instituteId": record.institute_id,
         "patientId": record.patient_id,
         "bedNo": bed_map.get(key, ""),
@@ -364,6 +387,7 @@ def _apply_workstation_filters(
     include_department: bool,
     discharge_summary=None,
 ):
+    query = query.filter(_workstation_identity_condition())
     if include_department and dept:
         query = query.filter(_workstation_department_expr(discharge_summary) == dept)
     if keyword:
@@ -464,25 +488,28 @@ def get_workstation_data(
                 .all()
             )
 
-        discharge_summary_map: dict[tuple[str, str], dict[str, Any]] = {}
+        discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:
             discharge_rows = session.query(
+                discharge_summary.c.institute_id,
                 discharge_summary.c.patient_id,
                 discharge_summary.c.visit_id,
                 discharge_summary.c.discharge_time,
                 discharge_summary.c.dept_name,
-            ).filter(
-                discharge_summary.c.visit_id.in_([r.visit_id for r in records])
-            ).all()
+            ).filter(discharge_summary.c.visit_id.in_([r.visit_id for r in records])).all()
             for row in discharge_rows:
-                discharge_summary_map[(row.patient_id, row.visit_id)] = {
+                key = _workstation_record_key(row.institute_id, row.patient_id, row.visit_id)
+                if not key:
+                    continue
+                discharge_summary_map[key] = {
                     "discharge_time": _parse_datetime_value(row.discharge_time),
                     "dept_name": row.dept_name,
                 }
 
-        bed_map: dict[tuple[str, str], str] = {}
+        bed_map: dict[str, str] = {}
         if records:
             beds = session.query(
+                AdmissionRecord.institute_id,
                 AdmissionRecord.patient_id,
                 AdmissionRecord.visit_id,
                 AdmissionRecord.bed_no,
@@ -490,7 +517,9 @@ def get_workstation_data(
                 AdmissionRecord.visit_id.in_([r.visit_id for r in records])
             ).all()
             for b in beds:
-                bed_map[(b.patient_id, b.visit_id)] = b.bed_no
+                key = _workstation_record_key(b.institute_id, b.patient_id, b.visit_id)
+                if key:
+                    bed_map[key] = b.bed_no
 
         dept_expr = _workstation_department_expr(discharge_summary).label("dept_name")
         dept_stats_base_query = session.query(
@@ -537,6 +566,8 @@ def get_workstation_data(
         status_map: dict[str, dict] = {}
         if real_visit_ids:
             qc_results = session.query(
+                QCResult.institute_id,
+                QCResult.patient_id,
                 QCResult.visit_id,
                 QCResult.severity,
                 QCResult.status,
@@ -544,27 +575,46 @@ def get_workstation_data(
                 QCResult.visit_id.in_(real_visit_ids)
             ).all()
             for r in qc_results:
-                vid = r.visit_id
-                if vid not in status_map:
-                    status_map[vid] = {"has_error": False, "has_any": True}
+                key = _workstation_record_key(r.institute_id, r.patient_id, r.visit_id)
+                if not key:
+                    continue
+                if key not in status_map:
+                    status_map[key] = {"has_error": False, "has_any": True}
                 if r.status == "open" and r.severity == "error":
-                    status_map[vid]["has_error"] = True
+                    status_map[key]["has_error"] = True
 
         frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
+        demo_frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         if visit_ids:
-            frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
+            visit_counts = {
+                visit_id: real_visit_ids.count(visit_id)
+                for visit_id in set(real_visit_ids)
+            }
+            safe_real_visit_ids = [
+                visit_id for visit_id in real_visit_ids if visit_counts.get(visit_id) == 1
+            ]
+            queue_visit_ids = list(dict.fromkeys([*safe_real_visit_ids, *demo_visit_ids]))
+            raw_frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
                 workflow_type="frontpage_generate",
-                visit_ids=visit_ids,
+                visit_ids=queue_visit_ids,
             )
-            if not frontpage_generate_state_map:
+            if not raw_frontpage_generate_state_map:
                 try:
-                    default_workflow_queue_state_service.backfill_frontpage_generate(visit_ids=visit_ids)
-                    frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
+                    default_workflow_queue_state_service.backfill_frontpage_generate(visit_ids=queue_visit_ids)
+                    raw_frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
                         workflow_type="frontpage_generate",
-                        visit_ids=visit_ids,
+                        visit_ids=queue_visit_ids,
                     )
                 except Exception:
-                    frontpage_generate_state_map = {}
+                    raw_frontpage_generate_state_map = {}
+            for record in records:
+                if visit_counts.get(record.visit_id) != 1:
+                    continue
+                key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
+                state = raw_frontpage_generate_state_map.get(record.visit_id)
+                if key and state:
+                    frontpage_generate_state_map[key] = state
+            demo_frontpage_generate_state_map = raw_frontpage_generate_state_map
 
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
         dept_warning_counts: dict[str, int] = {}
@@ -582,6 +632,8 @@ def get_workstation_data(
                 frontpage_generate_state_map,
                 discharge_summary_map,
             )
+            if not item:
+                continue
             dept_name = item["department"]
             if item["status"] == "has_defects":
                 dept_warning_counts[dept_name] = dept_warning_counts.get(dept_name, 0) + 1
@@ -610,7 +662,7 @@ def get_workstation_data(
         total_count = total_real_filtered + demo_count
         departments[0]["total"] = int(dept_total_count) + demo_count
         demo_items = [
-            _apply_frontpage_generate_state(item, frontpage_generate_state_map)
+            _apply_frontpage_generate_state(item, demo_frontpage_generate_state_map)
             for item in demo_page
         ]
         items = demo_items + real_items

@@ -1,10 +1,11 @@
 """病案数据 - 查询子域。"""
 
 from datetime import date
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from ..core.security import get_current_user
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
 from ..services.medical_records.query_service import (
     get_departments,
@@ -68,6 +69,7 @@ async def get_workstation_data_api(
     date_field: Optional[str] = Query("visit", description="日期字段：visit/admission/discharge/updated"),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     try:
         return get_workstation_data(

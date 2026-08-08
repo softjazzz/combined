@@ -9,11 +9,7 @@
 
 from fastapi import APIRouter, Depends
 
-from ..core.security import require_roles
-from ..services.medical_records.shared import (
-    build_demo_workstation_records as _build_demo_workstation_records,
-    filter_demo_records as _filter_demo_records,
-)
+from ..core.security import get_current_user
 
 from .medical_records_query import router as medical_records_query_router
 from .medical_records_detail import router as medical_records_detail_router
@@ -23,7 +19,7 @@ from .medical_records_export import router as medical_records_export_router
 router = APIRouter(
     prefix="/api/medical-records",
     tags=["病案数据"],
-    dependencies=[Depends(require_roles("admin", "qc_manager", "doctor", "reviewer", "sync_admin", "super_admin"))],
+    dependencies=[Depends(get_current_user)],
 )
 
 router.include_router(medical_records_query_router)

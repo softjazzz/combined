@@ -128,7 +128,11 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     // 单病历原文读取与现有工作台使用 visitId 作为受控病历标识；
     // DTO 内的 record_ref 再作为服务端授权文书引用使用。
-    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledWith('V001')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledWith({
+      instituteId: 'H1',
+      patientId: 'P001',
+      visitId: 'V001',
+    })
     expect(workbenchProps?.visitId).toBe('V001')
     expect(workbenchProps?.jobId).toBe('job-safe-001')
     expect(workbenchProps?.recordRef).toBe('rec-safe-001')

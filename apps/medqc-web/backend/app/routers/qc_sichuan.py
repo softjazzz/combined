@@ -4658,14 +4658,17 @@ async def get_workspace_batch_job(
 async def get_latest_workspace_record_result(
     request: Request,
     record_id: str,
+    institute_id: str = Query(..., min_length=1, description="机构标识"),
+    patient_id: str = Query(..., min_length=1, description="患者标识"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    """返回当前用户可访问的单病历最新 LX0609 保存结果。"""
+    """返回全院范围内、同一三坐标病历的最新 LX0609 保存结果。"""
 
     workspace = _sichuan_workspace_service()
     result = workspace.get_latest_luxian_0609_record_result(
-        created_by=_current_user_id(current_user),
-        record_id=record_id,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=record_id,
     )
     if str(result.get("state") or "") == "not_found":
         raise HTTPException(status_code=404, detail="该病历暂无已保存质控结果或无访问权限")

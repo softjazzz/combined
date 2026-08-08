@@ -228,8 +228,9 @@ class _InMemorySichuanWorkspaceService:
     def get_latest_luxian_0609_record_result(
         self,
         *,
-        created_by: str,
-        record_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
         expected_rule_ids=None,
         rule_set_key: str = "luxian_0609_qc_v1",
         rule_set_version: str = "2026-06-09",
@@ -237,9 +238,8 @@ class _InMemorySichuanWorkspaceService:
         candidates = [
             job
             for job in self.jobs.values()
-            if str(job.get("created_by")) == str(created_by)
-            and str(job.get("status")) == "completed"
-            and str(record_id) in {str(value) for value in list(job.get("record_ids") or [])}
+            if str(job.get("status")) == "completed"
+            and str(visit_id) in {str(value) for value in list(job.get("record_ids") or [])}
             and str((job.get("filters") or {}).get("rule_set_key") or "") == rule_set_key
             and str((job.get("filters") or {}).get("rule_set_version") or "") == rule_set_version
         ]
@@ -248,7 +248,7 @@ class _InMemorySichuanWorkspaceService:
                 "schema_version": "lx0609-single-record-result-v1",
                 "state": "not_found",
                 "reason_code": "record_result_not_found",
-                "record_ref": "",
+            "record_ref": "",
                 "job_id": "",
                 "items": [],
                 "expected_rule_count": 49,
@@ -259,13 +259,13 @@ class _InMemorySichuanWorkspaceService:
         items = [
             item
             for item in list(current.get("items") or [])
-            if str(item.get("record_id") or item.get("visit_id") or "") == str(record_id)
+            if str(item.get("record_id") or item.get("visit_id") or "") == str(visit_id)
         ]
         return {
             "schema_version": "lx0609-single-record-result-v1",
             "state": "ready",
             "reason_code": "",
-            "record_ref": f"rec_{record_id}",
+            "record_ref": f"rec_{visit_id}",
             "job_id": str(current.get("id") or ""),
             "rule_set_key": rule_set_key,
             "rule_set_version": rule_set_version,
@@ -502,17 +502,44 @@ def test_latest_luxian_record_result_is_read_by_server_bound_record(client, sich
         ],
         failed_records=[],
     )
+    newer_job = sichuan_workspace_stub.create_batch_job(
+        draft={"id": "luxian-0609", "rule_code": "LX0609", "name": "泸县0609", "scene": "final"},
+        created_by="u-audit",
+        scope="final",
+        filters={"rule_set_key": "luxian_0609_qc_v1", "rule_set_version": "2026-06-09"},
+        record_ids=["visit-lx-1"],
+        total_records=1,
+        job_kind="parent",
+    )
+    sichuan_workspace_stub.complete_batch_job(
+        job_id=str(newer_job["id"]),
+        summary={"total_records": 1},
+        items=[
+            {"record_id": "visit-lx-1", "rule_id": "LX0609-018", "status": "compliant"},
+        ],
+        failed_records=[],
+    )
+    sichuan_workspace_stub.jobs[str(newer_job["id"])]["finished_at"] = "2026-08-09T00:00:00+00:00"
 
-    response = client.get("/api/v1/qc/sichuan/workspace/records/visit-lx-1/latest-result")
+    response = client.get(
+        "/api/v1/qc/sichuan/workspace/records/visit-lx-1/latest-result",
+        params={"institute_id": "inst-1", "patient_id": "patient-1"},
+    )
 
     assert response.status_code == 200
     data = _extract_data(response)
     assert data.get("state") == "ready"
-    assert data.get("job_id") == job["id"]
+    assert data.get("job_id") == newer_job["id"]
     assert data.get("record_ref") == "rec_visit-lx-1"
     assert [item.get("record_id") for item in data.get("items") or []] == ["visit-lx-1"]
 
-    missing_response = client.get("/api/v1/qc/sichuan/workspace/records/visit-not-saved/latest-result")
+    missing_coordinates = client.get("/api/v1/qc/sichuan/workspace/records/visit-lx-1/latest-result")
+    assert missing_coordinates.status_code == 422
+
+    missing_response = client.get(
+        "/api/v1/qc/sichuan/workspace/records/visit-not-saved/latest-result",
+        params={"institute_id": "inst-1", "patient_id": "patient-1"},
+    )
     assert missing_response.status_code == 404
 
 

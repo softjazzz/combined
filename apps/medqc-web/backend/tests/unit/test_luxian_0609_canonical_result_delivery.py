@@ -75,8 +75,9 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
     )
 
     result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
-        created_by="reviewer-a",
-        record_id="visit-1",
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
         expected_rule_ids=["LX0609-001"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
@@ -138,8 +139,9 @@ def test_single_record_result_returns_canonical_envelope_items_without_reproject
     )
 
     result = CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
-        created_by="reviewer-a",
-        record_id="visit-1",
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
         expected_rule_ids=["LX0609-001"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
