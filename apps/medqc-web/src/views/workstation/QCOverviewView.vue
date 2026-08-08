@@ -290,6 +290,58 @@
           </section>
 
           <section
+            class="qc-home-panel qc-home-conclusion workstation-surface-enter"
+            data-testid="qc-conclusion-chart"
+            aria-labelledby="qc-conclusion-title"
+          >
+            <header class="qc-home-panel__head">
+              <div>
+                <h2 id="qc-conclusion-title">
+                  结论结构
+                </h2>
+                <p>已完成病历中的规则结论。</p>
+              </div>
+            </header>
+            <div
+              v-if="conclusionSegments.length"
+              class="qc-home-conclusion__content"
+            >
+              <div
+                class="qc-home-conclusion__ring"
+                role="img"
+                :aria-label="`已完成规则结论共 ${conclusionTotal} 条`"
+                :style="{ background: conclusionRingBackground }"
+              >
+                <div>
+                  <strong>{{ conclusionTotal }}</strong>
+                  <span>规则结论</span>
+                </div>
+              </div>
+              <ul
+                class="qc-home-conclusion__legend"
+                aria-label="已完成病历中的规则结论图例"
+              >
+                <li
+                  v-for="segment in conclusionSegments"
+                  :key="segment.status"
+                >
+                  <i
+                    :style="{ background: segment.color }"
+                    aria-hidden="true"
+                  />
+                  <span>{{ segment.label }} {{ segment.value }}</span>
+                  <small>{{ segment.percent }}%</small>
+                </li>
+              </ul>
+            </div>
+            <a-empty
+              v-else
+              description="暂无已完成质控结论"
+              :image-style="{ height: '58px' }"
+            />
+          </section>
+
+          <section
             v-if="clinicalQc.trend"
             class="qc-home-panel workstation-surface-enter"
             data-testid="home-trend"
@@ -361,6 +413,23 @@ interface CoverageSegment {
   tone: ChartTone
   percent: number
 }
+
+interface ConclusionSegment {
+  status: string
+  label: string
+  value: number
+  color: string
+  percent: number
+}
+
+const CONCLUSION_STATUS_META = [
+  { status: 'non_compliant', label: '确定问题', color: '#ef4444' },
+  { status: 'data_gap', label: '资料待核实', color: '#f59e0b' },
+  { status: 'uncertain', label: '待判断', color: '#64748b' },
+  { status: 'compliant', label: '合规', color: '#10b981' },
+  { status: 'not_applicable', label: '不适用', color: '#cbd5e1' },
+  { status: 'not_executed', label: '未执行', color: '#94a3b8' },
+] as const
 
 const router = useRouter()
 const route = useRoute()
@@ -454,6 +523,31 @@ const coverageSegments = computed<CoverageSegment[]>(() => {
 const coverageScopeIsClosed = computed(() => {
   const total = Math.max(0, Number(clinicalQc.value?.kpis.records_total || 0))
   return coverageSegments.value.reduce((sum, segment) => sum + segment.value, 0) === total
+})
+const conclusionSegments = computed<ConclusionSegment[]>(() => {
+  const counts = clinicalQc.value?.canonical_status_counts || {}
+  const values = CONCLUSION_STATUS_META.map((meta) => ({
+    ...meta,
+    value: Math.max(0, Number(counts[meta.status] || 0)),
+  })).filter((segment) => segment.value > 0)
+  const total = values.reduce((sum, segment) => sum + segment.value, 0)
+  return values.map((segment) => ({
+    ...segment,
+    percent: total ? Number(((segment.value / total) * 100).toFixed(1)) : 0,
+  }))
+})
+const conclusionTotal = computed(() =>
+  conclusionSegments.value.reduce((sum, segment) => sum + segment.value, 0),
+)
+const conclusionRingBackground = computed(() => {
+  if (!conclusionSegments.value.length) return 'transparent'
+  let offset = 0
+  const stops = conclusionSegments.value.map((segment) => {
+    const start = offset
+    offset += segment.percent
+    return `${segment.color} ${start}% ${offset}%`
+  })
+  return `conic-gradient(${stops.join(', ')})`
 })
 
 const sourceStateText = computed(() =>
@@ -864,6 +958,71 @@ watch([departmentFilter, keyword], () => {
 }
 .qc-home-chart-note.is-warning {
   color: #a16207;
+}
+.qc-home-conclusion {
+  display: grid;
+  gap: 16px;
+}
+.qc-home-conclusion__content {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 22px;
+}
+.qc-home-conclusion__ring {
+  display: grid;
+  width: 132px;
+  height: 132px;
+  place-items: center;
+  border-radius: 50%;
+}
+.qc-home-conclusion__ring > div {
+  display: grid;
+  width: 96px;
+  height: 96px;
+  place-content: center;
+  border-radius: 50%;
+  background: #fff;
+  text-align: center;
+}
+.qc-home-conclusion__ring strong,
+.qc-home-conclusion__ring span {
+  display: block;
+}
+.qc-home-conclusion__ring strong {
+  color: #1d1d1f;
+  font-size: 26px;
+  line-height: 30px;
+}
+.qc-home-conclusion__ring span {
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
+}
+.qc-home-conclusion__legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.qc-home-conclusion__legend li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 13px;
+}
+.qc-home-conclusion__legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.qc-home-conclusion__legend small {
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 12px;
 }
 .qc-home-department-chart {
   display: grid;
