@@ -223,6 +223,133 @@ def test_completed_projection_ignores_old_rule_version_envelopes(monkeypatch):
     assert result[("inst-1", "patient-1", "visit-1")] == {"status": "not_run"}
 
 
+def test_completed_projection_keeps_current_ready_when_newer_job_only_has_old_version_envelope(
+    monkeypatch,
+):
+    current_job = {
+        **_selected_job(),
+        "id": "job-current",
+        "created_at": "2026-08-08T09:00:00",
+        "finished_at": "2026-08-08T09:01:00",
+        "record_ids_json": json.dumps(["visit-1"]),
+        "job_kind": "parent",
+        "parent_job_id": None,
+    }
+    newer_old_version_job = {
+        **current_job,
+        "id": "job-newer-old-version",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+        "filters": {
+            "rule_set_key": "luxian_0609_qc_v1",
+            "rule_set_version": "2026-06-08",
+        },
+    }
+    current_envelope = {
+        "root_job_id": "job-current",
+        "job_id": "job-current",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+            }
+        ),
+    }
+    old_version_envelope = {
+        **current_envelope,
+        "root_job_id": "job-newer-old-version",
+        "job_id": "job-newer-old-version",
+        "rule_set_version": "2026-06-08",
+    }
+    session = _ReadSession([[current_job, newer_old_version_job], [current_envelope, old_version_envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, **_kwargs: dict(row))
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")]["status"] == "ready"
+
+
+def test_completed_projection_treats_current_job_with_only_old_version_envelope_as_missing(
+    monkeypatch,
+):
+    current_job = {
+        **_selected_job(),
+        "id": "job-current-with-old-envelope",
+        "record_ids_json": json.dumps(["visit-1"]),
+        "job_kind": "parent",
+        "parent_job_id": None,
+    }
+    old_version_envelope = {
+        "root_job_id": "job-current-with-old-envelope",
+        "job_id": "job-current-with-old-envelope",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-08",
+        "envelope_json": "{}",
+    }
+    session = _ReadSession([[current_job], [old_version_envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, **_kwargs: dict(row))
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")] == {
+        "status": "technical_error",
+        "reason_code": "canonical_envelope_missing",
+    }
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [{"status": "compliant"}],
+        [
+            {"rule_id": "LX0609-001", "status": "compliant"},
+            {"rule_code": "LX0609-001", "status": "non_compliant"},
+        ],
+    ],
+)
+def test_completed_projection_rejects_canonical_items_without_unique_rule_id(items):
+    result = CustomQCWorkspaceService._summarize_completed_record_result_envelope(
+        envelope_row={
+            "envelope_json": json.dumps(
+                {
+                    "schema_version": "lx0609-record-result-envelope-v1",
+                    "delivery_mode": "canonical_straight_through",
+                    "items": items,
+                }
+            )
+        },
+        completed_at="2026-08-08T10:00:00",
+    )
+
+    assert result == {
+        "status": "technical_error",
+        "reason_code": "canonical_envelope_invalid",
+    }
+
+
 def test_single_record_result_returns_canonical_envelope_items_without_reprojection(
     monkeypatch,
 ):

@@ -3932,7 +3932,7 @@ class CustomQCWorkspaceService:
                 .all()
             )
             envelopes_by_identity: Dict[tuple[str, str, str], Dict[str, list[Dict[str, Any]]]] = {}
-            envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
+            current_envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
             for raw_row in envelope_rows:
                 row = dict(raw_row)
                 identity = (
@@ -3943,13 +3943,13 @@ class CustomQCWorkspaceService:
                 job_id = _safe_text(row.get("root_job_id"))
                 if not job_id or not all(identity):
                     continue
-                envelopes_by_job_visit.setdefault((job_id, identity[2]), []).append(row)
                 if (
-                    identity in identities
-                    and _safe_text(row.get("rule_set_key")) == normalized_rule_set_key
+                    _safe_text(row.get("rule_set_key")) == normalized_rule_set_key
                     and _safe_text(row.get("rule_set_version")) == normalized_rule_set_version
                 ):
-                    envelopes_by_identity.setdefault(identity, {}).setdefault(job_id, []).append(row)
+                    current_envelopes_by_job_visit.setdefault((job_id, identity[2]), []).append(row)
+                    if identity in identities:
+                        envelopes_by_identity.setdefault(identity, {}).setdefault(job_id, []).append(row)
 
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
             for identity in identities:
@@ -3966,11 +3966,20 @@ class CustomQCWorkspaceService:
                     rule_set_key=normalized_rule_set_key,
                     rule_set_version=normalized_rule_set_version,
                 )
-                # 只有 visit_id 的旧任务在缺少 Envelope 时无法证明三坐标归属。
-                # 若其代次不早于可确认任务，绝不允许旧 Envelope 静默回退。
+                # 只有当前规则版本、且没有任何当前版本同 visit Envelope 的根任务
+                # 才是无法确认三坐标归属的缺失候选。旧版本 Envelope 完全不参与
+                # 当前代次选择，也不能遮蔽当前版本的交付缺口。
                 ambiguous_candidates = []
                 for job_id, job in jobs_by_id.items():
-                    same_visit_envelopes = envelopes_by_job_visit.get((job_id, visit_id), [])
+                    job_selection = select_latest_authoritative_record_result_job(
+                        [job],
+                        record_id=visit_id,
+                        rule_set_key=normalized_rule_set_key,
+                        rule_set_version=normalized_rule_set_version,
+                    )
+                    if job_selection.state != "ready":
+                        continue
+                    same_visit_envelopes = current_envelopes_by_job_visit.get((job_id, visit_id), [])
                     if same_visit_envelopes:
                         continue
                     ambiguous_candidates.append(job)
@@ -4048,10 +4057,21 @@ class CustomQCWorkspaceService:
             return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
 
         status_counts: Dict[str, int] = {}
+        delivered_rule_ids: set[str] = set()
         for item in envelope["items"]:
             status = _safe_text(item.get("status")) if isinstance(item, dict) else ""
-            if status not in _CUSTOMER_STATUSES:
+            rule_id = (
+                _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+                if isinstance(item, dict)
+                else ""
+            )
+            if (
+                status not in _CUSTOMER_STATUSES
+                or not rule_id
+                or rule_id in delivered_rule_ids
+            ):
                 return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
+            delivered_rule_ids.add(rule_id)
             status_counts[status] = status_counts.get(status, 0) + 1
         if isinstance(completed_at, datetime):
             completed_at_value = completed_at.isoformat()
