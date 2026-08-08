@@ -306,8 +306,16 @@ class WorkstationAggregationService:
                 target_date=date_value,
                 recipient_id=recipient_id,
             )
+            clinical_qc = self._build_luxian_0609_home_projection(
+                session,
+                department=department,
+                keyword=keyword,
+                priority_limit=hotspot_limit,
+                target_date=date_value,
+            )
             return {
                 "date": date_value.strftime("%Y-%m-%d"),
+                # 旧首页的前台/编码/结算统计仍保持兼容，不能混入全病历质控主口径。
                 "kpis": self._build_home_kpis(hotspots, todo_items, batch_summaries),
                 "hotspots": hotspots,
                 "my_todo_summary": self._build_todo_summary(todo_items),
@@ -315,9 +323,266 @@ class WorkstationAggregationService:
                 "batch_summaries": batch_summaries,
                 "department_options": self._build_home_departments(hotspots, todo_items),
                 "team_summary": self._build_team_summary(hotspots, todo_items),
+                "scope": clinical_qc["scope"],
+                "clinical_qc": clinical_qc,
             }
         finally:
             session.close()
+
+    def _build_luxian_0609_home_projection(
+        self,
+        session: Session,
+        *,
+        department: Optional[str],
+        keyword: Optional[str],
+        priority_limit: int,
+        target_date: datetime,
+    ) -> Dict[str, Any]:
+        """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
+
+        首页只消费 Task 2A 的完成态 Canonical 摘要；运行态和资料同步状态没有
+        三坐标权威来源时保持 unknown，不能从旧工作流、文案或文书数量回填。
+        """
+
+        records = self._load_luxian_home_records(
+            session,
+            department=department,
+            keyword=keyword,
+        )
+        record_refs = [
+            {
+                "institute_id": _safe_text(record.get("institute_id")).strip(),
+                "patient_id": _safe_text(record.get("patient_id")).strip(),
+                "visit_id": _safe_text(record.get("visit_id")).strip(),
+            }
+            for record in records
+        ]
+        summaries = self._load_luxian_0609_summaries(record_refs)
+
+        canonical_status_counts: Dict[str, int] = {}
+        technical_error_total = 0
+        qc_completed_total = 0
+        qc_pending_total = 0
+        high_risk_review_total = 0
+        last_successful_qc_at: Optional[str] = None
+        priority_items: List[Dict[str, Any]] = []
+        department_distribution: Dict[str, Dict[str, int]] = {}
+
+        for record in records:
+            identity = (
+                _safe_text(record.get("institute_id")).strip(),
+                _safe_text(record.get("patient_id")).strip(),
+                _safe_text(record.get("visit_id")).strip(),
+            )
+            summary = summaries.get(identity) or {"status": "not_run"}
+            summary_status = _safe_text(summary.get("status"), "not_run").strip()
+            department_name = _safe_text(record.get("department"), "未分科室").strip() or "未分科室"
+            department_bucket = department_distribution.setdefault(
+                department_name,
+                {
+                    "records_total": 0,
+                    "high_risk_review_total": 0,
+                    "data_gap_record_total": 0,
+                    "uncertain_record_total": 0,
+                },
+            )
+            department_bucket["records_total"] += 1
+
+            if summary_status == "technical_error":
+                technical_error_total += 1
+                continue
+            if summary_status != "ready":
+                qc_pending_total += 1
+                continue
+
+            qc_completed_total += 1
+            raw_counts = summary.get("status_counts")
+            status_counts = raw_counts if isinstance(raw_counts, dict) else {}
+            normalized_counts: Dict[str, int] = {}
+            for raw_status, raw_count in status_counts.items():
+                try:
+                    count = int(raw_count)
+                except (TypeError, ValueError):
+                    continue
+                status = _safe_text(raw_status).strip()
+                if count > 0 and status:
+                    normalized_counts[status] = count
+                    canonical_status_counts[status] = canonical_status_counts.get(status, 0) + count
+
+            completed_at = _safe_text(summary.get("completed_at")).strip() or None
+            if completed_at and (
+                last_successful_qc_at is None
+                or _datetime_sort_number(completed_at) > _datetime_sort_number(last_successful_qc_at)
+            ):
+                last_successful_qc_at = completed_at
+
+            non_compliant_count = normalized_counts.get("non_compliant", 0)
+            data_gap_count = normalized_counts.get("data_gap", 0)
+            uncertain_count = normalized_counts.get("uncertain", 0)
+            if non_compliant_count:
+                high_risk_review_total += 1
+                department_bucket["high_risk_review_total"] += 1
+            if data_gap_count:
+                department_bucket["data_gap_record_total"] += 1
+            if uncertain_count:
+                department_bucket["uncertain_record_total"] += 1
+
+            if non_compliant_count:
+                priority_kind = "non_compliant"
+                priority_rank = 0
+            elif data_gap_count:
+                priority_kind = "data_gap"
+                priority_rank = 1
+            elif uncertain_count:
+                priority_kind = "uncertain"
+                priority_rank = 2
+            else:
+                continue
+
+            priority_items.append(
+                {
+                    "record_key": self._luxian_home_record_key(identity),
+                    "institute_id": identity[0],
+                    "patient_id": identity[1],
+                    "visit_id": identity[2],
+                    "patient_name": _safe_text(record.get("patient_name")),
+                    "department": department_name,
+                    "priority_kind": priority_kind,
+                    "status_counts": normalized_counts,
+                    "completed_at": completed_at,
+                    "_priority_rank": priority_rank,
+                }
+            )
+
+        priority_items.sort(
+            key=lambda item: (
+                int(item.get("_priority_rank") or 9),
+                -int(dict(item.get("status_counts") or {}).get("non_compliant", 0)),
+                -int(dict(item.get("status_counts") or {}).get("data_gap", 0)),
+                -_datetime_sort_number(item.get("completed_at")),
+                _safe_text(item.get("record_key")),
+            )
+        )
+        for item in priority_items:
+            item.pop("_priority_rank", None)
+
+        generated_at = datetime.now().astimezone().isoformat()
+        return {
+            "scope": {
+                "hospital_scope": "all",
+                "department": department or None,
+                "scene": "final",
+                "rule_set_key": "luxian_0609_qc_v1",
+                "rule_set_version": "2026-06-09",
+                "target_date": target_date.strftime("%Y-%m-%d"),
+                "generated_at": generated_at,
+            },
+            "kpis": {
+                "records_total": len(records),
+                "qc_pending_total": qc_pending_total,
+                "qc_completed_total": qc_completed_total,
+                "high_risk_review_total": high_risk_review_total,
+            },
+            "data_health": {
+                "source_sync_status": "unknown",
+                "source_error_total": 0,
+                "technical_error_total": technical_error_total,
+                "running_task_total": None,
+                "running_task_state": "unknown",
+                "last_successful_qc_at": last_successful_qc_at,
+            },
+            "canonical_status_counts": dict(sorted(canonical_status_counts.items())),
+            "priority_items": priority_items[: max(1, priority_limit)],
+            "department_distribution": [
+                {"department": name, **counts}
+                for name, counts in sorted(
+                    department_distribution.items(),
+                    key=lambda item: (-item[1]["high_risk_review_total"], -item[1]["records_total"], item[0]),
+                )
+            ],
+            "rule_family_distribution": [],
+            "trend": None,
+            "comparison": None,
+        }
+
+    @staticmethod
+    def _luxian_home_record_key(identity: tuple[str, str, str]) -> str:
+        return json.dumps(list(identity), ensure_ascii=False, separators=(",", ":"))
+
+    def _load_luxian_home_records(
+        self,
+        session: Session,
+        *,
+        department: Optional[str],
+        keyword: Optional[str],
+    ) -> List[Dict[str, str]]:
+        """复用病历池的筛选器，仅读取三坐标齐全的真实 CDM 病历。"""
+
+        from ..medical_records.query_service import (
+            MedicalRecordFrontpage,
+            _apply_workstation_filters,
+            _workstation_department_expr,
+            _workstation_discharge_join_condition,
+            _workstation_discharge_summary_subquery,
+        )
+
+        discharge_summary = _workstation_discharge_summary_subquery(session)
+        query = session.query(MedicalRecordFrontpage)
+        if discharge_summary is not None:
+            query = query.outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            )
+        query = _apply_workstation_filters(
+            query,
+            dept=department,
+            keyword=keyword,
+            start_date=None,
+            end_date=None,
+            date_field="visit",
+            include_department=True,
+            discharge_summary=discharge_summary,
+        )
+        rows = query.with_entities(
+            MedicalRecordFrontpage.institute_id,
+            MedicalRecordFrontpage.patient_id,
+            MedicalRecordFrontpage.visit_id,
+            MedicalRecordFrontpage.name.label("patient_name"),
+            _workstation_department_expr(discharge_summary).label("department"),
+        ).all()
+        records_by_identity: Dict[tuple[str, str, str], Dict[str, str]] = {}
+        for row in rows:
+            identity = (
+                _safe_text(row.institute_id).strip(),
+                _safe_text(row.patient_id).strip(),
+                _safe_text(row.visit_id).strip(),
+            )
+            if not all(identity):
+                continue
+            records_by_identity.setdefault(
+                identity,
+                {
+                    "institute_id": identity[0],
+                    "patient_id": identity[1],
+                    "visit_id": identity[2],
+                    "patient_name": _safe_text(row.patient_name).strip(),
+                    "department": _safe_text(row.department).strip() or "未分科室",
+                },
+            )
+        return list(records_by_identity.values())
+
+    def _load_luxian_0609_summaries(
+        self,
+        record_refs: List[Dict[str, str]],
+    ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+        """只复用 Task 2A 的已完成 Canonical 批量摘要入口。"""
+
+        from ..custom_qc_workspace_service import CustomQCWorkspaceService
+
+        return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+            record_refs=record_refs,
+            session_factory=self._session_factory,
+        )
 
     def get_home_hotspots(
         self,
