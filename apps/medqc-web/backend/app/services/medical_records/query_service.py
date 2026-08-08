@@ -569,11 +569,33 @@ def get_workstation_data(
     qc_projection_loader: Optional[
         Callable[[list[dict[str, str]]], dict[tuple[str, str, str], dict[str, Any]]]
     ] = None,
+    analytics_job_id: Optional[str] = None,
+    analytics_completed_from: Optional[datetime] = None,
+    analytics_completed_to: Optional[datetime] = None,
+    analytics_rule_id: Optional[str] = None,
+    analytics_result_status: Optional[str] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged"}:
         raise ValueError("hospital_status must be one of: all, inpatient, discharged")
+    if (
+        analytics_completed_from
+        and analytics_completed_to
+        and analytics_completed_from > analytics_completed_to
+    ):
+        raise ValueError("analytics_completed_from 不能晚于 analytics_completed_to")
+    normalized_analytics_status = str(analytics_result_status or "").strip()
+    if normalized_analytics_status and normalized_analytics_status not in {
+        "non_compliant",
+        "data_gap",
+        "uncertain",
+        "compliant",
+        "not_applicable",
+        "not_executed",
+        "technical_error",
+    }:
+        raise ValueError("analytics_result_status 无效")
 
     with session_factory() as session:
         settings, _ = settings_loader()
@@ -608,6 +630,72 @@ def get_workstation_data(
             include_department=True,
             discharge_summary=discharge_summary,
         )
+        if any(
+            (
+                analytics_job_id,
+                analytics_completed_from,
+                analytics_completed_to,
+                analytics_rule_id,
+                normalized_analytics_status,
+            )
+        ):
+            from ..workstation.worklist_service import WorkstationAggregationService
+
+            analytics_records_by_identity = {
+                (str(row.institute_id).strip(), str(row.patient_id).strip(), str(row.visit_id).strip()): {
+                    "department": str(row.department or "").strip() or "未分科室"
+                }
+                for row in q.with_entities(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                    _workstation_department_expr(discharge_summary).label("department"),
+                ).all()
+                if all((row.institute_id, row.patient_id, row.visit_id))
+            }
+            analytics_service = WorkstationAggregationService(session_factory=session_factory)
+            analytics_events, _ = analytics_service._load_luxian_0609_analytics_events(
+                session,
+                records_by_identity=analytics_records_by_identity,
+                completed_from=analytics_completed_from,
+                completed_to=analytics_completed_to,
+                job_id=str(analytics_job_id or "").strip() or None,
+            )
+            matching_identities: set[tuple[str, str, str]] = set()
+            if normalized_analytics_status != "technical_error":
+                for event in analytics_events:
+                    identity = event.get("identity")
+                    if not isinstance(identity, tuple) or len(identity) != 3:
+                        continue
+                    matching_items = [
+                        item
+                        for item in event.get("items", [])
+                        if isinstance(item, dict)
+                        and (
+                            not analytics_rule_id
+                            or str(item.get("rule_id") or "").strip().upper()
+                            == str(analytics_rule_id).strip().upper()
+                        )
+                        and (
+                            not normalized_analytics_status
+                            or str(item.get("status") or "").strip()
+                            == normalized_analytics_status
+                        )
+                    ]
+                    if matching_items:
+                        matching_identities.add(identity)
+            identity_conditions = [
+                and_(
+                    MedicalRecordFrontpage.institute_id == institute_id,
+                    MedicalRecordFrontpage.patient_id == patient_id,
+                    MedicalRecordFrontpage.visit_id == visit_id,
+                )
+                for institute_id, patient_id, visit_id in matching_identities
+            ]
+            q = q.filter(or_(*identity_conditions) if identity_conditions else text("FALSE"))
+            # 统计下钻只接受服务端 Canonical + 三坐标结果；演示病历没有该身份，
+            # 不得以当前页可见演示数据混入图表明细。
+            visible_demos = []
 
         total_real_filtered = q.count()
         offset = (page - 1) * page_size

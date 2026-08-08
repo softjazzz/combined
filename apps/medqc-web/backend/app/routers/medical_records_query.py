@@ -1,7 +1,8 @@
 """病案数据 - 查询子域。"""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
@@ -73,6 +74,21 @@ async def get_workstation_data_api(
     ),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
+    analytics_job_id: Optional[UUID] = Query(None, description="统计下钻的已完成根任务 ID"),
+    analytics_completed_from: Optional[datetime] = Query(None, description="统计下钻完成时间起点"),
+    analytics_completed_to: Optional[datetime] = Query(None, description="统计下钻完成时间终点"),
+    analytics_rule_id: Optional[str] = Query(None, description="统计下钻规则 ID"),
+    analytics_result_status: Optional[
+        Literal[
+            "non_compliant",
+            "data_gap",
+            "uncertain",
+            "compliant",
+            "not_applicable",
+            "not_executed",
+            "technical_error",
+        ]
+    ] = Query(None, description="统计下钻 Canonical 结果状态"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     try:
@@ -85,6 +101,11 @@ async def get_workstation_data_api(
             hospital_status=hospital_status,
             page=page,
             page_size=page_size,
+            analytics_job_id=str(analytics_job_id) if analytics_job_id else None,
+            analytics_completed_from=analytics_completed_from,
+            analytics_completed_to=analytics_completed_to,
+            analytics_rule_id=analytics_rule_id,
+            analytics_result_status=analytics_result_status,
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)

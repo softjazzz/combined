@@ -108,6 +108,20 @@ export function usePatientRecords() {
       if (hospFilter.value !== 'all') {
         params.hospital_status = hospFilter.value
       }
+      const analyticsKeys = [
+        'analytics_job_id',
+        'analytics_completed_from',
+        'analytics_completed_to',
+        'analytics_rule_id',
+        'analytics_result_status',
+      ] as const
+      const analyticsQuery = new URLSearchParams(window.location.search)
+      for (const key of analyticsKeys) {
+        const value = analyticsQuery.get(key)
+        if (value?.trim()) {
+          params[key] = value.trim()
+        }
+      }
 
       const response = await ApiService.getRaw('/api/medical-records/workstation', {
         params,
