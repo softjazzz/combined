@@ -147,4 +147,13 @@ describe('QCOverviewView', () => {
 
     expect(wrapper.get('[data-testid="home-load-error"]').text()).toContain('暂时无法加载')
   })
+
+  it('首次请求期间显示全院质控概览加载状态，不短暂展示空页面', () => {
+    apiGet.mockReturnValueOnce(new Promise(() => undefined))
+
+    const wrapper = mountView()
+
+    expect(wrapper.get('[data-testid="home-loading"]').text()).toContain('正在加载全院质控概览')
+    expect(wrapper.find('[data-testid="home-empty"]').exists()).toBe(false)
+  })
 })

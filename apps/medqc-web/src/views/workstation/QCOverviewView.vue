@@ -36,6 +36,20 @@
           </a-button>
         </section>
 
+        <section
+          v-else-if="loading"
+          class="qc-home-loading workstation-surface-enter"
+          data-testid="home-loading"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <a-spin size="large" />
+          <div>
+            <strong>正在加载全院质控概览</strong>
+            <span>正在汇总当前范围内的病历与最新质控结果。</span>
+          </div>
+        </section>
+
         <template v-else-if="clinicalQc">
           <section
             class="qc-home-scope workstation-surface-enter"
@@ -264,7 +278,8 @@ interface KpiCard {
 
 const router = useRouter()
 const route = useRoute()
-const loading = ref(false)
+// 首次进入即处于加载态，避免请求尚未发起时短暂展示无内容的页面框架。
+const loading = ref(true)
 const loadError = ref(false)
 const selectedDate = ref<Dayjs>(dayjs())
 const departmentFilter = ref('all')
@@ -365,7 +380,7 @@ watch([departmentFilter, keyword], () => {
 
 .qc-home-shell { background: #f5f5f7; color: #1d1d1f; }
 .qc-home-canvas { display: grid; gap: 18px; min-height: calc(100vh - 64px); }
-.qc-home-header, .qc-home-panel, .qc-home-scope, .qc-home-notice, .qc-home-empty {
+.qc-home-header, .qc-home-panel, .qc-home-scope, .qc-home-notice, .qc-home-empty, .qc-home-loading {
   border: 1px solid rgba(0, 0, 0, .08); border-radius: 20px; background: rgba(255,255,255,.88); box-shadow: 0 2px 12px rgba(0,0,0,.035); backdrop-filter: blur(18px);
 }
 .qc-home-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; }
@@ -385,6 +400,7 @@ watch([departmentFilter, keyword], () => {
 .qc-home-health-list { display:grid; gap:0; margin:0; }.qc-home-health-list > div { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-health-list > div:last-child { border-bottom:0; }.qc-home-health-list dt, .qc-home-health-list dd { margin:0; font-size:13px; }.qc-home-health-list dt { color:rgba(29,29,31,.6); }.qc-home-health-list dd { text-align:right; font-weight:600; }.qc-home-health-list .is-danger { color:#dc2626; }
 .qc-home-department-list { display:grid; }.qc-home-department-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:11px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-department-row:last-child { border-bottom:0; }.qc-home-department-row strong, .qc-home-department-row span, .qc-home-department-row em { display:block; font-size:12px; font-style:normal; }.qc-home-department-row strong { font-size:13px; }.qc-home-department-row span { margin-top:3px; color:rgba(29,29,31,.48); }.qc-home-department-row > div:last-child { text-align:right; }.qc-home-department-row em { color:#b45309; font-weight:650; }
 .qc-home-notice { display:flex; align-items:center; gap:12px; padding:14px 18px; }.qc-home-notice span { flex:1; color:rgba(29,29,31,.6); font-size:13px; }.qc-home-notice--error { border-color:rgba(239,68,68,.2); }.qc-home-notice--error strong { color:#b91c1c; }.qc-home-empty { display:grid; min-height:280px; place-items:center; padding:28px; }
+.qc-home-loading { display:flex; min-height:220px; align-items:center; justify-content:center; gap:16px; padding:28px; color:rgba(29,29,31,.72); }.qc-home-loading :deep(.ant-spin-dot-item) { background-color:#0066cc; }.qc-home-loading strong, .qc-home-loading span { display:block; }.qc-home-loading strong { color:#1d1d1f; font-size:15px; font-weight:650; line-height:22px; }.qc-home-loading span { margin-top:3px; color:rgba(29,29,31,.52); font-size:13px; line-height:20px; }
 @media (max-width: 980px) { .qc-home-header { align-items:flex-start; flex-direction:column; }.qc-home-header :deep(.flex.min-w-\[280px\]) { width:100%; }.qc-home-kpis { grid-template-columns:repeat(2,1fr); }.qc-home-kpi:nth-child(2) { border-right:0; }.qc-home-kpi:nth-child(-n+2) { border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-grid { grid-template-columns:1fr; } }
 @media (max-width: 620px) { .qc-home-canvas { gap:12px; }.qc-home-header, .qc-home-panel { padding:17px; }.qc-home-header h1 { font-size:23px; }.qc-home-kpis { grid-template-columns:1fr; }.qc-home-kpi, .qc-home-kpi:nth-child(2) { border-right:0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-kpi:last-child { border-bottom:0; }.qc-home-priority-row { grid-template-columns:1fr; gap:9px; }.qc-home-priority-row__counts { justify-content:flex-start; }.qc-home-text-action { justify-self:start; }.qc-home-scope__time { width:100%; margin-left:0; } }
 </style>
