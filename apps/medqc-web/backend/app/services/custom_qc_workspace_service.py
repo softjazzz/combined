@@ -3693,49 +3693,45 @@ class CustomQCWorkspaceService:
                 .replace("_", "\\_")
                 .replace('"', '\\"')
             )
-            try:
-                root_rows = (
-                    session.execute(
-                        select(self._batch_job_table)
-                        .join(
-                            self._record_result_envelope_table,
-                            self._record_result_envelope_table.c.root_job_id
-                            == self._batch_job_table.c.id,
-                        )
-                        .where(
-                            and_(
-                                self._batch_job_table.c.status == "completed",
-                                or_(
-                                    self._batch_job_table.c.parent_job_id.is_(None),
-                                    self._batch_job_table.c.parent_job_id == "",
-                                ),
-                                self._batch_job_table.c.record_ids_json.ilike(
-                                    f'%"{escaped_visit_id}"%',
-                                    escape="\\",
-                                ),
-                                self._record_result_envelope_table.c.institute_id
-                                == normalized_institute_id,
-                                self._record_result_envelope_table.c.patient_id
-                                == normalized_patient_id,
-                                self._record_result_envelope_table.c.visit_id
-                                == normalized_visit_id,
-                                self._record_result_envelope_table.c.rule_set_key
-                                == normalized_rule_set_key,
-                                self._record_result_envelope_table.c.rule_set_version
-                                == normalized_rule_set_version,
-                            )
-                        )
-                        .distinct()
-                        .order_by(
-                            desc(self._batch_job_table.c.finished_at),
-                            desc(self._batch_job_table.c.created_at),
+            root_rows = (
+                session.execute(
+                    select(self._batch_job_table)
+                    .join(
+                        self._record_result_envelope_table,
+                        self._record_result_envelope_table.c.root_job_id
+                        == self._batch_job_table.c.id,
+                    )
+                    .where(
+                        and_(
+                            self._batch_job_table.c.status == "completed",
+                            or_(
+                                self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == "",
+                            ),
+                            self._batch_job_table.c.record_ids_json.ilike(
+                                f'%"{escaped_visit_id}"%',
+                                escape="\\",
+                            ),
+                            self._record_result_envelope_table.c.institute_id
+                            == normalized_institute_id,
+                            self._record_result_envelope_table.c.patient_id
+                            == normalized_patient_id,
+                            self._record_result_envelope_table.c.visit_id == normalized_visit_id,
+                            self._record_result_envelope_table.c.rule_set_key
+                            == normalized_rule_set_key,
+                            self._record_result_envelope_table.c.rule_set_version
+                            == normalized_rule_set_version,
                         )
                     )
-                    .mappings()
-                    .all()
+                    .distinct()
+                    .order_by(
+                        desc(self._batch_job_table.c.finished_at),
+                        desc(self._batch_job_table.c.created_at),
+                    )
                 )
-            except (sa.exc.ProgrammingError, sa.exc.OperationalError):
-                root_rows = []
+                .mappings()
+                .all()
+            )
             candidates = [
                 self._aggregate_parent_job(session, _row_to_batch_job(dict(row)))
                 for row in root_rows

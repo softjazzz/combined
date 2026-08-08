@@ -4,6 +4,9 @@ import json
 from datetime import datetime
 from typing import Any
 
+import pytest
+from sqlalchemy.exc import OperationalError
+
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 
@@ -36,6 +39,14 @@ class _WriteSession:
 
     def execute(self, statement: Any) -> None:
         self.statements.append(statement)
+
+
+class _BrokenReadSession:
+    def execute(self, _statement: Any) -> _Rows:
+        raise OperationalError("SELECT", {}, RuntimeError("database unavailable"))
+
+    def close(self) -> None:
+        return None
 
 
 def _selected_job(*, legacy_items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -87,6 +98,20 @@ def test_single_record_result_does_not_fall_back_to_legacy_items_when_envelope_i
     assert result["reason_code"] == "canonical_result_envelope_missing"
     assert result["items"] == []
     assert result["result_rule_count"] == 0
+
+
+def test_single_record_result_does_not_convert_database_read_error_to_not_found(monkeypatch):
+    monkeypatch.setattr(workspace_module, "_session", _BrokenReadSession)
+
+    with pytest.raises(OperationalError, match="database unavailable"):
+        CustomQCWorkspaceService().get_latest_luxian_0609_record_result(
+            institute_id="inst-1",
+            patient_id="patient-1",
+            visit_id="visit-1",
+            expected_rule_ids=["LX0609-001"],
+            rule_set_key="luxian_0609_qc_v1",
+            rule_set_version="2026-06-09",
+        )
 
 
 def test_single_record_result_returns_canonical_envelope_items_without_reprojection(
