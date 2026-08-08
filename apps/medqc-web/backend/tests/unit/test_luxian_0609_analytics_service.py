@@ -118,6 +118,22 @@ def test_analytics_returns_zero_structure_for_empty_scope(monkeypatch):
     assert payload["completion_time_series"] is None
 
 
+def test_analytics_hides_completion_trend_when_only_one_real_time_bucket(monkeypatch):
+    records = [_record("inst-a", "patient-a", "visit-a", "ICU")]
+    event = {
+        "root_job_id": "job-1",
+        "identity": ("inst-a", "patient-a", "visit-a"),
+        "department": "ICU",
+        "finished_at": datetime(2026, 8, 1, 9),
+        "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+    }
+
+    payload = _service(monkeypatch, records, [event]).get_luxian_0609_analytics()
+
+    assert payload["kpis"]["completed_event_total"] == 1
+    assert payload["completion_time_series"] is None
+
+
 def test_analytics_rejects_reverse_completed_range(monkeypatch):
     service = _service(monkeypatch, [], [])
 
