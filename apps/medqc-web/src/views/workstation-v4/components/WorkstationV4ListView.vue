@@ -131,6 +131,12 @@
               <div class="workbench-filter-summary wv4-record-pool-filter__summary">
                 {{ tableSummaryText }}
               </div>
+              <div
+                v-if="!isStageQueueMode"
+                class="wv4-record-pool-filter__notice"
+              >
+                在院、已出院及结果状态筛选待接入服务端，当前仅按已支持条件查询。
+              </div>
             </div>
 
             <div class="wv4-analysis-kpis">
@@ -156,6 +162,14 @@
               </article>
             </div>
           </section>
+        </div>
+
+        <div
+          v-if="loadError"
+          class="workstation-empty-state mb-4 flex items-center gap-2 px-4 py-3 text-[13px]"
+          role="alert"
+        >
+          病历池暂未加载成功，请检查网络后重试。
         </div>
 
         <div
@@ -189,6 +203,7 @@
                 :row-action-label="stageMeta.singleActionText"
                 :show-primary-action="isStageQueueMode"
                 :show-selection="isStageQueueMode"
+                :show-quality-columns="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"
                 @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
@@ -232,7 +247,7 @@ import {
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
-import type { DeptInfo } from '../types'
+import type { DeptInfo, RecordPoolQcSummary } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
 import { filterDepartmentOption } from '../utils/workstationFilterPresentation'
@@ -268,6 +283,8 @@ const props = defineProps<{
   currentPage: number
   pageSize: number
   displayServerTotal: number
+  qcSummary: RecordPoolQcSummary
+  loadError: boolean
 }>()
 
 const emit = defineEmits<{
@@ -336,8 +353,15 @@ const searchPlaceholder = computed(() =>
 )
 
 const totalRows = computed(() =>
-  props.displayServerTotal > 0 ? props.displayServerTotal : props.workbenchRows.length,
+  isFrontpageGenerateStage.value ? props.displayServerTotal : props.qcSummary.totalRecords,
 )
+
+const hasCompletedQcResults = computed(() => props.qcSummary.readyRecords > 0)
+
+function completedStatusCount(status: string): string | number {
+  if (!hasCompletedQcResults.value) return '—'
+  return Number(props.qcSummary.statusCounts[status] || 0)
+}
 
 const pendingGenerateCount = computed(
   () =>
@@ -349,12 +373,6 @@ const generatingCount = computed(
     props.workbenchRows.filter((row) => /(生成中|处理中|running)/i.test(row.stageStatus)).length,
 )
 
-const generatedCount = computed(
-  () =>
-    props.workbenchRows.filter((row) => /(已生成|完成|成功|succeeded)/i.test(row.stageStatus))
-      .length,
-)
-
 const failedGenerateCount = computed(
   () =>
     props.workbenchRows.filter((row) => /(失败|异常|错误|failed)/i.test(row.stageStatus)).length,
@@ -364,34 +382,6 @@ const failedRate = computed(() => {
   if (totalRows.value <= 0) return 0
   return Math.round((failedGenerateCount.value / totalRows.value) * 100)
 })
-
-const highRiskCount = computed(
-  () =>
-    props.workbenchRows.filter((row) => /(高风险|严重|缺失|超时|失败|异常)/.test(row.riskReason))
-      .length,
-)
-
-const timeoutPriorityCount = computed(() =>
-  Number(props.priorityGroups.find((group) => group.key === 'timeout')?.count || 0),
-)
-
-const priorityTotalCount = computed(() =>
-  Number(
-    props.priorityGroups.find((group) => group.key === 'all')?.count ||
-      props.priorityCardsFiltered.length,
-  ),
-)
-
-const inProgressCount = computed(
-  () =>
-    props.workbenchRows.filter((row) =>
-      /(处理中|进行中|待处理|待审核|待复核|抽取)/.test(row.stageStatus),
-    ).length,
-)
-
-const completedCount = computed(
-  () => props.workbenchRows.filter((row) => /(完成|已完成|终末|通过)/.test(row.stageStatus)).length,
-)
 
 const kpiCards = computed(() =>
   isFrontpageGenerateStage.value
@@ -434,31 +424,43 @@ const kpiCards = computed(() =>
           key: 'total',
           label: '病历总量',
           value: totalRows.value,
-          desc: '当前筛选范围内病历总数',
+          desc: '服务端当前筛选范围',
           icon: FileTextOutlined,
           tone: 'brand',
         },
         {
-          key: 'pending',
-          label: '待处理',
-          value: priorityTotalCount.value,
-          desc: '待人工处理病历数',
+          key: 'completed-qc',
+          label: '已完成质控',
+          value: props.qcSummary.readyRecords,
+          desc: props.qcSummary.readyRecords
+            ? `另有 ${props.qcSummary.notRunRecords} 份尚未运行`
+            : '暂无已完成质控结果',
           icon: CheckCircleOutlined,
           tone: 'success',
         },
         {
-          key: 'timeout',
-          label: '超时风险',
-          value: timeoutPriorityCount.value || highRiskCount.value,
-          desc: '超过处理时限的病历数',
+          key: 'confirmed-defect',
+          label: '确定问题',
+          value: completedStatusCount('non_compliant'),
+          desc: hasCompletedQcResults.value ? '仅统计已完成结果中的确定问题' : '等待质控结果回写',
           icon: WarningOutlined,
           tone: 'warning',
         },
         {
-          key: 'progress',
-          label: '处理中',
-          value: inProgressCount.value,
-          desc: '当前正在处理中的病历数',
+          key: 'data-gap',
+          label: '资料待补',
+          value: completedStatusCount('data_gap'),
+          desc: hasCompletedQcResults.value ? '与资料同步状态分开统计' : '等待质控结果回写',
+          icon: FileTextOutlined,
+          tone: 'brand',
+        },
+        {
+          key: 'result-error',
+          label: '结果校验异常',
+          value: props.qcSummary.technicalErrorRecords || '—',
+          desc: props.qcSummary.technicalErrorRecords
+            ? '请复核最新质控结果交付'
+            : '资料同步与执行状态待接入',
           icon: SyncOutlined,
           tone: 'info',
         },

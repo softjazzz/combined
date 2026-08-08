@@ -29,6 +29,31 @@ export interface PatientRecord {
   diagnosisCode: string
   doctor: string
   status: 'pending' | 'processing' | 'completed' | 'warning' | 'has_defects'
+  sourceState?: RecordSourceState
+  latestQcSummary?: RecordLatestQcSummary
+}
+
+export interface RecordSourceState {
+  status: 'unknown' | string
+  lastSyncAt: string | null
+  reasonCode: string | null
+}
+
+export interface RecordLatestQcSummary {
+  status: 'ready' | 'not_run' | 'technical_error'
+  completedAt?: string | null
+  totalRuleCount?: number
+  statusCounts?: Record<string, number>
+  reasonCode?: string | null
+}
+
+export interface RecordPoolQcSummary {
+  totalRecords: number
+  readyRecords: number
+  notRunRecords: number
+  technicalErrorRecords: number
+  statusCounts: Record<string, number>
+  runningState: 'unknown' | string
 }
 
 export interface DeptInfo {

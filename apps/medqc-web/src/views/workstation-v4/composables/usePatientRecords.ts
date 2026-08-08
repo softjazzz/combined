@@ -1,9 +1,17 @@
 import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { DeptInfo, PatientRecord } from '../types'
-import { normalizeRecord } from '../normalize'
+import type { DeptInfo, PatientRecord, RecordPoolQcSummary } from '../types'
+import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
 
 const WORKSTATION_PAGE_SIZE = 15
+const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
+  totalRecords: 0,
+  readyRecords: 0,
+  notRunRecords: 0,
+  technicalErrorRecords: 0,
+  statusCounts: {},
+  runningState: 'unknown',
+}
 export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type WorkstationDateRange = [string, string] | null
 
@@ -50,6 +58,8 @@ export function usePatientRecords() {
   const serverTotalPages = ref(1)
   const totalCount = computed(() => serverTotal.value)
   const loading = ref(false)
+  const loadError = ref(false)
+  const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
 
   const activeDept = ref('\u5168\u90e8\u79d1\u5ba4')
   const searchText = ref('')
@@ -63,23 +73,14 @@ export function usePatientRecords() {
     { value: 'discharged', label: '\u5df2\u51fa\u9662' },
   ]
 
-  const scopedRecords = computed(() => {
-    let list = allRecords.value
-
-    if (hospFilter.value !== 'all') {
-      list = list.filter((record) => {
-        const hasDischargeDate = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
-        return hospFilter.value === 'inpatient' ? !hasDischargeDate : hasDischargeDate
-      })
-    }
-
-    return list
-  })
+  // 在院/已出院尚未接入服务端筛选；禁止对当前页病历做本地筛选造成假统计。
+  const scopedRecords = computed(() => allRecords.value)
 
   const filteredRecords = computed(() => scopedRecords.value)
 
   async function fetchData(page = 1, targetPageSize = pageSize.value) {
     loading.value = true
+    loadError.value = false
     try {
       const [startDate, endDate] = dateRange.value || []
       const requestedPageSize =
@@ -131,8 +132,11 @@ export function usePatientRecords() {
       serverTotalPages.value = Math.max(1, totalPagesComputed || 1)
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
       pageSize.value = requestedPageSize
+      qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
     } catch (error) {
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
+      loadError.value = true
+      qcSummary.value = { ...EMPTY_QC_SUMMARY }
     } finally {
       loading.value = false
     }
@@ -179,6 +183,8 @@ export function usePatientRecords() {
     serverTotalPages,
     totalCount,
     loading,
+    loadError,
+    qcSummary,
     activeDept,
     searchText,
     dateRange,

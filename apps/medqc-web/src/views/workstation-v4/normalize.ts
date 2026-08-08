@@ -1,4 +1,12 @@
-import type { NotificationVM, PatientRecord, QCIssueLike, WorkstationWorklistItem } from './types'
+import type {
+  NotificationVM,
+  PatientRecord,
+  QCIssueLike,
+  RecordLatestQcSummary,
+  RecordPoolQcSummary,
+  RecordSourceState,
+  WorkstationWorklistItem,
+} from './types'
 import type { QueueStatusCode, QueueStatusSource } from '@/types/workflow'
 
 type LooseRecord = Record<string, unknown>
@@ -185,6 +193,66 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     status: normalizeRecordStatus(
       pickString(source, ['status', 'auditStatus', 'audit_status', 'qc_status']),
     ),
+    sourceState: normalizeRecordSourceState(source.sourceState ?? source.source_state),
+    latestQcSummary: normalizeRecordLatestQcSummary(
+      source.latestQcSummary ?? source.latest_qc_summary,
+    ),
+  }
+}
+
+function normalizeRecordSourceState(raw: unknown): RecordSourceState {
+  const source = (raw || {}) as LooseRecord
+  const status = pickString(source, ['status']).toLowerCase()
+  return {
+    status: status || 'unknown',
+    lastSyncAt: pickString(source, ['lastSyncAt', 'last_sync_at']) || null,
+    reasonCode: pickString(source, ['reasonCode', 'reason_code']) || null,
+  }
+}
+
+function normalizeStatusCounts(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  return Object.entries(raw as LooseRecord).reduce<Record<string, number>>((result, [status, count]) => {
+    const normalizedStatus = status.trim()
+    const normalizedCount = Number(count)
+    if (normalizedStatus && Number.isFinite(normalizedCount) && normalizedCount > 0) {
+      result[normalizedStatus] = normalizedCount
+    }
+    return result
+  }, {})
+}
+
+function normalizeRecordLatestQcSummary(raw: unknown): RecordLatestQcSummary {
+  const source = (raw || {}) as LooseRecord
+  const status = pickString(source, ['status'])
+  if (status === 'ready') {
+    return {
+      status: 'ready',
+      completedAt: pickString(source, ['completedAt', 'completed_at']) || null,
+      totalRuleCount: asNumber(source.totalRuleCount ?? source.total_rule_count),
+      statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
+    }
+  }
+  if (status === 'technical_error') {
+    return {
+      status: 'technical_error',
+      reasonCode: pickString(source, ['reasonCode', 'reason_code']) || null,
+    }
+  }
+  return { status: 'not_run' }
+}
+
+export function normalizeRecordPoolQcSummary(raw: unknown): RecordPoolQcSummary {
+  const source = (raw || {}) as LooseRecord
+  return {
+    totalRecords: asNumber(source.totalRecords ?? source.total_records),
+    readyRecords: asNumber(source.readyRecords ?? source.ready_records),
+    notRunRecords: asNumber(source.notRunRecords ?? source.not_run_records),
+    technicalErrorRecords: asNumber(
+      source.technicalErrorRecords ?? source.technical_error_records,
+    ),
+    statusCounts: normalizeStatusCounts(source.statusCounts ?? source.status_counts),
+    runningState: pickString(source, ['runningState', 'running_state']) || 'unknown',
   }
 }
 

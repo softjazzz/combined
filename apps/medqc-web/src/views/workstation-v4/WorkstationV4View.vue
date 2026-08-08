@@ -25,6 +25,8 @@
         :current-page="currentPage"
         :page-size="pageSize"
         :display-server-total="displayServerTotal"
+        :qc-summary="qcSummary"
+        :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
         @update:date-range="dateRange = $event"
@@ -429,6 +431,8 @@ const {
   serverTotal,
   serverTotalPages,
   loading,
+  loadError,
+  qcSummary,
   activeDept,
   searchText,
   dateRange,
@@ -899,6 +903,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
     updatedAt:
       record.sortTime || record.updateTime || record.dischargeDate || record.admissionDate || '-',
     isDemo: isDemoRecord(record),
+    sourceState: record.sourceState,
+    latestQcSummary: record.latestQcSummary,
   }))
 })
 

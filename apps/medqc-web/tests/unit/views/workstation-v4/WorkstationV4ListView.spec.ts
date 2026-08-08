@@ -50,6 +50,23 @@ const passthroughStub = (name: string, tag = 'div') =>
     },
   })
 
+const BatchTablePanelStub = defineComponent({
+  name: 'BatchTablePanel',
+  props: {
+    rows: {
+      type: Array,
+      default: () => [],
+    },
+    showQualityColumns: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  setup(_props, { attrs, slots }) {
+    return () => h('div', attrs, slots.default?.())
+  },
+})
+
 function mountListView(overrides: Record<string, unknown> = {}) {
   return shallowMount(WorkstationV4ListView, {
     props: {
@@ -85,12 +102,25 @@ function mountListView(overrides: Record<string, unknown> = {}) {
       currentPage: 1,
       pageSize: 20,
       displayServerTotal: 19,
+      qcSummary: {
+        totalRecords: 19,
+        readyRecords: 8,
+        notRunRecords: 10,
+        technicalErrorRecords: 1,
+        statusCounts: {
+          compliant: 240,
+          non_compliant: 6,
+          data_gap: 4,
+        },
+        runningState: 'unknown',
+      },
+      loadError: false,
       ...overrides,
     },
     global: {
       stubs: {
         PriorityLane: passthroughStub('PriorityLane'),
-        BatchTablePanel: passthroughStub('BatchTablePanel'),
+        BatchTablePanel: BatchTablePanelStub,
         ACard: passthroughStub('ACard'),
         AInput: passthroughStub('AInput'),
         AButton: passthroughStub('AButton', 'button'),
@@ -120,6 +150,53 @@ function mountListView(overrides: Record<string, unknown> = {}) {
 }
 
 describe('WorkstationV4ListView filters', () => {
+  it('uses the full-scope canonical summary for record-pool KPI instead of page rows', () => {
+    const wrapper = mountListView({
+      workbenchRows: [],
+      displayServerTotal: 1,
+    })
+
+    expect(wrapper.text()).toContain('已完成质控')
+    expect(wrapper.text()).toContain('8')
+    expect(wrapper.text()).toContain('确定问题')
+    expect(wrapper.text()).toContain('6')
+    expect(wrapper.text()).toContain('资料待补')
+    expect(wrapper.text()).toContain('4')
+    expect(wrapper.text()).not.toContain('当前正在处理中的病历数')
+  })
+
+  it('passes the source and canonical result state to the record-pool table without treating unknown as ready', () => {
+    const wrapper = mountListView({
+      workbenchRows: [
+        {
+          id: 'record-1',
+          patientName: '患者甲',
+          visitId: 'V-1',
+          department: '内科',
+          stageStatus: '待处理',
+          riskReason: '',
+          updatedAt: '2026-08-08',
+          isDemo: false,
+          sourceState: { status: 'unknown', lastSyncAt: null, reasonCode: null },
+          latestQcSummary: { status: 'not_run' },
+        },
+      ],
+    })
+
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+    expect(table.props('showQualityColumns')).toBe(true)
+    expect(table.props('rows')[0]).toMatchObject({
+      sourceState: { status: 'unknown' },
+      latestQcSummary: { status: 'not_run' },
+    })
+  })
+
+  it('renders a customer-facing query failure state', () => {
+    const wrapper = mountListView({ loadError: true })
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('病历池暂未加载成功')
+  })
+
   it('renders filter summary text', () => {
     const wrapper = mountListView()
 
@@ -156,5 +233,15 @@ describe('WorkstationV4ListView filters', () => {
 
     expect(wrapper.find('[data-testid="frontpage-tender-drawer"]').attributes('open')).toBe('true')
     expect(wrapper.find('[data-testid="qc-agent-entry"]').exists()).toBe(false)
+  })
+
+  it('keeps the frontpage generation queue KPI on its own server total', () => {
+    const wrapper = mountListView({
+      currentStageFilter: 'frontpage_generate',
+      displayServerTotal: 23,
+    })
+
+    expect(wrapper.text()).toContain('待生成总量')
+    expect(wrapper.text()).toContain('23')
   })
 })

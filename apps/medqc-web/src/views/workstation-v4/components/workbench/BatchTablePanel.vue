@@ -113,6 +113,21 @@
             {{ record.stageStatus }}
           </span>
         </template>
+        <template v-else-if="column.key === 'dataState'">
+          <div class="batch-table-panel__quality-cell">
+            <span class="batch-table-panel__quality-title">{{ sourceStateLabel(record.sourceState) }}</span>
+            <span class="batch-table-panel__quality-detail">不以文书数量推断资料完整性</span>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'qcResult'">
+          <div class="batch-table-panel__quality-cell">
+            <span
+              class="batch-table-panel__tag batch-table-panel__quality-title"
+              :class="qcSummaryClass(record.latestQcSummary)"
+            >{{ latestQcSummaryLabel(record.latestQcSummary) }}</span>
+            <span class="batch-table-panel__quality-detail">{{ latestQcSummaryDetail(record.latestQcSummary) }}</span>
+          </div>
+        </template>
         <template v-else-if="column.key === 'risk'">
           <span class="batch-table-panel__risk">{{ record.riskReason }}</span>
         </template>
@@ -142,6 +157,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { RecordLatestQcSummary, RecordSourceState } from '../../types'
 import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
 import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
 import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
@@ -162,6 +178,8 @@ export interface WorkbenchRow {
   dischargeDate?: string
   updatedAt: string
   isDemo: boolean
+  sourceState?: RecordSourceState
+  latestQcSummary?: RecordLatestQcSummary
 }
 
 const props = defineProps<{
@@ -181,6 +199,7 @@ const props = defineProps<{
   showDeferAction?: boolean
   showAssignAction?: boolean
   showClearFiltersAction?: boolean
+  showQualityColumns?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -214,6 +233,7 @@ const showPrimaryAction = computed(() => props.showPrimaryAction !== false)
 const showDeferAction = computed(() => props.showDeferAction === true)
 const showAssignAction = computed(() => props.showAssignAction === true)
 const showClearFiltersAction = computed(() => props.showClearFiltersAction === true)
+const showQualityColumns = computed(() => props.showQualityColumns === true)
 const showBatchActions = computed(
   () =>
     showPrimaryAction.value ||
@@ -222,7 +242,7 @@ const showBatchActions = computed(
     showClearFiltersAction.value,
 )
 const tableScroll = computed(() => ({
-  x: 980,
+  x: showQualityColumns.value ? 1240 : 980,
   y: showSelection.value ? undefined : 440,
 }))
 const displayRows = computed(() => {
@@ -288,7 +308,7 @@ function stageTagClass(stageStatus: string) {
   return 'batch-table-panel__tag--neutral'
 }
 
-const columns = [
+const stageColumns = [
   { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 260 },
   { title: '科室', key: 'department', dataIndex: 'department', width: 160 },
   { title: '状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 110 },
@@ -297,6 +317,60 @@ const columns = [
   { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 150 },
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
+
+const qualityColumns = [
+  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 250 },
+  { title: '科室', key: 'department', dataIndex: 'department', width: 140 },
+  { title: '数据状态', key: 'dataState', dataIndex: 'dataState', width: 210 },
+  { title: '最新质控结果', key: 'qcResult', dataIndex: 'qcResult', width: 240 },
+  { title: '入院 / 出院', key: 'admissionDischarge', dataIndex: 'admissionDischarge', width: 150 },
+  { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 150 },
+  { title: '操作', key: 'action', dataIndex: 'action', width: 100 },
+]
+
+const columns = computed(() => (showQualityColumns.value ? qualityColumns : stageColumns))
+
+function sourceStateLabel(sourceState?: RecordSourceState): string {
+  if (!sourceState || sourceState.status === 'unknown') return '资料同步状态待核实'
+  return '资料同步状态待核实'
+}
+
+function latestQcSummaryLabel(summary?: RecordLatestQcSummary): string {
+  if (!summary || summary.status === 'not_run') return '尚未运行质控'
+  if (summary.status === 'technical_error') return '结果校验异常'
+  return `已完成 · ${Number(summary.totalRuleCount || 0)} 条规则`
+}
+
+function latestQcSummaryDetail(summary?: RecordLatestQcSummary): string {
+  if (!summary || summary.status === 'not_run') return '当前规则版本尚未生成结果'
+  if (summary.status === 'technical_error') return qcErrorReasonLabel(summary.reasonCode)
+  const statusCounts = summary.statusCounts || {}
+  const defects = Number(statusCounts.non_compliant || 0)
+  const dataGaps = Number(statusCounts.data_gap || 0)
+  if (defects || dataGaps) {
+    return `确定问题 ${defects} 项；资料待补 ${dataGaps} 项`
+  }
+  return '当前规则版本结果已完成'
+}
+
+function qcSummaryClass(summary?: RecordLatestQcSummary): string {
+  if (!summary || summary.status === 'not_run') return 'batch-table-panel__tag--neutral'
+  if (summary.status === 'technical_error') return 'batch-table-panel__tag--danger'
+  const defects = Number(summary.statusCounts?.non_compliant || 0)
+  const dataGaps = Number(summary.statusCounts?.data_gap || 0)
+  if (defects) return 'batch-table-panel__tag--warning'
+  if (dataGaps) return 'batch-table-panel__tag--review'
+  return 'batch-table-panel__tag--success'
+}
+
+function qcErrorReasonLabel(reasonCode?: string | null): string {
+  const labels: Record<string, string> = {
+    generation_conflict: '同一病历存在冲突的结果代次，请联系管理员复核',
+    canonical_envelope_missing: '质控结果未完整交付，请联系管理员复核',
+    canonical_envelope_invalid: '质控结果校验未通过，请联系管理员复核',
+  }
+  return labels[String(reasonCode || '')] || '质控结果暂无法校验，请联系管理员复核'
+}
 </script>
 
 <style scoped>
@@ -479,6 +553,30 @@ const columns = [
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.batch-table-panel__quality-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.batch-table-panel__quality-title {
+  width: fit-content;
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.batch-table-panel__quality-detail {
+  overflow: hidden;
+  color: var(--workstation-text-muted, #94a3b8);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .batch-table-panel__date-pair {
