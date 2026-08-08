@@ -227,7 +227,8 @@
                     v-if="hiddenDepartmentCount"
                     class="qc-home-department-chart__note"
                   >
-                    按待复核数量排序，仅展示前 8 个科室；其余 {{ hiddenDepartmentCount }} 个科室已收起。
+                    按待复核数量排序，仅展示前 8 个科室；其余
+                    {{ hiddenDepartmentCount }} 个科室已收起。
                   </p>
                 </div>
                 <a-empty
@@ -240,12 +241,64 @@
           </section>
 
           <section
+            class="qc-home-panel qc-home-coverage workstation-surface-enter"
+            data-testid="qc-coverage-chart"
+            aria-labelledby="qc-coverage-title"
+          >
+            <header class="qc-home-panel__head">
+              <div>
+                <h2 id="qc-coverage-title">
+                  质控覆盖构成
+                </h2>
+                <p>按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。</p>
+              </div>
+            </header>
+            <div
+              class="qc-home-coverage__bar"
+              role="img"
+              :aria-label="`已完成 ${coverageSegments[0].value}，待质控 ${coverageSegments[1].value}，结果校验异常 ${coverageSegments[2].value}`"
+            >
+              <span
+                v-for="segment in coverageSegments"
+                :key="segment.key"
+                :class="['qc-home-coverage__segment', `is-${segment.tone}`]"
+                :style="{ width: `${segment.percent}%` }"
+              />
+            </div>
+            <ul
+              class="qc-home-coverage__legend"
+              aria-label="质控覆盖构成图例"
+            >
+              <li
+                v-for="segment in coverageSegments"
+                :key="segment.key"
+              >
+                <i
+                  :class="`is-${segment.tone}`"
+                  aria-hidden="true"
+                />
+                <span>{{ segment.label }} {{ segment.value }}</span>
+                <small>{{ segment.percent }}%</small>
+              </li>
+            </ul>
+            <p
+              v-if="!coverageScopeIsClosed"
+              class="qc-home-chart-note is-warning"
+            >
+              统计范围待核实：三个覆盖状态与纳入病历数暂不一致。
+            </p>
+          </section>
+
+          <section
             v-if="clinicalQc.trend"
             class="qc-home-panel workstation-surface-enter"
             data-testid="home-trend"
           >
             <header class="qc-home-panel__head">
-              <div><h2>质控趋势</h2><p>仅在后端返回真实时间序列时展示。</p></div>
+              <div>
+                <h2>质控趋势</h2>
+                <p>仅在后端返回真实时间序列时展示。</p>
+              </div>
             </header>
           </section>
         </template>
@@ -282,7 +335,12 @@ import type {
   ClinicalQcHomePriorityItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
-import { FileDoneOutlined, SafetyCertificateOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons-vue'
+import {
+  FileDoneOutlined,
+  SafetyCertificateOutlined,
+  SyncOutlined,
+  WarningOutlined,
+} from '@ant-design/icons-vue'
 import HomeHeroBar from './components/HomeHeroBar.vue'
 
 interface KpiCard {
@@ -292,6 +350,16 @@ interface KpiCard {
   desc: string
   tone: 'brand' | 'warning' | 'success' | 'danger'
   icon: Component
+}
+
+type ChartTone = 'success' | 'warning' | 'neutral'
+
+interface CoverageSegment {
+  key: 'completed' | 'pending' | 'technical'
+  label: string
+  value: number
+  tone: ChartTone
+  percent: number
 }
 
 const router = useRouter()
@@ -307,22 +375,97 @@ const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])
-const scopeHospitalText = computed(() => (clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围'))
+const scopeHospitalText = computed(() =>
+  clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围',
+)
 const scopeDepartmentText = computed(() => clinicalQc.value?.scope.department || '全部科室')
-const scopeSceneText = computed(() => (clinicalQc.value?.scope.scene === 'final' ? '最终结果' : clinicalQc.value?.scope.scene || '场景待确认'))
+const scopeSceneText = computed(() =>
+  clinicalQc.value?.scope.scene === 'final'
+    ? '最终结果'
+    : clinicalQc.value?.scope.scene || '场景待确认',
+)
 
 const kpiCards = computed<KpiCard[]>(() => {
   const kpis = clinicalQc.value?.kpis
   return [
-    { key: 'records', label: '纳入病历', value: Number(kpis?.records_total || 0), desc: '当前范围内三坐标完整的病历', tone: 'brand', icon: FileDoneOutlined },
-    { key: 'pending', label: '待质控', value: Number(kpis?.qc_pending_total || 0), desc: '尚未形成可用最终结论', tone: 'warning', icon: SyncOutlined },
-    { key: 'completed', label: '已完成', value: Number(kpis?.qc_completed_total || 0), desc: '已交付 Canonical 最终结论', tone: 'success', icon: SafetyCertificateOutlined },
-    { key: 'risk', label: '高风险待复核', value: Number(kpis?.high_risk_review_total || 0), desc: '至少含一项确定问题的病历', tone: 'danger', icon: WarningOutlined },
+    {
+      key: 'records',
+      label: '纳入病历',
+      value: Number(kpis?.records_total || 0),
+      desc: '当前范围内三坐标完整的病历',
+      tone: 'brand',
+      icon: FileDoneOutlined,
+    },
+    {
+      key: 'pending',
+      label: '待质控',
+      value: Number(kpis?.qc_pending_total || 0),
+      desc: '尚未形成可用最终结论',
+      tone: 'warning',
+      icon: SyncOutlined,
+    },
+    {
+      key: 'completed',
+      label: '已完成',
+      value: Number(kpis?.qc_completed_total || 0),
+      desc: '已交付 Canonical 最终结论',
+      tone: 'success',
+      icon: SafetyCertificateOutlined,
+    },
+    {
+      key: 'risk',
+      label: '高风险待复核',
+      value: Number(kpis?.high_risk_review_total || 0),
+      desc: '至少含一项确定问题的病历',
+      tone: 'danger',
+      icon: WarningOutlined,
+    },
   ]
 })
 
-const sourceStateText = computed(() => clinicalQc.value?.data_health.source_sync_status === 'unknown' ? '资料同步状态待核实' : '资料同步状态待核实')
-const runningTaskText = computed(() => clinicalQc.value?.data_health.running_task_state === 'unknown' ? '运行状态待接入' : '运行状态待接入')
+const coverageSegments = computed<CoverageSegment[]>(() => {
+  const kpis = clinicalQc.value?.kpis
+  const total = Math.max(0, Number(kpis?.records_total || 0))
+  const values = [
+    {
+      key: 'completed' as const,
+      label: '已完成',
+      value: Math.max(0, Number(kpis?.qc_completed_total || 0)),
+      tone: 'success' as const,
+    },
+    {
+      key: 'pending' as const,
+      label: '待质控',
+      value: Math.max(0, Number(kpis?.qc_pending_total || 0)),
+      tone: 'warning' as const,
+    },
+    {
+      key: 'technical' as const,
+      label: '结果校验异常',
+      value: Math.max(0, Number(clinicalQc.value?.data_health.technical_error_total || 0)),
+      tone: 'neutral' as const,
+    },
+  ]
+  return values.map((segment) => ({
+    ...segment,
+    percent: total ? Number(((segment.value / total) * 100).toFixed(1)) : 0,
+  }))
+})
+const coverageScopeIsClosed = computed(() => {
+  const total = Math.max(0, Number(clinicalQc.value?.kpis.records_total || 0))
+  return coverageSegments.value.reduce((sum, segment) => sum + segment.value, 0) === total
+})
+
+const sourceStateText = computed(() =>
+  clinicalQc.value?.data_health.source_sync_status === 'unknown'
+    ? '资料同步状态待核实'
+    : '资料同步状态待核实',
+)
+const runningTaskText = computed(() =>
+  clinicalQc.value?.data_health.running_task_state === 'unknown'
+    ? '运行状态待接入'
+    : '运行状态待接入',
+)
 const departmentChartItems = computed<ClinicalQcHomeDepartmentItem[]>(() => {
   const items = clinicalQc.value?.department_distribution || []
   return [...items]
@@ -336,7 +479,10 @@ const departmentChartItems = computed<ClinicalQcHomeDepartmentItem[]>(() => {
     .slice(0, 8)
 })
 const hiddenDepartmentCount = computed(() =>
-  Math.max(0, (clinicalQc.value?.department_distribution.length || 0) - departmentChartItems.value.length),
+  Math.max(
+    0,
+    (clinicalQc.value?.department_distribution.length || 0) - departmentChartItems.value.length,
+  ),
 )
 const departmentRiskMaximum = computed(() =>
   Math.max(1, ...departmentChartItems.value.map((item) => item.high_risk_review_total)),
@@ -390,7 +536,8 @@ async function fetchHome() {
       hotspot_limit: 20,
       todo_limit: 1,
     })
-    if (!res.success || !res.data?.clinical_qc) throw new Error(String(res.error || '首页聚合未返回'))
+    if (!res.success || !res.data?.clinical_qc)
+      throw new Error(String(res.error || '首页聚合未返回'))
     homeData.value = res.data
   } catch {
     homeData.value = null
@@ -418,29 +565,480 @@ watch([departmentFilter, keyword], () => {
 <style scoped>
 @import '../workstation-v4/styles/workstation-v4-view.css';
 
-.qc-home-shell { background: #f5f5f7; color: #1d1d1f; }
-.qc-home-canvas { display: grid; gap: 18px; min-height: calc(100vh - 64px); }
-.qc-home-header, .qc-home-panel, .qc-home-scope, .qc-home-notice, .qc-home-empty, .qc-home-loading {
-  border: 1px solid rgba(0, 0, 0, .08); border-radius: 20px; background: rgba(255,255,255,.88); box-shadow: 0 2px 12px rgba(0,0,0,.035); backdrop-filter: blur(18px);
+.qc-home-shell {
+  background: #f5f5f7;
+  color: #1d1d1f;
 }
-.qc-home-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 24px; }
-.qc-home-header h1, .qc-home-panel h2 { margin: 0; font-weight: 700; }
-.qc-home-header h1 { font-size: 28px; line-height: 31px; }
-.qc-home-header p, .qc-home-panel p { margin: 7px 0 0; color: rgba(29,29,31,.60); font-size: 13px; line-height: 20px; }
-.qc-home-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 12px 16px; color: rgba(29,29,31,.72); font-size: 12px; font-weight: 600; }
-.qc-home-scope i { width: 3px; height: 3px; border-radius: 50%; background: rgba(29,29,31,.28); }
-.qc-home-scope__label { color: #0066cc; }.qc-home-scope__time { margin-left: auto; color: rgba(29,29,31,.48); font-weight: 500; }
-.qc-home-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); overflow: hidden; border: 1px solid rgba(0,0,0,.08); border-radius: 18px; background: #fff; }
-.qc-home-kpi { display: flex; gap: 12px; min-height: 118px; padding: 21px; border-right: 1px solid rgba(0,0,0,.07); }.qc-home-kpi:last-child { border: 0; }
-.qc-home-kpi__icon { width: 34px; height: 34px; padding: 8px; border-radius: 10px; background: rgba(0,102,204,.09); color: #0066cc; }
-.qc-home-kpi.is-warning .qc-home-kpi__icon { background: rgba(245,158,11,.12); color: #b45309; }.qc-home-kpi.is-success .qc-home-kpi__icon { background: rgba(16,185,129,.11); color: #047857; }.qc-home-kpi.is-danger .qc-home-kpi__icon { background: rgba(239,68,68,.11); color: #dc2626; }
-.qc-home-kpi span, .qc-home-kpi small { display:block; color: rgba(29,29,31,.6); font-size:12px; line-height:18px; }.qc-home-kpi strong { display:block; margin:3px 0; font-size:25px; line-height:30px; }.qc-home-kpi small { color: rgba(29,29,31,.48); }
-.qc-home-grid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(310px,.85fr); gap:18px; }.qc-home-panel { padding:20px 22px; }.qc-home-side-stack { display:grid; gap:18px; align-content:start; }.qc-home-panel__head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding-bottom:15px; border-bottom:1px solid rgba(0,0,0,.08); }.qc-home-panel h2 { font-size:17px; line-height:22px; }
-.qc-home-priority-list { display:grid; }.qc-home-priority-row { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:18px; padding:16px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-priority-row:last-child { border-bottom:0; }.qc-home-priority-row__identity { min-width:0; }.qc-home-priority-row__identity strong, .qc-home-priority-row__identity span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.qc-home-priority-row__identity strong { font-size:14px; }.qc-home-priority-row__identity span { margin-top:4px; color:rgba(29,29,31,.55); font-size:12px; }.qc-home-priority-row__counts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; }.qc-home-priority-row__counts span { padding:3px 7px; border-radius:7px; background:rgba(0,0,0,.04); color:rgba(29,29,31,.68); font-size:12px; white-space:nowrap; }.qc-home-priority-row__counts .is-danger { background:rgba(239,68,68,.09); color:#c2410c; }.qc-home-priority-row__counts .is-warning { background:rgba(245,158,11,.11); color:#a16207; }.qc-home-text-action { border:0; background:none; color:#0066cc; font-size:13px; font-weight:600; cursor:pointer; }
-.qc-home-health-list { display:grid; gap:0; margin:0; }.qc-home-health-list > div { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-health-list > div:last-child { border-bottom:0; }.qc-home-health-list dt, .qc-home-health-list dd { margin:0; font-size:13px; }.qc-home-health-list dt { color:rgba(29,29,31,.6); }.qc-home-health-list dd { text-align:right; font-weight:600; }.qc-home-health-list .is-danger { color:#dc2626; }
-.qc-home-department-chart { display:grid; gap:12px; }.qc-home-department-chart__row { display:grid; grid-template-columns:minmax(90px,.8fr) minmax(88px,1.35fr) auto; align-items:center; gap:10px; }.qc-home-department-chart__meta { min-width:0; }.qc-home-department-chart__meta strong, .qc-home-department-chart__meta span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.qc-home-department-chart__meta strong { font-size:13px; }.qc-home-department-chart__meta span { margin-top:2px; color:rgba(29,29,31,.48); font-size:11px; }.qc-home-department-chart__track { height:8px; overflow:hidden; border-radius:999px; background:rgba(0,102,204,.08); }.qc-home-department-chart__track i { display:block; min-width:2px; height:100%; border-radius:inherit; background:#0066cc; transition:width 250ms cubic-bezier(.25,.1,.25,1); }.qc-home-department-chart__counts { min-width:80px; text-align:right; }.qc-home-department-chart__counts em, .qc-home-department-chart__counts span { display:block; font-size:11px; font-style:normal; white-space:nowrap; }.qc-home-department-chart__counts em { color:#b45309; font-weight:650; }.qc-home-department-chart__counts span { margin-top:2px; color:rgba(29,29,31,.48); }.qc-home-department-chart__note { margin:1px 0 0; color:rgba(29,29,31,.48); font-size:11px; line-height:17px; }
-.qc-home-notice { display:flex; align-items:center; gap:12px; padding:14px 18px; }.qc-home-notice span { flex:1; color:rgba(29,29,31,.6); font-size:13px; }.qc-home-notice--error { border-color:rgba(239,68,68,.2); }.qc-home-notice--error strong { color:#b91c1c; }.qc-home-empty { display:grid; min-height:280px; place-items:center; padding:28px; }
-.qc-home-loading { display:flex; min-height:220px; align-items:center; justify-content:center; gap:16px; padding:28px; color:rgba(29,29,31,.72); }.qc-home-loading :deep(.ant-spin-dot-item) { background-color:#0066cc; }.qc-home-loading strong, .qc-home-loading span { display:block; }.qc-home-loading strong { color:#1d1d1f; font-size:15px; font-weight:650; line-height:22px; }.qc-home-loading span { margin-top:3px; color:rgba(29,29,31,.52); font-size:13px; line-height:20px; }
-@media (max-width: 980px) { .qc-home-header { align-items:flex-start; flex-direction:column; }.qc-home-header :deep(.flex.min-w-\[280px\]) { width:100%; }.qc-home-kpis { grid-template-columns:repeat(2,1fr); }.qc-home-kpi:nth-child(2) { border-right:0; }.qc-home-kpi:nth-child(-n+2) { border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-grid { grid-template-columns:1fr; } }
-@media (max-width: 620px) { .qc-home-canvas { gap:12px; }.qc-home-header, .qc-home-panel { padding:17px; }.qc-home-header h1 { font-size:23px; }.qc-home-kpis { grid-template-columns:1fr; }.qc-home-kpi, .qc-home-kpi:nth-child(2) { border-right:0; border-bottom:1px solid rgba(0,0,0,.07); }.qc-home-kpi:last-child { border-bottom:0; }.qc-home-priority-row { grid-template-columns:1fr; gap:9px; }.qc-home-priority-row__counts { justify-content:flex-start; }.qc-home-text-action { justify-self:start; }.qc-home-scope__time { width:100%; margin-left:0; } }
+.qc-home-canvas {
+  display: grid;
+  gap: 18px;
+  min-height: calc(100vh - 64px);
+}
+.qc-home-header,
+.qc-home-panel,
+.qc-home-scope,
+.qc-home-notice,
+.qc-home-empty,
+.qc-home-loading {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.035);
+  backdrop-filter: blur(18px);
+}
+.qc-home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+}
+.qc-home-header h1,
+.qc-home-panel h2 {
+  margin: 0;
+  font-weight: 700;
+}
+.qc-home-header h1 {
+  font-size: 28px;
+  line-height: 31px;
+}
+.qc-home-header p,
+.qc-home-panel p {
+  margin: 7px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  line-height: 20px;
+}
+.qc-home-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 12px 16px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qc-home-scope i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(29, 29, 31, 0.28);
+}
+.qc-home-scope__label {
+  color: #0066cc;
+}
+.qc-home-scope__time {
+  margin-left: auto;
+  color: rgba(29, 29, 31, 0.48);
+  font-weight: 500;
+}
+.qc-home-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: #fff;
+}
+.qc-home-kpi {
+  display: flex;
+  gap: 12px;
+  min-height: 118px;
+  padding: 21px;
+  border-right: 1px solid rgba(0, 0, 0, 0.07);
+}
+.qc-home-kpi:last-child {
+  border: 0;
+}
+.qc-home-kpi__icon {
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(0, 102, 204, 0.09);
+  color: #0066cc;
+}
+.qc-home-kpi.is-warning .qc-home-kpi__icon {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+.qc-home-kpi.is-success .qc-home-kpi__icon {
+  background: rgba(16, 185, 129, 0.11);
+  color: #047857;
+}
+.qc-home-kpi.is-danger .qc-home-kpi__icon {
+  background: rgba(239, 68, 68, 0.11);
+  color: #dc2626;
+}
+.qc-home-kpi span,
+.qc-home-kpi small {
+  display: block;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  line-height: 18px;
+}
+.qc-home-kpi strong {
+  display: block;
+  margin: 3px 0;
+  font-size: 25px;
+  line-height: 30px;
+}
+.qc-home-kpi small {
+  color: rgba(29, 29, 31, 0.48);
+}
+.qc-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.85fr);
+  gap: 18px;
+}
+.qc-home-panel {
+  padding: 20px 22px;
+}
+.qc-home-side-stack {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.qc-home-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.qc-home-panel h2 {
+  font-size: 17px;
+  line-height: 22px;
+}
+.qc-home-priority-list {
+  display: grid;
+}
+.qc-home-priority-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+.qc-home-priority-row:last-child {
+  border-bottom: 0;
+}
+.qc-home-priority-row__identity {
+  min-width: 0;
+}
+.qc-home-priority-row__identity strong,
+.qc-home-priority-row__identity span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-home-priority-row__identity strong {
+  font-size: 14px;
+}
+.qc-home-priority-row__identity span {
+  margin-top: 4px;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 12px;
+}
+.qc-home-priority-row__counts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.qc-home-priority-row__counts span {
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.qc-home-priority-row__counts .is-danger {
+  background: rgba(239, 68, 68, 0.09);
+  color: #c2410c;
+}
+.qc-home-priority-row__counts .is-warning {
+  background: rgba(245, 158, 11, 0.11);
+  color: #a16207;
+}
+.qc-home-text-action {
+  border: 0;
+  background: none;
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qc-home-health-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.qc-home-health-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+.qc-home-health-list > div:last-child {
+  border-bottom: 0;
+}
+.qc-home-health-list dt,
+.qc-home-health-list dd {
+  margin: 0;
+  font-size: 13px;
+}
+.qc-home-health-list dt {
+  color: rgba(29, 29, 31, 0.6);
+}
+.qc-home-health-list dd {
+  text-align: right;
+  font-weight: 600;
+}
+.qc-home-health-list .is-danger {
+  color: #dc2626;
+}
+.qc-home-coverage {
+  display: grid;
+  gap: 16px;
+}
+.qc-home-coverage__bar {
+  display: flex;
+  min-height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.055);
+}
+.qc-home-coverage__segment {
+  display: block;
+  min-width: 0;
+  transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.qc-home-coverage__segment.is-success,
+.qc-home-coverage__legend i.is-success {
+  background: #10b981;
+}
+.qc-home-coverage__segment.is-warning,
+.qc-home-coverage__legend i.is-warning {
+  background: #f59e0b;
+}
+.qc-home-coverage__segment.is-neutral,
+.qc-home-coverage__legend i.is-neutral {
+  background: #94a3b8;
+}
+.qc-home-coverage__legend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.qc-home-coverage__legend li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: rgba(29, 29, 31, 0.72);
+  font-size: 13px;
+}
+.qc-home-coverage__legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.qc-home-coverage__legend small {
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 12px;
+}
+.qc-home-chart-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+.qc-home-chart-note.is-warning {
+  color: #a16207;
+}
+.qc-home-department-chart {
+  display: grid;
+  gap: 12px;
+}
+.qc-home-department-chart__row {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(88px, 1.35fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.qc-home-department-chart__meta {
+  min-width: 0;
+}
+.qc-home-department-chart__meta strong,
+.qc-home-department-chart__meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qc-home-department-chart__meta strong {
+  font-size: 13px;
+}
+.qc-home-department-chart__meta span {
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
+}
+.qc-home-department-chart__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+}
+.qc-home-department-chart__track i {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  border-radius: inherit;
+  background: #0066cc;
+  transition: width 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.qc-home-department-chart__counts {
+  min-width: 80px;
+  text-align: right;
+}
+.qc-home-department-chart__counts em,
+.qc-home-department-chart__counts span {
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+.qc-home-department-chart__counts em {
+  color: #b45309;
+  font-weight: 650;
+}
+.qc-home-department-chart__counts span {
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.48);
+}
+.qc-home-department-chart__note {
+  margin: 1px 0 0;
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 11px;
+  line-height: 17px;
+}
+.qc-home-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.qc-home-notice span {
+  flex: 1;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+}
+.qc-home-notice--error {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.qc-home-notice--error strong {
+  color: #b91c1c;
+}
+.qc-home-empty {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  padding: 28px;
+}
+.qc-home-loading {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 28px;
+  color: rgba(29, 29, 31, 0.72);
+}
+.qc-home-loading :deep(.ant-spin-dot-item) {
+  background-color: #0066cc;
+}
+.qc-home-loading strong,
+.qc-home-loading span {
+  display: block;
+}
+.qc-home-loading strong {
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 22px;
+}
+.qc-home-loading span {
+  margin-top: 3px;
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 13px;
+  line-height: 20px;
+}
+@media (max-width: 980px) {
+  .qc-home-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .qc-home-header :deep(.flex.min-w-\[280px\]) {
+    width: 100%;
+  }
+  .qc-home-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .qc-home-kpi:nth-child(2) {
+    border-right: 0;
+  }
+  .qc-home-kpi:nth-child(-n + 2) {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  }
+  .qc-home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .qc-home-canvas {
+    gap: 12px;
+  }
+  .qc-home-header,
+  .qc-home-panel {
+    padding: 17px;
+  }
+  .qc-home-header h1 {
+    font-size: 23px;
+  }
+  .qc-home-kpis {
+    grid-template-columns: 1fr;
+  }
+  .qc-home-kpi,
+  .qc-home-kpi:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  }
+  .qc-home-kpi:last-child {
+    border-bottom: 0;
+  }
+  .qc-home-priority-row {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  .qc-home-priority-row__counts {
+    justify-content: flex-start;
+  }
+  .qc-home-text-action {
+    justify-self: start;
+  }
+  .qc-home-scope__time {
+    width: 100%;
+    margin-left: 0;
+  }
+}
 </style>
