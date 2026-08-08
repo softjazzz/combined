@@ -119,3 +119,63 @@ def test_home_clinical_qc_has_explicit_scope_and_no_synthetic_trend(monkeypatch)
     assert payload["data_health"]["source_sync_status"] == "unknown"
     assert payload["data_health"]["running_task_total"] is None
     assert payload["trend"] is None
+
+
+def test_home_record_loader_explicitly_uses_all_hospital_status(monkeypatch):
+    """首页复用病历池筛选器时必须显式传全量住院状态，不能因漏参运行失败。"""
+
+    class _Label:
+        def label(self, _name):
+            return self
+
+    class _Query:
+        def outerjoin(self, *_args):
+            return self
+
+        def with_entities(self, *_args):
+            return self
+
+        def all(self):
+            return [
+                type(
+                    "Row",
+                    (),
+                    {
+                        "institute_id": "I",
+                        "patient_id": "P",
+                        "visit_id": "V",
+                        "patient_name": "患者",
+                        "department": "内科",
+                    },
+                )()
+            ]
+
+    class _SessionForLoader:
+        def query(self, *_args):
+            return _Query()
+
+    from app.services.medical_records import query_service
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(query_service, "_workstation_discharge_summary_subquery", lambda _session: None)
+    monkeypatch.setattr(query_service, "_workstation_department_expr", lambda _summary: _Label())
+
+    def _capture_filter(query, **kwargs):
+        captured.update(kwargs)
+        return query
+
+    monkeypatch.setattr(query_service, "_apply_workstation_filters", _capture_filter)
+    service = WorkstationAggregationService(session_factory=_FakeSession)
+
+    records = service._load_luxian_home_records(_SessionForLoader(), department=None, keyword=None)
+
+    assert captured["hospital_status"] == "all"
+    assert records == [
+        {
+            "institute_id": "I",
+            "patient_id": "P",
+            "visit_id": "V",
+            "patient_name": "患者",
+            "department": "内科",
+        }
+    ]
