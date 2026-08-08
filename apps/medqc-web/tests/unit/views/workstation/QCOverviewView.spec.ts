@@ -140,6 +140,32 @@ describe('QCOverviewView', () => {
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('2')
   })
 
+  it('将科室分布收敛为按待复核数量排序的前八个横向柱状图', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          department_distribution: Array.from({ length: 9 }, (_, index) => ({
+            department: `科室${index + 1}`,
+            records_total: index + 10,
+            high_risk_review_total: index + 1,
+            data_gap_record_total: 0,
+            uncertain_record_total: 0,
+          })),
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const chartRows = wrapper.findAll('[data-testid="department-chart-row"]')
+    expect(chartRows).toHaveLength(8)
+    expect(chartRows[0].text()).toContain('科室9')
+    expect(wrapper.get('[data-testid="department-chart"]').text()).toContain('其余 1 个科室已收起')
+  })
+
   it('在请求失败时提供清晰的客户可见提示', async () => {
     apiGet.mockResolvedValue({ success: false, error: 'network failed', data: null })
     const wrapper = mountView()
