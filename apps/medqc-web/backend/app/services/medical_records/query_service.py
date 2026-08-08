@@ -88,6 +88,7 @@ def _serialize_real_workstation_record(
     status_map: dict[str, dict],
     frontpage_generate_state_map: dict[str, dict[str, Any]],
     discharge_summary_map: dict[str, dict[str, Any]],
+    latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
     if not key:
@@ -163,7 +164,128 @@ def _serialize_real_workstation_record(
         "cdmFrontpageEmpty": cdm_frontpage_empty,
         "frontpageGenerateQueueStatus": queue_status,
         "frontpageGenerateQueueStatusSource": queue_status_source,
+        "source_state": {
+            "status": "unknown",
+            "last_sync_at": None,
+            "reason_code": None,
+        },
+        "latest_qc_summary": latest_qc_summary_map.get(
+            (str(record.institute_id).strip(), str(record.patient_id).strip(), str(record.visit_id).strip()),
+            {"status": "not_run"},
+        ),
     }
+
+
+def _load_latest_luxian_0609_qc_summaries(
+    record_refs: list[dict[str, str]],
+    *,
+    session_factory: Callable[[], Any],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """病历池唯一允许读取的已完成 LX0609 结果投影。"""
+
+    from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
+
+    return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=record_refs,
+        session_factory=session_factory,
+    )
+
+
+def _build_qc_summary(
+    record_refs: list[dict[str, str]],
+    latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
+) -> dict[str, Any]:
+    """仅按筛选全集聚合已完成 Canonical 项，永不推断运行中状态。"""
+
+    ready_records = 0
+    not_run_records = 0
+    technical_error_records = 0
+    status_counts: dict[str, int] = {}
+    for ref in record_refs:
+        identity = (ref["institute_id"], ref["patient_id"], ref["visit_id"])
+        summary = latest_qc_summary_map.get(identity) or {"status": "not_run"}
+        status = str(summary.get("status") or "not_run").strip()
+        if status == "ready":
+            ready_records += 1
+            for item_status, count in dict(summary.get("status_counts") or {}).items():
+                try:
+                    normalized_count = int(count)
+                except (TypeError, ValueError):
+                    continue
+                if normalized_count > 0 and str(item_status).strip():
+                    status_counts[str(item_status).strip()] = (
+                        status_counts.get(str(item_status).strip(), 0) + normalized_count
+                    )
+        elif status == "technical_error":
+            technical_error_records += 1
+        else:
+            not_run_records += 1
+    return {
+        "total_records": len(record_refs),
+        "ready_records": ready_records,
+        "not_run_records": not_run_records,
+        "technical_error_records": technical_error_records,
+        "status_counts": dict(sorted(status_counts.items())),
+        "running_state": "unknown",
+    }
+
+
+def _normalize_latest_qc_summary_map(
+    value: dict[tuple[str, str, str], dict[str, Any]],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """限制病历池投影为小型、稳定且客户无关的摘要合同。"""
+
+    normalized: dict[tuple[str, str, str], dict[str, Any]] = {}
+    reason_aliases = {
+        "record_result_task_generation_conflict": "generation_conflict",
+        "generation_conflict": "generation_conflict",
+        "canonical_envelope_missing": "canonical_envelope_missing",
+        "canonical_envelope_invalid": "canonical_envelope_invalid",
+    }
+    for identity, raw_summary in value.items():
+        if not isinstance(identity, tuple) or len(identity) != 3 or not isinstance(raw_summary, dict):
+            continue
+        status = str(raw_summary.get("status") or "not_run").strip()
+        if status == "ready":
+            counts: dict[str, int] = {}
+            for item_status, count in dict(raw_summary.get("status_counts") or {}).items():
+                try:
+                    normalized_count = int(count)
+                except (TypeError, ValueError):
+                    continue
+                if normalized_count > 0 and str(item_status).strip():
+                    counts[str(item_status).strip()] = normalized_count
+            try:
+                total_rule_count = int(raw_summary.get("total_rule_count"))
+            except (TypeError, ValueError):
+                normalized[identity] = {
+                    "status": "technical_error",
+                    "reason_code": "canonical_envelope_invalid",
+                }
+                continue
+            if total_rule_count < 0:
+                normalized[identity] = {
+                    "status": "technical_error",
+                    "reason_code": "canonical_envelope_invalid",
+                }
+                continue
+            normalized[identity] = {
+                "status": "ready",
+                "completed_at": raw_summary.get("completed_at") or None,
+                "total_rule_count": total_rule_count,
+                "status_counts": dict(sorted(counts.items())),
+            }
+        elif status == "technical_error":
+            normalized[identity] = {
+                "status": "technical_error",
+                "reason_code": reason_aliases.get(
+                    str(raw_summary.get("reason_code") or "").strip(),
+                    "canonical_envelope_invalid",
+                ),
+            }
+        else:
+            normalized[identity] = {"status": "not_run"}
+    return normalized
 
 
 def _apply_frontpage_generate_state(
@@ -435,6 +557,9 @@ def get_workstation_data(
     demo_records_builder: Callable[[], list[dict]] = build_demo_workstation_records,
     demo_filter: Callable[[list[dict], Optional[str], Optional[str]], list[dict]] = filter_demo_records,
     demo_policy: Callable[[Any, int], bool] = should_include_demo_records,
+    qc_projection_loader: Optional[
+        Callable[[list[dict[str, str]]], dict[tuple[str, str, str], dict[str, Any]]]
+    ] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
 
@@ -488,6 +613,28 @@ def get_workstation_data(
                 .limit(real_limit)
                 .all()
             )
+
+        full_record_refs = [
+            {
+                "institute_id": str(row.institute_id).strip(),
+                "patient_id": str(row.patient_id).strip(),
+                "visit_id": str(row.visit_id).strip(),
+            }
+            for row in q.with_entities(
+                MedicalRecordFrontpage.institute_id,
+                MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id,
+            ).all()
+            if all((row.institute_id, row.patient_id, row.visit_id))
+        ]
+        summary_loader = qc_projection_loader or (
+            lambda refs: _load_latest_luxian_0609_qc_summaries(
+                refs,
+                session_factory=session_factory,
+            )
+        )
+        latest_qc_summary_map = _normalize_latest_qc_summary_map(summary_loader(full_record_refs))
+        qc_summary = _build_qc_summary(full_record_refs, latest_qc_summary_map)
 
         discharge_summary_map: dict[str, dict[str, Any]] = {}
         if records and discharge_summary is not None:
@@ -639,6 +786,7 @@ def get_workstation_data(
                 status_map,
                 frontpage_generate_state_map,
                 discharge_summary_map,
+                latest_qc_summary_map,
             )
             if not item:
                 continue
@@ -682,4 +830,5 @@ def get_workstation_data(
         "page": page,
         "pageSize": page_size,
         "totalPages": (total_count + page_size - 1) // page_size,
+        "qc_summary": qc_summary,
     }

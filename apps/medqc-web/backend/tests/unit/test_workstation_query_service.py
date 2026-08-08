@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.connection import Base
 from app.database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
 from app.services.frontpage_settings import FrontpageExtractionSettings
+import app.services.medical_records.query_service as query_service_module
 from app.services.medical_records.query_service import get_workstation_data
 
 
@@ -34,6 +35,24 @@ class RunningWorkflowQueueStateService:
 
     def backfill_frontpage_generate(self, **_kwargs):
         return None
+
+
+@pytest.fixture(autouse=True)
+def _default_qc_projection_is_not_run_for_frontpage_only_fixture(monkeypatch):
+    """旧工作台单测不建 QC 结果表，显式替身隔离本轮投影依赖。"""
+
+    monkeypatch.setattr(
+        query_service_module,
+        "_load_latest_luxian_0609_qc_summaries",
+        lambda record_refs, **_kwargs: {
+            (
+                str(ref["institute_id"]),
+                str(ref["patient_id"]),
+                str(ref["visit_id"]),
+            ): {"status": "not_run"}
+            for ref in record_refs
+        },
+    )
 
 
 @pytest.fixture()
@@ -133,6 +152,47 @@ def _workstation_settings_loader():
 
 def _no_demo_policy(_settings, _real_total_count):
     return False
+
+
+def _qc_projection_loader_for_test(record_refs):
+    """公开病历池入口的受控 Canonical 投影替身。"""
+
+    projections = {}
+    for ref in record_refs:
+        identity = (
+            str(ref["institute_id"]),
+            str(ref["patient_id"]),
+            str(ref["visit_id"]),
+        )
+        if identity == ("H1", "P1", "V1"):
+            projections[identity] = {
+                "status": "ready",
+                "completed_at": "2026-08-08T10:00:00",
+                "total_rule_count": 2,
+                "status_counts": {"compliant": 1, "non_compliant": 1},
+            }
+        elif identity == ("H2", "P2", "V-SHARED"):
+            projections[identity] = {
+                "status": "technical_error",
+                "reason_code": "record_result_task_generation_conflict",
+            }
+        else:
+            projections[identity] = {"status": "not_run"}
+    return projections
+
+
+def _qc_projection_loader_missing_envelope(record_refs):
+    return {
+        (
+            str(ref["institute_id"]),
+            str(ref["patient_id"]),
+            str(ref["visit_id"]),
+        ): {
+            "status": "technical_error",
+            "reason_code": "canonical_envelope_missing",
+        }
+        for ref in record_refs
+    }
 
 
 def test_get_workstation_data_excludes_demo_records_in_production_even_when_enabled(
@@ -324,6 +384,123 @@ def test_workstation_record_key_does_not_collide_when_coordinate_contains_separa
         '["A|B","C","D"]',
         '["A","B|C","D"]',
     }
+
+
+def test_workstation_qc_summary_is_full_scope_and_independent_of_page(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V1",
+            name="第一页病历",
+            update_time=datetime(2026, 8, 8, 12, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P2",
+            visit_id="V2",
+            name="第二页病历",
+            update_time=datetime(2026, 8, 8, 11, 0),
+        ),
+    )
+
+    common_kwargs = {
+        "page_size": 1,
+        "session_factory": workstation_session_factory,
+        "settings_loader": _workstation_settings_loader,
+        "demo_policy": _no_demo_policy,
+        "qc_projection_loader": _qc_projection_loader_for_test,
+    }
+    first_page = get_workstation_data(page=1, **common_kwargs)
+    second_page = get_workstation_data(page=2, **common_kwargs)
+
+    expected_summary = {
+        "total_records": 2,
+        "ready_records": 1,
+        "not_run_records": 1,
+        "technical_error_records": 0,
+        "status_counts": {"compliant": 1, "non_compliant": 1},
+        "running_state": "unknown",
+    }
+    assert first_page["qc_summary"] == expected_summary
+    assert second_page["qc_summary"] == expected_summary
+    assert first_page["records"][0]["latest_qc_summary"]["status"] == "ready"
+    assert second_page["records"][0]["latest_qc_summary"] == {"status": "not_run"}
+
+
+def test_workstation_qc_projection_uses_three_coordinates_and_keeps_source_state_unknown(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V-SHARED",
+            name="无运行结果",
+            update_time=datetime(2026, 8, 8, 12, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="H2",
+            patient_id="P2",
+            visit_id="V-SHARED",
+            name="代次冲突",
+            update_time=datetime(2026, 8, 8, 11, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_qc_projection_loader_for_test,
+    )
+
+    records_by_key = {record["recordKey"]: record for record in result["records"]}
+    assert records_by_key['["H1","P1","V-SHARED"]']["latest_qc_summary"] == {
+        "status": "not_run"
+    }
+    assert records_by_key['["H2","P2","V-SHARED"]']["latest_qc_summary"] == {
+        "status": "technical_error",
+        "reason_code": "generation_conflict",
+    }
+    assert all(
+        record["source_state"]
+        == {"status": "unknown", "last_sync_at": None, "reason_code": None}
+        for record in result["records"]
+    )
+    assert result["qc_summary"]["technical_error_records"] == 1
+
+
+def test_workstation_qc_projection_never_falls_back_when_canonical_envelope_is_missing(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V1",
+            name="Envelope缺失",
+            update_time=datetime(2026, 8, 8, 12, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+        qc_projection_loader=_qc_projection_loader_missing_envelope,
+    )
+
+    assert result["records"][0]["latest_qc_summary"] == {
+        "status": "technical_error",
+        "reason_code": "canonical_envelope_missing",
+    }
+    assert result["qc_summary"]["status_counts"] == {}
 
 
 def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_session_factory):

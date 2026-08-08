@@ -114,6 +114,61 @@ def test_single_record_result_does_not_convert_database_read_error_to_not_found(
         )
 
 
+def test_completed_projection_does_not_fall_back_when_newer_root_job_lacks_envelope(
+    monkeypatch,
+):
+    """病历池不能用较旧 Envelope 遮蔽较新完成任务的交付缺口。"""
+
+    old_job = {
+        **_selected_job(),
+        "id": "job-old",
+        "created_at": "2026-08-08T09:00:00",
+        "finished_at": "2026-08-08T09:01:00",
+        "filters_json": json.dumps(_selected_job()["filters"]),
+        "record_ids_json": json.dumps(["visit-1"]),
+        "job_kind": "parent",
+        "parent_job_id": None,
+    }
+    newer_job = {
+        **old_job,
+        "id": "job-new",
+        "created_at": "2026-08-08T10:00:00",
+        "finished_at": "2026-08-08T10:01:00",
+    }
+    old_envelope = {
+        "root_job_id": "job-old",
+        "job_id": "job-old",
+        "institute_id": "inst-1",
+        "patient_id": "patient-1",
+        "visit_id": "visit-1",
+        "rule_set_key": "luxian_0609_qc_v1",
+        "rule_set_version": "2026-06-09",
+        "envelope_json": json.dumps(
+            {
+                "schema_version": "lx0609-record-result-envelope-v1",
+                "delivery_mode": "canonical_straight_through",
+                "items": [{"rule_id": "LX0609-001", "status": "compliant"}],
+            }
+        ),
+    }
+    session = _ReadSession([[old_job, newer_job], [old_envelope]])
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row, **_kwargs: dict(row))
+
+    result = CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
+        record_refs=[
+            {"institute_id": "inst-1", "patient_id": "patient-1", "visit_id": "visit-1"}
+        ],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result[("inst-1", "patient-1", "visit-1")] == {
+        "status": "technical_error",
+        "reason_code": "canonical_envelope_missing",
+    }
+
+
 def test_single_record_result_returns_canonical_envelope_items_without_reprojection(
     monkeypatch,
 ):

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO, StringIO
 from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import (
@@ -36,6 +36,7 @@ from .document_domain_alignment import (
 )
 from .luxian_0609.customer_renderer import RULE_SET_VERSION
 from .luxian_0609.record_result_read_model import (
+    _generation_key,
     select_latest_authoritative_record_result_job,
 )
 from .luxian_0609_rule_catalog import (
@@ -3847,6 +3848,219 @@ class CustomQCWorkspaceService:
             }
         finally:
             session.close()
+
+    def build_luxian_0609_completed_record_result_summaries(
+        self,
+        *,
+        record_refs: Sequence[Mapping[str, Any]],
+        rule_set_key: str = LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version: str = RULE_SET_VERSION,
+        session_factory: Optional[Callable[[], Session]] = None,
+    ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+        """批量读取病历池可展示的最新 Canonical 结果摘要。
+
+        只读取完成的根任务及其显式 Envelope。它不会读取 legacy items、Bundle
+        或 QCResult；无法以三坐标确认的结果不允许进入 ``ready`` 状态。
+        """
+
+        identities = {
+            (
+                _safe_text(ref.get("institute_id")),
+                _safe_text(ref.get("patient_id")),
+                _safe_text(ref.get("visit_id")),
+            )
+            for ref in record_refs
+            if isinstance(ref, Mapping)
+        }
+        identities = {identity for identity in identities if all(identity)}
+        if not identities:
+            return {}
+
+        normalized_rule_set_key = _safe_text(rule_set_key)
+        normalized_rule_set_version = _safe_text(rule_set_version)
+        if not normalized_rule_set_key or not normalized_rule_set_version:
+            raise ValueError("病历池结果摘要缺少规则集身份")
+
+        visit_ids = sorted({identity[2] for identity in identities})
+        escaped_visit_ids = {
+            visit_id: visit_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace('"', '\\"')
+            for visit_id in visit_ids
+        }
+        record_id_conditions = [
+            self._batch_job_table.c.record_ids_json.ilike(
+                f'%"{escaped_visit_ids[visit_id]}"%',
+                escape="\\",
+            )
+            for visit_id in visit_ids
+        ]
+        session = (session_factory or _session)()
+        try:
+            job_rows = (
+                session.execute(
+                    select(self._batch_job_table).where(
+                        and_(
+                            self._batch_job_table.c.status == "completed",
+                            or_(
+                                self._batch_job_table.c.parent_job_id.is_(None),
+                                self._batch_job_table.c.parent_job_id == "",
+                            ),
+                            or_(*record_id_conditions),
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            jobs_by_id = {
+                _safe_text(row.get("id")): _row_to_batch_job(dict(row), include_items=False)
+                for row in job_rows
+                if _safe_text(row.get("id"))
+            }
+            if not jobs_by_id:
+                return {identity: {"status": "not_run"} for identity in identities}
+
+            envelope_rows = (
+                session.execute(
+                    select(self._record_result_envelope_table).where(
+                        and_(
+                            self._record_result_envelope_table.c.root_job_id.in_(list(jobs_by_id)),
+                            self._record_result_envelope_table.c.visit_id.in_(visit_ids),
+                            self._record_result_envelope_table.c.rule_set_key == normalized_rule_set_key,
+                            self._record_result_envelope_table.c.rule_set_version == normalized_rule_set_version,
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            envelopes_by_identity: Dict[tuple[str, str, str], Dict[str, list[Dict[str, Any]]]] = {}
+            envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
+            for raw_row in envelope_rows:
+                row = dict(raw_row)
+                identity = (
+                    _safe_text(row.get("institute_id")),
+                    _safe_text(row.get("patient_id")),
+                    _safe_text(row.get("visit_id")),
+                )
+                job_id = _safe_text(row.get("root_job_id"))
+                if not job_id or not all(identity):
+                    continue
+                envelopes_by_job_visit.setdefault((job_id, identity[2]), []).append(row)
+                if identity in identities:
+                    envelopes_by_identity.setdefault(identity, {}).setdefault(job_id, []).append(row)
+
+            projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+            for identity in identities:
+                _, _, visit_id = identity
+                exact_envelopes = envelopes_by_identity.get(identity, {})
+                ready_candidates = [
+                    jobs_by_id[job_id]
+                    for job_id in exact_envelopes
+                    if job_id in jobs_by_id
+                ]
+                ready_selection = select_latest_authoritative_record_result_job(
+                    ready_candidates,
+                    record_id=visit_id,
+                    rule_set_key=normalized_rule_set_key,
+                    rule_set_version=normalized_rule_set_version,
+                )
+                # 只有 visit_id 的旧任务在缺少 Envelope 时无法证明三坐标归属。
+                # 若其代次不早于可确认任务，绝不允许旧 Envelope 静默回退。
+                ambiguous_candidates = []
+                for job_id, job in jobs_by_id.items():
+                    same_visit_envelopes = envelopes_by_job_visit.get((job_id, visit_id), [])
+                    if same_visit_envelopes:
+                        continue
+                    ambiguous_candidates.append(job)
+                if ready_selection.state == "technical_error":
+                    projections[identity] = {
+                        "status": "technical_error",
+                        "reason_code": "generation_conflict",
+                    }
+                    continue
+                if ready_selection.state == "ready" and isinstance(ready_selection.job, dict):
+                    ready_generation = _generation_key(ready_selection.job)
+                    ambiguous_generation = max(
+                        (_generation_key(job) for job in ambiguous_candidates),
+                        default=None,
+                    )
+                    if ambiguous_generation is not None and ambiguous_generation >= ready_generation:
+                        projections[identity] = {
+                            "status": "technical_error",
+                            "reason_code": "canonical_envelope_missing",
+                        }
+                        continue
+                    selected_job_id = _safe_text(ready_selection.job.get("id"))
+                    selected_envelopes = exact_envelopes.get(selected_job_id, [])
+                    if len(selected_envelopes) != 1:
+                        projections[identity] = {
+                            "status": "technical_error",
+                            "reason_code": "canonical_envelope_invalid",
+                        }
+                        continue
+                    projections[identity] = self._summarize_completed_record_result_envelope(
+                        envelope_row=selected_envelopes[0],
+                        completed_at=ready_selection.job.get("finished_at"),
+                    )
+                    continue
+
+                # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
+                # visit 的其他三坐标 Envelope，明确排除，避免把别的病历标记为缺失。
+                ambiguous_selection = select_latest_authoritative_record_result_job(
+                    ambiguous_candidates,
+                    record_id=visit_id,
+                    rule_set_key=normalized_rule_set_key,
+                    rule_set_version=normalized_rule_set_version,
+                )
+                if ambiguous_selection.state == "technical_error":
+                    projections[identity] = {
+                        "status": "technical_error",
+                        "reason_code": "generation_conflict",
+                    }
+                elif ambiguous_selection.state == "ready":
+                    projections[identity] = {
+                        "status": "technical_error",
+                        "reason_code": "canonical_envelope_missing",
+                    }
+                else:
+                    projections[identity] = {"status": "not_run"}
+            return projections
+        finally:
+            session.close()
+
+    @staticmethod
+    def _summarize_completed_record_result_envelope(
+        *,
+        envelope_row: Mapping[str, Any],
+        completed_at: Any,
+    ) -> Dict[str, Any]:
+        """把一份通过结构校验的 Canonical Envelope 缩减为病历池摘要。"""
+
+        envelope = _safe_json_loads(envelope_row.get("envelope_json"), {})
+        if (
+            not isinstance(envelope, dict)
+            or envelope.get("schema_version") != _RECORD_RESULT_ENVELOPE_SCHEMA
+            or envelope.get("delivery_mode") != _CANONICAL_RESULT_DELIVERY_MODE
+            or not isinstance(envelope.get("items"), list)
+        ):
+            return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
+
+        status_counts: Dict[str, int] = {}
+        for item in envelope["items"]:
+            status = _safe_text(item.get("status")) if isinstance(item, dict) else ""
+            if status not in _CUSTOMER_STATUSES:
+                return {"status": "technical_error", "reason_code": "canonical_envelope_invalid"}
+            status_counts[status] = status_counts.get(status, 0) + 1
+        if isinstance(completed_at, datetime):
+            completed_at_value = completed_at.isoformat()
+        else:
+            completed_at_value = _safe_text(completed_at)
+        return {
+            "status": "ready",
+            "completed_at": completed_at_value or None,
+            "total_rule_count": len(envelope["items"]),
+            "status_counts": dict(sorted(status_counts.items())),
+        }
 
     def get_latest_luxian_0609_record_result(
         self,
