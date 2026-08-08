@@ -155,35 +155,6 @@
                 >
                   {{ record.name }}
                 </button>
-                <div
-                  v-if="isLuxianWrapper(record as SemanticRuleItem)"
-                  class="rule-main-tags"
-                >
-                  <span class="mini-tag mini-tag-blue">
-                    {{ formatImplementationStatus(record.implementation_status) }}
-                  </span>
-                  <span class="mini-tag">
-                    {{ formatDependencyType(record.dependency_type) }}
-                  </span>
-                  <span
-                    v-if="record.data_status"
-                    class="mini-tag mini-tag-amber"
-                  >
-                    {{ formatDataStatus(record.data_status) }}
-                  </span>
-                  <span
-                    v-if="record.primary_execution_rule_id"
-                    class="mini-tag mini-tag-green"
-                  >
-                    主执行 {{ record.primary_execution_rule_id }}
-                  </span>
-                </div>
-                <div
-                  v-if="record.mapped_rule_ids?.length"
-                  class="mapped-rules"
-                >
-                  映射规则：{{ record.mapped_rule_ids.join('、') }}
-                </div>
               </div>
               <div class="rule-inline-actions">
                 <a-button
@@ -227,12 +198,7 @@ import {
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 import type { SemanticRuleItem, SichuanRuleSetOption } from '../types'
-import {
-  getDataStatusZh,
-  getDependencyTypeZh,
-  getDocTypeZh,
-  getImplementationStatusZh,
-} from '../types'
+import { getDocTypeZh } from '../types'
 import { buildSemanticRuleRowActionModel } from '../service'
 
 const DEFAULT_RULE_SET_SELECT_VALUE = '__default_sc_rules__'
@@ -298,22 +264,6 @@ function handleRuleSetSelectChange(value: string | number) {
   const nextValue = normalized === DEFAULT_RULE_SET_SELECT_VALUE ? '' : normalized
   emit('update:ruleSetKey', nextValue)
   emit('ruleSetChange', nextValue)
-}
-
-function isLuxianWrapper(rule: SemanticRuleItem): boolean {
-  return rule.rule_id.startsWith('LX0609-')
-}
-
-function formatImplementationStatus(value?: string): string {
-  return getImplementationStatusZh(value)
-}
-
-function formatDependencyType(value?: string): string {
-  return getDependencyTypeZh(value)
-}
-
-function formatDataStatus(value?: string): string {
-  return getDataStatusZh(value)
 }
 
 function buildCustomRow(record: SemanticRuleItem) {
@@ -715,18 +665,10 @@ function buildCustomRow(record: SemanticRuleItem) {
   color: #0066cc;
 }
 
-.rule-main-tags,
-.mapped-rules,
 .rule-inline-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.mapped-rules {
-  color: rgba(29, 29, 31, 0.42);
-  font-size: 11px;
-  font-weight: 500;
 }
 
 .rule-inline-actions {
@@ -736,37 +678,6 @@ function buildCustomRow(record: SemanticRuleItem) {
   align-self: flex-start;
   min-width: 180px;
   padding-top: 2px;
-}
-
-.mini-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 21px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  padding: 0 8px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.mini-tag-blue {
-  border-color: rgba(60, 111, 170, 0.2);
-  background: rgba(226, 237, 248, 0.72);
-  color: #1f6fb2;
-}
-
-.mini-tag-green {
-  border-color: rgba(60, 111, 170, 0.2);
-  background: rgba(226, 237, 248, 0.72);
-  color: #1f6fb2;
-}
-
-.mini-tag-amber {
-  border-color: rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.04);
-  color: rgba(29, 29, 31, 0.6);
 }
 
 .status-pill {

@@ -113,4 +113,62 @@ describe('SemanticRulesTableSection', () => {
     expect(wrapper.text()).toContain('开始质控评估')
     expect(wrapper.text()).toContain('自定义规则工作台')
   })
+
+  it('泸县规则列表应与 SC 规则保持相同的简洁信息层级', () => {
+    const wrapper = mount(SemanticRulesTableSection, {
+      props: {
+        loading: false,
+        rules: [
+          {
+            rule_id: 'LX0609-001',
+            rule_code: 'LX0609-001',
+            name: '入院记录：入院后24小时内是否完成',
+            description: '入院记录时效性核对',
+            category: '入院记录',
+            complexity: '低复杂度',
+            defect_level: '严重缺陷',
+            score_deduction: 3,
+            applicable_documents: ['admission_record'],
+            medical_domain: '通用',
+            requires_rag: false,
+            requires_cot: false,
+            implementation_status: 'ready',
+            dependency_type: 'single_document',
+            data_status: 'data_pending',
+            primary_execution_rule_id: 'SC-002',
+            mapped_rule_ids: ['SC-002'],
+          },
+        ],
+        total: 1,
+        ruleSetKey: 'luxian_0609_qc_v1',
+        ruleSetOptions: [],
+        keywordInput: '',
+        complexity: '',
+        defectLevel: '',
+        documentType: '',
+        complexityOptions: [],
+        defectOptions: [],
+        documentOptions: [],
+        pagination: { current: 1, pageSize: 20, total: 1 },
+      },
+      global: {
+        stubs: {
+          ProQueryBar: ProQueryBarStub,
+          ProStandardTable: ProStandardTableStub,
+          'a-button': { template: '<button><slot /></button>' },
+          'a-input': { template: '<input />' },
+          'a-select': { template: '<select><slot /></select>' },
+          'a-select-option': { template: '<option><slot /></option>' },
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('LX0609-001')
+    expect(wrapper.text()).toContain('入院记录：入院后24小时内是否完成')
+    expect(wrapper.text()).not.toContain('可执行')
+    expect(wrapper.text()).not.toContain('单文书')
+    expect(wrapper.text()).not.toContain('数据待补')
+    expect(wrapper.text()).not.toContain('主执行 SC-002')
+    expect(wrapper.text()).not.toContain('映射规则：SC-002')
+  })
 })
