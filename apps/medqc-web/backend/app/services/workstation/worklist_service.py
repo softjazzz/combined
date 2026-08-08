@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from functools import lru_cache
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from sqlalchemy import MetaData, Table, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
@@ -331,6 +331,382 @@ class WorkstationAggregationService:
             }
         finally:
             session.close()
+
+    def get_luxian_0609_analytics(
+        self,
+        *,
+        completed_from: Optional[datetime] = None,
+        completed_to: Optional[datetime] = None,
+        department: Optional[str] = None,
+        job_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """按已完成根任务的 Canonical Envelope 汇总泸县质控统计。
+
+        统计事件的身份是 ``root_job_id + 三坐标``；病历数只按三坐标去重。
+        该入口不读取 legacy items、Bundle 或结果文案，也不返回任何病历正文。
+        """
+
+        if completed_from and completed_to and completed_from > completed_to:
+            raise ValueError("completed_from 不能晚于 completed_to")
+        normalized_job_id = _safe_text(job_id).strip() or None
+        session: Session = self._session_factory()
+        try:
+            records = self._load_luxian_home_records(session, department=None, keyword=None)
+            records_by_identity = {
+                (
+                    _safe_text(record.get("institute_id")).strip(),
+                    _safe_text(record.get("patient_id")).strip(),
+                    _safe_text(record.get("visit_id")).strip(),
+                ): record
+                for record in records
+                if all(
+                    _safe_text(record.get(key)).strip()
+                    for key in ("institute_id", "patient_id", "visit_id")
+                )
+            }
+            if department:
+                records_by_identity = {
+                    identity: record
+                    for identity, record in records_by_identity.items()
+                    if _safe_text(record.get("department")).strip() == department
+                }
+            events, invalid_total = self._load_luxian_0609_analytics_events(
+                session,
+                records_by_identity=records_by_identity,
+                completed_from=completed_from,
+                completed_to=completed_to,
+                job_id=normalized_job_id,
+            )
+        finally:
+            session.close()
+
+        status_order = (
+            "non_compliant",
+            "data_gap",
+            "uncertain",
+            "compliant",
+            "not_applicable",
+            "not_executed",
+        )
+        status_counts = {status: 0 for status in status_order}
+        rule_counts: Dict[str, Dict[str, int]] = {}
+        department_records: Dict[str, set[tuple[str, str, str]]] = {}
+        department_non_compliant: Dict[str, set[tuple[str, str, str]]] = {}
+        department_data_gap: Dict[str, set[tuple[str, str, str]]] = {}
+        department_uncertain: Dict[str, set[tuple[str, str, str]]] = {}
+        records_with_non_compliant: set[tuple[str, str, str]] = set()
+        records_with_data_gap: set[tuple[str, str, str]] = set()
+        event_identities: set[tuple[str, str, str, str]] = set()
+        record_identities: set[tuple[str, str, str]] = set()
+        time_buckets: Dict[str, int] = {}
+
+        from ..luxian_0609_rule_master import load_luxian_0609_rule_master
+
+        rule_names = {entry.rule_id: entry.title for entry in load_luxian_0609_rule_master()}
+        for event in events:
+            identity = event["identity"]
+            root_job_id = _safe_text(event.get("root_job_id")).strip()
+            if not root_job_id or not isinstance(identity, tuple) or len(identity) != 3:
+                invalid_total += 1
+                continue
+            event_key = (root_job_id, *identity)
+            if event_key in event_identities:
+                invalid_total += 1
+                continue
+            department_name = _safe_text(event.get("department"), "未分科室").strip() or "未分科室"
+            event_statuses = set()
+            validated_items: list[tuple[str, str]] = []
+            valid_event = True
+            delivered_rule_ids: set[str] = set()
+            for item in event.get("items", []):
+                if not isinstance(item, Mapping):
+                    valid_event = False
+                    break
+                rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).strip().upper()
+                status = _safe_text(item.get("status")).strip()
+                if not rule_id or rule_id in delivered_rule_ids or status not in status_counts:
+                    valid_event = False
+                    break
+                delivered_rule_ids.add(rule_id)
+                validated_items.append((rule_id, status))
+            if not valid_event:
+                invalid_total += 1
+                continue
+            event_identities.add(event_key)
+            record_identities.add(identity)
+            department_records.setdefault(department_name, set()).add(identity)
+            for rule_id, status in validated_items:
+                status_counts[status] += 1
+                event_statuses.add(status)
+                bucket = rule_counts.setdefault(
+                    rule_id,
+                    {
+                        "non_compliant_count": 0,
+                        "data_gap_count": 0,
+                        "uncertain_count": 0,
+                        "evaluated_count": 0,
+                    },
+                )
+                bucket["evaluated_count"] += 1
+                if status in {"non_compliant", "data_gap", "uncertain"}:
+                    bucket[f"{status}_count"] += 1
+            if "non_compliant" in event_statuses:
+                records_with_non_compliant.add(identity)
+                department_non_compliant.setdefault(department_name, set()).add(identity)
+            if "data_gap" in event_statuses:
+                records_with_data_gap.add(identity)
+                department_data_gap.setdefault(department_name, set()).add(identity)
+            if "uncertain" in event_statuses:
+                department_uncertain.setdefault(department_name, set()).add(identity)
+
+            completed_at = _to_datetime(event.get("finished_at"))
+            if completed_at is not None:
+                bucket = completed_at.date().isoformat()
+                time_buckets[bucket] = time_buckets.get(bucket, 0) + 1
+
+        department_distribution = [
+            {
+                "department": name,
+                "distinct_record_total": len(identities),
+                "non_compliant_record_total": len(department_non_compliant.get(name, set())),
+                "data_gap_record_total": len(department_data_gap.get(name, set())),
+                "uncertain_record_total": len(department_uncertain.get(name, set())),
+                "canonical_invalid_or_missing_total": 0,
+            }
+            for name, identities in department_records.items()
+        ]
+        department_distribution.sort(
+            key=lambda item: (
+                -item["non_compliant_record_total"],
+                -item["data_gap_record_total"],
+                item["department"],
+            )
+        )
+        rule_distribution = [
+            {
+                "rule_id": rule_id,
+                "rule_name": rule_names.get(rule_id, rule_id),
+                **counts,
+            }
+            for rule_id, counts in rule_counts.items()
+        ]
+        rule_distribution.sort(
+            key=lambda item: (
+                -item["non_compliant_count"],
+                -item["data_gap_count"],
+                -item["uncertain_count"],
+                item["rule_id"],
+            )
+        )
+        time_series = (
+            [
+                {"bucket": bucket, "completed_event_total": count}
+                for bucket, count in sorted(time_buckets.items())
+            ]
+            if len(time_buckets) >= 2
+            else None
+        )
+        return {
+            "scope": {
+                "time_basis": "qc_completed_at",
+                "completed_from": completed_from.isoformat() if completed_from else None,
+                "completed_to": completed_to.isoformat() if completed_to else None,
+                "department": department or None,
+                "job_id": normalized_job_id,
+                "scene": "final",
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                "rule_set_version": LUXIAN_0609_RULE_SET_VERSION,
+                "hospital_scope": "all",
+                "generated_at": datetime.now().astimezone().isoformat(),
+            },
+            "kpis": {
+                "distinct_record_total": len(record_identities),
+                "completed_event_total": len(event_identities),
+                "records_with_non_compliant": len(records_with_non_compliant),
+                "records_with_data_gap": len(records_with_data_gap),
+                "canonical_invalid_or_missing_total": invalid_total,
+            },
+            "status_distribution": [
+                {"status": status, "count": status_counts[status]}
+                for status in status_order
+            ],
+            "department_distribution": department_distribution,
+            "rule_distribution": rule_distribution[:10],
+            "completion_time_series": time_series,
+            "data_health": {
+                "canonical_invalid_or_missing_total": invalid_total,
+            },
+        }
+
+    def _load_luxian_0609_analytics_events(
+        self,
+        session: Session,
+        *,
+        records_by_identity: Mapping[tuple[str, str, str], Mapping[str, Any]],
+        completed_from: Optional[datetime],
+        completed_to: Optional[datetime],
+        job_id: Optional[str],
+    ) -> tuple[list[Dict[str, Any]], int]:
+        """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
+
+        from ..custom_qc_workspace_service import (
+            CustomQCWorkspaceService,
+            _CANONICAL_RESULT_DELIVERY_MODE,
+            _CUSTOMER_STATUSES,
+            _RECORD_RESULT_ENVELOPE_SCHEMA,
+        )
+
+        workspace_service = CustomQCWorkspaceService()
+        jobs_query = select(
+            workspace_service._batch_job_table.c.id,
+            workspace_service._batch_job_table.c.finished_at,
+            workspace_service._batch_job_table.c.filters_json,
+            workspace_service._batch_job_table.c.record_ids_json,
+        ).where(
+            and_(
+                workspace_service._batch_job_table.c.status == "completed",
+                or_(
+                    workspace_service._batch_job_table.c.parent_job_id.is_(None),
+                    workspace_service._batch_job_table.c.parent_job_id == "",
+                ),
+            )
+        )
+        if job_id:
+            jobs_query = jobs_query.where(workspace_service._batch_job_table.c.id == job_id)
+        jobs: Dict[str, Dict[str, Any]] = {}
+        legacy_candidates: Dict[str, Dict[str, Any]] = {}
+        for raw_row in session.execute(jobs_query).mappings().all():
+            row = dict(raw_row)
+            current_job_id = _safe_text(row.get("id")).strip()
+            finished_at = _to_datetime(row.get("finished_at"))
+            filters = _json_loads_if_needed(row.get("filters_json"))
+            source = filters if isinstance(filters, Mapping) else {}
+            if (
+                not current_job_id
+                or finished_at is None
+                or (completed_from is not None and finished_at < completed_from)
+                or (completed_to is not None and finished_at > completed_to)
+            ):
+                continue
+            record_ids = _json_loads_if_needed(row.get("record_ids_json"))
+            job = {
+                "finished_at": row.get("finished_at"),
+                "record_ids": {
+                    _safe_text(value).strip()
+                    for value in record_ids
+                    if _safe_text(value).strip()
+                }
+                if isinstance(record_ids, list)
+                else set(),
+            }
+            filter_rule_set_key = _safe_text(source.get("rule_set_key")).strip()
+            filter_rule_set_version = _safe_text(source.get("rule_set_version")).strip()
+            if (
+                filter_rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                and filter_rule_set_version == LUXIAN_0609_RULE_SET_VERSION
+            ):
+                jobs[current_job_id] = job
+            elif not filter_rule_set_key and not filter_rule_set_version:
+                # 保留历史 summary 回退，但延迟且按任务 ID 精确读取，禁止把每个大
+                # summary 拉到统计请求里再反序列化。
+                legacy_candidates[current_job_id] = job
+        if legacy_candidates:
+            legacy_rows = session.execute(
+                select(
+                    workspace_service._batch_job_table.c.id,
+                    workspace_service._batch_job_table.c.summary_json,
+                ).where(workspace_service._batch_job_table.c.id.in_(list(legacy_candidates)))
+            ).mappings().all()
+            for raw_row in legacy_rows:
+                row = dict(raw_row)
+                current_job_id = _safe_text(row.get("id")).strip()
+                summary = _json_loads_if_needed(row.get("summary_json"))
+                if not isinstance(summary, Mapping):
+                    continue
+                if (
+                    _safe_text(summary.get("rule_set_key")).strip() == LUXIAN_0609_RULE_SET_KEY
+                    and _safe_text(summary.get("rule_set_version")).strip() == LUXIAN_0609_RULE_SET_VERSION
+                ):
+                    jobs[current_job_id] = legacy_candidates[current_job_id]
+        if not jobs:
+            return [], 0
+
+        envelope_rows = session.execute(
+            select(
+                workspace_service._record_result_envelope_table.c.root_job_id,
+                workspace_service._record_result_envelope_table.c.institute_id,
+                workspace_service._record_result_envelope_table.c.patient_id,
+                workspace_service._record_result_envelope_table.c.visit_id,
+                workspace_service._record_result_envelope_table.c.envelope_json,
+            ).where(
+                and_(
+                    workspace_service._record_result_envelope_table.c.root_job_id.in_(list(jobs)),
+                    workspace_service._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+                    workspace_service._record_result_envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
+                )
+            )
+        ).mappings().all()
+        rows_by_event: Dict[tuple[str, str, str, str], list[Dict[str, Any]]] = {}
+        for raw_row in envelope_rows:
+            row = dict(raw_row)
+            root_job_id = _safe_text(row.get("root_job_id")).strip()
+            identity = tuple(_safe_text(row.get(key)).strip() for key in ("institute_id", "patient_id", "visit_id"))
+            if root_job_id not in jobs or not all(identity):
+                continue
+            rows_by_event.setdefault((root_job_id, *identity), []).append(row)
+
+        events: list[Dict[str, Any]] = []
+        invalid_total = 0
+        for root_job_id, job in jobs.items():
+            record_ids = job["record_ids"]
+            matching_identities = [
+                identity for identity in records_by_identity if identity[2] in record_ids
+            ]
+            unresolved_visit_ids = record_ids - {identity[2] for identity in matching_identities}
+            invalid_total += len(unresolved_visit_ids)
+            for identity in matching_identities:
+                candidates = rows_by_event.get((root_job_id, *identity), [])
+                if len(candidates) != 1:
+                    invalid_total += 1
+                    continue
+                envelope = _json_loads_if_needed(candidates[0].get("envelope_json"))
+                items = envelope.get("items") if isinstance(envelope, Mapping) else None
+                if (
+                    not isinstance(envelope, Mapping)
+                    or envelope.get("schema_version") != _RECORD_RESULT_ENVELOPE_SCHEMA
+                    or envelope.get("delivery_mode") != _CANONICAL_RESULT_DELIVERY_MODE
+                    or not isinstance(items, list)
+                ):
+                    invalid_total += 1
+                    continue
+                rule_ids: set[str] = set()
+                valid_items: list[Dict[str, Any]] = []
+                valid = True
+                for item in items:
+                    if not isinstance(item, Mapping):
+                        valid = False
+                        break
+                    rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).strip().upper()
+                    status = _safe_text(item.get("status")).strip()
+                    if not rule_id or rule_id in rule_ids or status not in _CUSTOMER_STATUSES:
+                        valid = False
+                        break
+                    rule_ids.add(rule_id)
+                    valid_items.append({"rule_id": rule_id, "status": status})
+                if not valid:
+                    invalid_total += 1
+                    continue
+                record = records_by_identity[identity]
+                events.append(
+                    {
+                        "root_job_id": root_job_id,
+                        "identity": identity,
+                        "department": _safe_text(record.get("department"), "未分科室").strip() or "未分科室",
+                        "finished_at": job["finished_at"],
+                        "items": valid_items,
+                    }
+                )
+        return events, invalid_total
 
     def _build_luxian_0609_home_projection(
         self,
