@@ -87,7 +87,10 @@
             </article>
           </section>
 
-          <section class="qc-home-grid workstation-surface-enter">
+          <section
+            class="qc-home-grid qc-home-workspace workstation-surface-enter"
+            data-testid="home-workspace"
+          >
             <section
               class="qc-home-panel"
               data-testid="priority-queue"
@@ -186,159 +189,164 @@
                   </div>
                 </dl>
               </section>
-
-              <section
-                class="qc-home-panel"
-                data-testid="department-distribution"
-              >
-                <header class="qc-home-panel__head">
-                  <div>
-                    <h2>科室分布</h2>
-                    <p>高风险待复核按科室汇总。</p>
-                  </div>
-                </header>
-                <div
-                  v-if="departmentChartItems.length"
-                  class="qc-home-department-chart"
-                  data-testid="department-chart"
-                >
-                  <div
-                    v-for="item in departmentChartItems"
-                    :key="item.department"
-                    class="qc-home-department-chart__row"
-                    data-testid="department-chart-row"
-                  >
-                    <div class="qc-home-department-chart__meta">
-                      <strong>{{ item.department }}</strong>
-                      <span>纳入 {{ item.records_total }} 份</span>
-                    </div>
-                    <div
-                      class="qc-home-department-chart__track"
-                      aria-hidden="true"
-                    >
-                      <i :style="{ width: `${departmentRiskBarPercent(item)}%` }" />
-                    </div>
-                    <div class="qc-home-department-chart__counts">
-                      <em>待复核 {{ item.high_risk_review_total }}</em>
-                      <span v-if="item.data_gap_record_total">待核实 {{ item.data_gap_record_total }}</span>
-                    </div>
-                  </div>
-                  <p
-                    v-if="hiddenDepartmentCount"
-                    class="qc-home-department-chart__note"
-                  >
-                    按待复核数量排序，仅展示前 8 个科室；其余
-                    {{ hiddenDepartmentCount }} 个科室已收起。
-                  </p>
-                </div>
-                <a-empty
-                  v-else
-                  description="当前范围内暂无科室汇总"
-                  :image-style="{ height: '58px' }"
-                />
-              </section>
             </aside>
           </section>
 
           <section
-            class="qc-home-panel qc-home-coverage workstation-surface-enter"
-            data-testid="qc-coverage-chart"
-            aria-labelledby="qc-coverage-title"
+            class="qc-home-analysis workstation-surface-enter"
+            data-testid="home-analysis"
           >
-            <header class="qc-home-panel__head">
-              <div>
-                <h2 id="qc-coverage-title">
-                  质控覆盖构成
-                </h2>
-                <p>按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。</p>
-              </div>
-            </header>
-            <div
-              class="qc-home-coverage__bar"
-              role="img"
-              :aria-label="`已完成 ${coverageSegments[0].value}，待质控 ${coverageSegments[1].value}，结果校验异常 ${coverageSegments[2].value}`"
+            <section
+              class="qc-home-panel qc-home-coverage"
+              data-testid="qc-coverage-chart"
+              aria-labelledby="qc-coverage-title"
             >
-              <span
-                v-for="segment in coverageSegments"
-                :key="segment.key"
-                :class="['qc-home-coverage__segment', `is-${segment.tone}`]"
-                :style="{ width: `${segment.percent}%` }"
-              />
-            </div>
-            <ul
-              class="qc-home-coverage__legend"
-              aria-label="质控覆盖构成图例"
-            >
-              <li
-                v-for="segment in coverageSegments"
-                :key="segment.key"
-              >
-                <i
-                  :class="`is-${segment.tone}`"
-                  aria-hidden="true"
-                />
-                <span>{{ segment.label }} {{ segment.value }}</span>
-                <small>{{ segment.percent }}%</small>
-              </li>
-            </ul>
-            <p
-              v-if="!coverageScopeIsClosed"
-              class="qc-home-chart-note is-warning"
-            >
-              统计范围待核实：三个覆盖状态与纳入病历数暂不一致。
-            </p>
-          </section>
-
-          <section
-            class="qc-home-panel qc-home-conclusion workstation-surface-enter"
-            data-testid="qc-conclusion-chart"
-            aria-labelledby="qc-conclusion-title"
-          >
-            <header class="qc-home-panel__head">
-              <div>
-                <h2 id="qc-conclusion-title">
-                  结论结构
-                </h2>
-                <p>已完成病历中的规则结论。</p>
-              </div>
-            </header>
-            <div
-              v-if="conclusionSegments.length"
-              class="qc-home-conclusion__content"
-            >
-              <div
-                class="qc-home-conclusion__ring"
-                role="img"
-                :aria-label="`已完成规则结论共 ${conclusionTotal} 条`"
-                :style="{ background: conclusionRingBackground }"
-              >
+              <header class="qc-home-panel__head">
                 <div>
-                  <strong>{{ conclusionTotal }}</strong>
-                  <span>规则结论</span>
+                  <h2 id="qc-coverage-title">
+                    质控覆盖构成
+                  </h2>
+                  <p>按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。</p>
                 </div>
+              </header>
+              <div
+                class="qc-home-coverage__bar"
+                role="img"
+                :aria-label="`已完成 ${coverageSegments[0].value}，待质控 ${coverageSegments[1].value}，结果校验异常 ${coverageSegments[2].value}`"
+              >
+                <span
+                  v-for="segment in coverageSegments"
+                  :key="segment.key"
+                  :class="['qc-home-coverage__segment', `is-${segment.tone}`]"
+                  :style="{ width: `${segment.percent}%` }"
+                />
               </div>
               <ul
-                class="qc-home-conclusion__legend"
-                aria-label="已完成病历中的规则结论图例"
+                class="qc-home-coverage__legend"
+                aria-label="质控覆盖构成图例"
               >
                 <li
-                  v-for="segment in conclusionSegments"
-                  :key="segment.status"
+                  v-for="segment in coverageSegments"
+                  :key="segment.key"
                 >
                   <i
-                    :style="{ background: segment.color }"
+                    :class="`is-${segment.tone}`"
                     aria-hidden="true"
                   />
                   <span>{{ segment.label }} {{ segment.value }}</span>
                   <small>{{ segment.percent }}%</small>
                 </li>
               </ul>
-            </div>
-            <a-empty
-              v-else
-              description="暂无已完成质控结论"
-              :image-style="{ height: '58px' }"
-            />
+              <p
+                v-if="!coverageScopeIsClosed"
+                class="qc-home-chart-note is-warning"
+              >
+                统计范围待核实：三个覆盖状态与纳入病历数暂不一致。
+              </p>
+            </section>
+
+            <section
+              class="qc-home-panel qc-home-conclusion"
+              data-testid="qc-conclusion-chart"
+              aria-labelledby="qc-conclusion-title"
+            >
+              <header class="qc-home-panel__head">
+                <div>
+                  <h2 id="qc-conclusion-title">
+                    结论结构
+                  </h2>
+                  <p>已完成病历中的规则结论。</p>
+                </div>
+              </header>
+              <div
+                v-if="conclusionSegments.length"
+                class="qc-home-conclusion__content"
+              >
+                <div
+                  class="qc-home-conclusion__ring"
+                  role="img"
+                  :aria-label="`已完成规则结论共 ${conclusionTotal} 条`"
+                  :style="{ background: conclusionRingBackground }"
+                >
+                  <div>
+                    <strong>{{ conclusionTotal }}</strong>
+                    <span>规则结论</span>
+                  </div>
+                </div>
+                <ul
+                  class="qc-home-conclusion__legend"
+                  aria-label="已完成病历中的规则结论图例"
+                >
+                  <li
+                    v-for="segment in conclusionSegments"
+                    :key="segment.status"
+                  >
+                    <i
+                      :style="{ background: segment.color }"
+                      aria-hidden="true"
+                    />
+                    <span>{{ segment.label }} {{ segment.value }}</span>
+                    <small>{{ segment.percent }}%</small>
+                  </li>
+                </ul>
+              </div>
+              <a-empty
+                v-else
+                description="暂无已完成质控结论"
+                :image-style="{ height: '58px' }"
+              />
+            </section>
+
+            <section
+              class="qc-home-panel qc-home-department-panel"
+              data-testid="department-distribution"
+            >
+              <header class="qc-home-panel__head">
+                <div>
+                  <h2>科室风险排行</h2>
+                  <p>按高风险待复核病历数排序，辅助显示资料待核实。</p>
+                </div>
+              </header>
+              <div
+                v-if="departmentChartItems.length"
+                class="qc-home-department-chart"
+                data-testid="department-chart"
+              >
+                <div
+                  v-for="item in departmentChartItems"
+                  :key="item.department"
+                  class="qc-home-department-chart__row"
+                  data-testid="department-chart-row"
+                >
+                  <div class="qc-home-department-chart__meta">
+                    <strong>{{ item.department }}</strong>
+                    <span>纳入 {{ item.records_total }} 份</span>
+                  </div>
+                  <div
+                    class="qc-home-department-chart__track"
+                    aria-hidden="true"
+                  >
+                    <i :style="{ width: `${departmentRiskBarPercent(item)}%` }" />
+                  </div>
+                  <div class="qc-home-department-chart__counts">
+                    <em>待复核 {{ item.high_risk_review_total }}</em>
+                    <span v-if="item.data_gap_record_total">待核实 {{ item.data_gap_record_total }}</span>
+                  </div>
+                </div>
+                <p
+                  v-if="hiddenDepartmentCount"
+                  class="qc-home-department-chart__note"
+                >
+                  按待复核数量排序，仅展示前 8 个科室；其余
+                  {{ hiddenDepartmentCount }} 个科室已收起。
+                </p>
+              </div>
+              <a-empty
+                v-else
+                description="当前范围内暂无科室汇总"
+                :image-style="{ height: '58px' }"
+              />
+            </section>
           </section>
 
           <section
@@ -786,6 +794,14 @@ watch([departmentFilter, keyword], () => {
   grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.85fr);
   gap: 18px;
 }
+.qc-home-analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr);
+  gap: 18px;
+}
+.qc-home-department-panel {
+  grid-column: 1;
+}
 .qc-home-panel {
   padding: 20px 22px;
 }
@@ -1162,6 +1178,12 @@ watch([departmentFilter, keyword], () => {
   .qc-home-grid {
     grid-template-columns: 1fr;
   }
+  .qc-home-analysis {
+    grid-template-columns: 1fr;
+  }
+  .qc-home-department-panel {
+    grid-column: auto;
+  }
 }
 @media (max-width: 620px) {
   .qc-home-canvas {
@@ -1188,6 +1210,14 @@ watch([departmentFilter, keyword], () => {
   .qc-home-priority-row {
     grid-template-columns: 1fr;
     gap: 9px;
+  }
+  .qc-home-coverage__legend,
+  .qc-home-conclusion__legend {
+    grid-template-columns: 1fr;
+  }
+  .qc-home-conclusion__content {
+    grid-template-columns: 1fr;
+    justify-items: center;
   }
   .qc-home-priority-row__counts {
     justify-content: flex-start;

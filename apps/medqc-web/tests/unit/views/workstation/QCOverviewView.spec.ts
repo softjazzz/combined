@@ -3,7 +3,10 @@ import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiGet = vi.hoisted(() => vi.fn())
-const routeState = vi.hoisted(() => ({ query: {} as Record<string, string>, path: '/workstation-v4' }))
+const routeState = vi.hoisted(() => ({
+  query: {} as Record<string, string>,
+  path: '/workstation-v4',
+}))
 const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/apiService', () => ({
@@ -164,6 +167,111 @@ describe('QCOverviewView', () => {
     expect(chartRows).toHaveLength(8)
     expect(chartRows[0].text()).toContain('科室9')
     expect(wrapper.get('[data-testid="department-chart"]').text()).toContain('其余 1 个科室已收起')
+  })
+
+  it('使用同一首页响应展示质控覆盖构成，且不把技术异常混入医疗风险', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            ...clinicalQcPayload.clinical_qc.kpis,
+            records_total: 454,
+            qc_completed_total: 5,
+            qc_pending_total: 220,
+          },
+          data_health: {
+            ...clinicalQcPayload.clinical_qc.data_health,
+            technical_error_total: 229,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const coverage = wrapper.get('[data-testid="qc-coverage-chart"]').text()
+    expect(coverage).toContain('已完成 5')
+    expect(coverage).toContain('待质控 220')
+    expect(coverage).toContain('结果校验异常 229')
+    expect(coverage).not.toContain('统计范围待核实')
+    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
+    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('结果校验异常')
+  })
+
+  it('将完成态 Canonical 结论以可读图例展示，技术异常不进入结论结构', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          canonical_status_counts: {
+            non_compliant: 33,
+            data_gap: 70,
+            uncertain: 5,
+            compliant: 72,
+            not_applicable: 139,
+            not_executed: 4,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const conclusion = wrapper.get('[data-testid="qc-conclusion-chart"]').text()
+    expect(conclusion).toContain('已完成病历中的规则结论')
+    expect(conclusion).toContain('确定问题 33')
+    expect(conclusion).toContain('资料待核实 70')
+    expect(conclusion).toContain('待判断 5')
+    expect(conclusion).toContain('合规 72')
+    expect(conclusion).toContain('不适用 139')
+    expect(conclusion).toContain('未执行 4')
+    expect(conclusion).not.toContain('技术异常')
+  })
+
+  it('在覆盖计数未闭合时明确提示统计范围待核实，并为零结论提供空状态', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            ...clinicalQcPayload.clinical_qc.kpis,
+            records_total: 18,
+            qc_completed_total: 5,
+            qc_pending_total: 3,
+          },
+          canonical_status_counts: {},
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.get('[data-testid="qc-coverage-chart"]').text()).toContain('统计范围待核实')
+    expect(
+      wrapper.get('[data-testid="qc-conclusion-chart"] a-empty-stub').attributes('description'),
+    ).toBe('暂无已完成质控结论')
+  })
+
+  it('将工作入口与第二屏分析区分层展示', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const workspace = wrapper.get('[data-testid="home-workspace"]')
+    expect(workspace.find('[data-testid="priority-queue"]').exists()).toBe(true)
+    expect(workspace.find('[data-testid="data-health"]').exists()).toBe(true)
+    expect(workspace.find('[data-testid="department-chart"]').exists()).toBe(false)
+
+    const analysis = wrapper.get('[data-testid="home-analysis"]')
+    expect(analysis.find('[data-testid="qc-coverage-chart"]').exists()).toBe(true)
+    expect(analysis.find('[data-testid="qc-conclusion-chart"]').exists()).toBe(true)
+    expect(analysis.find('[data-testid="department-chart"]').exists()).toBe(true)
   })
 
   it('在请求失败时提供清晰的客户可见提示', async () => {
