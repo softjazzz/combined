@@ -115,6 +115,7 @@ def test_home_clinical_qc_has_explicit_scope_and_no_synthetic_trend(monkeypatch)
     assert payload["scope"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert payload["scope"]["rule_set_version"] == "2026-06-09"
     assert payload["scope"]["generated_at"]
+    assert "target_date" not in payload["scope"]
     assert payload["data_health"]["source_sync_status"] == "unknown"
     assert payload["data_health"]["running_task_total"] is None
     assert payload["trend"] is None

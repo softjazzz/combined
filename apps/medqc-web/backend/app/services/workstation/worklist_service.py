@@ -11,6 +11,8 @@ from sqlalchemy import MetaData, Table, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...database.connection import SessionLocal, engine
+from ..luxian_0609_result_schema import RULE_SET_VERSION as LUXIAN_0609_RULE_SET_VERSION
+from ..luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .workflow_queue_state_service import default_workflow_queue_state_service
 
 
@@ -311,7 +313,6 @@ class WorkstationAggregationService:
                 department=department,
                 keyword=keyword,
                 priority_limit=hotspot_limit,
-                target_date=date_value,
             )
             return {
                 "date": date_value.strftime("%Y-%m-%d"),
@@ -336,7 +337,6 @@ class WorkstationAggregationService:
         department: Optional[str],
         keyword: Optional[str],
         priority_limit: int,
-        target_date: datetime,
     ) -> Dict[str, Any]:
         """按病历池相同三坐标范围聚合全病历 Canonical 质控摘要。
 
@@ -472,9 +472,8 @@ class WorkstationAggregationService:
                 "hospital_scope": "all",
                 "department": department or None,
                 "scene": "final",
-                "rule_set_key": "luxian_0609_qc_v1",
-                "rule_set_version": "2026-06-09",
-                "target_date": target_date.strftime("%Y-%m-%d"),
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                "rule_set_version": LUXIAN_0609_RULE_SET_VERSION,
                 "generated_at": generated_at,
             },
             "kpis": {
