@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -53,6 +55,29 @@ async def get_workstation_home(
             recipient_id=_current_user_id(current_user),
             hotspot_limit=hotspot_limit,
             todo_limit=todo_limit,
+        )
+        return success_response(data=data, trace_id=get_trace_id(request))
+    except Exception as exc:
+        _raise_workstation_http_error(exc)
+
+
+@router.get("/analytics/luxian-0609")
+async def get_luxian_0609_analytics(
+    request: Request,
+    completed_from: Optional[datetime] = Query(None, description="质控完成时间起点（闭区间）"),
+    completed_to: Optional[datetime] = Query(None, description="质控完成时间终点（闭区间）"),
+    department: Optional[str] = Query(None, description="科室筛选"),
+    job_id: Optional[UUID] = Query(None, description="已完成根任务 ID"),
+    current_user: dict = Depends(get_current_user),
+):
+    """全院临时范围内的泸县 Canonical 终末质控统计。"""
+
+    try:
+        data = default_workstation_aggregation_service.get_luxian_0609_analytics(
+            completed_from=completed_from,
+            completed_to=completed_to,
+            department=department,
+            job_id=str(job_id) if job_id else None,
         )
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
@@ -237,4 +262,3 @@ async def get_settlement_snapshot(
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)
-
