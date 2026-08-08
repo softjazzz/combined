@@ -10,6 +10,10 @@
 from fastapi import APIRouter, Depends
 
 from ..core.security import get_current_user
+from ..services.medical_records.shared import (
+    build_demo_workstation_records as _build_demo_workstation_records,  # noqa: F401
+    filter_demo_records as _filter_demo_records,  # noqa: F401
+)
 
 from .medical_records_query import router as medical_records_query_router
 from .medical_records_detail import router as medical_records_detail_router

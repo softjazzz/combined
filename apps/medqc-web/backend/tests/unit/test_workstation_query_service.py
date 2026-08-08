@@ -23,6 +23,19 @@ class DummyWorkflowQueueStateService:
         return None
 
 
+class RunningWorkflowQueueStateService:
+    def get_state_map(self, **_kwargs):
+        return {
+            "V-SHARED": {
+                "queue_status": "running",
+                "queue_status_source": "runtime",
+            }
+        }
+
+    def backfill_frontpage_generate(self, **_kwargs):
+        return None
+
+
 @pytest.fixture()
 def workstation_session_factory(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
@@ -227,12 +240,90 @@ def test_get_workstation_data_keeps_same_visit_id_records_isolated_by_three_coor
     )
 
     records_by_key = {record["recordKey"]: record for record in result["records"]}
-    assert records_by_key["H1|P1|V-SHARED"]["id"] == "V-SHARED"
-    assert records_by_key["H1|P1|V-SHARED"]["bedNo"] == "01"
-    assert records_by_key["H1|P1|V-SHARED"]["status"] == "has_defects"
-    assert records_by_key["H2|P2|V-SHARED"]["id"] == "V-SHARED"
-    assert records_by_key["H2|P2|V-SHARED"]["bedNo"] == "02"
-    assert records_by_key["H2|P2|V-SHARED"]["status"] == "completed"
+    assert records_by_key['["H1","P1","V-SHARED"]']["id"] == "V-SHARED"
+    assert records_by_key['["H1","P1","V-SHARED"]']["bedNo"] == "01"
+    assert records_by_key['["H1","P1","V-SHARED"]']["status"] == "has_defects"
+    assert records_by_key['["H2","P2","V-SHARED"]']["id"] == "V-SHARED"
+    assert records_by_key['["H2","P2","V-SHARED"]']["bedNo"] == "02"
+    assert records_by_key['["H2","P2","V-SHARED"]']["status"] == "completed"
+
+
+def test_workstation_queue_state_remains_pending_when_same_visit_id_is_on_other_page(
+    workstation_session_factory,
+    monkeypatch,
+):
+    """visit_id 级旧队列状态不得跨页投影给不同三坐标病历。"""
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="H1",
+            patient_id="P1",
+            visit_id="V-SHARED",
+            name="机构一患者",
+            admission_dept_name="内科",
+            update_time=datetime(2026, 5, 26, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="H2",
+            patient_id="P2",
+            visit_id="V-SHARED",
+            name="机构二患者",
+            admission_dept_name="外科",
+            update_time=datetime(2026, 5, 25, 9, 0),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.medical_records.query_service.default_workflow_queue_state_service",
+        RunningWorkflowQueueStateService(),
+    )
+
+    result = get_workstation_data(
+        page=1,
+        page_size=1,
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 2
+    assert len(result["records"]) == 1
+    assert result["records"][0]["recordKey"] == '["H1","P1","V-SHARED"]'
+    assert result["records"][0]["frontpageGenerateQueueStatus"] == "pending"
+
+
+def test_workstation_record_key_does_not_collide_when_coordinate_contains_separator(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="A|B",
+            patient_id="C",
+            visit_id="D",
+            name="第一份",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 5, 26, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="A",
+            patient_id="B|C",
+            visit_id="D",
+            name="第二份",
+            admission_dept_name="外科",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert {record["recordKey"] for record in result["records"]} == {
+        '["A|B","C","D"]',
+        '["A","B|C","D"]',
+    }
 
 
 def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_session_factory):

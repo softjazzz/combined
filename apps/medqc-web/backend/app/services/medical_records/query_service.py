@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from typing import Any, Callable, Optional
 
@@ -32,7 +33,7 @@ def _workstation_record_key(institute_id: Any, patient_id: Any, visit_id: Any) -
     """工作台内存关联唯一使用的病历三坐标键。"""
 
     parts = [str(value or "").strip() for value in (institute_id, patient_id, visit_id)]
-    return "|".join(parts) if all(parts) else ""
+    return json.dumps(parts, ensure_ascii=False, separators=(",", ":")) if all(parts) else ""
 
 
 def _workstation_identity_condition():
@@ -586,12 +587,19 @@ def get_workstation_data(
         frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         demo_frontpage_generate_state_map: dict[str, dict[str, Any]] = {}
         if visit_ids:
-            visit_counts = {
-                visit_id: real_visit_ids.count(visit_id)
-                for visit_id in set(real_visit_ids)
+            all_real_visit_counts = {
+                visit_id: int(visit_count)
+                for visit_id, visit_count in q.with_entities(
+                    MedicalRecordFrontpage.visit_id,
+                    func.count(MedicalRecordFrontpage.visit_id),
+                )
+                .group_by(MedicalRecordFrontpage.visit_id)
+                .all()
             }
             safe_real_visit_ids = [
-                visit_id for visit_id in real_visit_ids if visit_counts.get(visit_id) == 1
+                visit_id
+                for visit_id in real_visit_ids
+                if all_real_visit_counts.get(visit_id) == 1
             ]
             queue_visit_ids = list(dict.fromkeys([*safe_real_visit_ids, *demo_visit_ids]))
             raw_frontpage_generate_state_map = default_workflow_queue_state_service.get_state_map(
@@ -608,7 +616,7 @@ def get_workstation_data(
                 except Exception:
                     raw_frontpage_generate_state_map = {}
             for record in records:
-                if visit_counts.get(record.visit_id) != 1:
+                if all_real_visit_counts.get(record.visit_id) != 1:
                     continue
                 key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
                 state = raw_frontpage_generate_state_map.get(record.visit_id)
