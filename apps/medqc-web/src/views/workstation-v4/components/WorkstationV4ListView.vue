@@ -135,7 +135,7 @@
                 v-if="!isStageQueueMode"
                 class="wv4-record-pool-filter__notice"
               >
-                在院、已出院及结果状态筛选待接入服务端，当前仅按已支持条件查询。
+                在院、已出院已按服务端结果筛选；质控状态筛选待接入服务端。
               </div>
             </div>
 

@@ -105,6 +105,9 @@ export function usePatientRecords() {
       if (endDate) {
         params.end_date = endDate
       }
+      if (hospFilter.value !== 'all') {
+        params.hospital_status = hospFilter.value
+      }
 
       const response = await ApiService.getRaw('/api/medical-records/workstation', {
         params,
@@ -165,6 +168,14 @@ export function usePatientRecords() {
     fetchData(1)
   }
 
+  function selectHospFilter(value: typeof hospFilter.value) {
+    const nextValue = hospOptions.some((option) => option.value === value) ? value : 'all'
+    if (hospFilter.value === nextValue) return
+    hospFilter.value = nextValue
+    currentPage.value = 1
+    fetchData(1)
+  }
+
   function resetFilters() {
     activeDept.value = '\u5168\u90e8\u79d1\u5ba4'
     searchText.value = ''
@@ -196,6 +207,7 @@ export function usePatientRecords() {
     handlePageChange,
     refreshData,
     selectDept,
+    selectHospFilter,
     resetFilters,
   }
 }

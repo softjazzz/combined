@@ -56,6 +56,7 @@ describe('usePatientRecords workstation filters', () => {
     records.searchText.value = '张三'
     records.dateRange.value = ['2026-05-01', '2026-05-31']
     records.dateField.value = 'admission'
+    records.hospFilter.value = 'inpatient'
 
     await records.fetchData(2, 10)
 
@@ -68,6 +69,25 @@ describe('usePatientRecords workstation filters', () => {
         keyword: '张三',
         start_date: '2026-05-01',
         end_date: '2026-05-31',
+        hospital_status: 'inpatient',
+      },
+    })
+  })
+
+  it('switches hospital status through the backend from the first page without local filtering', async () => {
+    const records = usePatientRecords()
+    records.currentPage.value = 3
+
+    records.selectHospFilter('discharged')
+    await flushPromises()
+
+    expect(records.currentPage.value).toBe(1)
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      params: {
+        page: 1,
+        page_size: 15,
+        date_field: 'visit',
+        hospital_status: 'discharged',
       },
     })
   })
