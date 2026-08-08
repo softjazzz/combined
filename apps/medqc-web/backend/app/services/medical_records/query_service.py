@@ -574,6 +574,7 @@ def get_workstation_data(
     analytics_completed_to: Optional[datetime] = None,
     analytics_rule_id: Optional[str] = None,
     analytics_result_status: Optional[str] = None,
+    analytics_scope: Optional[str] = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
@@ -596,6 +597,9 @@ def get_workstation_data(
         "technical_error",
     }:
         raise ValueError("analytics_result_status 无效")
+    normalized_analytics_scope = str(analytics_scope or "").strip()
+    if normalized_analytics_scope and normalized_analytics_scope != "final":
+        raise ValueError("analytics_scope 无效")
 
     with session_factory() as session:
         settings, _ = settings_loader()
@@ -637,6 +641,7 @@ def get_workstation_data(
                 analytics_completed_to,
                 analytics_rule_id,
                 normalized_analytics_status,
+                normalized_analytics_scope,
             )
         ):
             from ..workstation.worklist_service import WorkstationAggregationService

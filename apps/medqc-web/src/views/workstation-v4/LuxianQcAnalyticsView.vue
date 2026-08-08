@@ -427,6 +427,7 @@ function drillDown(filters: { department?: string; rule_id?: string }) {
     path: '/workstation-v4',
     query: {
       source: 'analytics',
+      analytics_scope: 'final',
       department: filters.department || department.value,
       analytics_completed_from: dateRange.value?.[0],
       analytics_completed_to: dateRange.value?.[1],

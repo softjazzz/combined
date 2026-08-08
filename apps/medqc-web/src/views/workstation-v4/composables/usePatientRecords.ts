@@ -114,6 +114,7 @@ export function usePatientRecords() {
         'analytics_completed_to',
         'analytics_rule_id',
         'analytics_result_status',
+        'analytics_scope',
       ] as const
       const analyticsQuery = new URLSearchParams(window.location.search)
       for (const key of analyticsKeys) {

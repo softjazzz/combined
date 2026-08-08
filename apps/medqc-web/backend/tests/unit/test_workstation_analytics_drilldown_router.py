@@ -25,7 +25,7 @@ def test_workstation_drilldown_forwards_analytics_scope_to_service(client, monke
         "analytics_job_id=00000000-0000-0000-0000-000000000001&"
         "analytics_completed_from=2026-08-01T00:00:00&"
         "analytics_completed_to=2026-08-02T00:00:00&"
-        "analytics_rule_id=LX0609-010&analytics_result_status=non_compliant",
+        "analytics_rule_id=LX0609-010&analytics_result_status=non_compliant&analytics_scope=final",
         headers={"Authorization": "Bearer test-token"},
     )
 
@@ -33,6 +33,7 @@ def test_workstation_drilldown_forwards_analytics_scope_to_service(client, monke
     assert captured["analytics_job_id"] == "00000000-0000-0000-0000-000000000001"
     assert captured["analytics_rule_id"] == "LX0609-010"
     assert captured["analytics_result_status"] == "non_compliant"
+    assert captured["analytics_scope"] == "final"
 
 
 def test_workstation_drilldown_rejects_invalid_status(client, monkeypatch):

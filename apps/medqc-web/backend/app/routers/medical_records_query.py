@@ -89,6 +89,7 @@ async def get_workstation_data_api(
             "technical_error",
         ]
     ] = Query(None, description="统计下钻 Canonical 结果状态"),
+    analytics_scope: Optional[Literal["final"]] = Query(None, description="统计下钻资料范围"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     try:
@@ -106,6 +107,7 @@ async def get_workstation_data_api(
             analytics_completed_to=analytics_completed_to,
             analytics_rule_id=analytics_rule_id,
             analytics_result_status=analytics_result_status,
+            analytics_scope=analytics_scope,
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)
