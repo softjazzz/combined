@@ -86,14 +86,18 @@ describe('LuxianQcAnalyticsView', () => {
     routerPush.mockReset()
   })
 
-  it('展示真实统计范围、五个 KPI 与主分析模块，不展示旧 mock 指标', async () => {
+  it('展示紧凑的真实统计概览与主分析模块，不展示旧 mock 指标', async () => {
     const wrapper = mountView()
     await flush()
     expect(wrapper.text()).toContain('质控统计分析')
     expect(wrapper.text()).toContain('按质控完成时间')
     expect(wrapper.get('[data-testid="analytics-kpis"]').text()).toContain('纳入病历')
-    expect(wrapper.get('[data-testid="analytics-kpis"]').text()).toContain('结果校验异常')
-    expect(wrapper.get('[data-testid="analytics-status-chart"]').text()).toContain('确定问题')
+    expect(wrapper.findAll('[data-testid="analytics-kpi"]')).toHaveLength(4)
+    expect(wrapper.get('[data-testid="analytics-kpis"]').text()).toContain('需优先处理')
+    expect(wrapper.get('[data-testid="analytics-conclusion-structure"]').text()).toContain(
+      '确定问题',
+    )
+    expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
     expect(wrapper.get('[data-testid="analytics-department-chart"]').text()).toContain('ICU')
     expect(wrapper.get('[data-testid="analytics-rule-chart"]').text()).toContain('LX0609-010')
     expect(wrapper.text()).not.toContain('平均评分')
@@ -113,6 +117,6 @@ describe('LuxianQcAnalyticsView', () => {
       '/api/v1/workstation/analytics/luxian-0609',
       expect.any(Object),
     )
-    expect(wrapper.get('[data-testid="analytics-health"]').text()).toContain('未计入不合规')
+    expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
   })
 })
