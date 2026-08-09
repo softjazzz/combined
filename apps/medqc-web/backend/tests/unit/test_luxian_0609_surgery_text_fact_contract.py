@@ -388,6 +388,15 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
             {"surgery_name": f"历史操作-{index}"}
             for index in range(8)
         ),
+        # 正式手术记录可用时，住院期间大量无关病程不能挤占025的投影预算。
+        daily_course_rows=tuple(
+            {
+                "document_id": f"daily-unrelated-{index}",
+                "record_time": f"2026-07-{index + 1:02d} 10:00:00+08",
+                "record_content": f"UNRELATED_DAILY_COURSE_{index}",
+            }
+            for index in range(12)
+        ),
     )
     event = _event(
         implant_use="actual_permanent_implant",
@@ -433,6 +442,7 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
     assert native.total_tokens == 100
     assert len(client.prompts) == 1
     assert "人工硬脑膜一张覆盖" in client.prompts[0]
+    assert "UNRELATED_DAILY_COURSE" not in client.prompts[0]
     assert "implant_barcode" in client.prompts[0]
     assert reduced[0].final_state.value == "compliant"
     assert reduced[0].reason_code == "requirement_satisfied"

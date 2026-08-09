@@ -1867,11 +1867,22 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 active_rule_ids.append(rule_id)
 
         if active_rule_ids:
+            def projection_sources_for(rule_id: str) -> tuple[str, ...]:
+                if rule_id == "LX0609-025":
+                    # 025 的两个来源是替代关系，不是必须同时送模。正式手术记录
+                    # 完整可用时优先使用它；仅在其不可用时回退病程，避免无关
+                    # 病程数量把本来足够的手术记录误判为投影截断。
+                    if source_states.get("surgery_record") == "available":
+                        return ("surgery_record",)
+                    if source_states.get("daily_course_record") == "available":
+                        return ("daily_course_record",)
+                return _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
+
             # 先按规则各自来源检查行上限；相关来源过多只能让该规则资料不足，
             # 不能为了合批静默裁剪。
             model_rule_ids: list[str] = []
             for rule_id in active_rule_ids:
-                source_keys = _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
+                source_keys = projection_sources_for(rule_id)
                 if any(
                     len(rows_by_source[source_key])
                     > _JOINT_TEXT_FACT_MAX_ROWS_PER_SOURCE
@@ -1887,7 +1898,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 active_sources = tuple(dict.fromkeys(
                     source_key
                     for rule_id in model_rule_ids
-                    for source_key in _TYPED_TEXT_PROJECTION_SOURCES[rule_id]
+                    for source_key in projection_sources_for(rule_id)
                 ))
                 total_rows = sum(len(rows_by_source[source_key]) for source_key in active_sources)
                 if total_rows > _JOINT_TEXT_FACT_MAX_TOTAL_ROWS:
