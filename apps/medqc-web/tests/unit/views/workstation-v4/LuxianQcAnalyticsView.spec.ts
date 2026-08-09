@@ -4,9 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiGet = vi.hoisted(() => vi.fn())
 const routerPush = vi.hoisted(() => vi.fn())
+const routeState = vi.hoisted(() => ({ query: {} as Record<string, string | undefined> }))
 
 vi.mock('@/services/apiService', () => ({ ApiService: { get: apiGet } }))
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPush }) }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    query: routeState.query,
+    get fullPath() {
+      return JSON.stringify(routeState.query)
+    },
+  }),
+  useRouter: () => ({ push: routerPush }),
+}))
 
 import LuxianQcAnalyticsView from '@/views/workstation-v4/LuxianQcAnalyticsView.vue'
 
@@ -93,6 +102,7 @@ describe('LuxianQcAnalyticsView', () => {
     apiGet.mockReset()
     apiGet.mockResolvedValue({ success: true, data: payload })
     routerPush.mockReset()
+    routeState.query = {}
   })
 
   it('展示紧凑的真实统计概览与主分析模块，不展示旧 mock 指标', async () => {
@@ -129,5 +139,47 @@ describe('LuxianQcAnalyticsView', () => {
       expect.any(Object),
     )
     expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
+  })
+
+  it('点击科室进入保留统计范围的科室报告，而不是返回质控首页', async () => {
+    const wrapper = mountView()
+    await flush()
+
+    await wrapper.get('.department-row').trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/workstation-v4/stats',
+      query: {
+        view: 'department',
+        department: 'ICU',
+        completed_from: undefined,
+        completed_to: undefined,
+        job_id: undefined,
+      },
+    })
+  })
+
+  it('科室报告以科室条件请求同一Canonical统计，并显示返回全院入口', async () => {
+    routeState.query = {
+      view: 'department',
+      department: 'ICU',
+      completed_from: '2026-08-01T00:00:00',
+      completed_to: '2026-08-08T23:59:59',
+      job_id: 'job-1',
+    }
+
+    const wrapper = mountView()
+    await flush()
+
+    expect(wrapper.text()).toContain('ICU质控分析')
+    expect(wrapper.find('[data-testid="analytics-return-hospital"]').exists()).toBe(true)
+    expect(apiGet).toHaveBeenCalledWith('/api/v1/workstation/analytics/luxian-0609', {
+      completed_from: '2026-08-01T00:00:00',
+      completed_to: '2026-08-08T23:59:59',
+      department: 'ICU',
+      job_id: 'job-1',
+    })
+    expect(wrapper.find('[data-testid="analytics-department-chart"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
   })
 })

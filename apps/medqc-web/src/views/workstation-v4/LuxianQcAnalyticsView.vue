@@ -5,10 +5,16 @@
         <div class="analytics-heading">
           <div>
             <p class="analytics-eyebrow">
-              全院临时范围 · 终末质控
+              {{ isDepartmentReport ? '科室专项范围 · 终末质控' : '全院临时范围 · 终末质控' }}
             </p>
-            <h1>质控统计分析</h1>
-            <p>聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。</p>
+            <h1>{{ isDepartmentReport ? `${activeDepartmentName}质控分析` : '质控统计分析' }}</h1>
+            <p>
+              {{
+                isDepartmentReport
+                  ? '聚焦本科室已完成任务中可交付的 Canonical 结果，不混入技术异常。'
+                  : '聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。'
+              }}
+            </p>
           </div>
 
           <div
@@ -21,6 +27,7 @@
               value-format="YYYY-MM-DDTHH:mm:ss"
             />
             <a-select
+              v-if="!isDepartmentReport"
               v-model:value="department"
               allow-clear
               placeholder="全部科室"
@@ -37,6 +44,13 @@
               @click="void fetchAnalytics"
             >
               查询
+            </a-button>
+            <a-button
+              v-if="isDepartmentReport"
+              data-testid="analytics-return-hospital"
+              @click="returnToHospitalAnalytics"
+            >
+              返回全院
             </a-button>
             <a-button @click="resetFilters">
               重置
@@ -199,6 +213,7 @@
 
           <section class="analytics-detail-grid">
             <article
+              v-if="!isDepartmentReport"
               class="analytics-surface analytics-panel analytics-department-panel"
               data-testid="analytics-department-chart"
             >
@@ -218,7 +233,7 @@
                   :key="item.department"
                   type="button"
                   class="department-row"
-                  @click="drillDown({ department: item.department })"
+                  @click="openDepartmentReport(item.department)"
                 >
                   <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
                   <span class="department-name">{{ item.department }}</span>
@@ -365,8 +380,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ApiService } from '@/services/apiService'
 
@@ -424,12 +439,26 @@ interface AnalyticsPayload {
 }
 
 const router = useRouter()
+const route = useRoute()
 const loading = ref(true)
 const error = ref('')
 const payload = ref<AnalyticsPayload | null>(null)
 const dateRange = ref<[string, string]>()
 const department = ref<string>()
 const jobId = ref('')
+const routeScopeInitialized = ref(false)
+
+function routeQueryText(name: string) {
+  const value = route.query[name]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const isDepartmentReport = computed(
+  () => routeQueryText('view') === 'department' && Boolean(routeQueryText('department')),
+)
+const activeDepartmentName = computed(
+  () => routeQueryText('department') || department.value || '当前科室',
+)
 
 const STATUS_META: Array<{ status: Status; label: string; color: string }> = [
   { status: 'non_compliant', label: '确定问题', color: '#ef4444' },
@@ -578,9 +607,31 @@ function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
 }
 function resetFilters() {
   dateRange.value = undefined
-  department.value = undefined
+  department.value = isDepartmentReport.value ? activeDepartmentName.value : undefined
   jobId.value = ''
   void fetchAnalytics()
+}
+function openDepartmentReport(departmentName: string) {
+  void router.push({
+    path: '/workstation-v4/stats',
+    query: {
+      view: 'department',
+      department: departmentName,
+      completed_from: dateRange.value?.[0],
+      completed_to: dateRange.value?.[1],
+      job_id: jobId.value || undefined,
+    },
+  })
+}
+function returnToHospitalAnalytics() {
+  void router.push({
+    path: '/workstation-v4/stats',
+    query: {
+      completed_from: dateRange.value?.[0],
+      completed_to: dateRange.value?.[1],
+      job_id: jobId.value || undefined,
+    },
+  })
 }
 function drillDown(filters: { department?: string; rule_id?: string }) {
   void router.push({
@@ -620,6 +671,23 @@ async function fetchAnalytics() {
     loading.value = false
   }
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    const selectedDepartment = isDepartmentReport.value ? routeQueryText('department') : ''
+    const completedFrom = routeQueryText('completed_from')
+    const completedTo = routeQueryText('completed_to')
+    department.value = selectedDepartment || undefined
+    dateRange.value = completedFrom && completedTo ? [completedFrom, completedTo] : undefined
+    jobId.value = routeQueryText('job_id')
+    if (routeScopeInitialized.value) {
+      void fetchAnalytics()
+    }
+    routeScopeInitialized.value = true
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   void fetchAnalytics()
