@@ -9,7 +9,11 @@ from typing import Any
 import psycopg2
 
 from .bundles.assembly import refresh_all_bundle_variants_for_rows
-from .case_identity import CaseRef, normalize_case_refs
+from .case_identity import (
+    CaseRef,
+    normalize_source_case_refs,
+    stamp_source_rows_institute_id,
+)
 from .etl_sync import (
     fetch_remote_rows_by_case_refs,
     get_remote_db_url,
@@ -76,7 +80,11 @@ class CaseSetSyncService:
         case_refs: Sequence[CaseRef | Mapping[str, Any]],
         policy_version: str,
     ) -> dict[str, Any]:
-        normalized = normalize_case_refs(case_refs)
+        config = self._db_config_loader()
+        normalized = normalize_source_case_refs(
+            case_refs,
+            default_institute_id=str(config.get("default_institute_id") or "").strip(),
+        )
         stats = self._bundle_refresher(
             rows=[case_ref.as_dict() for case_ref in normalized],
             scenes=("running", "final"),
@@ -99,7 +107,14 @@ class CaseSetSyncService:
         policy_version: str,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> CaseSetSyncResult:
-        normalized_refs = normalize_case_refs(case_refs)
+        config = self._db_config_loader()
+        default_institute_id = str(
+            config.get("default_institute_id") or ""
+        ).strip()
+        normalized_refs = normalize_source_case_refs(
+            case_refs,
+            default_institute_id=default_institute_id,
+        )
         normalized_tables = tuple(
             dict.fromkeys(
                 str(table_name or "").strip()
@@ -113,7 +128,6 @@ class CaseSetSyncService:
         remote_url = self._remote_url_loader()
         if not remote_url:
             raise ValueError("REMOTE_DB_URL 未配置")
-        config = self._db_config_loader()
         remote_schema = str(config.get("remote_schema") or "public").strip() or "public"
         catalog = {
             str(item.get("name") or "").strip(): item
@@ -162,6 +176,7 @@ class CaseSetSyncService:
                     remote_schema=remote_schema,
                     source_table=source_table,
                     case_refs=list(normalized_refs),
+                    default_institute_id=default_institute_id,
                 )
             except (psycopg2.errors.UndefinedColumn, psycopg2.errors.UndefinedTable):
                 return _unavailable_result(
@@ -187,9 +202,13 @@ class CaseSetSyncService:
                     source_table=source_table,
                     error_category="source_table_missing",
                 )
+            normalized_source_rows = stamp_source_rows_institute_id(
+                rows,
+                default_institute_id=default_institute_id,
+            )
             upserted = self._row_upserter(
                 table_name=table_name,
-                records=rows,
+                records=normalized_source_rows,
                 primary_keys=[
                     str(key)
                     for key in table_config.get("key_fields") or ()
@@ -197,7 +216,7 @@ class CaseSetSyncService:
                 ],
                 batch_size=self._upsert_batch_size,
             )
-            normalized_rows = tuple(dict(row) for row in rows)
+            normalized_rows = tuple(normalized_source_rows)
             return (
                 table_name,
                 normalized_rows,

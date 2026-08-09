@@ -36,7 +36,12 @@ from .bundles.assembly import (
     refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
-from .case_identity import CaseRef, coerce_case_ref, normalize_case_refs
+from .case_identity import (
+    CaseRef,
+    coerce_case_ref,
+    normalize_case_refs,
+    stamp_source_rows_institute_id,
+)
 from .case_set_sync_service import CaseSetSyncService
 from .etl_sync import (
     expand_table_groups,
@@ -5670,7 +5675,17 @@ class CustomQCSamplePoolService:
                 "visit_keys": [],
             }
 
+        default_institute_id = str(
+            load_db_config().get("default_institute_id") or "LOCAL-HOSPITAL"
+        ).strip()
         lookup = self._lookup_remote_match_candidates(items=items)
+
+        def _complete_candidates(values: Sequence[Dict[str, Any]]) -> list[Dict[str, Any]]:
+            return stamp_source_rows_institute_id(
+                values,
+                default_institute_id=default_institute_id,
+            )
+
         visit_lookup_map = lookup.get("visit_id", {})
         mr_no_lookup_map = lookup.get("mr_no", {})
         inpat_no_lookup_map = lookup.get("inpat_no", {})
@@ -5689,7 +5704,9 @@ class CustomQCSamplePoolService:
             qc_date_value = _parse_date(item.get("qc_date"))
             visit_candidates = [
                 candidate
-                for candidate in (visit_lookup_map.get(visit_id_input, []) if visit_id_input else [])
+                for candidate in _complete_candidates(
+                    visit_lookup_map.get(visit_id_input, []) if visit_id_input else []
+                )
                 if _safe_text(candidate.get("institute_id"))
                 and _safe_text(candidate.get("patient_id"))
                 and _safe_text(candidate.get("visit_id"))
@@ -5706,7 +5723,9 @@ class CustomQCSamplePoolService:
             if chosen is None and mr_no_input:
                 mr_no_candidates = [
                     candidate
-                    for candidate in mr_no_lookup_map.get(mr_no_input, [])
+                    for candidate in _complete_candidates(
+                        mr_no_lookup_map.get(mr_no_input, [])
+                    )
                     if _safe_text(candidate.get("institute_id"))
                     and _safe_text(candidate.get("patient_id"))
                     and _safe_text(candidate.get("visit_id"))
@@ -5723,7 +5742,9 @@ class CustomQCSamplePoolService:
             if chosen is None and inpat_no_input:
                 inpat_no_candidates = [
                     candidate
-                    for candidate in inpat_no_lookup_map.get(inpat_no_input, [])
+                    for candidate in _complete_candidates(
+                        inpat_no_lookup_map.get(inpat_no_input, [])
+                    )
                     if _safe_text(candidate.get("institute_id"))
                     and _safe_text(candidate.get("patient_id"))
                     and _safe_text(candidate.get("visit_id"))

@@ -1642,6 +1642,46 @@ def test_resolve_remote_visit_keys_uses_inpat_registration_without_mr(monkeypatc
     assert result["visit_keys"] == [("P002", "V002")]
 
 
+def test_resolve_remote_visit_keys_injects_fixed_institute_for_single_hospital_source(
+    monkeypatch,
+):
+    service = CustomQCSamplePoolService()
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        sample_pool_module,
+        "load_db_config",
+        lambda: {"remote_schema": "public", "default_institute_id": "LOCAL-HOSPITAL"},
+    )
+    monkeypatch.setattr(
+        service,
+        "_lookup_remote_match_candidates",
+        lambda **kwargs: {
+            "visit_id": {
+                "V-NO-INSTITUTE": [
+                    {
+                        "source_anchor_table": "mr",
+                        "patient_id": "P001",
+                        "visit_id": "V-NO-INSTITUTE",
+                    }
+                ]
+            },
+            "mr_no": {},
+            "inpat_no": {},
+        },
+    )
+
+    result = service._resolve_remote_visit_keys(
+        items=[{"visit_id": "V-NO-INSTITUTE"}]
+    )
+
+    assert result["matched"] == 1
+    assert result["case_refs"] == [
+        sample_pool_module.CaseRef(
+            "LOCAL-HOSPITAL", "P001", "V-NO-INSTITUTE"
+        )
+    ]
+
+
 def test_resolve_remote_visit_keys_uses_admission_record_and_rejects_incomplete_identity(monkeypatch):
     service = CustomQCSamplePoolService()
     monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
@@ -1699,7 +1739,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "ambiguous": 0,
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
-            "case_refs": [("H1", "P001", "V001")],
+            "case_refs": [("", "P001", "V001")],
         },
     )
     match_calls = []
@@ -1735,13 +1775,24 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
         },
     )
     monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
-    monkeypatch.setattr(sample_pool_module, "load_db_config", lambda: {"remote_schema": "public"})
+    monkeypatch.setattr(
+        sample_pool_module,
+        "load_db_config",
+        lambda: {
+            "remote_schema": "public",
+            "default_institute_id": "LOCAL-HOSPITAL",
+        },
+    )
 
     rows_by_table = {
         "mr": [],
-        "admission_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}],
-        "daily_course_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001", "document_id": "D1"}],
-        "procedure_record": [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001", "document_id": "P1"}],
+        "admission_record": [{"patient_id": "P001", "visit_id": "V001"}],
+        "daily_course_record": [
+            {"patient_id": "P001", "visit_id": "V001", "document_id": "D1"}
+        ],
+        "procedure_record": [
+            {"patient_id": "P001", "visit_id": "V001", "document_id": "P1"}
+        ],
     }
     remote_read_calls = []
     local_write_calls = []
@@ -1857,6 +1908,18 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert len(local_write_calls) == 4
     assert all("remote_url" not in call for call in local_write_calls)
     assert all(call["batch_size"] == 500 for call in local_write_calls)
+    assert all(
+        row["institute_id"] == "LOCAL-HOSPITAL"
+        for call in local_write_calls
+        for row in call["records"]
+    )
+    assert refresh_calls[0]["rows"] == [
+        {
+            "institute_id": "LOCAL-HOSPITAL",
+            "patient_id": "P001",
+            "visit_id": "V001",
+        }
+    ]
     assert result["sync_performance"]["detail_table_workers"] == 2
     assert result["sync_performance"]["source_resolve_ms"] >= 0
     assert result["sync_performance"]["primary_visible_ms"] >= 0

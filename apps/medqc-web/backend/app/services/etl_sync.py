@@ -453,6 +453,8 @@ _DEFAULT_CONFIG = {
     "remote_username": "postgres",
     "remote_password_ref": "env:REMOTE_DB_PASSWORD",
     "remote_schema": "public",
+    # 单院源库通常没有机构号列；该固定值只在源数据缺失时补入。
+    "default_institute_id": "LOCAL-HOSPITAL",
     "sync_mode": "table",  # table | procedure
 }
 
@@ -863,6 +865,10 @@ def load_db_config() -> Dict:
     if not cfg.get("remote_password_ref"):
         cfg["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
     cfg["remote_schema"] = str(cfg.get("remote_schema") or "public")
+    cfg["default_institute_id"] = (
+        str(cfg.get("default_institute_id") or "LOCAL-HOSPITAL").strip()
+        or "LOCAL-HOSPITAL"
+    )
     cfg["sync_mode"] = str(cfg.get("sync_mode") or "table").lower()
 
     cfg["remote_password"] = _runtime_remote_password or _resolve_password_from_ref(str(cfg.get("remote_password_ref", "")))
@@ -882,6 +888,7 @@ def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict
         "remote_username",
         "remote_password_ref",
         "remote_schema",
+        "default_institute_id",
         "sync_mode",
     }
     to_save = {k: v for k, v in config.items() if k in safe_keys}
@@ -889,6 +896,8 @@ def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict
         to_save["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
     if not to_save.get("remote_schema"):
         to_save["remote_schema"] = "public"
+    if not str(to_save.get("default_institute_id") or "").strip():
+        to_save["default_institute_id"] = "LOCAL-HOSPITAL"
     if str(to_save.get("sync_mode") or "").lower() not in {"table", "procedure"}:
         to_save["sync_mode"] = "table"
     if not set_config(
@@ -2380,10 +2389,11 @@ def fetch_remote_rows_by_case_refs(
     remote_schema: str,
     source_table: str,
     case_refs: List[Any],
+    default_institute_id: str = "",
 ) -> List[Dict]:
-    """按机构、患者、住院号三坐标精确读取源库病例资料。"""
+    """按病例集合读取源库；单院源表缺机构列时使用固定机构标识。"""
 
-    from .case_identity import normalize_case_refs
+    from .case_identity import normalize_case_refs, stamp_source_rows_institute_id
 
     normalized_refs = normalize_case_refs(case_refs)
     schema_ident = _safe_identifier(remote_schema)
@@ -2391,30 +2401,58 @@ def fetch_remote_rows_by_case_refs(
     conn = psycopg2.connect(remote_url, connect_timeout=10)
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        required_columns = ("institute_id", "patient_id", "visit_id")
-        if any(
-            not _remote_column_exists(cursor, remote_schema, source_table, column)
-            for column in required_columns
-        ):
+        has_patient_id = _remote_column_exists(
+            cursor, remote_schema, source_table, "patient_id"
+        )
+        has_visit_id = _remote_column_exists(
+            cursor, remote_schema, source_table, "visit_id"
+        )
+        if not has_patient_id or not has_visit_id:
             raise ValueError(
-                f"{source_table} 缺少 institute_id/patient_id/visit_id 字段，"
-                "无法按三坐标病例集合抽取"
+                f"{source_table} 缺少 patient_id/visit_id 字段，无法按病例集合抽取"
             )
+        has_institute_id = _remote_column_exists(
+            cursor, remote_schema, source_table, "institute_id"
+        )
+        fallback = str(default_institute_id or "").strip()
+        if not has_institute_id:
+            if not fallback:
+                raise ValueError(
+                    f"{source_table} 缺少 institute_id 字段，且未配置固定机构标识"
+                )
+            if any(case_ref.institute_id != fallback for case_ref in normalized_refs):
+                raise ValueError(
+                    f"{source_table} 无 institute_id 字段，请求病例与固定机构标识不一致"
+                )
         all_rows: List[Dict] = []
         for start in range(0, len(normalized_refs), _VISIT_KEY_CHUNK_SIZE):
             chunk = normalized_refs[start : start + _VISIT_KEY_CHUNK_SIZE]
-            placeholders = ", ".join(["(%s, %s, %s)"] * len(chunk))
             params: List[str] = []
-            for institute_id, patient_id, visit_id in chunk:
-                params.extend([institute_id, patient_id, visit_id])
-            cursor.execute(
-                f"SELECT * FROM {schema_ident}.{table_ident} "
-                "WHERE (institute_id::text, patient_id::text, visit_id::text) "
-                f"IN ({placeholders})",
-                params,
-            )
+            if has_institute_id:
+                placeholders = ", ".join(["(%s, %s, %s)"] * len(chunk))
+                for institute_id, patient_id, visit_id in chunk:
+                    params.extend([institute_id, patient_id, visit_id])
+                cursor.execute(
+                    f"SELECT * FROM {schema_ident}.{table_ident} "
+                    "WHERE (institute_id::text, patient_id::text, visit_id::text) "
+                    f"IN ({placeholders})",
+                    params,
+                )
+            else:
+                placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+                for _institute_id, patient_id, visit_id in chunk:
+                    params.extend([patient_id, visit_id])
+                cursor.execute(
+                    f"SELECT * FROM {schema_ident}.{table_ident} "
+                    "WHERE (patient_id::text, visit_id::text) "
+                    f"IN ({placeholders})",
+                    params,
+                )
             all_rows.extend(dict(row) for row in cursor.fetchall() or [])
-        return all_rows
+        return stamp_source_rows_institute_id(
+            all_rows,
+            default_institute_id=fallback,
+        )
     finally:
         cursor.close()
         conn.close()
@@ -2808,6 +2846,10 @@ def run_sync(
         remote_url = get_remote_db_url()
         if not remote_url:
             return {"success": False, "error": "REMOTE_DB_URL 未配置"}
+        source_config = load_db_config()
+        default_institute_id = str(
+            source_config.get("default_institute_id") or ""
+        ).strip()
 
         sync_mode = _resolve_sync_mode()
         resolved_scene = _normalize_sync_scene(scene)
@@ -3045,6 +3087,13 @@ def run_sync(
                         date_str=sync_date,
                         param_count=int(table_config.get("params") or 1),
                     )
+
+                from .case_identity import stamp_source_rows_institute_id
+
+                rows = stamp_source_rows_institute_id(
+                    rows,
+                    default_institute_id=default_institute_id,
+                )
 
                 log.stage = "local_upsert"
                 count = upsert_to_local(

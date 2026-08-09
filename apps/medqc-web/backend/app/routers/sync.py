@@ -92,6 +92,9 @@ def _mask_pg_config(raw: dict) -> dict:
     data["remote_password_display"] = "***" if password else ""
     data["remote_password_ref"] = str(data.get("remote_password_ref") or "")
     data["remote_schema"] = str(data.get("remote_schema") or "public")
+    data["default_institute_id"] = str(
+        data.get("default_institute_id") or "LOCAL-HOSPITAL"
+    )
     data["sync_mode"] = str(data.get("sync_mode") or "table")
     return data
 
@@ -117,6 +120,7 @@ class PgConfigUpdate(BaseModel):
     remote_password_ref: Optional[str] = Field(default=None, max_length=128)
     remote_password: Optional[str] = Field(default=None, max_length=256)
     remote_schema: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    default_institute_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
     sync_mode: Optional[Literal["table", "procedure"]] = None
 
 

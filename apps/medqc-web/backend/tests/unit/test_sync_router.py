@@ -160,6 +160,7 @@ class TestSyncRouter:
             "remote_username": "tester",
             "remote_password": "secret",
             "remote_schema": "public",
+            "default_institute_id": "LOCAL-HOSPITAL",
             "sync_mode": "table",
         }
         saved_holder: dict[str, object] = {}
@@ -181,12 +182,18 @@ class TestSyncRouter:
 
         resp = client.put(
             "/api/v1/sync/config/pg",
-            json={"remote_host": "10.10.10.8", "remote_port": 5433, "remote_password": ""},
+            json={
+                "remote_host": "10.10.10.8",
+                "remote_port": 5433,
+                "remote_password": "",
+                "default_institute_id": "HOSPITAL-A",
+            },
         )
         assert resp.status_code == 200
         data = _assert_success_shell(resp.json())
         assert saved_holder["value"]["remote_host"] == "10.10.10.8"
         assert saved_holder["value"]["remote_port"] == "5433"
+        assert saved_holder["value"]["default_institute_id"] == "HOSPITAL-A"
         assert saved_holder["value"]["remote_password"] == "secret"
         assert saved_holder["runtime_password"] is None
         assert data["config"]["remote_password_set"] is True

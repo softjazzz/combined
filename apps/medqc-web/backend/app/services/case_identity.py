@@ -62,6 +62,49 @@ def normalize_case_refs(values: Sequence[CaseRefInput]) -> tuple[CaseRef, ...]:
     return tuple(normalized)
 
 
+def normalize_source_case_refs(
+    values: Sequence[CaseRefInput],
+    *,
+    default_institute_id: str,
+) -> tuple[CaseRef, ...]:
+    """在源库同步边界补固定机构号，其他坐标仍严格失败关闭。"""
+
+    fallback = str(default_institute_id or "").strip()
+    resolved: list[CaseRef] = []
+    for value in values:
+        case_ref = coerce_case_ref(value)
+        resolved.append(
+            CaseRef(
+                case_ref.institute_id or fallback,
+                case_ref.patient_id,
+                case_ref.visit_id,
+            )
+        )
+    return normalize_case_refs(resolved)
+
+
+def stamp_source_rows_institute_id(
+    values: Sequence[Mapping[str, Any]],
+    *,
+    default_institute_id: str,
+) -> list[dict[str, Any]]:
+    """给源库缺失机构号的行补固定值；已有机构号原样保留。"""
+
+    fallback = str(default_institute_id or "").strip()
+    normalized: list[dict[str, Any]] = []
+    for value in values:
+        row = dict(value)
+        institute_id = str(row.get("institute_id") or "").strip()
+        if not institute_id:
+            if not fallback:
+                raise ValueError("源病例缺少 institute_id，且未配置固定机构标识")
+            row["institute_id"] = fallback
+        else:
+            row["institute_id"] = institute_id
+        normalized.append(row)
+    return normalized
+
+
 def case_refs_from_records(values: Sequence[Mapping[str, Any]]) -> tuple[CaseRef, ...]:
     """从已解析病历行冻结三坐标；缺任一坐标立即失败关闭。"""
 

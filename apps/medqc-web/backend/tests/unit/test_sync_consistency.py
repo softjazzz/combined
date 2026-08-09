@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import create_engine
 
 from app.services import etl_sync, mongo_sync, sync_run_history
+from app.services.case_identity import CaseRef
 
 
 def test_list_remote_departments_uses_discharge_department_field(monkeypatch):
@@ -306,14 +307,25 @@ def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
     visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 5)]
     rows_by_table = {
         table: [
-            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
+            {"patient_id": patient_id, "visit_id": visit_id}
             for patient_id, visit_id in visit_keys
         ]
         for table in ["mr", "admission_record", "discharge_record"]
     }
+    upserted_rows: list[dict] = []
+    refreshed_case_refs: list[tuple[str, str, str]] = []
 
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
+    monkeypatch.setattr(
+        etl_sync,
+        "load_db_config",
+        lambda: {
+            "remote_schema": "public",
+            "sync_mode": "table",
+            "default_institute_id": "LOCAL-HOSPITAL",
+        },
+    )
     monkeypatch.setattr(
         etl_sync,
         "validate_pg_sync_plan",
@@ -331,10 +343,17 @@ def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
     monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
     monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
     monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
-    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(
+        etl_sync,
+        "upsert_to_local",
+        lambda **kwargs: upserted_rows.extend(kwargs["records"])
+        or len(kwargs["records"]),
+    )
     monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
     monkeypatch.setattr(
-        etl_sync, "_refresh_all_bundle_variants_after_sync", lambda **_kwargs: None
+        etl_sync,
+        "_refresh_all_bundle_variants_after_sync",
+        lambda **kwargs: refreshed_case_refs.extend(kwargs["case_refs"]),
     )
 
     result = etl_sync.run_sync(
@@ -353,6 +372,12 @@ def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
     assert result["missing_mr_visit_ids"] == []
     assert result["detail_only_visit_count"] == 0
     assert result["warnings"] == []
+    assert upserted_rows
+    assert {row["institute_id"] for row in upserted_rows} == {"LOCAL-HOSPITAL"}
+    assert refreshed_case_refs == [
+        ("LOCAL-HOSPITAL", patient_id, visit_id)
+        for patient_id, visit_id in visit_keys
+    ]
     final_progress = progress_events[-1]["visit_progress"]
     assert final_progress["total"] == 4
     assert final_progress["completed"] == 4
@@ -1434,6 +1459,87 @@ def test_fetch_remote_rows_by_visit_keys_full_reload_has_no_time_condition(monke
     )
 
     assert " >= %s" not in executed[0]
+
+
+def test_fetch_remote_rows_by_case_refs_without_institute_column_uses_fixed_identity(
+    monkeypatch,
+):
+    executed: list[tuple[str, list[str]]] = []
+
+    class _Cursor:
+        def execute(self, sql, params=None):
+            executed.append((str(sql), list(params or [])))
+
+        def fetchall(self):
+            return [{"patient_id": "P1", "visit_id": "V1", "record_content": "正文"}]
+
+        def close(self):
+            return None
+
+    class _Connection:
+        def cursor(self, cursor_factory=None):
+            return _Cursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(etl_sync.psycopg2, "connect", lambda *_args, **_kwargs: _Connection())
+    monkeypatch.setattr(
+        etl_sync,
+        "_remote_column_exists",
+        lambda _cursor, _schema, _table, column: column != "institute_id",
+    )
+
+    rows = etl_sync.fetch_remote_rows_by_case_refs(
+        remote_url="postgresql://source",
+        remote_schema="public",
+        source_table="daily_course_record",
+        case_refs=[CaseRef("LOCAL-HOSPITAL", "P1", "V1")],
+        default_institute_id="LOCAL-HOSPITAL",
+    )
+
+    assert "(patient_id::text, visit_id::text)" in executed[0][0]
+    assert "institute_id::text" not in executed[0][0]
+    assert executed[0][1] == ["P1", "V1"]
+    assert rows == [
+        {
+            "institute_id": "LOCAL-HOSPITAL",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "record_content": "正文",
+        }
+    ]
+
+
+def test_fetch_remote_rows_by_case_refs_without_institute_column_rejects_other_scope(
+    monkeypatch,
+):
+    class _Cursor:
+        def close(self):
+            return None
+
+    class _Connection:
+        def cursor(self, cursor_factory=None):
+            return _Cursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(etl_sync.psycopg2, "connect", lambda *_args, **_kwargs: _Connection())
+    monkeypatch.setattr(
+        etl_sync,
+        "_remote_column_exists",
+        lambda _cursor, _schema, _table, column: column != "institute_id",
+    )
+
+    with pytest.raises(ValueError, match="固定机构标识不一致"):
+        etl_sync.fetch_remote_rows_by_case_refs(
+            remote_url="postgresql://source",
+            remote_schema="public",
+            source_table="daily_course_record",
+            case_refs=[CaseRef("OTHER-HOSPITAL", "P1", "V1")],
+            default_institute_id="LOCAL-HOSPITAL",
+        )
 
 
 def test_sync_run_history_persists_and_caps_records(monkeypatch):
