@@ -20,7 +20,9 @@ from ..services.frontpage_settings import (
 router = APIRouter(
     prefix="/api/v1/frontpage/settings",
     tags=["Frontpage Settings"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[
+        Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin"))
+    ],
 )
 
 

@@ -27,33 +27,6 @@ def _pg_required_in_current_env() -> bool:
     return env in {"prod", "production"}
 
 
-def _ensure_registry_table(session: Session) -> None:
-    session.execute(
-        text(
-            f"""
-            CREATE TABLE IF NOT EXISTS {_TABLE_NAME} (
-                namespace VARCHAR(64) NOT NULL,
-                config_key VARCHAR(128) NOT NULL,
-                payload_json TEXT NOT NULL,
-                updated_by VARCHAR(128) NULL,
-                source VARCHAR(128) NULL,
-                change_reason VARCHAR(255) NULL,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (namespace, config_key)
-            )
-            """
-        )
-    )
-    session.execute(
-        text(
-            f"""
-            CREATE INDEX IF NOT EXISTS idx_{_TABLE_NAME}_updated_at
-            ON {_TABLE_NAME}(updated_at DESC)
-            """
-        )
-    )
-
-
 def _load_file_registry() -> dict[str, Any]:
     if not _REGISTRY_FILE.exists():
         return {}
@@ -86,8 +59,6 @@ def get_config(namespace: str, key: str) -> dict[str, Any] | list[Any] | str | i
     if engine is not None:
         try:
             with Session(engine) as session:
-                _ensure_registry_table(session)
-                session.commit()
                 row = session.execute(
                     text(
                         f"""
@@ -144,7 +115,6 @@ def set_config(
     if engine is not None:
         try:
             with Session(engine) as session:
-                _ensure_registry_table(session)
                 session.execute(
                     text(
                         f"""

@@ -42,7 +42,7 @@ from ..services.sc_rule_launch_tier import (
 )
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
-from ..core.security import require_admin, get_current_user
+from ..core.security import require_admin, require_roles, get_current_user
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     customer_safe_projection_key,
@@ -6270,7 +6270,10 @@ async def update_rule_prompt(
 async def reload_llm_config(
     request: Request,
     config_name: str = Query(default="default"),
-    user_id: Optional[str] = Query(default=None)
+    user_id: Optional[str] = Query(default=None),
+    system_config_user: dict = Depends(
+        require_roles("admin", "sync_admin", "super_admin")
+    ),
 ):
     """
     重新加载 LLM 配置（从数据库）
@@ -6285,6 +6288,7 @@ async def reload_llm_config(
     Returns:
         重新加载结果
     """
+    del system_config_user
     try:
         qc_service = await get_qc_service()
         success = await qc_service.reload_config(config_name, user_id)

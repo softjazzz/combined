@@ -26,7 +26,7 @@
               <div class="system-config-hero__actions">
                 <a-tooltip
                   v-if="isSyncAdvancedUser"
-                  :title="isReadonly ? '仅 admin 可执行' : '测试源库 PG + 本地 PG'"
+                  :title="isReadonly ? '仅系统配置管理员可执行' : '测试源库 PG + 本地 PG'"
                 >
                   <a-button
                     class="wv4-overview-btn wv4-overview-btn--ghost"
@@ -40,7 +40,9 @@
 
                 <a-tooltip
                   :title="
-                    isReadonly ? '仅 admin 可执行' : '检查科室和出院日期范围内是否有可同步病历'
+                    isReadonly
+                      ? '仅系统配置管理员可执行'
+                      : '检查科室和出院日期范围内是否有可同步病历'
                   "
                 >
                   <a-button
@@ -55,7 +57,9 @@
 
                 <a-tooltip
                   v-if="isSyncAdvancedUser"
-                  :title="isReadonly ? '仅 admin 可执行' : '保存当前策略，预检通过后再确认同步'"
+                  :title="
+                    isReadonly ? '仅系统配置管理员可执行' : '保存当前策略，预检通过后再确认同步'
+                  "
                 >
                   <a-button
                     class="wv4-overview-btn wv4-overview-btn--ghost"

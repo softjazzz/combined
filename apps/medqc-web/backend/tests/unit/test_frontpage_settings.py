@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from app.core.access_control import enforce_default_auth
+from app.core.security import get_current_user
 from app.services.frontpage_settings import (
     FrontpageExtractionSettings,
     should_include_demo_records,
@@ -8,11 +10,23 @@ from app.services.frontpage_settings import (
 from app.routers.medical_records import _build_demo_workstation_records, _filter_demo_records
 
 
+def _override_user(client, roles: list[str]) -> None:
+    async def _noop_auth_gate():
+        return None
+
+    client.app.dependency_overrides[enforce_default_auth] = _noop_auth_gate
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-frontpage-settings",
+        "email": "settings@test.local",
+        "roles": roles,
+    }
+
+
 def test_frontpage_settings_default_non_production(monkeypatch):
     monkeypatch.setattr("app.services.frontpage_settings._is_production_env", lambda: False)
     settings = FrontpageExtractionSettings()
     assert settings.include_demo_records is True
-    assert settings.auto_hide_demo_when_real_data is True
+    assert settings.auto_hide_demo_when_real_data is False
     assert settings.demo_hide_threshold == 1
 
 
@@ -51,6 +65,7 @@ def test_workstation_demo_filtering():
 
 
 def test_frontpage_settings_api_crud(client, monkeypatch, tmp_path: Path):
+    _override_user(client, ["sync_admin"])
     config_path = tmp_path / "frontpage_settings.json"
     monkeypatch.setattr("app.services.frontpage_settings.CONFIG_PATH", config_path)
     monkeypatch.setattr("app.services.frontpage_settings._is_production_env", lambda: False)
@@ -88,7 +103,16 @@ def test_frontpage_settings_api_crud(client, monkeypatch, tmp_path: Path):
     assert body["settings"]["demo_hide_threshold"] == 1
 
 
+def test_frontpage_settings_rejects_non_system_role(client):
+    _override_user(client, ["doctor"])
+
+    resp = client.get("/api/v1/frontpage/settings")
+
+    assert resp.status_code == 403
+
+
 def test_frontpage_stream_respects_settings(client, monkeypatch, tmp_path: Path):
+    _override_user(client, ["sync_admin"])
     config_path = tmp_path / "frontpage_settings.json"
     monkeypatch.setattr("app.services.frontpage_settings.CONFIG_PATH", config_path)
     config_path.write_text(

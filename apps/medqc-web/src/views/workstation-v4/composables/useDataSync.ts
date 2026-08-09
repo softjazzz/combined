@@ -2,6 +2,7 @@ import { computed, reactive } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { useAuthStore } from '@/stores/auth'
+import { canManageSystemConfig } from '@/utils/systemConfigAccess'
 import {
   syncApi,
   type PgConnectionConfig,
@@ -900,7 +901,7 @@ async function refreshRunHistory(filters?: {
 
 export function useDataSync() {
   const authStore = useAuthStore()
-  const isAdmin = computed(() => authStore.userRoles.includes('admin'))
+  const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
   const isReadonly = computed(() => !isAdmin.value)
   const hasPreflightPass = computed(
     () =>

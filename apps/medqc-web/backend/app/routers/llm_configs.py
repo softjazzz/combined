@@ -1,12 +1,13 @@
 from typing import Dict, Any, List, Optional
 import logging
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from datetime import datetime, timezone
 
 from ..storage.memory import llm_configs
 from ..core.supabase_client import get_supabase, async_execute
-from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
-from ..core.security import get_optional_user, require_admin
+from ..core.response import success_response, get_trace_id, StatusCode
+from ..core.security import get_optional_user, require_roles
 from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
     LLMConfigLoader,
@@ -18,6 +19,8 @@ from ..services.qc_llm_client import SichuanQCLLMClient
 
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
+
+_SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
 
 
 def _now_iso() -> str:
@@ -271,7 +274,17 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
             result_data["model_code"] = model["model_code"]
         return result_data or _save_in_memory()
     except Exception as exc:
-        logging.getLogger(__name__).warning("save_config internal failed, fallback memory: %s", exc)
+        if str(os.getenv("ENV") or "").strip().lower() in {"prod", "production"}:
+            logging.getLogger(__name__).warning(
+                "LLM config persistence failed in production; refusing memory fallback"
+            )
+            raise HTTPException(
+                status_code=StatusCode.SERVICE_UNAVAILABLE,
+                detail="模型配置持久化失败，请检查数据库迁移与连接状态",
+            ) from exc
+        logging.getLogger(__name__).warning(
+            "LLM config persistence failed; using development memory fallback"
+        )
         return _save_in_memory()
 
 
@@ -343,7 +356,7 @@ async def get_config_by_name(request: Request, config_name: str, user_id: Option
 async def save_config(
     request: Request,
     payload: Dict[str, Any],
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
 ):
     del admin_user
     result = await _save_config_internal(payload, request)
@@ -359,7 +372,7 @@ async def get_default_summary(
     runtime = runtime or {}
     custom_params = runtime.get("custom_parameters") or {}
     source = str(runtime.get("source") or "env")
-    readonly = "admin" not in _extract_roles(current_user)
+    readonly = not _extract_roles(current_user).intersection(_SYSTEM_CONFIG_ROLES)
     return success_response(
         data={
             "provider_code": str(runtime.get("provider_code") or get_default_provider_code()),
@@ -379,7 +392,7 @@ async def get_default_summary(
 @router.post("/configs/default/reset")
 async def reset_default_config(
     request: Request,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
 ):
     del admin_user
     default_provider = get_default_provider_code()
@@ -411,7 +424,12 @@ async def reset_default_config(
 
 
 @router.post("/test")
-async def test_config(request: Request, payload: Dict[str, Any]):
+async def test_config(
+    request: Request,
+    payload: Dict[str, Any],
+    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+):
+    del system_config_user
     try:
         provider_code, model_code = _extract_provider_and_model_codes(payload)
         runtime = build_provider_runtime_config(

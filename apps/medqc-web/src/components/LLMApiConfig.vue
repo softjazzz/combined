@@ -336,6 +336,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { useAuthStore } from '@/stores/auth'
+import { canManageSystemConfig } from '@/utils/systemConfigAccess'
 import {
   llmConfigService,
   type LLMConfigInput,
@@ -375,7 +376,7 @@ const draft = reactive({
   max_tokens: 4000,
 })
 
-const isAdmin = computed(() => authStore.userRoles.includes('admin'))
+const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
 const isReadonly = computed(() => backendReadonly.value || !isAdmin.value)
 const providerOptions = computed(() =>
   providers.value.map((item) => ({
