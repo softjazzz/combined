@@ -7,6 +7,7 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException
 
 from app.routers import qc_sample_pools
+from app.services.case_identity import CaseRef
 from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services import sample_validation_rule_sets
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
@@ -78,11 +79,15 @@ class _SamplePoolServiceStub:
         return [
             {
                 "id": "item-1",
+                "matched_institute_id": "I001",
+                "matched_patient_id": "P001",
                 "matched_visit_id": "V001",
                 "candidate_rule_ids": ["SC-023", "SC-024"],
             },
             {
                 "id": "item-2",
+                "matched_institute_id": "I001",
+                "matched_patient_id": "P002",
                 "matched_visit_id": "V002",
                 "candidate_rule_ids": ["SC-026"],
             },
@@ -107,16 +112,16 @@ class _WorkspaceServiceStub:
         self.updated_parent = None
         self.records_by_scope = {
             "running": [
-                {"record_id": "V001", "visit_id": "V001"},
-                {"record_id": "V002", "visit_id": "V002"},
+                {"institute_id": "I001", "patient_id": "P001", "record_id": "V001", "visit_id": "V001"},
+                {"institute_id": "I001", "patient_id": "P002", "record_id": "V002", "visit_id": "V002"},
             ],
             "final": [
-                {"record_id": "V001", "visit_id": "V001"},
-                {"record_id": "V002", "visit_id": "V002"},
+                {"institute_id": "I001", "patient_id": "P001", "record_id": "V001", "visit_id": "V001"},
+                {"institute_id": "I001", "patient_id": "P002", "record_id": "V002", "visit_id": "V002"},
             ],
             "all": [
-                {"record_id": "V001", "visit_id": "V001"},
-                {"record_id": "V002", "visit_id": "V002"},
+                {"institute_id": "I001", "patient_id": "P001", "record_id": "V001", "visit_id": "V001"},
+                {"institute_id": "I001", "patient_id": "P002", "record_id": "V002", "visit_id": "V002"},
             ],
         }
 
@@ -131,6 +136,7 @@ class _WorkspaceServiceStub:
         end_date: str | None,
         keyword: str | None,
         record_ids: list[str] | None = None,
+        record_refs: list[object] | None = None,
     ):
         self.collect_records_calls.append(
             {
@@ -139,9 +145,17 @@ class _WorkspaceServiceStub:
                 "doctor": doctor,
                 "date_field": date_field,
                 "record_ids": list(record_ids or []),
+                "record_refs": list(record_refs or []),
             }
         )
-        return list(self.records_by_scope.get(scope, []))
+        return [
+            {
+                "institute_id": str(record.get("institute_id") or "I001"),
+                "patient_id": str(record.get("patient_id") or f"P-{record.get('visit_id')}"),
+                **record,
+            }
+            for record in self.records_by_scope.get(scope, [])
+        ]
 
     def count_records(
         self,
@@ -183,6 +197,7 @@ class _WorkspaceServiceStub:
         filters,
         record_ids,
         total_records,
+        record_refs=None,
         draft_ids=None,
         execution_mode=None,
         run_mode=None,
@@ -202,6 +217,7 @@ class _WorkspaceServiceStub:
             "scope": scope,
             "filters": filters,
             "record_ids": list(record_ids),
+            "record_refs": list(record_refs or []),
             "total_records": total_records,
             "draft_ids": list(draft_ids or []),
             "execution_mode": execution_mode,
@@ -924,7 +940,11 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
             "department": None,
             "doctor": None,
             "date_field": "admission",
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
+            "record_refs": [
+                CaseRef("I001", "P001", "V001"),
+                CaseRef("I001", "P002", "V002"),
+            ],
         }
     ]
 
@@ -939,8 +959,8 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["filters"]["selected_sample_count"] == 2
     assert created["filters"]["dedup_record_count"] == 2
     assert created["filters"]["record_rule_map"] == {
-        "V001": ["SC-023", "SC-024"],
-        "V002": ["SC-026"],
+        CaseRef("I001", "P001", "V001").as_key(): ["SC-023", "SC-024"],
+        CaseRef("I001", "P002", "V002").as_key(): ["SC-026"],
     }
     assert created["filters"]["max_parallel_records"] == 2
     assert created["filters"]["model_code"] == "qwen3.6-35b-a3b"
@@ -952,12 +972,20 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["filters"]["record_scene_snapshot"] == [
         {
             "record_id": "V001",
+            "institute_id": "I001",
+            "patient_id": "P001",
+            "visit_id": "V001",
+            "record_key": CaseRef("I001", "P001", "V001").as_key(),
             "record_scene": "unknown",
             "resolved_scene": "running",
             "discharge_snapshot": "",
         },
         {
             "record_id": "V002",
+            "institute_id": "I001",
+            "patient_id": "P002",
+            "visit_id": "V002",
+            "record_key": CaseRef("I001", "P002", "V002").as_key(),
             "record_scene": "unknown",
             "resolved_scene": "running",
             "discharge_snapshot": "",
@@ -1049,7 +1077,7 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         "item-2",
     ]
     assert workspace_service.create_batch_job_calls[0]["filters"]["record_rule_map"] == {
-        "V001": ["SC-023", "SC-026"],
+        CaseRef("I001", "P001", "V001").as_key(): ["SC-023", "SC-026"],
     }
     assert workspace_service.create_batch_job_calls[0]["filters"]["max_parallel_records"] == 4
     assert workspace_service.create_batch_job_calls[0]["filters"]["effective_scope"] == "running"
@@ -1123,14 +1151,22 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
             "department": None,
             "doctor": None,
             "date_field": "admission",
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
+            "record_refs": [
+                CaseRef("I001", "P001", "V001"),
+                CaseRef("I001", "P002", "V002"),
+            ],
         },
         {
             "scope": "all",
             "department": None,
             "doctor": None,
             "date_field": "admission",
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
+            "record_refs": [
+                CaseRef("I001", "P001", "V001"),
+                CaseRef("I001", "P002", "V002"),
+            ],
         },
     ]
     created = workspace_service.create_batch_job_calls[0]
@@ -1352,8 +1388,8 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
     assert created["filters"]["rule_ids"] == expected_execution_rule_ids
     assert created["filters"]["selected_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert created["filters"]["record_rule_map"] == {
-        "V001": expected_execution_rule_ids,
-        "V002": expected_execution_rule_ids,
+        CaseRef("I001", "P001", "V001").as_key(): expected_execution_rule_ids,
+        CaseRef("I001", "P002", "V002").as_key(): expected_execution_rule_ids,
     }
     assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert created["filters"]["customer_rule_count"] == 2
@@ -1365,8 +1401,8 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
     assert response["data"]["selected_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert response["data"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert response["data"]["record_rule_map"] == {
-        "V001": expected_execution_rule_ids,
-        "V002": expected_execution_rule_ids,
+        CaseRef("I001", "P001", "V001").as_key(): expected_execution_rule_ids,
+        CaseRef("I001", "P002", "V002").as_key(): expected_execution_rule_ids,
     }
     assert response["data"]["gate_only_customer_rule_ids"] == []
     assert response["data"]["rule_ids"] == expected_execution_rule_ids
@@ -1787,8 +1823,8 @@ async def test_run_sample_pool_intrinsic_validation_should_execute_selected_luxi
     assert created["filters"]["execution_rule_count"] == 1
     assert created["filters"]["gate_only_customer_rule_ids"] == []
     assert created["filters"]["record_rule_map"] == {
-        "V001": ["LX0609-028"],
-        "V002": ["LX0609-028"],
+        CaseRef("I001", "P001", "V001").as_key(): ["LX0609-028"],
+        CaseRef("I001", "P002", "V002").as_key(): ["LX0609-028"],
     }
     assert response["data"]["gate_only_customer_rule_ids"] == []
 
@@ -1939,7 +1975,11 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
             "department": None,
             "doctor": None,
             "date_field": "admission",
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
+            "record_refs": [
+                CaseRef("I001", "P001", "V001"),
+                CaseRef("I001", "P002", "V002"),
+            ],
         }
     ]
     assert created["draft"]["id"] == "sample-formal-fast-screen-full"
@@ -2020,7 +2060,11 @@ async def test_run_sample_pool_intrinsic_validation_formal_mode_should_not_fallb
             "department": None,
             "doctor": None,
             "date_field": "admission",
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
+            "record_refs": [
+                CaseRef("I001", "P001", "V001"),
+                CaseRef("I001", "P002", "V002"),
+            ],
         }
     ]
     assert workspace_service.create_batch_job_calls == []
@@ -2061,7 +2105,9 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_
     created = workspace_service.create_batch_job_calls[0]
     assert created["draft_ids"] == ["SC-069"]
     assert created["filters"]["execution_strategy"] == "standard"
-    assert created["filters"]["record_rule_map"] == {"V069": ["SC-069"]}
+    assert created["filters"]["record_rule_map"] == {
+        CaseRef("I001", "P-V069", "V069").as_key(): ["SC-069"]
+    }
     assert response["data"]["rule_ids"] == ["SC-069"]
 
 

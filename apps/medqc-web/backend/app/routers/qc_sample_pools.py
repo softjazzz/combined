@@ -25,6 +25,7 @@ from ..services.custom_qc_sample_pool_service import (
     load_manual_case_rows_from_excel,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.case_identity import CaseRef, normalize_case_refs
 from ..services.customer_rule_sets import (
     CUSTOMER_LUXIAN_RULE_SET_KEY,
     get_customer_luxian_rule_set,
@@ -1049,13 +1050,31 @@ async def run_sample_pool_intrinsic_validation(
             if str(item.get("matched_visit_id") or "").strip()
         }
     )
+    candidate_record_refs = [
+        CaseRef(
+            str(item.get("matched_institute_id") or "").strip(),
+            str(item.get("matched_patient_id") or "").strip(),
+            str(item.get("matched_visit_id") or "").strip(),
+        )
+        for item in runnable_items
+    ]
+    record_refs = (
+        normalize_case_refs(candidate_record_refs)
+        if candidate_record_refs and all(all(ref) for ref in candidate_record_refs)
+        else ()
+    )
     record_rule_map: Dict[str, list[str]] = {}
     if not is_formal_fast_screen_full and resolved_rule_set is None:
         for item in runnable_items:
-            record_id = str(item.get("matched_visit_id") or "").strip()
-            if not record_id:
+            record_ref = CaseRef(
+                str(item.get("matched_institute_id") or "").strip(),
+                str(item.get("matched_patient_id") or "").strip(),
+                str(item.get("matched_visit_id") or "").strip(),
+            )
+            record_map_key = record_ref.as_key() if all(record_ref) else record_ref.visit_id
+            if not record_map_key:
                 continue
-            bucket = record_rule_map.setdefault(record_id, [])
+            bucket = record_rule_map.setdefault(record_map_key, [])
             for rule_id in list(item.get("candidate_rule_ids") or []):
                 normalized_rule_id = str(rule_id or "").strip()
                 if normalized_rule_id and normalized_rule_id not in bucket:
@@ -1139,6 +1158,7 @@ async def run_sample_pool_intrinsic_validation(
     else:
         paused_customer_rule_ids = []
 
+    selected_execution_rule_ids: list[str] = []
     if requested_selected_rule_ids:
         if rule_set_key != LUXIAN_0609_QC_RULE_SET_KEY:
             raise HTTPException(status_code=422, detail="selected_rule_ids 当前仅支持泸县0609质控点验证")
@@ -1153,7 +1173,12 @@ async def run_sample_pool_intrinsic_validation(
                 detail=f"所选质控点不属于当前规则集: {', '.join(invalid_rule_ids)}",
             )
         rule_ids = execution_rule_ids
-        record_rule_map = {record_id: list(execution_rule_ids) for record_id in record_ids} if execution_rule_ids else {}
+        selected_execution_rule_ids = list(execution_rule_ids)
+        record_rule_map = (
+            {record_ref.as_key(): list(execution_rule_ids) for record_ref in record_refs}
+            if execution_rule_ids
+            else {}
+        )
     else:
         gate_only_customer_rule_ids = []
 
@@ -1186,12 +1211,14 @@ async def run_sample_pool_intrinsic_validation(
         start_date=None,
         end_date=None,
         keyword=None,
-        record_ids=record_ids,
+        record_ids=None if record_refs else record_ids,
+        record_refs=record_refs or None,
     )
     record_count = len(selected_records)
     if record_count == 0 and is_formal_fast_screen_full:
         raise HTTPException(status_code=422, detail="选中病历未同步为终末病历，无法发起正式终末质控")
-    if record_ids and effective_scope != "all" and record_count < len(record_ids):
+    requested_record_count = len(record_refs) if record_refs else len(record_ids)
+    if requested_record_count and effective_scope != "all" and record_count < requested_record_count:
         fallback_records = workspace.collect_records(
             scope="all",
             department=payload.department,
@@ -1200,7 +1227,8 @@ async def run_sample_pool_intrinsic_validation(
             start_date=None,
             end_date=None,
             keyword=None,
-            record_ids=record_ids,
+            record_ids=None if record_refs else record_ids,
+            record_refs=record_refs or None,
         )
         fallback_record_count = len(fallback_records)
         if fallback_record_count > record_count:
@@ -1209,6 +1237,46 @@ async def run_sample_pool_intrinsic_validation(
             selected_records = fallback_records
     if record_count == 0:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
+    try:
+        selected_record_refs = (
+            record_refs
+            if record_refs
+            else normalize_case_refs(
+                [CaseRef.from_mapping(record) for record in selected_records]
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="样本病历缺少完整三坐标，无法创建质控任务",
+        ) from exc
+    if not record_refs:
+        refs_by_visit: Dict[str, set[CaseRef]] = {}
+        for ref in selected_record_refs:
+            refs_by_visit.setdefault(ref.visit_id, set()).add(ref)
+        if any(len(refs_by_visit.get(visit_id) or set()) != 1 for visit_id in record_ids):
+            raise HTTPException(
+                status_code=422,
+                detail="样本住院号对应多份病历，无法安全解析三坐标",
+            )
+    record_refs = selected_record_refs
+    if selected_execution_rule_ids:
+        record_rule_map = {
+            record_ref.as_key(): list(selected_execution_rule_ids)
+            for record_ref in record_refs
+        }
+    elif record_rule_map:
+        legacy_rule_map = dict(record_rule_map)
+        mapped_rule_map: dict[str, list[str]] = {}
+        for record_ref in record_refs:
+            mapped_rules = list(
+                legacy_rule_map.get(record_ref.as_key())
+                or legacy_rule_map.get(record_ref.visit_id)
+                or []
+            )
+            if mapped_rules:
+                mapped_rule_map[record_ref.as_key()] = mapped_rules
+        record_rule_map = mapped_rule_map
     record_scene_snapshot = _build_workspace_record_scene_snapshot(
         selected_records,
         query_scope=effective_scope,
@@ -1260,7 +1328,7 @@ async def run_sample_pool_intrinsic_validation(
         "scoped_customer_rule_ids": requested_selected_rule_ids,
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
-        "dedup_record_count": len(record_ids),
+        "dedup_record_count": len(record_refs),
         "department": payload.department,
         "doctor": payload.doctor,
         "temperature": payload.temperature,
@@ -1306,6 +1374,7 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key=rule_set_key,
         selected_rule_ids=identity_rule_ids,
         record_ids=record_ids,
+        record_refs=record_refs,
         sample_item_ids=selected_sample_item_ids,
         group_by_luxian_family=bool(payload.group_by_luxian_family),
         effective_scope=effective_scope,
@@ -1391,6 +1460,7 @@ async def run_sample_pool_intrinsic_validation(
             filters=parent_filters,
             record_ids=record_ids,
             total_records=record_count,
+            record_refs=record_refs,
             draft_ids=parent_filters["scoped_customer_rule_ids"],
             execution_mode="multi",
             run_mode="parallel",
@@ -1424,7 +1494,10 @@ async def run_sample_pool_intrinsic_validation(
                     detail=f"{family_scope.get('name') or '规则族'}当前没有可执行的映射规则",
                 )
             family_record_rule_map = (
-                {record_id: list(family_execution_rule_ids) for record_id in record_ids}
+                {
+                    record_ref.as_key(): list(family_execution_rule_ids)
+                    for record_ref in record_refs
+                }
                 if family_execution_rule_ids
                 else {}
             )
@@ -1452,6 +1525,7 @@ async def run_sample_pool_intrinsic_validation(
                 filters=child_filters,
                 record_ids=record_ids,
                 total_records=record_count,
+                record_refs=record_refs,
                 draft_ids=family_execution_rule_ids,
                 execution_mode="multi",
                 run_mode="parallel",
@@ -1529,6 +1603,7 @@ async def run_sample_pool_intrinsic_validation(
         filters=job_filters,
         record_ids=record_ids,
         total_records=record_count,
+        record_refs=record_refs,
         draft_ids=rule_ids,
         execution_mode="multi",
         run_mode="parallel",

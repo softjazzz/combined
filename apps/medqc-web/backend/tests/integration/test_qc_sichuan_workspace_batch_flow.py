@@ -45,18 +45,28 @@ class _InMemorySichuanWorkspaceService:
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[List[str]] = None,
+        record_refs: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
-        ids = [str(x) for x in (record_ids or ["visit-1001", "visit-1002"])]
+        refs = list(record_refs or [])
+        if not refs:
+            refs = [
+                {
+                    "institute_id": "inst-1",
+                    "patient_id": f"patient-{idx + 1}",
+                    "visit_id": str(record_id),
+                }
+                for idx, record_id in enumerate(record_ids or ["visit-1001", "visit-1002"])
+            ]
         return [
             {
-                "record_id": rid,
-                "visit_id": rid,
+                **(ref.as_dict() if hasattr(ref, "as_dict") else ref),
+                "record_id": str(ref.visit_id if hasattr(ref, "visit_id") else ref["visit_id"]),
                 "patient_name": f"患者-{idx + 1}",
                 "department": department or "骨科",
                 "doctor": doctor or "王医生",
                 "scope": scope,
             }
-            for idx, rid in enumerate(ids)
+            for idx, ref in enumerate(refs)
         ]
 
     def hydrate_records_with_medical_text(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -77,6 +87,7 @@ class _InMemorySichuanWorkspaceService:
         filters: Dict[str, Any],
         record_ids: List[str],
         total_records: int,
+        record_refs: Optional[List[Dict[str, str]]] = None,
         draft_ids: Optional[List[str]] = None,
         execution_mode: str = "single",
         run_mode: str = "serial",
@@ -99,8 +110,24 @@ class _InMemorySichuanWorkspaceService:
             "scene": str(draft.get("scene") or "final"),
             "scope": str(scope or "final"),
             "status": "queued",
-            "filters": filters or {},
+            "filters": {
+                **(filters or {}),
+                **(
+                    {
+                        "record_refs": [
+                            ref.as_dict() if hasattr(ref, "as_dict") else dict(ref)
+                            for ref in record_refs
+                        ]
+                    }
+                    if record_refs
+                    else {}
+                ),
+            },
             "record_ids": list(record_ids or []),
+            "record_refs": [
+                ref.as_dict() if hasattr(ref, "as_dict") else dict(ref)
+                for ref in list(record_refs or [])
+            ],
             "summary": None,
             "items": [],
             "failed_records": [],
@@ -448,6 +475,31 @@ def test_sichuan_workspace_batch_create_poll_debug_export_flow(client, sichuan_w
     assert "质控明细" in html_export_resp.text
 
 
+def test_workspace_batch_create_persists_full_case_coordinates_for_same_visit(
+    client,
+    sichuan_workspace_stub,
+):
+    response = client.post(
+        "/api/v1/qc/sichuan/workspace/batch-jobs",
+        json={
+            "rule_ids": ["SC-001"],
+            "scope": "final",
+            "record_refs": [
+                {"institute_id": "H1", "patient_id": "P1", "visit_id": "V-SAME"},
+                {"institute_id": "H2", "patient_id": "P2", "visit_id": "V-SAME"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    created = _extract_data(response)
+    assert created["record_refs"] == [
+        {"institute_id": "H1", "patient_id": "P1", "visit_id": "V-SAME"},
+        {"institute_id": "H2", "patient_id": "P2", "visit_id": "V-SAME"},
+    ]
+    assert created["filters"]["record_refs"] == created["record_refs"]
+
+
 def test_sichuan_workspace_batch_cancel_and_retry_flow(client, sichuan_workspace_stub):
     draft = {
         "id": "sichuan-rule-library",
@@ -519,7 +571,7 @@ def test_latest_luxian_record_result_is_read_by_server_bound_record(client, sich
         ],
         failed_records=[],
     )
-    sichuan_workspace_stub.jobs[str(newer_job["id"])]["finished_at"] = "2026-08-09T00:00:00+00:00"
+    sichuan_workspace_stub.jobs[str(newer_job["id"])]["finished_at"] = "2099-08-09T00:00:00+00:00"
 
     response = client.get(
         "/api/v1/qc/sichuan/workspace/records/visit-lx-1/latest-result",

@@ -49,6 +49,7 @@ from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 from .luxian_0609.customer_renderer import compliant_customer_finding
 from .bundles.emr_view import load_bundle_documents
+from .case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import (
     AdmissionRecord,
@@ -1587,6 +1588,11 @@ def _row_to_batch_job(row: Dict[str, Any], *, include_items: bool = True) -> Dic
         "run_mode": run_mode,
         "filters": filters_dict,
         "record_ids": record_ids if isinstance(record_ids, list) else [],
+        "record_refs": (
+            list(filters_dict.get("record_refs") or [])
+            if isinstance(filters_dict.get("record_refs"), list)
+            else []
+        ),
         "summary": summary_dict,
         "progress": progress,
         "items": normalized_items,
@@ -2738,6 +2744,128 @@ class CustomQCWorkspaceService:
             )
         return records
 
+    def _collect_explicit_anchor_records_by_refs(
+        self,
+        session: Session,
+        *,
+        record_refs: Sequence[CaseRefInput],
+        excluded_record_refs: set[CaseRef],
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """按三坐标补充没有病案首页的执行锚点，禁止按 visit 串病例。"""
+
+        missing_refs = [
+            ref for ref in normalize_case_refs(record_refs) if ref not in excluded_record_refs
+        ]
+        if not missing_refs:
+            return []
+
+        def exact_clause(model: Any):
+            return or_(
+                *(
+                    and_(
+                        model.institute_id == ref.institute_id,
+                        model.patient_id == ref.patient_id,
+                        model.visit_id == ref.visit_id,
+                    )
+                    for ref in missing_refs
+                )
+            )
+
+        discharge_rows = session.query(DischargeRecord).filter(exact_clause(DischargeRecord)).all()
+        registration_rows = (
+            session.query(InpatRegistration).filter(exact_clause(InpatRegistration)).all()
+        )
+        admission_rows = session.query(AdmissionRecord).filter(exact_clause(AdmissionRecord)).all()
+        discharge_by_ref = {
+            CaseRef.from_mapping(row.__dict__): row for row in discharge_rows
+        }
+        anchor_by_ref: Dict[CaseRef, Any] = {}
+        for row in [*registration_rows, *admission_rows]:
+            ref = CaseRef.from_mapping(row.__dict__)
+            anchor_by_ref.setdefault(ref, row)
+
+        scope_value = _normalize_scope(scope)
+        date_field_value = _normalize_date_field(date_field)
+        start = _as_date(start_date)
+        end = _as_date(end_date)
+        records: List[Dict[str, Any]] = []
+        for ref in missing_refs:
+            source = anchor_by_ref.get(ref)
+            if source is None:
+                continue
+            discharge_source = discharge_by_ref.get(ref)
+            discharge_datetime = (
+                getattr(source, "discharge_datetime", None)
+                or getattr(discharge_source, "discharge_date", None)
+            )
+            item_scope = "final" if discharge_datetime else "running"
+            if scope_value != "all" and item_scope != scope_value:
+                continue
+            item_department = _safe_text(
+                getattr(source, "discharge_dept_name", None)
+                or getattr(source, "admission_dept_name", None)
+                or getattr(source, "dept_name", None)
+                or getattr(discharge_source, "dept_name", None)
+            )
+            item_doctor = _safe_text(
+                getattr(source, "attending_physician_sign", None)
+                or getattr(source, "submitter", None)
+            )
+            if department and item_department != department:
+                continue
+            if doctor and item_doctor != doctor:
+                continue
+            if keyword:
+                normalized_keyword = keyword.strip().lower()
+                searchable_values = (
+                    ref.visit_id,
+                    _safe_text(getattr(source, "name", "")),
+                    _safe_text(getattr(source, "mr_no", "")),
+                    _safe_text(getattr(source, "inpat_no", "")),
+                )
+                if normalized_keyword and not any(
+                    normalized_keyword in value.lower()
+                    for value in searchable_values
+                    if value
+                ):
+                    continue
+            admission_datetime = getattr(source, "admission_datetime", None)
+            effective_date = admission_datetime if date_field_value == "admission" else discharge_datetime
+            effective_date_value = _as_date(_to_iso_date(effective_date))
+            if start and (effective_date_value is None or effective_date_value < start):
+                continue
+            if end and (effective_date_value is None or effective_date_value > end):
+                continue
+            medical_text = _safe_text(getattr(source, "record_content", None))
+            records.append(
+                {
+                    **ref.as_dict(),
+                    "record_id": ref.visit_id,
+                    "record_key": ref.as_key(),
+                    "patient_name": _safe_text(getattr(source, "name", "")),
+                    "mr_no": _safe_text(getattr(source, "mr_no", "")),
+                    "inpat_no": _safe_text(getattr(source, "inpat_no", "")),
+                    "scope": item_scope,
+                    "department": item_department,
+                    "doctor": item_doctor,
+                    "admission_date": _to_iso_date(admission_datetime),
+                    "discharge_date": _to_iso_date(discharge_datetime),
+                    "admission_datetime": _to_iso_datetime(admission_datetime),
+                    "discharge_datetime": _to_iso_datetime(discharge_datetime),
+                    "status": "completed" if item_scope == "final" else "running",
+                    "medical_text": medical_text,
+                    "medical_text_length": len(medical_text),
+                }
+            )
+        return records
+
     def list_drafts(
         self,
         *,
@@ -2926,6 +3054,7 @@ class CustomQCWorkspaceService:
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
+        record_refs: Optional[Sequence[CaseRefInput]] = None,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -2992,7 +3121,21 @@ class CustomQCWorkspaceService:
                 )
             )
 
-        if record_ids:
+        if record_refs:
+            normalized_refs = normalize_case_refs(record_refs)
+            query = query.filter(
+                or_(
+                    *(
+                        and_(
+                            MedicalRecordFrontpage.institute_id == ref.institute_id,
+                            MedicalRecordFrontpage.patient_id == ref.patient_id,
+                            MedicalRecordFrontpage.visit_id == ref.visit_id,
+                        )
+                        for ref in normalized_refs
+                    )
+                )
+            )
+        elif record_ids:
             normalized_ids = [_safe_text(item) for item in record_ids if _safe_text(item)]
             if normalized_ids:
                 query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
@@ -3035,6 +3178,11 @@ class CustomQCWorkspaceService:
             "patient_id": _safe_text(getattr(source_row, "patient_id", "")),
             "record_id": _safe_text(source_row.visit_id),
             "visit_id": _safe_text(source_row.visit_id),
+            "record_key": CaseRef(
+                _safe_text(getattr(source_row, "institute_id", "")),
+                _safe_text(getattr(source_row, "patient_id", "")),
+                _safe_text(source_row.visit_id),
+            ).as_key(),
             "patient_name": _safe_text(source_row.name),
             "mr_no": _safe_text(source_row.mr_no),
             "inpat_no": _safe_text(source_row.inpat_no),
@@ -3162,6 +3310,7 @@ class CustomQCWorkspaceService:
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
+        record_refs: Optional[Sequence[CaseRefInput]] = None,
     ) -> List[Dict[str, Any]]:
         session = _session()
         try:
@@ -3175,13 +3324,33 @@ class CustomQCWorkspaceService:
                 end_date=end_date,
                 keyword=keyword,
                 record_ids=record_ids,
+                record_refs=record_refs,
             )
             rows = query.order_by(
                 desc(MedicalRecordFrontpage.discharge_datetime),
                 desc(MedicalRecordFrontpage.admission_datetime),
             ).all()
             records = [self._serialize_record_row(row) for row in rows]
-            if record_ids:
+            if record_refs:
+                records.extend(
+                    self._collect_explicit_anchor_records_by_refs(
+                        session,
+                        record_refs=record_refs,
+                        excluded_record_refs={
+                            CaseRef.from_mapping(item)
+                            for item in records
+                            if all(CaseRef.from_mapping(item))
+                        },
+                        scope=scope,
+                        department=department,
+                        doctor=doctor,
+                        date_field=date_field,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                    )
+                )
+            elif record_ids:
                 records.extend(
                     self._collect_explicit_anchor_records(
                         session,
@@ -3215,8 +3384,9 @@ class CustomQCWorkspaceService:
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
+        record_refs: Optional[Sequence[CaseRefInput]] = None,
     ) -> int:
-        if record_ids:
+        if record_ids or record_refs:
             records = self.collect_records(
                 scope=scope,
                 department=department,
@@ -3226,12 +3396,13 @@ class CustomQCWorkspaceService:
                 end_date=end_date,
                 keyword=keyword,
                 record_ids=record_ids,
+                record_refs=record_refs,
             )
             return len(
                 {
-                    _safe_text(item.get("visit_id") or item.get("record_id"))
+                    CaseRef.from_mapping(item)
                     for item in records
-                    if _safe_text(item.get("visit_id") or item.get("record_id"))
+                    if all(CaseRef.from_mapping(item))
                 }
             )
 
@@ -3247,8 +3418,20 @@ class CustomQCWorkspaceService:
                 end_date=end_date,
                 keyword=keyword,
                 record_ids=record_ids,
+                record_refs=record_refs,
             )
-            return int(query.with_entities(func.count(func.distinct(MedicalRecordFrontpage.visit_id))).scalar() or 0)
+            identity_rows = (
+                query.with_entities(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                )
+                .distinct()
+                .subquery()
+            )
+            return int(
+                session.query(func.count()).select_from(identity_rows).scalar() or 0
+            )
         finally:
             session.close()
 
@@ -3264,13 +3447,21 @@ class CustomQCWorkspaceService:
         if not visit_ids:
             return []
 
+        exact_refs = {
+            CaseRef.from_mapping(item)
+            for item in records
+            if all(CaseRef.from_mapping(item))
+        }
+        use_exact_refs = bool(records) and all(
+            all(CaseRef.from_mapping(item)) for item in records
+        )
+
         session = _session()
         try:
             dept_expr = func.coalesce(
                 MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
             )
-            rows = (
-                session.query(
+            query = session.query(
                     MedicalRecordFrontpage.institute_id,
                     MedicalRecordFrontpage.patient_id,
                     MedicalRecordFrontpage.visit_id,
@@ -3279,17 +3470,41 @@ class CustomQCWorkspaceService:
                     MedicalRecordFrontpage.attending_physician_sign,
                     MedicalRecordFrontpage.record_content,
                 )
-                .filter(MedicalRecordFrontpage.visit_id.in_(visit_ids))
-                .all()
-            )
-            row_map: Dict[str, Any] = {str(row.visit_id): row for row in rows}
+            if use_exact_refs:
+                query = query.filter(
+                    or_(
+                        *(
+                            and_(
+                                MedicalRecordFrontpage.institute_id == ref.institute_id,
+                                MedicalRecordFrontpage.patient_id == ref.patient_id,
+                                MedicalRecordFrontpage.visit_id == ref.visit_id,
+                            )
+                            for ref in exact_refs
+                        )
+                    )
+                )
+            else:
+                query = query.filter(MedicalRecordFrontpage.visit_id.in_(visit_ids))
+            rows = query.all()
+            row_map: Dict[CaseRef, Any] = {
+                CaseRef(str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
+                for row in rows
+            }
+            legacy_rows: Dict[str, List[Any]] = {}
+            for row in rows:
+                legacy_rows.setdefault(str(row.visit_id), []).append(row)
         finally:
             session.close()
 
         hydrated: List[Dict[str, Any]] = []
         for item in records:
             visit_id = _safe_text(item.get("visit_id") or item.get("record_id"))
-            source = row_map.get(visit_id)
+            item_ref = CaseRef.from_mapping(item)
+            source = row_map.get(item_ref) if all(item_ref) else None
+            if source is None and not all(item_ref):
+                candidates = legacy_rows.get(visit_id) or []
+                # 升级前任务仅有 visit_id；同 visit 命中多病例时失败关闭，禁止任取一条。
+                source = candidates[0] if len(candidates) == 1 else None
             medical_text = _safe_text(item.get("medical_text"))
             if not medical_text and source is not None:
                 medical_text = _safe_text(source.record_content)
@@ -3300,6 +3515,15 @@ class CustomQCWorkspaceService:
                     "patient_id": _safe_text(item.get("patient_id") or (source.patient_id if source else "")),
                     "record_id": _safe_text(item.get("record_id") or visit_id),
                     "visit_id": visit_id,
+                    "record_key": (
+                        CaseRef(
+                            _safe_text(item.get("institute_id") or (source.institute_id if source else "")),
+                            _safe_text(item.get("patient_id") or (source.patient_id if source else "")),
+                            visit_id,
+                        ).as_key()
+                        if visit_id
+                        else ""
+                    ),
                     "patient_name": _safe_text(item.get("patient_name") or (source.name if source else "")),
                     "department": _safe_text(item.get("department") or (source.department if source else "")),
                     "doctor": _safe_text(item.get("doctor") or (source.attending_physician_sign if source else "")),
@@ -3339,6 +3563,7 @@ class CustomQCWorkspaceService:
         filters: Dict[str, Any],
         record_ids: Sequence[str],
         total_records: int,
+        record_refs: Optional[Sequence[CaseRefInput]] = None,
         draft_ids: Optional[Sequence[str]] = None,
         execution_mode: str = "single",
         run_mode: str = "serial",
@@ -3363,11 +3588,28 @@ class CustomQCWorkspaceService:
             if normalized_execution_mode == "single" and len(normalized_draft_ids) > 1:
                 normalized_execution_mode = "multi"
             normalized_run_mode = _normalize_run_mode(run_mode)
+            normalized_record_refs = (
+                normalize_case_refs(record_refs)
+                if record_refs
+                else normalize_case_refs(filters.get("record_refs"))
+                if isinstance(filters.get("record_refs"), list) and filters.get("record_refs")
+                else ()
+            )
+            effective_record_ids = (
+                [ref.visit_id for ref in normalized_record_refs]
+                if normalized_record_refs
+                else list(record_ids)
+            )
             filters_payload = {
                 **(filters or {}),
                 "draft_ids": normalized_draft_ids,
                 "execution_mode": normalized_execution_mode,
                 "run_mode": normalized_run_mode,
+                **(
+                    {"record_refs": [ref.as_dict() for ref in normalized_record_refs]}
+                    if normalized_record_refs
+                    else {}
+                ),
             }
             summary_payload = {
                 "rule_count": max(1, int(rule_count or len(normalized_draft_ids) or 1)),
@@ -3389,7 +3631,8 @@ class CustomQCWorkspaceService:
                 "scope": _normalize_scope(scope),
                 "status": "queued",
                 "filters_json": _safe_json_dumps(filters_payload),
-                "record_ids_json": _safe_json_dumps(list(record_ids)),
+                # 仅保留给升级前读取/展示；新任务的权威身份在 filters.record_refs。
+                "record_ids_json": _safe_json_dumps(effective_record_ids),
                 "summary_json": _safe_json_dumps(summary_payload),
                 "items_json": None,
                 "failed_records_json": None,
@@ -4813,34 +5056,23 @@ class CustomQCWorkspaceService:
         job_id = _safe_text(job_row.get("id"))
         root_job_id = _safe_text(job_row.get("parent_job_id")) or job_id
         created_by = _safe_text(job_row.get("created_by"))
-        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        grouped: Dict[CaseRef, List[Dict[str, Any]]] = {}
         for raw_item in items:
             if not isinstance(raw_item, dict):
                 continue
-            record_id = _safe_text(raw_item.get("record_id") or raw_item.get("visit_id"))
-            if record_id:
-                grouped.setdefault(record_id, []).append(raw_item)
+            record_ref = CaseRef.from_mapping(raw_item)
+            if all(record_ref):
+                grouped.setdefault(record_ref, []).append(raw_item)
 
-        for record_id, record_items in grouped.items():
-            identity_values = {
-                key: {
-                    _safe_text(item.get(key))
-                    for item in record_items
-                    if _safe_text(item.get(key))
-                }
-                for key in ("institute_id", "patient_id", "visit_id")
-            }
-            # Envelope 的授权身份必须是唯一三坐标；否则只保留旧链，禁止创建可被
-            # 前端误用的独立结果。
-            if not all(len(values) == 1 for values in identity_values.values()):
-                continue
+        for record_ref, record_items in grouped.items():
+            record_id = record_ref.visit_id
             envelope = {
                 "schema_version": _RECORD_RESULT_ENVELOPE_SCHEMA,
                 "delivery_mode": _CANONICAL_RESULT_DELIVERY_MODE,
                 "record_id": record_id,
                 "record_ref": _keyed_ref(
                     "rec",
-                    record_id,
+                    record_ref.as_key(),
                     hmac_key=customer_safe_projection_key(),
                 ),
                 "job_id": job_id,
@@ -4853,7 +5085,9 @@ class CustomQCWorkspaceService:
                 self._record_result_envelope_table.delete().where(
                     and_(
                         self._record_result_envelope_table.c.job_id == job_id,
-                        self._record_result_envelope_table.c.record_id == record_id,
+                        self._record_result_envelope_table.c.institute_id == record_ref.institute_id,
+                        self._record_result_envelope_table.c.patient_id == record_ref.patient_id,
+                        self._record_result_envelope_table.c.visit_id == record_ref.visit_id,
                     )
                 )
             )
@@ -4864,9 +5098,9 @@ class CustomQCWorkspaceService:
                     root_job_id=root_job_id,
                     created_by=created_by,
                     record_id=record_id,
-                    institute_id=next(iter(identity_values["institute_id"])),
-                    patient_id=next(iter(identity_values["patient_id"])),
-                    visit_id=next(iter(identity_values["visit_id"])),
+                    institute_id=record_ref.institute_id,
+                    patient_id=record_ref.patient_id,
+                    visit_id=record_ref.visit_id,
                     rule_set_key=rule_set_key,
                     rule_set_version=rule_set_version,
                     envelope_json=_safe_json_dumps(envelope),

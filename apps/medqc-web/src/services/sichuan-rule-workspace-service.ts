@@ -60,6 +60,11 @@ export async function createSichuanWorkspaceBatchJob(payload: {
   end_date?: string
   keyword?: string
   record_ids?: string[]
+  record_refs?: Array<{
+    institute_id: string
+    patient_id: string
+    visit_id: string
+  }>
 }) {
   return requestEnvelope<SichuanBatchJob>(
     {

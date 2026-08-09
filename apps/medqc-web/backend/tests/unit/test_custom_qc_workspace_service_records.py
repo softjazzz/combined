@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from datetime import datetime
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -102,6 +103,47 @@ def test_hydrate_records_with_medical_text_should_preserve_scope_and_dates(monke
     assert hydrated[0]["medical_text"] == "补齐病历正文"
 
 
+def test_hydrate_records_should_keep_same_visit_cases_separate(monkeypatch):
+    service = CustomQCWorkspaceService()
+
+    def row(institute_id: str, patient_id: str, content: str):
+        return SimpleNamespace(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id="V-SAME",
+            name=patient_id,
+            department="重症医学科",
+            attending_physician_sign="李医生",
+            record_content=content,
+        )
+
+    class _Query:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def all(self):
+            return [row("H1", "P1", "病历一"), row("H2", "P2", "病历二")]
+
+    class _Session:
+        def query(self, *_args, **_kwargs):
+            return _Query()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
+
+    hydrated = service.hydrate_records_with_medical_text(
+        [
+            {"institute_id": "H1", "patient_id": "P1", "visit_id": "V-SAME"},
+            {"institute_id": "H2", "patient_id": "P2", "visit_id": "V-SAME"},
+        ]
+    )
+
+    assert [item["medical_text"] for item in hydrated] == ["病历一", "病历二"]
+    assert len({item["record_key"] for item in hydrated}) == 2
+
+
 def test_collect_records_should_use_inpat_registration_for_active_record_without_frontpage(
     monkeypatch,
 ):
@@ -191,6 +233,55 @@ def test_collect_records_should_use_inpat_registration_for_active_record_without
         keyword=None,
         record_ids=["ACTIVE-1"],
     ) == 1
+
+
+def test_count_records_should_count_distinct_full_case_coordinates(monkeypatch):
+    service = CustomQCWorkspaceService()
+    selected_columns = []
+
+    class _IdentityQuery:
+        def with_entities(self, *columns):
+            selected_columns.extend(column.key for column in columns)
+            return self
+
+        def distinct(self):
+            return self
+
+        def subquery(self):
+            return "case_identity_rows"
+
+    class _CountQuery:
+        def select_from(self, identity_rows):
+            assert identity_rows == "case_identity_rows"
+            return self
+
+        def scalar(self):
+            return 2
+
+    class _Session:
+        def query(self, *_args):
+            return _CountQuery()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(workspace_module, "_session", lambda: _Session())
+    monkeypatch.setattr(
+        service,
+        "_build_records_query",
+        lambda *_args, **_kwargs: _IdentityQuery(),
+    )
+
+    assert service.count_records(
+        scope="all",
+        department=None,
+        doctor=None,
+        date_field="admission",
+        start_date=None,
+        end_date=None,
+        keyword=None,
+    ) == 2
+    assert selected_columns == ["institute_id", "patient_id", "visit_id"]
 
 
 def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):
@@ -391,3 +482,52 @@ def test_record_result_envelope_preserves_finalized_state_fields_verbatim():
         "reason_code": "customer_explanation_incomplete",
         "is_compliant": None,
     }
+
+
+def test_record_result_envelopes_are_grouped_by_full_case_coordinate():
+    service = CustomQCWorkspaceService()
+    executed = []
+
+    class _Session:
+        def execute(self, statement):
+            executed.append(statement)
+            return None
+
+    items = [
+        {
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V-SAME",
+            "record_id": "V-SAME",
+            "rule_id": "LX0609-001",
+            "rule_code": "LX0609-001",
+            "status": "compliant",
+        },
+        {
+            "institute_id": "H2",
+            "patient_id": "P2",
+            "visit_id": "V-SAME",
+            "record_id": "V-SAME",
+            "rule_id": "LX0609-001",
+            "rule_code": "LX0609-001",
+            "status": "non_compliant",
+        },
+    ]
+
+    service._write_record_result_envelopes(
+        _Session(),
+        job_row={
+            "id": "job-1",
+            "created_by": "tester",
+            "filters_json": '{"rule_set_key":"luxian_0609_qc_v1"}',
+        },
+        items=items,
+        now=datetime(2026, 8, 9, 18, 0, 0),
+    )
+
+    insert_params = [statement.compile().params for statement in executed if statement.is_insert]
+    assert len(insert_params) == 2
+    assert {
+        (params["institute_id"], params["patient_id"], params["visit_id"])
+        for params in insert_params
+    } == {("H1", "P1", "V-SAME"), ("H2", "P2", "V-SAME")}

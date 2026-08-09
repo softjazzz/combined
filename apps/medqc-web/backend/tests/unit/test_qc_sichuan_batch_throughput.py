@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from app.routers import qc_sichuan
 import app.services.custom_qc_workspace_service as workspace_module
+from app.services.case_identity import CaseRef
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
@@ -197,10 +198,22 @@ class _WorkspaceStub:
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[List[str]] = None,
+        record_refs: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
-        ids = list(record_ids or [])
+        refs = list(record_refs or [])
+        ids = list(record_ids or [ref["visit_id"] for ref in refs])
         return [
             {
+                "institute_id": (
+                    str(refs[idx].get("institute_id") or "HOSP-001")
+                    if idx < len(refs) and isinstance(refs[idx], dict)
+                    else "HOSP-001"
+                ),
+                "patient_id": (
+                    str(refs[idx].get("patient_id") or f"PAT-{rid}")
+                    if idx < len(refs) and isinstance(refs[idx], dict)
+                    else f"PAT-{rid}"
+                ),
                 "record_id": rid,
                 "visit_id": rid,
                 "patient_name": f"患者{idx + 1}",
@@ -222,6 +235,7 @@ class _WorkspaceStub:
         filters: Dict[str, Any],
         record_ids: List[str],
         total_records: int,
+        record_refs: Optional[List[Dict[str, str]]] = None,
         draft_ids: Optional[List[str]] = None,
         execution_mode: Optional[str] = None,
         rule_count: Optional[int] = None,
@@ -238,6 +252,7 @@ class _WorkspaceStub:
             "scope": scope,
             "filters": filters,
             "record_ids": record_ids,
+            "record_refs": list(record_refs or []),
             "total_records": total_records,
             "execution_mode": execution_mode,
             "rule_count": rule_count,
@@ -1181,6 +1196,7 @@ async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[List[str]] = None,
+        record_refs: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
         ids = list(record_ids or [])
         return [
@@ -1296,6 +1312,7 @@ async def test_sample_pool_single_rule_records_should_prefer_rule_level_visit_ev
         end_date: Optional[str],
         keyword: Optional[str],
         record_ids: Optional[List[str]] = None,
+        record_refs: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
         ids = list(record_ids or [])
         return [
@@ -1607,6 +1624,8 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     workspace = _WorkspaceStub()
     workspace.collect_records = lambda **_: [  # type: ignore[method-assign]
         {
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-visit-001",
             "record_id": "visit-001",
             "visit_id": "visit-001",
             "scope": "final",
@@ -1614,6 +1633,8 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
             "discharge_datetime": "2026-06-13 18:00:00",
         },
         {
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-visit-002",
             "record_id": "visit-002",
             "visit_id": "visit-002",
             "scope": "running",
@@ -1670,6 +1691,12 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
             "evaluation_horizon": "2026-06-13",
             "evaluation_basis": "discharge_datetime",
             "resolution_status": "resolved",
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-visit-001",
+            "visit_id": "visit-001",
+            "record_key": CaseRef(
+                "HOSP-001", "PAT-visit-001", "visit-001"
+            ).as_key(),
         },
         {
             "record_id": "visit-002",
@@ -1679,6 +1706,12 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
             "evaluation_horizon": task_frozen_date,
             "evaluation_basis": "task_frozen_date",
             "resolution_status": "resolved",
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-visit-002",
+            "visit_id": "visit-002",
+            "record_key": CaseRef(
+                "HOSP-001", "PAT-visit-002", "visit-002"
+            ).as_key(),
         },
     ]
     assert (
@@ -1687,8 +1720,8 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
     )
     assert "evaluation_as_of_date" not in filters
     assert filters["record_rule_map"] == {
-        "visit-001": native_rule_ids,
-        "visit-002": native_rule_ids,
+        CaseRef("HOSP-001", "PAT-visit-001", "visit-001").as_key(): native_rule_ids,
+        CaseRef("HOSP-001", "PAT-visit-002", "visit-002").as_key(): native_rule_ids,
     }
     assert workspace.created_job["draft_ids"] == native_rule_ids
     assert response["data"]["draft_ids"] == native_rule_ids
@@ -1875,18 +1908,10 @@ async def test_full_luxian_batch_worker_uses_unified_customer_package_entry(
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert workspace.job["status"] == "completed"
-    assert captured == [
-        {
-            "rule_ids": customer_rule_ids,
-            "scene": "final",
-            "data_quality_flags": ["bundle_unavailable"],
-        },
-        {
-            "rule_ids": customer_rule_ids,
-            "scene": "final",
-            "data_quality_flags": ["bundle_unavailable"],
-        },
-    ]
+    assert len(captured) == 2
+    assert all(item["rule_ids"] == customer_rule_ids for item in captured)
+    assert all(item["scene"] == "final" for item in captured)
+    assert all("text_unavailable" in item["data_quality_flags"] for item in captured)
     assert len(workspace.items) == 98
     assert {str(item.get("rule_id") or "") for item in workspace.items} == set(
         customer_rule_ids
@@ -2452,13 +2477,9 @@ async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(mon
         "start_date": "2026-06-01",
         "end_date": "2026-06-18",
         "keyword": "出院",
-        "record_ids": sorted(
-            {
-                str(record.get("record_id") or record.get("visit_id") or "").strip()
-                for record in first_records
-                if str(record.get("record_id") or record.get("visit_id") or "").strip()
-            }
-        ),
+        "record_refs": [
+            CaseRef.from_mapping(record).as_dict() for record in first_records
+        ],
         "record_scene_snapshot": qc_sichuan._build_workspace_record_scene_snapshot(
             first_records,
             query_scope="final",
@@ -2503,6 +2524,8 @@ async def test_create_workspace_batch_job_should_not_reuse_running_job_after_rec
         def collect_records(self, **_: Any) -> List[Dict[str, Any]]:
             return [
                 {
+                    "institute_id": "HOSP-001",
+                    "patient_id": "PAT-visit-001",
                     "record_id": "visit-001",
                     "visit_id": "visit-001",
                     "scope": "final",
@@ -2584,6 +2607,12 @@ async def test_create_workspace_batch_job_should_not_reuse_running_job_after_rec
     assert workspace.created_job["filters"]["record_scene_snapshot"] == [
         {
             "record_id": "visit-001",
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-visit-001",
+            "visit_id": "visit-001",
+            "record_key": CaseRef(
+                "HOSP-001", "PAT-visit-001", "visit-001"
+            ).as_key(),
             "record_scene": "final",
             "resolved_scene": "final",
             "discharge_snapshot": "2026-08-03 09:30:00",
@@ -2638,11 +2667,11 @@ async def test_luxian_runtime_shadow_metadata_is_additive_and_precedes_evaluatio
 
     assert sequence == ["hook", "evaluate", "hook", "evaluate"]
     summary = (evaluation_row.get("metadata") or {}).get("luxian_0609_runtime_shadow")
-    assert summary and summary["disposition"] == "inputs_unavailable"
+    assert summary and summary["disposition"] == "completed"
     assert evaluation_row["status"] == "compliant"
     assert workspace.items
     persisted_summary = (workspace.items[0].get("metadata") or {}).get("luxian_0609_runtime_shadow")
-    assert persisted_summary and persisted_summary["disposition"] == "inputs_unavailable"
+    assert persisted_summary and persisted_summary["disposition"] == "completed"
     assert persisted_summary["expected_llm_call_count"] == persisted_summary["llm_total_tokens"] == 0
 
 

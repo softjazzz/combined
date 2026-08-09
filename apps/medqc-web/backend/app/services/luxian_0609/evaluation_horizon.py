@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any, Mapping
 
+from ..case_identity import CaseRef
+
 
 EVALUATION_HORIZON_POLICY_FROZEN_TASK_DATE = "frozen_task_date"
 EVALUATION_HORIZON_POLICY_AUTHORITATIVE_DISCHARGE = "authoritative_discharge"
@@ -169,17 +171,27 @@ def build_record_evaluation_horizon_snapshot(
         record_id = _normalized_text(record.get("record_id") or record.get("visit_id"))
         if not record_id:
             continue
-        snapshots.append(
-            resolve_record_evaluation_horizon(
-                record_id=record_id,
-                record_scene=record.get("scope"),
-                admission_datetime=(
-                    record.get("admission_datetime") or record.get("admission_date")
-                ),
-                discharge_datetime=(
-                    record.get("discharge_datetime") or record.get("discharge_date")
-                ),
-                task_frozen_date=task_frozen_date,
-            ).to_dict()
-        )
-    return sorted(snapshots, key=lambda item: item["record_id"])
+        snapshot = resolve_record_evaluation_horizon(
+            record_id=record_id,
+            record_scene=record.get("scope"),
+            admission_datetime=(
+                record.get("admission_datetime") or record.get("admission_date")
+            ),
+            discharge_datetime=(
+                record.get("discharge_datetime") or record.get("discharge_date")
+            ),
+            task_frozen_date=task_frozen_date,
+        ).to_dict()
+        record_ref = CaseRef.from_mapping(record)
+        if all(record_ref):
+            snapshot.update(
+                {
+                    **record_ref.as_dict(),
+                    "record_key": record_ref.as_key(),
+                }
+            )
+        snapshots.append(snapshot)
+    return sorted(
+        snapshots,
+        key=lambda item: (item.get("record_key") or item["record_id"]),
+    )

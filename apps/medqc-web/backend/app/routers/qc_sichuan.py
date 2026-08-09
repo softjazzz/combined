@@ -48,6 +48,7 @@ from ..services.custom_qc_workspace_service import (
     customer_safe_projection_key,
     project_customer_safe_batch_job,
 )
+from ..services.case_identity import CaseRef, case_refs_from_records
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
 from ..services.luxian_0609.evaluation_horizon import (
@@ -314,6 +315,7 @@ def _build_workspace_record_scene_snapshot(
         record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
         if not record_id:
             continue
+        record_ref = CaseRef.from_mapping(record)
         normalized_record_scene = str(record.get("scope") or "").strip().lower()
         record_scene = (
             normalized_record_scene
@@ -323,6 +325,14 @@ def _build_workspace_record_scene_snapshot(
         snapshot.append(
             {
                 "record_id": record_id,
+                **(
+                    {
+                        **record_ref.as_dict(),
+                        "record_key": record_ref.as_key(),
+                    }
+                    if all(record_ref)
+                    else {}
+                ),
                 "record_scene": record_scene,
                 "resolved_scene": _resolve_workspace_bundle_scene(
                     query_scope=query_scope,
@@ -333,7 +343,7 @@ def _build_workspace_record_scene_snapshot(
                 ).strip(),
             }
         )
-    return sorted(snapshot, key=lambda item: item["record_id"])
+    return sorted(snapshot, key=lambda item: item.get("record_key") or item["record_id"])
 
 
 async def _rule_source_monitor_loop() -> None:
@@ -485,6 +495,7 @@ class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     end_date: Optional[str] = None
     keyword: Optional[str] = None
     record_ids: Optional[List[str]] = None
+    record_refs: Optional[List[Dict[str, str]]] = None
     run_mode: Optional[str] = None
 
 
@@ -2358,9 +2369,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
         record_evaluation_snapshot_by_id = {
-            str(item.get("record_id") or "").strip(): dict(item)
+            str(item.get("record_key") or item.get("record_id") or "").strip(): dict(item)
             for item in list(filters.get("record_evaluation_snapshot") or [])
-            if isinstance(item, dict) and str(item.get("record_id") or "").strip()
+            if isinstance(item, dict)
+            and str(item.get("record_key") or item.get("record_id") or "").strip()
         }
         requested_rule_ids = [
             str(item).strip().upper()
@@ -2444,6 +2456,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 block_batch=True,
             )
 
+        persisted_record_refs = filters.get("record_refs")
+        has_persisted_record_refs = isinstance(persisted_record_refs, list) and bool(
+            persisted_record_refs
+        )
         records = workspace.collect_records(
             scope=str(current.get("scope") or "all"),
             department=filters.get("department"),
@@ -2452,7 +2468,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             start_date=filters.get("start_date"),
             end_date=filters.get("end_date"),
             keyword=filters.get("keyword"),
-            record_ids=current.get("record_ids") or None,
+            record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
+            record_refs=persisted_record_refs if has_persisted_record_refs else None,
         )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
         total_records = len(hydrated_records)
@@ -2645,10 +2662,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         def _record_ids_for_item_status(status: str) -> set[str]:
             normalized_status = str(status or "").strip().lower()
             return {
-                str(item.get("record_id") or "").strip()
+                str(item.get("record_key") or item.get("record_id") or "").strip()
                 for item in all_items
                 if str(item.get("status") or "").strip().lower() == normalized_status
-                and str(item.get("record_id") or "").strip()
+                and str(item.get("record_key") or item.get("record_id") or "").strip()
             }
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
@@ -2725,32 +2742,32 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 rule_items = list(state.get("items") or [])
                 rule_failed = list(state.get("failed_records") or [])
                 rule_failed_record_ids = {
-                    str(item.get("record_id") or "").strip()
+                    str(item.get("record_key") or item.get("record_id") or "").strip()
                     for item in rule_failed
-                    if str(item.get("record_id") or "").strip()
+                    if str(item.get("record_key") or item.get("record_id") or "").strip()
                 }
                 confirmed_record_ids = {
-                    str(item.get("record_id") or "")
+                    str(item.get("record_key") or item.get("record_id") or "")
                     for item in rule_items
                     if _item_is_confirmed_defect(item)
                 }
                 uncertain_record_ids_for_rule = {
-                    str(item.get("record_id") or "")
+                    str(item.get("record_key") or item.get("record_id") or "")
                     for item in rule_items
                     if _item_needs_review(item)
                 }
                 data_gap_record_ids_for_rule = {
-                    str(item.get("record_id") or "")
+                    str(item.get("record_key") or item.get("record_id") or "")
                     for item in rule_items
                     if _item_data_quality_gap(item)
                 }
                 rejected_record_ids_for_rule = {
-                    str(item.get("record_id") or "")
+                    str(item.get("record_key") or item.get("record_id") or "")
                     for item in rule_items
                     if _item_rejected_by_system(item)
                 }
                 not_applicable_record_ids_for_rule = {
-                    str(item.get("record_id") or "")
+                    str(item.get("record_key") or item.get("record_id") or "")
                     for item in rule_items
                     if str(item.get("status") or "").strip().lower() == "not_applicable"
                 }
@@ -2851,10 +2868,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             visit_id = str(record.get("visit_id") or record_id).strip()
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
+            record_ref = CaseRef(institute_id, patient_id, visit_id)
+            record_key = record_ref.as_key() if all(record_ref) else record_id
             query_scope = str(
                 filters.get("query_scope") or current.get("scope") or "all"
             ).strip().lower()
-            record_evaluation_snapshot = record_evaluation_snapshot_by_id.get(record_id)
+            record_evaluation_snapshot = (
+                record_evaluation_snapshot_by_id.get(record_key)
+                or record_evaluation_snapshot_by_id.get(visit_id)
+                or record_evaluation_snapshot_by_id.get(record_id)
+            )
             if record_evaluation_snapshot is not None:
                 evaluation_horizon_policy = resolve_record_evaluation_horizon_policy(
                     record_evaluation_snapshot
@@ -2890,7 +2913,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             )
             document_type = _resolve_document_type(query_scope, str(record.get("scope") or ""))
             active_rule_ids = (
-                list(record_rule_map.get(visit_id) or record_rule_map.get(record_id) or [])
+                list(
+                    record_rule_map.get(record_key)
+                    or record_rule_map.get(visit_id)
+                    or record_rule_map.get(record_id)
+                    or []
+                )
                 or list(valid_rule_ids)
             )
             execution_trace_sink = None
@@ -3618,6 +3646,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "rule_code": rule_code,
                         "rule_name": str(eval_item.get("rule_name") or rule_name),
                         "record_id": record_id,
+                        "record_key": record_key,
                         "institute_id": institute_id,
                         "patient_id": patient_id,
                         "visit_id": str(record.get("visit_id") or ""),
@@ -3843,6 +3872,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
                 return {
                     "record_id": record_id,
+                    "record_key": record_key,
                     "visit_id": visit_id,
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
@@ -3885,6 +3915,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     )
                 return {
                     "record_id": record_id,
+                    "record_key": record_key,
                     "visit_id": visit_id,
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
@@ -3930,7 +3961,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 int(completed_records_state["count"]), processed_records_count
             )
 
-            record_id = str(record_result.get("record_id") or "").strip()
+            record_id = str(
+                record_result.get("record_key") or record_result.get("record_id") or ""
+            ).strip()
             if record_result.get("issue_record") is True:
                 issue_record_ids.add(record_id)
             if record_result.get("uncertain_record") is True:
@@ -4118,29 +4151,31 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         display_status_counts = dict(postprocess_summary.get("display_status_counts") or {})
         postprocess_label_counts = dict(postprocess_summary.get("postprocess_label_counts") or {})
         data_quality_gap_record_ids = {
-            str(item.get("record_id") or "")
+            str(item.get("record_key") or item.get("record_id") or "")
             for item in all_items
             if (
                 str(item.get("status") or "") == "data_gap"
                 or str(item.get("display_status") or "") == "data_quality_gap"
             )
-            and str(item.get("record_id") or "")
+            and str(item.get("record_key") or item.get("record_id") or "")
         }
         technical_error_record_ids = {
-            str(item.get("record_id") or "")
+            str(item.get("record_key") or item.get("record_id") or "")
             for item in all_items
-            if str(item.get("display_status") or "") == "technical_error_internal" and str(item.get("record_id") or "")
+            if str(item.get("display_status") or "") == "technical_error_internal"
+            and str(item.get("record_key") or item.get("record_id") or "")
         }
         rejected_by_system_record_ids = {
-            str(item.get("record_id") or "")
+            str(item.get("record_key") or item.get("record_id") or "")
             for item in all_items
-            if str(item.get("display_status") or "") == "rejected_by_system" and str(item.get("record_id") or "")
+            if str(item.get("display_status") or "") == "rejected_by_system"
+            and str(item.get("record_key") or item.get("record_id") or "")
         }
         not_applicable_record_ids = {
-            str(item.get("record_id") or "")
+            str(item.get("record_key") or item.get("record_id") or "")
             for item in all_items
             if str(item.get("status") or "").strip().lower() == "not_applicable"
-            and str(item.get("record_id") or "")
+            and str(item.get("record_key") or item.get("record_id") or "")
         }
         record_status_counts = _build_record_status_counts(
             total_records=total_records,
@@ -4374,6 +4409,12 @@ async def create_workspace_batch_job(
     workspace = _sichuan_workspace_service()
     normalized_scope = _normalize_scope(effective_scope)
     run_mode = _normalize_run_mode(payload.run_mode) if payload.run_mode else "parallel"
+    try:
+        requested_record_refs = (
+            case_refs_from_records(payload.record_refs or []) if payload.record_refs else ()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     records = workspace.collect_records(
         scope=normalized_scope,
         department=payload.department,
@@ -4382,18 +4423,30 @@ async def create_workspace_batch_job(
         start_date=payload.start_date,
         end_date=payload.end_date,
         keyword=payload.keyword,
-        record_ids=payload.record_ids or None,
+        record_ids=None if requested_record_refs else payload.record_ids or None,
+        record_refs=requested_record_refs or None,
     )
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
 
-    effective_record_ids = sorted(
-        {
-            str(record.get("record_id") or record.get("visit_id") or "").strip()
-            for record in records
-            if str(record.get("record_id") or record.get("visit_id") or "").strip()
-        }
-    )
+    try:
+        effective_record_refs = case_refs_from_records(records)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="病历缺少完整三坐标，无法创建质控任务") from exc
+    if payload.record_ids and not requested_record_refs:
+        refs_by_visit: Dict[str, set[CaseRef]] = {}
+        for ref in effective_record_refs:
+            refs_by_visit.setdefault(ref.visit_id, set()).add(ref)
+        ambiguous_visit_ids = sorted(
+            visit_id for visit_id, refs in refs_by_visit.items() if len(refs) > 1
+        )
+        if ambiguous_visit_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="所选住院号对应多份病历，请使用三坐标重新选择",
+            )
+    effective_record_ids = sorted({ref.visit_id for ref in effective_record_refs})
+    effective_record_ref_payload = [ref.as_dict() for ref in effective_record_refs]
     record_scene_snapshot = _build_workspace_record_scene_snapshot(
         records,
         query_scope=normalized_scope,
@@ -4420,7 +4473,7 @@ async def create_workspace_batch_job(
         "start_date": payload.start_date or "",
         "end_date": payload.end_date or "",
         "keyword": payload.keyword or "",
-        "record_ids": effective_record_ids,
+        "record_refs": effective_record_ref_payload,
         "record_scene_snapshot": record_scene_snapshot,
         "rule_set_key": rule_set_key,
         "rule_ids": sorted({str(rule_id).strip().upper() for rule_id in rule_ids if str(rule_id).strip()}),
@@ -4518,8 +4571,8 @@ async def create_workspace_batch_job(
                     "selected_rule_ids": list(direct_native_rule_ids),
                     "scoped_customer_rule_ids": list(direct_native_rule_ids),
                     "record_rule_map": {
-                        record_id: list(direct_native_rule_ids)
-                        for record_id in effective_record_ids
+                        ref.as_key(): list(direct_native_rule_ids)
+                        for ref in effective_record_refs
                     },
                     "validation_mode": "programmatic",
                     "customer_rule_count": len(direct_native_rule_ids),
@@ -4529,8 +4582,9 @@ async def create_workspace_batch_job(
                 else {}
             ),
         },
-        record_ids=payload.record_ids or [],
+        record_ids=effective_record_ids,
         total_records=len(records),
+        record_refs=effective_record_refs,
         draft_ids=rule_ids,
         execution_mode="multi",
         run_mode=run_mode,

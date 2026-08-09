@@ -36,7 +36,7 @@ from .bundles.assembly import (
     refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
-from .case_identity import CaseRef, coerce_case_ref
+from .case_identity import CaseRef, coerce_case_ref, normalize_case_refs
 from .case_set_sync_service import CaseSetSyncService
 from .etl_sync import (
     expand_table_groups,
@@ -166,6 +166,7 @@ def build_sample_validation_execution_scope_hash(
     group_by_luxian_family: bool,
     effective_scope: str = "",
     execution_options: Optional[Dict[str, Any]] = None,
+    record_refs: Optional[Sequence[Dict[str, Any] | CaseRef]] = None,
     hmac_key: Optional[str] = None,
 ) -> str:
     """生成不可逆的任务执行范围身份，不在审计字段中回显用户或病历坐标。"""
@@ -179,8 +180,17 @@ def build_sample_validation_execution_scope_hash(
             }
         )
 
+    normalized_record_refs = (
+        [ref.as_dict() for ref in normalize_case_refs(record_refs)]
+        if record_refs
+        else []
+    )
     payload = {
-        "schema": "sample-validation-execution-scope-v1",
+        "schema": (
+            "sample-validation-execution-scope-v2"
+            if normalized_record_refs
+            else "sample-validation-execution-scope-v1"
+        ),
         "created_by": _safe_text(created_by),
         "pool_id": _safe_text(pool_id),
         "validation_mode": _safe_text(validation_mode).lower(),
@@ -191,6 +201,20 @@ def build_sample_validation_execution_scope_hash(
         "group_by_luxian_family": bool(group_by_luxian_family),
         "effective_scope": _safe_text(effective_scope).lower(),
         "execution_options": _sanitize_json_value(execution_options or {}),
+        **(
+            {
+                "record_refs": sorted(
+                    normalized_record_refs,
+                    key=lambda item: (
+                        item["institute_id"],
+                        item["patient_id"],
+                        item["visit_id"],
+                    ),
+                )
+            }
+            if normalized_record_refs
+            else {}
+        ),
     }
     material = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     secret = _safe_text(hmac_key) or _safe_text(get_settings().JWT_SECRET)

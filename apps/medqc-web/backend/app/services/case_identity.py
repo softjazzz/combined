@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
@@ -25,6 +26,11 @@ class CaseRef(NamedTuple):
             "patient_id": self.patient_id,
             "visit_id": self.visit_id,
         }
+
+    def as_key(self) -> str:
+        """返回无分隔符碰撞、可逆的内部病例键。"""
+
+        return json.dumps(list(self), ensure_ascii=False, separators=(",", ":"))
 
 
 CaseRefInput = CaseRef | Mapping[str, Any] | Sequence[str]
@@ -54,3 +60,9 @@ def normalize_case_refs(values: Sequence[CaseRefInput]) -> tuple[CaseRef, ...]:
     if not normalized:
         raise ValueError("病例三坐标集合不能为空")
     return tuple(normalized)
+
+
+def case_refs_from_records(values: Sequence[Mapping[str, Any]]) -> tuple[CaseRef, ...]:
+    """从已解析病历行冻结三坐标；缺任一坐标立即失败关闭。"""
+
+    return normalize_case_refs([CaseRef.from_mapping(value) for value in values])
