@@ -45,6 +45,7 @@ from .luxian_0609_rule_catalog import (
     get_luxian_0609_rule,
     load_luxian_0609_rules,
 )
+from .luxian_0609_rule_master import load_luxian_0609_rule_master
 from .luxian_0609_result_aggregator import safe_luxian_0609_customer_display_facts
 from .luxian_0609.customer_renderer import compliant_customer_finding
 from .bundles.emr_view import load_bundle_documents
@@ -3828,6 +3829,18 @@ class CustomQCWorkspaceService:
                     "is_complete": False,
                 }
 
+            rule_master_by_id = {
+                entry.rule_id: entry for entry in load_luxian_0609_rule_master()
+            }
+            projected_items = []
+            for item, rule_id in zip(items, valid_rule_ids):
+                projected_item = dict(item)
+                master_entry = rule_master_by_id.get(rule_id)
+                if master_entry is not None:
+                    projected_item["source_document"] = master_entry.source_document
+                    projected_item["qc_point"] = master_entry.qc_point
+                projected_items.append(projected_item)
+
             missing_rule_ids = [
                 rule_id for rule_id in resolved_expected_rule_ids if rule_id not in set(valid_rule_ids)
             ]
@@ -3840,7 +3853,7 @@ class CustomQCWorkspaceService:
                 "job_id": _safe_text(selected_job.get("id")),
                 "rule_set_key": normalized_rule_set_key,
                 "rule_set_version": normalized_rule_set_version,
-                "items": items,
+                "items": projected_items,
                 "expected_rule_count": len(resolved_expected_rule_ids),
                 "result_rule_count": len(items),
                 "is_complete": not missing_rule_ids and not conflicting_rule_ids,

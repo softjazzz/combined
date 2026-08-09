@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.luxian_0609_rule_master import load_luxian_0609_rule_master
 
 
 class _Rows:
@@ -454,12 +455,12 @@ def test_completed_projection_rejects_canonical_items_without_unique_rule_id(
     }
 
 
-def test_single_record_result_returns_canonical_envelope_items_without_reprojection(
+def test_single_record_result_adds_authoritative_presentation_metadata_without_mutating_envelope(
     monkeypatch,
 ):
     canonical_item = {
-        "rule_id": "LX0609-001",
-        "rule_name": "入院记录",
+        "rule_id": "LX0609-025",
+        "rule_name": "植入物相关记录",
         "status": "uncertain",
         "result_status": "uncertain",
         "reason_code": "customer_explanation_incomplete",
@@ -473,16 +474,18 @@ def test_single_record_result_returns_canonical_envelope_items_without_reproject
             }
         ],
     }
+    original_canonical_item = json.loads(json.dumps(canonical_item, ensure_ascii=False))
     envelope = {
         "schema_version": "lx0609-record-result-envelope-v1",
         "delivery_mode": "canonical_straight_through",
         "record_ref": "rec_1234567890abcdef12345678",
         "items": [canonical_item],
     }
+    original_envelope_json = json.dumps(envelope, ensure_ascii=False)
     session = _ReadSession(
         [
             [_selected_job()],
-            [{"envelope_json": json.dumps(envelope, ensure_ascii=False)}],
+            [{"envelope_json": original_envelope_json}],
         ]
     )
     monkeypatch.setattr(workspace_module, "_session", lambda: session)
@@ -507,14 +510,125 @@ def test_single_record_result_returns_canonical_envelope_items_without_reproject
         institute_id="inst-1",
         patient_id="patient-1",
         visit_id="visit-1",
-        expected_rule_ids=["LX0609-001"],
+        expected_rule_ids=["LX0609-025"],
         rule_set_key="luxian_0609_qc_v1",
         rule_set_version="2026-06-09",
     )
 
     assert result["state"] == "ready"
     assert result["record_ref"] == "rec_1234567890abcdef12345678"
-    assert result["items"] == [canonical_item]
+    assert result["items"] == [
+        {
+            **original_canonical_item,
+            "source_document": "手术记录",
+            "qc_point": "未记录植入物名称、种类、规格或型号、材质及数量等信息",
+        }
+    ]
+    assert canonical_item == original_canonical_item
+    assert json.dumps(envelope, ensure_ascii=False) == original_envelope_json
+
+
+def test_single_record_result_projects_all_rule_master_metadata_in_envelope_order(monkeypatch):
+    master_entries = load_luxian_0609_rule_master()
+    rule_ids = [entry.rule_id for entry in master_entries]
+    canonical_items = [
+        {
+            "rule_id": entry.rule_id,
+            "status": "compliant",
+            "reason_code": "requirement_satisfied",
+        }
+        for entry in reversed(master_entries)
+    ]
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": canonical_items,
+    }
+    session = _ReadSession(
+        [
+            [_selected_job()],
+            [{"envelope_json": json.dumps(envelope, ensure_ascii=False)}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+
+    result = CustomQCWorkspaceService().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=rule_ids,
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "ready"
+    assert result["is_complete"] is True
+    assert [item["rule_id"] for item in result["items"]] == list(reversed(rule_ids))
+    master_by_id = {entry.rule_id: entry for entry in master_entries}
+    for item in result["items"]:
+        master_entry = master_by_id[item["rule_id"]]
+        assert item["source_document"] == master_entry.source_document
+        assert item["qc_point"] == master_entry.qc_point
+
+
+@pytest.mark.parametrize(
+    "canonical_items",
+    [
+        [{"status": "compliant"}],
+        [
+            {"rule_id": "LX0609-025", "status": "compliant"},
+            {"rule_id": "LX0609-025", "status": "non_compliant"},
+        ],
+    ],
+)
+def test_single_record_result_rejects_invalid_rule_identity_before_metadata_projection(
+    monkeypatch,
+    canonical_items,
+):
+    envelope = {
+        "schema_version": "lx0609-record-result-envelope-v1",
+        "delivery_mode": "canonical_straight_through",
+        "record_ref": "rec_1234567890abcdef12345678",
+        "items": canonical_items,
+    }
+    session = _ReadSession(
+        [
+            [_selected_job()],
+            [{"envelope_json": json.dumps(envelope, ensure_ascii=False)}],
+        ]
+    )
+    monkeypatch.setattr(workspace_module, "_session", lambda: session)
+    monkeypatch.setattr(workspace_module, "_row_to_batch_job", lambda row: dict(row))
+    monkeypatch.setattr(
+        CustomQCWorkspaceService,
+        "_aggregate_parent_job",
+        lambda _self, _session, job: job,
+    )
+    monkeypatch.setattr(
+        workspace_module,
+        "load_luxian_0609_rule_master",
+        lambda: (_ for _ in ()).throw(AssertionError("无效Envelope不得进入展示投影")),
+    )
+
+    result = CustomQCWorkspaceService().build_latest_single_record_result_dto(
+        institute_id="inst-1",
+        patient_id="patient-1",
+        visit_id="visit-1",
+        expected_rule_ids=["LX0609-025"],
+        rule_set_key="luxian_0609_qc_v1",
+        rule_set_version="2026-06-09",
+    )
+
+    assert result["state"] == "technical_error"
+    assert result["reason_code"] == "canonical_result_envelope_invalid"
+    assert result["items"] == []
 
 
 def test_writer_marks_envelope_as_canonical_straight_through():
