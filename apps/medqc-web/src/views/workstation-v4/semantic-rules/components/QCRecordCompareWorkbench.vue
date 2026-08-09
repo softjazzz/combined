@@ -148,6 +148,7 @@
         <SingleRecordQcResultPanel
           v-if="hasSingleRecordResult"
           :items="singleRecordItems || []"
+          :presentation-mode="presentationMode"
           @select="selectSingleRecordResult"
           @locate-evidence="locateSingleRecordEvidence"
         />
@@ -342,17 +343,21 @@ import type {
   QCRecordCompareIssue,
 } from '@/views/workstation-v4/semantic-rules/types'
 
-const props = defineProps<{
-  visitId: string
-  jobId?: string
-  recordRef?: string
-  instituteId?: string
-  patientId?: string
-  issues: QCRecordCompareIssue[]
-  /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
-  singleRecordItems?: SingleRecordQcResultItem[]
-  activeIssueKey?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    visitId: string
+    jobId?: string
+    recordRef?: string
+    instituteId?: string
+    patientId?: string
+    issues: QCRecordCompareIssue[]
+    /** 单病历纵向切片专用；存在时右栏不再使用批量结果旧模型。 */
+    singleRecordItems?: SingleRecordQcResultItem[]
+    presentationMode?: 'flat' | 'grouped'
+    activeIssueKey?: string
+  }>(),
+  { presentationMode: 'flat' },
+)
 
 const emit = defineEmits<{
   (event: 'select-issue', issueKey: string): void

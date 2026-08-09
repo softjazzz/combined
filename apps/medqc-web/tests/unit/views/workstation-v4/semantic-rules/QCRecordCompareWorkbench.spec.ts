@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/components/QCRecordCompareWorkbench.vue'
+import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import type { QCRecordCompareIssue } from '@/views/workstation-v4/semantic-rules/types'
 
 const { getDocumentsMock } = vi.hoisted(() => ({
@@ -240,6 +241,32 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('.record-result-list').exists()).toBe(false)
     expect(wrapper.find('mark').text()).toBe('反复咳嗽，咳痰，气促')
     expect(wrapper.text()).toContain('已定位到证据段落')
+  })
+
+  it('只把单病历报告展示模式透传给结果面板，不改写固定结果条目', async () => {
+    const singleRecordItems = [
+      {
+        rule_id: 'LX0609-025',
+        rule_name: '植入物相关记录',
+        source_document: '手术记录',
+        status: 'non_compliant',
+        conclusion: '植入物记录不完整。',
+      },
+    ]
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-1',
+        issues: [],
+        singleRecordItems,
+        presentationMode: 'grouped',
+      },
+    })
+
+    await flushPromises()
+
+    const panel = wrapper.getComponent(SingleRecordQcResultPanel)
+    expect(panel.props('presentationMode')).toBe('grouped')
+    expect(panel.props('items')).toEqual(singleRecordItems)
   })
 
   it('客户安全文书引用未命中时不得按相同片段猜测其他文书', async () => {

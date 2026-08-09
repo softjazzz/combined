@@ -24,6 +24,7 @@
         :job-id="latestResult.job_id"
         :issues="[]"
         :single-record-items="latestResult.items"
+        :presentation-mode="presentationMode"
       />
       <a-result
         v-else-if="loadError"
@@ -50,10 +51,14 @@ export interface QCRecordResultFocus {
   label: string
 }
 
-const props = defineProps<{
-  open: boolean
-  focus: QCRecordResultFocus | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    focus: QCRecordResultFocus | null
+    presentationMode?: 'flat' | 'grouped'
+  }>(),
+  { presentationMode: 'flat' },
+)
 
 const emit = defineEmits<{
   (event: 'close'): void

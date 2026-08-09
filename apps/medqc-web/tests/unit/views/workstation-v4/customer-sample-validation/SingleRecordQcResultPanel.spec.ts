@@ -232,6 +232,150 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('待处理')
     expect(wrapper.text()).toContain('不适用')
     expect(wrapper.text()).toContain('合规')
+    expect(wrapper.find('[data-testid="single-record-document-group"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="single-record-report-tab-"]').exists()).toBe(false)
+  })
+
+  it('分组模式按客户文书主题展示四类报告页签，技术异常只进入系统状态和全部规则', async () => {
+    const groupedItems = [
+      {
+        rule_id: 'LX0609-025',
+        rule_name: '植入物相关记录',
+        source_document: '手术记录',
+        qc_point: '未记录植入物种类及数量',
+        status: 'non_compliant',
+        conclusion: '植入物种类及数量未记录。',
+        evidence: [{ source_ref: 'src_surgery_025', source_type: 'surgery_record' }],
+      },
+      {
+        rule_id: 'LX0609-020',
+        rule_name: '会诊意见执行情况',
+        source_document: '会诊记录',
+        status: 'data_gap',
+        conclusion: '缺少可核对的后续病程记录。',
+      },
+      {
+        rule_id: 'LX0609-023',
+        rule_name: '会诊意见落实内容',
+        source_document: '会诊记录',
+        status: 'uncertain',
+        conclusion: '执行内容仍需人工判断。',
+      },
+      {
+        rule_id: 'LX0609-002',
+        rule_name: '首次病程记录',
+        source_document: '首次病程记录',
+        status: 'technical_error',
+        conclusion: '本次结果生成异常。',
+      },
+      {
+        rule_id: 'LX0609-001',
+        rule_name: '入院记录及时性',
+        source_document: '入院记录',
+        status: 'compliant',
+        conclusion: '符合要求。',
+      },
+    ]
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: { items: groupedItems, presentationMode: 'grouped' },
+    })
+
+    expect(
+      wrapper.findAll('[data-testid^="single-record-report-tab-"]').map((tab) => tab.text()),
+    ).toEqual(['确定问题1', '资料待核实1', '待判断1', '全部规则5'])
+    expect(
+      wrapper
+        .get('[data-testid="single-record-report-tab-non_compliant"]')
+        .attributes('aria-selected'),
+    ).toBe('true')
+    expect(wrapper.get('[data-testid="single-record-system-status"]').text()).toContain(
+      '1 条结果校验异常',
+    )
+    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="single-record-document-group"]').text()).toContain('手术记录')
+    expect(wrapper.text()).toContain('1处证据')
+    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('LX0609-002')
+
+    await wrapper.get('[data-testid="single-record-report-tab-all"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="single-record-document-group"]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(5)
+    expect(wrapper.text()).toContain('LX0609-002')
+    expect(wrapper.text()).toContain('LX0609-001')
+
+    const surgeryGroupToggle = wrapper.findAll(
+      '[data-testid="single-record-document-group-toggle"]',
+    )[0]!
+    await surgeryGroupToggle.trigger('click')
+    expect(
+      wrapper
+        .findAll('[data-testid="single-record-document-group-toggle"]')[0]!
+        .attributes('aria-expanded'),
+    ).toBe('false')
+    expect(wrapper.findAll('[data-testid="single-record-result-row"]')).toHaveLength(4)
+    await wrapper
+      .findAll('[data-testid="single-record-document-group-toggle"]')[0]!
+      .trigger('click')
+    await wrapper
+      .findAll('[data-testid="single-record-result-row"]')[0]!
+      .get('.result-trigger')
+      .trigger('click')
+    await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
+    expect(wrapper.emitted('locate-evidence')).toBeTruthy()
+  })
+
+  it('分组模式按确定问题、资料待核实、待判断、全部规则选择首个非空页签', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        presentationMode: 'grouped',
+        items: [
+          {
+            rule_id: 'LX0609-020',
+            rule_name: '会诊意见执行情况',
+            source_document: '会诊记录',
+            status: 'data_gap',
+          },
+          {
+            rule_id: 'LX0609-023',
+            rule_name: '会诊意见落实内容',
+            source_document: '会诊记录',
+            status: 'uncertain',
+          },
+        ],
+      },
+    })
+
+    expect(
+      wrapper.get('[data-testid="single-record-report-tab-data_gap"]').attributes('aria-selected'),
+    ).toBe('true')
+
+    await wrapper.setProps({
+      items: [
+        {
+          rule_id: 'LX0609-023',
+          rule_name: '会诊意见落实内容',
+          source_document: '会诊记录',
+          status: 'uncertain',
+        },
+      ],
+    })
+    expect(
+      wrapper.get('[data-testid="single-record-report-tab-uncertain"]').attributes('aria-selected'),
+    ).toBe('true')
+
+    await wrapper.setProps({
+      items: [
+        {
+          rule_id: 'LX0609-001',
+          rule_name: '入院记录及时性',
+          source_document: '入院记录',
+          status: 'compliant',
+        },
+      ],
+    })
+    expect(
+      wrapper.get('[data-testid="single-record-report-tab-all"]').attributes('aria-selected'),
+    ).toBe('true')
   })
 
   it('合规项有现有核对说明或证据时，也可展开查看详细依据', async () => {

@@ -22,6 +22,7 @@ const QCRecordCompareWorkbenchStub = defineComponent({
     recordRef: { type: String, default: '' },
     issues: { type: Array, default: () => [] },
     singleRecordItems: { type: Array, default: () => [] },
+    presentationMode: { type: String, default: 'flat' },
   },
   setup(props) {
     workbenchProps = props as unknown as Record<string, unknown>
@@ -49,7 +50,7 @@ const readyResult = {
   is_complete: true,
 }
 
-function mountDrawer() {
+function mountDrawer(presentationMode?: 'flat' | 'grouped') {
   return mount(QCRecordResultComparisonDrawer, {
     props: {
       open: true,
@@ -60,6 +61,7 @@ function mountDrawer() {
         recordId: 'R001',
         label: '测试病历',
       },
+      ...(presentationMode ? { presentationMode } : {}),
     },
     global: {
       stubs: {
@@ -136,6 +138,17 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.visitId).toBe('V001')
     expect(workbenchProps?.jobId).toBe('job-safe-001')
     expect(workbenchProps?.recordRef).toBe('rec-safe-001')
+    expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
+    expect(workbenchProps?.presentationMode).toBe('flat')
+  })
+
+  it('显式分组模式只透传到对照工作台，不改写单病历结果', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+
+    mountDrawer('grouped')
+    await flushPromises()
+
+    expect(workbenchProps?.presentationMode).toBe('grouped')
     expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
   })
 

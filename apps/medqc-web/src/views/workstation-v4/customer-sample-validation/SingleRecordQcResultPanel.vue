@@ -13,31 +13,61 @@
           <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
         </div>
       </div>
-      <div
-        v-if="viewItems.length"
-        class="result-tabs"
-        role="tablist"
-        aria-label="质控结果状态筛选"
-      >
-        <button
-          v-for="tab in statusTabs"
-          :key="tab.key"
-          type="button"
-          role="tab"
-          class="result-tab"
-          :class="{ 'is-active': activeTab === tab.key }"
-          :aria-selected="activeTab === tab.key"
-          :data-testid="`single-record-result-tab-${tab.key}`"
-          @click="activeTab = tab.key"
+      <template v-if="viewItems.length">
+        <div
+          v-if="!isGroupedPresentation"
+          class="result-tabs"
+          role="tablist"
+          aria-label="质控结果状态筛选"
         >
-          <span>{{ tab.label }}</span>
-          <b>{{ tab.count }}</b>
-        </button>
-      </div>
+          <button
+            v-for="tab in statusTabs"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="result-tab"
+            :class="{ 'is-active': activeTab === tab.key }"
+            :aria-selected="activeTab === tab.key"
+            :data-testid="`single-record-result-tab-${tab.key}`"
+            @click="activeTab = tab.key"
+          >
+            <span>{{ tab.label }}</span>
+            <b>{{ tab.count }}</b>
+          </button>
+        </div>
+        <div
+          v-else
+          class="result-tabs result-report-tabs"
+          role="tablist"
+          aria-label="病历质控报告分类"
+        >
+          <button
+            v-for="tab in reportTabs"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="result-tab"
+            :class="{ 'is-active': activeReportTab === tab.key }"
+            :aria-selected="activeReportTab === tab.key"
+            :data-testid="`single-record-report-tab-${tab.key}`"
+            @click="activeReportTab = tab.key"
+          >
+            <span>{{ tab.label }}</span>
+            <b>{{ tab.count }}</b>
+          </button>
+        </div>
+        <p
+          v-if="isGroupedPresentation && presentation.counts.technicalError"
+          class="result-system-status"
+          data-testid="single-record-system-status"
+        >
+          系统状态：{{ presentation.counts.technicalError }} 条结果校验异常，仅在全部规则中展示
+        </p>
+      </template>
     </header>
 
     <div
-      v-if="!visibleItems.length"
+      v-if="!hasVisibleResults"
       class="empty-state"
     >
       {{ viewItems.length ? '当前分类下没有质控结果' : '当前没有可展示的质控结果' }}
@@ -46,20 +76,57 @@
     <div
       v-else
       class="result-list"
+      :class="{ 'is-grouped': isGroupedPresentation }"
     >
       <article
-        v-for="item in visibleItems"
+        v-for="item in renderedItems"
+        v-show="shouldRenderDocumentGroupItem(item.key)"
         :key="item.key"
         class="result-row"
         :class="[
           `is-${item.tone}`,
           {
             'is-expanded': expandedKey === item.key,
+            'is-document-group-start': documentGroupForItem(item.key)?.isFirst,
+            'is-document-group-collapsed': !isDocumentGroupExpandedForItem(item.key),
           },
         ]"
-        data-testid="single-record-result-row"
+        :data-testid="
+          isDocumentGroupExpandedForItem(item.key) ? 'single-record-result-row' : undefined
+        "
       >
+        <div
+          v-if="isGroupedPresentation && documentGroupForItem(item.key)?.isFirst"
+          class="result-document-group-header"
+          data-testid="single-record-document-group"
+        >
+          <button
+            type="button"
+            class="result-document-group-toggle"
+            data-testid="single-record-document-group-toggle"
+            :aria-expanded="isDocumentGroupExpandedForItem(item.key)"
+            @click="toggleDocumentGroup(documentGroupForItem(item.key)?.key || '')"
+          >
+            <span>
+              <strong>{{ documentGroupForItem(item.key)?.sourceDocument }}</strong>
+              <small>{{ documentGroupForItem(item.key)?.count }} 个质控点</small>
+            </span>
+            <ChevronUp
+              v-if="isDocumentGroupExpandedForItem(item.key)"
+              :size="17"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            <ChevronRight
+              v-else
+              :size="17"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
         <button
+          v-if="isDocumentGroupExpandedForItem(item.key)"
           type="button"
           class="result-trigger"
           :class="{ 'is-static': !isExpandable(item) }"
@@ -81,6 +148,12 @@
                   }}</span>
                 </span>
                 <span class="rule-code">{{ item.rule_id }}</span>
+                <span
+                  v-if="isGroupedPresentation && item.evidence?.length"
+                  class="result-evidence-count"
+                >
+                  {{ item.evidence.length }}处证据
+                </span>
               </span>
               <span
                 v-if="isExpandable(item)"
@@ -110,7 +183,11 @@
         </button>
 
         <section
-          v-if="expandedKey === item.key && isExpandable(item)"
+          v-if="
+            isDocumentGroupExpandedForItem(item.key) &&
+              expandedKey === item.key &&
+              isExpandable(item)
+          "
           class="result-detail"
         >
           <div
@@ -436,20 +513,26 @@
 import { ArrowRight, ChevronRight, ChevronUp } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
 import {
+  buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
   resolveSingleRecordQcResultTab,
   type SingleRecordQcEvidence,
   type SingleRecordQcCriterionResult,
   type SingleRecordQcResultItem,
+  type SingleRecordQcResultReportTab,
   type SingleRecordQcResultTabKey,
   type SingleRecordQcResultViewItem,
 } from './single-record-result-model'
 
-const props = defineProps<{
-  items: SingleRecordQcResultItem[]
-  selectedKey?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    items: SingleRecordQcResultItem[]
+    selectedKey?: string
+    presentationMode?: 'flat' | 'grouped'
+  }>(),
+  { presentationMode: 'flat' },
+)
 
 const emit = defineEmits<{
   (event: 'select', key: string): void
@@ -653,6 +736,8 @@ const DetailBlock = defineComponent({
 })
 
 const viewItems = computed(() => buildSingleRecordQcResultItems(props.items))
+const isGroupedPresentation = computed(() => props.presentationMode === 'grouped')
+const presentation = computed(() => buildSingleRecordQcPresentation(props.items))
 const resultExecutionSummary = computed(() => {
   const total = viewItems.value.length
   const notExecuted = viewItems.value.filter((item) => item.status === 'not_executed').length
@@ -663,12 +748,102 @@ const resultExecutionSummary = computed(() => {
 })
 const statusTabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
 const activeTab = ref<SingleRecordQcResultTabKey>('all')
+const activeReportTab = ref<SingleRecordQcResultReportTab>('all')
+const reportTabs = computed(() => [
+  {
+    key: 'non_compliant' as const,
+    label: '确定问题',
+    count: presentation.value.counts.nonCompliant,
+  },
+  { key: 'data_gap' as const, label: '资料待核实', count: presentation.value.counts.dataGap },
+  { key: 'uncertain' as const, label: '待判断', count: presentation.value.counts.uncertain },
+  { key: 'all' as const, label: '全部规则', count: viewItems.value.length },
+])
 const visibleItems = computed(() =>
   activeTab.value === 'all'
     ? viewItems.value
     : viewItems.value.filter((item) => resolveSingleRecordQcResultTab(item) === activeTab.value),
 )
+const visibleGroups = computed(() => {
+  if (isGroupedPresentation.value) {
+    return presentation.value.sectionsByTab[activeReportTab.value]
+  }
+  return visibleItems.value.length
+    ? [{ key: 'flat-results', sourceDocument: '', items: visibleItems.value }]
+    : []
+})
+const renderedItems = computed(() => visibleGroups.value.flatMap((group) => group.items))
+
+interface DocumentGroupItemMeta {
+  key: string
+  sourceDocument: string
+  count: number
+  isFirst: boolean
+}
+
+const documentGroupByItemKey = computed(() => {
+  const entries = new Map<string, DocumentGroupItemMeta>()
+  if (!isGroupedPresentation.value) return entries
+
+  visibleGroups.value.forEach((group) => {
+    group.items.forEach((item, index) => {
+      entries.set(item.key, {
+        key: group.key,
+        sourceDocument: group.sourceDocument,
+        count: group.items.length,
+        isFirst: index === 0,
+      })
+    })
+  })
+  return entries
+})
+const hasVisibleResults = computed(() => renderedItems.value.length > 0)
 const expandedKey = ref('')
+const collapsedDocumentGroupKeys = ref<Set<string>>(new Set())
+
+function documentGroupForItem(itemKey: string) {
+  return documentGroupByItemKey.value.get(itemKey)
+}
+
+function isDocumentGroupExpanded(key: string) {
+  return !collapsedDocumentGroupKeys.value.has(key)
+}
+
+function toggleDocumentGroup(key: string) {
+  if (!key) return
+  const next = new Set(collapsedDocumentGroupKeys.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsedDocumentGroupKeys.value = next
+}
+
+function isDocumentGroupExpandedForItem(itemKey: string) {
+  const group = documentGroupForItem(itemKey)
+  return !group || isDocumentGroupExpanded(group.key)
+}
+
+function shouldRenderDocumentGroupItem(itemKey: string) {
+  const group = documentGroupForItem(itemKey)
+  return !group || group.isFirst || isDocumentGroupExpanded(group.key)
+}
+
+function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
+  if (presentation.value.counts.nonCompliant) return 'non_compliant'
+  if (presentation.value.counts.dataGap) return 'data_gap'
+  if (presentation.value.counts.uncertain) return 'uncertain'
+  return 'all'
+}
+
+watch(
+  [() => props.presentationMode, () => props.items],
+  () => {
+    if (!isGroupedPresentation.value) return
+    activeReportTab.value = resolveDefaultReportTab()
+    collapsedDocumentGroupKeys.value = new Set()
+    expandedKey.value = ''
+  },
+  { immediate: true },
+)
 
 function toggle(key: string) {
   expandedKey.value = expandedKey.value === key ? '' : key
@@ -963,6 +1138,15 @@ watch(
   text-align: center;
 }
 
+.result-system-status {
+  margin: 0;
+  padding: 7px 14px 9px;
+  border-top: 1px solid rgba(0, 0, 0, 0.055);
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .empty-state {
   padding: 56px 18px;
   color: rgba(29, 29, 31, 0.5);
@@ -977,6 +1161,52 @@ watch(
   background: #f5f5f7;
 }
 
+.result-list.is-grouped {
+  gap: 13px;
+}
+
+.result-document-group-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.result-document-group-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.78);
+  cursor: pointer;
+  text-align: left;
+}
+
+.result-document-group-toggle:hover {
+  color: #0066cc;
+}
+
+.result-document-group-toggle > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.result-document-group-toggle strong {
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 20px;
+}
+
+.result-document-group-toggle small {
+  color: rgba(29, 29, 31, 0.44);
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .result-row {
   position: relative;
   overflow: hidden;
@@ -988,6 +1218,12 @@ watch(
     border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.result-row.is-document-group-collapsed {
+  border-color: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
 }
 
 .result-row:hover {
@@ -1059,6 +1295,14 @@ watch(
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 11px;
   font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.result-evidence-count {
+  color: rgba(29, 29, 31, 0.46);
+  font-size: 11px;
+  font-weight: 550;
   line-height: 18px;
   white-space: nowrap;
 }
