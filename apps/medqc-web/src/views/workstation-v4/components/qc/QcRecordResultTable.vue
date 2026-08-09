@@ -47,11 +47,16 @@
             <td>
               <strong>{{ row.patientName || '患者信息待接入' }}</strong>
               <span>{{ row.visitId || '住院号待接入' }}</span>
-              <span class="qc-record-result-table__source-state">{{ row.sourceLabel }}</span>
+              <span
+                v-if="row.sourceLabel"
+                class="qc-record-result-table__source-state"
+              >{{
+                row.sourceLabel
+              }}</span>
             </td>
             <td>
               <strong>{{ row.department || '未分科室' }}</strong>
-              <span>{{ row.bedNumber || '床位待接入' }}</span>
+              <span v-if="row.bedNumber">{{ row.bedNumber }}</span>
             </td>
             <td>{{ displayTime(row) }}</td>
             <td>
@@ -62,17 +67,20 @@
                 {{ row.resultLabel }}
               </span>
             </td>
-            <td class="qc-record-result-table__summary">
+            <td
+              class="qc-record-result-table__summary"
+              :title="row.issueSummary"
+            >
               {{ row.issueSummary }}
             </td>
-            <td>{{ row.latestQcTime || '—' }}</td>
+            <td>{{ formatDisplayTime(row.latestQcTime) }}</td>
             <td class="qc-record-result-table__action-cell">
               <button
                 class="qc-record-result-table__result-button"
                 type="button"
                 @click.stop="openResult(row.recordKey)"
               >
-                查看结果
+                {{ row.resultStatus === 'not-run' ? '暂无结果' : '查看结果' }}
               </button>
             </td>
           </tr>
@@ -95,6 +103,8 @@ export type QcRecordCarePhase = 'inpatient' | 'discharged'
 
 export interface QcRecordResultRow {
   recordKey: string
+  instituteId: string
+  patientId: string
   patientName?: string
   visitId?: string
   department?: string
@@ -112,16 +122,19 @@ export interface QcRecordResultRow {
   resultLabel: string
   issueSummary: string
   latestQcTime?: string
-  sourceLabel: '资料同步待核实' | '来源未知'
+  sourceLabel?: '资料同步待核实'
 }
 
-const props = withDefaults(defineProps<{
-  carePhase: QcRecordCarePhase
-  rows: QcRecordResultRow[]
-  emptyMessage?: string
-}>(), {
-  emptyMessage: '暂无符合当前范围的病历',
-})
+const props = withDefaults(
+  defineProps<{
+    carePhase: QcRecordCarePhase
+    rows: QcRecordResultRow[]
+    emptyMessage?: string
+  }>(),
+  {
+    emptyMessage: '暂无符合当前范围的病历',
+  },
+)
 
 const emit = defineEmits<{
   'open-result': [recordKey: string]
@@ -130,7 +143,15 @@ const emit = defineEmits<{
 const timeColumnLabel = props.carePhase === 'inpatient' ? '入院时间' : '出院时间'
 
 function displayTime(row: QcRecordResultRow): string {
-  return props.carePhase === 'inpatient' ? row.admissionTime || '—' : row.dischargeTime || '—'
+  return formatDisplayTime(props.carePhase === 'inpatient' ? row.admissionTime : row.dischargeTime)
+}
+
+function formatDisplayTime(value?: string): string {
+  const text = String(value || '').trim()
+  if (!text) return '—'
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
+  if (!match) return '—'
+  return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
 }
 
 function openResult(recordKey: string) {

@@ -6,6 +6,8 @@ import QcRecordResultTable from '@/views/workstation-v4/components/qc/QcRecordRe
 const rows = [
   {
     recordKey: '["H-1","P-1","V-1"]',
+    instituteId: 'H-1',
+    patientId: 'P-1',
     patientName: '患者甲',
     visitId: 'V-1',
     department: '重症医学科',
@@ -15,8 +17,7 @@ const rows = [
     resultStatus: 'priority' as const,
     resultLabel: '需优先复核',
     issueSummary: '存在确定问题 2 项',
-    latestQcTime: '2026-08-12 11:30',
-    sourceLabel: '来源未知' as const,
+    latestQcTime: '2026-08-12T11:30:45.123456',
   },
 ]
 
@@ -40,6 +41,8 @@ describe('QcRecordResultTable', () => {
     expect(running.text()).toContain('2026-08-09 08:00')
     expect(final.text()).toContain('出院时间')
     expect(final.text()).toContain('2026-08-12 10:00')
+    expect(running.text()).toContain('2026-08-12 11:30')
+    expect(running.text()).not.toContain('T11:30:45.123456')
   })
 
   it('行点击和查看结果按钮发出同一个 recordKey', async () => {
@@ -75,7 +78,6 @@ describe('QcRecordResultTable', () => {
             resultStatus: 'data-gap' as const,
             resultLabel: '资料待核实',
             issueSummary: '待核实 3',
-            sourceLabel: '来源未知' as const,
           },
           {
             ...rows[0],
@@ -91,7 +93,6 @@ describe('QcRecordResultTable', () => {
             resultStatus: 'technical-error' as const,
             resultLabel: '结果校验异常',
             issueSummary: '请复核结果交付',
-            sourceLabel: '来源未知' as const,
           },
         ],
       },
@@ -101,7 +102,28 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.text()).toContain('未质控')
     expect(wrapper.text()).toContain('结果校验异常')
     expect(wrapper.text()).toContain('请复核结果交付')
-    expect(wrapper.text()).toContain('来源未知')
+    expect(wrapper.text()).not.toContain('来源未知')
+    expect(wrapper.text()).toContain('资料同步待核实')
     expect(wrapper.text()).not.toContain('资料完整')
+  })
+
+  it('未质控按钮显示暂无结果，缺床位时不渲染占位副标题', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        rows: [
+          {
+            ...rows[0],
+            bedNumber: '',
+            resultStatus: 'not-run' as const,
+            resultLabel: '未质控',
+            issueSummary: '暂无结果',
+          },
+        ],
+      },
+    })
+
+    expect(wrapper.get('button').text()).toBe('暂无结果')
+    expect(wrapper.text()).not.toContain('床位待接入')
   })
 })

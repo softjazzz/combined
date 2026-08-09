@@ -124,12 +124,22 @@
         {{ detailNotice }}
       </p>
     </section>
+
+    <QCRecordResultComparisonDrawer
+      :open="drawerOpen"
+      :focus="selectedFocus"
+      presentation-mode="grouped"
+      @close="closeResultDrawer"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 
+import QCRecordResultComparisonDrawer, {
+  type QCRecordResultFocus,
+} from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
@@ -142,6 +152,8 @@ const props = defineProps<{
 }>()
 
 const detailNotice = ref('')
+const drawerOpen = ref(false)
+const selectedFocus = ref<QCRecordResultFocus | null>(null)
 const startDate = ref('')
 const endDate = ref('')
 
@@ -170,9 +182,7 @@ const {
 } = usePatientRecords(props.carePhase)
 
 const departmentOptions = computed(() =>
-  departments.value
-    .map((item) => item.name)
-    .filter((name) => name && name !== '全部科室'),
+  departments.value.map((item) => item.name).filter((name) => name && name !== '全部科室'),
 )
 
 const metricItems = computed(() => [
@@ -205,23 +215,23 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
   const result = resolveResultPresentation(record.latestQcSummary)
   return {
     recordKey: record.recordKey as string,
+    instituteId: record.instituteId as string,
+    patientId: record.patientId as string,
     patientName: record.name,
     visitId: record.visitId,
     department: record.department,
     bedNumber: record.bedNo,
-    admissionTime: record.admissionDate,
-    dischargeTime: record.dischargeDate,
-    sourceLabel: record.sourceState?.status === 'unknown' || !record.sourceState
-      ? '来源未知'
-      : '资料同步待核实',
+    admissionTime: formatQcTimestamp(record.admissionDate),
+    dischargeTime: formatQcTimestamp(record.dischargeDate),
+    sourceLabel:
+      record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
     ...result,
   }
 }
 
-function resolveResultPresentation(summary?: RecordLatestQcSummary): Pick<
-  QcRecordResultRow,
-  'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'
-> {
+function resolveResultPresentation(
+  summary?: RecordLatestQcSummary,
+): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
   if (summary?.status === 'technical_error') {
     return {
       resultStatus: 'technical-error',
@@ -243,18 +253,21 @@ function resolveResultPresentation(summary?: RecordLatestQcSummary): Pick<
   const nonCompliant = statusCount(statusCounts, 'non_compliant')
   const dataGap = statusCount(statusCounts, 'data_gap')
   const uncertain = statusCount(statusCounts, 'uncertain')
-  const issueSummary = [
-    nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
-    dataGap > 0 ? `待核实 ${dataGap}` : '',
-    uncertain > 0 ? `待判断 ${uncertain}` : '',
-  ].filter(Boolean).join(' · ') || '未发现确定问题'
+  const issueSummary =
+    [
+      nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
+      dataGap > 0 ? `待核实 ${dataGap}` : '',
+      uncertain > 0 ? `待判断 ${uncertain}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ') || '未发现确定问题'
 
   if (nonCompliant > 0) {
     return {
       resultStatus: 'priority',
       resultLabel: '需优先复核',
       issueSummary,
-      latestQcTime: summary.completedAt || '—',
+      latestQcTime: formatQcTimestamp(summary.completedAt),
     }
   }
   if (dataGap > 0) {
@@ -262,7 +275,7 @@ function resolveResultPresentation(summary?: RecordLatestQcSummary): Pick<
       resultStatus: 'data-gap',
       resultLabel: '资料待核实',
       issueSummary,
-      latestQcTime: summary.completedAt || '—',
+      latestQcTime: formatQcTimestamp(summary.completedAt),
     }
   }
   if (uncertain > 0) {
@@ -270,15 +283,23 @@ function resolveResultPresentation(summary?: RecordLatestQcSummary): Pick<
       resultStatus: 'uncertain',
       resultLabel: '待判断',
       issueSummary,
-      latestQcTime: summary.completedAt || '—',
+      latestQcTime: formatQcTimestamp(summary.completedAt),
     }
   }
   return {
     resultStatus: 'completed',
     resultLabel: '已完成',
     issueSummary,
-    latestQcTime: summary.completedAt || '—',
+    latestQcTime: formatQcTimestamp(summary.completedAt),
   }
+}
+
+function formatQcTimestamp(value?: string | null): string {
+  const text = String(value || '').trim()
+  if (!text) return '—'
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2}):(\d{2}))?/u)
+  if (!match) return '—'
+  return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
 }
 
 function applyFilters() {
@@ -304,6 +325,7 @@ function goToPage(page: number) {
 watch(
   () => props.carePhase,
   (carePhase) => {
+    closeResultDrawer()
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
     selectHospFilter(carePhase)
   },
@@ -314,8 +336,45 @@ onMounted(() => {
   fetchData(1)
 })
 
-function handleOpenResult(_recordKey: string) {
-  detailNotice.value = '质控结果详情将在下一闭环接入'
+function handleOpenResult(recordKey: string) {
+  const record = allRecords.value.find(
+    (candidate) => candidate.recordKey === recordKey && hasCompleteRecordIdentity(candidate),
+  )
+  const row = rows.value.find((candidate) => candidate.recordKey === recordKey)
+  closeResultDrawer()
+
+  if (!record || !row) {
+    detailNotice.value = '无法确认当前病历身份，已停止读取质控结果'
+    return
+  }
+  if (row.resultStatus === 'not-run') {
+    detailNotice.value = '这份病历暂无已保存质控结果'
+    return
+  }
+
+  detailNotice.value = ''
+  const labelParts = [
+    record.name || '患者信息待核实',
+    record.department || '未分科室',
+    `住院号 ${record.visitId}`,
+  ]
+  if (row.latestQcTime && row.latestQcTime !== '—') {
+    labelParts.push(`质控完成 ${row.latestQcTime}`)
+  }
+  selectedFocus.value = {
+    visitId: record.visitId as string,
+    instituteId: record.instituteId as string,
+    patientId: record.patientId as string,
+    recordId: record.id || (record.visitId as string),
+    label: labelParts.join(' · '),
+  }
+  drawerOpen.value = true
+}
+
+function closeResultDrawer() {
+  drawerOpen.value = false
+  selectedFocus.value = null
+  detailNotice.value = ''
 }
 </script>
 

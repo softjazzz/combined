@@ -1,4 +1,5 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,19 @@ vi.mock('@/services/apiService', () => ({
 }))
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
+
+const ResultDrawerStub = defineComponent({
+  name: 'QCRecordResultComparisonDrawer',
+  props: {
+    open: { type: Boolean, default: false },
+    focus: { type: Object, default: null },
+    presentationMode: { type: String, default: 'flat' },
+  },
+  emits: ['close'],
+  setup(props) {
+    return () => h('div', { 'data-testid': 'result-drawer-stub', 'data-open': String(props.open) })
+  },
+})
 
 function response() {
   return {
@@ -94,9 +108,13 @@ function response() {
   }
 }
 
-async function flushPromises() {
-  await Promise.resolve()
-  await Promise.resolve()
+function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
+  return mount(QcRecordResultListView, {
+    props: { carePhase },
+    global: {
+      stubs: { QCRecordResultComparisonDrawer: ResultDrawerStub },
+    },
+  })
 }
 
 describe('QcRecordResultListView', () => {
@@ -108,24 +126,27 @@ describe('QcRecordResultListView', () => {
   it.each([
     ['inpatient', '运行病历质控', '固定范围：在院', 'admission'],
     ['discharged', '终末病历质控', '固定范围：已出院', 'discharge'],
-  ] as const)('固定 %s 服务端范围并使用对应时间字段', async (carePhase, title, scope, dateField) => {
-    const wrapper = mount(QcRecordResultListView, { props: { carePhase } })
-    await flushPromises()
+  ] as const)(
+    '固定 %s 服务端范围并使用对应时间字段',
+    async (carePhase, title, scope, dateField) => {
+      const wrapper = mountView(carePhase)
+      await flushPromises()
 
-    expect(wrapper.text()).toContain(title)
-    expect(wrapper.text()).toContain(scope)
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: dateField,
-        hospital_status: carePhase,
-      },
-    })
-  })
+      expect(wrapper.text()).toContain(title)
+      expect(wrapper.text()).toContain(scope)
+      expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+        params: {
+          page: 1,
+          page_size: 15,
+          date_field: dateField,
+          hospital_status: carePhase,
+        },
+      })
+    },
+  )
 
   it('使用服务端全量汇总，并只展示三坐标和 recordKey 完整的病历行', async () => {
-    const wrapper = mount(QcRecordResultListView, { props: { carePhase: 'inpatient' } })
+    const wrapper = mountView('inpatient')
     await flushPromises()
 
     expect(
@@ -133,12 +154,12 @@ describe('QcRecordResultListView', () => {
     ).toEqual(['20', '14', '4', '5'])
     expect(wrapper.findAll('tbody tr[data-record-key]')).toHaveLength(5)
     expect(wrapper.text()).not.toContain('不得展示')
-    expect(wrapper.text()).toContain('来源未知')
+    expect(wrapper.text()).not.toContain('来源未知')
     expect(wrapper.text()).not.toContain('资料完整')
   })
 
   it('按 Canonical 摘要严格区分临床问题、资料待核实、待判断、未质控和交付异常', async () => {
-    const wrapper = mount(QcRecordResultListView, { props: { carePhase: 'inpatient' } })
+    const wrapper = mountView('inpatient')
     await flushPromises()
 
     expect(wrapper.text()).toContain('需优先复核')
@@ -152,7 +173,7 @@ describe('QcRecordResultListView', () => {
   })
 
   it('关键词、科室和日期过滤重置为第一页并只使用服务端请求', async () => {
-    const wrapper = mount(QcRecordResultListView, { props: { carePhase: 'discharged' } })
+    const wrapper = mountView('discharged')
     await flushPromises()
     const inputs = wrapper.findAll('input')
     await inputs[0].setValue('患者甲')
@@ -175,8 +196,70 @@ describe('QcRecordResultListView', () => {
     })
   })
 
-  it('不展示任务、批量、生成、编码、结算或整改入口，详情仍留待下一闭环', async () => {
-    const wrapper = mount(QcRecordResultListView, { props: { carePhase: 'discharged' } })
+  it('相同 visitId 的两份病历按 recordKey 定位，并向抽屉传入所选行的完整三坐标', async () => {
+    mocks.getRaw.mockResolvedValue({
+      data: {
+        ...response().data,
+        records: [
+          {
+            id: 'V-shared',
+            record_key: '["H-1","P-1","V-shared"]',
+            institute_id: 'H-1',
+            patient_id: 'P-1',
+            visit_id: 'V-shared',
+            patient_name: '患者甲',
+            department: '重症医学科',
+            latest_qc_summary: { status: 'ready', completed_at: '2026-08-09T08:01:02.123456' },
+          },
+          {
+            id: 'V-shared',
+            record_key: '["H-2","P-2","V-shared"]',
+            institute_id: 'H-2',
+            patient_id: 'P-2',
+            visit_id: 'V-shared',
+            patient_name: '患者乙',
+            department: '康复科',
+            latest_qc_summary: { status: 'ready', completed_at: '2026-08-09T09:02:03.654321' },
+          },
+        ],
+        total: 2,
+      },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+
+    const rows = wrapper.findAll('tbody tr[data-record-key]')
+    await rows[1]!.find('button').trigger('click')
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('presentationMode')).toBe('grouped')
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H-2',
+      patientId: 'P-2',
+      visitId: 'V-shared',
+      recordId: 'V-shared',
+    })
+    expect(String((drawer.props('focus') as { label: string }).label)).toContain('患者乙')
+    expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 09:02')
+  })
+
+  it('未质控病历显示暂无结果并留在当前页，不发起抽屉读取', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const notRunRow = wrapper
+      .findAll('tbody tr[data-record-key]')
+      .find((row) => row.attributes('data-record-key').includes('V-not-run'))!
+    expect(notRunRow.find('button').text()).toBe('暂无结果')
+    await notRunRow.trigger('click')
+
+    expect(wrapper.get('[role="status"]').text()).toContain('这份病历暂无已保存质控结果')
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(false)
+  })
+
+  it('不展示任务、批量、生成、编码、结算或整改入口，已保存结果在当前页打开分组抽屉', async () => {
+    const wrapper = mountView('discharged')
     await flushPromises()
     const text = wrapper.text()
 
@@ -185,7 +268,10 @@ describe('QcRecordResultListView', () => {
         expect(text).not.toContain(forbidden)
       },
     )
-    await wrapper.findComponent({ name: 'QcRecordResultTable' }).vm.$emit('open-result', '["H","P","V"]')
-    expect(wrapper.text()).toContain('质控结果详情将在下一闭环接入')
+    await wrapper
+      .findComponent({ name: 'QcRecordResultTable' })
+      .vm.$emit('open-result', '["H","P","V-priority"]')
+    expect(wrapper.getComponent(ResultDrawerStub).props('open')).toBe(true)
+    expect(wrapper.text()).not.toContain('下一闭环接入')
   })
 })

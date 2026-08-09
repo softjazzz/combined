@@ -50,6 +50,14 @@ const readyResult = {
   is_complete: true,
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
+}
+
 function mountDrawer(presentationMode?: 'flat' | 'grouped') {
   return mount(QCRecordResultComparisonDrawer, {
     props: {
@@ -152,6 +160,41 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(workbenchProps?.singleRecordItems).toEqual(readyResult.items)
   })
 
+  it('切换病历后忽略上一病历的迟到响应，禁止跨三坐标闪现旧结果', async () => {
+    const first = deferred<{ success: true; data: typeof readyResult }>()
+    const second = deferred<{ success: true; data: typeof readyResult }>()
+    getLatestLuxian0609RecordResult
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise)
+
+    const wrapper = mountDrawer('grouped')
+    await flushPromises()
+    await wrapper.setProps({
+      focus: {
+        visitId: 'V002',
+        instituteId: 'H2',
+        patientId: 'P002',
+        recordId: 'R002',
+        label: '第二份病历',
+      },
+    })
+    await flushPromises()
+
+    second.resolve({
+      success: true,
+      data: { ...readyResult, job_id: 'job-second', record_ref: 'record-second' },
+    })
+    await flushPromises()
+    expect(workbenchProps?.visitId).toBe('V002')
+    expect(workbenchProps?.jobId).toBe('job-second')
+
+    first.resolve({ success: true, data: readyResult })
+    await flushPromises()
+    expect(workbenchProps?.visitId).toBe('V002')
+    expect(workbenchProps?.jobId).toBe('job-second')
+    expect(workbenchProps?.recordRef).toBe('record-second')
+  })
+
   it('not_found 时停止展示，不回退查询批量任务或其他病历结果', async () => {
     getLatestLuxian0609RecordResult.mockResolvedValue({
       success: true,
@@ -172,6 +215,30 @@ describe('QCRecordResultComparisonDrawer', () => {
 
     expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('暂无已保存质控结果')
+    expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
+  })
+
+  it('technical_error 使用安全错误文案停止展示，不伪装成未质控或回退旧结果', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({
+      success: true,
+      data: {
+        ...readyResult,
+        state: 'technical_error',
+        reason_code: 'canonical_envelope_invalid',
+        job_id: '',
+        record_ref: '',
+        items: [],
+        result_rule_count: 0,
+        is_complete: false,
+      },
+    })
+
+    const wrapper = mountDrawer('grouped')
+    await flushPromises()
+
+    expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain('质控结果读取异常')
+    expect(wrapper.text()).not.toContain('暂无已保存质控结果')
     expect(getLatestLuxian0609RecordResult).toHaveBeenCalledTimes(1)
   })
 })

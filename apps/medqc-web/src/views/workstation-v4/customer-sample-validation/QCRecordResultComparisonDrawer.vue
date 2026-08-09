@@ -68,12 +68,15 @@ const loading = ref(false)
 const loadError = ref('')
 const latestResult = ref<SingleRecordQcResultPayload | null>(null)
 const authorizedRecordRef = ref('')
+let activeRequestSequence = 0
 
 async function loadLatestResult() {
+  const requestSequence = ++activeRequestSequence
   const focus = props.focus
   latestResult.value = null
   authorizedRecordRef.value = ''
   loadError.value = ''
+  loading.value = false
   if (!props.open || !focus?.instituteId || !focus.patientId || !focus.visitId) return
 
   loading.value = true
@@ -83,8 +86,13 @@ async function loadLatestResult() {
       patientId: focus.patientId,
       visitId: focus.visitId,
     })
+    if (requestSequence !== activeRequestSequence) return
     if (!result.success || !result.data) {
       loadError.value = result.message || '这份病历暂无已保存质控结果，请先质控后查看'
+      return
+    }
+    if (result.data.state === 'technical_error') {
+      loadError.value = '质控结果读取异常，请联系管理员核对结果交付'
       return
     }
     if (result.data.state !== 'ready') {
@@ -97,8 +105,14 @@ async function loadLatestResult() {
       return
     }
     latestResult.value = result.data
+  } catch {
+    if (requestSequence === activeRequestSequence) {
+      loadError.value = '质控结果读取失败，请稍后重试'
+    }
   } finally {
-    loading.value = false
+    if (requestSequence === activeRequestSequence) {
+      loading.value = false
+    }
   }
 }
 
