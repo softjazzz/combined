@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildSingleRecordQcPresentation,
   buildSingleRecordQcResultItems,
   buildSingleRecordQcStatusTabs,
   type SingleRecordQcResultItem,
@@ -104,5 +105,145 @@ describe('single-record-result-model canonical 直通展示', () => {
     })
     expect(tabs.find((item) => item.key === 'non_compliant')?.count).toBe(1)
     expect(tabs.find((item) => item.key === 'pending')?.count).toBe(1)
+  })
+})
+
+describe('single-record-result-model 病历质控报告分组', () => {
+  it('按权威来源文书稳定分组，并保持 Envelope 条目顺序', () => {
+    const items: SingleRecordQcResultItem[] = [
+      {
+        rule_id: 'LX0609-025',
+        rule_name: '植入物相关记录',
+        source_document: '手术记录',
+        qc_point: '未记录植入物种类及数量',
+        status: 'non_compliant',
+      },
+      {
+        rule_id: 'LX0609-020',
+        rule_name: '会诊意见执行情况',
+        source_document: '会诊记录',
+        qc_point: '后续病程未记录会诊意见执行情况',
+        status: 'data_gap',
+      },
+      {
+        rule_id: 'LX0609-031',
+        rule_name: '手术记录签名',
+        source_document: '手术记录',
+        qc_point: '手术记录签名不规范',
+        status: 'uncertain',
+      },
+    ]
+
+    const presentation = buildSingleRecordQcPresentation(items)
+
+    expect(presentation.sectionsByTab.all).toHaveLength(2)
+    expect(presentation.sectionsByTab.all.map((group) => group.sourceDocument)).toEqual([
+      '手术记录',
+      '会诊记录',
+    ])
+    expect(presentation.sectionsByTab.all[0]?.items.map((item) => item.rule_id)).toEqual([
+      'LX0609-025',
+      'LX0609-031',
+    ])
+    expect(presentation.sectionsByTab.non_compliant[0]?.items[0]).toMatchObject({
+      rule_id: 'LX0609-025',
+      source_document: '手术记录',
+      qc_point: '未记录植入物种类及数量',
+      status: 'non_compliant',
+    })
+  })
+
+  it('缺失或重复规则身份失败关闭，不静默去重或合并结论', () => {
+    const items: SingleRecordQcResultItem[] = [
+      {
+        rule_id: 'LX0609-025',
+        rule_name: '植入物相关记录',
+        source_document: '手术记录',
+        status: 'non_compliant',
+      },
+      {
+        rule_id: 'lx0609-025',
+        rule_name: '植入物相关记录',
+        source_document: '病程记录',
+        status: 'data_gap',
+      },
+    ]
+
+    expect(() => buildSingleRecordQcPresentation(items)).toThrowError(
+      '单病历质控结果存在重复规则：LX0609-025',
+    )
+    expect(() =>
+      buildSingleRecordQcPresentation([
+        { rule_id: ' ', rule_name: '缺少规则身份', status: 'non_compliant' },
+      ]),
+    ).toThrowError('单病历质控结果缺少规则身份')
+  })
+
+  it('严格拆分确定问题、资料待核实、待判断、系统异常和其他结果', () => {
+    const statuses: SingleRecordQcResultItem['status'][] = [
+      'non_compliant',
+      'data_gap',
+      'uncertain',
+      'evaluation_unknown',
+      'ai_suggested_non_compliant',
+      'technical_error',
+      'compliant',
+      'not_applicable',
+      'not_executed',
+      'ai_suggested_compliant',
+    ]
+    const items = statuses.map((status, index) => ({
+      rule_id: `LX0609-${String(index + 1).padStart(3, '0')}`,
+      rule_name: `规则${index + 1}`,
+      source_document: '病程记录',
+      status,
+    }))
+
+    const presentation = buildSingleRecordQcPresentation(items)
+
+    expect(presentation.counts).toEqual({
+      nonCompliant: 1,
+      dataGap: 1,
+      uncertain: 3,
+      technicalError: 1,
+      other: 4,
+    })
+    expect(
+      presentation.sectionsByTab.non_compliant
+        .flatMap((group) => group.items)
+        .map((item) => item.status),
+    ).toEqual(['non_compliant'])
+    expect(
+      presentation.sectionsByTab.data_gap
+        .flatMap((group) => group.items)
+        .map((item) => item.status),
+    ).toEqual(['data_gap'])
+    expect(
+      presentation.sectionsByTab.uncertain
+        .flatMap((group) => group.items)
+        .map((item) => item.status),
+    ).toEqual(['uncertain', 'evaluation_unknown', 'ai_suggested_non_compliant'])
+    expect(
+      presentation.sectionsByTab.all.flatMap((group) => group.items).map((item) => item.status),
+    ).toEqual(statuses)
+  })
+
+  it('缺少来源文书时只进入其他质控点，不根据规则编号或证据猜测分组', () => {
+    const presentation = buildSingleRecordQcPresentation([
+      {
+        rule_id: 'LX0609-066',
+        rule_name: '术后首次病程记录',
+        source_document: '   ',
+        status: 'non_compliant',
+        evidence: [{ source_ref: 'src_066', source_type: 'postoperative_course' }],
+      },
+    ])
+
+    expect(presentation.sectionsByTab.all).toEqual([
+      expect.objectContaining({
+        sourceDocument: '其他质控点',
+        items: [expect.objectContaining({ rule_id: 'LX0609-066' })],
+      }),
+    ])
   })
 })

@@ -54,6 +54,10 @@ export interface SingleRecordQcDataGapDetails {
 export interface SingleRecordQcResultItem {
   rule_id: string
   rule_name: string
+  /** 规则总表提供的客户展示分组，不参与结果判定。 */
+  source_document?: string
+  /** 规则总表提供的客户质控点说明，不参与结果判定。 */
+  qc_point?: string
   status: SingleRecordQcStatus
   display_status?: string
   reason_code?: string
@@ -123,6 +127,25 @@ export interface SingleRecordQcStatusTab {
   count: number
 }
 
+export type SingleRecordQcResultReportTab = 'non_compliant' | 'data_gap' | 'uncertain' | 'all'
+
+export interface SingleRecordQcResultDocumentGroup {
+  key: string
+  sourceDocument: string
+  items: SingleRecordQcResultViewItem[]
+}
+
+export interface SingleRecordQcResultPresentation {
+  counts: {
+    nonCompliant: number
+    dataGap: number
+    uncertain: number
+    technicalError: number
+    other: number
+  }
+  sectionsByTab: Record<SingleRecordQcResultReportTab, SingleRecordQcResultDocumentGroup[]>
+}
+
 const STATUS_PRESENTATION: Record<
   string,
   { label: string; tone: SingleRecordQcResultTone; sortOrder: number }
@@ -169,6 +192,94 @@ export function buildSingleRecordQcResultItems(
   items: SingleRecordQcResultItem[] | undefined | null,
 ): SingleRecordQcResultViewItem[] {
   return (items || []).map(toSingleRecordQcResultViewItem)
+}
+
+const REPORT_UNCERTAIN_STATUSES = new Set<SingleRecordQcStatus>([
+  'uncertain',
+  'evaluation_unknown',
+  'ai_suggested_non_compliant',
+])
+
+function resolveSingleRecordQcReportTab(
+  item: Pick<SingleRecordQcResultItem, 'status'>,
+): Exclude<SingleRecordQcResultReportTab, 'all'> | null {
+  if (item.status === 'non_compliant') return 'non_compliant'
+  if (item.status === 'data_gap') return 'data_gap'
+  if (REPORT_UNCERTAIN_STATUSES.has(item.status)) return 'uncertain'
+  return null
+}
+
+function groupSingleRecordQcResultItems(
+  items: SingleRecordQcResultViewItem[],
+): SingleRecordQcResultDocumentGroup[] {
+  const groups = new Map<string, SingleRecordQcResultDocumentGroup>()
+  items.forEach((item) => {
+    const sourceDocument = text(item.source_document) || '其他质控点'
+    const existing = groups.get(sourceDocument)
+    if (existing) {
+      existing.items.push(item)
+      return
+    }
+    groups.set(sourceDocument, {
+      key: sourceDocument,
+      sourceDocument,
+      items: [item],
+    })
+  })
+  return Array.from(groups.values())
+}
+
+/**
+ * 只把 Canonical 条目组织成客户可扫描的报告结构，不修改状态、顺序或结论。
+ */
+export function buildSingleRecordQcPresentation(
+  items: SingleRecordQcResultItem[] | undefined | null,
+): SingleRecordQcResultPresentation {
+  const sourceItems = items || []
+  const ruleIds = new Set<string>()
+  sourceItems.forEach((item) => {
+    const ruleId = text(item.rule_id).toUpperCase()
+    if (!ruleId) {
+      throw new Error('单病历质控结果缺少规则身份')
+    }
+    if (ruleIds.has(ruleId)) {
+      throw new Error(`单病历质控结果存在重复规则：${ruleId}`)
+    }
+    ruleIds.add(ruleId)
+  })
+
+  const viewItems = buildSingleRecordQcResultItems(sourceItems)
+  const nonCompliantItems = viewItems.filter(
+    (item) => resolveSingleRecordQcReportTab(item) === 'non_compliant',
+  )
+  const dataGapItems = viewItems.filter(
+    (item) => resolveSingleRecordQcReportTab(item) === 'data_gap',
+  )
+  const uncertainItems = viewItems.filter(
+    (item) => resolveSingleRecordQcReportTab(item) === 'uncertain',
+  )
+  const technicalErrorCount = viewItems.filter((item) => item.status === 'technical_error').length
+
+  return {
+    counts: {
+      nonCompliant: nonCompliantItems.length,
+      dataGap: dataGapItems.length,
+      uncertain: uncertainItems.length,
+      technicalError: technicalErrorCount,
+      other:
+        viewItems.length -
+        nonCompliantItems.length -
+        dataGapItems.length -
+        uncertainItems.length -
+        technicalErrorCount,
+    },
+    sectionsByTab: {
+      non_compliant: groupSingleRecordQcResultItems(nonCompliantItems),
+      data_gap: groupSingleRecordQcResultItems(dataGapItems),
+      uncertain: groupSingleRecordQcResultItems(uncertainItems),
+      all: groupSingleRecordQcResultItems(viewItems),
+    },
+  }
 }
 
 export function buildSingleRecordQcStatusSummary(
