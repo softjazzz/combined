@@ -93,6 +93,32 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
+  it('允许运行和终末页面以显式初始住院状态固定服务端范围', async () => {
+    const runningRecords = usePatientRecords('inpatient')
+    await runningRecords.fetchData()
+
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      params: {
+        page: 1,
+        page_size: 15,
+        date_field: 'visit',
+        hospital_status: 'inpatient',
+      },
+    })
+
+    const finalRecords = usePatientRecords('discharged')
+    await finalRecords.fetchData()
+
+    expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
+      params: {
+        page: 1,
+        page_size: 15,
+        date_field: 'visit',
+        hospital_status: 'discharged',
+      },
+    })
+  })
+
   it('switches hospital status through the backend from the first page without local filtering', async () => {
     const records = usePatientRecords()
     records.currentPage.value = 3
@@ -182,5 +208,51 @@ describe('usePatientRecords workstation filters', () => {
     expect(records.dateField.value).toBe('visit')
     expect(records.hospFilter.value).toBe('all')
     expect(records.currentPage.value).toBe(1)
+  })
+
+  it('过期请求不会覆盖较新筛选响应或其全量汇总', async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined
+    const firstResponse = new Promise((resolve) => {
+      resolveFirst = resolve
+    })
+    mocks.getRaw.mockReset()
+    mocks.getRaw.mockImplementationOnce(() => firstResponse)
+    mocks.getRaw.mockResolvedValueOnce({
+      data: {
+        records: [
+          {
+            id: 'newest',
+            visit_id: 'newest',
+            record_key: '["H","P","newest"]',
+            institute_id: 'H',
+            patient_id: 'P',
+            name: '新筛选结果',
+          },
+        ],
+        total: 1,
+        page: 1,
+        qc_summary: { total_records: 1, ready_records: 1 },
+      },
+    })
+    const records = usePatientRecords('inpatient')
+    records.searchText.value = '旧条件'
+    const firstRequest = records.fetchData()
+    records.searchText.value = '新条件'
+    const secondRequest = records.fetchData()
+
+    await secondRequest
+    resolveFirst?.({
+      data: {
+        records: [{ id: 'stale', name: '旧筛选结果' }],
+        total: 99,
+        page: 1,
+        qc_summary: { total_records: 99, ready_records: 99 },
+      },
+    })
+    await firstRequest
+
+    expect(records.allRecords.value.map((item) => item.name)).toEqual(['新筛选结果'])
+    expect(records.qcSummary.value).toMatchObject({ totalRecords: 1, readyRecords: 1 })
+    expect(records.loading.value).toBe(false)
   })
 })

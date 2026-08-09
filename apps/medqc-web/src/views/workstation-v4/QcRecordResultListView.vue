@@ -6,7 +6,7 @@
           {{ carePhaseLabel }} · 质控结果
         </div>
         <h1>{{ pageTitle }}</h1>
-        <p>仅展示最新已完成质控结果</p>
+        <p>仅展示当前范围内病历的最新质控结果，不混入其他业务流程。</p>
       </div>
       <span class="qc-record-result-list-view__scope">{{ scopeLabel }}</span>
     </section>
@@ -21,7 +21,7 @@
         class="qc-record-result-list-view__metric"
       >
         <span>{{ metric.label }}</span>
-        <strong>—</strong>
+        <strong>{{ metric.value }}</strong>
       </div>
     </section>
 
@@ -29,33 +29,92 @@
       <div class="qc-record-result-list-view__toolbar">
         <div
           class="qc-record-result-list-view__filters"
-          aria-label="待接入筛选条件"
+          aria-label="病历筛选条件"
         >
           <input
-            disabled
-            placeholder="关键词筛选（数据接入后可用）"
-            aria-label="关键词筛选，数据接入后可用"
+            v-model="searchText"
+            placeholder="搜索患者、住院号、科室"
+            aria-label="关键词筛选"
+            @keydown.enter.prevent="applyFilters"
           >
           <select
-            disabled
-            aria-label="科室筛选，数据接入后可用"
+            v-model="activeDept"
+            aria-label="科室筛选"
+            @change="applyFilters"
           >
-            <option>全部科室（数据接入后可用）</option>
+            <option value="全部科室">
+              全部科室
+            </option>
+            <option
+              v-for="department in departmentOptions"
+              :key="department"
+              :value="department"
+            >
+              {{ department }}
+            </option>
           </select>
           <input
-            disabled
             type="date"
-            aria-label="日期筛选，数据接入后可用"
+            aria-label="开始日期筛选"
+            :value="startDate"
+            @change="updateStartDate"
           >
+          <span class="qc-record-result-list-view__date-separator">至</span>
+          <input
+            type="date"
+            aria-label="结束日期筛选"
+            :value="endDate"
+            @change="updateEndDate"
+          >
+          <button
+            class="qc-record-result-list-view__query-button"
+            type="button"
+            :disabled="loading"
+            @click="applyFilters"
+          >
+            查询
+          </button>
         </div>
-        <span class="qc-record-result-list-view__pending">数据接入后可筛选</span>
+        <button
+          class="qc-record-result-list-view__refresh-button"
+          type="button"
+          :disabled="loading"
+          @click="refreshData"
+        >
+          刷新
+        </button>
       </div>
 
       <QcRecordResultTable
         :care-phase="carePhase"
         :rows="rows"
+        :empty-message="emptyMessage"
         @open-result="handleOpenResult"
       />
+
+      <footer
+        v-if="serverTotal > 0"
+        class="qc-record-result-list-view__pagination"
+      >
+        <span>共 {{ serverTotal }} 份病历</span>
+        <div>
+          <button
+            type="button"
+            :disabled="loading || currentPage <= 1"
+            @click="goToPage(currentPage - 1)"
+          >
+            上一页
+          </button>
+          <span>第 {{ currentPage }} / {{ serverTotalPages }} 页</span>
+          <button
+            type="button"
+            :disabled="loading || currentPage >= serverTotalPages"
+            @click="goToPage(currentPage + 1)"
+          >
+            下一页
+          </button>
+        </div>
+      </footer>
 
       <p
         v-if="detailNotice"
@@ -69,30 +128,191 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import QcRecordResultTable, {
   type QcRecordCarePhase,
   type QcRecordResultRow,
 } from './components/qc/QcRecordResultTable.vue'
+import { usePatientRecords } from './composables/usePatientRecords'
+import type { PatientRecord, RecordLatestQcSummary } from './types'
 
 const props = defineProps<{
   carePhase: QcRecordCarePhase
 }>()
 
-const rows = ref<QcRecordResultRow[]>([])
 const detailNotice = ref('')
+const startDate = ref('')
+const endDate = ref('')
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
 const carePhaseLabel = computed(() => (isInpatient.value ? '在院病历' : '已出院病历'))
 const scopeLabel = computed(() => (isInpatient.value ? '固定范围：在院' : '固定范围：已出院'))
-const metricItems = [
-  { label: '纳入病历' },
-  { label: '已完成质控' },
-  { label: '需优先复核' },
-  { label: '资料待核实' },
-]
+
+const {
+  allRecords,
+  activeDept,
+  currentPage,
+  dateField,
+  dateRange,
+  departments,
+  fetchData,
+  handlePageChange,
+  loadError,
+  loading,
+  qcSummary,
+  refreshData,
+  searchText,
+  selectHospFilter,
+  serverTotal,
+  serverTotalPages,
+} = usePatientRecords(props.carePhase)
+
+const departmentOptions = computed(() =>
+  departments.value
+    .map((item) => item.name)
+    .filter((name) => name && name !== '全部科室'),
+)
+
+const metricItems = computed(() => [
+  { label: '纳入病历', value: qcSummary.value.totalRecords },
+  { label: '已完成质控', value: qcSummary.value.readyRecords },
+  { label: '需优先复核', value: statusCount(qcSummary.value.statusCounts, 'non_compliant') },
+  { label: '资料待核实', value: statusCount(qcSummary.value.statusCounts, 'data_gap') },
+])
+
+const rows = computed<QcRecordResultRow[]>(() =>
+  allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
+)
+
+const emptyMessage = computed(() => {
+  if (loading.value) return '正在加载质控结果…'
+  if (loadError.value) return '加载失败，请重试'
+  return '暂无符合当前范围的病历'
+})
+
+function statusCount(statusCounts: Record<string, number>, status: string): number {
+  const value = Number(statusCounts[status] || 0)
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function hasCompleteRecordIdentity(record: PatientRecord): boolean {
+  return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
+}
+
+function toResultRow(record: PatientRecord): QcRecordResultRow {
+  const result = resolveResultPresentation(record.latestQcSummary)
+  return {
+    recordKey: record.recordKey as string,
+    patientName: record.name,
+    visitId: record.visitId,
+    department: record.department,
+    bedNumber: record.bedNo,
+    admissionTime: record.admissionDate,
+    dischargeTime: record.dischargeDate,
+    sourceLabel: record.sourceState?.status === 'unknown' || !record.sourceState
+      ? '来源未知'
+      : '资料同步待核实',
+    ...result,
+  }
+}
+
+function resolveResultPresentation(summary?: RecordLatestQcSummary): Pick<
+  QcRecordResultRow,
+  'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'
+> {
+  if (summary?.status === 'technical_error') {
+    return {
+      resultStatus: 'technical-error',
+      resultLabel: '结果校验异常',
+      issueSummary: '请复核结果交付',
+      latestQcTime: '—',
+    }
+  }
+  if (summary?.status !== 'ready') {
+    return {
+      resultStatus: 'not-run',
+      resultLabel: '未质控',
+      issueSummary: '暂无结果',
+      latestQcTime: '—',
+    }
+  }
+
+  const statusCounts = summary.statusCounts || {}
+  const nonCompliant = statusCount(statusCounts, 'non_compliant')
+  const dataGap = statusCount(statusCounts, 'data_gap')
+  const uncertain = statusCount(statusCounts, 'uncertain')
+  const issueSummary = [
+    nonCompliant > 0 ? `确定问题 ${nonCompliant}` : '',
+    dataGap > 0 ? `待核实 ${dataGap}` : '',
+    uncertain > 0 ? `待判断 ${uncertain}` : '',
+  ].filter(Boolean).join(' · ') || '未发现确定问题'
+
+  if (nonCompliant > 0) {
+    return {
+      resultStatus: 'priority',
+      resultLabel: '需优先复核',
+      issueSummary,
+      latestQcTime: summary.completedAt || '—',
+    }
+  }
+  if (dataGap > 0) {
+    return {
+      resultStatus: 'data-gap',
+      resultLabel: '资料待核实',
+      issueSummary,
+      latestQcTime: summary.completedAt || '—',
+    }
+  }
+  if (uncertain > 0) {
+    return {
+      resultStatus: 'uncertain',
+      resultLabel: '待判断',
+      issueSummary,
+      latestQcTime: summary.completedAt || '—',
+    }
+  }
+  return {
+    resultStatus: 'completed',
+    resultLabel: '已完成',
+    issueSummary,
+    latestQcTime: summary.completedAt || '—',
+  }
+}
+
+function applyFilters() {
+  dateRange.value = startDate.value || endDate.value ? [startDate.value, endDate.value] : null
+  currentPage.value = 1
+  fetchData(1)
+}
+
+function updateStartDate(event: Event) {
+  startDate.value = (event.target as HTMLInputElement).value
+  applyFilters()
+}
+
+function updateEndDate(event: Event) {
+  endDate.value = (event.target as HTMLInputElement).value
+  applyFilters()
+}
+
+function goToPage(page: number) {
+  handlePageChange(page)
+}
+
+watch(
+  () => props.carePhase,
+  (carePhase) => {
+    dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
+    selectHospFilter(carePhase)
+  },
+)
+
+onMounted(() => {
+  dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
+  fetchData(1)
+})
 
 function handleOpenResult(_recordKey: string) {
   detailNotice.value = '质控结果详情将在下一闭环接入'
@@ -221,7 +441,7 @@ function handleOpenResult(_recordKey: string) {
   border: 1px solid rgba(0, 0, 0, 0.09);
   border-radius: 8px;
   background: rgba(245, 245, 247, 0.8);
-  color: rgba(29, 29, 31, 0.45);
+  color: rgba(29, 29, 31, 0.78);
   font: inherit;
   font-size: 13px;
 }
@@ -241,10 +461,56 @@ function handleOpenResult(_recordKey: string) {
   padding: 0 8px;
 }
 
-.qc-record-result-list-view__pending {
+.qc-record-result-list-view__date-separator {
+  align-self: center;
   color: rgba(29, 29, 31, 0.45);
   font-size: 12px;
+}
+
+.qc-record-result-list-view__query-button,
+.qc-record-result-list-view__refresh-button,
+.qc-record-result-list-view__pagination button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 8px;
+  background: #fff;
+  color: #0066cc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.qc-record-result-list-view__query-button {
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+}
+
+.qc-record-result-list-view__query-button:disabled,
+.qc-record-result-list-view__refresh-button:disabled,
+.qc-record-result-list-view__pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.qc-record-result-list-view__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+}
+
+.qc-record-result-list-view__pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .qc-record-result-list-view__notice {
@@ -284,6 +550,15 @@ function handleOpenResult(_recordKey: string) {
   .qc-record-result-list-view__filters input[type='date'] {
     width: 100%;
     min-width: 0;
+  }
+
+  .qc-record-result-list-view__date-separator {
+    display: none;
+  }
+
+  .qc-record-result-list-view__pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

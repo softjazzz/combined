@@ -47,6 +47,7 @@
             <td>
               <strong>{{ row.patientName || '患者信息待接入' }}</strong>
               <span>{{ row.visitId || '住院号待接入' }}</span>
+              <span class="qc-record-result-table__source-state">{{ row.sourceLabel }}</span>
             </td>
             <td>
               <strong>{{ row.department || '未分科室' }}</strong>
@@ -58,11 +59,11 @@
                 class="qc-record-result-table__result-tag"
                 :class="resultClass(row.resultStatus)"
               >
-                {{ row.resultLabel || '结果待接入' }}
+                {{ row.resultLabel }}
               </span>
             </td>
             <td class="qc-record-result-table__summary">
-              {{ row.issueSummary || '—' }}
+              {{ row.issueSummary }}
             </td>
             <td>{{ row.latestQcTime || '—' }}</td>
             <td class="qc-record-result-table__action-cell">
@@ -80,7 +81,7 @@
             class="qc-record-result-table__empty-row"
           >
             <td colspan="7">
-              质控结果数据将在下一闭环接入
+              {{ emptyMessage }}
             </td>
           </tr>
         </tbody>
@@ -100,16 +101,27 @@ export interface QcRecordResultRow {
   bedNumber?: string
   admissionTime?: string
   dischargeTime?: string
-  resultStatus?: 'priority' | 'data-gap' | 'completed' | 'unknown'
-  resultLabel?: string
-  issueSummary?: string
+  resultStatus:
+    | 'priority'
+    | 'data-gap'
+    | 'uncertain'
+    | 'technical-error'
+    | 'not-run'
+    | 'completed'
+    | 'unknown'
+  resultLabel: string
+  issueSummary: string
   latestQcTime?: string
+  sourceLabel: '资料同步待核实' | '来源未知'
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   carePhase: QcRecordCarePhase
   rows: QcRecordResultRow[]
-}>()
+  emptyMessage?: string
+}>(), {
+  emptyMessage: '暂无符合当前范围的病历',
+})
 
 const emit = defineEmits<{
   'open-result': [recordKey: string]
@@ -128,6 +140,9 @@ function openResult(recordKey: string) {
 function resultClass(status: QcRecordResultRow['resultStatus']): string {
   if (status === 'priority') return 'qc-record-result-table__result-tag--priority'
   if (status === 'data-gap') return 'qc-record-result-table__result-tag--data-gap'
+  if (status === 'uncertain') return 'qc-record-result-table__result-tag--uncertain'
+  if (status === 'technical-error') return 'qc-record-result-table__result-tag--technical-error'
+  if (status === 'not-run') return 'qc-record-result-table__result-tag--not-run'
   if (status === 'completed') return 'qc-record-result-table__result-tag--completed'
   return 'qc-record-result-table__result-tag--unknown'
 }
@@ -229,6 +244,26 @@ function resultClass(status: QcRecordResultRow['resultStatus']): string {
 .qc-record-result-table__result-tag--completed {
   background: rgba(16, 185, 129, 0.1);
   color: #047857;
+}
+
+.qc-record-result-table__result-tag--uncertain {
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+}
+
+.qc-record-result-table__result-tag--technical-error {
+  background: rgba(148, 163, 184, 0.16);
+  color: #475569;
+}
+
+.qc-record-result-table__result-tag--not-run {
+  background: rgba(148, 163, 184, 0.1);
+  color: #64748b;
+}
+
+.qc-record-result-table__source-state {
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.45) !important;
 }
 
 .qc-record-result-table__result-tag--unknown {

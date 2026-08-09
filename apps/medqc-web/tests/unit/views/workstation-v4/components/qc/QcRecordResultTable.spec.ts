@@ -16,6 +16,7 @@ const rows = [
     resultLabel: '需优先复核',
     issueSummary: '存在确定问题 2 项',
     latestQcTime: '2026-08-12 11:30',
+    sourceLabel: '来源未知' as const,
   },
 ]
 
@@ -61,5 +62,46 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.find('.qc-record-result-table__table').classes()).toContain(
       'qc-record-result-table__table',
     )
+  })
+
+  it('明确区分资料待核实、未质控和结果校验异常，且未知来源不伪装为资料缺失', () => {
+    const wrapper = mount(QcRecordResultTable, {
+      props: {
+        carePhase: 'inpatient',
+        rows: [
+          {
+            ...rows[0],
+            recordKey: '["H","P","data-gap"]',
+            resultStatus: 'data-gap' as const,
+            resultLabel: '资料待核实',
+            issueSummary: '待核实 3',
+            sourceLabel: '来源未知' as const,
+          },
+          {
+            ...rows[0],
+            recordKey: '["H","P","not-run"]',
+            resultStatus: 'not-run' as const,
+            resultLabel: '未质控',
+            issueSummary: '暂无结果',
+            sourceLabel: '资料同步待核实' as const,
+          },
+          {
+            ...rows[0],
+            recordKey: '["H","P","technical"]',
+            resultStatus: 'technical-error' as const,
+            resultLabel: '结果校验异常',
+            issueSummary: '请复核结果交付',
+            sourceLabel: '来源未知' as const,
+          },
+        ],
+      },
+    })
+
+    expect(wrapper.text()).toContain('资料待核实')
+    expect(wrapper.text()).toContain('未质控')
+    expect(wrapper.text()).toContain('结果校验异常')
+    expect(wrapper.text()).toContain('请复核结果交付')
+    expect(wrapper.text()).toContain('来源未知')
+    expect(wrapper.text()).not.toContain('资料完整')
   })
 })

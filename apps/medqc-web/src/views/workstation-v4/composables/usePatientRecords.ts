@@ -14,6 +14,7 @@ const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
 }
 export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type WorkstationDateRange = [string, string] | null
+export type HospitalStatusScope = 'all' | 'inpatient' | 'discharged'
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -49,7 +50,11 @@ function buildDepartments(records: PatientRecord[]): DeptInfo[] {
   ]
 }
 
-export function usePatientRecords() {
+/**
+ * 病历池的住院状态必须由调用方显式固定到服务端查询。
+ * 默认值保留既有全量病历池的行为，运行/终末质控页不会在当前页做本地过滤。
+ */
+export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = 'all') {
   const initialRouteQuery = new URLSearchParams(window.location.search)
   const initialDepartment = initialRouteQuery.get('department')?.trim()
   const allRecords = ref<PatientRecord[]>([])
@@ -67,7 +72,8 @@ export function usePatientRecords() {
   const searchText = ref('')
   const dateRange = ref<WorkstationDateRange>(null)
   const dateField = ref<WorkstationDateField>('visit')
-  const hospFilter = ref<'all' | 'inpatient' | 'discharged'>('all')
+  const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
+  let activeRequestSequence = 0
 
   const hospOptions = [
     { value: 'all', label: '\u5168\u90e8' },
@@ -81,6 +87,7 @@ export function usePatientRecords() {
   const filteredRecords = computed(() => scopedRecords.value)
 
   async function fetchData(page = 1, targetPageSize = pageSize.value) {
+    const requestSequence = ++activeRequestSequence
     loading.value = true
     loadError.value = false
     try {
@@ -139,6 +146,9 @@ export function usePatientRecords() {
       const normalizedRecords = Array.isArray(data.records)
         ? data.records.map((record: unknown) => normalizeRecord(record))
         : []
+      // 过期请求不得覆盖较新的筛选、分页或住院状态响应。
+      if (requestSequence !== activeRequestSequence) return
+
       allRecords.value = normalizedRecords
       departments.value =
         Array.isArray(data.departments) && data.departments.length > 0
@@ -154,11 +164,14 @@ export function usePatientRecords() {
       pageSize.value = requestedPageSize
       qcSummary.value = normalizeRecordPoolQcSummary(data.qc_summary)
     } catch (error) {
+      if (requestSequence !== activeRequestSequence) return
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
       loadError.value = true
       qcSummary.value = { ...EMPTY_QC_SUMMARY }
     } finally {
-      loading.value = false
+      if (requestSequence === activeRequestSequence) {
+        loading.value = false
+      }
     }
   }
 
@@ -185,7 +198,7 @@ export function usePatientRecords() {
     fetchData(1)
   }
 
-  function selectHospFilter(value: typeof hospFilter.value) {
+  function selectHospFilter(value: HospitalStatusScope) {
     const nextValue = hospOptions.some((option) => option.value === value) ? value : 'all'
     if (hospFilter.value === nextValue) return
     hospFilter.value = nextValue
@@ -198,7 +211,7 @@ export function usePatientRecords() {
     searchText.value = ''
     dateRange.value = null
     dateField.value = 'visit'
-    hospFilter.value = 'all'
+    hospFilter.value = initialHospitalStatus
     currentPage.value = 1
   }
 
