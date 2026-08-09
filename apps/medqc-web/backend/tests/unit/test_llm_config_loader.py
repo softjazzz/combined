@@ -63,6 +63,47 @@ def test_build_provider_runtime_config_should_support_deepseek(monkeypatch):
     assert config["custom_parameters"]["reasoning_effort"] == "high"
 
 
+@pytest.mark.asyncio
+async def test_database_loader_pins_user_llm_configs_to_public_schema():
+    captured: list[str] = []
+
+    class _Response:
+        data = []
+
+    class _Query:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def is_(self, *_args, **_kwargs):
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            return _Response()
+
+    class _Supabase:
+        def table(self, name):
+            captured.append(name)
+            return _Query()
+
+    result = await llm_config_loader.LLMConfigLoader._load_from_database(
+        _Supabase(),
+        "default",
+        None,
+    )
+
+    assert result is None
+    assert captured == ["public.user_llm_configs"]
+
+
 def _default_test_settings(**overrides):
     values = {
         "JWT_SECRET": "test-secret",

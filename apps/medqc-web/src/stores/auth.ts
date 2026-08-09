@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { ApiService } from '@/services/apiService'

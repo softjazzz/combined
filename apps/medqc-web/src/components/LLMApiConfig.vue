@@ -515,14 +515,13 @@ async function testConnection() {
       description: `${result.provider_code} / ${result.model} 已联通`,
     }
     message.success('连接测试成功')
-  } catch (error) {
-    const text = error instanceof Error ? error.message : String(error)
+  } catch {
     testResult.value = {
       success: false,
       message: '连接测试失败',
-      description: text,
+      description: '连接未成功，请检查模型服务配置或联系实施人员。',
     }
-    message.error(`连接测试失败：${text}`)
+    message.error('连接测试失败，请检查模型服务配置')
   } finally {
     testing.value = false
   }

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 _CONFIG_DIR = Path(__file__).parent.parent / "data"
 _REGISTRY_FILE = _CONFIG_DIR / "sync_config_registry.json"
-_TABLE_NAME = "sync_config_registry"
+_TABLE_NAME = "qc.sync_config_registry"
 
 
 def _pg_required_in_current_env() -> bool:
@@ -34,8 +34,8 @@ def _load_file_registry() -> dict[str, Any]:
         with open(_REGISTRY_FILE, "r", encoding="utf-8") as fp:
             raw = json.load(fp)
         return raw if isinstance(raw, dict) else {}
-    except Exception as exc:
-        logger.warning("读取配置注册中心文件失败: %s", exc)
+    except Exception:
+        logger.warning("config_registry_file_read_failed")
         return {}
 
 
@@ -45,8 +45,8 @@ def _save_file_registry(payload: dict[str, Any]) -> bool:
         with open(_REGISTRY_FILE, "w", encoding="utf-8") as fp:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
         return True
-    except Exception as exc:
-        logger.warning("写入配置注册中心文件失败: %s", exc)
+    except Exception:
+        logger.warning("config_registry_file_write_failed")
         return False
 
 
@@ -74,14 +74,14 @@ def get_config(namespace: str, key: str) -> dict[str, Any] | list[Any] | str | i
             if row and str(row.get("payload_json") or "").strip():
                 try:
                     return json.loads(str(row.get("payload_json")))
-                except Exception as exc:
-                    logger.warning("解析配置失败 namespace=%s key=%s error=%s", ns, cfg_key, exc)
+                except Exception:
+                    logger.warning("config_registry_payload_invalid namespace=%s key=%s", ns, cfg_key)
                     return None
             return None
         except Exception as exc:
             if _pg_required_in_current_env():
                 raise RuntimeError(f"读取配置失败: {ns}/{cfg_key}") from exc
-            logger.warning("读取 PG 配置失败，回退文件: namespace=%s key=%s error=%s", ns, cfg_key, exc)
+            logger.warning("config_registry_database_read_failed namespace=%s key=%s", ns, cfg_key)
 
     if _pg_required_in_current_env():
         return None
@@ -146,7 +146,7 @@ def set_config(
         except Exception as exc:
             if _pg_required_in_current_env():
                 raise RuntimeError(f"写入配置失败: {ns}/{cfg_key}") from exc
-            logger.warning("写入 PG 配置失败，回退文件: namespace=%s key=%s error=%s", ns, cfg_key, exc)
+            logger.warning("config_registry_database_write_failed namespace=%s key=%s", ns, cfg_key)
 
     if _pg_required_in_current_env():
         return False

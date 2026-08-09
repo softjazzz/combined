@@ -446,6 +446,23 @@ const CONCLUSION_STATUS_META = [
   { status: 'not_executed', label: '未执行', color: '#94a3b8' },
 ] as const
 
+function withClosedPercent(
+  segments: Array<Omit<CoverageSegment, 'percent'>>,
+  denominator: number,
+): CoverageSegment[] {
+  if (!denominator) return segments.map((segment) => ({ ...segment, percent: 0 }))
+  const shouldClose = segments.reduce((sum, segment) => sum + segment.value, 0) === denominator
+  let accumulated = 0
+  return segments.map((segment, index) => {
+    const percent =
+      shouldClose && index === segments.length - 1
+        ? Number((100 - accumulated).toFixed(1))
+        : Number(((segment.value / denominator) * 100).toFixed(1))
+    accumulated += percent
+    return { ...segment, percent }
+  })
+}
+
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -532,16 +549,14 @@ const coverageSegments = computed<CoverageSegment[]>(() => {
       tone: 'neutral' as const,
     },
   ]
-  return values.map((segment) => ({
-    ...segment,
-    percent: total ? Number(((segment.value / total) * 100).toFixed(1)) : 0,
-  }))
+  return withClosedPercent(values, total)
 })
-const visibleCoverageSegments = computed(() =>
-  isDemoPresentation.value
-    ? coverageSegments.value.filter((segment) => segment.key !== 'technical')
-    : coverageSegments.value,
-)
+const visibleCoverageSegments = computed(() => {
+  if (!isDemoPresentation.value) return coverageSegments.value
+  const visible = coverageSegments.value.filter((segment) => segment.key !== 'technical')
+  const visibleTotal = visible.reduce((sum, segment) => sum + segment.value, 0)
+  return withClosedPercent(visible, visibleTotal)
+})
 const coverageAriaLabel = computed(() =>
   visibleCoverageSegments.value.map((segment) => `${segment.label} ${segment.value}`).join('，'),
 )

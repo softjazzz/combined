@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+import pytest
+
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user, get_optional_user
+from app.storage.memory import llm_configs
+
+
+@pytest.fixture(autouse=True)
+def _restore_memory_configs():
+    before = dict(llm_configs)
+    yield
+    llm_configs.clear()
+    llm_configs.update(before)
 
 
 def _override_user(client, roles: list[str]) -> None:
@@ -132,3 +143,186 @@ def test_production_llm_save_does_not_report_memory_fallback_as_success(client, 
     )
 
     assert response.status_code == 503
+
+
+def test_production_llm_save_requires_database_and_does_not_mutate_memory(client, monkeypatch):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+    before = dict(llm_configs)
+
+    response = client.post(
+        "/api/v1/llm/configs",
+        json={
+            "config_name": "default",
+            "provider_code": "alibaba",
+            "model_code": "qwen3.7-flash",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "llm_config_persistence_unavailable"
+    assert llm_configs == before
+
+
+def test_production_llm_save_rejects_empty_readback_without_memory_fallback(client, monkeypatch):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setenv("ENV", "production")
+    before = dict(llm_configs)
+
+    class _Response:
+        def __init__(self, data):
+            self.data = data
+
+    class _Query:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def is_(self, *_args, **_kwargs):
+            return self
+
+        def limit(self, *_args, **_kwargs):
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        def insert(self, *_args, **_kwargs):
+            return self
+
+    class _Supabase:
+        def table(self, name):
+            assert name == "public.user_llm_configs"
+            return _Query()
+
+    calls = 0
+
+    async def _execute(_query):
+        nonlocal calls
+        calls += 1
+        return _Response([])
+
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: _Supabase())
+    monkeypatch.setattr("app.routers.llm_configs.async_execute", _execute)
+
+    response = client.post(
+        "/api/v1/llm/configs",
+        json={
+            "config_name": "default",
+            "provider_code": "alibaba",
+            "model_code": "qwen3.7-flash",
+        },
+    )
+
+    assert calls == 3
+    assert response.status_code == 503
+    assert response.json()["error"] == "llm_config_persistence_unavailable"
+    assert llm_configs == before
+
+
+def test_doctor_cannot_use_legacy_qc_configuration_routes_or_mutate_memory(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    _override_user(client, ["doctor"])
+    monkeypatch.setattr("app.routers.qc_settings.CONFIG_PATH", tmp_path / "qc_settings.json")
+    before = dict(llm_configs)
+
+    assert client.put("/api/v1/qc/settings", json={"temperature": 0.4}).status_code == 403
+    assert client.get("/api/v1/qc/llm-configs").status_code == 403
+    assert client.post(
+        "/api/v1/qc/llm-configs",
+        json={"id": "forbidden", "config_name": "forbidden"},
+    ).status_code == 403
+    assert llm_configs == before
+
+
+def test_sync_admin_can_use_legacy_configuration_routes(client, monkeypatch, tmp_path):
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setattr("app.routers.qc_settings.CONFIG_PATH", tmp_path / "qc_settings.json")
+
+    updated = client.put("/api/v1/qc/settings", json={"temperature": 0.4})
+    assert updated.status_code == 200
+
+    created = client.post(
+        "/api/v1/qc/llm-configs",
+        json={"id": "legacy-authorized", "config_name": "legacy-authorized"},
+    )
+    assert created.status_code == 200
+    assert client.get("/api/v1/qc/llm-configs").status_code == 200
+    assert client.put(
+        "/api/v1/qc/llm-configs/legacy-authorized",
+        json={"model_code": "qwen3.7-flash"},
+    ).status_code == 200
+    assert client.post("/api/v1/qc/llm-configs/legacy-authorized/test").status_code == 200
+    assert client.delete("/api/v1/qc/llm-configs/legacy-authorized").status_code == 200
+
+
+def test_system_config_roles_can_manage_custom_models(client, monkeypatch, tmp_path):
+    model_file = tmp_path / "llm_custom_models.json"
+    monkeypatch.setattr("app.routers.llm_info.CUSTOM_MODELS_FILE", model_file)
+
+    for role in ("sync_admin", "super_admin"):
+        _override_user(client, [role])
+        model_code = f"custom-{role}"
+        created = client.post(
+            "/api/v1/llm/models/custom",
+            json={
+                "provider_code": "alibaba",
+                "model_code": model_code,
+                "model_name": model_code,
+            },
+        )
+        assert created.status_code == 200
+        deleted = client.delete(
+            "/api/v1/llm/models/custom",
+            params={"provider_code": "alibaba", "model_code": model_code},
+        )
+        assert deleted.status_code == 200
+
+
+def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, monkeypatch, tmp_path):
+    _override_user(client, ["qc_manager"])
+    monkeypatch.setattr(
+        "app.services.frontpage_settings.CONFIG_PATH",
+        tmp_path / "frontpage_settings.json",
+    )
+
+    assert client.post(
+        "/api/v1/llm/models/custom",
+        json={
+            "provider_code": "alibaba",
+            "model_code": "forbidden-qc-manager",
+        },
+    ).status_code == 403
+    assert client.put(
+        "/api/v1/frontpage/settings",
+        json={"demo_hide_threshold": 2},
+    ).status_code == 200
+
+
+def test_llm_connection_failure_does_not_leak_endpoint_or_exception(client, monkeypatch, caplog):
+    _override_user(client, ["sync_admin"])
+
+    async def _fail_generate(*_args, **_kwargs):
+        raise RuntimeError("SECRET_REASON endpoint=https://secret.example/v1 token=SECRET")
+
+    monkeypatch.setattr(
+        "app.routers.llm_configs.SichuanQCLLMClient.generate",
+        _fail_generate,
+    )
+
+    response = client.post(
+        "/api/v1/llm/test",
+        json={"provider_code": "alibaba", "model_code": "qwen3.7-flash"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"] == "llm_connection_test_failed"
+    assert "SECRET_REASON" not in caplog.text
+    assert "secret.example" not in caplog.text
+    assert "SECRET" not in caplog.text

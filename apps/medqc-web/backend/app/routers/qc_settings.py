@@ -9,12 +9,20 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+
+from ..core.security import require_roles
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/qc/settings", tags=["QC Settings"])
+_SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
+
+router = APIRouter(
+    prefix="/api/v1/qc/settings",
+    tags=["QC Settings"],
+    dependencies=[Depends(require_roles(*_SYSTEM_CONFIG_ROLES))],
+)
 
 # 配置文件路径
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "data" / "qc_settings.json"

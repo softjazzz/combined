@@ -45,3 +45,20 @@ def test_system_config_migration_seeds_production_sync_keys():
     assert migration.DEFAULT_PG_SOURCE_CONFIG["remote_password_ref"] == "env:REMOTE_DB_PASSWORD"
     assert migration.DEFAULT_PG_SOURCE_CONFIG["remote_schema"] == "public"
     assert migration.DEFAULT_PG_SOURCE_CONFIG["sync_mode"] == "table"
+
+
+def test_system_config_migration_fixes_owner_and_fails_closed_on_legacy_contract_drift(monkeypatch):
+    migration = _load_migration()
+    statements: list[str] = []
+    monkeypatch.setattr(migration.op, "execute", lambda statement: statements.append(str(statement)))
+
+    migration.upgrade()
+
+    sql = "\n".join(statements)
+    assert "CREATE SCHEMA IF NOT EXISTS qc" in sql
+    assert "to_regclass('public.sync_config_registry')" in sql
+    assert "INSERT INTO qc.sync_config_registry" in sql
+    assert "system_config_schema_contract_mismatch: qc.sync_config_registry" in sql
+    assert "system_config_primary_key_contract_mismatch: qc.sync_config_registry" in sql
+    assert "system_config_schema_contract_mismatch: public.user_llm_configs" in sql
+    assert "system_config_primary_key_contract_mismatch: public.user_llm_configs" in sql

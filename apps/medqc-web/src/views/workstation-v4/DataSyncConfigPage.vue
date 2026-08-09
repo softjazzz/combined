@@ -464,9 +464,10 @@
         </a-tab-pane>
 
         <a-tab-pane
-          v-if="isSyncAdvancedUser"
+          v-if="canManageFrontpageConfig"
           key="frontpageExtraction"
           tab="首页抽取设置"
+          data-testid="frontpage-config-tab"
         >
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <FrontpageExtractionSettingsPanel />
@@ -474,9 +475,10 @@
         </a-tab-pane>
 
         <a-tab-pane
-          v-if="isSyncAdvancedUser"
+          v-if="canManageLlmConfig"
           key="llmConfig"
           tab="模型配置"
+          data-testid="llm-config-tab"
         >
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <LLMApiConfig />
@@ -520,6 +522,14 @@ const {
 
 const isSyncAdvancedUser = computed(() =>
   authStore.userRoles.some((role) => role === 'super_admin' || role === 'sync_admin'),
+)
+const canManageFrontpageConfig = computed(() =>
+  authStore.userRoles.some((role) =>
+    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role),
+  ),
+)
+const canManageLlmConfig = computed(() =>
+  authStore.userRoles.some((role) => ['admin', 'sync_admin', 'super_admin'].includes(role)),
 )
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
@@ -1103,10 +1113,10 @@ async function handleExecuteSync() {
 }
 
 onMounted(async () => {
-  if (
-    isSyncAdvancedUser.value &&
-    (route.query.tab === 'frontpageExtraction' || route.query.tab === 'llmConfig')
-  ) {
+  const canOpenRequestedTab =
+    (route.query.tab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
+    (route.query.tab === 'llmConfig' && canManageLlmConfig.value)
+  if (canOpenRequestedTab) {
     activeTab.value = route.query.tab
   }
   if (activeTab.value !== 'llmConfig') {

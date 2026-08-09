@@ -166,6 +166,10 @@ describe('QCOverviewView', () => {
     expect(coverage).toContain('已完成 13')
     expect(coverage).toContain('待质控 3')
     expect(coverage).not.toContain('结果校验异常')
+    expect(coverage).toContain('81.3%')
+    expect(coverage).toContain('18.7%')
+    expect(coverage).not.toContain('72.2%')
+    expect(coverage).not.toContain('16.7%')
   })
 
   it('将科室分布收敛为按待复核数量排序的前八个横向柱状图', async () => {

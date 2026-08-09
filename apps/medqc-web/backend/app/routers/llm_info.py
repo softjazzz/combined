@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
-from ..core.security import require_admin
+from ..core.security import require_roles
 from ..services.llm_config_loader import get_enabled_provider_codes
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
+_SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
 SUPPORTED_PROVIDERS = ("alibaba", "deepseek", "siliconflow", "ollama")
 CUSTOM_MODELS_FILE = Path(__file__).resolve().parents[2] / "data" / "llm_custom_models.json"
 
@@ -154,7 +155,7 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
 async def add_custom_model(
     request: Request,
     payload: CustomModelPayload,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
 ):
     del admin_user
     provider_code = _normalize_provider_code(payload.provider_code)
@@ -205,7 +206,7 @@ async def delete_custom_model(
     request: Request,
     provider_code: str = Query(...),
     model_code: str = Query(...),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
 ):
     del admin_user
     p = _normalize_provider_code(provider_code)

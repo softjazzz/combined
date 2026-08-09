@@ -1,10 +1,18 @@
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..core.response import StatusCode, get_trace_id, success_response
+from ..core.security import require_roles
 from ..storage.memory import llm_configs
 
 
-router = APIRouter(prefix="/api/v1/qc", tags=["qc-llm-configs"])
+_SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
+
+router = APIRouter(
+    prefix="/api/v1/qc",
+    tags=["qc-llm-configs"],
+    dependencies=[Depends(require_roles(*_SYSTEM_CONFIG_ROLES))],
+)
 
 
 @router.get("/llm-configs")
@@ -43,4 +51,3 @@ async def test_config(request: Request, config_id: str):
     if config_id not in llm_configs:
         raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="配置不存在")
     return success_response(data={"config_id": config_id}, message="连接正常", trace_id=get_trace_id(request))
-

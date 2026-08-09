@@ -197,6 +197,21 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(text).toContain('表组预检表')
   })
 
+  it.each([
+    { role: 'qc_manager', frontpage: true, llm: false },
+    { role: 'admin', frontpage: true, llm: true },
+    { role: 'sync_admin', frontpage: true, llm: true },
+    { role: 'super_admin', frontpage: true, llm: true },
+    { role: 'doctor', frontpage: false, llm: false },
+  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm }) => {
+    mockUserRoles = [role]
+
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-testid="frontpage-config-tab"]').exists()).toBe(frontpage)
+    expect(wrapper.find('[data-testid="llm-config-tab"]').exists()).toBe(llm)
+  })
+
   it('0 条候选病历时展示客户化 warning 口径', () => {
     mockUserRoles = ['admin', 'qc_manager']
     mockState.preflightResult = {

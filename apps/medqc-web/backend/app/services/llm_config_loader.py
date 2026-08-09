@@ -211,7 +211,7 @@ class LLMConfigLoader:
                         "user_llm_configs 表不可用，本进程后续跳过数据库 LLM 配置查询，直接回退 env"
                     )
                 else:
-                    logger.warning("从数据库加载 LLM 配置失败: %s，将回退到 .env 配置", exc)
+                    logger.warning("llm_config_database_load_failed fallback=env")
 
         memory_config = LLMConfigLoader._load_from_memory(config_name=config_name, user_id=user_id)
         if memory_config:
@@ -241,7 +241,7 @@ class LLMConfigLoader:
         """从数据库加载 provider/model/custom_parameters，再由 env 注入敏感参数。"""
         try:
             q = (
-                supabase.table("user_llm_configs")
+                supabase.table("public.user_llm_configs")
                 .select("*")
                 .eq("config_name", config_name)
                 .eq("is_active", True)
@@ -285,8 +285,8 @@ class LLMConfigLoader:
                 }
             )
             return runtime
-        except Exception as exc:
-            logger.error("从数据库加载配置时出错: %s", exc)
+        except Exception:
+            logger.error("llm_config_database_query_failed")
             raise
 
     @staticmethod
@@ -409,6 +409,6 @@ class LLMConfigLoader:
                 return True
 
             return False
-        except Exception as exc:
-            logger.error("重新加载配置失败: %s", exc)
+        except Exception:
+            logger.error("llm_config_reload_failed")
             return False

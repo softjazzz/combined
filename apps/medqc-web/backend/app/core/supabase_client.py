@@ -12,12 +12,24 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text, create_engine
 from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
+
+_SCHEMA_OWNED_TABLES = {
+    "user_llm_configs": "public.user_llm_configs",
+}
+
+
+def _quote_qualified_identifier(identifier: str) -> str:
+    parts = str(identifier or "").split(".")
+    if not parts or any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", part) for part in parts):
+        raise ValueError("invalid_database_identifier")
+    return ".".join(f'"{part}"' for part in parts)
 
 # ==================== 连接池（复用 database/connection.py 的配置逻辑） ====================
 
@@ -283,7 +295,7 @@ class _Query:
                     col_parts.append(f'"{c}"' if c != "*" else "*")
             cols = ", ".join(col_parts) if col_parts else "*"
 
-        sql = f'SELECT {cols} FROM "{self._table}"'
+        sql = f"SELECT {cols} FROM {_quote_qualified_identifier(self._table)}"
         if where:
             sql += f" WHERE {where}"
 
@@ -302,7 +314,7 @@ class _Query:
 
     def _build_count_sql(self) -> Tuple[str, Dict[str, Any]]:
         where, params = self._build_where()
-        sql = f'SELECT COUNT(*) FROM "{self._table}"'
+        sql = f"SELECT COUNT(*) FROM {_quote_qualified_identifier(self._table)}"
         if where:
             sql += f" WHERE {where}"
         return sql, params
@@ -327,9 +339,9 @@ class _Query:
                 return self._exec_delete(session)
             else:
                 return _Response(data=[])
-        except Exception as e:
+        except Exception:
             session.rollback()
-            logger.error("SQL 执行错误 [%s on %s]: %s", self._method, self._table, e)
+            logger.error("database_query_failed method=%s table=%s", self._method, self._table)
             raise
         finally:
             session.close()
@@ -382,7 +394,10 @@ class _Query:
             cols = list(row.keys())
             col_str = ", ".join(f'"{c}"' for c in cols)
             val_str = ", ".join(f":{c}" for c in cols)
-            sql = f'INSERT INTO "{self._table}" ({col_str}) VALUES ({val_str}) RETURNING *'
+            sql = (
+                f"INSERT INTO {_quote_qualified_identifier(self._table)} "
+                f"({col_str}) VALUES ({val_str}) RETURNING *"
+            )
             result = session.execute(text(sql), self._serialize_params(row))
             inserted = [dict(r._mapping) for r in result]
             results.extend(inserted)
@@ -406,7 +421,7 @@ class _Query:
             else:
                 params[pname] = val
 
-        sql = f'UPDATE "{self._table}" SET {", ".join(set_parts)}'
+        sql = f"UPDATE {_quote_qualified_identifier(self._table)} SET {', '.join(set_parts)}"
         if where:
             sql += f" WHERE {where}"
         sql += " RETURNING *"
@@ -418,7 +433,7 @@ class _Query:
 
     def _exec_delete(self, session) -> _Response:
         where, params = self._build_where()
-        sql = f'DELETE FROM "{self._table}"'
+        sql = f"DELETE FROM {_quote_qualified_identifier(self._table)}"
         if where:
             sql += f" WHERE {where}"
         sql += " RETURNING *"
@@ -456,8 +471,8 @@ class _RpcCall:
             result = session.execute(text(sql), self._params)
             rows = [dict(r._mapping) for r in result]
             return _Response(data=rows)
-        except Exception as e:
-            logger.error("RPC 执行错误 [%s]: %s", self._function_name, e)
+        except Exception:
+            logger.error("database_rpc_failed function=%s", self._function_name)
             raise
         finally:
             session.close()
@@ -476,7 +491,8 @@ class _PgClient:
         self._session_factory = session_factory
 
     def table(self, table_name: str) -> _Query:
-        return _Query(self._session_factory, table_name)
+        canonical_name = _SCHEMA_OWNED_TABLES.get(table_name, table_name)
+        return _Query(self._session_factory, canonical_name)
 
     def rpc(self, function_name: str, params: Optional[Dict] = None) -> _RpcCall:
         return _RpcCall(self._session_factory, function_name, params)

@@ -21,6 +21,18 @@ from ..services.qc_llm_client import SichuanQCLLMClient
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
 
 _SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
+_LLM_CONFIG_TABLE = "public.user_llm_configs"
+
+
+def _is_production_env() -> bool:
+    return str(os.getenv("ENV") or "").strip().lower() in {"prod", "production"}
+
+
+def _persistence_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=StatusCode.SERVICE_UNAVAILABLE,
+        detail="llm_config_persistence_unavailable",
+    )
 
 
 def _now_iso() -> str:
@@ -223,6 +235,8 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
         return data
 
     if supabase is None:
+        if _is_production_env():
+            raise _persistence_unavailable()
         return _save_in_memory()
 
     row = {
@@ -238,7 +252,7 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
     }
 
     try:
-        q = supabase.table("user_llm_configs").select("id").eq("config_name", cfg_name)
+        q = supabase.table(_LLM_CONFIG_TABLE).select("id").eq("config_name", cfg_name)
         if row["user_id"]:
             q = q.eq("user_id", row["user_id"])
         else:
@@ -255,12 +269,12 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
 
         if existing_data:
             cfg_id = existing_data[0]["id"]
-            await async_execute(supabase.table("user_llm_configs").update(row).eq("id", cfg_id))
+            await async_execute(supabase.table(_LLM_CONFIG_TABLE).update(row).eq("id", cfg_id))
         else:
             row["created_at"] = now
-            await async_execute(supabase.table("user_llm_configs").insert(row))
+            await async_execute(supabase.table(_LLM_CONFIG_TABLE).insert(row))
 
-        q2 = supabase.table("user_llm_configs").select("*").eq("config_name", cfg_name)
+        q2 = supabase.table(_LLM_CONFIG_TABLE).select("*").eq("config_name", cfg_name)
         if row["user_id"]:
             q2 = q2.eq("user_id", row["user_id"])
         else:
@@ -272,16 +286,15 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
             result_data["model"] = model
             result_data["provider_code"] = provider["provider_code"]
             result_data["model_code"] = model["model_code"]
-        return result_data or _save_in_memory()
+        if result_data is None:
+            if _is_production_env():
+                raise RuntimeError("llm_config_readback_empty")
+            return _save_in_memory()
+        return result_data
     except Exception as exc:
-        if str(os.getenv("ENV") or "").strip().lower() in {"prod", "production"}:
-            logging.getLogger(__name__).warning(
-                "LLM config persistence failed in production; refusing memory fallback"
-            )
-            raise HTTPException(
-                status_code=StatusCode.SERVICE_UNAVAILABLE,
-                detail="模型配置持久化失败，请检查数据库迁移与连接状态",
-            ) from exc
+        if _is_production_env():
+            logging.getLogger(__name__).warning("llm_config_persistence_failed")
+            raise _persistence_unavailable() from exc
         logging.getLogger(__name__).warning(
             "LLM config persistence failed; using development memory fallback"
         )
@@ -305,7 +318,7 @@ async def list_configs(request: Request, user_id: Optional[str] = Query(default=
         return _fallback()
 
     try:
-        q = supabase.table("user_llm_configs").select("*").eq("is_active", True)
+        q = supabase.table(_LLM_CONFIG_TABLE).select("*").eq("is_active", True)
         if user_id:
             q = q.eq("user_id", user_id)
         else:
@@ -318,8 +331,8 @@ async def list_configs(request: Request, user_id: Optional[str] = Query(default=
             data={"items": data, "total": len(data)},
             trace_id=get_trace_id(request)
         )
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Supabase list_configs 失败，回退内存配置: %s", exc)
+    except Exception:
+        logging.getLogger(__name__).warning("llm_config_list_failed")
         return _fallback()
 
 
@@ -337,7 +350,7 @@ async def get_config_by_name(request: Request, config_name: str, user_id: Option
         return _fallback()
 
     try:
-        q = supabase.table("user_llm_configs").select("*").eq("config_name", config_name).eq("is_active", True)
+        q = supabase.table(_LLM_CONFIG_TABLE).select("*").eq("config_name", config_name).eq("is_active", True)
         if user_id:
             q = q.eq("user_id", user_id)
         else:
@@ -347,8 +360,8 @@ async def get_config_by_name(request: Request, config_name: str, user_id: Option
             row = _normalize_config_row(dict(resp.data[0]))
             return success_response(data=row, trace_id=get_trace_id(request))
         return success_response(data=None, trace_id=get_trace_id(request))
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Supabase get_config_by_name 失败，回退内存配置: %s", exc)
+    except Exception:
+        logging.getLogger(__name__).warning("llm_config_read_failed")
         return _fallback()
 
 
@@ -447,12 +460,12 @@ async def test_config(
         if not client.api_endpoint:
             raise HTTPException(
                 status_code=StatusCode.BAD_REQUEST,
-                detail=f"连接测试失败: provider={provider_code} 未配置 API_ENDPOINT（请检查 backend/.env）",
+                detail="llm_connection_test_not_configured",
             )
         if provider_code in ("alibaba", "deepseek", "siliconflow") and not client.api_key:
             raise HTTPException(
                 status_code=StatusCode.BAD_REQUEST,
-                detail=f"连接测试失败: provider={provider_code} 未配置 API_KEY（请检查 backend/.env）",
+                detail="llm_connection_test_not_configured",
             )
 
         result = await client.generate("请只返回“pong”，不要输出其他内容。")
@@ -473,19 +486,8 @@ async def test_config(
     except HTTPException:
         raise
     except Exception as exc:
-        logging.getLogger(__name__).exception(
-            "LLM 连接测试失败: provider=%s model=%s endpoint=%s",
-            locals().get("provider_code", "unknown"),
-            getattr(locals().get("client"), "model", "unknown"),
-            getattr(locals().get("client"), "api_endpoint", "unknown"),
-        )
+        logging.getLogger(__name__).warning("llm_connection_test_failed")
         raise HTTPException(
             status_code=StatusCode.BAD_GATEWAY,
-            detail=(
-                "连接测试失败: "
-                f"provider={locals().get('provider_code', 'unknown')}, "
-                f"model={getattr(locals().get('client'), 'model', 'unknown')}, "
-                f"endpoint={getattr(locals().get('client'), 'api_endpoint', 'unknown')}, "
-                f"reason={exc}"
-            ),
-        )
+            detail="llm_connection_test_failed",
+        ) from exc

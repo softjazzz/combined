@@ -15,7 +15,7 @@
           type="info"
           show-icon
           message="当前为只读模式（qc_manager）"
-          description="仅 admin 可修改并保存配置。"
+          description="当前账号仅可查看，需首页配置管理角色方可修改。"
           class="mb-3"
         />
 
@@ -184,6 +184,7 @@
               </a-button>
               <a-button
                 type="primary"
+                data-testid="frontpage-settings-save"
                 :loading="saving"
                 :disabled="isReadonly || loading"
                 @click="handleSave"
@@ -225,8 +226,12 @@ const form = reactive<FrontpageExtractionSettings>({
   default_preview_tab: 'preview',
 })
 
-const isAdmin = computed(() => authStore.userRoles.includes('admin'))
-const isReadonly = computed(() => !isAdmin.value)
+const canManageFrontpageConfig = computed(() =>
+  authStore.userRoles.some((role) =>
+    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role),
+  ),
+)
+const isReadonly = computed(() => !canManageFrontpageConfig.value)
 
 function patchForm(payload: FrontpageExtractionSettings) {
   form.sql_prefill_enabled = payload.sql_prefill_enabled
