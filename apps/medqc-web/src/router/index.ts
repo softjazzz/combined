@@ -990,13 +990,15 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'records/running',
         name: 'WorkstationV4RunningRecords',
-        component: () => import('@/views/dashboard/records/RunningRecordsViewNew.vue'),
+        component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
+        props: { carePhase: 'inpatient' },
         meta: { title: '运行病历', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'records/final',
         name: 'WorkstationV4FinalRecords',
-        component: () => import('@/views/dashboard/records/FinalRecordsView.vue'),
+        component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
+        props: { carePhase: 'discharged' },
         meta: { title: '终末病历质控', permission: ['admin', 'qc_manager'] },
       },
       {
