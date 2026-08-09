@@ -239,10 +239,10 @@ class _PromptCaptureClient:
 
     async def generate(self, prompt: str) -> dict[str, Any]:
         self.prompts.append(prompt)
-        course_match = re.search(r"COURSE_DOC=(\[[^\]]*\])", prompt)
+        course_match = re.search(r"COURSE_DOC_POSITION=(\[[^\]]*\])", prompt)
         assert course_match is not None
-        course_refs = json.loads(course_match.group(1))
-        assert course_refs
+        course_positions = json.loads(course_match.group(1))
+        assert course_positions
         return {
             "choices": [{"message": {"content": json.dumps({
                 "schema_version": "lx0609-exam-lab-text-facts-v3",
@@ -251,7 +251,7 @@ class _PromptCaptureClient:
                     "applicability": "applicable",
                     "semantic_state": "present",
                     "positive_state": "positive",
-                    "course_doc_refs": [course_refs[-1]],
+                    "course_doc_positions": [course_positions[-1]],
                 }],
             }, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 37, "completion_tokens": 5, "total_tokens": 42},
@@ -315,6 +315,12 @@ async def test_typed_native_prompt_and_canonical_are_invariant_to_scene_summary_
         evaluation_horizon_policy="frozen_task_date",
         use_execution_cache=False,
     )
+    assert len(client.prompts) == 1
+    assert first["token_usage"] == {
+        "total_tokens": 42,
+        "prompt_tokens": 37,
+        "completion_tokens": 5,
+    }
     second = await service.evaluate_running_final_bundle_input(
         bundle=_scene_bundle(variant="long"),
         rule_ids=["LX0609-012"],
