@@ -1603,6 +1603,9 @@ def test_resolve_remote_visit_keys_prefers_mr_over_running_anchors(monkeypatch):
     assert result["ambiguous"] == 0
     assert result["unmatched"] == 0
     assert result["visit_keys"] == [("P-MR", "V001")]
+    assert result["case_refs"] == [
+        sample_pool_module.CaseRef("H1", "P-MR", "V001")
+    ]
 
 
 def test_resolve_remote_visit_keys_uses_inpat_registration_without_mr(monkeypatch):
@@ -1696,6 +1699,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "ambiguous": 0,
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
+            "case_refs": [("H1", "P001", "V001")],
         },
     )
     match_calls = []
@@ -1768,7 +1772,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
 
     monkeypatch.setattr(
         sample_pool_module,
-        "fetch_remote_rows_by_visit_keys",
+        "fetch_remote_rows_by_case_refs",
         _fetch_remote_rows,
     )
     monkeypatch.setattr(sample_pool_module, "upsert_to_local", _upsert_local_rows)
@@ -1982,6 +1986,7 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
             "ambiguous": 0,
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
+            "case_refs": [("H1", "P001", "V001")],
         },
     )
     monkeypatch.setattr(
@@ -2015,7 +2020,7 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
             raise ValueError("docpat_commu_record 缺少 patient_id/visit_id 字段，无法按病例集合抽取")
         return [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}]
 
-    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_case_refs", fake_fetch)
     monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
     monkeypatch.setattr(
@@ -2075,6 +2080,7 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
             "ambiguous": 0,
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
+            "case_refs": [("H1", "P001", "V001")],
         },
     )
     monkeypatch.setattr(
@@ -2107,7 +2113,7 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
             raise RuntimeError("permission denied for table docpat_commu_record")
         return [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}]
 
-    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_case_refs", fake_fetch)
     monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
     monkeypatch.setattr(
@@ -2253,7 +2259,7 @@ def _run_two_stage_primary_sync(
             "unmatched": 0,
         }
 
-    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", _fetch)
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_case_refs", _fetch)
     monkeypatch.setattr(
         sample_pool_module,
         "upsert_to_local",
@@ -2475,9 +2481,10 @@ def test_sync_pool_records_passes_only_changed_visits_to_bundle_refresh(
         resolved_visit_keys=[("P001", "V001"), ("P002", "V002")],
     )
 
-    assert result["bundle_refresh"]["processed"] == 1
+    assert result["bundle_refresh"]["processed"] == 2
     assert capture["bundle_refresh_calls"][0]["rows"] == [
-        {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}
+        {"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"},
+        {"institute_id": "H1", "patient_id": "P002", "visit_id": "V002"},
     ]
 
 
@@ -2564,9 +2571,8 @@ def test_sync_pool_records_reconciles_only_explicit_active_to_discharged_transit
     assert result["final_reconciliation"] is bool(expected_reconciliation_count)
     assert result["hard_delete_reconciliation"] == "not_supported"
     assert operations.count("fetch:discharge_record") == 1
-    assert operations.index("fetch:discharge_record") < operations.index(
-        "fetch:daily_course_record"
-    )
+    assert operations.index("fetch:discharge_record") < operations.index("bundle:all")
+    assert operations.index("fetch:daily_course_record") < operations.index("bundle:all")
     discharge_fetch = next(
         call
         for call in capture["fetch_calls"]
@@ -2662,7 +2668,7 @@ def test_sync_pool_records_does_not_persist_transition_when_any_bundle_refresh_r
             },
         }
 
-    with pytest.raises(RuntimeError, match="未更新出院同步状态"):
+    with pytest.raises(RuntimeError, match="Bundle统一刷新失败"):
         _run_two_stage_primary_sync(
             monkeypatch,
             {
@@ -2705,7 +2711,7 @@ def test_sync_pool_records_does_not_persist_transition_when_any_bundle_refresh_r
     assert persisted == []
 
 
-def test_sync_pool_records_reports_nontransition_bundle_failure_without_aborting(
+def test_sync_pool_records_reports_nontransition_bundle_failure_fail_closed(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -2726,27 +2732,24 @@ def test_sync_pool_records_reports_nontransition_bundle_failure_without_aborting
             "domains": {},
         }
 
-    result, _operations, _match_calls, _events = _run_two_stage_primary_sync(
-        monkeypatch,
-        {
-            "mr": [],
-            "inpat_registration": [
-                {
-                    "institute_id": "H1",
-                    "patient_id": "P001",
-                    "visit_id": "V001",
-                    "admission_datetime": "2026-07-30 08:00:00",
-                    "discharge_datetime": None,
-                }
-            ],
-            "admission_record": [],
-        },
-        refresh_scene_impl=_refresh_with_final_failure,
-    )
-
-    assert result["final_reconciliation"] is False
-    assert result["bundle_refresh"]["material_reads"] == 6
-    assert result["bundle_refresh"]["scenes"]["final"]["failed"] == 1
+    with pytest.raises(RuntimeError, match="Bundle统一刷新失败"):
+        _run_two_stage_primary_sync(
+            monkeypatch,
+            {
+                "mr": [],
+                "inpat_registration": [
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P001",
+                        "visit_id": "V001",
+                        "admission_datetime": "2026-07-30 08:00:00",
+                        "discharge_datetime": None,
+                    }
+                ],
+                "admission_record": [],
+            },
+            refresh_scene_impl=_refresh_with_final_failure,
+        )
 
 
 def test_transition_visit_fetches_full_while_other_visit_keeps_watermark(
@@ -2885,16 +2888,12 @@ def test_transition_visit_fetches_full_while_other_visit_keeps_watermark(
         for call in capture["fetch_calls"]
         if call["source_table"] == "daily_course_record"
     ]
-    assert any(
-        call["visit_keys"] == [("P001", "V001")]
-        and "watermark_column" not in call
-        for call in detail_fetches
-    )
-    assert any(
-        call["visit_keys"] == [("P002", "V002")]
-        and call["watermark_column"] == "update_time"
-        for call in detail_fetches
-    )
+    assert len(detail_fetches) == 1
+    assert detail_fetches[0]["case_refs"] == [
+        sample_pool_module.CaseRef("H1", "P001", "V001"),
+        sample_pool_module.CaseRef("H1", "P002", "V002"),
+    ]
+    assert "watermark_column" not in detail_fetches[0]
 
 
 def test_sync_pool_records_degrades_missing_primary_relation_to_admission_record(
@@ -3004,7 +3003,7 @@ def test_sync_watermark_normalizes_naive_and_aware_values_to_utc():
     )
 
 
-def test_incremental_full_reload_same_signature_skips_upsert_and_bundle_refresh(
+def test_public_case_set_sync_reloads_requested_cases_and_refreshes_bundles(
     monkeypatch,
 ):
     monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
@@ -3073,13 +3072,13 @@ def test_incremental_full_reload_same_signature_skips_upsert_and_bundle_refresh(
     )
 
     assert result["primary_visible"] is True
-    assert all(records == [] for records in upsert_records)
-    assert not any(operation.startswith("bundle:") for operation in operations)
-    assert result["sync_performance"]["tables_skipped_unchanged"] == 4
-    assert result["sync_performance"]["visits_refreshed"] == 0
+    assert any(records for records in upsert_records)
+    assert operations.count("bundle:all") == 1
+    assert result["sync_performance"]["tables_skipped_unchanged"] == 0
+    assert result["sync_performance"]["visits_refreshed"] == 1
 
 
-def test_incremental_cursor_transaction_rolls_back_when_upsert_fails(monkeypatch):
+def test_public_case_set_sync_does_not_advance_sample_cursor_when_upsert_fails(monkeypatch):
     monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
     sessions = []
     marks = []
@@ -3132,12 +3131,12 @@ def test_incremental_cursor_transaction_rolls_back_when_upsert_fails(monkeypatch
             ),
         )
 
-    assert marks
-    assert any(session.rollbacks == 1 for session in sessions)
+    assert marks == []
     assert all(session.commits == 0 for session in sessions)
+    assert all(session.rollbacks == 0 for session in sessions)
 
 
-def test_incremental_updated_at_uses_ten_minute_overlap(monkeypatch):
+def test_public_case_set_sync_uses_exact_case_set_without_watermark_projection(monkeypatch):
     monkeypatch.setenv("SAMPLE_SYNC_INCREMENTAL_ENABLED", "true")
     watermark = datetime(2026, 7, 31, 8, 0)
 
@@ -3204,7 +3203,13 @@ def test_incremental_updated_at_uses_ten_minute_overlap(monkeypatch):
                 "watermark_columns": ["update_time"],
             }
         },
-        item_payload={"id": "item-1", "visit_id": "V001"},
+        item_payload={
+            "id": "item-1",
+            "visit_id": "V001",
+            "matched_institute_id": "H1",
+            "matched_patient_id": "P001",
+            "matched_visit_id": "V001",
+        },
     )
 
     detail_fetch = next(
@@ -3212,10 +3217,11 @@ def test_incremental_updated_at_uses_ten_minute_overlap(monkeypatch):
         for call in capture["fetch_calls"]
         if call["source_table"] == "daily_course_record"
     )
-    assert detail_fetch["watermark_column"] == "update_time"
-    assert detail_fetch["watermark_after"] == datetime(
-        2026, 7, 31, 7, 50, tzinfo=timezone.utc
-    )
+    assert detail_fetch["case_refs"] == [
+        sample_pool_module.CaseRef("H1", "P001", "V001")
+    ]
+    assert "watermark_column" not in detail_fetch
+    assert "watermark_after" not in detail_fetch
 
 
 def test_incremental_updated_at_first_run_fetches_full_visit(monkeypatch):

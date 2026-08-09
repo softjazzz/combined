@@ -13,7 +13,7 @@ import re
 import uuid
 from contextlib import nullcontext
 from pathlib import Path
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from typing import Callable, Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field, asdict
 
@@ -24,7 +24,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..database.connection import DB_SCHEMA_MODE, engine
-from .bundles.assembly import refresh_scene_bundles_for_rows
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
 from .config_registry import get_config, set_config
@@ -929,6 +928,20 @@ def get_remote_display_url() -> str:
     if not host or not user:
         return ""
     return f"postgresql://{user}:***@{host}:{port}/{db}"
+
+
+def _refresh_all_bundle_variants_after_sync(
+    *, case_refs: List[tuple[str, str, str]], policy_version: str
+) -> Dict[str, Any]:
+    """旧同步入口对公共病例集Bundle刷新边界的薄适配。"""
+
+    from .case_identity import CaseRef
+    from .case_set_sync_service import CaseSetSyncService
+
+    return CaseSetSyncService().refresh_case_set_bundles(
+        case_refs=[CaseRef(*identity) for identity in case_refs],
+        policy_version=policy_version,
+    )
 
 
 def test_remote_connection() -> Dict:
@@ -2108,17 +2121,17 @@ def _chunk_visit_keys(visit_keys: List[Tuple[str, str]], chunk_size: int = _VISI
 
 def _resolve_remote_visit_filters(cursor, remote_schema: str, source_table: str) -> Tuple[str, Optional[str]]:
     date_field = None
-    for field in ["discharge_datetime", "discharge_date"]:
-        if _remote_column_exists(cursor, remote_schema, source_table, field):
-            date_field = field
+    for column_name in ["discharge_datetime", "discharge_date"]:
+        if _remote_column_exists(cursor, remote_schema, source_table, column_name):
+            date_field = column_name
             break
     if not date_field:
         raise ValueError(f"{source_table} 缺少出院日期字段（discharge_datetime/discharge_date）")
 
     dept_field = None
-    for field in ["discharge_dept_name", "admission_dept_name", "dept_name"]:
-        if _remote_column_exists(cursor, remote_schema, source_table, field):
-            dept_field = field
+    for column_name in ["discharge_dept_name", "admission_dept_name", "dept_name"]:
+        if _remote_column_exists(cursor, remote_schema, source_table, column_name):
+            dept_field = column_name
             break
     return date_field, dept_field
 
@@ -2355,6 +2368,52 @@ def fetch_remote_rows_by_visit_keys(
             cursor.execute(sql, params)
             rows = cursor.fetchall() or []
             all_rows.extend([dict(row) for row in rows])
+        return all_rows
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def fetch_remote_rows_by_case_refs(
+    *,
+    remote_url: str,
+    remote_schema: str,
+    source_table: str,
+    case_refs: List[Any],
+) -> List[Dict]:
+    """按机构、患者、住院号三坐标精确读取源库病例资料。"""
+
+    from .case_identity import normalize_case_refs
+
+    normalized_refs = normalize_case_refs(case_refs)
+    schema_ident = _safe_identifier(remote_schema)
+    table_ident = _safe_identifier(source_table)
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        required_columns = ("institute_id", "patient_id", "visit_id")
+        if any(
+            not _remote_column_exists(cursor, remote_schema, source_table, column)
+            for column in required_columns
+        ):
+            raise ValueError(
+                f"{source_table} 缺少 institute_id/patient_id/visit_id 字段，"
+                "无法按三坐标病例集合抽取"
+            )
+        all_rows: List[Dict] = []
+        for start in range(0, len(normalized_refs), _VISIT_KEY_CHUNK_SIZE):
+            chunk = normalized_refs[start : start + _VISIT_KEY_CHUNK_SIZE]
+            placeholders = ", ".join(["(%s, %s, %s)"] * len(chunk))
+            params: List[str] = []
+            for institute_id, patient_id, visit_id in chunk:
+                params.extend([institute_id, patient_id, visit_id])
+            cursor.execute(
+                f"SELECT * FROM {schema_ident}.{table_ident} "
+                "WHERE (institute_id::text, patient_id::text, visit_id::text) "
+                f"IN ({placeholders})",
+                params,
+            )
+            all_rows.extend(dict(row) for row in cursor.fetchall() or [])
         return all_rows
     finally:
         cursor.close()
@@ -2923,6 +2982,7 @@ def run_sync(
         mr_rows_upserted = 0
         visit_index_upserted_count = 0
         visit_index_failed_count = 0
+        synced_case_refs: set[tuple[str, str, str]] = set()
 
         for table_config in target_tables:
             table_name = str(table_config["name"])
@@ -2992,6 +3052,14 @@ def run_sync(
                     records=rows,
                     primary_keys=[str(pk) for pk in validation.get("local_primary_keys", [])],
                 )
+                for row in rows:
+                    identity = (
+                        str(row.get("institute_id") or "").strip(),
+                        str(row.get("patient_id") or "").strip(),
+                        str(row.get("visit_id") or "").strip(),
+                    )
+                    if all(identity):
+                        synced_case_refs.add(identity)
                 row_visit_ids = _visit_id_set_from_rows(rows)
                 if table_name == "mr":
                     mr_visit_ids.update(row_visit_ids)
@@ -3030,23 +3098,6 @@ def run_sync(
                         visit_index_failed_count += len(rows or [])
                         run_warnings.append(f"{table_name}: visit_index 写入失败")
                         logger.warning("visit_index 更新失败（不阻断主同步）: %s", visit_index_exc)
-                    try:
-                        refresh_scenes = [
-                            resolved_scene
-                        ] if resolved_scene in {"running", "final", "frontpage", "coding"} else []
-                        # 出院记录是 running bundle 的补充投影。同步该来源后必须
-                        # 重建同批 running bundle，不能等待下一次入院记录同步。
-                        if table_name == "discharge_record" and "running" not in refresh_scenes:
-                            refresh_scenes.append("running")
-                        for refresh_scene in refresh_scenes:
-                            refresh_scene_bundles_for_rows(
-                                scene=refresh_scene,
-                                rows=rows,
-                                policy_version=str(policy_version or "").strip(),
-                            )
-                    except Exception as bundle_exc:
-                        logger.warning("%s bundle 更新失败（不阻断主同步）: %s", resolved_scene, bundle_exc)
-
                 log.record_count = count
                 log.status = "success"
                 pulled_total += len(rows)
@@ -3150,6 +3201,22 @@ def run_sync(
                     "eta_seconds": int(avg_seconds * remaining),
                 },
             )
+
+        # 明细全部写入后，使用与样本池相同的公共边界一次性刷新
+        # running/final Scene 与所有 Domain Bundle，避免中途快照缺文书。
+        if synced_case_refs:
+            try:
+                _refresh_all_bundle_variants_after_sync(
+                    case_refs=sorted(synced_case_refs),
+                    policy_version=str(policy_version or "").strip(),
+                )
+            except Exception as bundle_exc:
+                has_error = True
+                run_warnings.append("全部Bundle统一刷新失败")
+                logger.warning("全部Bundle统一刷新失败: %s", bundle_exc)
+        elif total_synced > 0:
+            has_error = True
+            run_warnings.append("同步结果缺少完整病例三坐标，未刷新Bundle")
 
         # 更新全局状态
         missing_mr_visit_ids = sorted(eligible_visit_ids - mr_visit_ids)

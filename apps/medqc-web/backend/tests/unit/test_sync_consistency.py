@@ -246,7 +246,7 @@ def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
     refresh_calls: list[dict] = []
     monkeypatch.setattr(
         etl_sync,
-        "refresh_scene_bundles_for_rows",
+        "_refresh_all_bundle_variants_after_sync",
         lambda **kwargs: refresh_calls.append(kwargs),
     )
 
@@ -277,7 +277,13 @@ def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
     assert final_progress["remaining"] == 4
     assert final_progress["missing_mr"] == 4
     assert final_progress["detail_only"] == 4
-    assert [call["scene"] for call in refresh_calls] == ["running"]
+    assert len(refresh_calls) == 1
+    assert refresh_calls[0]["case_refs"] == [
+        ("A", "p1", "v1"),
+        ("A", "p2", "v2"),
+        ("A", "p3", "v3"),
+        ("A", "p4", "v4"),
+    ]
 
 
 def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
@@ -327,7 +333,9 @@ def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
     monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
     monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
-    monkeypatch.setattr(etl_sync, "refresh_scene_bundles_for_rows", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        etl_sync, "_refresh_all_bundle_variants_after_sync", lambda **_kwargs: None
+    )
 
     result = etl_sync.run_sync(
         sync_date="2026-05-25",
@@ -406,7 +414,9 @@ def test_run_sync_visit_progress_counts_mr_visible_records(monkeypatch):
     monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
     monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
     monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
-    monkeypatch.setattr(etl_sync, "refresh_scene_bundles_for_rows", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        etl_sync, "_refresh_all_bundle_variants_after_sync", lambda **_kwargs: None
+    )
 
     result = etl_sync.run_sync(
         sync_date="2026-05-25",

@@ -4,12 +4,10 @@ import hashlib
 import hmac
 import json
 import math
-import os
 import re
 import time
 import uuid
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -38,19 +36,20 @@ from .bundles.assembly import (
     refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
+from .case_identity import CaseRef, coerce_case_ref
+from .case_set_sync_service import CaseSetSyncService
 from .etl_sync import (
     expand_table_groups,
-    fetch_remote_rows_by_visit_keys,
+    fetch_remote_rows_by_case_refs,
     get_remote_db_url,
     list_sync_tables,
     load_db_config,
     upsert_to_local,
 )
 from .sample_sync_cursor_repository import (
-    CursorKey,
-    SampleSyncCursorRepository,
+    CursorKey as CursorKey,  # noqa: F401 - 旧扩展导入兼容
+    SampleSyncCursorRepository as SampleSyncCursorRepository,  # noqa: F401 - 旧扩展导入兼容
     VisitKey,
-    build_source_identity,
 )
 from .visit_index_service import ingest_sync_rows
 
@@ -5653,6 +5652,7 @@ class CustomQCSamplePoolService:
         inpat_no_lookup_map = lookup.get("inpat_no", {})
 
         visit_key_set: set[tuple[str, str]] = set()
+        case_ref_set: set[CaseRef] = set()
         matched = 0
         ambiguous = 0
         unmatched = 0
@@ -5725,12 +5725,20 @@ class CustomQCSamplePoolService:
                 continue
             matched += 1
             visit_key_set.add((patient_id, visit_id))
+            case_ref_set.add(
+                CaseRef(
+                    _safe_text(chosen.get("institute_id")),
+                    patient_id,
+                    visit_id,
+                )
+            )
 
         return {
             "matched": matched,
             "ambiguous": ambiguous,
             "unmatched": unmatched,
             "visit_keys": sorted(visit_key_set),
+            "case_refs": sorted(case_ref_set),
         }
 
     def list_remote_admission_departments(self) -> List[str]:
@@ -6567,7 +6575,6 @@ class CustomQCSamplePoolService:
             for _patient_id, visit_id in visit_keys
             if str(visit_id or "").strip()
         }
-        primary_record_synced_visit_ids: set[str] = set()
         if progress_callback is not None:
             progress_callback(
                 {
@@ -6617,24 +6624,12 @@ class CustomQCSamplePoolService:
                 "pool": self.get_pool(pool_id=pool_id),
             }
 
-        table_map = {str(item.get("name") or "").strip(): item for item in list_sync_tables()}
-        remote_url = get_remote_db_url()
-        cfg = load_db_config()
-        remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
-        incremental_enabled = _sample_sync_incremental_enabled()
-        source_identity = (
-            build_source_identity(
-                host=str(cfg.get("remote_host") or ""),
-                port=str(cfg.get("remote_port") or ""),
-                database=str(cfg.get("remote_database") or ""),
-                schema=remote_schema,
-            )
-            if incremental_enabled
-            else ""
-        )
-        requested_visit_keys = list(
+        requested_visit_keys = [
+            coerce_case_ref(case_ref)
+            for case_ref in (resolved.get("case_refs") or [])
+        ] or list(
             dict.fromkeys(
-                VisitKey(
+                CaseRef(
                     _safe_text(item.get("matched_institute_id"))
                     or _safe_text((item.get("raw_payload") or {}).get("institute_id")),
                     _safe_text(item.get("matched_patient_id"))
@@ -6658,611 +6653,154 @@ class CustomQCSamplePoolService:
                 )
             )
         )
-        primary_visibility_tables = set(PRIMARY_VISIBILITY_TABLES)
-        sync_settings = get_settings()
-        detail_table_worker_limit = min(
-            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS,
-            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX,
-        )
-        detail_table_workers = 0
-        local_upsert_batch_size = sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE
-        cursor_overlap = timedelta(
-            minutes=sync_settings.SAMPLE_SYNC_WATERMARK_OVERLAP_MINUTES
-        )
-        results_by_table: Dict[str, Dict[str, Any]] = {}
-        source_rows_by_table: Dict[str, List[Dict[str, Any]]] = {}
-        skipped_table_errors: List[Dict[str, Any]] = []
-        total_rows_pulled = 0
-        total_rows_upserted = 0
-        bundle_refresh_rows: List[Dict[str, Any]] = []
-        bundle_refresh_row_keys: set[tuple[str, str, str]] = set()
+        if not requested_visit_keys:
+            raise ValueError("样本池未解析出完整的病例三坐标")
+
         sync_item_ids = [
             _safe_text(item.get("id"))
             for item in items
             if _safe_text(item.get("id"))
         ]
-        primary_visible = False
-        primary_completed_at = ""
-        current_phase = "primary_visibility"
-        force_full_visit_keys: set[VisitKey] = set()
+        completed_case_keys: set[str] = set()
+        primary_match_result: Optional[Dict[str, Any]] = None
+        primary_stage_complete = False
 
-        def _emit_sync_progress(*, processed_tables: int, current_table: str) -> None:
-            if progress_callback is not None:
-                primary_progress = _build_record_progress(
-                    total=len(eligible_visit_ids),
-                    completed_visit_ids=primary_record_synced_visit_ids,
+        def _case_progress_key(case_ref: CaseRef) -> str:
+            return json.dumps(case_ref, ensure_ascii=False, separators=(",", ":"))
+
+        def _forward_case_sync_progress(event: Dict[str, Any]) -> None:
+            nonlocal primary_match_result, primary_stage_complete
+            if _safe_text(event.get("step_key")) == "primary_visible":
+                primary_stage_complete = True
+            if (
+                _safe_text(event.get("step_key")) == "primary_visible"
+                and primary_match_result is None
+            ):
+                primary_match_result = self.match_pool_items(
+                    pool_id=pool_id,
+                    item_ids=sync_item_ids,
                 )
-                progress_callback(
-                    {
-                        "step_key": "syncing",
-                        "step_label": "正在同步病历表",
-                        "phase": current_phase,
-                        "primary_visible": primary_visible,
-                        "primary_completed_at": primary_completed_at,
-                        "primary_progress": primary_progress,
-                        "total_candidates": len(items),
-                        "eligible_visits": len(visit_keys),
-                        "record_progress": primary_progress,
-                        "processed_tables": processed_tables,
-                        "total_tables": total_tables,
-                        "current_table": current_table,
-                        "remaining_tables": max(total_tables - processed_tables, 0),
-                        "total_rows_pulled": total_rows_pulled,
-                        "total_rows_upserted": total_rows_upserted,
-                        "table_workers": detail_table_workers,
-                    }
-                )
-
-        def _sync_table(
-            table_name: str,
-            *,
-            force_full_keys: Optional[set[VisitKey]] = None,
-        ) -> Optional[Dict[str, Any]]:
-            table_config = table_map.get(table_name)
-            if not table_config:
-                return {
-                    "rows": [],
-                    "result": {
-                        "table_name": table_name,
-                        "source_table": table_name,
-                        "rows_pulled": 0,
-                        "rows_upserted": 0,
-                        "sync_status": "source_table_unavailable",
-                        "skip_reason": "该类资料暂未从源系统提供，本次同步已跳过。",
-                        "error_category": "source_config_missing",
-                        "fetch_duration_ms": 0.0,
-                        "upsert_duration_ms": 0.0,
-                        "duration_ms": 0.0,
-                    },
-                }
-            source_table = str(table_config.get("source_table") or table_name)
-            strategy = str(
-                table_config.get("incremental_strategy") or "full_visit_reload"
-            )
-            if strategy not in {
-                "updated_at",
-                "append_only_record_time",
-                "full_visit_reload",
-            }:
-                strategy = "full_visit_reload"
-            if table_name in primary_visibility_tables:
-                # 主记录阶段始终全量快速核对，避免水位遗漏导致病例不可见。
-                strategy = "full_visit_reload"
-            watermark_columns = [
-                str(column).strip()
-                for column in (table_config.get("watermark_columns") or [])
-                if str(column).strip()
-            ]
-            if strategy != "full_visit_reload" and not watermark_columns:
-                # 未提供受控水位字段时禁止伪增量。
-                strategy = "full_visit_reload"
-            schema_version = str(
-                table_config.get("schema_version") or "sample-sync-v1"
-            )
-            table_started_at = time.perf_counter()
-            fetch_started_at = time.perf_counter()
-            local_session: Optional[Session] = None
-            try:
-                effective_force_full_keys = set(force_full_keys or set())
-                cursors: Dict[CursorKey, Any] = {}
-                repository: Optional[SampleSyncCursorRepository] = None
-                watermark_column: Optional[str] = None
-                if incremental_enabled:
-                    local_session = _session()
-                    repository = SampleSyncCursorRepository(local_session)
-                    cursors = dict(
-                        repository.get_many(
-                            source_identity=source_identity,
-                            visit_keys=requested_visit_keys,
-                            table_names=[table_name],
-                        )
-                    )
-
-                if (
-                    incremental_enabled
-                    and {
-                        (key.patient_id, key.visit_id)
-                        for key in requested_visit_keys
-                    }
-                    == set(visit_keys)
-                    and strategy != "full_visit_reload"
-                    and watermark_columns
-                ):
-                    watermark_column = watermark_columns[0]
-                    regular_visit_keys = [
-                        key
-                        for key in requested_visit_keys
-                        if key not in effective_force_full_keys
-                    ]
-                    visits_without_watermark: List[VisitKey] = []
-                    visits_with_watermark: List[VisitKey] = []
-                    for key in regular_visit_keys:
-                        cursor_key = CursorKey(source_identity, *key, table_name)
-                        cursor = cursors.get(cursor_key)
-                        if cursor is not None and cursor.watermark_value is not None:
-                            visits_with_watermark.append(key)
-                        else:
-                            visits_without_watermark.append(key)
-
-                    rows = []
-                    if effective_force_full_keys:
-                        rows.extend(
-                            fetch_remote_rows_by_visit_keys(
-                                remote_url=remote_url,
-                                remote_schema=remote_schema,
-                                source_table=source_table,
-                                visit_keys=[
-                                    (key.patient_id, key.visit_id)
-                                    for key in effective_force_full_keys
-                                ],
-                            )
-                        )
-                    if visits_without_watermark:
-                        rows.extend(
-                            fetch_remote_rows_by_visit_keys(
-                                remote_url=remote_url,
-                                remote_schema=remote_schema,
-                                source_table=source_table,
-                                visit_keys=[
-                                    (key.patient_id, key.visit_id)
-                                    for key in visits_without_watermark
-                                ],
-                            )
-                        )
-                    if visits_with_watermark:
-                        minimum_watermark = min(
-                            _coerce_sync_watermark(
-                                cursors[
-                                    CursorKey(source_identity, *key, table_name)
-                                ].watermark_value
-                            )
-                            for key in visits_with_watermark
-                        )
-                        rows.extend(
-                            fetch_remote_rows_by_visit_keys(
-                                remote_url=remote_url,
-                                remote_schema=remote_schema,
-                                source_table=source_table,
-                                visit_keys=[
-                                    (key.patient_id, key.visit_id)
-                                    for key in visits_with_watermark
-                                ],
-                                watermark_column=watermark_column,
-                                watermark_after=minimum_watermark
-                                - cursor_overlap,
-                            )
-                        )
-                else:
-                    rows = fetch_remote_rows_by_visit_keys(
-                        remote_url=remote_url,
-                        remote_schema=remote_schema,
-                        source_table=source_table,
-                        visit_keys=visit_keys,
-                    )
-            except Exception as exc:
-                if local_session is not None:
-                    local_session.rollback()
-                    local_session.close()
-                if not _is_remote_source_unavailable_error(exc):
-                    raise
-                error_category = _remote_source_unavailable_category(exc)
-                return {
-                    "rows": [],
-                    "result": {
-                        "table_name": table_name,
-                        "source_table": source_table,
-                        "rows_pulled": 0,
-                        "rows_upserted": 0,
-                        "sync_status": "source_table_unavailable",
-                        "skip_reason": "该类资料暂未从源系统提供，本次同步已跳过。",
-                        "error_category": error_category,
-                        "fetch_duration_ms": round((time.perf_counter() - fetch_started_at) * 1000, 2),
-                        "upsert_duration_ms": 0.0,
-                        "duration_ms": round((time.perf_counter() - table_started_at) * 1000, 2),
-                    },
-                }
-            fetch_duration_ms = round((time.perf_counter() - fetch_started_at) * 1000, 2)
-            upsert_started_at = time.perf_counter()
-            changed_rows = list(rows)
-            changed_visit_rows: List[Dict[str, Any]] = []
-            unchanged_visit_count = 0
-            try:
-                if incremental_enabled and local_session is not None and repository is not None:
-                    rows_by_visit: Dict[VisitKey, List[Dict[str, Any]]] = {}
-                    for row in rows:
-                        visit_key = _row_visit_key(row)
-                        if visit_key is not None:
-                            rows_by_visit.setdefault(visit_key, []).append(row)
-                    all_visit_keys = list(
-                        dict.fromkeys([*requested_visit_keys, *rows_by_visit.keys()])
-                    )
-                    changed_rows = []
-                    for visit_key in all_visit_keys:
-                        visit_rows = rows_by_visit.get(visit_key, [])
-                        cursor_key = CursorKey(
-                            source_identity, *visit_key, table_name
-                        )
-                        existing_cursor = cursors.get(cursor_key)
-                        if (
-                            strategy == "full_visit_reload"
-                            or visit_key in effective_force_full_keys
-                        ):
-                            signature = build_sample_sync_content_signature(
-                                visit_rows
-                            )
-                            changed = (
-                                visit_key in effective_force_full_keys
-                                or existing_cursor is None
-                                or existing_cursor.content_signature != signature
-                            )
-                            if changed:
-                                changed_rows.extend(visit_rows)
-                                if visit_rows or existing_cursor is not None:
-                                    changed_visit_rows.append(
-                                        {
-                                            "institute_id": visit_key.institute_id,
-                                            "patient_id": visit_key.patient_id,
-                                            "visit_id": visit_key.visit_id,
-                                        }
-                                    )
-                            else:
-                                unchanged_visit_count += 1
-                            repository.mark_full_sync(
-                                source_identity=source_identity,
-                                visit_key=visit_key,
-                                table_name=table_name,
-                                strategy=(
-                                    "full_visit_reload"
-                                    if visit_key in effective_force_full_keys
-                                    else strategy
-                                ),
-                                schema_version=schema_version,
-                                source_row_count=len(visit_rows),
-                                content_signature=signature,
-                            )
-                        else:
-                            cutoff = (
-                                _coerce_sync_watermark(
-                                    existing_cursor.watermark_value
-                                )
-                                - cursor_overlap
-                                if existing_cursor is not None
-                                and existing_cursor.watermark_value is not None
-                                else None
-                            )
-                            effective_rows = []
-                            for row in visit_rows:
-                                row_watermark = _coerce_sync_watermark(
-                                    row.get(watermark_column or "")
-                                )
-                                if cutoff is None or (
-                                    row_watermark is not None
-                                    and row_watermark >= cutoff
-                                ):
-                                    effective_rows.append(row)
-                            if effective_rows:
-                                changed_rows.extend(effective_rows)
-                                changed_visit_rows.append(
-                                    {
-                                        "institute_id": visit_key.institute_id,
-                                        "patient_id": visit_key.patient_id,
-                                        "visit_id": visit_key.visit_id,
-                                    }
-                                )
-                            elif existing_cursor is not None:
-                                unchanged_visit_count += 1
-                            watermark_values = [
-                                value
-                                for value in (
-                                    _coerce_sync_watermark(
-                                        row.get(watermark_column or "")
-                                    )
-                                    for row in effective_rows
-                                )
-                                if value is not None
-                            ]
-                            repository.mark_success(
-                                source_identity=source_identity,
-                                visit_key=visit_key,
-                                table_name=table_name,
-                                strategy=strategy,
-                                schema_version=schema_version,
-                                watermark_column=watermark_column,
-                                watermark_value=(
-                                    max(watermark_values)
-                                    if watermark_values
-                                    else (
-                                        _coerce_sync_watermark(
-                                            existing_cursor.watermark_value
-                                        )
-                                        if existing_cursor is not None
-                                        else None
-                                    )
-                                ),
-                                source_row_count=len(effective_rows),
-                            )
-
-                    upserted = upsert_to_local(
-                        table_name=table_name,
-                        records=changed_rows,
-                        primary_keys=[
-                            str(key)
-                            for key in (table_config.get("key_fields") or [])
-                            if str(key).strip()
-                        ],
-                        batch_size=local_upsert_batch_size,
-                        session=local_session,
-                    )
-                    local_session.commit()
-                else:
-                    upserted = upsert_to_local(
-                        table_name=table_name,
-                        records=rows,
-                        primary_keys=[
-                            str(key)
-                            for key in (table_config.get("key_fields") or [])
-                            if str(key).strip()
-                        ],
-                        batch_size=local_upsert_batch_size,
-                    )
-                    changed_visit_rows = [
-                        {
-                            "institute_id": key.institute_id,
-                            "patient_id": key.patient_id,
-                            "visit_id": key.visit_id,
-                        }
-                        for key in dict.fromkeys(
-                            key
-                            for key in (_row_visit_key(row) for row in rows)
-                            if key is not None
-                        )
-                    ]
-            except Exception:
-                if local_session is not None:
-                    local_session.rollback()
-                raise
-            finally:
-                if local_session is not None:
-                    local_session.close()
-            return {
-                "rows": rows,
-                "changed_rows": changed_rows,
-                "changed_visit_rows": changed_visit_rows,
-                "result": {
-                    "table_name": table_name,
-                    "source_table": source_table,
-                    "rows_pulled": len(rows),
-                    "rows_upserted": upserted,
-                    "changed_visit_count": len(changed_visit_rows),
-                    "unchanged_visit_count": unchanged_visit_count,
-                    "sync_status": "synced",
-                    "skip_reason": "",
-                    "fetch_duration_ms": fetch_duration_ms,
-                    "upsert_duration_ms": round((time.perf_counter() - upsert_started_at) * 1000, 2),
-                    "duration_ms": round((time.perf_counter() - table_started_at) * 1000, 2),
-                },
-            }
-
-        def _consume_table_result(table_name: str, outcome: Optional[Dict[str, Any]]) -> None:
-            nonlocal total_rows_pulled, total_rows_upserted
-            if outcome is None:
+            if progress_callback is None:
                 return
-            table_result = outcome["result"]
-            rows = outcome["rows"]
-            source_rows_by_table[table_name] = list(rows)
-            changed_visit_rows = outcome.get("changed_visit_rows", rows)
-            results_by_table[table_name] = table_result
-            if table_result["sync_status"] == "source_table_unavailable":
-                skipped_table_errors.append(table_result)
-                return
+            processed_tables = int(event.get("processed_tables") or 0)
+            progress_callback(
+                {
+                    "step_key": _safe_text(event.get("step_key")) or "syncing",
+                    "step_label": (
+                        "病历同步与文书整理完成"
+                        if _safe_text(event.get("step_key")) == "completed"
+                        else "病历已进入样本池，文书整理中"
+                        if _safe_text(event.get("step_key")) == "primary_visible"
+                        else "正在同步病历资料"
+                    ),
+                    "phase": (
+                        "completed"
+                        if _safe_text(event.get("step_key")) == "completed"
+                        else "primary_visible"
+                        if _safe_text(event.get("step_key")) == "primary_visible"
+                        else "detail_sync"
+                        if primary_stage_complete
+                        else "primary_visibility"
+                    ),
+                    "primary_visible": primary_stage_complete,
+                    "total_candidates": len(items),
+                    "eligible_visits": len(requested_visit_keys),
+                    "record_progress": _build_record_progress(
+                        total=len(requested_visit_keys),
+                        completed_visit_ids=completed_case_keys,
+                    ),
+                    "processed_tables": processed_tables,
+                    "total_tables": total_tables,
+                    "current_table": _safe_text(event.get("current_table")),
+                    "remaining_tables": max(total_tables - processed_tables, 0),
+                }
+            )
 
-            total_rows_pulled += len(rows)
-            total_rows_upserted += int(table_result["rows_upserted"])
-            for row in changed_visit_rows:
-                institute_id = _safe_text(row.get("institute_id"))
-                patient_id = _safe_text(row.get("patient_id"))
-                visit_id = _safe_text(row.get("visit_id"))
-                row_key = (institute_id, patient_id, visit_id)
-                if all(row_key) and row_key not in bundle_refresh_row_keys:
-                    bundle_refresh_row_keys.add(row_key)
-                    bundle_refresh_rows.append(
-                        {
-                            "institute_id": institute_id,
-                            "patient_id": patient_id,
-                            "visit_id": visit_id,
-                        }
-                    )
-            valid_primary_rows: List[Dict[str, Any]] = []
-            if table_name in primary_visibility_tables:
-                for row in rows:
-                    primary_identity = (
-                        _safe_text(row.get("institute_id")),
-                        _safe_text(row.get("patient_id")),
-                        _safe_text(row.get("visit_id")),
-                    )
-                    if all(primary_identity):
-                        primary_record_synced_visit_ids.add(primary_identity[2])
-                        primary_visit_key = VisitKey(*primary_identity)
-                        if primary_visit_key not in requested_visit_keys:
-                            requested_visit_keys.append(primary_visit_key)
-                        valid_primary_rows.append(row)
-
-            if valid_primary_rows:
-                ingest_sync_rows(
-                    table_name=table_name,
-                    rows=valid_primary_rows,
-                    policy_version="sample_pool_sync",
-                    sync_scene="running",
-                    allow_frontpage_only=False,
-                    latest_mirror_success_time=datetime.now(),
-                    mirror_delay_base_minutes=30,
-                    sync_interval_minutes=30,
-                )
-
-        ordered_table_names = list(sync_plan["table_names"])
-        primary_table_names = [
-            name for name in PRIMARY_VISIBILITY_TABLES if name in ordered_table_names
-        ]
-        detail_table_names = [
-            name for name in ordered_table_names if name not in primary_visibility_tables
-        ]
+        sync_settings = get_settings()
         detail_table_workers = min(
-            detail_table_worker_limit,
-            len(
-                [
-                    name
-                    for name in detail_table_names
-                    if name != "discharge_record"
-                ]
+            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS,
+            sync_settings.SAMPLE_SYNC_DETAIL_TABLE_WORKERS_MAX,
+            sum(
+                1
+                for table_name in sync_plan["table_names"]
+                if table_name not in PRIMARY_VISIBILITY_TABLES
             ),
         )
-        processed_tables = 0
+        sync_result = CaseSetSyncService(
+            table_catalog_loader=list_sync_tables,
+            row_fetcher=fetch_remote_rows_by_case_refs,
+            row_upserter=upsert_to_local,
+            bundle_refresher=refresh_all_bundle_variants_for_rows,
+            visit_index_ingester=ingest_sync_rows,
+            remote_url_loader=get_remote_db_url,
+            db_config_loader=load_db_config,
+            detail_table_workers=max(1, detail_table_workers),
+            upsert_batch_size=sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE,
+        ).sync_case_set(
+            case_refs=requested_visit_keys,
+            table_names=sync_plan["table_names"],
+            policy_version="sample_pool_incremental_sync",
+            progress_callback=_forward_case_sync_progress,
+        )
+        source_rows_by_table = {
+            table_name: list(rows)
+            for table_name, rows in sync_result.source_rows_by_table.items()
+        }
+        primary_identities: set[CaseRef] = set()
+        for table_name in PRIMARY_VISIBILITY_TABLES:
+            for row in source_rows_by_table.get(table_name, []):
+                case_ref = CaseRef.from_mapping(row)
+                if all(case_ref):
+                    primary_identities.add(case_ref)
+        completed_case_keys.update(
+            _case_progress_key(case_ref) for case_ref in primary_identities
+        )
+        primary_visible = sync_result.primary_visible
+        primary_completed_at = _now_utc().isoformat()
+        primary_progress = _build_record_progress(
+            total=len(requested_visit_keys),
+            completed_visit_ids=completed_case_keys,
+        )
+        synced_tables = [dict(item) for item in sync_result.synced_tables]
+        skipped_optional_tables = [
+            item
+            for item in synced_tables
+            if _safe_text(item.get("sync_status")) == "source_table_unavailable"
+        ]
 
-        for table_name in primary_table_names:
-            _emit_sync_progress(processed_tables=processed_tables, current_table=table_name)
-            _consume_table_result(table_name, _sync_table(table_name))
-            processed_tables += 1
-            _emit_sync_progress(processed_tables=processed_tables, current_table=table_name)
-
-        if not primary_record_synced_visit_ids:
-            unavailable_primary_tables = [
-                table_name
-                for table_name in primary_table_names
-                if (results_by_table.get(table_name) or {}).get("sync_status")
-                == "source_table_unavailable"
+        if not primary_visible:
+            primary_table_results = [
+                item
+                for item in synced_tables
+                if _safe_text(item.get("table_name")) in PRIMARY_VISIBILITY_TABLES
             ]
-            if primary_table_names and len(unavailable_primary_tables) == len(primary_table_names):
+            if primary_table_results and all(
+                _safe_text(item.get("sync_status")) == "source_table_unavailable"
+                for item in primary_table_results
+            ):
                 raise RuntimeError(
                     "源系统未提供可用的病案首页、住院登记或入院记录，无法创建病历主记录。"
                 )
-            primary_completed_at = _now_utc().isoformat()
-            if progress_callback is not None:
-                primary_progress = _build_record_progress(
-                    total=len(eligible_visit_ids),
-                    completed_visit_ids=primary_record_synced_visit_ids,
-                )
-                progress_callback(
-                    {
-                        "step_key": "primary_unavailable",
-                        "step_label": "未找到对应病历主记录，已停止明细整理",
-                        "phase": "primary_visibility",
-                        "primary_visible": False,
-                        "primary_completed_at": primary_completed_at,
-                        "primary_progress": primary_progress,
-                        "record_progress": primary_progress,
-                        "total_candidates": len(items),
-                        "eligible_visits": len(visit_keys),
-                        "processed_tables": processed_tables,
-                        "total_tables": total_tables,
-                        "current_table": "",
-                        "remaining_tables": max(total_tables - processed_tables, 0),
-                        "total_rows_pulled": total_rows_pulled,
-                        "total_rows_upserted": total_rows_upserted,
-                    }
-                )
-            results = [
-                results_by_table[table_name]
-                for table_name in ordered_table_names
-                if table_name in results_by_table
-            ]
-            record_progress = _build_record_progress(total=len(eligible_visit_ids))
             return {
                 "pool_id": pool_id,
                 "matched": resolved["matched"],
                 "ambiguous": resolved["ambiguous"],
                 "unmatched": resolved["unmatched"],
-                "eligible_visits": len(visit_keys),
+                "eligible_visits": len(requested_visit_keys),
                 "primary_visible": False,
                 "primary_completed_at": primary_completed_at,
-                "primary_progress": record_progress,
-                "record_progress": record_progress,
-                "synced_tables": results,
-                "total_rows_pulled": total_rows_pulled,
-                "total_rows_upserted": total_rows_upserted,
+                "primary_progress": primary_progress,
+                "record_progress": primary_progress,
+                "synced_tables": synced_tables,
+                "total_rows_pulled": sync_result.total_rows_pulled,
+                "total_rows_upserted": sync_result.total_rows_upserted,
                 "sync_group_ids": sync_plan["group_ids"],
                 "missing_group_ids": sync_plan["missing_group_ids"],
-                "skipped_optional_tables": skipped_table_errors,
+                "skipped_optional_tables": skipped_optional_tables,
+                "bundle_refresh": {},
                 "pool": self.get_pool(pool_id=pool_id),
                 "post_match": None,
             }
-
-        primary_visible = True
-        primary_completed_at = _now_utc().isoformat()
-        primary_visible_duration_ms = round(
-            (time.perf_counter() - overall_started_at) * 1000,
-            2,
-        )
-        primary_match_result = self.match_pool_items(
-            pool_id=pool_id,
-            item_ids=sync_item_ids,
-        )
-        if progress_callback is not None:
-            primary_progress = _build_record_progress(
-                total=len(eligible_visit_ids),
-                completed_visit_ids=primary_record_synced_visit_ids,
-            )
-            progress_callback(
-                {
-                    "step_key": "primary_visible",
-                    "step_label": "病历已进入样本池，文书整理中",
-                    "phase": "primary_visible",
-                    "primary_visible": True,
-                    "primary_completed_at": primary_completed_at,
-                    "primary_progress": primary_progress,
-                    "record_progress": primary_progress,
-                    "total_candidates": len(items),
-                    "eligible_visits": len(visit_keys),
-                    "processed_tables": processed_tables,
-                    "total_tables": total_tables,
-                    "current_table": "",
-                    "remaining_tables": max(total_tables - processed_tables, 0),
-                    "total_rows_pulled": total_rows_pulled,
-                    "total_rows_upserted": total_rows_upserted,
-                }
-            )
-        current_phase = "detail_sync"
-        detail_sync_started_at = time.perf_counter()
-
-        # 出院记录是轻量状态探测表：在普通明细并发前全量读取一次，避免水位
-        # 遗漏出院事件；随后从明细列表移除，确保不会重复同步。
-        if "discharge_record" in detail_table_names:
-            _emit_sync_progress(
-                processed_tables=processed_tables,
-                current_table="discharge_record",
-            )
-            _consume_table_result(
-                "discharge_record",
-                _sync_table(
-                    "discharge_record",
-                    force_full_keys=set(requested_visit_keys),
-                ),
-            )
-            detail_table_names.remove("discharge_record")
-            processed_tables += 1
-            _emit_sync_progress(
-                processed_tables=processed_tables,
-                current_table="discharge_record",
-            )
 
         current_hospitalization_states = _collect_current_hospitalization_states(
             source_rows_by_table
@@ -7279,84 +6817,6 @@ class CustomQCSamplePoolService:
             ).lower()
             == "active"
         }
-        force_full_visit_keys = {
-            VisitKey(*identity) for identity in transition_identities
-        }
-        for identity in transition_identities:
-            if identity not in bundle_refresh_row_keys:
-                bundle_refresh_row_keys.add(identity)
-                bundle_refresh_rows.append(
-                    {
-                        "institute_id": identity[0],
-                        "patient_id": identity[1],
-                        "visit_id": identity[2],
-                    }
-                )
-
-        if detail_table_names:
-            _emit_sync_progress(processed_tables=processed_tables, current_table="并行同步明细表")
-            with ThreadPoolExecutor(
-                max_workers=min(detail_table_workers, len(detail_table_names)),
-                thread_name_prefix="sample-pool-sync",
-            ) as executor:
-                future_to_table = {
-                    executor.submit(
-                        _sync_table,
-                        table_name,
-                        force_full_keys=force_full_visit_keys,
-                    ): table_name
-                    for table_name in detail_table_names
-                }
-                for future in as_completed(future_to_table):
-                    table_name = future_to_table[future]
-                    _consume_table_result(table_name, future.result())
-                    processed_tables += 1
-                    _emit_sync_progress(
-                        processed_tables=processed_tables,
-                        current_table=table_name,
-                    )
-
-        results = [
-            results_by_table[table_name]
-            for table_name in ordered_table_names
-            if table_name in results_by_table
-        ]
-        detail_sync_duration_ms = round(
-            (time.perf_counter() - detail_sync_started_at) * 1000,
-            2,
-        )
-
-        bundle_refresh_started_at = time.perf_counter()
-        bundle_refresh_stats: Dict[str, Any] = {
-            "processed": 0,
-            "skipped": 0,
-            "material_reads": 0,
-            "scenes": {},
-            "domains": {},
-        }
-        if bundle_refresh_rows:
-            bundle_refresh_stats = refresh_all_bundle_variants_for_rows(
-                rows=bundle_refresh_rows,
-                scenes=("running", "final"),
-                policy_version="sample_pool_incremental_sync",
-            )
-        bundle_refresh_duration_ms = round((time.perf_counter() - bundle_refresh_started_at) * 1000, 2)
-
-        bundle_refresh_failed = sum(
-            int((counts or {}).get("failed") or 0)
-            for variant_counts in (
-                bundle_refresh_stats.get("scenes") or {},
-                bundle_refresh_stats.get("domains") or {},
-            )
-            for counts in variant_counts.values()
-        )
-        if transition_identities and bundle_refresh_failed > 0:
-            raise RuntimeError(
-                "出院病例最终资料整理失败，请稍后重试；"
-                "本次未更新出院同步状态。"
-            )
-
-        # 状态完成标记必须晚于 running/final/domain 三类 Bundle 全部成功。
         if current_hospitalization_states:
             _persist_hospitalization_sync_states(
                 item_table=self._item_table,
@@ -7370,81 +6830,58 @@ class CustomQCSamplePoolService:
                 {
                     "step_key": "matching",
                     "step_label": "正在回写匹配结果",
-                    "phase": "detail_sync",
-                    "primary_visible": True,
-                    "primary_completed_at": primary_completed_at,
-                    "primary_progress": _build_record_progress(
-                        total=len(eligible_visit_ids),
-                        completed_visit_ids=primary_record_synced_visit_ids,
-                    ),
+                    "phase": "completed",
                     "total_candidates": len(items),
-                    "eligible_visits": len(visit_keys),
-                    "record_progress": _build_record_progress(
-                        total=len(eligible_visit_ids),
-                        completed_visit_ids=primary_record_synced_visit_ids,
-                    ),
+                    "eligible_visits": len(requested_visit_keys),
+                    "record_progress": primary_progress,
                     "processed_tables": total_tables,
                     "total_tables": total_tables,
                     "current_table": "",
                     "remaining_tables": 0,
-                    "total_rows_pulled": total_rows_pulled,
-                    "total_rows_upserted": total_rows_upserted,
                 }
             )
         match_result = self.match_pool_items(
             pool_id=pool_id,
             item_ids=sync_item_ids,
         )
+        total_duration_ms = round(
+            (time.perf_counter() - overall_started_at) * 1000,
+            2,
+        )
         return {
             "pool_id": pool_id,
             "matched": resolved["matched"],
             "ambiguous": resolved["ambiguous"],
             "unmatched": resolved["unmatched"],
-            "eligible_visits": len(visit_keys),
+            "eligible_visits": len(requested_visit_keys),
             "primary_visible": True,
             "primary_completed_at": primary_completed_at,
-            "primary_progress": _build_record_progress(
-                total=len(eligible_visit_ids),
-                completed_visit_ids=primary_record_synced_visit_ids,
-            ),
-            "record_progress": _build_record_progress(
-                total=len(eligible_visit_ids),
-                completed_visit_ids=primary_record_synced_visit_ids,
-            ),
-            "synced_tables": results,
-            "total_rows_pulled": total_rows_pulled,
-            "total_rows_upserted": total_rows_upserted,
+            "primary_progress": primary_progress,
+            "record_progress": primary_progress,
+            "synced_tables": synced_tables,
+            "total_rows_pulled": sync_result.total_rows_pulled,
+            "total_rows_upserted": sync_result.total_rows_upserted,
             "sync_group_ids": sync_plan["group_ids"],
             "missing_group_ids": sync_plan["missing_group_ids"],
-            "skipped_optional_tables": skipped_table_errors,
-            "bundle_refresh": bundle_refresh_stats,
+            "skipped_optional_tables": skipped_optional_tables,
+            "bundle_refresh": dict(sync_result.bundle_refresh),
             "final_reconciliation": bool(transition_identities),
             "final_reconciliation_count": len(transition_identities),
             "hard_delete_reconciliation": "not_supported",
             "sync_performance": {
                 "detail_table_workers": detail_table_workers,
-                "local_upsert_batch_size": local_upsert_batch_size,
+                "local_upsert_batch_size": sync_settings.SAMPLE_SYNC_UPSERT_BATCH_SIZE,
                 "source_resolve_ms": source_resolve_duration_ms,
-                "primary_visible_ms": primary_visible_duration_ms,
-                "detail_sync_ms": detail_sync_duration_ms,
-                "table_sync_duration_ms": detail_sync_duration_ms,
-                "bundle_refresh_duration_ms": bundle_refresh_duration_ms,
-                "bundle_refresh_ms": bundle_refresh_duration_ms,
-                "tables_skipped_unchanged": sum(
-                    1
-                    for result in results
-                    if int(result.get("changed_visit_count") or 0) == 0
-                    and int(result.get("unchanged_visit_count") or 0) > 0
-                ),
-                "visits_refreshed": len(bundle_refresh_row_keys),
+                "primary_visible_ms": total_duration_ms,
+                "detail_sync_ms": total_duration_ms,
+                "bundle_refresh_ms": 0.0,
+                "tables_skipped_unchanged": 0,
+                "visits_refreshed": len(requested_visit_keys),
                 "retry_count": 0,
-                "total_duration_ms": round(
-                    (time.perf_counter() - overall_started_at) * 1000,
-                    2,
-                ),
+                "total_duration_ms": total_duration_ms,
             },
             "pool": match_result.get("pool") or self.get_pool(pool_id=pool_id),
-            "primary_match": primary_match_result,
+            "primary_match": primary_match_result or match_result,
             "post_match": match_result,
         }
 
