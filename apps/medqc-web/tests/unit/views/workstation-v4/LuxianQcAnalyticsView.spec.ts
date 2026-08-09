@@ -111,6 +111,8 @@ describe('LuxianQcAnalyticsView', () => {
     expect(wrapper.text()).toContain('质控统计分析')
     expect(wrapper.text()).toContain('按质控完成时间')
     expect(wrapper.get('[data-testid="analytics-kpis"]').text()).toContain('纳入病历')
+    expect(wrapper.get('[data-testid="analytics-kpis"]').text()).not.toContain('按三坐标去重')
+    expect(wrapper.get('[data-testid="analytics-kpis"]').text()).not.toContain('已完成根任务')
     expect(wrapper.findAll('[data-testid="analytics-kpi"]')).toHaveLength(4)
     expect(wrapper.get('[data-testid="analytics-kpis"]').text()).toContain('需优先处理')
     expect(wrapper.get('[data-testid="analytics-conclusion-structure"]').text()).toContain(

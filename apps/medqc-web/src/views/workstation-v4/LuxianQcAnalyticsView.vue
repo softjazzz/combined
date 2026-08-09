@@ -131,7 +131,6 @@
           >
             <span>{{ card.label }}</span>
             <strong>{{ card.value }}</strong>
-            <small>{{ card.detail }}</small>
           </article>
         </section>
 
@@ -925,8 +924,7 @@ onMounted(() => {
   background: #f59e0b;
 }
 
-.analytics-kpi span,
-.analytics-kpi small {
+.analytics-kpi span {
   color: rgba(29, 29, 31, 0.55);
   display: block;
   font-size: 12px;
@@ -938,7 +936,7 @@ onMounted(() => {
   font-size: 28px;
   letter-spacing: -0.03em;
   line-height: 34px;
-  margin: 5px 0 2px;
+  margin: 8px 0 0;
 }
 
 .analytics-kpi.is-brand strong {
