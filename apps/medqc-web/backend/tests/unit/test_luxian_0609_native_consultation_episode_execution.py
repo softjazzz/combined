@@ -8,6 +8,9 @@ import httpx
 import pytest
 
 from app.services.luxian_0609 import native_consultation_episode_execution as episode
+from app.services.luxian_0609.decision_binding import (
+    bind_and_reduce_luxian_0609_rule_decisions,
+)
 from app.services.luxian_0609.evidence_snapshot import (
     EVIDENCE_SNAPSHOT_SCHEMA_VERSION,
     Luxian0609EvidenceSnapshot,
@@ -2322,6 +2325,16 @@ async def test_typed_candidate_scope_incomplete_returns_safe_data_gap_decision()
         episode.EvidenceState.DATA_GAP,
     ]
     assert [item.reason_code for item in result.decisions] == [
+        "candidate_scope_incomplete",
+        "candidate_scope_incomplete",
+    ]
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-020", "LX0609-023"),
+        snapshot=session.snapshot,
+    )
+    assert [item.final_state.value for item in reduced] == ["data_gap", "data_gap"]
+    assert [item.reason_code for item in reduced] == [
         "candidate_scope_incomplete",
         "candidate_scope_incomplete",
     ]

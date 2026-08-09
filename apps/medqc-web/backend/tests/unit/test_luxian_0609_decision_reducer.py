@@ -408,6 +408,19 @@ def test_candidate_scope_incomplete_is_allowed_for_conflict_decision():
     )
 
 
+def test_candidate_scope_incomplete_is_allowed_for_data_gap_decision():
+    decision = _decision(
+        applicability=ApplicabilityState.UNKNOWN,
+        evidence_state=EvidenceState.DATA_GAP,
+        qc_direction=QcDirection.UNKNOWN,
+        reason_code="candidate_scope_incomplete",
+    )
+    reduced = reduce_luxian_0609_rule_decision(decision)
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "candidate_scope_incomplete"
+
+
 def test_reduced_decision_cannot_be_constructed_outside_the_reducer():
     with pytest.raises(TypeError, match="reducer-owned"):
         ReducedRuleDecision(
