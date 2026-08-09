@@ -81,7 +81,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     { value: 'discharged', label: '\u5df2\u51fa\u9662' },
   ]
 
-  // 在院/已出院尚未接入服务端筛选；禁止对当前页病历做本地筛选造成假统计。
+  // 住院状态由服务端筛选；禁止对当前页病历再次本地过滤造成假统计。
   const scopedRecords = computed(() => allRecords.value)
 
   const filteredRecords = computed(() => scopedRecords.value)
@@ -133,9 +133,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         }
       }
 
-      const response = await ApiService.getRaw('/api/medical-records/workstation', {
-        params,
-      })
+      const response = await ApiService.getRaw('/api/medical-records/workstation', params)
       const raw = response.data as Record<string, unknown>
       const data = (
         raw && typeof raw === 'object' && 'data' in raw

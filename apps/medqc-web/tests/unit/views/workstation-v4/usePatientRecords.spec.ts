@@ -59,13 +59,11 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.activeDept.value).toBe('ICU')
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'visit',
-        dept: 'ICU',
-        analytics_scope: 'final',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      dept: 'ICU',
+      analytics_scope: 'final',
     })
   })
 
@@ -80,16 +78,14 @@ describe('usePatientRecords workstation filters', () => {
     await records.fetchData(2, 10)
 
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 2,
-        page_size: 10,
-        date_field: 'admission',
-        dept: '中医科',
-        keyword: '张三',
-        start_date: '2026-05-01',
-        end_date: '2026-05-31',
-        hospital_status: 'inpatient',
-      },
+      page: 2,
+      page_size: 10,
+      date_field: 'admission',
+      dept: '中医科',
+      keyword: '张三',
+      start_date: '2026-05-01',
+      end_date: '2026-05-31',
+      hospital_status: 'inpatient',
     })
   })
 
@@ -98,24 +94,20 @@ describe('usePatientRecords workstation filters', () => {
     await runningRecords.fetchData()
 
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'visit',
-        hospital_status: 'inpatient',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      hospital_status: 'inpatient',
     })
 
     const finalRecords = usePatientRecords('discharged')
     await finalRecords.fetchData()
 
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'visit',
-        hospital_status: 'discharged',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      hospital_status: 'discharged',
     })
   })
 
@@ -128,12 +120,10 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'visit',
-        hospital_status: 'discharged',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      hospital_status: 'discharged',
     })
   })
 
@@ -182,12 +172,10 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'visit',
-        dept: '普通外科',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      dept: '普通外科',
     })
   })
 

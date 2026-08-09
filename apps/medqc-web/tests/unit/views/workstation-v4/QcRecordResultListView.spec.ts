@@ -135,12 +135,10 @@ describe('QcRecordResultListView', () => {
       expect(wrapper.text()).toContain(title)
       expect(wrapper.text()).toContain(scope)
       expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-        params: {
-          page: 1,
-          page_size: 15,
-          date_field: dateField,
-          hospital_status: carePhase,
-        },
+        page: 1,
+        page_size: 15,
+        date_field: dateField,
+        hospital_status: carePhase,
       })
     },
   )
@@ -183,16 +181,14 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     expect(mocks.getRaw).toHaveBeenLastCalledWith('/api/medical-records/workstation', {
-      params: {
-        page: 1,
-        page_size: 15,
-        date_field: 'discharge',
-        dept: '重症医学科',
-        keyword: '患者甲',
-        start_date: '2026-08-01',
-        end_date: '2026-08-10',
-        hospital_status: 'discharged',
-      },
+      page: 1,
+      page_size: 15,
+      date_field: 'discharge',
+      dept: '重症医学科',
+      keyword: '患者甲',
+      start_date: '2026-08-01',
+      end_date: '2026-08-10',
+      hospital_status: 'discharged',
     })
   })
 
