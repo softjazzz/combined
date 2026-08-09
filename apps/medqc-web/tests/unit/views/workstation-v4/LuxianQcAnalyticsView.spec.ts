@@ -172,6 +172,10 @@ describe('LuxianQcAnalyticsView', () => {
     await flush()
 
     expect(wrapper.text()).toContain('ICU质控分析')
+    expect(wrapper.text()).toContain('终末质控')
+    expect(wrapper.text()).not.toContain('科室专项范围')
+    expect(wrapper.text()).not.toContain('聚焦本科室已完成任务中可交付的 Canonical 结果')
+    expect(wrapper.find('[data-testid="analytics-scope"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="analytics-return-hospital"]').exists()).toBe(true)
     expect(apiGet).toHaveBeenCalledWith('/api/v1/workstation/analytics/luxian-0609', {
       completed_from: '2026-08-01T00:00:00',

@@ -3,18 +3,21 @@
     <main class="analytics-canvas">
       <section class="analytics-command-surface">
         <div class="analytics-heading">
-          <div>
+          <div
+            v-if="isDepartmentReport"
+            class="analytics-department-title"
+          >
+            <div class="analytics-title-row">
+              <h1>{{ `${activeDepartmentName}质控分析` }}</h1>
+              <span class="analytics-mode-chip">终末质控</span>
+            </div>
+          </div>
+          <div v-else>
             <p class="analytics-eyebrow">
-              {{ isDepartmentReport ? '科室专项范围 · 终末质控' : '全院临时范围 · 终末质控' }}
+              全院临时范围 · 终末质控
             </p>
-            <h1>{{ isDepartmentReport ? `${activeDepartmentName}质控分析` : '质控统计分析' }}</h1>
-            <p>
-              {{
-                isDepartmentReport
-                  ? '聚焦本科室已完成任务中可交付的 Canonical 结果，不混入技术异常。'
-                  : '聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。'
-              }}
-            </p>
+            <h1>质控统计分析</h1>
+            <p>聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。</p>
           </div>
 
           <div
@@ -59,7 +62,7 @@
         </div>
 
         <div
-          v-if="payload"
+          v-if="payload && !isDepartmentReport"
           class="analytics-context"
           data-testid="analytics-scope"
         >
@@ -742,6 +745,28 @@ onMounted(() => {
   letter-spacing: -0.02em;
   line-height: 32px;
   margin: 4px 0 0;
+}
+
+.analytics-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.analytics-title-row h1 {
+  margin: 0;
+}
+
+.analytics-mode-chip {
+  background: #eaf4ff;
+  border: 1px solid #cce5ff;
+  border-radius: 999px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 22px;
+  padding: 0 10px;
 }
 
 .analytics-heading p:not(.analytics-eyebrow) {
