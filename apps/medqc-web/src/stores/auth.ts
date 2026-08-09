@@ -21,6 +21,7 @@ interface User {
   phone?: string
   bio?: string
   role?: string
+  is_demo_account?: boolean
   notifications?: {
     email: boolean
     sms: boolean

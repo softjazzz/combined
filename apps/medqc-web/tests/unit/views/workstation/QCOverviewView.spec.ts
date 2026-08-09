@@ -8,6 +8,7 @@ const routeState = vi.hoisted(() => ({
   path: '/workstation-v4',
 }))
 const routerPush = vi.hoisted(() => vi.fn())
+const authState = vi.hoisted(() => ({ isDemoAccount: false }))
 
 vi.mock('@/services/apiService', () => ({
   ApiService: { get: apiGet },
@@ -16,6 +17,12 @@ vi.mock('@/services/apiService', () => ({
 vi.mock('vue-router', () => ({
   useRoute: () => routeState,
   useRouter: () => ({ push: routerPush, replace: vi.fn() }),
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    user: { is_demo_account: authState.isDemoAccount },
+  }),
 }))
 
 import QCOverviewView from '@/views/workstation/QCOverviewView.vue'
@@ -116,6 +123,7 @@ describe('QCOverviewView', () => {
     apiGet.mockResolvedValue({ success: true, data: clinicalQcPayload })
     routerPush.mockReset()
     routeState.query = {}
+    authState.isDemoAccount = false
   })
 
   it('只展示权威 clinical_qc 指标、范围和结构化优先项，不展示固定涨跌或趋势', async () => {
@@ -141,6 +149,23 @@ describe('QCOverviewView', () => {
     expect(health).toContain('资料同步状态待核实')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('2')
+  })
+
+  it('演示账号不展示内部技术异常，但保留客户需要的数据状态', async () => {
+    authState.isDemoAccount = true
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const health = wrapper.get('[data-testid="data-health"]').text()
+    expect(health).toContain('资料同步状态')
+    expect(health).toContain('运行中任务')
+    expect(health).toContain('最近成功质控')
+    expect(health).not.toContain('技术异常')
+
+    const coverage = wrapper.get('[data-testid="qc-coverage-chart"]').text()
+    expect(coverage).toContain('已完成 13')
+    expect(coverage).toContain('待质控 3')
+    expect(coverage).not.toContain('结果校验异常')
   })
 
   it('将科室分布收敛为按待复核数量排序的前八个横向柱状图', async () => {

@@ -52,6 +52,7 @@ export interface User extends BaseAuthUser {
   last_login?: string
   created_at?: string
   updated_at?: string
+  is_demo_account?: boolean
 }
 
 // 用户角色数据库记录

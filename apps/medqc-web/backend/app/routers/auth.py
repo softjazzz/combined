@@ -24,6 +24,7 @@ from ..services.auth_store import (
     update_user_password,
     update_user_profile,
 )
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -39,6 +40,7 @@ def _find_user_by_account(account: str) -> dict | None:
 
 
 def _user_payload(user: dict) -> dict:
+    normalized_email = str(user.get("email") or "").strip().lower()
     return {
         "id": user["id"],
         "email": user["email"],
@@ -51,6 +53,7 @@ def _user_payload(user: dict) -> dict:
         "bio": user["bio"],
         "created_at": user["created_at"],
         "last_login": user["last_login"],
+        "is_demo_account": normalized_email in DEFAULT_DEMO_USER_EMAILS,
     }
 
 
@@ -282,4 +285,3 @@ async def reset_password(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
     logger.info("auth.reset_password.success email=%s", email)
     return success_response(data={}, message="密码重置成功", trace_id=get_trace_id(request))
-

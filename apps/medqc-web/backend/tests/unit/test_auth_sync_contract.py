@@ -25,6 +25,19 @@ def _headers(token: str) -> dict[str, str]:
 
 @pytest.mark.unit
 @pytest.mark.api
+def test_me_marks_builtin_account_for_demo_presentation(client):
+    access_token, _ = _login(client, "admin@medqc.com", "admin888")
+
+    response = client.get("/api/v1/auth/me", headers=_headers(access_token))
+
+    assert response.status_code == 200, response.text
+    payload = _assert_success_shell(response.json())
+    assert payload["email"] == "admin@medqc.com"
+    assert payload["is_demo_account"] is True
+
+
+@pytest.mark.unit
+@pytest.mark.api
 def test_refresh_contract_accepts_json_and_returns_stable_shape(client):
     _, refresh_token = _login(client, "admin@medqc.com", "admin888")
     refresh_resp = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})

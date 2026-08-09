@@ -177,7 +177,7 @@
                     <dt>运行中任务</dt>
                     <dd>{{ runningTaskText }}</dd>
                   </div>
-                  <div>
+                  <div v-if="!isDemoPresentation">
                     <dt>技术异常</dt>
                     <dd :class="{ 'is-danger': clinicalQc.data_health.technical_error_total > 0 }">
                       技术异常 {{ clinicalQc.data_health.technical_error_total }} 份
@@ -206,16 +206,22 @@
                   <h2 id="qc-coverage-title">
                     质控覆盖构成
                   </h2>
-                  <p>按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。</p>
+                  <p>
+                    {{
+                      isDemoPresentation
+                        ? '按病历汇总质控完成与待处理情况。'
+                        : '按病历汇总执行覆盖；结果校验异常仅反映系统数据状态。'
+                    }}
+                  </p>
                 </div>
               </header>
               <div
                 class="qc-home-coverage__bar"
                 role="img"
-                :aria-label="`已完成 ${coverageSegments[0].value}，待质控 ${coverageSegments[1].value}，结果校验异常 ${coverageSegments[2].value}`"
+                :aria-label="coverageAriaLabel"
               >
                 <span
-                  v-for="segment in coverageSegments"
+                  v-for="segment in visibleCoverageSegments"
                   :key="segment.key"
                   :class="['qc-home-coverage__segment', `is-${segment.tone}`]"
                   :style="{ width: `${segment.percent}%` }"
@@ -226,7 +232,7 @@
                 aria-label="质控覆盖构成图例"
               >
                 <li
-                  v-for="segment in coverageSegments"
+                  v-for="segment in visibleCoverageSegments"
                   :key="segment.key"
                 >
                   <i
@@ -390,6 +396,7 @@ import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import { ApiService } from '@/services/apiService'
+import { useAuthStore } from '@/stores/auth'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePriorityItem,
@@ -441,6 +448,7 @@ const CONCLUSION_STATUS_META = [
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 // 首次进入即处于加载态，避免请求尚未发起时短暂展示无内容的页面框架。
 const loading = ref(true)
 const loadError = ref(false)
@@ -451,6 +459,7 @@ const syncingFromRoute = ref(false)
 const homeData = ref<WorkstationHomePayload | null>(null)
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
+const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true)
 const departmentOptions = computed(() => homeData.value?.department_options ?? [])
 const scopeHospitalText = computed(() =>
   clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围',
@@ -528,6 +537,14 @@ const coverageSegments = computed<CoverageSegment[]>(() => {
     percent: total ? Number(((segment.value / total) * 100).toFixed(1)) : 0,
   }))
 })
+const visibleCoverageSegments = computed(() =>
+  isDemoPresentation.value
+    ? coverageSegments.value.filter((segment) => segment.key !== 'technical')
+    : coverageSegments.value,
+)
+const coverageAriaLabel = computed(() =>
+  visibleCoverageSegments.value.map((segment) => `${segment.label} ${segment.value}`).join('，'),
+)
 const coverageScopeIsClosed = computed(() => {
   const total = Math.max(0, Number(clinicalQc.value?.kpis.records_total || 0))
   return coverageSegments.value.reduce((sum, segment) => sum + segment.value, 0) === total
