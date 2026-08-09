@@ -927,7 +927,9 @@ onMounted(() => {
 .analytics-kpi span {
   color: rgba(29, 29, 31, 0.55);
   display: block;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
 }
 
 .analytics-kpi strong {
