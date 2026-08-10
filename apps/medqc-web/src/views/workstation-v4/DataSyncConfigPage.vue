@@ -381,6 +381,17 @@
         </a-tab-pane>
 
         <a-tab-pane
+          v-if="canViewLlmObservability"
+          key="llmObservability"
+          tab="模型性能"
+          data-testid="llm-observability-tab"
+        >
+          <div class="system-config-tab-shell system-config-tab-shell--panel">
+            <LlmPerformanceObservabilityPanel />
+          </div>
+        </a-tab-pane>
+
+        <a-tab-pane
           v-if="canManageLlmConfig"
           key="llmConfig"
           tab="模型配置"
@@ -407,6 +418,7 @@ import SyncRunPanel from './components/sync-console/SyncRunPanel.vue'
 import FrontpageExtractionSettingsPanel from './components/system-config/FrontpageExtractionSettingsPanel.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
 import { useDataSync } from './composables/useDataSync'
+import LlmPerformanceObservabilityPanel from './components/system-config/LlmPerformanceObservabilityPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const activeTab = ref('dataSync')
@@ -441,6 +453,9 @@ const canManageLlmConfig = computed(() =>
 )
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
+const canViewLlmObservability = computed(
+  () => canManageLlmConfig.value && authStore.user?.is_demo_account !== true,
+)
 const syncSceneOptions = [
   { label: '在院病历', value: 'running', description: '同步截止日期仍在院的病历' },
   { label: '已出院病历', value: 'final', description: '按出院日期范围同步终末病历' },
@@ -1094,19 +1109,21 @@ async function handleExecuteSync() {
 }
 
 onMounted(async () => {
+  const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
   const canOpenRequestedTab =
-    (route.query.tab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
-    (route.query.tab === 'llmConfig' && canManageLlmConfig.value)
+    (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
+    (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
+    (requestedTab === 'llmObservability' && canViewLlmObservability.value)
   if (canOpenRequestedTab) {
-    activeTab.value = route.query.tab
+    activeTab.value = requestedTab
   }
-  if (activeTab.value !== 'llmConfig') {
+  if (activeTab.value !== 'llmConfig' && activeTab.value !== 'llmObservability') {
     await ensureSyncInitialized()
   }
 })
 
 watch(activeTab, async (tab) => {
-  if (tab === 'llmConfig') return
+  if (tab === 'llmConfig' || tab === 'llmObservability') return
   await ensureSyncInitialized()
 })
 

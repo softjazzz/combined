@@ -35,10 +35,15 @@ const mockAuthStore = {
   get userRoles() {
     return mockUserRoles
   },
+  user: {
+    is_demo_account: false,
+  },
 }
 
+const mockRoute = reactive({ query: {} as Record<string, string> })
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {} }),
+  useRoute: () => mockRoute,
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -75,7 +80,11 @@ function mountPage() {
   return mount(DataSyncConfigPage, {
     global: {
       stubs: {
-        'a-tabs': { template: '<div><slot /></div>' },
+        'a-tabs': {
+          props: ['activeKey'],
+          template:
+            '<div data-testid="system-config-tabs" :data-active-key="activeKey"><slot /></div>',
+        },
         'a-tab-pane': { template: '<section><slot /></section>' },
         'a-tooltip': { template: '<span><slot /></span>' },
         'a-button': { template: '<button><slot /></button>' },
@@ -98,6 +107,7 @@ function mountPage() {
         SyncRunPanel: { template: '<div />' },
         FrontpageExtractionSettingsPanel: { template: '<div />' },
         LLMApiConfig: { template: '<div />' },
+        LlmPerformanceObservabilityPanel: { template: '<div />' },
       },
     },
   })
@@ -106,6 +116,9 @@ function mountPage() {
 describe('DataSyncConfigPage visit progress', () => {
   beforeEach(() => {
     mockUserRoles = ['admin', 'qc_manager']
+    mockAuthStore.user.is_demo_account = false
+    mockRoute.query = {}
+    mockState.policyForm.scope = 'final'
     mockState.isSyncing = false
     mockState.preflightResult = { estimated_impact: 20 }
     mockState.pgSyncState = {
@@ -292,18 +305,40 @@ describe('DataSyncConfigPage visit progress', () => {
   })
 
   it.each([
-    { role: 'qc_manager', frontpage: true, llm: false },
-    { role: 'admin', frontpage: true, llm: true },
-    { role: 'sync_admin', frontpage: true, llm: true },
-    { role: 'super_admin', frontpage: true, llm: true },
-    { role: 'doctor', frontpage: false, llm: false },
-  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm }) => {
+    { role: 'qc_manager', frontpage: true, llm: false, observability: false },
+    { role: 'admin', frontpage: true, llm: true, observability: true },
+    { role: 'sync_admin', frontpage: true, llm: true, observability: true },
+    { role: 'super_admin', frontpage: true, llm: true, observability: true },
+    { role: 'doctor', frontpage: false, llm: false, observability: false },
+  ])('按 $role 的后端角色合同展示系统配置页签', ({ role, frontpage, llm, observability }) => {
     mockUserRoles = [role]
 
     const wrapper = mountPage()
 
     expect(wrapper.find('[data-testid="frontpage-config-tab"]').exists()).toBe(frontpage)
     expect(wrapper.find('[data-testid="llm-config-tab"]').exists()).toBe(llm)
+    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(observability)
+  })
+
+  it('演示账号不显示模型性能页签', () => {
+    mockUserRoles = ['admin']
+    mockAuthStore.user.is_demo_account = true
+
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(false)
+  })
+
+  it('管理员通过 tab 查询参数可直接打开模型性能页签', async () => {
+    mockUserRoles = ['admin']
+    mockRoute.query = { tab: 'llmObservability' }
+
+    const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'llmObservability',
+    )
   })
 
   it('0 条候选病历时展示客户化 warning 口径', () => {
