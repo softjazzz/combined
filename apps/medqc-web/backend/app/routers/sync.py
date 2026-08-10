@@ -22,6 +22,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError as SAOperationalError
+from starlette.concurrency import run_in_threadpool
 
 try:
     from psycopg2 import OperationalError as PGOperationalError
@@ -865,7 +866,8 @@ async def trigger_sync(
 
     try:
         from ..services.etl_sync import run_sync
-        result = run_sync(
+        result = await run_in_threadpool(
+            run_sync,
             sync_date=effective_sync_date,
             tables=selected_tables,
             scene=scene,

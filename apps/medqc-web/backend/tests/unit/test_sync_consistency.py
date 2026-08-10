@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import pytest
@@ -1890,3 +1891,80 @@ def test_mongo_sync_state_persisted_in_database(monkeypatch):
     assert loaded["tier1_discovered"] == 11
     assert loaded["tier2_synced"] == 7
     assert loaded["tier3_synced"] == 5
+
+
+def test_pg_sync_state_persists_and_reads_progress_json(monkeypatch):
+    persisted: dict[str, object] = {}
+    stored_row = {
+        "is_running": True,
+        "last_sync_time": None,
+        "last_sync_status": "running",
+        "total_records_synced": 0,
+        "logs_json": [],
+        "progress_json": {
+            "run_id": "sync-progress-1",
+            "stage": "syncing_table",
+            "tables_done": 3,
+            "tables_total": 8,
+        },
+        "remote_connected": True,
+        "local_connected": True,
+    }
+
+    class _Result:
+        def __init__(self, *, first=None, mapping=None):
+            self._first = first
+            self._mapping = mapping
+
+        def first(self):
+            return self._first
+
+        def mappings(self):
+            return self
+
+    class _Session:
+        def __init__(self, _engine):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, statement, params=None):
+            sql = str(statement)
+            if "information_schema.tables" in sql:
+                return _Result(first=(1,))
+            if "INSERT INTO qc.sync_job_state" in sql:
+                persisted.update(params or {})
+                return _Result()
+            if "FROM qc.sync_job_state" in sql:
+                return _Result(first=stored_row, mapping=stored_row)
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "engine", object())
+    monkeypatch.setattr(etl_sync, "Session", _Session)
+    state = etl_sync.SyncState(
+        is_running=True,
+        last_sync_status="running",
+        progress={
+            "run_id": "sync-progress-1",
+            "stage": "syncing_table",
+            "tables_done": 3,
+            "tables_total": 8,
+        },
+        remote_connected=True,
+        local_connected=True,
+    )
+
+    etl_sync._upsert_sync_job_state(state)
+    loaded = etl_sync.get_sync_state()
+
+    assert json.loads(str(persisted["progress_json"]))["tables_done"] == 3
+    assert loaded["is_running"] is True
+    assert loaded["progress"]["run_id"] == "sync-progress-1"
+    assert loaded["progress"]["tables_total"] == 8

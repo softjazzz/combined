@@ -211,37 +211,35 @@
 
                   <div class="system-config-progress-grid">
                     <div>
-                      <span>{{ candidateProgressLabel }}</span>
+                      <span>本次候选</span>
                       <strong>{{ syncProgressCandidateCount.toLocaleString() }} 份</strong>
                     </div>
                     <div>
-                      <span>病历进度</span>
+                      <span>可进入病历池</span>
                       <strong>{{ syncProgressVisitCompleted }} / {{ syncProgressVisitTotal }} 份</strong>
                     </div>
-                    <div v-if="isSyncAdvancedUser">
-                      <span>表进度</span>
+                    <div>
+                      <span>资料类别进度</span>
                       <strong>{{ syncProgressTablesDone }} / {{ syncProgressTablesTotal }}</strong>
-                    </div>
-                    <div v-if="isSyncAdvancedUser">
-                      <span>已拉取行数</span>
-                      <strong>{{ syncProgressRowsPulled.toLocaleString() }}</strong>
-                    </div>
-                    <div v-if="isSyncAdvancedUser">
-                      <span>已写入行数</span>
-                      <strong>{{ syncProgressRowsUpserted.toLocaleString() }}</strong>
                     </div>
                   </div>
 
-                  <div
+                  <details
                     v-if="isSyncAdvancedUser"
-                    class="system-config-progress-meta"
+                    class="system-config-progress-details"
+                    data-testid="sync-technical-details"
                   >
-                    <span>当前表：{{ syncProgressCurrentTable }}</span>
-                    <span>剩余表：{{ syncProgressTablesRemaining }}</span>
-                    <span>预计剩余：{{ syncProgressEtaText }}</span>
-                  </div>
+                    <summary>同步详情</summary>
+                    <div class="system-config-progress-meta">
+                      <span>当前资料表：{{ syncProgressCurrentTable }}</span>
+                      <span>剩余资料表：{{ syncProgressTablesRemaining }}</span>
+                      <span>已拉取行数：{{ syncProgressRowsPulled.toLocaleString() }}</span>
+                      <span>已写入行数：{{ syncProgressRowsUpserted.toLocaleString() }}</span>
+                      <span>预计剩余：{{ syncProgressEtaText }}</span>
+                    </div>
+                  </details>
                   <p class="system-config-progress-note">
-                    病历进度按病历主记录已写入本地计算；明细文书、医嘱、检查等仍以表进度为准。
+                    病历主记录写入后即可进入病历池；病程、医嘱、检查检验等资料会继续同步并统一刷新。
                     <span v-if="syncProgressVisitWarning">{{ syncProgressVisitWarning }}</span>
                   </p>
                 </div>
@@ -803,10 +801,16 @@ const syncVisitProgress = computed<Record<string, unknown>>(() => {
 })
 
 const syncProgressStageLabelMap: Record<string, string> = {
-  initializing: '正在初始化同步任务',
-  preflight: '正在执行同步前检查',
-  syncing_table: '正在同步数据表',
-  completed: '同步执行已结束',
+  initializing: '正在准备同步任务',
+  preflight: '正在检查同步条件',
+  scope_resolution: '正在确定病历范围',
+  syncing_table: '正在同步病历资料',
+  primary_visibility: '正在同步病历主记录',
+  primary_unavailable: '部分病历主记录待处理',
+  finalizing: '正在刷新病历资料视图',
+  completed: '同步已完成',
+  failed: '同步未完成，请查看原因',
+  rejected: '同步任务未启动',
 }
 
 const syncProgressStatusText = computed(() => {
@@ -821,7 +825,8 @@ const syncProgressStatusText = computed(() => {
 const syncProgressStatusClass = computed(() => {
   const status = String(syncProgress.value.status || state.pgSyncState?.last_sync_status || '')
   if (status === 'failed') return 'wv4-status-chip--danger'
-  if (status === 'success' || status === 'partial') return 'wv4-status-chip--success'
+  if (status === 'partial') return 'wv4-status-chip--warning'
+  if (status === 'success') return 'wv4-status-chip--success'
   return state.isSyncing ? 'wv4-status-chip--brand' : 'wv4-status-chip--neutral'
 })
 
@@ -893,8 +898,6 @@ const syncProgressEtaText = computed(() => {
 const syncProgressStageText = computed(() => {
   const stage = String(syncProgress.value.stage || '').trim()
   const label = syncProgressStageLabelMap[stage] || (state.isSyncing ? '正在同步数据' : '等待执行')
-  const table = String(syncProgress.value.current_table || '').trim()
-  if (table) return `${label}：${table}`
   return label
 })
 const showSyncProgress = computed(
@@ -1979,6 +1982,21 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.system-config-progress-details {
+  margin-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 10px;
+}
+
+.system-config-progress-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+  list-style-position: inside;
 }
 
 .system-config-progress-meta span {

@@ -135,12 +135,14 @@ describe('DataSyncConfigPage visit progress', () => {
   it('展示病历池可见口径的病历级进度', () => {
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('病历进度')
+    expect(wrapper.text()).toContain('可进入病历池')
+    expect(wrapper.text()).toContain('资料类别进度')
     expect(wrapper.text()).toContain('3 / 20 份')
     expect(wrapper.text()).toContain('有 2 份病历明细已同步但病历池暂不可见')
+    expect(wrapper.find('.wv4-status-chip--warning').exists()).toBe(true)
   })
 
-  it('没有 visit_progress 时仍可展示原有表级和行数进度', () => {
+  it('高级账号将表名和行数收纳在默认折叠的同步详情中', () => {
     mockUserRoles = ['sync_admin']
     mockState.pgSyncState = {
       is_running: false,
@@ -158,9 +160,36 @@ describe('DataSyncConfigPage visit progress', () => {
 
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('表进度')
+    const details = wrapper.get('[data-testid="sync-technical-details"]')
+    expect(details.attributes('open')).toBeUndefined()
+    expect(wrapper.text()).toContain('资料类别进度')
+    expect(details.text()).toContain('当前资料表')
     expect(wrapper.text()).toContain('已拉取行数')
     expect(wrapper.text()).toContain('0 / 20 份')
+  })
+
+  it('使用客户语言展示病例范围与Bundle刷新阶段', async () => {
+    mockState.isSyncing = true
+    mockState.pgSyncState = {
+      is_running: true,
+      last_sync_status: 'running',
+      progress: {
+        status: 'running',
+        stage: 'scope_resolution',
+        current_table: 'mr',
+        tables_total: 8,
+        tables_done: 0,
+        eligible_visit_count: 0,
+      },
+    }
+    const wrapper = mountPage()
+    expect(wrapper.text()).toContain('正在确定病历范围')
+    expect(wrapper.text()).not.toContain('正在同步数据：mr')
+
+    mockState.pgSyncState.progress.stage = 'finalizing'
+    mockState.pgSyncState.progress.current_table = ''
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('正在刷新病历资料视图')
   })
 
   it('按用户任务顺序展示三步单页同步引导', () => {

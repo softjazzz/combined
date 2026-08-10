@@ -461,6 +461,47 @@ class TestSyncRouter:
         assert resp.status_code == 200
         _assert_error_shell(resp.json(), expected_code="SYNC_ALREADY_RUNNING")
 
+    def test_trigger_runs_blocking_sync_in_worker_thread(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        calls: list[dict] = []
+
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-worker-thread",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **_kwargs: None,
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda _record: None,
+        )
+
+        async def _fake_run_in_threadpool(func, **kwargs):
+            calls.append({"func": func, "kwargs": kwargs})
+            return func(**kwargs)
+
+        monkeypatch.setattr(sync_router_module, "run_in_threadpool", _fake_run_in_threadpool)
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {"success": True, "status": "success", "total_records": 1},
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all"},
+        )
+
+        assert response.status_code == 200
+        assert len(calls) == 1
+        assert calls[0]["func"].__name__ == "<lambda>"
+        assert calls[0]["kwargs"]["run_id"] == "syncrun-worker-thread"
+
     def test_trigger_idempotency_reuse(self, client, monkeypatch):
         _override_user(client, ["admin"])
         calls = {"reserve": 0, "run": 0, "append": 0}

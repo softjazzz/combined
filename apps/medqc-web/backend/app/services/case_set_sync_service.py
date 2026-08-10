@@ -348,6 +348,8 @@ class CaseSetSyncService:
                     "current_table": "",
                     "processed_tables": processed_tables,
                     "total_tables": len(ordered_tables),
+                    "visible_case_count": len(visible_case_refs),
+                    "missing_primary_case_count": len(missing_primary_case_refs),
                 }
             )
         if primary_visible and detail_tables:

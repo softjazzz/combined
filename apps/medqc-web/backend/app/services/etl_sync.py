@@ -349,11 +349,13 @@ def _upsert_sync_job_state(state: SyncState):
                 f"""
                 INSERT INTO {_SYNC_JOB_STATE_TABLE} (
                     job_name, is_running, last_sync_time, last_sync_status,
-                    total_records_synced, logs_json, remote_connected, local_connected, updated_at
+                    total_records_synced, logs_json, progress_json,
+                    remote_connected, local_connected, updated_at
                 )
                 VALUES (
                     'pg_sync', :is_running, :last_sync_time, :last_sync_status,
-                    :total_records_synced, :logs_json, :remote_connected, :local_connected, CURRENT_TIMESTAMP
+                    :total_records_synced, :logs_json, :progress_json,
+                    :remote_connected, :local_connected, CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (job_name)
                 DO UPDATE SET
@@ -362,6 +364,7 @@ def _upsert_sync_job_state(state: SyncState):
                     last_sync_status = EXCLUDED.last_sync_status,
                     total_records_synced = EXCLUDED.total_records_synced,
                     logs_json = EXCLUDED.logs_json,
+                    progress_json = EXCLUDED.progress_json,
                     remote_connected = EXCLUDED.remote_connected,
                     local_connected = EXCLUDED.local_connected,
                     updated_at = CURRENT_TIMESTAMP
@@ -373,6 +376,7 @@ def _upsert_sync_job_state(state: SyncState):
                 "last_sync_status": payload.get("last_sync_status") or "never",
                 "total_records_synced": int(payload.get("total_records_synced") or 0),
                 "logs_json": json.dumps(payload.get("logs") or [], ensure_ascii=False),
+                "progress_json": json.dumps(payload.get("progress") or {}, ensure_ascii=False),
                 "remote_connected": bool(payload.get("remote_connected")),
                 "local_connected": bool(payload.get("local_connected")),
             },
@@ -382,8 +386,6 @@ def _upsert_sync_job_state(state: SyncState):
 
 def get_sync_state() -> Dict:
     """获取当前同步状态（优先读取数据库状态，回退内存）"""
-    if _sync_state.is_running:
-        return asdict(_sync_state)
     if engine is None:
         if _pg_required_in_current_env():
             raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
@@ -396,7 +398,7 @@ def get_sync_state() -> Dict:
                     f"""
                     SELECT
                         is_running, last_sync_time, last_sync_status, total_records_synced,
-                        logs_json, remote_connected, local_connected
+                        logs_json, progress_json, remote_connected, local_connected
                     FROM {_SYNC_JOB_STATE_TABLE}
                     WHERE job_name = 'pg_sync'
                     """
@@ -406,6 +408,7 @@ def get_sync_state() -> Dict:
                 _upsert_sync_job_state(_sync_state)
                 return asdict(_sync_state)
             logs = row.get("logs_json") or []
+            progress = row.get("progress_json") or {}
             last_sync_time = row.get("last_sync_time")
             if hasattr(last_sync_time, "strftime"):
                 last_sync_time = last_sync_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -416,13 +419,18 @@ def get_sync_state() -> Dict:
                     logs = json.loads(logs)
                 except Exception:
                     logs = []
+            if isinstance(progress, str):
+                try:
+                    progress = json.loads(progress)
+                except Exception:
+                    progress = {}
             return {
                 "is_running": bool(row.get("is_running")),
                 "last_sync_time": last_sync_time,
                 "last_sync_status": row.get("last_sync_status") or "never",
                 "total_records_synced": int(row.get("total_records_synced") or 0),
                 "logs": logs if isinstance(logs, list) else [],
-                "progress": dict(_sync_state.progress or {}),
+                "progress": dict(progress) if isinstance(progress, dict) else {},
                 "remote_connected": bool(row.get("remote_connected")),
                 "local_connected": bool(row.get("local_connected")),
             }
@@ -2751,7 +2759,18 @@ def _emit_sync_progress(
     progress_callback: Optional[Callable[[Dict[str, Any]], None]],
     payload: Dict[str, Any],
 ) -> None:
-    _sync_state.progress = dict(payload)
+    previous = dict(_sync_state.progress or {})
+    if previous.get("run_id") != payload.get("run_id"):
+        previous = {}
+    previous.update(payload)
+    _sync_state.progress = previous
+    try:
+        _upsert_sync_job_state(_sync_state)
+    except Exception as exc:
+        logger.warning(
+            "sync_progress_persist_failed error_type=%s",
+            type(exc).__name__,
+        )
     if progress_callback is None:
         return
     try:
@@ -3155,7 +3174,10 @@ def run_sync(
                 "warnings": list(dict.fromkeys(run_warnings)),
             }
 
+        visible_case_count = 0
+
         def _forward_case_set_progress(payload: Dict[str, Any]) -> None:
+            nonlocal visible_case_count
             step_key = str(payload.get("step_key") or "")
             stage_by_step = {
                 "syncing": "syncing_table",
@@ -3165,6 +3187,21 @@ def run_sync(
             }
             processed_tables = int(payload.get("processed_tables") or 0)
             total_tables = int(payload.get("total_tables") or len(target_tables))
+            if "visible_case_count" in payload:
+                visible_case_count = max(
+                    0,
+                    min(len(case_refs), int(payload.get("visible_case_count") or 0)),
+                )
+            visit_progress = {
+                "total": len(case_refs),
+                "completed": visible_case_count,
+                "remaining": max(0, len(case_refs) - visible_case_count),
+                "missing_mr": max(0, len(case_refs) - visible_case_count),
+                "detail_only": 0,
+                "basis": "case_ref_primary_visible",
+                "identity_basis": "institute_id+patient_id+visit_id",
+                "label": "病历池可见进度",
+            }
             _emit_sync_progress(
                 progress_callback,
                 {
@@ -3178,10 +3215,7 @@ def run_sync(
                     "rows_upserted_total": 0,
                     "eligible_visit_count": len(case_refs),
                     "case_ref_count": len(case_refs),
-                    "visit_progress": _build_case_ref_progress(
-                        eligible_case_refs,
-                        set(),
-                    ),
+                    "visit_progress": visit_progress,
                     "failed_tables": 0,
                     "eta_seconds": None,
                 },
