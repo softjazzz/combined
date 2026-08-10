@@ -1244,7 +1244,14 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     expected_task_rule_ids = [
         rule_id
         for rule_id in luxian_rule_set.rule_ids
-        if rule_id not in {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+        if rule_id
+        not in {
+            "LX0609-033",
+            "LX0609-034",
+            "LX0609-041",
+            "LX0609-042",
+            "LX0609-049",
+        }
     ]
     assert len(luxian_rule_set.rule_ids) == 75
     assert luxian_rule_set.rule_ids[-1] == "LX0609-075"
@@ -1262,8 +1269,9 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
         "LX0609-034",
         "LX0609-041",
         "LX0609-042",
+        "LX0609-049",
     ]
-    assert created["filters"]["paused_customer_rule_count"] == 4
+    assert created["filters"]["paused_customer_rule_count"] == 5
     assert created["filters"]["selected_rule_ids"] == []
     assert created["filters"]["scoped_customer_rule_ids"] == []
     assert "record_rule_map" not in created["filters"]
@@ -1278,7 +1286,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_should_skip_paused_consent_rules_but_keep_catalog_rule_set(monkeypatch):
+async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalog_rule_set(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -1297,17 +1305,17 @@ async def test_run_sample_pool_should_skip_paused_consent_rules_but_keep_catalog
         current_user={"id": "tester"},
     )
 
-    paused = {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+    paused = {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042", "LX0609-049"}
     created = workspace_service.create_batch_job_calls[0]
     assert paused.isdisjoint(created["filters"]["rule_ids"])
-    assert created["filters"]["rule_count"] == 71
-    assert response["data"]["rule_count"] == 71
+    assert created["filters"]["rule_count"] == 70
+    assert response["data"]["rule_count"] == 70
     # 规则目录仍是完整75条；只改变本次任务执行范围。
     assert len(sample_validation_rule_sets.get_luxian_0609_sample_validation_rule_set().rule_ids) == 75
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_should_filter_paused_consent_rules_from_explicit_scope(monkeypatch):
+async def test_run_sample_pool_should_filter_paused_customer_rules_from_explicit_scope(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -1322,7 +1330,7 @@ async def test_run_sample_pool_should_filter_paused_consent_rules_from_explicit_
             record_ids=["V001"],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
-            selected_rule_ids=["LX0609-020", "LX0609-033", "LX0609-042"],
+            selected_rule_ids=["LX0609-020", "LX0609-033", "LX0609-042", "LX0609-049"],
         ),
         current_user={"id": "tester"},
     )
@@ -1334,7 +1342,7 @@ async def test_run_sample_pool_should_filter_paused_consent_rules_from_explicit_
 
 
 @pytest.mark.asyncio
-async def test_run_sample_pool_should_reject_scope_with_only_paused_consent_rules(monkeypatch):
+async def test_run_sample_pool_should_reject_scope_with_only_paused_customer_rules(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
 
@@ -1349,7 +1357,13 @@ async def test_run_sample_pool_should_reject_scope_with_only_paused_consent_rule
                 record_ids=["V001"],
                 sample_item_ids=["item-1"],
                 rule_set_key="luxian_0609_qc_v1",
-                selected_rule_ids=["LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"],
+                selected_rule_ids=[
+                    "LX0609-033",
+                    "LX0609-034",
+                    "LX0609-041",
+                    "LX0609-042",
+                    "LX0609-049",
+                ],
             ),
             current_user={"id": "tester"},
         )

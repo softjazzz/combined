@@ -2966,13 +2966,13 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
     """样本池策略暂停必须经 worker 投影为客户可懂结果，而不是执行异常。"""
 
     active_rule = get_luxian_0609_rule("LX0609-020")
-    paused_rule = get_luxian_0609_rule("LX0609-033")
+    paused_rule = get_luxian_0609_rule("LX0609-049")
     assert active_rule is not None and paused_rule is not None
     workspace = _WorkspaceStub()
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["filters"] = {
         "rule_ids": ["LX0609-020"],
-        "paused_customer_rule_ids": ["LX0609-033"],
+        "paused_customer_rule_ids": ["LX0609-049"],
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
@@ -3013,7 +3013,7 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
-    paused_item = next(item for item in workspace.items if item["rule_id"] == "LX0609-033")
+    paused_item = next(item for item in workspace.items if item["rule_id"] == "LX0609-049")
     assert workspace.failed_records == []
     assert paused_item["status"] == "not_executed"
     assert paused_item["result_status"] == "not_executed"
@@ -3021,6 +3021,7 @@ async def test_native_luxian_paused_customer_rule_is_persisted_as_paused_not_mis
     assert paused_item["metadata"]["result_fallback"] == "paused_customer_rule"
     assert paused_item["metadata"]["customer_rule_paused"] is True
     assert "不纳入本次质控结论" in paused_item["findings"]
+    assert "知情同意书" not in paused_item["findings"]
     assert "资料缺失" in paused_item["evidence"]
     assert "重新执行" not in paused_item["suggestion"]
 

@@ -72,10 +72,10 @@ _LUXIAN_0609_REPORT_FILES = {
 }
 _SAMPLE_VALIDATION_DEDUP_WINDOW = timedelta(minutes=2)
 _SAMPLE_VALIDATION_DEDUP_STATUSES = {"queued", "running"}
-# 当前 LX0609 目标病例缺少可核验的同意书资料。规则仍保留在目录和历史结果中，
-# 仅暂停新建样本池 LX0609 任务的执行，避免把资料能力缺口伪装成质控结论。
-_LUXIAN_0609_PAUSED_CONSENT_RULE_IDS = frozenset(
-    {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042"}
+# 当前 LX0609 目标病例缺少可核验的同意书或收费资料。规则仍保留在目录和历史结果中，
+# 仅暂停新建样本池 LX0609 任务的执行，避免把系统资料能力缺口伪装成医疗质控结论。
+_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS = frozenset(
+    {"LX0609-033", "LX0609-034", "LX0609-041", "LX0609-042", "LX0609-049"}
 )
 
 
@@ -1131,29 +1131,29 @@ async def run_sample_pool_intrinsic_validation(
         paused_selected_rule_ids = [
             rule_id
             for rule_id in requested_selected_rule_ids
-            if rule_id in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+            if rule_id in _LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS
         ]
         requested_selected_rule_ids = [
             rule_id
             for rule_id in requested_selected_rule_ids
-            if rule_id not in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+            if rule_id not in _LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS
         ]
         rule_ids = [
             rule_id
             for rule_id in rule_ids
-            if str(rule_id).strip().upper() not in _LUXIAN_0609_PAUSED_CONSENT_RULE_IDS
+            if str(rule_id).strip().upper() not in _LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS
         ]
         if paused_selected_rule_ids and not requested_selected_rule_ids:
             raise HTTPException(
                 status_code=422,
-                detail="所选质控点均为暂不执行的知情同意书规则，请调整质控范围",
+                detail="所选质控点当前均暂不执行，请调整质控范围",
             )
         # 目录仍展示全部 75 条规则；将本次未进入执行器的规则明确传给 worker，
         # 避免客户结果层把“策略暂停”误投影为“未返回执行结果”。
         paused_customer_rule_ids = (
             paused_selected_rule_ids
             if requested_selected_rule_ids
-            else sorted(_LUXIAN_0609_PAUSED_CONSENT_RULE_IDS)
+            else sorted(_LUXIAN_0609_PAUSED_CUSTOMER_RULE_IDS)
         )
     else:
         paused_customer_rule_ids = []

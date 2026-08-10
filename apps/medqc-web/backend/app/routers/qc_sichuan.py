@@ -3512,7 +3512,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                     "rule_name": rule_name,
                                     "status": "not_executed",
                                     "is_compliant": None,
-                                    "findings": "本次暂未启用：该知情同意书质控点不纳入本次质控结论。",
+                                    "findings": "本次暂未启用：该质控点不纳入本次质控结论。",
                                     "evidence": "本次未执行该规则；这不是资料缺失，也不表示存在质控问题。",
                                     "suggestion": "无需处理；该质控点恢复启用后将重新纳入质控范围。",
                                     "confidence": 0,

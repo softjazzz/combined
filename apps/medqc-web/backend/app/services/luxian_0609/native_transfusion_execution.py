@@ -30,8 +30,12 @@ EXECUTOR_KEY = "transfusion"
 _TYPED_DECISION_RULE_IDS = frozenset(TRANSFUSION_RULE_IDS)
 _TYPED_EVALUATOR_VERSION = "transfusion-ruledecision-shadow-v1"
 
-_CONSERVATIVE_DATA_GAP_RULE_IDS: frozenset[str] = frozenset()
-_CONSERVATIVE_DATA_GAP_REASONS: dict[str, str] = {}
+# 049 仍缺少可受控关联的收费数量，因此旧的直接执行入口继续保守返回 DATA_GAP；
+# 新建客户任务会在任务入口明确暂停该规则，不会把此系统缺口交付为客户质控结论。
+_CONSERVATIVE_DATA_GAP_RULE_IDS = frozenset({"LX0609-049"})
+_CONSERVATIVE_DATA_GAP_REASONS = {
+    "LX0609-049": "billing_linkage_source_unavailable",
+}
 
 _TRIGGER_SOURCES = ("mr_bloodtrans", "bloodtrans_record")
 _MAX_ROWS_PER_SOURCE = 8
@@ -174,6 +178,7 @@ _RULE_CONTEXT_SOURCES = {
     "LX0609-049": (
         "bloodtrans_record",
         "inpat_nondrug_order",
+        "inpat_bill_item",
         "blood_application",
     ),
 }
@@ -199,6 +204,7 @@ _RULE_REQUIRED_SOURCE_GROUPS = {
     "LX0609-049": (
         ("bloodtrans_record",),
         ("inpat_nondrug_order",),
+        ("inpat_bill_item",),
     ),
 }
 
@@ -219,6 +225,7 @@ _TYPED_SOURCE_ALIASES = {
     "postsurg_firstcourse_record": ("postsurg_firstcourse_record",),
     # medical_order 仅用于识别来源 ERROR；保守规则不会读取其内容推断输血医嘱。
     "inpat_nondrug_order": ("inpat_nondrug_order", "medical_order"),
+    "inpat_bill_item": ("inpat_bill_item",),
 }
 
 
@@ -1152,81 +1159,6 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     if bloodtrans_entries and has_application and not has_marker:
         return "non_compliant", "pretransfusion_assessment_incomplete"
     return None
-
-
-def _programmatic_049_status(
-    documents: Mapping[str, Any],
-) -> tuple[str, str, Mapping[str, Any]]:
-    """只核对输血医嘱与实际输血记录；收费不属于当前质控合同。"""
-
-    record_rows = _source_document_rows(documents, "bloodtrans_record")
-    application_rows = _source_document_rows(documents, "blood_application")
-    application_ids = {
-        _clean(row.get("application_id"))
-        for row in application_rows
-        if _clean(row.get("application_id"))
-    }
-    order_rows = tuple(
-        row
-        for row in _source_document_rows(documents, "inpat_nondrug_order")
-        if (
-            _clean(row.get("application_id")) in application_ids
-            or _TRANSFUSION_CONTEXT_PATTERN.search(_row_text(row))
-            or _TRANSFUSION_COMPONENT_PATTERN.search(_row_text(row))
-        )
-    )
-
-    def components(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-        return sorted(
-            {
-                component
-                for row in rows
-                for component in _TRANSFUSION_COMPONENT_PATTERN.findall(
-                    " ".join(
-                        part
-                        for part in (
-                            _row_text(row),
-                            _clean(row.get("transfuse_variety")),
-                            _clean(row.get("order_name")),
-                        )
-                        if part
-                    )
-                )
-            }
-        )
-
-    ordered_components = components((*order_rows, *application_rows))
-    recorded_components = components(record_rows)
-    order_count = len(order_rows)
-    record_count = len(record_rows)
-    consistent = bool(
-        order_count
-        and record_count
-        and ordered_components
-        and recorded_components
-        and ordered_components == recorded_components
-    )
-    facts: dict[str, Any] = {
-        (
-            "verification_kind" if consistent else "failure_kind"
-        ): (
-            "transfusion_order_record_consistent"
-            if consistent
-            else "transfusion_order_record_inconsistent"
-        ),
-        "performed_transfusion_confirmed": True,
-        "order_count": order_count,
-        "record_count": record_count,
-        "ordered_components": ordered_components,
-        "recorded_components": recorded_components,
-        "order_record_consistent": consistent,
-        "billing_checked": False,
-    }
-    return (
-        "compliant" if consistent else "non_compliant",
-        "requirement_satisfied" if consistent else "requirement_violated",
-        facts,
-    )
 
 
 def _is_substantive_transfusion_course_entry(entry: str) -> bool:
@@ -2268,16 +2200,6 @@ async def execute_luxian_0609_native_transfusion_rules(
             continue
         if rule_id == "LX0609-048":
             status, reason_code, display_facts = _programmatic_048_status(documents)
-            emit_outcome(
-                rule_id,
-                status,
-                reason_code,
-                executor_type="program",
-                display_facts=display_facts,
-            )
-            continue
-        if rule_id == "LX0609-049":
-            status, reason_code, display_facts = _programmatic_049_status(documents)
             emit_outcome(
                 rule_id,
                 status,

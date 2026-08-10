@@ -2015,10 +2015,6 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-055": {"antimicrobial_effect_evaluation_check"},
         "LX0609-057": {"empiric_antimicrobial_reason_check"},
         "LX0609-058": {"special_antimicrobial_expert_support_check"},
-        "LX0609-049": {
-            "transfusion_order_record_consistent",
-            "transfusion_order_record_inconsistent",
-        },
         "LX0609-059": {
             "antimicrobial_course_documentation_complete",
             "antimicrobial_course_documentation_missing",
@@ -2074,16 +2070,6 @@ def safe_luxian_0609_customer_display_facts(
         },
         "special_antimicrobial_expert_support_check": {
             "special_antimicrobials", "expert_support_present",
-        },
-        "transfusion_order_record_consistent": {
-            "performed_transfusion_confirmed", "order_count", "record_count",
-            "ordered_components", "recorded_components",
-            "order_record_consistent", "billing_checked",
-        },
-        "transfusion_order_record_inconsistent": {
-            "performed_transfusion_confirmed", "order_count", "record_count",
-            "ordered_components", "recorded_components",
-            "order_record_consistent", "billing_checked",
         },
         "antimicrobial_course_documentation_complete": {
             "antimicrobials", "course_documented",
