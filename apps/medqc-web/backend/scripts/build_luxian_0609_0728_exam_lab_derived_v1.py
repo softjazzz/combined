@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """为 0728 样本池的两份真实病历生成可追溯的受控资料补件副本。
 
 这是一次性、受控的验证资料构建器：不修改源病例；每份副本使用新三坐标，
@@ -7,19 +5,21 @@ from __future__ import annotations
 解决其他真实缺失资料；本轮补齐检查检验、输血、收费、会诊及交接班受控资料。
 """
 
+from __future__ import annotations
+
 import argparse
 import importlib.util
 import json
+import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable
 
-import sqlalchemy as sa
-from sqlalchemy import MetaData, Table, and_, select, update
+from sqlalchemy import MetaData, Table, and_, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -45,6 +45,23 @@ RULE_IDS = [
     "LX0609-043", "LX0609-049", "LX0609-069", "LX0609-070", "LX0609-071",
 ]
 OUTPUT_PATH = ROOT / "tmp-0728-controlled-supplement-v2-manifest.json"
+_CT_MRI_ORDER_PATTERN = re.compile(
+    r"(?:^|[^A-Z])CT(?:$|[^A-Z])|(?:^|[^A-Z])MRI(?:$|[^A-Z])|磁共振|核磁",
+    flags=re.IGNORECASE,
+)
+_CANCELLED_ORDER_PATTERN = re.compile(r"撤销|作废|取消")
+_CT_MRI_MASTER_FIELDS = (
+    "exam_type",
+    "modality",
+    "exam_name",
+    "item_name",
+    "exam_item_name",
+    "performed_dept",
+    "exam_result",
+    "exam_impression",
+    "exam_conclusion",
+    "record_content",
+)
 
 
 @dataclass(frozen=True)
@@ -193,6 +210,209 @@ def _append(rows_by_table: dict[str, list[dict[str, Any]]], table_name: str, row
     rows_by_table.setdefault(table_name, []).append(row)
 
 
+def _target_ct_mri_orders(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows_by_table.get("inpat_nondrug_order", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+        and not _CANCELLED_ORDER_PATTERN.search(str(row.get("order_status") or ""))
+        and _CT_MRI_ORDER_PATTERN.search(str(row.get("order_name") or ""))
+    ]
+
+
+def _complete_ct_mri_associations(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> None:
+    """为派生病例的每条有效 CT/MRI 医嘱补齐稳定的一对主记录和报告。"""
+
+    admission, discharge = _case_times(rows_by_table, case)
+    masters = [
+        row
+        for row in rows_by_table.get("exam_master", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+    ]
+    reports = [
+        row
+        for row in rows_by_table.get("exam_item_report", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+    ]
+    course_rows = [
+        row
+        for row in rows_by_table.get("daily_course_record", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+    ]
+
+    for order in _target_ct_mri_orders(rows_by_table, case):
+        order_id = str(order.get("order_id") or "").strip()
+        order_name = str(order.get("order_name") or "CT/MRI检查").strip()
+        order_time = order.get("prescribed_datetime") or order.get("order_time") or order.get("start_time")
+        if not order_id or not isinstance(order_time, datetime):
+            raise ValueError(f"{case.source_mr_no} 的有效 CT/MRI 医嘱缺少稳定医嘱号或开立时间")
+
+        linked_masters = [row for row in masters if str(row.get("order_id") or "").strip() == order_id]
+        if len(linked_masters) > 1:
+            raise ValueError(f"{case.source_mr_no} 的 CT/MRI 医嘱存在重复检查主记录")
+        if linked_masters:
+            exam = linked_masters[0]
+            exam_id = str(exam.get("exam_id") or "").strip()
+        else:
+            exam_time = order_time + timedelta(hours=1)
+            report_time = order_time + timedelta(hours=2)
+            if not (admission <= order_time < exam_time < report_time <= discharge):
+                raise ValueError(f"{case.source_mr_no} 的 CT/MRI 医嘱无法在本次住院窗内形成受控闭环")
+            exam_id = f"{order_id}-exam"
+            exam_type = "MRI" if re.search(r"MRI|磁共振|核磁", order_name, flags=re.IGNORECASE) else "CT"
+            exam = {
+                **_base(case, report_time),
+                "exam_id": exam_id,
+                "order_id": order_id,
+                "exam_type": exam_type,
+                "exam_reason": "按原医嘱完成受控检查关联补件",
+                "request_dept": str(order.get("dept_name") or "重症医学科（ICU）"),
+                "request_physician": str(order.get("prescribed_doctor") or "合成验证医师"),
+                "request_time": order_time,
+                "exam_time": exam_time,
+                "report_time": report_time,
+                "exam_result_status": "Final",
+                "record_content": f"{order_name}检查主记录（受控关联补件）。",
+                "record_time": report_time,
+            }
+            _append(rows_by_table, "exam_master", exam)
+            masters.append(exam)
+
+        if not exam_id:
+            raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录缺少稳定检查号")
+        linked_reports = [row for row in reports if str(row.get("exam_id") or "").strip() == exam_id]
+        if len(linked_reports) > 1:
+            raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查存在重复报告")
+        report_time = exam.get("report_time") or exam.get("report_datetime")
+        if not isinstance(report_time, datetime):
+            raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录缺少报告时间")
+        if not linked_reports:
+            report = {
+                **_base(case, report_time),
+                "document_id": f"{exam_id}-report",
+                "document_title": f"{order_name}检查报告（受控关联补件）",
+                "document_status": "Submitted",
+                "submitter": "影像科报告医师",
+                "submitter_id": "SYNTHETIC-RAD",
+                "submit_datetime": report_time,
+                "record_time": report_time,
+                "exam_no": exam_id,
+                "exam_id": exam_id,
+                "item_no": "1",
+                "item_id": f"{exam_id}-item-001",
+                "item_code": str(exam.get("exam_type") or "CT-MRI"),
+                "item_name": order_name,
+                "exam_name": order_name,
+                "exam_item_name": order_name,
+                "exam_type": str(exam.get("exam_type") or "CT/MRI"),
+                "exam_findings": "受控补件：未见明确急性异常。",
+                "exam_impression": "受控补件：未见明确急性异常。",
+                "exam_conclusion": "受控补件：未见明确急性异常。",
+                "record_content": f"{order_name}报告已完成，未见明确急性异常。",
+                "report_time": report_time,
+            }
+            _append(rows_by_table, "exam_item_report", report)
+            reports.append(report)
+
+        linked_course = [row for row in course_rows if str(row.get("order_id") or "").strip() == order_id]
+        if not linked_course:
+            before_time = order_time - timedelta(minutes=30)
+            after_time = report_time + timedelta(hours=1)
+            if not (admission <= before_time <= order_time <= report_time <= after_time <= discharge):
+                raise ValueError(f"{case.source_mr_no} 的 CT/MRI 医嘱无法在本次住院窗内补齐病程关联")
+            for phase, record_time, content in (
+                ("before", before_time, f"根据当前病情，拟行{order_name}以进一步明确病因。"),
+                ("after", after_time, f"已阅{order_name}报告，未见明确急性异常，继续结合病情观察。"),
+            ):
+                course = {
+                    **_base(case, record_time),
+                    "document_id": f"{order_id}-course-{phase}",
+                    "document_title": "日常病程记录（受控检查关联补件）",
+                    "document_status": "Submitted",
+                    "submitter": "合成验证医师",
+                    "submitter_id": "SYNTHETIC",
+                    "submit_datetime": record_time,
+                    "record_time": record_time,
+                    "order_id": order_id,
+                    "record_content": content,
+                }
+                _append(rows_by_table, "daily_course_record", course)
+                course_rows.append(course)
+
+
+def _validate_ct_mri_associations(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> None:
+    orders = _target_ct_mri_orders(rows_by_table, case)
+    order_ids = [str(row.get("order_id") or "").strip() for row in orders]
+    if not order_ids or any(not order_id for order_id in order_ids) or len(order_ids) != len(set(order_ids)):
+        raise ValueError(f"{case.source_mr_no} 的有效 CT/MRI 医嘱自然键缺失或重复")
+    order_id_set = set(order_ids)
+
+    masters = [
+        row
+        for row in rows_by_table.get("exam_master", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+        and any(
+            _CT_MRI_ORDER_PATTERN.search(str(row.get(field) or ""))
+            for field in _CT_MRI_MASTER_FIELDS
+        )
+    ]
+    master_keys = [
+        (str(row.get("order_id") or "").strip(), str(row.get("exam_id") or "").strip())
+        for row in masters
+    ]
+    if any(not order_id or not exam_id for order_id, exam_id in master_keys):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录自然键缺失")
+    if len(master_keys) != len(set(master_keys)):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录自然键重复")
+    master_order_ids = [order_id for order_id, _exam_id in master_keys]
+    if set(master_order_ids) != order_id_set or len(master_order_ids) != len(order_ids):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 医嘱与检查主记录未形成一一对应")
+
+    exam_ids = [exam_id for _order_id, exam_id in master_keys]
+    if len(exam_ids) != len(set(exam_ids)):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查号重复")
+    exam_id_set = set(exam_ids)
+    reports = [
+        row
+        for row in rows_by_table.get("exam_item_report", [])
+        if row.get("institute_id") == TARGET_INSTITUTE_ID
+        and row.get("patient_id") == case.target_patient_id
+        and row.get("visit_id") == case.target_visit_id
+        and str(row.get("exam_id") or "").strip() in exam_id_set
+    ]
+    report_exam_ids = [str(row.get("exam_id") or "").strip() for row in reports]
+    report_keys = [
+        (
+            str(row.get("exam_id") or "").strip(),
+            str(row.get("item_id") or row.get("document_id") or "").strip(),
+        )
+        for row in reports
+    ]
+    if any(not exam_id or not item_id for exam_id, item_id in report_keys) or len(report_keys) != len(set(report_keys)):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 报告自然键缺失或重复")
+    if set(report_exam_ids) != exam_id_set or len(report_exam_ids) != len(exam_ids):
+        raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录与报告未形成一一对应")
+
+
 def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]], case: SourceCase) -> list[dict[str, Any]]:
     admission, discharge = _case_times(rows_by_table, case)
     exam_request = admission + timedelta(days=1, hours=2)
@@ -308,6 +528,7 @@ def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]],
         "submitter_id": "SYNTHETIC",
         "submit_datetime": exam_course_before,
         "record_time": exam_course_before,
+        "order_id": f"{case.target_visit_id}-exam-order-001",
         "record_content": "患者腰痛伴右下肢麻木持续，拟行腰椎MRI检查以明确神经根受压情况，已向患者说明检查目的。",
     })
     _append(rows_by_table, "daily_course_record", {
@@ -319,6 +540,7 @@ def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]],
         "submitter_id": "SYNTHETIC",
         "submit_datetime": exam_course_after,
         "record_time": exam_course_after,
+        "order_id": f"{case.target_visit_id}-exam-order-001",
         "record_content": "已阅腰椎MRI报告，记录提示L4/5椎间盘突出并右侧神经根受压。",
     })
     _append(rows_by_table, "daily_course_record", {
@@ -618,6 +840,11 @@ def build_rows() -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
             *_append_transfusion_supplements(rows_by_table, case),
             *_append_consultation_and_handover_supplements(rows_by_table, case),
         ]
+        _complete_ct_mri_associations(rows_by_table, case)
+        supplements[case.target_visit_id].append({
+            "table": "inpat_nondrug_order+exam_master+exam_item_report+daily_course_record",
+            "reason": "controlled_complete_ct_mri_association_set",
+        })
     return dict(rows_by_table), {"source_counts": source_counts, "supplements": supplements}
 
 
@@ -645,6 +872,44 @@ def _upsert_rows(session: Session, table: Table, rows: list[dict[str, Any]]) -> 
     return len(payload)
 
 
+def _replace_target_rows(session: Session, table: Table, rows: list[dict[str, Any]]) -> int:
+    """仅在脚本专用三坐标内先删后写，兼容没有主键的 CDM 表。"""
+
+    if not rows:
+        return 0
+    coordinate_columns = ("institute_id", "patient_id", "visit_id")
+    missing_columns = [column for column in coordinate_columns if column not in table.c]
+    if missing_columns:
+        raise ValueError(f"{table.name} 缺少三坐标字段，拒绝执行派生病例替换")
+
+    allowed_coordinates = {
+        (TARGET_INSTITUTE_ID, case.target_patient_id, case.target_visit_id)
+        for case in CASES
+    }
+    row_coordinates = {
+        (
+            str(row.get("institute_id") or ""),
+            str(row.get("patient_id") or ""),
+            str(row.get("visit_id") or ""),
+        )
+        for row in rows
+    }
+    if not row_coordinates or not row_coordinates.issubset(allowed_coordinates):
+        raise ValueError(f"{table.name} 包含脚本专用三坐标之外的资料，拒绝替换")
+
+    for institute_id, patient_id, visit_id in sorted(row_coordinates):
+        session.execute(
+            delete(table).where(
+                and_(
+                    table.c.institute_id == institute_id,
+                    table.c.patient_id == patient_id,
+                    table.c.visit_id == visit_id,
+                )
+            )
+        )
+    return _upsert_rows(session, table, rows)
+
+
 def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> None:
     for case in CASES:
         visit_rows = [row for rows in rows_by_table.values() for row in rows if row.get("visit_id") == case.target_visit_id]
@@ -657,6 +922,7 @@ def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> No
         ):
             if not any(row.get("visit_id") == case.target_visit_id for row in rows_by_table.get(table_name, [])):
                 raise ValueError(f"{case.source_mr_no} 缺少 {table_name} 补件")
+        _validate_ct_mri_associations(rows_by_table, case)
         admission, discharge = _case_times(rows_by_table, case)
         prefix = case.target_visit_id
         controlled_mr_bloodtrans = [
@@ -774,6 +1040,7 @@ def _pool_item_values(case: SourceCase, now: datetime, source_tables: list[str],
 
 
 def write_rows(rows_by_table: dict[str, list[dict[str, Any]]], audit: dict[str, Any]) -> dict[str, Any]:
+    _validate_before_write(rows_by_table)
     service = CustomQCSamplePoolService()
     if service.get_pool(pool_id=POOL_ID) is None:
         raise ValueError(f"目标样本池不存在: {POOL_ID}")
@@ -784,7 +1051,7 @@ def write_rows(rows_by_table: dict[str, list[dict[str, Any]]], audit: dict[str, 
         for table_name, rows in rows_by_table.items():
             table = _reflect(table_name, metadata)
             if table is not None:
-                inserted[table_name] = _upsert_rows(session, table, rows)
+                inserted[table_name] = _replace_target_rows(session, table, rows)
         item_table = service._item_table
         for case in CASES:
             source_tables = sorted(audit["source_counts"].get(case.target_visit_id, {}))
