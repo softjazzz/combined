@@ -136,6 +136,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 import QCRecordResultComparisonDrawer, {
   type QCRecordResultFocus,
@@ -151,6 +152,7 @@ const props = defineProps<{
   carePhase: QcRecordCarePhase
 }>()
 
+const route = useRoute()
 const detailNotice = ref('')
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
@@ -331,10 +333,19 @@ watch(
   },
 )
 
-onMounted(() => {
+onMounted(async () => {
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
-  fetchData(1)
+  const requestedRecordKey = routeQueryText('record_key')
+  const requestedVisitId = routeQueryText('visit_id')
+  if (requestedRecordKey && requestedVisitId) searchText.value = requestedVisitId
+  await fetchData(1)
+  if (requestedRecordKey) handleOpenResult(requestedRecordKey)
 })
+
+function routeQueryText(name: string): string {
+  const value = route.query[name]
+  return typeof value === 'string' ? value.trim() : ''
+}
 
 function handleOpenResult(recordKey: string) {
   const record = allRecords.value.find(

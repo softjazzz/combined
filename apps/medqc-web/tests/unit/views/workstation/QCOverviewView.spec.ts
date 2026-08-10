@@ -142,6 +142,47 @@ describe('QCOverviewView', () => {
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)
   })
 
+  it('从优先复核行进入对应病历的质控结果页', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const action = wrapper.get('.qc-home-priority-row .qc-home-text-action')
+    expect(action.text()).toBe('查看质控结果')
+
+    await action.trigger('click')
+
+    expect(routerPush).toHaveBeenCalledTimes(1)
+    expect(routerPush).toHaveBeenCalledWith({
+      path: '/workstation-v4/records/final',
+      query: {
+        record_key: '["H1","P1","V1"]',
+        visit_id: 'V1',
+      },
+    })
+  })
+
+  it('以统计分析样式展示四项 KPI，且只保留标题与数值', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const cards = wrapper.findAll('.qc-home-kpi')
+    expect(cards).toHaveLength(4)
+    expect(
+      cards.map((card) => ({
+        label: card.get('span').text(),
+        value: card.get('strong').text(),
+        tone: card.classes().find((className) => className.startsWith('is-')),
+      })),
+    ).toEqual([
+      { label: '纳入病历', value: '18', tone: 'is-brand' },
+      { label: '待质控', value: '3', tone: 'is-warning' },
+      { label: '已完成', value: '13', tone: 'is-success' },
+      { label: '高风险待复核', value: '2', tone: 'is-danger' },
+    ])
+    expect(wrapper.find('.qc-home-kpi__icon').exists()).toBe(false)
+    expect(wrapper.find('.qc-home-kpi small').exists()).toBe(false)
+  })
+
   it('将技术异常和未知资料状态放入数据运行状态，不计入高风险队列', async () => {
     const wrapper = mountView()
     await flushHomeLoad()

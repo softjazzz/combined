@@ -5,11 +5,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getRaw: vi.fn(),
 }))
+const routeState = vi.hoisted(() => ({
+  query: {} as Record<string, string>,
+}))
 
 vi.mock('@/services/apiService', () => ({
   ApiService: {
     getRaw: mocks.getRaw,
   },
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => routeState,
 }))
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
@@ -120,6 +127,7 @@ function mountView(carePhase: 'inpatient' | 'discharged' = 'inpatient') {
 describe('QcRecordResultListView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeState.query = {}
     mocks.getRaw.mockResolvedValue(response())
   })
 
@@ -238,6 +246,32 @@ describe('QcRecordResultListView', () => {
     })
     expect(String((drawer.props('focus') as { label: string }).label)).toContain('患者乙')
     expect(String((drawer.props('focus') as { label: string }).label)).toContain('2026-08-09 09:02')
+  })
+
+  it('从首页携带三坐标键进入时按住院号服务端检索，并自动打开该病历质控结果', async () => {
+    routeState.query = {
+      record_key: '["H","P","V-priority"]',
+      visit_id: 'V-priority',
+    }
+
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'discharge',
+      keyword: 'V-priority',
+      hospital_status: 'discharged',
+    })
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H',
+      patientId: 'P',
+      visitId: 'V-priority',
+      recordId: 'V-priority',
+    })
   })
 
   it('未质控病历显示暂无结果并留在当前页，不发起抽屉读取', async () => {

@@ -75,15 +75,8 @@
               :key="card.key"
               :class="['qc-home-kpi', `is-${card.tone}`]"
             >
-              <component
-                :is="card.icon"
-                class="qc-home-kpi__icon"
-              />
-              <div>
-                <span>{{ card.label }}</span>
-                <strong>{{ card.value }}</strong>
-                <small>{{ card.desc }}</small>
-              </div>
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
             </article>
           </section>
 
@@ -132,9 +125,9 @@
                   <button
                     type="button"
                     class="qc-home-text-action"
-                    @click="openRecordPool"
+                    @click="openQcResult(item)"
                   >
-                    进入病历池
+                    查看质控结果
                   </button>
                 </article>
               </div>
@@ -380,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import { ApiService } from '@/services/apiService'
@@ -390,21 +383,13 @@ import type {
   ClinicalQcHomePriorityItem,
   WorkstationHomePayload,
 } from '@/views/workstation-v2/types'
-import {
-  FileDoneOutlined,
-  SafetyCertificateOutlined,
-  SyncOutlined,
-  WarningOutlined,
-} from '@ant-design/icons-vue'
 import HomeHeroBar from './components/HomeHeroBar.vue'
 
 interface KpiCard {
   key: string
   label: string
   value: number
-  desc: string
   tone: 'brand' | 'warning' | 'success' | 'danger'
-  icon: Component
 }
 
 type ChartTone = 'success' | 'warning' | 'neutral'
@@ -483,33 +468,25 @@ const kpiCards = computed<KpiCard[]>(() => {
       key: 'records',
       label: '纳入病历',
       value: Number(kpis?.records_total || 0),
-      desc: '当前范围内三坐标完整的病历',
       tone: 'brand',
-      icon: FileDoneOutlined,
     },
     {
       key: 'pending',
       label: '待质控',
       value: Number(kpis?.qc_pending_total || 0),
-      desc: '尚未形成可用最终结论',
       tone: 'warning',
-      icon: SyncOutlined,
     },
     {
       key: 'completed',
       label: '已完成',
       value: Number(kpis?.qc_completed_total || 0),
-      desc: '已交付 Canonical 最终结论',
       tone: 'success',
-      icon: SafetyCertificateOutlined,
     },
     {
       key: 'risk',
       label: '高风险待复核',
       value: Number(kpis?.high_risk_review_total || 0),
-      desc: '至少含一项确定问题的病历',
       tone: 'danger',
-      icon: WarningOutlined,
     },
   ]
 })
@@ -648,6 +625,16 @@ function openRecordPool() {
   })
 }
 
+function openQcResult(item: ClinicalQcHomePriorityItem) {
+  void router.push({
+    path: '/workstation-v4/records/final',
+    query: {
+      record_key: item.record_key,
+      visit_id: item.visit_id,
+    },
+  })
+}
+
 async function fetchHome() {
   loading.value = true
   loadError.value = false
@@ -756,58 +743,69 @@ watch([departmentFilter, keyword], () => {
   font-weight: 500;
 }
 .qc-home-kpis {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 18px;
-  background: #fff;
 }
 .qc-home-kpi {
-  display: flex;
-  gap: 12px;
-  min-height: 118px;
-  padding: 21px;
   border-right: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 16px 20px;
+  position: relative;
 }
 .qc-home-kpi:last-child {
-  border: 0;
+  border-right: 0;
 }
-.qc-home-kpi__icon {
+.qc-home-kpi::before {
+  background: #94a3b8;
+  border-radius: 0 0 4px 4px;
+  content: '';
+  height: 3px;
+  left: 20px;
+  position: absolute;
+  top: 0;
   width: 34px;
-  height: 34px;
-  padding: 8px;
-  border-radius: 10px;
-  background: rgba(0, 102, 204, 0.09);
-  color: #0066cc;
 }
-.qc-home-kpi.is-warning .qc-home-kpi__icon {
-  background: rgba(245, 158, 11, 0.12);
-  color: #b45309;
+.qc-home-kpi.is-brand::before {
+  background: #0066cc;
 }
-.qc-home-kpi.is-success .qc-home-kpi__icon {
-  background: rgba(16, 185, 129, 0.11);
-  color: #047857;
+.qc-home-kpi.is-warning::before {
+  background: #f59e0b;
 }
-.qc-home-kpi.is-danger .qc-home-kpi__icon {
-  background: rgba(239, 68, 68, 0.11);
-  color: #dc2626;
+.qc-home-kpi.is-success::before {
+  background: #10b981;
 }
-.qc-home-kpi span,
-.qc-home-kpi small {
+.qc-home-kpi.is-danger::before {
+  background: #ef4444;
+}
+.qc-home-kpi span {
   display: block;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 12px;
-  line-height: 18px;
+  color: rgba(29, 29, 31, 0.55);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
 }
 .qc-home-kpi strong {
+  color: #1d1d1f;
   display: block;
-  margin: 3px 0;
-  font-size: 25px;
-  line-height: 30px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  line-height: 34px;
+  margin: 8px 0 0;
 }
-.qc-home-kpi small {
-  color: rgba(29, 29, 31, 0.48);
+.qc-home-kpi.is-brand strong {
+  color: #0066cc;
+}
+.qc-home-kpi.is-warning strong {
+  color: #c17a08;
+}
+.qc-home-kpi.is-success strong {
+  color: #047857;
+}
+.qc-home-kpi.is-danger strong {
+  color: #dc2626;
 }
 .qc-home-grid {
   display: grid;
