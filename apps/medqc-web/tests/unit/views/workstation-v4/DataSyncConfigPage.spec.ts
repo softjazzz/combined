@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
@@ -57,7 +57,7 @@ vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
   useDataSync: () => ({
     state: mockState,
     isReadonly: ref(false),
-    hasPreflightPass: ref(true),
+    hasPreflightPass: computed(() => Boolean(mockState.preflightResult?.executable)),
     initialize: vi.fn().mockResolvedValue(undefined),
     resetState: vi.fn(),
     testAllConnections: vi.fn(),
@@ -159,22 +159,21 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).toContain('0 / 20 份')
   })
 
-  it('在主执行区支持在院、出院和合并同步范围', () => {
+  it('按用户任务顺序展示三步单页同步引导', () => {
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('病历同步范围')
+    expect(wrapper.text()).toContain('选择病历类型')
+    expect(wrapper.text()).toContain('设置同步范围')
+    expect(wrapper.text()).toContain('检查结果')
     expect(wrapper.text()).toContain('抽取科室')
     expect(wrapper.text()).toContain('出院开始日期')
     expect(wrapper.text()).toContain('出院结束日期')
-    const sceneSelect = wrapper.getComponent('[data-testid="sync-scene-select"]')
-    expect(sceneSelect.props('value')).toBe('final')
-    expect(sceneSelect.props('disabled')).toBe(false)
-    expect(sceneSelect.props('options')).toEqual([
-      { label: '在院病历', value: 'running' },
-      { label: '已出院病历', value: 'final' },
-      { label: '在院及已出院病历', value: 'both' },
-    ])
-    expect(wrapper.text()).not.toContain('不支持在院病历')
+    expect(wrapper.findAll('[data-testid^="sync-scene-"]')).toHaveLength(3)
+    expect(wrapper.get('[data-testid="sync-scene-final"]').classes()).toContain('is-active')
+    expect(wrapper.findAll('[data-testid="check-record-scope-action"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('mr_no 不是同步条件')
+    expect(wrapper.text()).not.toContain('配置摘要')
+    expect(wrapper.text()).not.toContain('安全说明')
   })
 
   it('在院范围只展示截止日期，不伪装成出院日期区间', async () => {
@@ -189,6 +188,34 @@ describe('DataSyncConfigPage visit progress', () => {
     mockState.policyForm.scope = 'final'
   })
 
+  it('点击病历类型卡片直接更新同步范围', async () => {
+    const wrapper = mountPage()
+
+    await wrapper.get('[data-testid="sync-scene-running"]').trigger('click')
+
+    expect(mockState.policyForm.scope).toBe('running')
+    expect(wrapper.text()).toContain('在院截止日期')
+    mockState.policyForm.scope = 'final'
+  })
+
+  it('只有检查通过后才展示确认和正式同步操作', async () => {
+    mockState.preflightResult = {
+      estimated_impact: 12,
+      executable: false,
+      blockers: ['源库住院登记不可用'],
+      warnings: [],
+    }
+    const wrapper = mountPage()
+    expect(wrapper.text()).not.toContain('我已确认同步 12 份病历')
+
+    mockState.preflightResult.executable = true
+    mockState.preflightResult.blockers = []
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('我已确认同步 12 份病历')
+    expect(wrapper.text()).toContain('开始同步')
+  })
+
   it('演示账号只看到简化同步向导并隐藏实施诊断信息', () => {
     mockUserRoles = ['admin', 'qc_manager']
     mockState.preflightResult = null
@@ -198,7 +225,7 @@ describe('DataSyncConfigPage visit progress', () => {
 
     expect(text).toContain('病历数据同步设置')
     expect(text).toContain('检查病历范围')
-    expect(text).toContain('开始同步')
+    expect(text).not.toContain('我已确认同步')
     expect(text).toContain('出院开始日期')
     expect(text).toContain('出院结束日期')
     expect(text).not.toContain('clinical_data')
@@ -208,16 +235,17 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(text).not.toContain('实施诊断模式')
   })
 
-  it('实施账号可以看到高级配置和运行日志入口', () => {
+  it('实施账号可以展开高级配置和运行日志', async () => {
     mockUserRoles = ['sync_admin']
 
     const wrapper = mountPage()
-    const text = wrapper.text()
+    expect(wrapper.text()).toContain('高级设置与运行记录')
+    expect(wrapper.text()).not.toContain('clinical_data')
 
-    expect(text).toContain('实施诊断模式')
-    expect(text).toContain('展开高级配置与日志')
-    expect(text).toContain('clinical_data')
-    expect(text).toContain('表组预检表')
+    await wrapper.get('[data-testid="advanced-sync-toggle"]').trigger('click')
+
+    expect(wrapper.text()).toContain('clinical_data')
+    expect(wrapper.text()).toContain('表组预检')
   })
 
   it.each([

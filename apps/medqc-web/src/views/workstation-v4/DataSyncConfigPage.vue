@@ -22,206 +22,167 @@
                   {{ pageSubtitle }}
                 </p>
               </div>
+            </section>
 
-              <div class="system-config-hero__actions">
-                <a-tooltip
-                  v-if="isSyncAdvancedUser"
-                  :title="isReadonly ? '仅系统配置管理员可执行' : '测试源库 PG + 本地 PG'"
-                >
-                  <a-button
-                    class="wv4-overview-btn wv4-overview-btn--ghost"
-                    :loading="state.isTestingAll"
+            <section class="sync-guided-workbench">
+              <div class="sync-guided-step">
+                <div class="sync-guided-step__heading">
+                  <span>1</span>
+                  <div>
+                    <h3>选择病历类型</h3>
+                    <p>先明确本次要同步在院病历、已出院病历，或两者一起同步。</p>
+                  </div>
+                </div>
+                <div class="sync-scene-cards">
+                  <button
+                    v-for="option in syncSceneOptions"
+                    :key="option.value"
+                    type="button"
+                    class="sync-scene-card"
+                    :class="{ 'is-active': state.policyForm.scope === option.value }"
+                    :data-testid="`sync-scene-${option.value}`"
                     :disabled="isReadonly"
-                    @click="handleTestAllConnections"
+                    @click="selectSyncScene(option.value)"
                   >
-                    只读检测
-                  </a-button>
-                </a-tooltip>
+                    <strong>{{ option.label }}</strong>
+                    <span>{{ option.description }}</span>
+                  </button>
+                </div>
+                <p class="sync-identity-note">
+                  按机构、患者和就诊三坐标匹配病历；mr_no 不是同步条件。
+                </p>
+              </div>
 
-                <a-tooltip
-                  :title="
-                    isReadonly
-                      ? '仅系统配置管理员可执行'
-                      : '检查当前住院范围、科室和日期条件下是否有可同步病历'
-                  "
-                >
+              <div class="sync-guided-divider" />
+
+              <div class="sync-guided-step">
+                <div class="sync-guided-step__heading">
+                  <span>2</span>
+                  <div>
+                    <h3>设置同步范围</h3>
+                    <p>{{ syncScopeDescription }}</p>
+                  </div>
+                </div>
+                <div class="sync-filter-row">
+                  <label class="system-config-scope-field sync-filter-row__department">
+                    <span>抽取科室</span>
+                    <a-select
+                      v-model:value="state.policyForm.target_departments"
+                      mode="multiple"
+                      :disabled="isReadonly"
+                      :loading="state.departmentsLoading"
+                      :options="policyDepartmentOptions"
+                      :max-tag-count="3"
+                      style="width: 100%"
+                      placeholder="默认全院"
+                      @change="handlePolicyDepartmentChange"
+                    />
+                  </label>
+                  <label
+                    v-if="state.policyForm.scope !== 'running'"
+                    class="system-config-scope-field sync-filter-row__date"
+                  >
+                    <span>出院开始日期</span>
+                    <a-date-picker
+                      v-model:value="state.policyForm.start_date"
+                      value-format="YYYY-MM-DD"
+                      :disabled="isReadonly"
+                      style="width: 100%"
+                      placeholder="开始日期"
+                    />
+                  </label>
+                  <label class="system-config-scope-field sync-filter-row__date">
+                    <span>{{ syncEndDateLabel }}</span>
+                    <a-date-picker
+                      v-model:value="state.policyForm.end_date"
+                      value-format="YYYY-MM-DD"
+                      :disabled="isReadonly"
+                      style="width: 100%"
+                      placeholder="结束日期"
+                    />
+                  </label>
                   <a-button
-                    class="wv4-overview-btn wv4-overview-btn--ghost"
+                    type="primary"
+                    class="wv4-overview-btn wv4-overview-btn--primary sync-check-action"
+                    data-testid="check-record-scope-action"
                     :loading="state.isPreflighting"
                     :disabled="isReadonly"
                     @click="handleRunPreflight"
                   >
-                    {{ preflightActionLabel }}
+                    检查病历范围
                   </a-button>
-                </a-tooltip>
-
-                <a-tooltip
-                  v-if="isSyncAdvancedUser"
-                  :title="
-                    isReadonly ? '仅系统配置管理员可执行' : '保存当前策略，预检通过后再确认同步'
-                  "
-                >
-                  <a-button
-                    class="wv4-overview-btn wv4-overview-btn--ghost"
-                    :loading="state.isSavingPolicy || state.isPreflighting || state.isSyncing"
-                    :disabled="isReadonly"
-                    @click="handleSyncWithPolicy"
-                  >
-                    保存并同步
-                  </a-button>
-                </a-tooltip>
+                </div>
               </div>
-            </section>
 
-            <section class="system-config-safe-banner">
-              <div class="system-config-safe-shield">
-                只读
-              </div>
-              <div>
-                <strong>{{ safeBannerTitle }}</strong>
-                <p>
-                  {{ safeBannerDescription }}
-                </p>
-              </div>
-            </section>
+              <div class="sync-guided-divider" />
 
-            <div class="system-config-safety-steps">
-              <article
-                v-for="step in syncSafetySteps"
-                :key="step.key"
-                class="system-config-safety-card"
-                :class="`system-config-safety-card--${step.tone}`"
-              >
-                <span>
-                  {{ step.index }}
-                </span>
-                <div>
-                  <strong>{{ step.title }}</strong>
-                  <p>{{ step.description }}</p>
-                </div>
-              </article>
-            </div>
-
-            <section class="system-config-safe-workbench flex-1 min-h-0">
-              <aside class="system-config-config-summary">
-                <div class="system-config-side-kicker">
-                  同步配置概览
-                </div>
-                <h3>配置摘要</h3>
-                <p>
-                  {{ summaryDescription }}
-                </p>
-
-                <div class="system-config-summary-list">
-                  <div
-                    v-for="item in summaryItems"
-                    :key="item.label"
-                  >
-                    <span>{{ item.label }}</span>
-                    <strong>{{ item.value }}</strong>
-                    <em>{{ item.description }}</em>
-                  </div>
-                </div>
-
-                <div class="system-config-safe-note">
-                  <strong>安全说明</strong>
-                  <p>{{ safeNoteText }}</p>
-                </div>
-              </aside>
-
-              <main class="system-config-preflight-panel">
-                <div class="system-config-section-head">
+              <div class="sync-guided-step sync-result-step">
+                <div class="sync-guided-step__heading sync-guided-step__heading--result">
+                  <span>3</span>
                   <div>
-                    <h3>执行前核对</h3>
+                    <h3>检查结果</h3>
                     <p>{{ preflightSummary }}</p>
                   </div>
                   <a-tag
                     :class="[
                       'wv4-status-chip',
-                      state.preflightResult?.executable
-                        ? 'wv4-status-chip--success'
-                        : 'wv4-status-chip--neutral',
+                      hasPreflightPass ? 'wv4-status-chip--success' : 'wv4-status-chip--neutral',
                     ]"
                   >
-                    {{ state.preflightResult?.executable ? '预检通过' : '待预检' }}
+                    {{ hasPreflightPass ? '可同步' : state.preflightResult ? '需处理' : '待检查' }}
                   </a-tag>
                 </div>
 
-                <div class="system-config-checklist">
-                  <div
-                    v-for="item in executionChecklist"
-                    :key="item.label"
-                    class="system-config-check-row"
-                    :class="`system-config-check-row--${item.tone}`"
-                  >
-                    <span>{{ item.status }}</span>
-                    <div>
-                      <strong>{{ item.label }}</strong>
-                      <em>{{ item.value }}</em>
-                    </div>
+                <div
+                  v-if="state.preflightResult"
+                  class="sync-result-summary"
+                >
+                  <div class="sync-result-metric sync-result-metric--primary">
+                    <span>{{ candidateProgressLabel }}</span>
+                    <strong>{{
+                      Number(state.preflightResult.estimated_impact || 0).toLocaleString()
+                    }}</strong>
+                    <em>份病历</em>
+                  </div>
+                  <div class="sync-result-metric">
+                    <span>病历类型</span>
+                    <strong>{{ syncScopeDisplayLabel }}</strong>
+                    <em>{{ syncAnchorLabel }}</em>
+                  </div>
+                  <div class="sync-result-metric">
+                    <span>同步范围</span>
+                    <strong>{{ policyDepartmentLabel }}</strong>
+                    <em>{{ policyDateRangeLabel }}</em>
                   </div>
                 </div>
+                <div
+                  v-else
+                  class="sync-result-empty"
+                >
+                  选择范围后点击“检查病历范围”，这里会显示候选病历数和阻断原因。
+                </div>
 
-                <div class="system-config-scope-form">
-                  <div class="system-config-section-head system-config-section-head--compact">
-                    <div>
-                      <h4>病历同步范围</h4>
-                      <p>{{ syncScopeDescription }}</p>
-                    </div>
-                    <a-tag class="wv4-status-chip wv4-status-chip--neutral">
-                      {{ syncScopeDisplayLabel }}
-                    </a-tag>
-                  </div>
-
-                  <div class="system-config-scope-grid">
-                    <label class="system-config-scope-field system-config-scope-field--scene">
-                      <span>同步场景</span>
-                      <a-select
-                        v-model:value="state.policyForm.scope"
-                        data-testid="sync-scene-select"
-                        :disabled="isReadonly"
-                        style="width: 100%"
-                        :options="syncSceneOptions"
-                      />
-                    </label>
-                    <label class="system-config-scope-field system-config-scope-field--department">
-                      <span>抽取科室</span>
-                      <a-select
-                        v-model:value="state.policyForm.target_departments"
-                        mode="multiple"
-                        :disabled="isReadonly"
-                        :loading="state.departmentsLoading"
-                        :options="policyDepartmentOptions"
-                        :max-tag-count="3"
-                        style="width: 100%"
-                        placeholder="默认全院"
-                        @change="handlePolicyDepartmentChange"
-                      />
-                    </label>
-                    <label
-                      v-if="state.policyForm.scope !== 'running'"
-                      class="system-config-scope-field system-config-scope-field--date"
-                    >
-                      <span>出院开始日期</span>
-                      <a-date-picker
-                        v-model:value="state.policyForm.start_date"
-                        value-format="YYYY-MM-DD"
-                        :disabled="isReadonly"
-                        style="width: 100%"
-                        placeholder="开始日期"
-                      />
-                    </label>
-                    <label class="system-config-scope-field system-config-scope-field--date">
-                      <span>{{ syncEndDateLabel }}</span>
-                      <a-date-picker
-                        v-model:value="state.policyForm.end_date"
-                        value-format="YYYY-MM-DD"
-                        :disabled="isReadonly"
-                        style="width: 100%"
-                        placeholder="结束日期"
-                      />
-                    </label>
-                  </div>
+                <div
+                  v-if="
+                    state.preflightResult?.blockers?.length ||
+                      state.preflightResult?.warnings?.length
+                  "
+                  class="sync-result-messages"
+                >
+                  <p
+                    v-for="item in state.preflightResult.blockers || []"
+                    :key="`blocker-${item}`"
+                    class="is-blocker"
+                  >
+                    {{ item }}
+                  </p>
+                  <p
+                    v-for="item in state.preflightResult.warnings || []"
+                    :key="`warning-${item}`"
+                    class="is-warning"
+                  >
+                    {{ item }}
+                  </p>
                 </div>
 
                 <div
@@ -283,89 +244,38 @@
                     <span v-if="syncProgressVisitWarning">{{ syncProgressVisitWarning }}</span>
                   </p>
                 </div>
-
                 <div
-                  v-if="isSyncAdvancedUser"
-                  class="system-config-preflight-table"
+                  v-if="hasPreflightPass"
+                  class="sync-result-actions"
                 >
-                  <div class="system-config-section-head system-config-section-head--compact">
-                    <div>
-                      <h4>表组预检表</h4>
-                      <p>
-                        可执行 {{ preflightPassCount }} / {{ preflightTableRows.length }}， 阻断
-                        {{ preflightBlockerCount }} 项，警告 {{ preflightWarningCount }} 项。
-                      </p>
-                    </div>
-                    <a-button
-                      size="small"
-                      :loading="state.isPreflighting"
+                  <label
+                    class="system-config-confirm-check"
+                    :class="{ 'is-disabled': isReadonly }"
+                  >
+                    <input
+                      v-model="syncScopeConfirmed"
+                      type="checkbox"
                       :disabled="isReadonly"
-                      @click="handleRunPreflight"
                     >
-                      执行预检
+                    <span>我已确认同步
+                      {{
+                        Number(state.preflightResult?.estimated_impact || 0).toLocaleString()
+                      }}
+                      份病历</span>
+                  </label>
+                  <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
+                    <a-button
+                      type="primary"
+                      class="wv4-overview-btn wv4-overview-btn--primary"
+                      :loading="state.isSyncing"
+                      :disabled="isReadonly || !syncScopeConfirmed"
+                      @click="handleExecuteSync"
+                    >
+                      {{ executeActionLabel }}
                     </a-button>
-                  </div>
-
-                  <div
-                    v-if="preflightTableRows.length === 0"
-                    class="system-config-empty-table"
-                  >
-                    尚未生成表组预检结果。请先执行只读检测或试运行预检。
-                  </div>
-                  <table v-else>
-                    <thead>
-                      <tr>
-                        <th>本地表</th>
-                        <th>源表</th>
-                        <th>日期字段</th>
-                        <th>状态</th>
-                        <th>说明</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="row in preflightTableRows"
-                        :key="row.table"
-                      >
-                        <td>{{ row.table }}</td>
-                        <td>{{ row.source }}</td>
-                        <td>{{ row.dateField }}</td>
-                        <td>
-                          <span :class="row.executable ? 'is-pass' : 'is-blocked'">
-                            {{ row.executable ? '可执行' : '阻断' }}
-                          </span>
-                        </td>
-                        <td>{{ row.blockers || '字段与连接检查通过' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  </a-tooltip>
                 </div>
-              </main>
-
-              <aside
-                v-if="isSyncAdvancedUser"
-                class="system-config-risk-panel"
-              >
-                <div class="system-config-section-head">
-                  <div>
-                    <h3>风险与回滚建议</h3>
-                    <p>优先处理会影响客户样本同步的问题。</p>
-                  </div>
-                </div>
-
-                <div class="system-config-risk-list">
-                  <div
-                    v-for="item in riskAdviceItems"
-                    :key="item.title"
-                    class="system-config-risk-item"
-                    :class="`system-config-risk-item--${item.tone}`"
-                  >
-                    <strong>{{ item.title }}</strong>
-                    <p>{{ item.description }}</p>
-                    <em>{{ item.action }}</em>
-                  </div>
-                </div>
-              </aside>
+              </div>
             </section>
 
             <section
@@ -374,15 +284,74 @@
             >
               <div class="system-config-advanced-head">
                 <div>
-                  <h3>实施诊断模式</h3>
+                  <h3>高级设置与运行记录</h3>
                   <p>仅供实施/管理员排障使用。这里包含连接配置、表组预检、源库诊断和运行日志。</p>
                 </div>
-                <a-button
-                  class="wv4-overview-btn wv4-overview-btn--ghost"
-                  @click="detailWorkbenchOpen = !detailWorkbenchOpen"
+                <div class="system-config-advanced-actions">
+                  <a-button
+                    class="wv4-overview-btn wv4-overview-btn--ghost"
+                    :loading="state.isTestingAll"
+                    :disabled="isReadonly"
+                    @click="handleTestAllConnections"
+                  >
+                    检测数据连接
+                  </a-button>
+                  <a-button
+                    class="wv4-overview-btn wv4-overview-btn--ghost"
+                    data-testid="advanced-sync-toggle"
+                    @click="detailWorkbenchOpen = !detailWorkbenchOpen"
+                  >
+                    {{ detailWorkbenchOpen ? '收起' : '展开高级设置' }}
+                  </a-button>
+                </div>
+              </div>
+
+              <div
+                v-if="detailWorkbenchOpen"
+                class="system-config-preflight-table system-config-advanced-preflight"
+              >
+                <div class="system-config-section-head system-config-section-head--compact">
+                  <div>
+                    <h4>clinical_data 表组预检</h4>
+                    <p>
+                      可执行 {{ preflightPassCount }} / {{ preflightTableRows.length }}，阻断
+                      {{ preflightBlockerCount }} 项，警告 {{ preflightWarningCount }} 项。
+                    </p>
+                  </div>
+                </div>
+                <div
+                  v-if="preflightTableRows.length === 0"
+                  class="system-config-empty-table"
                 >
-                  {{ detailWorkbenchOpen ? '收起高级配置' : '展开高级配置与日志' }}
-                </a-button>
+                  尚未生成表组预检结果。
+                </div>
+                <table v-else>
+                  <thead>
+                    <tr>
+                      <th>本地表</th>
+                      <th>源表</th>
+                      <th>日期字段</th>
+                      <th>状态</th>
+                      <th>说明</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in preflightTableRows"
+                      :key="row.table"
+                    >
+                      <td>{{ row.table }}</td>
+                      <td>{{ row.source }}</td>
+                      <td>{{ row.dateField }}</td>
+                      <td>
+                        <span :class="row.executable ? 'is-pass' : 'is-blocked'">
+                          {{ row.executable ? '可执行' : '阻断' }}
+                        </span>
+                      </td>
+                      <td>{{ row.blockers || '字段与连接检查通过' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <div
@@ -400,67 +369,6 @@
                 </article>
               </div>
             </section>
-
-            <div class="system-config-safe-action-bar">
-              <div>
-                <strong>执行确认</strong>
-                <p>{{ preflightSummary }}</p>
-              </div>
-              <div class="system-config-safe-action-bar__actions">
-                <a-button
-                  class="wv4-overview-btn wv4-overview-btn--ghost"
-                  :loading="state.isTestingAll"
-                  :disabled="isReadonly"
-                  @click="handleTestAllConnections"
-                >
-                  只读检测
-                </a-button>
-                <a-button
-                  class="wv4-overview-btn wv4-overview-btn--ghost"
-                  :loading="state.isPreflighting"
-                  :disabled="isReadonly"
-                  @click="handleRunPreflight"
-                >
-                  {{ preflightActionLabel }}
-                </a-button>
-                <label
-                  class="system-config-confirm-check"
-                  :class="{ 'is-disabled': isReadonly || !hasPreflightPass }"
-                >
-                  <input
-                    v-model="syncScopeConfirmed"
-                    type="checkbox"
-                    :disabled="isReadonly || !hasPreflightPass"
-                  >
-                  <span>我已确认同步范围</span>
-                </label>
-                <a-tooltip
-                  :title="
-                    isReadonly
-                      ? '仅 admin 可执行'
-                      : !hasPreflightPass
-                        ? isDemoSyncUser
-                          ? '请先检查病历范围'
-                          : '请先完成试运行预检'
-                        : !syncScopeConfirmed
-                          ? '请先确认同步范围'
-                          : isDemoSyncUser
-                            ? '开始同步到本地演示环境'
-                            : '正式写入本地 CDM'
-                  "
-                >
-                  <a-button
-                    type="primary"
-                    class="wv4-overview-btn wv4-overview-btn--primary"
-                    :loading="state.isSyncing"
-                    :disabled="isReadonly || !hasPreflightPass || !syncScopeConfirmed"
-                    @click="handleExecuteSync"
-                  >
-                    {{ executeActionLabel }}
-                  </a-button>
-                </a-tooltip>
-              </div>
-            </div>
           </div>
         </a-tab-pane>
 
@@ -535,10 +443,15 @@ const canManageLlmConfig = computed(() =>
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
 const syncSceneOptions = [
-  { label: '在院病历', value: 'running' },
-  { label: '已出院病历', value: 'final' },
-  { label: '在院及已出院病历', value: 'both' },
-]
+  { label: '在院病历', value: 'running', description: '同步截止日期仍在院的病历' },
+  { label: '已出院病历', value: 'final', description: '按出院日期范围同步终末病历' },
+  { label: '在院及已出院', value: 'both', description: '一次同步两类病历' },
+] as const
+
+function selectSyncScene(scene: 'running' | 'final' | 'both') {
+  if (isReadonly.value) return
+  state.policyForm.scope = scene
+}
 
 const syncScopeDisplayLabel = computed(() => {
   if (state.policyForm.scope === 'running') return '在院病历'
@@ -622,14 +535,14 @@ const preflightSummary = computed(() => {
       ? '请选择住院范围、科室和日期，然后点击“检查病历范围”。'
       : '尚未试运行，建议先预检候选病历范围后执行同步。'
   }
+  const estimated = Number(state.preflightResult.estimated_impact || 0)
+  if (estimated === 0 && (state.preflightResult.blockers?.length || 0) === 0) {
+    return noCandidateMessage.value
+  }
   if (!hasPreflightPass.value) {
     return isDemoSyncUser.value
       ? '同步范围已变化，请重新检查病历范围后再开始同步。'
       : '同步范围已变化，请重新试运行后再执行同步。'
-  }
-  const estimated = Number(state.preflightResult.estimated_impact || 0)
-  if (estimated === 0) {
-    return noCandidateMessage.value
   }
   if (state.preflightResult.executable) {
     return isDemoSyncUser.value
@@ -667,6 +580,13 @@ const policyDepartmentOptions = computed(() => [
     value: name,
   })),
 ])
+
+const policyDepartmentLabel = computed(() => {
+  const departments = state.policyForm.target_departments || []
+  if (departments.length === 0 || departments.includes('*')) return '全院'
+  if (departments.length <= 2) return departments.join('、')
+  return `${departments.slice(0, 2).join('、')} 等 ${departments.length} 个科室`
+})
 
 const policyDateRangeLabel = computed(() => {
   const end = state.policyForm.end_date || '未设'
@@ -1333,6 +1253,285 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.sync-guided-workbench {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 8px 24px rgba(0, 0, 0, 0.04);
+  padding: 24px;
+}
+
+.sync-guided-step {
+  min-width: 0;
+}
+
+.sync-guided-step__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sync-guided-step__heading > span {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sync-guided-step__heading h3 {
+  margin: 1px 0 0;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.sync-guided-step__heading p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.sync-guided-step__heading--result {
+  align-items: center;
+}
+
+.sync-guided-step__heading--result > div {
+  flex: 1;
+}
+
+.sync-guided-divider {
+  height: 1px;
+  margin: 24px 0;
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.sync-scene-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sync-scene-card {
+  display: flex;
+  min-height: 86px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  border-radius: 14px;
+  background: rgba(250, 250, 252, 0.76);
+  color: #1d1d1f;
+  cursor: pointer;
+  padding: 16px 18px;
+  text-align: left;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.sync-scene-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(0, 102, 204, 0.22);
+}
+
+.sync-scene-card.is-active {
+  border-color: rgba(0, 102, 204, 0.42);
+  background: rgba(234, 242, 255, 0.82);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.06);
+}
+
+.sync-scene-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.sync-scene-card strong {
+  color: inherit;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sync-scene-card.is-active strong {
+  color: #0066cc;
+}
+
+.sync-scene-card span {
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sync-identity-note {
+  margin: 12px 0 0;
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sync-filter-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 0.8fr) minmax(180px, 0.8fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sync-filter-row__department,
+.sync-filter-row__date {
+  min-width: 0;
+}
+
+.sync-check-action {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.sync-result-step {
+  min-height: 160px;
+}
+
+.sync-result-summary {
+  display: grid;
+  grid-template-columns: 0.72fr 1fr 1.2fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.sync-result-metric {
+  min-width: 0;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 14px;
+  background: rgba(250, 250, 252, 0.72);
+  padding: 14px 16px;
+}
+
+.sync-result-metric--primary {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(234, 242, 255, 0.62);
+}
+
+.sync-result-metric span,
+.sync-result-metric em {
+  display: block;
+  overflow: hidden;
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-result-metric strong {
+  display: block;
+  overflow: hidden;
+  margin: 5px 0 3px;
+  color: #1d1d1f;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-result-metric--primary strong {
+  color: #0066cc;
+  font-size: 26px;
+  line-height: 30px;
+}
+
+.sync-result-empty {
+  margin-top: 16px;
+  border: 1px dashed rgba(0, 0, 0, 0.12);
+  border-radius: 14px;
+  background: rgba(250, 250, 252, 0.6);
+  color: rgba(29, 29, 31, 0.48);
+  font-size: 13px;
+  line-height: 22px;
+  padding: 22px 18px;
+  text-align: center;
+}
+
+.sync-result-messages {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sync-result-messages p {
+  margin: 0;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 9px 12px;
+}
+
+.sync-result-messages .is-blocker {
+  background: rgba(254, 242, 242, 0.86);
+  color: #b91c1c;
+}
+
+.sync-result-messages .is-warning {
+  background: rgba(255, 251, 235, 0.86);
+  color: #a16207;
+}
+
+.sync-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  padding-top: 16px;
+}
+
+@media (max-width: 980px) {
+  .sync-filter-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sync-result-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .sync-guided-workbench {
+    padding: 18px;
+  }
+
+  .sync-scene-cards,
+  .sync-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-result-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 820px) {
+  .sync-scene-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 .system-config-safe-banner {
   display: flex;
   align-items: center;
@@ -1852,6 +2051,17 @@ onUnmounted(() => {
   color: rgba(29, 29, 31, 0.56);
   font-size: 13px;
   line-height: 22px;
+}
+
+.system-config-advanced-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.system-config-advanced-preflight {
+  margin: 0 14px 14px;
 }
 
 .system-config-detail-workbench {
