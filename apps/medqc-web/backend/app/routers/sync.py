@@ -688,8 +688,6 @@ async def run_preflight(
         target_departments = _normalize_target_departments(req.target_departments)
         policy_version = str(req.policy_version or "")
         scene = str(req.scene or "both")
-        if scene == "running":
-            blockers.append("running 在院病历同步尚未接入本页，请切换为终末病历按出院日期同步。")
         impact_meta: dict[str, object] = {
             "estimated_impact": 0,
             "estimate_basis": "eligible_visit_count",
@@ -699,16 +697,24 @@ async def run_preflight(
         if not blockers:
             try:
                 impact_meta = estimate_pg_sync_impact(
+                    scene=scene,
                     date_window=date_window_payload,
                     target_departments=target_departments,
                 )
+                warnings.extend(
+                    str(item)
+                    for item in (impact_meta.get("warnings") or [])
+                    if str(item).strip()
+                )
                 if int(impact_meta.get("estimated_impact") or 0) <= 0:
-                    blockers.append(
-                        "当前出院日期范围和科室条件下未找到可同步的终末病历，请调整日期范围、科室或源库配置后重试"
-                    )
+                    blockers.append("当前日期范围和科室条件下未找到可同步病历，请调整范围或源库配置后重试")
                     warnings.append("候选病历数为 0，本次不会触发正式同步。")
             except Exception as exc:
-                warnings.append(f"预计影响范围计算失败：{exc}")
+                logger.warning(
+                    "sync_preflight_scope_resolution_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                blockers.append("候选病历范围解析失败，请检查日期、科室和源库住院登记配置")
         preflight_fingerprint = _build_preflight_fingerprint(
             source=req.source,
             tier="all",

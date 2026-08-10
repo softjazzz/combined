@@ -81,7 +81,10 @@ function mountPage() {
         'a-button': { template: '<button><slot /></button>' },
         'a-tag': { template: '<span><slot /></span>' },
         'a-progress': { template: '<div class="progress-stub" />' },
-        'a-select': { template: '<div class="select-stub"><slot /></div>' },
+        'a-select': {
+          props: ['value', 'options', 'disabled'],
+          template: '<div class="select-stub"><slot /></div>',
+        },
         'a-option': { template: '<option><slot /></option>' },
         'a-input': { template: '<input />' },
         'a-input-password': { template: '<input />' },
@@ -156,14 +159,34 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).toContain('0 / 20 份')
   })
 
-  it('在主执行区展示终末病历同步的科室和出院日期范围', () => {
+  it('在主执行区支持在院、出院和合并同步范围', () => {
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('终末同步范围')
+    expect(wrapper.text()).toContain('病历同步范围')
     expect(wrapper.text()).toContain('抽取科室')
     expect(wrapper.text()).toContain('出院开始日期')
     expect(wrapper.text()).toContain('出院结束日期')
-    expect(wrapper.text()).toContain('不支持在院病历')
+    const sceneSelect = wrapper.getComponent('[data-testid="sync-scene-select"]')
+    expect(sceneSelect.props('value')).toBe('final')
+    expect(sceneSelect.props('disabled')).toBe(false)
+    expect(sceneSelect.props('options')).toEqual([
+      { label: '在院病历', value: 'running' },
+      { label: '已出院病历', value: 'final' },
+      { label: '在院及已出院病历', value: 'both' },
+    ])
+    expect(wrapper.text()).not.toContain('不支持在院病历')
+  })
+
+  it('在院范围只展示截止日期，不伪装成出院日期区间', async () => {
+    mockState.policyForm.scope = 'running'
+
+    const wrapper = mountPage()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('在院截止日期')
+    expect(wrapper.text()).not.toContain('出院开始日期')
+    expect(wrapper.text()).not.toContain('出院结束日期')
+    mockState.policyForm.scope = 'final'
   })
 
   it('演示账号只看到简化同步向导并隐藏实施诊断信息', () => {
@@ -173,7 +196,7 @@ describe('DataSyncConfigPage visit progress', () => {
     const wrapper = mountPage()
     const text = wrapper.text()
 
-    expect(text).toContain('终末病历同步设置')
+    expect(text).toContain('病历数据同步设置')
     expect(text).toContain('检查病历范围')
     expect(text).toContain('开始同步')
     expect(text).toContain('出院开始日期')
@@ -223,7 +246,7 @@ describe('DataSyncConfigPage visit progress', () => {
 
     const wrapper = mountPage()
 
-    expect(wrapper.text()).toContain('没有找到符合条件的出院病历，请检查科室名称或出院日期范围。')
+    expect(wrapper.text()).toContain('没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。')
     expect(wrapper.text()).not.toContain('预检通过')
   })
 })

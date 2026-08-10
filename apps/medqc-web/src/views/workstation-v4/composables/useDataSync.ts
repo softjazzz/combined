@@ -228,6 +228,7 @@ function patchSyncPolicy(payload: SyncPolicyConfig) {
 
   const scope = String(payload.scope || 'both').toLowerCase()
   const normalizedScope: SyncPolicyForm['scope'] = [
+    'running',
     'final',
     'frontpage',
     'coding',
@@ -237,7 +238,7 @@ function patchSyncPolicy(payload: SyncPolicyConfig) {
     ? (scope as SyncPolicyForm['scope'])
     : 'both'
 
-  globalSyncState.policyForm.scope = scope === 'running' ? 'final' : normalizedScope
+  globalSyncState.policyForm.scope = normalizedScope
   globalSyncState.policyForm.target_departments = departments
   globalSyncState.policyForm.start_date = String(payload.start_date || '')
   globalSyncState.policyForm.end_date = String(payload.end_date || '')
@@ -687,12 +688,7 @@ function buildSyncScopePayload(
   return {
     source,
     tier: globalSyncState.selectedTier,
-    scene:
-      source === 'pg'
-        ? globalSyncState.policyForm.scope === 'running'
-          ? 'final'
-          : globalSyncState.policyForm.scope
-        : undefined,
+    scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
     date_window:
       source === 'pg'
         ? {

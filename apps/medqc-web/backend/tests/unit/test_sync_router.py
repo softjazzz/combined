@@ -358,11 +358,11 @@ class TestSyncRouter:
         data = _assert_success_shell(resp.json())
         assert data["executable"] is False
         assert data["estimated_impact"] == 0
-        assert any("未找到可同步的终末病历" in item for item in data["blockers"])
+        assert any("未找到可同步病历" in item for item in data["blockers"])
         assert any("候选病历数为 0" in item for item in data["warnings"])
         assert data["risk_level"] == "high"
 
-    def test_preflight_running_scene_should_block_sync(self, client, monkeypatch):
+    def test_preflight_running_scene_uses_authoritative_case_scope(self, client, monkeypatch):
         _override_user(client, ["admin"])
         monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})
         monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True, "error": ""})
@@ -378,18 +378,43 @@ class TestSyncRouter:
                 "target_tables": ["mr"],
             },
         )
+        impact_calls = []
+        monkeypatch.setattr(
+            "app.services.etl_sync.estimate_pg_sync_impact",
+            lambda **kwargs: impact_calls.append(kwargs)
+            or {
+                "estimated_impact": 2,
+                "estimate_basis": "case_ref_count",
+                "date_window": {"end": "2026-07-31"},
+                "target_departments": ["重症医学科(ICU)"],
+            },
+        )
 
         resp = client.post(
             "/api/v1/sync/preflight",
-            json={"source": "pg", "tables": ["mr"], "scene": "running"},
+            json={
+                "source": "pg",
+                "tables": ["mr"],
+                "scene": "running",
+                "date_window": {"end": "2026-07-31"},
+                "target_departments": ["重症医学科(ICU)"],
+            },
         )
         assert resp.status_code == 200
         data = _assert_success_shell(resp.json())
-        assert data["executable"] is False
+        assert data["executable"] is True
         assert data["scene"] == "running"
-        assert any("running 在院病历同步尚未接入本页" in item for item in data["blockers"])
-        assert data["estimated_impact"] == 0
-        assert data["risk_level"] == "high"
+        assert data["blockers"] == []
+        assert data["estimated_impact"] == 2
+        assert data["estimate_basis"] == "case_ref_count"
+        assert data["risk_level"] == "low"
+        assert impact_calls == [
+            {
+                "scene": "running",
+                "date_window": {"start": None, "end": "2026-07-31"},
+                "target_departments": ["重症医学科(ICU)"],
+            }
+        ]
 
     def test_trigger_rejects_stale_preflight_fingerprint(self, client, monkeypatch):
         _override_user(client, ["admin"])

@@ -2295,38 +2295,47 @@ def collect_visit_keys_by_policy(
 
 def estimate_pg_sync_impact(
     *,
+    scene: str = "final",
     date_window: Optional[Dict[str, str]] = None,
     target_departments: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Estimate the current PG sync scope by counting eligible visits.
-
-    This mirrors the visit-anchor logic used by ``run_sync`` without pulling or
-    writing source rows.
-    """
+    """使用正式三坐标病例范围服务估算同步影响，不读取或写入病历明细。"""
+    resolved_scene = _normalize_sync_scene(scene)
     policy = load_sync_policy()
-    start_date, end_date, dept_filters = _resolve_pg_extract_window(
-        policy=policy,
-        sync_date=None,
-        date_window=date_window,
-        target_departments=target_departments,
+    as_of_date, discharge_start_date, discharge_end_date, dept_filters, window_error = (
+        _resolve_case_scope_window(
+            scene=resolved_scene,
+            sync_date=None,
+            policy=policy,
+            date_window=date_window,
+            target_departments=target_departments,
+        )
     )
-    remote_url = get_remote_db_url()
-    if not remote_url:
-        raise ValueError("REMOTE_DB_URL 未配置")
-    cfg = load_db_config()
-    remote_schema = _safe_identifier(str(cfg.get("remote_schema") or "public").strip() or "public")
-    visit_keys = collect_visit_keys_by_policy(
-        remote_url=remote_url,
-        remote_schema=remote_schema,
-        start_date=start_date,
-        end_date=end_date,
-        target_departments=dept_filters,
+    if window_error or as_of_date is None:
+        raise ValueError(window_error or "病例范围日期无效")
+    scope_result = _create_case_scope_service().resolve_hospitalization_scope(
+        scope_mode=_scope_mode_for_scene(resolved_scene),
+        as_of_date=as_of_date,
+        discharge_start_date=discharge_start_date,
+        discharge_end_date=discharge_end_date,
+        departments=dept_filters,
+    )
+    effective_window = (
+        {"end": as_of_date.isoformat()}
+        if resolved_scene == "running"
+        else {
+            "start": discharge_start_date.isoformat() if discharge_start_date else "",
+            "end": discharge_end_date.isoformat() if discharge_end_date else "",
+        }
     )
     return {
-        "estimated_impact": len(visit_keys),
-        "estimate_basis": "eligible_visit_count",
-        "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+        "estimated_impact": len(scope_result.case_refs),
+        "estimate_basis": "case_ref_count",
+        "date_window": effective_window,
         "target_departments": dept_filters or ["*"],
+        "sources_used": list(scope_result.sources_used),
+        "source_status": scope_result.source_status,
+        "warnings": list(scope_result.warnings),
     }
 
 

@@ -11,6 +11,52 @@ from app.services.case_scope_service import HospitalizationScopeResult
 from app.services.case_set_sync_service import CaseSetSyncResult
 
 
+def test_estimate_pg_sync_impact_uses_running_case_refs_without_mr_no(monkeypatch):
+    calls = []
+
+    class _ScopeService:
+        def resolve_hospitalization_scope(self, **kwargs):
+            calls.append(kwargs)
+            return HospitalizationScopeResult(
+                case_refs=(CaseRef("H1", "P1", "V1"),),
+                selected=(
+                    {
+                        "institute_id": "H1",
+                        "patient_id": "P1",
+                        "visit_id": "V1",
+                        "mr_no": "",
+                        "source_table": "inpat_registration",
+                    },
+                ),
+                all_selected=(),
+                sources_used=("inpat_registration",),
+                source_status="ready",
+                warnings=(),
+            )
+
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {})
+    monkeypatch.setattr(etl_sync, "_create_case_scope_service", lambda: _ScopeService())
+
+    result = etl_sync.estimate_pg_sync_impact(
+        scene="running",
+        date_window={"end": "2026-07-31"},
+        target_departments=["重症医学科(ICU)"],
+    )
+
+    assert result["estimated_impact"] == 1
+    assert result["estimate_basis"] == "case_ref_count"
+    assert result["sources_used"] == ["inpat_registration"]
+    assert calls == [
+        {
+            "scope_mode": "active",
+            "as_of_date": date(2026, 7, 31),
+            "discharge_start_date": None,
+            "discharge_end_date": None,
+            "departments": ["重症医学科(ICU)"],
+        }
+    ]
+
+
 def test_list_remote_departments_uses_discharge_department_field(monkeypatch):
     executed: list[tuple[str, tuple]] = []
 

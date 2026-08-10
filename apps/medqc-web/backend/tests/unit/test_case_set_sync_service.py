@@ -8,6 +8,51 @@ from app.services.case_identity import CaseRef
 from app.services.case_set_sync_service import CaseSetSyncService
 
 
+def test_running_case_without_mr_no_is_visible_from_inpat_registration():
+    case_ref = CaseRef("H1", "P1", "V1")
+    fetched_case_refs: dict[str, tuple[CaseRef, ...]] = {}
+
+    def _fetch(**kwargs: Any) -> list[dict[str, Any]]:
+        source_table = kwargs["source_table"]
+        fetched_case_refs[source_table] = tuple(kwargs["case_refs"])
+        if source_table == "mr":
+            return []
+        if source_table == "inpat_registration":
+            return [{**case_ref.as_dict(), "mr_no": "", "discharge_datetime": None}]
+        return [case_ref.as_dict()]
+
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {"name": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]},
+            {
+                "name": "inpat_registration",
+                "key_fields": ["institute_id", "patient_id", "visit_id"],
+            },
+            {
+                "name": "daily_course_record",
+                "key_fields": ["institute_id", "patient_id", "visit_id"],
+            },
+        ],
+        row_fetcher=_fetch,
+        row_upserter=lambda **kwargs: len(kwargs["records"]),
+        bundle_refresher=lambda **_: {"scenes": {}, "domains": {}},
+        visit_index_ingester=lambda **_: {"processed": 1},
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    result = service.sync_case_set(
+        case_refs=(case_ref,),
+        table_names=("mr", "inpat_registration", "daily_course_record"),
+        policy_version="case-set-sync-v1",
+        sync_scene="running",
+    )
+
+    assert result.visible_case_refs == (case_ref,)
+    assert result.missing_primary_case_refs == ()
+    assert fetched_case_refs["daily_course_record"] == (case_ref,)
+
+
 def test_case_set_sync_only_continues_cases_with_visible_primary_record():
     visible = CaseRef("HOSPITAL-A", "PATIENT-A", "VISIT-1")
     missing = CaseRef("HOSPITAL-B", "PATIENT-B", "VISIT-1")

@@ -17,7 +17,7 @@
                 <div class="system-config-breadcrumb">
                   系统配置 / 数据同步设置
                 </div>
-                <h2>终末病历同步设置</h2>
+                <h2>病历数据同步设置</h2>
                 <p>
                   {{ pageSubtitle }}
                 </p>
@@ -42,7 +42,7 @@
                   :title="
                     isReadonly
                       ? '仅系统配置管理员可执行'
-                      : '检查科室和出院日期范围内是否有可同步病历'
+                      : '检查当前住院范围、科室和日期条件下是否有可同步病历'
                   "
                 >
                   <a-button
@@ -165,25 +165,23 @@
                 <div class="system-config-scope-form">
                   <div class="system-config-section-head system-config-section-head--compact">
                     <div>
-                      <h4>终末同步范围</h4>
-                      <p>按出院日期和科室筛选候选病历；修改后需要重新预检。</p>
+                      <h4>病历同步范围</h4>
+                      <p>{{ syncScopeDescription }}</p>
                     </div>
                     <a-tag class="wv4-status-chip wv4-status-chip--neutral">
-                      不支持在院病历
+                      {{ syncScopeDisplayLabel }}
                     </a-tag>
                   </div>
 
                   <div class="system-config-scope-grid">
-                    <label
-                      v-if="isSyncAdvancedUser"
-                      class="system-config-scope-field system-config-scope-field--scene"
-                    >
+                    <label class="system-config-scope-field system-config-scope-field--scene">
                       <span>同步场景</span>
                       <a-select
-                        :value="'final'"
-                        disabled
+                        v-model:value="state.policyForm.scope"
+                        data-testid="sync-scene-select"
+                        :disabled="isReadonly"
                         style="width: 100%"
-                        :options="[{ label: '终末病历（按出院日期）', value: 'final' }]"
+                        :options="syncSceneOptions"
                       />
                     </label>
                     <label class="system-config-scope-field system-config-scope-field--department">
@@ -200,7 +198,10 @@
                         @change="handlePolicyDepartmentChange"
                       />
                     </label>
-                    <label class="system-config-scope-field system-config-scope-field--date">
+                    <label
+                      v-if="state.policyForm.scope !== 'running'"
+                      class="system-config-scope-field system-config-scope-field--date"
+                    >
                       <span>出院开始日期</span>
                       <a-date-picker
                         v-model:value="state.policyForm.start_date"
@@ -211,7 +212,7 @@
                       />
                     </label>
                     <label class="system-config-scope-field system-config-scope-field--date">
-                      <span>出院结束日期</span>
+                      <span>{{ syncEndDateLabel }}</span>
                       <a-date-picker
                         v-model:value="state.policyForm.end_date"
                         value-format="YYYY-MM-DD"
@@ -533,10 +534,52 @@ const canManageLlmConfig = computed(() =>
 )
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
+const syncSceneOptions = [
+  { label: '在院病历', value: 'running' },
+  { label: '已出院病历', value: 'final' },
+  { label: '在院及已出院病历', value: 'both' },
+]
+
+const syncScopeDisplayLabel = computed(() => {
+  if (state.policyForm.scope === 'running') return '在院病历'
+  if (state.policyForm.scope === 'both') return '在院及已出院病历'
+  return '已出院病历'
+})
+
+const syncScopeDescription = computed(() => {
+  if (state.policyForm.scope === 'running') {
+    return '按在院截止日期和当前科室筛选；不要求病案首页号，修改后需要重新预检。'
+  }
+  if (state.policyForm.scope === 'both') {
+    return '同时筛选截止日期仍在院的病历和出院日期区间内的病历；修改后需要重新预检。'
+  }
+  return '按出院日期和科室筛选已出院病历；修改后需要重新预检。'
+})
+
+const syncEndDateLabel = computed(() =>
+  state.policyForm.scope === 'running' ? '在院截止日期' : '出院结束日期',
+)
+
+const syncAnchorLabel = computed(() => {
+  if (state.policyForm.scope === 'running') return '住院登记 / 在院截止日期'
+  if (state.policyForm.scope === 'both') return '住院登记 + 出院记录 / 日期范围'
+  return '出院记录 / 出院日期'
+})
+
+const noCandidateMessage = computed(() => {
+  if (state.policyForm.scope === 'running') {
+    return '没有找到符合条件的在院病历，请检查科室、截止日期或住院登记数据。'
+  }
+  if (state.policyForm.scope === 'both') {
+    return '没有找到符合条件的在院或已出院病历，请检查科室、日期范围或住院登记数据。'
+  }
+  return '没有找到符合条件的已出院病历，请检查科室名称或出院日期范围。'
+})
+
 const pageSubtitle = computed(() =>
   isDemoSyncUser.value
-    ? '选择科室和出院日期，先检查可同步病历，再把终末病历同步到本地用于质控验证。'
-    : '按出院日期抽取终末病历，先只读检测，再预检影响，最后人工确认同步。',
+    ? '选择在院、已出院或合并范围，先检查可同步病历，再同步到本地用于质控。'
+    : '按三坐标病例范围抽取在院及已出院病历，先只读检测，再预检影响，最后人工确认同步。',
 )
 
 const preflightActionLabel = computed(() => (isDemoSyncUser.value ? '检查病历范围' : '重新预检'))
@@ -549,13 +592,13 @@ const safeBannerTitle = computed(() =>
 
 const safeBannerDescription = computed(() =>
   isDemoSyncUser.value
-    ? '同步只会把符合条件的终末病历复制到本地，用于后续质控验证和演示。'
-    : '本页用于终末病历按出院日期同步；0609/客户样本定向同步请在“客户样本验证”页面执行。',
+    ? '同步只会把符合条件的病历复制到本地，用于后续质控验证和演示。'
+    : '本页与客户样本验证共用三坐标病例同步链；客户样本的定向同步仍在“客户样本验证”页面执行。',
 )
 
 const summaryDescription = computed(() =>
   isDemoSyncUser.value
-    ? '请先确认科室和出院日期范围，再检查是否找到可同步病历。'
+    ? '请先确认住院范围、科室和日期，再检查是否找到可同步病历。'
     : '用于快速核对源库、范围和调度，详细配置在下方连接面板中维护。',
 )
 
@@ -576,8 +619,8 @@ const connectedCount = computed(() =>
 const preflightSummary = computed(() => {
   if (!state.preflightResult) {
     return isDemoSyncUser.value
-      ? '请选择科室和出院日期，然后点击“检查病历范围”。'
-      : '尚未试运行，建议先预检终末病历候选范围后执行同步。'
+      ? '请选择住院范围、科室和日期，然后点击“检查病历范围”。'
+      : '尚未试运行，建议先预检候选病历范围后执行同步。'
   }
   if (!hasPreflightPass.value) {
     return isDemoSyncUser.value
@@ -586,7 +629,7 @@ const preflightSummary = computed(() => {
   }
   const estimated = Number(state.preflightResult.estimated_impact || 0)
   if (estimated === 0) {
-    return '没有找到符合条件的出院病历，请检查科室名称或出院日期范围。'
+    return noCandidateMessage.value
   }
   if (state.preflightResult.executable) {
     return isDemoSyncUser.value
@@ -626,8 +669,9 @@ const policyDepartmentOptions = computed(() => [
 ])
 
 const policyDateRangeLabel = computed(() => {
-  const start = state.policyForm.start_date || '未设'
   const end = state.policyForm.end_date || '未设'
+  if (state.policyForm.scope === 'running') return `截至 ${end}`
+  const start = state.policyForm.start_date || '未设'
   return `${start} ~ ${end}`
 })
 
@@ -642,8 +686,8 @@ const summaryItems = computed(() => {
     return [
       {
         label: '同步方式',
-        value: '终末病历',
-        description: '按出院日期筛选已完成病历',
+        value: syncScopeDisplayLabel.value,
+        description: syncAnchorLabel.value,
       },
       {
         label: '筛选范围',
@@ -673,8 +717,8 @@ const summaryItems = computed(() => {
     },
     {
       label: '抽取锚点',
-      value: 'discharge_record / 出院日期',
-      description: '按终末病历范围计算候选病历',
+      value: syncAnchorLabel.value,
+      description: '按完整三坐标计算候选病历',
     },
     {
       label: '同步范围',
@@ -695,7 +739,7 @@ const syncSafetySteps = computed(() => [
     index: '1',
     title: isDemoSyncUser.value ? '选择同步范围' : '只读源库检测',
     description: isDemoSyncUser.value
-      ? '选择科室和出院日期，明确这次要同步哪些终末病历。'
+      ? `选择${syncScopeDisplayLabel.value}、科室和日期，明确本次同步范围。`
       : connectedCount.value >= 2
         ? '源库与本地库连接可用。'
         : '验证 clinical_data 与本地 CDM 连通性。',
@@ -708,8 +752,8 @@ const syncSafetySteps = computed(() => [
     description: state.preflightResult
       ? `${candidateProgressLabel.value} ${Number(state.preflightResult.estimated_impact || 0).toLocaleString()} 份。`
       : isDemoSyncUser.value
-        ? '检查所选范围内是否能找到出院病历。'
-        : '模拟按出院日期抽取终末病历，生成影响范围和阻断项。',
+        ? '检查所选范围内是否能找到可同步病历。'
+        : '按三坐标病例范围模拟抽取，生成影响范围和阻断项。',
     tone: state.preflightResult?.executable ? 'ready' : state.preflightResult ? 'warn' : 'neutral',
   },
   {
@@ -741,7 +785,7 @@ const executionChecklist = computed(() => {
       },
       {
         label: '筛选依据',
-        value: '按出院日期筛选终末病历',
+        value: syncAnchorLabel.value,
         status: '已确认',
         tone: 'ready',
       },
@@ -789,7 +833,7 @@ const executionChecklist = computed(() => {
     },
     {
       label: '抽取锚点',
-      value: 'discharge_record / 出院日期',
+      value: syncAnchorLabel.value,
       status: '已确认',
       tone: 'ready',
     },
@@ -973,14 +1017,14 @@ const riskAdviceItems = computed(() => {
   const items = [
     {
       title: '存在无法匹配的 visit_id',
-      description: '若出院记录缺少出院日期、patient_id 或 visit_id，本页无法计算终末病历候选范围。',
-      action: '建议先核对 discharge_record 的出院日期、patient_id、visit_id 字段。',
+      description: '若住院登记或出院记录缺少三坐标身份与关键时间，本页无法计算病历候选范围。',
+      action: '请核对 institute_id、patient_id、visit_id 以及入院/出院时间；mr_no 不是同步前提。',
       tone: warnings.length || blockers.length ? 'warn' : 'neutral',
     },
     {
       title: '关键文书可能缺表',
       description: '首次病程、医嘱、检查检验、病理报告缺失会直接影响 0609 质控解释性。',
-      action: '0609/客户样本定向同步建议在客户样本验证页执行；本页用于终末病历批量同步。',
+      action: '0609/客户样本定向同步建议在客户验证页执行；本页用于全院在院、已出院病历批量同步。',
       tone: preflightTableRows.value.some((item) => !item.executable) ? 'danger' : 'neutral',
     },
     {
@@ -1017,7 +1061,7 @@ async function handleRunPreflight() {
     const result = await runPreflight('pg')
     const estimated = Number(result.estimated_impact || 0)
     if (estimated === 0) {
-      message.warning('没有找到符合条件的出院病历，请检查科室名称或出院日期范围。')
+      message.warning(noCandidateMessage.value)
     } else if (result.executable) {
       message.success(
         isDemoSyncUser.value
@@ -1042,7 +1086,7 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
       Modal.confirm({
         title: isDemoSyncUser.value ? '保存范围并检查' : '保存策略并同步',
         content: isDemoSyncUser.value
-          ? '将先保存当前科室和出院日期范围，再检查是否有可同步病历。'
+          ? '将先保存当前住院范围、科室和日期，再检查是否有可同步病历。'
           : '将先保存当前同步策略，再执行试运行预检。预检通过后还会再次确认是否正式同步。',
         okText: isDemoSyncUser.value ? '保存并检查' : '保存并试运行',
         cancelText: '取消',
@@ -1064,7 +1108,7 @@ async function triggerSyncWithConfirm(autoSavePolicy: boolean) {
     const estimated = Number(preflight.estimated_impact || 0)
     message.warning(
       estimated === 0
-        ? '没有找到符合条件的出院病历，请检查科室名称或出院日期范围。'
+        ? noCandidateMessage.value
         : isDemoSyncUser.value
           ? `检查未通过：${preflight.blockers?.join('；') || '请先处理提示项'}`
           : `预检未通过：${preflight.blockers?.join('；') || '存在阻断项'}`,
