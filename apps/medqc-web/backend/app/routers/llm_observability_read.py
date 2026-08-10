@@ -66,7 +66,13 @@ async def require_llm_observability_user(
     current_user: dict = Depends(require_roles(*_SYSTEM_OBSERVABILITY_ROLES)),
 ) -> dict:
     normalized_email = str(current_user.get("email") or "").strip().lower()
-    if normalized_email in DEFAULT_DEMO_USER_EMAILS:
+    role_names = {
+        str(role or "").strip().lower()
+        for role in (current_user.get("roles") or [])
+        if str(role or "").strip()
+    }
+    is_operational_admin = bool({"sync_admin", "super_admin"}.intersection(role_names))
+    if normalized_email in DEFAULT_DEMO_USER_EMAILS and not is_operational_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="演示账号不可访问模型性能观测数据",

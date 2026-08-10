@@ -463,6 +463,9 @@ def test_permissions_allow_only_non_demo_system_administrators():
     with _client([], roles=["admin"], email="  ADMIN@MEDQC.COM ") as client:
         assert client.get("/api/v1/system/llm-observability/overview").status_code == 403
 
+    with _client([], roles=["sync_admin"], email="sync_admin@medqc.com") as client:
+        assert client.get("/api/v1/system/llm-observability/overview").status_code == 200
+
 
 def test_overview_forwards_supported_filters_and_rejects_inverted_range():
     reader = _StaticEventReader([])

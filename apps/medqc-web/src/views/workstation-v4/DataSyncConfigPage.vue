@@ -453,8 +453,13 @@ const canManageLlmConfig = computed(() =>
 )
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 
+const isObservabilityOperationalAdmin = computed(() =>
+  authStore.userRoles.some((role) => role === 'sync_admin' || role === 'super_admin'),
+)
 const canViewLlmObservability = computed(
-  () => canManageLlmConfig.value && authStore.user?.is_demo_account !== true,
+  () =>
+    canManageLlmConfig.value &&
+    (authStore.user?.is_demo_account !== true || isObservabilityOperationalAdmin.value),
 )
 const syncSceneOptions = [
   { label: '在院病历', value: 'running', description: '同步截止日期仍在院的病历' },

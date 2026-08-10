@@ -329,6 +329,15 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(false)
   })
 
+  it('内置同步管理员即使带演示标记仍显示模型性能页签', () => {
+    mockUserRoles = ['sync_admin']
+    mockAuthStore.user.is_demo_account = true
+
+    const wrapper = mountPage()
+
+    expect(wrapper.find('[data-testid="llm-observability-tab"]').exists()).toBe(true)
+  })
+
   it('管理员通过 tab 查询参数可直接打开模型性能页签', async () => {
     mockUserRoles = ['admin']
     mockRoute.query = { tab: 'llmObservability' }
