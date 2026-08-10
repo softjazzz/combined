@@ -42,6 +42,7 @@ from .case_identity import (
     normalize_case_refs,
     stamp_source_rows_institute_id,
 )
+from .case_scope_service import CaseScopeService
 from .case_set_sync_service import CaseSetSyncService
 from .etl_sync import (
     expand_table_groups,
@@ -2564,20 +2565,6 @@ def _pick_best_remote_candidate(
 
 _REMOTE_MATCH_ANCHOR_PRIORITY = ("mr", "inpat_registration", "admission_record")
 PRIMARY_VISIBILITY_TABLES = ("mr", "inpat_registration", "admission_record")
-_HOSPITALIZATION_SCOPE_MODES = {"active", "discharged", "active_and_discharged"}
-_HOSPITALIZATION_ID_COLUMNS = {"institute_id", "patient_id", "visit_id"}
-_HOSPITALIZATION_ADMISSION_TIME_COLUMNS = (
-    "admission_datetime",
-    "admission_time",
-    "inpat_datetime",
-    "inpat_time",
-    "record_time",
-)
-_HOSPITALIZATION_DISCHARGE_TIME_COLUMNS = (
-    "discharge_datetime",
-    "discharge_time",
-    "discharge_date",
-)
 _SAMPLE_SYNC_STATE_KEY = "_sample_sync_state"
 
 
@@ -2833,10 +2820,6 @@ def _persist_hospitalization_sync_states(
         session.close()
 
 
-def _first_available_column(columns: set[str], candidates: Sequence[str]) -> str:
-    return next((column for column in candidates if column in columns), "")
-
-
 def _parse_datetime_value(value: Any) -> Optional[datetime]:
     if value is None or value == "":
         return None
@@ -2853,182 +2836,6 @@ def _parse_datetime_value(value: Any) -> Optional[datetime]:
     except ValueError:
         parsed_date = _parse_date(normalized)
         return datetime.combine(parsed_date, datetime.min.time()) if parsed_date else None
-
-
-def _resolve_hospitalization_source_plan(
-    *,
-    table_columns: Dict[str, set[str]],
-    scope_mode: str,
-) -> Dict[str, Any]:
-    normalized_mode = _safe_text(scope_mode).lower()
-    if normalized_mode not in _HOSPITALIZATION_SCOPE_MODES:
-        raise ValueError("住院范围仅支持当前在院、期间出院或两者合并")
-
-    def choose_source(
-        table_names: Sequence[str],
-        *,
-        require_admission_time: bool,
-    ) -> Optional[Dict[str, Any]]:
-        for table_name in table_names:
-            columns = set(table_columns.get(table_name) or set())
-            if not _HOSPITALIZATION_ID_COLUMNS.issubset(columns):
-                continue
-            admission_column = _first_available_column(
-                columns,
-                _HOSPITALIZATION_ADMISSION_TIME_COLUMNS,
-            )
-            discharge_column = _first_available_column(
-                columns,
-                _HOSPITALIZATION_DISCHARGE_TIME_COLUMNS,
-            )
-            if (require_admission_time and not admission_column) or not discharge_column:
-                continue
-            return {
-                "table_name": table_name,
-                "columns": columns,
-                "admission_time_column": admission_column,
-                "discharge_time_column": discharge_column,
-            }
-        return None
-
-    needs_active = normalized_mode in {"active", "active_and_discharged"}
-    needs_discharged = normalized_mode in {"discharged", "active_and_discharged"}
-    active_source = (
-        choose_source(
-            ("inpat_registration",),
-            require_admission_time=True,
-        )
-        if needs_active
-        else None
-    )
-    discharged_source = (
-        choose_source(
-            ("discharge_record", "mr", "inpat_registration", "admission_record"),
-            require_admission_time=False,
-        )
-        if needs_discharged
-        else None
-    )
-    if needs_active and active_source is None:
-        raise ValueError("源库没有可识别的当前在院患者数据，请同步住院登记")
-    if needs_discharged and discharged_source is None:
-        raise ValueError("源库没有可识别的已出院患者数据，请同步出院记录或病案首页")
-
-    warnings: List[str] = []
-    if needs_discharged and discharged_source and discharged_source["table_name"] != "discharge_record":
-        warnings.append("源库未提供可用出院记录表，已使用病案首页或住院记录识别期间出院患者。")
-    sources_used = list(
-        dict.fromkeys(
-            source["table_name"]
-            for source in (active_source, discharged_source)
-            if source is not None
-        )
-    )
-    return {
-        "active": active_source,
-        "discharged": discharged_source,
-        "sources_used": sources_used,
-        "source_status": "degraded" if warnings else "ready",
-        "warnings": warnings,
-    }
-
-
-def _select_hospitalization_candidates(
-    *,
-    candidates: Sequence[Dict[str, Any]],
-    scope_mode: str,
-    as_of_date: date,
-    discharge_start_date: Optional[date],
-    discharge_end_date: Optional[date],
-    departments: Sequence[str],
-) -> List[Dict[str, Any]]:
-    normalized_mode = _safe_text(scope_mode).lower()
-    if normalized_mode not in _HOSPITALIZATION_SCOPE_MODES:
-        raise ValueError("住院范围仅支持当前在院、期间出院或两者合并")
-    if normalized_mode in {"discharged", "active_and_discharged"}:
-        if discharge_start_date is None or discharge_end_date is None:
-            raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
-        if discharge_start_date > discharge_end_date:
-            raise ValueError("出院开始日期不能晚于结束日期")
-        if (discharge_end_date - discharge_start_date).days > 30:
-            raise ValueError("出院日期范围最多 31 天")
-
-    department_filter = {
-        _safe_text(item)
-        for item in departments
-        if _safe_text(item)
-    }
-    as_of_end = datetime.combine(as_of_date + timedelta(days=1), datetime.min.time())
-    selected_by_identity: Dict[tuple[str, str, str], Dict[str, Any]] = {}
-    for candidate in candidates:
-        institute_id = _safe_text(candidate.get("institute_id"))
-        patient_id = _safe_text(candidate.get("patient_id"))
-        visit_id = _safe_text(candidate.get("visit_id"))
-        identity = (institute_id, patient_id, visit_id)
-        if not all(identity):
-            continue
-        admission_time = _parse_datetime_value(
-            candidate.get("admission_time") or candidate.get("admission_datetime")
-        )
-        discharge_time = _parse_datetime_value(
-            candidate.get("discharge_time") or candidate.get("discharge_datetime")
-        )
-        is_active = bool(
-            admission_time
-            and admission_time < as_of_end
-            and (discharge_time is None or discharge_time >= as_of_end)
-        )
-        is_period_discharge = bool(
-            discharge_time
-            and discharge_start_date
-            and discharge_end_date
-            and discharge_start_date <= discharge_time.date() <= discharge_end_date
-        )
-        status = ""
-        if normalized_mode in {"active", "active_and_discharged"} and is_active:
-            status = "active"
-        elif normalized_mode in {"discharged", "active_and_discharged"} and is_period_discharge:
-            status = "discharged"
-        if not status:
-            continue
-
-        if status == "active":
-            department_candidates = (
-                ("current_department", candidate.get("current_department")),
-                ("admission_department", candidate.get("admission_department")),
-            )
-        else:
-            department_candidates = (
-                ("discharge_department", candidate.get("discharge_department")),
-                ("current_department", candidate.get("current_department")),
-                ("admission_department", candidate.get("admission_department")),
-            )
-        department_basis, department = next(
-            (
-                (basis, _safe_text(value))
-                for basis, value in department_candidates
-                if _safe_text(value)
-            ),
-            ("unavailable", ""),
-        )
-        if department_filter and department not in department_filter:
-            continue
-
-        normalized = dict(candidate)
-        normalized.update(
-            {
-                "institute_id": institute_id,
-                "patient_id": patient_id,
-                "visit_id": visit_id,
-                "admission_time": admission_time,
-                "discharge_time": discharge_time,
-                "hospitalization_status": status,
-                "department": department,
-                "department_basis": department_basis,
-            }
-        )
-        selected_by_identity.setdefault(identity, normalized)
-    return list(selected_by_identity.values())
 
 
 def _build_admission_filter_pool_item(
@@ -5839,218 +5646,17 @@ class CustomQCSamplePoolService:
         discharge_end_date: Optional[date],
         departments: Sequence[str],
     ) -> Dict[str, Any]:
-        remote_url = get_remote_db_url()
-        if not remote_url:
-            raise ValueError("远端 PG 未配置，无法读取住院范围")
-        cfg = load_db_config()
-        remote_schema = _safe_text(cfg.get("remote_schema"), "public") or "public"
-        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
-        if not schema_ident:
-            raise ValueError("远端 schema 非法")
-
-        candidate_tables = (
-            "inpat_registration",
-            "admission_record",
-            "daily_admission_record",
-            "discharge_record",
-            "mr",
-            "patient_information",
-        )
-        conn = psycopg2.connect(remote_url, connect_timeout=10)
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        try:
-            cursor.execute(
-                """
-                SELECT table_name, column_name
-                FROM information_schema.columns
-                WHERE table_schema = %s
-                  AND table_name = ANY(%s)
-                """,
-                (remote_schema, list(candidate_tables)),
-            )
-            table_columns: Dict[str, set[str]] = {}
-            for row in cursor.fetchall() or []:
-                table_name = _safe_text(row.get("table_name"))
-                column_name = _safe_text(row.get("column_name"))
-                if table_name and column_name:
-                    table_columns.setdefault(table_name, set()).add(column_name)
-            plan = _resolve_hospitalization_source_plan(
-                table_columns=table_columns,
-                scope_mode=scope_mode,
-            )
-
-            def column_expr(
-                *,
-                columns: set[str],
-                candidates: Sequence[str],
-                alias: str,
-            ) -> str:
-                column = _first_available_column(columns, candidates)
-                return f"{column} AS {alias}" if column else f"NULL AS {alias}"
-
-            def fetch_source(role: str, source: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
-                if source is None:
-                    return []
-                table_name = _safe_text(source.get("table_name"))
-                columns = set(source.get("columns") or set())
-                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
-                    raise ValueError("住院来源表名称非法")
-                admission_column = _safe_text(source.get("admission_time_column"))
-                discharge_column = _safe_text(source.get("discharge_time_column"))
-                patient_name_expr = column_expr(
-                    columns=columns,
-                    candidates=("name", "patient_name"),
-                    alias="patient_name",
-                )
-                mr_no_expr = column_expr(
-                    columns=columns,
-                    candidates=("mr_no", "inpat_no"),
-                    alias="mr_no",
-                )
-                inpat_no_expr = column_expr(
-                    columns=columns,
-                    candidates=("inpat_no", "mr_no"),
-                    alias="inpat_no",
-                )
-                admission_department_expr = column_expr(
-                    columns=columns,
-                    candidates=("admission_dept_name", "department_name"),
-                    alias="admission_department",
-                )
-                current_department_expr = column_expr(
-                    columns=columns,
-                    candidates=("current_dept_name", "dept_name", "transfer_dept_name"),
-                    alias="current_department",
-                )
-                discharge_department_expr = column_expr(
-                    columns=columns,
-                    candidates=("discharge_dept_name", "dept_name", "transfer_dept_name"),
-                    alias="discharge_department",
-                )
-                if role == "active":
-                    where_sql = (
-                        f"{admission_column} < (%s::date + INTERVAL '1 day') "
-                        f"AND ({discharge_column} IS NULL "
-                        f"OR {discharge_column} >= (%s::date + INTERVAL '1 day'))"
-                    )
-                    params: List[Any] = [as_of_date.isoformat(), as_of_date.isoformat()]
-                else:
-                    if discharge_start_date is None or discharge_end_date is None:
-                        raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
-                    where_sql = (
-                        f"{discharge_column}::date >= %s::date "
-                        f"AND {discharge_column}::date <= %s::date"
-                    )
-                    params = [
-                        discharge_start_date.isoformat(),
-                        discharge_end_date.isoformat(),
-                    ]
-                admission_time_expr = (
-                    f"{admission_column} AS admission_time"
-                    if admission_column
-                    else "NULL AS admission_time"
-                )
-                order_time_column = admission_column or discharge_column
-                cursor.execute(
-                    f"""
-                    SELECT DISTINCT ON (institute_id::text, patient_id::text, visit_id::text)
-                        institute_id::text AS institute_id,
-                        patient_id::text AS patient_id,
-                        visit_id::text AS visit_id,
-                        {patient_name_expr},
-                        {mr_no_expr},
-                        {inpat_no_expr},
-                        {admission_time_expr},
-                        {discharge_column} AS discharge_time,
-                        {admission_department_expr},
-                        {current_department_expr},
-                        {discharge_department_expr}
-                    FROM {schema_ident}.{table_name}
-                    WHERE {where_sql}
-                    ORDER BY institute_id::text, patient_id::text, visit_id::text,
-                             {order_time_column} DESC NULLS LAST
-                    """,
-                    params,
-                )
-                return [
-                    {**dict(row), "source_table": table_name}
-                    for row in (cursor.fetchall() or [])
-                ]
-
-            candidates = [
-                *fetch_source("active", plan.get("active")),
-                *fetch_source("discharged", plan.get("discharged")),
-            ]
-            missing_name_identities = sorted(
-                {
-                    (
-                        _safe_text(row.get("institute_id")),
-                        _safe_text(row.get("patient_id")),
-                    )
-                    for row in candidates
-                    if _safe_text(row.get("institute_id"))
-                    and _safe_text(row.get("patient_id"))
-                    and not _safe_text(row.get("patient_name"))
-                }
-            )
-            patient_columns = set(table_columns.get("patient_information") or set())
-            patient_name_column = _first_available_column(
-                patient_columns,
-                ("name", "patient_name"),
-            )
-            demographic_rows: List[Dict[str, Any]] = []
-            if (
-                missing_name_identities
-                and patient_name_column
-                and {"institute_id", "patient_id"}.issubset(patient_columns)
-            ):
-                for start in range(0, len(missing_name_identities), 200):
-                    chunk = missing_name_identities[start : start + 200]
-                    placeholders = ", ".join(["(%s, %s)"] * len(chunk))
-                    params: List[str] = []
-                    for institute_id, patient_id in chunk:
-                        params.extend([institute_id, patient_id])
-                    cursor.execute(
-                        f"""
-                        SELECT institute_id::text AS institute_id,
-                               patient_id::text AS patient_id,
-                               {patient_name_column}::text AS patient_name
-                        FROM {schema_ident}.patient_information
-                        WHERE (institute_id::text, patient_id::text) IN ({placeholders})
-                        """,
-                        params,
-                    )
-                    demographic_rows.extend(dict(row) for row in (cursor.fetchall() or []))
-                candidates = _backfill_admission_source_patient_names(
-                    source_rows=candidates,
-                    demographic_rows=demographic_rows,
-                )
-            all_selected = _select_hospitalization_candidates(
-                candidates=candidates,
-                scope_mode=scope_mode,
-                as_of_date=as_of_date,
-                discharge_start_date=discharge_start_date,
-                discharge_end_date=discharge_end_date,
-                departments=[],
-            )
-            selected = _select_hospitalization_candidates(
-                candidates=all_selected,
-                scope_mode=scope_mode,
-                as_of_date=as_of_date,
-                discharge_start_date=discharge_start_date,
-                discharge_end_date=discharge_end_date,
-                departments=departments,
-            )
-            return {
-                "selected": selected,
-                "all_selected": all_selected,
-                "sources_used": plan["sources_used"],
-                "source_status": plan["source_status"],
-                "warnings": plan["warnings"],
-            }
-        finally:
-            cursor.close()
-            conn.close()
+        return CaseScopeService(
+            remote_url_loader=get_remote_db_url,
+            db_config_loader=load_db_config,
+            connection_factory=psycopg2.connect,
+        ).resolve_hospitalization_scope(
+            scope_mode=scope_mode,
+            as_of_date=as_of_date,
+            discharge_start_date=discharge_start_date,
+            discharge_end_date=discharge_end_date,
+            departments=departments,
+        ).to_legacy_dict()
 
     def _existing_pool_identity_set(self, *, pool_id: str) -> set[tuple[str, str, str]]:
         session = _session()

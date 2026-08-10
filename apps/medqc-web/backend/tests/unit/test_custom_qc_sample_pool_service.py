@@ -8,6 +8,7 @@ from app.services.custom_qc_sample_pool_service import (
     load_manual_case_rows_from_excel,
     summarize_sample_validation_run_readiness,
 )
+from app.services.case_scope_service import HospitalizationScopeResult
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
 from datetime import date, datetime, timedelta, timezone
 import pandas as pd
@@ -1342,63 +1343,37 @@ def test_admission_filter_should_repair_existing_blank_display_fields():
     assert payload["patient_id"] == "patient-1"
 
 
-def test_hospitalization_scope_should_include_old_active_and_period_discharge_records():
-    rows = [
-        {
-            "institute_id": "H1",
-            "patient_id": "P1",
-            "visit_id": "ACTIVE-OLD",
-            "admission_time": "2026-06-01 08:00:00",
-            "discharge_time": None,
-            "current_department": "重症医学科（ICU）",
-        },
-        {
-            "institute_id": "H1",
-            "patient_id": "P2",
-            "visit_id": "DISCHARGED-TODAY",
-            "admission_time": "2026-07-20 08:00:00",
-            "discharge_time": "2026-07-30 10:00:00",
-            "discharge_department": "神经外科",
-        },
-        {
-            "institute_id": "H1",
-            "patient_id": "P3",
-            "visit_id": "DISCHARGED-BEFORE",
-            "admission_time": "2026-07-01 08:00:00",
-            "discharge_time": "2026-07-29 10:00:00",
-            "discharge_department": "内科",
-        },
-    ]
-
-    selected = sample_pool_module._select_hospitalization_candidates(
-        candidates=rows,
-        scope_mode="active_and_discharged",
-        as_of_date=date(2026, 7, 30),
-        discharge_start_date=date(2026, 7, 30),
-        discharge_end_date=date(2026, 7, 30),
-        departments=[],
-    )
-
-    assert [row["visit_id"] for row in selected] == ["ACTIVE-OLD", "DISCHARGED-TODAY"]
-    assert selected[0]["hospitalization_status"] == "active"
-    assert selected[0]["department"] == "重症医学科（ICU）"
-    assert selected[1]["hospitalization_status"] == "discharged"
-    assert selected[1]["department"] == "神经外科"
-
-
-def test_hospitalization_scope_should_deduplicate_coordinates_and_filter_by_effective_department():
-    duplicate = {
+def test_hospitalization_scope_adapter_delegates_to_public_case_scope(monkeypatch):
+    captured = {}
+    selected = {
         "institute_id": "H1",
         "patient_id": "P1",
         "visit_id": "V1",
-        "admission_time": "2026-06-01 08:00:00",
-        "discharge_time": None,
-        "admission_department": "急诊科",
-        "current_department": "重症医学科（ICU）",
+        "hospitalization_status": "active",
+        "department": "重症医学科（ICU）",
+        "department_basis": "current_department",
+        "source_table": "inpat_registration",
     }
 
-    selected = sample_pool_module._select_hospitalization_candidates(
-        candidates=[duplicate, {**duplicate, "source_table": "admission_record"}],
+    class _PublicScopeService:
+        def __init__(self, **kwargs):
+            captured["dependencies"] = kwargs
+
+        def resolve_hospitalization_scope(self, **kwargs):
+            captured["request"] = kwargs
+            return HospitalizationScopeResult(
+                case_refs=(),
+                selected=(selected,),
+                all_selected=(selected,),
+                sources_used=("inpat_registration",),
+                source_status="ready",
+                warnings=(),
+            )
+
+    monkeypatch.setattr(sample_pool_module, "CaseScopeService", _PublicScopeService)
+    service = CustomQCSamplePoolService()
+
+    result = service._resolve_remote_hospitalization_scope(
         scope_mode="active",
         as_of_date=date(2026, 7, 30),
         discharge_start_date=None,
@@ -1406,31 +1381,192 @@ def test_hospitalization_scope_should_deduplicate_coordinates_and_filter_by_effe
         departments=["重症医学科（ICU）"],
     )
 
-    assert len(selected) == 1
-    assert selected[0]["department"] == "重症医学科（ICU）"
-    assert selected[0]["department_basis"] == "current_department"
+    assert result["selected"] == [selected]
+    assert result["all_selected"] == [selected]
+    assert result["sources_used"] == ["inpat_registration"]
+    assert captured["request"]["scope_mode"] == "active"
+    assert captured["request"]["departments"] == ["重症医学科（ICU）"]
+    assert captured["dependencies"]["remote_url_loader"] is (
+        sample_pool_module.get_remote_db_url
+    )
 
 
-def test_hospitalization_source_plan_should_not_infer_active_without_registration():
-    with pytest.raises(ValueError, match="请同步住院登记"):
-        sample_pool_module._resolve_hospitalization_source_plan(
-            table_columns={
-                "admission_record": {
-                    "institute_id",
-                    "patient_id",
-                    "visit_id",
-                    "admission_datetime",
-                },
-                "mr": {
-                    "institute_id",
-                    "patient_id",
-                    "visit_id",
-                    "admission_datetime",
-                    "discharge_datetime",
-                },
-            },
-            scope_mode="active_and_discharged",
+def test_hospitalization_preview_and_append_preserve_counts_coordinates_and_departments(
+    monkeypatch,
+):
+    db_engine = sa.create_engine("sqlite:///:memory:")
+    metadata = sa.MetaData()
+    pool_table = sa.Table(
+        "scope_pools",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("updated_at", sa.DateTime),
+        *[
+            sa.Column(name, sa.Integer, default=0)
+            for name in (
+                "total_items",
+                "llm_intrinsic_items",
+                "programmatic_items",
+                "unsupported_items",
+                "matched_items",
+                "ambiguous_items",
+                "unmatched_items",
+                "ready_items",
+            )
+        ],
+    )
+    item_table = sa.Table(
+        "scope_pool_items",
+        metadata,
+        sa.Column("id", sa.String, primary_key=True),
+        sa.Column("pool_id", sa.String),
+        sa.Column("row_no", sa.Integer),
+        sa.Column("department", sa.String),
+        sa.Column("patient_name", sa.String),
+        sa.Column("mr_no", sa.String),
+        sa.Column("manual_issue_text", sa.String),
+        sa.Column("normalized_issue_text", sa.String),
+        sa.Column("doctor_name", sa.String),
+        sa.Column("qc_date", sa.Date),
+        sa.Column("qc_user", sa.String),
+        sa.Column("coverage_type", sa.String),
+        sa.Column("issue_category", sa.String),
+        sa.Column("expected_scene", sa.String),
+        sa.Column("candidate_rule_ids_json", sa.Text),
+        sa.Column("include_in_batch_1", sa.Boolean),
+        sa.Column("exclude_reason", sa.String),
+        sa.Column("matched_institute_id", sa.String),
+        sa.Column("matched_patient_id", sa.String),
+        sa.Column("matched_visit_id", sa.String),
+        sa.Column("match_status", sa.String),
+        sa.Column("sync_status", sa.String),
+        sa.Column("bundle_status", sa.String),
+        sa.Column("latest_job_id", sa.String),
+        sa.Column("latest_match_status", sa.String),
+        sa.Column("raw_payload_json", sa.Text),
+        sa.Column("created_at", sa.DateTime),
+        sa.Column("updated_at", sa.DateTime),
+    )
+    metadata.create_all(db_engine)
+    session_factory = sa.orm.sessionmaker(bind=db_engine)
+    monkeypatch.setattr(sample_pool_module, "_session", session_factory)
+    service = object.__new__(CustomQCSamplePoolService)
+    service._pool_table = pool_table
+    service._item_table = item_table
+    selected = [
+        {
+            "institute_id": "H1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "patient_name": "在院患者",
+            "mr_no": "MR-1",
+            "admission_time": datetime(2026, 7, 1, 8, 0),
+            "discharge_time": None,
+            "hospitalization_status": "active",
+            "department": "重症医学科（ICU）",
+            "department_basis": "current_department",
+            "source_table": "inpat_registration",
+        },
+        {
+            "institute_id": "H1",
+            "patient_id": "P2",
+            "visit_id": "V2",
+            "patient_name": "出院患者",
+            "mr_no": "MR-2",
+            "admission_time": None,
+            "discharge_time": datetime(2026, 7, 31, 10, 0),
+            "hospitalization_status": "discharged",
+            "department": "神经外科",
+            "department_basis": "discharge_department",
+            "source_table": "discharge_record",
+        },
+    ]
+    all_selected = [
+        *selected,
+        {
+            **selected[0],
+            "patient_id": "P3",
+            "visit_id": "V3",
+            "department": "心内科",
+        },
+    ]
+    resolved = {
+        "selected": selected,
+        "all_selected": all_selected,
+        "sources_used": ["inpat_registration", "discharge_record"],
+        "source_status": "ready",
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        service,
+        "_resolve_remote_hospitalization_scope",
+        lambda **_kwargs: resolved,
+    )
+    with db_engine.begin() as connection:
+        connection.execute(pool_table.insert().values(id="pool-1"))
+        connection.execute(
+            item_table.insert().values(
+                id="existing-1",
+                pool_id="pool-1",
+                row_no=1,
+                department="重症医学科（ICU）",
+                patient_name="在院患者",
+                mr_no="MR-1",
+                coverage_type="llm_intrinsic",
+                matched_institute_id="H1",
+                matched_patient_id="P1",
+                matched_visit_id="V1",
+                match_status="matched",
+                sync_status="pending",
+                bundle_status="pending",
+                raw_payload_json="{}",
+            )
         )
+
+    preview = service.preview_hospitalization_scope(
+        pool_id="pool-1",
+        scope_mode="active_and_discharged",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=date(2026, 7, 31),
+        discharge_end_date=date(2026, 7, 31),
+        departments=(),
+    )
+    appended = service.append_pool_items_by_hospitalization_scope(
+        pool_id="pool-1",
+        scope_mode="active_and_discharged",
+        as_of_date=date(2026, 7, 31),
+        discharge_start_date=date(2026, 7, 31),
+        discharge_end_date=date(2026, 7, 31),
+        departments=(),
+    )
+
+    assert preview["counts"] == {
+        "active": 1,
+        "discharged": 1,
+        "deduplicated": 2,
+        "existing_in_pool": 1,
+        "new_to_pool": 1,
+    }
+    assert {
+        item["name"]: (item["active_count"], item["discharged_count"])
+        for item in preview["departments"]
+    } == {
+        "心内科": (1, 0),
+        "神经外科": (0, 1),
+        "重症医学科（ICU）": (1, 0),
+    }
+    assert appended["matched_source_count"] == 2
+    assert appended["existing_count"] == 1
+    assert appended["new_count"] == 1
+    with db_engine.connect() as connection:
+        identities = connection.execute(
+            sa.select(
+                item_table.c.matched_institute_id,
+                item_table.c.matched_patient_id,
+                item_table.c.matched_visit_id,
+            ).order_by(item_table.c.row_no)
+        ).all()
+    assert identities == [("H1", "P1", "V1"), ("H1", "P2", "V2")]
 
 
 @pytest.mark.parametrize(
@@ -1542,25 +1678,6 @@ def test_trusted_previous_state_ignores_customer_hospitalization_status():
         }
     )
     assert trusted["hospitalization_status"] == "active"
-
-
-def test_hospitalization_source_plan_should_accept_discharge_record_without_admission_time():
-    plan = sample_pool_module._resolve_hospitalization_source_plan(
-        table_columns={
-            "discharge_record": {
-                "institute_id",
-                "patient_id",
-                "visit_id",
-                "discharge_datetime",
-                "discharge_dept_name",
-            },
-        },
-        scope_mode="discharged",
-    )
-
-    assert plan["discharged"]["table_name"] == "discharge_record"
-    assert plan["discharged"]["admission_time_column"] == ""
-    assert plan["source_status"] == "ready"
 
 
 def test_resolve_remote_visit_keys_prefers_mr_over_running_anchors(monkeypatch):
