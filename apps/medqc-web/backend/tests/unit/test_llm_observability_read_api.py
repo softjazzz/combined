@@ -127,6 +127,38 @@ def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurren
     }
 
 
+def test_retry_count_uses_attempt_number_when_filtered_window_only_contains_retry():
+    rows = [
+        _event(
+            logical_call_id="logical-retry-only",
+            attempt_no=2,
+        )
+    ]
+
+    with _client(rows) as client:
+        response = client.get("/api/v1/system/llm-observability/overview")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["kpis"]["retry_attempts"] == 1
+
+
+def test_trend_buckets_follow_declared_asia_shanghai_timezone():
+    rows = [
+        _event(
+            started_at=_dt("2026-08-09T16:30:00"),
+            finished_at=_dt("2026-08-09T16:30:01"),
+        )
+    ]
+
+    with _client(rows) as client:
+        response = client.get("/api/v1/system/llm-observability/overview")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["range"]["timezone"] == "Asia/Shanghai"
+    assert [item["bucket"] for item in data["trends"]] == ["2026-08-10"]
+
+
 def test_overview_returns_frozen_sections_model_role_and_paginated_records():
     rows = [
         _event(record_key_hash="record-hash-1"),

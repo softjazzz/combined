@@ -23,6 +23,8 @@ from ..database import connection as database_connection
 logger = logging.getLogger(__name__)
 
 _STALE_RUNNING_AFTER = timedelta(minutes=10)
+_DISPLAY_TIMEZONE_NAME = "Asia/Shanghai"
+_DISPLAY_TIMEZONE = timezone(timedelta(hours=8), _DISPLAY_TIMEZONE_NAME)
 
 
 _SAFE_EVENT_COLUMNS = (
@@ -263,7 +265,9 @@ def _attempt_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_latency_ms": _average(latencies),
         "p95_latency_ms": _percentile_nearest_rank(latencies, 0.95),
         "peak_concurrency": _peak_concurrency(rows),
-        "retry_attempts": max(0, attempts - logical_calls),
+        "retry_attempts": sum(
+            1 for row in rows if (_known_int(row.get("attempt_no")) or 0) > 1
+        ),
         "successful_attempts": success_count,
         "failed_attempts": failed_count,
         "unknown_usage_attempts": _unknown_usage_count(rows),
@@ -275,7 +279,8 @@ def _trend_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in rows:
         started_at = _as_utc_datetime(row.get("started_at"))
         if started_at is not None:
-            groups[started_at.strftime("%Y-%m-%d")].append(row)
+            bucket = started_at.astimezone(_DISPLAY_TIMEZONE).strftime("%Y-%m-%d")
+            groups[bucket].append(row)
     return [
         {"bucket": bucket, **_attempt_summary(group)}
         for bucket, group in sorted(groups.items())
@@ -467,7 +472,7 @@ class LLMObservabilityReadService:
                 "provider_code": filters.provider_code,
                 "model": filters.model,
                 "root_job_id": filters.root_job_id,
-                "timezone": "Asia/Shanghai",
+                "timezone": _DISPLAY_TIMEZONE_NAME,
             },
             "kpis": kpis,
             "trends": _trend_items(rows),
@@ -549,7 +554,7 @@ class LLMObservabilityReadService:
                 "provider_code": filters.provider_code,
                 "model": filters.model,
                 "root_job_id": filters.root_job_id,
-                "timezone": "Asia/Shanghai",
+                "timezone": _DISPLAY_TIMEZONE_NAME,
             },
             "items": records[offset : offset + page_size],
             "total": len(records),
