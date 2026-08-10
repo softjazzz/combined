@@ -12,6 +12,8 @@ import logging
 import math
 from typing import Any, Callable, Iterable, Mapping
 
+from app.services.llm_observability import llm_executor_observation_context
+
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
 from .execution_contract import (
     FamilyExecutionEnvelope,
@@ -289,9 +291,11 @@ class Luxian0609ExecutionEngine:
                     event="started",
                     rule_count=len(context.selected_rule_ids),
                 )
-                evaluation_task = asyncio.create_task(
-                    registration.executor.evaluate(context)
-                )
+                # ContextVar 会在 create_task 时复制；并发规则族各自携带真实执行器键。
+                with llm_executor_observation_context(executor_key):
+                    evaluation_task = asyncio.create_task(
+                        registration.executor.evaluate(context)
+                    )
                 try:
                     done, _ = await asyncio.wait(
                         {evaluation_task},

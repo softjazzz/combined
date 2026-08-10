@@ -14,6 +14,7 @@ import app.services.custom_qc_workspace_service as workspace_module
 from app.services.case_identity import CaseRef
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.sichuan_qc_service import SichuanQCService
+from app.services.llm_observability import current_llm_observation_context
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
 from app.services.luxian_0609 import runtime_shadow_input_provider
@@ -2786,6 +2787,7 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
     workspace.update_batch_job_progress = _update_incremental_progress  # type: ignore[method-assign]
     native_rule_ids = ["LX0609-029", "LX0609-030"]
     workspace.job["record_ids"] = ["visit-001"]
+    workspace.job["parent_job_id"] = "parent-job-throughput-001"
     workspace.job["filters"] = {
         "sample_pool_id": "pool-live-phase-001",
         "rule_ids": native_rule_ids,
@@ -2797,8 +2799,10 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
     }
     service = _ServiceStub()
     observed_stream_states: List[Dict[str, Any]] = []
+    observed_llm_contexts: List[Any] = []
 
     async def _evaluate_running_final_bundle_input(**kwargs: Any) -> Dict[str, Any]:
+        observed_llm_contexts.append(current_llm_observation_context())
         trace_sink = kwargs.get("execution_trace_sink")
         assert callable(trace_sink)
         trace_sink(
@@ -2861,6 +2865,11 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
 
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
+    assert len(observed_llm_contexts) == 1
+    assert observed_llm_contexts[0].business_scene == "luxian_0609_qc"
+    assert observed_llm_contexts[0].root_job_id == "parent-job-throughput-001"
+    assert observed_llm_contexts[0].record_key_hash
+    assert observed_llm_contexts[0].rule_set_key == qc_sichuan.LUXIAN_0609_RULE_SET_KEY
     assert observed_stream_states, workspace.failed_records
     assert observed_stream_states[0]["event"] == "failed"
     assert observed_stream_states[0]["completed_batches"] == 0

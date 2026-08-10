@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
+from ..services.llm_observability import llm_observation_context
 from ..services.qc_input_adapters import evaluate_running_final_bundle
 from ..services.qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from ..services.fast_screen_qc import (
@@ -2862,7 +2863,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
-        async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
+        async def _evaluate_single_record_impl(record: Dict[str, Any]) -> Dict[str, Any]:
             _raise_if_cancelled()
             record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
             visit_id = str(record.get("visit_id") or record_id).strip()
@@ -3937,6 +3938,27 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "cot_summary": {},
                     "refine_summary": {},
                 }
+
+        async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
+            institute_id = str(record.get("institute_id") or "").strip()
+            patient_id = str(record.get("patient_id") or "").strip()
+            visit_id = str(
+                record.get("visit_id") or record.get("record_id") or ""
+            ).strip()
+            root_job_id = str(
+                current.get("parent_job_id")
+                or filters.get("parent_job_id")
+                or job_id
+            ).strip()
+            with llm_observation_context(
+                business_scene="luxian_0609_qc",
+                root_job_id=root_job_id,
+                record_identity=(institute_id, patient_id, visit_id),
+                rule_set_key=rule_set_key,
+                rule_set_version=rule_set_version,
+                executor_key="legacy_orchestrated",
+            ):
+                return await _evaluate_single_record_impl(record)
 
         def _merge_record_result(record_result: Dict[str, Any], processed_records_count: int) -> None:
             nonlocal total_tokens
