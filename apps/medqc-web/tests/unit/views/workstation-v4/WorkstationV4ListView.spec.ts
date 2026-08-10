@@ -61,6 +61,22 @@ const BatchTablePanelStub = defineComponent({
       type: Boolean,
       default: false,
     },
+    showSelection: {
+      type: Boolean,
+      default: false,
+    },
+    showPrimaryAction: {
+      type: Boolean,
+      default: false,
+    },
+    primaryActionLabel: {
+      type: String,
+      default: '',
+    },
+    primaryActionLoading: {
+      type: Boolean,
+      default: false,
+    },
   },
   setup(_props, { attrs, slots }) {
     return () => h('div', attrs, slots.default?.())
@@ -96,6 +112,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
       selectedWorkbenchKeys: [],
       tableSummaryText: '当前筛选：中医科 / 入出院日期 2026-05-25 至 2026-05-27 / 共 19 份',
       displayLoading: false,
+      batchActionLoading: false,
       stageMeta: {
         batchActionText: '批量处理',
         singleActionText: '处理',
@@ -197,6 +214,37 @@ describe('WorkstationV4ListView filters', () => {
       sourceState: { status: 'unknown' },
       latestQcSummary: { status: 'not_run' },
     })
+  })
+
+  it('enables triple-identity selection and the selected-record QC action in the formal record pool', () => {
+    const wrapper = mountListView({
+      selectedWorkbenchKeys: ['["H-1","P-1","V-1"]', '["H-2","P-2","V-2"]'],
+      batchActionLoading: true,
+    })
+
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+    expect(table.props('showSelection')).toBe(true)
+    expect(table.props('showPrimaryAction')).toBe(true)
+    expect(table.props('primaryActionLabel')).toBe('质控所选（2）')
+    expect(table.props('primaryActionLoading')).toBe(true)
+  })
+
+  it('keeps the stage queue batch action wording and selection behavior unchanged', () => {
+    const wrapper = mountListView({
+      currentStageFilter: 'frontpage_generate',
+      isStageQueueMode: true,
+      selectedWorkbenchKeys: ['stage-key'],
+      stageMeta: {
+        batchActionText: '批量生成',
+        singleActionText: '生成',
+        tableTitle: '参考首页生成队列',
+      },
+    })
+
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+    expect(table.props('showSelection')).toBe(true)
+    expect(table.props('showPrimaryAction')).toBe(true)
+    expect(table.props('primaryActionLabel')).toBe('批量生成')
   })
 
   it('renders a customer-facing query failure state', () => {

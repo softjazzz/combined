@@ -70,6 +70,37 @@ function mountTable(summary: Record<string, unknown>) {
 }
 
 describe('BatchTablePanel 病历池质控投影', () => {
+  it('shows the formal QC action and prevents repeat submission while it is loading', async () => {
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [],
+        selectedRowKeys: ['["H-1","P-1","V-1"]'],
+        summaryText: '',
+        showSelection: true,
+        showPrimaryAction: true,
+        primaryActionLabel: '质控所选（1）',
+        primaryActionLoading: true,
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          AButton: defineComponent({
+            name: 'AButton',
+            setup(_props, { attrs, slots }) {
+              return () => h('button', attrs, slots.default?.())
+            },
+          }),
+        },
+      },
+    })
+
+    const button = wrapper.find('button')
+    expect(button.text()).toBe('质控所选（1）')
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+    expect(wrapper.emitted('batch-extract')).toBeUndefined()
+  })
+
   it('uses the backend triple record key for duplicate-visit rows and detail selection', async () => {
     const wrapper = mount(BatchTablePanel, {
       props: {

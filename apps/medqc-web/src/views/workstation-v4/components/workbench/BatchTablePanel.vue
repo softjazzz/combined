@@ -28,7 +28,8 @@
             size="small"
             type="primary"
             class="batch-table-panel__action batch-table-panel__action--primary"
-            :disabled="selectedRowKeys.length === 0 || readonly"
+            :loading="primaryActionLoading"
+            :disabled="selectedRowKeys.length === 0 || readonly || primaryActionLoading"
             @click="emit('batch-extract', selectedRowKeys)"
           >
             {{ primaryActionLabel }}
@@ -198,6 +199,7 @@ const props = defineProps<{
   readonly?: boolean
   title?: string
   primaryActionLabel?: string
+  primaryActionLoading?: boolean
   rowActionLabel?: string
   showSelection?: boolean
   showPrimaryAction?: boolean
@@ -233,6 +235,7 @@ const rowSelection = computed(() => {
 
 const title = computed(() => props.title || '病历池列表')
 const primaryActionLabel = computed(() => props.primaryActionLabel || '批量处理')
+const primaryActionLoading = computed(() => props.primaryActionLoading === true)
 const rowActionLabel = computed(() => props.rowActionLabel || '查看详情')
 const showPrimaryAction = computed(() => props.showPrimaryAction !== false)
 const showDeferAction = computed(() => props.showDeferAction === true)

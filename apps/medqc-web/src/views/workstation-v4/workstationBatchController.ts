@@ -1,5 +1,6 @@
 import { message } from 'ant-design-vue'
 import { extractApiErrorMessageFromError } from '@/utils/api-envelope'
+import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { PatientRecord } from './types'
 import {
@@ -40,6 +41,131 @@ interface RunBatchExtractParams {
   refreshActiveWorklist: () => Promise<void>
   refreshData: () => Promise<void>
   refreshSelectedSnapshots: () => Promise<void>
+}
+
+interface RunRecordPoolQcParams {
+  keys: string[]
+  getBatchExtracting: () => boolean
+  setBatchExtracting: (value: boolean) => void
+  findBatchRecordByKey: (recordKey: string) => PatientRecord | null
+  setSelectedWorkbenchKeys: (keys: string[]) => void
+}
+
+const RECORD_POOL_QC_MESSAGE_KEY = 'workstation-v4-record-pool-qc'
+
+function recordPoolQcError(
+  content: string,
+  selectedRecordKeys: string[],
+  setSelectedWorkbenchKeys: (keys: string[]) => void,
+) {
+  setSelectedWorkbenchKeys(selectedRecordKeys)
+  message.error({
+    key: RECORD_POOL_QC_MESSAGE_KEY,
+    content,
+  })
+}
+
+export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<void> {
+  const {
+    keys,
+    getBatchExtracting,
+    setBatchExtracting,
+    findBatchRecordByKey,
+    setSelectedWorkbenchKeys,
+  } = params
+  if (getBatchExtracting()) return
+
+  const selectedRecordKeys = Array.from(
+    new Set(keys.map((key) => String(key || '').trim()).filter(Boolean)),
+  )
+  if (!selectedRecordKeys.length) return
+
+  const recordRefs: Array<{ institute_id: string; patient_id: string; visit_id: string }> = []
+  const identityOwners = new Map<string, string>()
+  for (const recordKey of selectedRecordKeys) {
+    const record = findBatchRecordByKey(recordKey)
+    if (!record || String(record.recordKey || '').trim() !== recordKey) {
+      recordPoolQcError(
+        '选中病历身份已失效，请刷新列表后重新选择。',
+        selectedRecordKeys,
+        setSelectedWorkbenchKeys,
+      )
+      return
+    }
+
+    const instituteId = String(record.instituteId || '').trim()
+    const patientId = String(record.patientId || '').trim()
+    const visitId = String(record.visitId || '').trim()
+    if (!instituteId || !patientId || !visitId) {
+      recordPoolQcError(
+        '选中病历缺少完整病例标识，暂不能启动质控。',
+        selectedRecordKeys,
+        setSelectedWorkbenchKeys,
+      )
+      return
+    }
+
+    const identityKey = JSON.stringify([instituteId, patientId, visitId])
+    const existingOwner = identityOwners.get(identityKey)
+    if (existingOwner && existingOwner !== recordKey) {
+      recordPoolQcError(
+        '选中病历存在身份冲突，暂不能启动批量质控。',
+        selectedRecordKeys,
+        setSelectedWorkbenchKeys,
+      )
+      return
+    }
+    identityOwners.set(identityKey, recordKey)
+    recordRefs.push({
+      institute_id: instituteId,
+      patient_id: patientId,
+      visit_id: visitId,
+    })
+  }
+
+  setBatchExtracting(true)
+  message.loading({
+    key: RECORD_POOL_QC_MESSAGE_KEY,
+    content: `正在创建 ${recordRefs.length} 份病历的质控任务…`,
+    duration: 0,
+  })
+  try {
+    const response = await createSichuanWorkspaceBatchJob({
+      rule_set_key: 'luxian_0609_qc_v1',
+      scope: 'all',
+      date_field: 'admission',
+      record_refs: recordRefs,
+    })
+    if (!response.success || !response.data) {
+      recordPoolQcError(
+        response.message || '质控任务创建失败，请稍后重试。',
+        selectedRecordKeys,
+        setSelectedWorkbenchKeys,
+      )
+      return
+    }
+
+    setSelectedWorkbenchKeys([])
+    if (response.data.idempotency_reused) {
+      message.info({
+        key: RECORD_POOL_QC_MESSAGE_KEY,
+        content: '相同质控任务已存在，正在继续执行质控',
+      })
+      return
+    }
+    message.success({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: '质控任务已创建，正在执行质控',
+    })
+  } catch (error) {
+    recordPoolQcError(
+      extractApiErrorMessageFromError(error, '质控任务创建失败，请稍后重试。'),
+      selectedRecordKeys,
+      setSelectedWorkbenchKeys,
+    )
+  } finally {
+    setBatchExtracting(false)
+  }
 }
 
 export async function runBatchExtract(params: RunBatchExtractParams): Promise<void> {

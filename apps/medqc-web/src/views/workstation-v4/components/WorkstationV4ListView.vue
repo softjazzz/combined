@@ -215,10 +215,15 @@
                 :total="displayServerTotal"
                 :loading="displayLoading"
                 :title="isStageQueueMode ? stageMeta.tableTitle || '批量工作台' : '病历池列表'"
-                :primary-action-label="stageMeta.batchActionText"
+                :primary-action-label="
+                  isStageQueueMode
+                    ? stageMeta.batchActionText
+                    : `质控所选（${selectedWorkbenchKeys.length}）`
+                "
+                :primary-action-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
-                :show-primary-action="isStageQueueMode"
-                :show-selection="isStageQueueMode"
+                :show-primary-action="true"
+                :show-selection="true"
                 :show-quality-columns="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"
@@ -300,6 +305,7 @@ const props = defineProps<{
   selectedWorkbenchKeys: string[]
   tableSummaryText: string
   displayLoading: boolean
+  batchActionLoading: boolean
   stageMeta: StageMetaLike
   currentStageFilter?: WorkflowStageKey | ''
   listRecords: unknown[]

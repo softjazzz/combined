@@ -19,6 +19,7 @@
         :selected-workbench-keys="selectedWorkbenchKeys"
         :table-summary-text="tableSummaryText"
         :display-loading="displayLoading"
+        :batch-action-loading="batchExtracting"
         :stage-meta="stageMeta"
         :current-stage-filter="currentStageFilter"
         :list-records="listRecords"
@@ -346,7 +347,7 @@ import FrontpageWorkspace from './components/FrontpageWorkspace.vue'
 import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
 import SettlementWorkspace from './components/SettlementWorkspace.vue'
 import { useWorkstationRouteEffects } from './workstationRouteEffects'
-import { runBatchExtract } from './workstationBatchController'
+import { runBatchExtract, runRecordPoolQc } from './workstationBatchController'
 import {
   createDetailNavigation,
   findRecordById,
@@ -2114,6 +2115,20 @@ function findBatchRecordByKey(recordKey: string): PatientRecord | null {
 }
 
 async function handleBatchExtract(keys: string[]) {
+  if (!isStageQueueMode.value) {
+    await runRecordPoolQc({
+      keys,
+      getBatchExtracting: () => batchExtracting.value,
+      setBatchExtracting: (value) => {
+        batchExtracting.value = value
+      },
+      findBatchRecordByKey,
+      setSelectedWorkbenchKeys: (nextKeys) => {
+        selectedWorkbenchKeys.value = nextKeys
+      },
+    })
+    return
+  }
   await runBatchExtract({
     keys,
     currentStageFilter: currentStageFilter.value,
