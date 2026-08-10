@@ -117,6 +117,11 @@ async def get_llm_observability_overview(
 async def get_llm_observability_record_calls(
     request: Request,
     record_key_hash: str = Path(min_length=1, max_length=128),
+    start_at: datetime | None = Query(default=None),
+    end_at: datetime | None = Query(default=None),
+    business_scene: str | None = Query(default=None, max_length=100),
+    provider_code: str | None = Query(default=None, max_length=100),
+    model: str | None = Query(default=None, max_length=200),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     _current_user: dict = Depends(require_llm_observability_user),
@@ -125,6 +130,14 @@ async def get_llm_observability_record_calls(
     try:
         payload = await service.build_record_calls(
             record_key_hash=record_key_hash,
+            filters=_build_filters(
+                start_at=start_at,
+                end_at=end_at,
+                business_scene=business_scene,
+                provider_code=provider_code,
+                model=model,
+                root_job_id=None,
+            ),
             page=page,
             page_size=page_size,
         )

@@ -319,6 +319,45 @@ def test_record_calls_are_paginated_and_only_return_safe_attempt_fields():
         assert forbidden not in serialized
 
 
+def test_record_calls_forward_the_same_overview_filters_to_the_reader():
+    reader = _StaticEventReader([_event()])
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-observability",
+        "email": "admin@hospital.local",
+        "roles": ["admin"],
+    }
+    app.dependency_overrides[get_llm_observability_read_service] = lambda: (
+        LLMObservabilityReadService(reader=reader)
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/system/llm-observability/records/record-hash-1/calls",
+            params={
+                "start_at": "2026-08-01T00:00:00Z",
+                "end_at": "2026-08-10T00:00:00Z",
+                "business_scene": "luxian_0609_qc",
+                "provider_code": "alibaba",
+                "model": "qwen-plus",
+            },
+        )
+
+    assert response.status_code == 200
+    assert reader.filters == [
+        {
+            "start_at": _dt("2026-08-01T00:00:00"),
+            "end_at": _dt("2026-08-10T00:00:00"),
+            "business_scene": "luxian_0609_qc",
+            "provider_code": "alibaba",
+            "model": "qwen-plus",
+            "root_job_id": None,
+            "record_key_hash": "record-hash-1",
+        }
+    ]
+
+
 def test_records_endpoint_returns_only_hashed_record_summaries_with_filters():
     rows = [
         _event(record_key_hash="record-hash-1"),

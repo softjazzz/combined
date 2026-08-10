@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 import time
 from typing import Any, Awaitable, Callable, Iterator, Mapping, Optional, Protocol, TypeVar
 from uuid import uuid4
@@ -26,6 +27,8 @@ from app.database import connection as database_connection
 
 
 logger = logging.getLogger(__name__)
+
+_SAFE_METADATA_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,16 @@ class PostgresLLMCallEventStore:
 
     async def finish_attempt(self, event_id: str, changes: Mapping[str, Any]) -> None:
         await asyncio.to_thread(self._finish_attempt_sync, event_id, dict(changes))
+
+    def start_attempt_sync(self, event: Mapping[str, Any]) -> None:
+        self._start_attempt_sync(dict(event))
+
+    def finish_attempt_sync(
+        self,
+        event_id: str,
+        changes: Mapping[str, Any],
+    ) -> None:
+        self._finish_attempt_sync(event_id, dict(changes))
 
     @staticmethod
     def _start_attempt_sync(event: dict[str, Any]) -> None:
@@ -121,6 +134,16 @@ class NullLLMCallEventStore:
     async def finish_attempt(self, event_id: str, changes: Mapping[str, Any]) -> None:
         return None
 
+    def start_attempt_sync(self, event: Mapping[str, Any]) -> None:
+        return None
+
+    def finish_attempt_sync(
+        self,
+        event_id: str,
+        changes: Mapping[str, Any],
+    ) -> None:
+        return None
+
 
 class LLMObservabilityRecorder:
     def __init__(self, *, store: Optional[LLMCallEventStore] = None) -> None:
@@ -143,15 +166,47 @@ class LLMObservabilityRecorder:
             "logical_call_id": logical_call_id,
             "attempt_no": attempt_no,
             "started_at": started_at,
-            "business_scene": context.business_scene,
-            "root_job_id": context.root_job_id,
+            "business_scene": _safe_metadata_label(
+                context.business_scene,
+                max_length=80,
+                fallback="unclassified",
+            ),
+            "root_job_id": _safe_metadata_label(
+                context.root_job_id,
+                max_length=128,
+                fallback=None,
+            ),
             "record_key_hash": context.record_key_hash,
-            "rule_set_key": context.rule_set_key,
-            "rule_set_version": context.rule_set_version,
-            "executor_key": context.executor_key,
-            "provider_code": provider_code or "unknown",
-            "model": model or "unknown",
-            "model_role": model_role or "unknown",
+            "rule_set_key": _safe_metadata_label(
+                context.rule_set_key,
+                max_length=128,
+                fallback=None,
+            ),
+            "rule_set_version": _safe_metadata_label(
+                context.rule_set_version,
+                max_length=64,
+                fallback=None,
+            ),
+            "executor_key": _safe_metadata_label(
+                context.executor_key,
+                max_length=128,
+                fallback=None,
+            ),
+            "provider_code": _safe_metadata_label(
+                provider_code,
+                max_length=64,
+                fallback="unknown",
+            ),
+            "model": _safe_metadata_label(
+                model,
+                max_length=128,
+                fallback="unknown",
+            ),
+            "model_role": _safe_metadata_label(
+                model_role,
+                max_length=64,
+                fallback="unknown",
+            ),
             "status": "running",
             "usage_state": "unknown",
             "worker_id": _worker_id(),
@@ -185,6 +240,125 @@ class LLMObservabilityRecorder:
             "finish_attempt",
             self._store.finish_attempt(event_id, changes),
         )
+
+    def start_attempt_sync(
+        self,
+        *,
+        logical_call_id: str,
+        attempt_no: int,
+        provider_code: str,
+        model: str,
+        model_role: str,
+    ) -> tuple[str, float]:
+        event_id = str(uuid4())
+        started_at = datetime.now(timezone.utc)
+        context = _OBSERVATION_CONTEXT.get()
+        event = {
+            "event_id": event_id,
+            "logical_call_id": logical_call_id,
+            "attempt_no": attempt_no,
+            "started_at": started_at,
+            "business_scene": _safe_metadata_label(
+                context.business_scene,
+                max_length=80,
+                fallback="unclassified",
+            ),
+            "root_job_id": _safe_metadata_label(
+                context.root_job_id,
+                max_length=128,
+                fallback=None,
+            ),
+            "record_key_hash": context.record_key_hash,
+            "rule_set_key": _safe_metadata_label(
+                context.rule_set_key,
+                max_length=128,
+                fallback=None,
+            ),
+            "rule_set_version": _safe_metadata_label(
+                context.rule_set_version,
+                max_length=64,
+                fallback=None,
+            ),
+            "executor_key": _safe_metadata_label(
+                context.executor_key,
+                max_length=128,
+                fallback=None,
+            ),
+            "provider_code": _safe_metadata_label(
+                provider_code,
+                max_length=64,
+                fallback="unknown",
+            ),
+            "model": _safe_metadata_label(
+                model,
+                max_length=128,
+                fallback="unknown",
+            ),
+            "model_role": _safe_metadata_label(
+                model_role,
+                max_length=64,
+                fallback="unknown",
+            ),
+            "status": "running",
+            "usage_state": "unknown",
+            "worker_id": _worker_id(),
+            "created_at": started_at,
+        }
+        self._safe_store_call_sync("start_attempt", event)
+        return event_id, time.perf_counter()
+
+    def finish_attempt_sync(
+        self,
+        *,
+        event_id: str,
+        started_timestamp: float,
+        status: str,
+        safe_error_kind: Optional[str],
+        usage: Optional[Mapping[str, int]],
+    ) -> None:
+        finished_at = datetime.now(timezone.utc)
+        usage_state = "known" if usage is not None else "unknown"
+        changes = {
+            "finished_at": finished_at,
+            "status": status,
+            "safe_error_kind": safe_error_kind,
+            "usage_state": usage_state,
+            "input_tokens": int(usage["input_tokens"]) if usage is not None else None,
+            "output_tokens": int(usage["output_tokens"]) if usage is not None else None,
+            "total_tokens": int(usage["total_tokens"]) if usage is not None else None,
+            "latency_ms": max(
+                0,
+                round((time.perf_counter() - started_timestamp) * 1000),
+            ),
+        }
+        self._safe_store_call_sync("finish_attempt", changes, event_id=event_id)
+
+    def _safe_store_call_sync(
+        self,
+        operation: str,
+        payload: Mapping[str, Any],
+        *,
+        event_id: Optional[str] = None,
+    ) -> None:
+        method = getattr(self._store, f"{operation}_sync", None)
+        if not callable(method):
+            logger.warning(
+                "llm_observability_write_failed operation=%s error_type=%s",
+                operation,
+                "SyncStoreUnavailable",
+            )
+            return
+        try:
+            if event_id is None:
+                method(payload)
+            else:
+                method(event_id, payload)
+        except Exception as error:
+            logger.warning(
+                "llm_observability_write_failed operation=%s error_type=%s",
+                operation,
+                type(error).__name__,
+            )
 
     @staticmethod
     async def _safe_store_call(operation: str, call: Awaitable[Any]) -> None:
@@ -226,6 +400,38 @@ def _record_identity_hash(record_identity: Optional[tuple[str, str, str]]) -> Op
     normalized = "\x1f".join(normalized_parts)
     secret = str(get_settings().JWT_SECRET).encode("utf-8")
     return hmac.new(secret, normalized.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def opaque_observation_id(namespace: str, value: Optional[str]) -> Optional[str]:
+    """把不受信任的外部标识转换为固定长度、不可逆的观测关联键。"""
+
+    normalized_namespace = str(namespace or "").strip()
+    normalized_value = str(value or "").strip()
+    if not normalized_namespace or not normalized_value:
+        return None
+    secret = str(get_settings().JWT_SECRET).encode("utf-8")
+    material = f"{normalized_namespace}\x1f{normalized_value}".encode("utf-8")
+    return hmac.new(secret, material, hashlib.sha256).hexdigest()
+
+
+def _safe_metadata_label(
+    value: Any,
+    *,
+    max_length: int,
+    fallback: Optional[str],
+) -> Optional[str]:
+    normalized = str(value or "").strip()
+    lowered = normalized.lower()
+    if (
+        not normalized
+        or len(normalized) > max_length
+        or not _SAFE_METADATA_PATTERN.fullmatch(normalized)
+        or "://" in normalized
+        or lowered.startswith(("sk-", "bearer"))
+        or "api_key" in lowered
+    ):
+        return fallback
+    return normalized
 
 
 def _worker_id() -> str:
@@ -343,6 +549,7 @@ def safe_status_for_http_result(result: Mapping[str, Any]) -> tuple[str, Optiona
 
 def safe_status_for_exception(error: BaseException) -> tuple[str, str]:
     import httpx
+    import requests
 
     if isinstance(error, asyncio.CancelledError):
         return "cancelled", "cancelled"
@@ -350,6 +557,33 @@ def safe_status_for_exception(error: BaseException) -> tuple[str, str]:
         return "timeout", "timeout"
     if isinstance(error, httpx.TransportError):
         return "transport_error", "http_transport"
+    if isinstance(error, requests.Timeout):
+        return "timeout", "timeout"
+    if isinstance(error, requests.ConnectionError):
+        return "transport_error", "http_transport"
+    if isinstance(error, requests.HTTPError):
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+        if status_code == 429:
+            return "upstream_429", "upstream_429"
+        if isinstance(status_code, int) and 500 <= status_code <= 599:
+            return "upstream_5xx", "upstream_5xx"
+        if isinstance(status_code, int) and 400 <= status_code <= 499:
+            return "configuration_error", "upstream_4xx"
+    error_module = type(error).__module__.split(".", 1)[0]
+    error_name = type(error).__name__
+    if error_module == "openai":
+        status_code = getattr(error, "status_code", None)
+        if error_name == "APITimeoutError":
+            return "timeout", "timeout"
+        if error_name == "APIConnectionError":
+            return "transport_error", "http_transport"
+        if error_name == "RateLimitError" or status_code == 429:
+            return "upstream_429", "upstream_429"
+        if isinstance(status_code, int) and 500 <= status_code <= 599:
+            return "upstream_5xx", "upstream_5xx"
+        if isinstance(status_code, int) and 400 <= status_code <= 499:
+            return "configuration_error", "upstream_4xx"
     if isinstance(error, (ValueError, RuntimeError)):
         return "configuration_error", "configuration"
     return "unclassified", "unclassified"
@@ -393,6 +627,8 @@ async def observe_llm_http_attempt(
     executor_key: str,
     model_role: str = "first_pass",
     recorder: Optional[LLMObservabilityRecorder] = None,
+    logical_call_id: Optional[str] = None,
+    attempt_no: int = 1,
 ) -> _LLM_HTTP_RESULT:
     """记录一次真实模型 HTTP 尝试，并原样返回上游结果。
 
@@ -406,8 +642,8 @@ async def observe_llm_http_attempt(
         executor_key=executor_key,
     ):
         event_id, started_timestamp = await active_recorder.start_attempt(
-            logical_call_id=str(uuid4()),
-            attempt_no=1,
+            logical_call_id=logical_call_id or str(uuid4()),
+            attempt_no=max(1, int(attempt_no)),
             provider_code=provider_code,
             model=model,
             model_role=model_role,
@@ -427,6 +663,54 @@ async def observe_llm_http_attempt(
 
         status, safe_error_kind = safe_status_for_http_result(result)
         await active_recorder.finish_attempt(
+            event_id=event_id,
+            started_timestamp=started_timestamp,
+            status=status,
+            safe_error_kind=safe_error_kind,
+            usage=observed_usage(result),
+        )
+        return result
+
+
+def observe_llm_sync_http_attempt(
+    request: Callable[[], _LLM_HTTP_RESULT],
+    *,
+    provider_code: str,
+    model: str,
+    business_scene: str,
+    executor_key: str,
+    model_role: str = "first_pass",
+    recorder: Optional[LLMObservabilityRecorder] = None,
+) -> _LLM_HTTP_RESULT:
+    """记录同步模型 HTTP 出口；观测失败不改变调用结果或异常语义。"""
+
+    active_recorder = recorder or get_llm_observability_recorder()
+    with _llm_http_attempt_context(
+        business_scene=business_scene,
+        executor_key=executor_key,
+    ):
+        event_id, started_timestamp = active_recorder.start_attempt_sync(
+            logical_call_id=str(uuid4()),
+            attempt_no=1,
+            provider_code=provider_code,
+            model=model,
+            model_role=model_role,
+        )
+        try:
+            result = request()
+        except BaseException as error:
+            status, safe_error_kind = safe_status_for_exception(error)
+            active_recorder.finish_attempt_sync(
+                event_id=event_id,
+                started_timestamp=started_timestamp,
+                status=status,
+                safe_error_kind=safe_error_kind,
+                usage=None,
+            )
+            raise
+
+        status, safe_error_kind = safe_status_for_http_result(result)
+        active_recorder.finish_attempt_sync(
             event_id=event_id,
             started_timestamp=started_timestamp,
             status=status,

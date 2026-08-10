@@ -23,12 +23,6 @@ async def llm_parse_text_proxy(
     api_endpoint = str(api_config.get("apiEndpoint") or settings.LLM_API_ENDPOINT or "").strip()
     api_key = str(api_config.get("apiKey") or settings.LLM_API_KEY or "").strip()
     model_name = str(request_body.get("model") or api_config.get("model") or settings.LLM_MODEL or "").strip()
-    provider_code = str(
-        api_config.get("providerCode")
-        or api_config.get("provider_code")
-        or getattr(settings, "LLM_DEFAULT_PROVIDER", None)
-        or "unknown"
-    ).strip()
     if model_name and not request_body.get("model"):
         request_body["model"] = model_name
 
@@ -76,8 +70,8 @@ async def llm_parse_text_proxy(
                     request_body,
                     timeout_seconds=max(1, int(settings.LLM_TIMEOUT_SECONDS)),
                 ),
-                provider_code=provider_code,
-                model=model_name,
+                provider_code="client_proxy",
+                model="client_supplied",
                 business_scene="legacy_llm_proxy",
                 executor_key="legacy_llm_proxy",
             )

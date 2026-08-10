@@ -9,6 +9,7 @@ import httpx
 
 from app.core.http import _is_allowed_host, _is_private_address
 from app.core.settings import get_settings
+from app.services.llm_observability import observe_llm_sync_http_attempt
 
 
 logger = logging.getLogger(__name__)
@@ -200,11 +201,22 @@ def resolve_intent_with_llm(message: str, context: Dict[str, Any] | None = None)
         "Content-Type": "application/json",
     }
     try:
-        response = _post_llm_json(
-            endpoint=str(settings.LLM_API_ENDPOINT),
-            headers=headers,
-            payload=payload,
-            timeout_seconds=max(1, int(settings.QC_AGENT_LLM_INTENT_TIMEOUT_SECONDS)),
+        response = observe_llm_sync_http_attempt(
+            lambda: _post_llm_json(
+                endpoint=str(settings.LLM_API_ENDPOINT),
+                headers=headers,
+                payload=payload,
+                timeout_seconds=max(
+                    1,
+                    int(settings.QC_AGENT_LLM_INTENT_TIMEOUT_SECONDS),
+                ),
+            ),
+            provider_code=str(
+                getattr(settings, "LLM_DEFAULT_PROVIDER", None) or "unknown"
+            ),
+            model=str(settings.LLM_MODEL or "unknown"),
+            business_scene="qc_agent_intent",
+            executor_key="qc_agent_intent_router",
         )
         if response.get("__error__"):
             logger.warning("QC Agent LLM intent router upstream error: %s", response.get("__status__"))

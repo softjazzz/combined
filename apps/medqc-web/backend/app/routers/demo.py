@@ -14,7 +14,6 @@ from fastapi import APIRouter, Query, Request, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from starlette import status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
 import uuid
 import io
 from collections import defaultdict
@@ -27,7 +26,6 @@ from ..schemas.demo import (
     FeedbackStats,
     FeedbackListResponse,
     RuleFeedbackStat,
-    ErrorCategory,
     RuleGenerationRequest,
     DemoCustomRule,
     CustomRuleSaveRequest,
@@ -36,6 +34,10 @@ from ..database.demo_db import get_db
 from ..models.demo import Feedback
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
+from ..services.llm_observability import (
+    llm_observation_context,
+    observe_llm_http_attempt,
+)
 
 router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 
@@ -137,6 +139,11 @@ async def _call_llm_for_rule(payload: RuleGenerationRequest) -> DemoCustomRule:
     endpoint = os.getenv("DEMO_RULE_LLM_ENDPOINT") or settings.LLM_API_ENDPOINT
     api_key = os.getenv("DEMO_RULE_LLM_API_KEY") or settings.LLM_API_KEY
     model = os.getenv("DEMO_RULE_LLM_MODEL") or settings.LLM_MODEL
+    provider_code = (
+        os.getenv("DEMO_RULE_LLM_PROVIDER")
+        or getattr(settings, "LLM_DEFAULT_PROVIDER", None)
+        or "unknown"
+    )
 
     if not endpoint or not api_key:
         raise HTTPException(
@@ -164,11 +171,20 @@ async def _call_llm_for_rule(payload: RuleGenerationRequest) -> DemoCustomRule:
     else:
         target_url = endpoint_str
 
-    llm_response = await safe_post_json(
-        target_url,
-        headers,
-        request_body,
-        timeout_seconds=60,
+    async def _request() -> Dict[str, Any]:
+        return await safe_post_json(
+            target_url,
+            headers,
+            request_body,
+            timeout_seconds=60,
+        )
+
+    llm_response = await observe_llm_http_attempt(
+        _request,
+        provider_code=str(provider_code),
+        model=str(model),
+        business_scene="demo_custom_rule_generation",
+        executor_key="demo_custom_rule_generation",
     )
 
     if isinstance(llm_response, dict) and llm_response.get("__error__"):
@@ -350,7 +366,12 @@ async def generate_custom_rule(
     if not normalized_payload.category and normalized_payload.applicable_documents:
         normalized_payload.category = normalized_payload.applicable_documents[0]
 
-    generated_rule = await _call_llm_for_rule(normalized_payload)
+    with llm_observation_context(
+        business_scene="demo_custom_rule_generation",
+        root_job_id=get_trace_id(request),
+        executor_key="demo_custom_rule_generation",
+    ):
+        generated_rule = await _call_llm_for_rule(normalized_payload)
     all_rules = _merge_rules_for_listing()
     rule_id = _generate_custom_rule_id(all_rules)
     enriched_rule = generated_rule.model_copy(update={

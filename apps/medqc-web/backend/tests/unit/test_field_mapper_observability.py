@@ -132,6 +132,81 @@ async def test_field_mapping_records_one_sdk_attempt_with_usage_and_safe_context
 
 
 @pytest.mark.asyncio
+async def test_field_mapping_retries_each_transport_attempt_under_one_logical_call(
+    monkeypatch,
+):
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content='{"mappings":{},"confidence":0.9,"reasoning":"ok"}'
+                )
+            )
+        ],
+        usage=SimpleNamespace(
+            prompt_tokens=8,
+            completion_tokens=4,
+            total_tokens=12,
+        ),
+    )
+
+    class _RetryCompletions:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def create(self, **_kwargs: Any) -> Any:
+            self.calls += 1
+            if self.calls == 1:
+                connection_error = type(
+                    "APIConnectionError",
+                    (RuntimeError,),
+                    {"__module__": "openai"},
+                )
+                raise connection_error("transient")
+            return response
+
+    completions = _RetryCompletions()
+    fake_client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    monkeypatch.setattr(field_mapper_module, "OpenAI", lambda **_kwargs: fake_client)
+    monkeypatch.setattr(field_mapper_module, "_get_dashscope_api_key", lambda: "key")
+    monkeypatch.setattr(
+        field_mapper_module,
+        "_get_dashscope_base_url",
+        lambda: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    monkeypatch.setattr(
+        field_mapper_module,
+        "_get_field_mapper_model",
+        lambda: "field-mapper-model",
+    )
+    monkeypatch.setattr(field_mapper_module.asyncio, "sleep", _no_sleep)
+    store = _MemoryEventStore()
+    monkeypatch.setattr(
+        llm_observability_module,
+        "_TEST_RECORDER",
+        LLMObservabilityRecorder(store=store),
+    )
+
+    result = await field_mapper_module.suggest_field_mapping(["字段"], [{"字段": "值"}])
+
+    assert result["fallback"] is False
+    assert completions.calls == 2
+    assert len(store.started) == 2
+    assert {event["logical_call_id"] for event in store.started} == {
+        store.started[0]["logical_call_id"]
+    }
+    assert [event["attempt_no"] for event in store.started] == [1, 2]
+    assert [event["status"] for event in store.finished] == [
+        "transport_error",
+        "success",
+    ]
+
+
+async def _no_sleep(_delay: float) -> None:
+    return None
+
+
+@pytest.mark.asyncio
 async def test_field_mapping_computes_total_when_sdk_omits_total_tokens(monkeypatch):
     response = SimpleNamespace(
         choices=[

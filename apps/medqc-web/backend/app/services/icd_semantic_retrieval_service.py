@@ -7,15 +7,56 @@ import pickle
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 import requests
 
 from ..core.settings import get_settings
+from .llm_observability import observe_llm_sync_http_attempt
 
 
 logger = logging.getLogger(__name__)
+
+
+def _embedding_provider_code(endpoint: str) -> str:
+    lowered = str(endpoint or "").lower()
+    if "siliconflow" in lowered:
+        return "siliconflow"
+    if "dashscope" in lowered or "aliyuncs" in lowered:
+        return "alibaba"
+    if "deepseek" in lowered:
+        return "deepseek"
+    if "openai" in lowered:
+        return "openai"
+    return "custom_embedding"
+
+
+def _embedding_usage(payload: Mapping[str, Any]) -> Optional[Dict[str, int]]:
+    usage = payload.get("usage")
+    if not isinstance(usage, Mapping):
+        return None
+    prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens"))
+    total_tokens = usage.get("total_tokens", usage.get("total"))
+    if (
+        isinstance(prompt_tokens, bool)
+        or not isinstance(prompt_tokens, int)
+        or prompt_tokens < 0
+    ):
+        return None
+    if total_tokens is None:
+        total_tokens = prompt_tokens
+    if (
+        isinstance(total_tokens, bool)
+        or not isinstance(total_tokens, int)
+        or total_tokens < prompt_tokens
+    ):
+        return None
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": 0,
+        "total_tokens": total_tokens,
+    }
 
 try:
     import faiss  # type: ignore
@@ -294,21 +335,37 @@ class IcdSemanticRetrievalService:
             return None
 
         try:
-            resp = requests.post(
-                endpoint,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "input": query,
-                    "encoding_format": "float",
-                },
-                timeout=timeout,
+            def _request() -> Dict[str, Any]:
+                response = requests.post(
+                    endpoint,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "input": query,
+                        "encoding_format": "float",
+                    },
+                    timeout=timeout,
+                )
+                response.raise_for_status()
+                response_payload = response.json()
+                observed: Dict[str, Any] = {"response": response_payload}
+                usage = _embedding_usage(response_payload)
+                if usage is not None:
+                    observed["usage"] = usage
+                return observed
+
+            observed = observe_llm_sync_http_attempt(
+                _request,
+                provider_code=_embedding_provider_code(endpoint),
+                model=model,
+                business_scene="icd_semantic_embedding",
+                executor_key="icd_semantic_embedding",
+                model_role="embedding",
             )
-            resp.raise_for_status()
-            payload = resp.json()
+            payload = observed["response"]
             data = payload.get("data") or []
             if not data:
                 return None
@@ -317,8 +374,11 @@ class IcdSemanticRetrievalService:
                 return None
             vec = np.array([emb], dtype=np.float32)
             return _l2_normalize(vec)
-        except Exception:
-            logger.exception("ICD semantic embedding request failed")
+        except Exception as error:
+            logger.warning(
+                "ICD semantic embedding request failed error_type=%s",
+                type(error).__name__,
+            )
             return None
 
     def _search_embedding(self, query: str, top_k: int, min_score: float) -> List[Dict[str, Any]]:

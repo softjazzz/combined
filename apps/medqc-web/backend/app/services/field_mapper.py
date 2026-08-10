@@ -6,10 +6,12 @@ LLM-based field mapping service.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 from typing import Any, Dict, List
+from uuid import uuid4
 
 import yaml
 from openai import OpenAI
@@ -308,7 +310,12 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
 
         model = _get_field_mapper_model()
         base_url = _get_dashscope_base_url()
-        client = OpenAI(api_key=_get_dashscope_api_key(), base_url=base_url, timeout=45.0)
+        client = OpenAI(
+            api_key=_get_dashscope_api_key(),
+            base_url=base_url,
+            timeout=45.0,
+            max_retries=0,
+        )
         async def _request() -> Dict[str, Any]:
             response = client.chat.completions.create(
                 model=model,
@@ -325,13 +332,32 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
                 observed_result["usage"] = usage
             return observed_result
 
-        observed_result = await observe_llm_http_attempt(
-            _request,
-            provider_code=_field_mapper_provider_code(base_url),
-            model=model,
-            business_scene="smart_upload_field_mapping",
-            executor_key="field_mapper",
-        )
+        logical_call_id = str(uuid4())
+        observed_result: Dict[str, Any] | None = None
+        for attempt_no in range(1, 4):
+            try:
+                observed_result = await observe_llm_http_attempt(
+                    _request,
+                    provider_code=_field_mapper_provider_code(base_url),
+                    model=model,
+                    business_scene="smart_upload_field_mapping",
+                    executor_key="field_mapper",
+                    logical_call_id=logical_call_id,
+                    attempt_no=attempt_no,
+                )
+                break
+            except Exception as error:
+                _, safe_error_kind = safe_status_for_exception(error)
+                if attempt_no >= 3 or safe_error_kind not in {
+                    "timeout",
+                    "http_transport",
+                    "upstream_429",
+                    "upstream_5xx",
+                }:
+                    raise
+                await asyncio.sleep(0.25 * (2 ** (attempt_no - 1)))
+        if observed_result is None:
+            raise RuntimeError("field_mapping_llm_no_result")
         response = observed_result["response"]
 
         content = (response.choices[0].message.content or "").strip()

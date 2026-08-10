@@ -10,6 +10,10 @@ from app.core.audit import audit_event
 from app.core.security import get_current_user
 from app.services.qc_agent.intent_router import get_intent_router_health
 from app.services.qc_agent.orchestrator import run_intent
+from app.services.llm_observability import (
+    llm_observation_context,
+    opaque_observation_id,
+)
 from app.services.qc_agent.schemas import (
     AgentToolRunResponse,
     AgentToolSpec,
@@ -152,7 +156,12 @@ async def run_qc_agent_chat(
 ) -> QCAgentChatResponse:
     if not payload.session_id:
         payload = payload.model_copy(update={"session_id": str(uuid.uuid4())})
-    result = run_intent(payload, registry)
+    with llm_observation_context(
+        business_scene="qc_agent_intent",
+        root_job_id=opaque_observation_id("qc_agent_session", payload.session_id),
+        executor_key="qc_agent_intent_router",
+    ):
+        result = run_intent(payload, registry)
     assert_no_sensitive_output(result.model_dump())
     try:
         store = QCAgentSessionStore()

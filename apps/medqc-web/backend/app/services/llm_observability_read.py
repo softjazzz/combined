@@ -490,16 +490,17 @@ class LLMObservabilityReadService:
         self,
         *,
         record_key_hash: str,
+        filters: LLMObservabilityFilters,
         page: int,
         page_size: int,
     ) -> dict[str, Any]:
         rows = await self._reader.fetch_events(
-            start_at=None,
-            end_at=None,
-            business_scene=None,
-            provider_code=None,
-            model=None,
-            root_job_id=None,
+            start_at=filters.start_at,
+            end_at=filters.end_at,
+            business_scene=filters.business_scene,
+            provider_code=filters.provider_code,
+            model=filters.model,
+            root_job_id=filters.root_job_id,
             record_key_hash=record_key_hash,
         )
         rows = _project_stale_running_attempts(rows)
