@@ -780,7 +780,7 @@
           </a-button>
           <a-button
             size="small"
-            @click="selectedRecordKeys = []"
+            @click="clearSelectedRecords"
           >
             清空
           </a-button>
@@ -788,7 +788,7 @@
       </div>
 
       <a-table
-        row-key="record_id"
+        row-key="record_key"
         size="small"
         :loading="recordLoading"
         :columns="recordColumns"
@@ -1083,6 +1083,7 @@ import type {
   CustomRuleDraftPayload,
   CustomRuleSingleTestResult,
   CustomRuleWorkspaceRecord,
+  CustomRuleWorkspaceRecordRef,
   WorkspaceDraftStatus,
   WorkspaceScope,
   WorkspaceSeverity,
@@ -1261,6 +1262,8 @@ const doctorOptions = ref<Array<{ label: string; value: string }>>([])
 const recordLoading = ref(false)
 const records = ref<CustomRuleWorkspaceRecord[]>([])
 const selectedRecordKeys = ref<string[]>([])
+const selectedRecordRefByKey = new Map<string, CustomRuleWorkspaceRecordRef>()
+const invalidSelectedRecordKeys = new Set<string>()
 
 const recordPagination = reactive({
   current: 1,
@@ -1290,8 +1293,21 @@ const recordColumns: TableColumnsType<CustomRuleWorkspaceRecord> = [
 
 const recordRowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRecordKeys.value,
+  preserveSelectedRowKeys: true,
   onChange: (keys: Array<string | number>) => {
-    selectedRecordKeys.value = keys.map((item) => String(item))
+    const nextKeys = keys.map((item) => String(item))
+    const nextKeySet = new Set(nextKeys)
+    for (const record of records.value) {
+      const key = String(record.record_key || '').trim()
+      if (!key) continue
+      if (nextKeySet.has(key)) {
+        cacheSelectedRecordRef(record)
+      } else {
+        selectedRecordRefByKey.delete(key)
+        invalidSelectedRecordKeys.delete(key)
+      }
+    }
+    selectedRecordKeys.value = nextKeys
   },
 }))
 
@@ -1711,9 +1727,76 @@ function handleRecordTableChange(pagination: { current?: number; pageSize?: numb
 }
 
 function selectCurrentPageRecords() {
-  selectedRecordKeys.value = Array.from(
-    new Set([...selectedRecordKeys.value, ...records.value.map((item) => item.record_id)]),
-  )
+  if (records.value.some((item) => !String(item.record_key || '').trim())) {
+    message.error('当前页存在缺少稳定病历标识的数据，无法加入批量任务')
+    return
+  }
+  const nextKeys = new Set(selectedRecordKeys.value)
+  for (const record of records.value) {
+    const key = String(record.record_key).trim()
+    nextKeys.add(key)
+    cacheSelectedRecordRef(record)
+  }
+  selectedRecordKeys.value = Array.from(nextKeys)
+}
+
+function clearSelectedRecords() {
+  selectedRecordKeys.value = []
+  selectedRecordRefByKey.clear()
+  invalidSelectedRecordKeys.clear()
+}
+
+function normalizeWorkspaceRecordRef(
+  record: Pick<CustomRuleWorkspaceRecord, 'institute_id' | 'patient_id' | 'visit_id'>,
+): CustomRuleWorkspaceRecordRef | null {
+  const recordRef = {
+    institute_id: String(record.institute_id || '').trim(),
+    patient_id: String(record.patient_id || '').trim(),
+    visit_id: String(record.visit_id || '').trim(),
+  }
+  return recordRef.institute_id && recordRef.patient_id && recordRef.visit_id ? recordRef : null
+}
+
+function workspaceRecordRefKey(recordRef: CustomRuleWorkspaceRecordRef): string {
+  return JSON.stringify([recordRef.institute_id, recordRef.patient_id, recordRef.visit_id])
+}
+
+function cacheSelectedRecordRef(record: CustomRuleWorkspaceRecord) {
+  const key = String(record.record_key || '').trim()
+  if (!key) return
+  const recordRef = normalizeWorkspaceRecordRef(record)
+  const current = selectedRecordRefByKey.get(key)
+  if (
+    !recordRef ||
+    (current && workspaceRecordRefKey(current) !== workspaceRecordRefKey(recordRef))
+  ) {
+    selectedRecordRefByKey.delete(key)
+    invalidSelectedRecordKeys.add(key)
+    return
+  }
+  selectedRecordRefByKey.set(key, recordRef)
+  invalidSelectedRecordKeys.delete(key)
+}
+
+function buildSelectedRecordRefs():
+  | { success: true; recordRefs: CustomRuleWorkspaceRecordRef[] }
+  | { success: false; message: string } {
+  const recordRefs: CustomRuleWorkspaceRecordRef[] = []
+  const ownerByRef = new Map<string, string>()
+  for (const key of selectedRecordKeys.value) {
+    const recordRef = selectedRecordRefByKey.get(key)
+    if (invalidSelectedRecordKeys.has(key) || !recordRef) {
+      return { success: false, message: '所选病历身份不完整或映射已失效，请刷新病历列表后重试' }
+    }
+    const refKey = workspaceRecordRefKey(recordRef)
+    const existingOwner = ownerByRef.get(refKey)
+    if (existingOwner && existingOwner !== key) {
+      return { success: false, message: '所选病历存在重复身份映射，已停止创建任务' }
+    }
+    ownerByRef.set(refKey, key)
+    recordRefs.push({ ...recordRef })
+  }
+  return { success: true, recordRefs }
 }
 
 async function runSingleTest(record: CustomRuleWorkspaceRecord) {
@@ -2008,6 +2091,12 @@ async function runBatchJob() {
     return
   }
 
+  const selectedRecordRefs = buildSelectedRecordRefs()
+  if ('message' in selectedRecordRefs) {
+    message.error(selectedRecordRefs.message)
+    return
+  }
+
   const saved = await saveDraftEditor()
   if (!saved) return
 
@@ -2031,7 +2120,7 @@ async function runBatchJob() {
       start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
       end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
       keyword: recordFilters.keyword || undefined,
-      record_ids: selectedRecordKeys.value,
+      record_refs: selectedRecordRefs.recordRefs,
       temperature: advancedParams.temperature,
       top_p: advancedParams.top_p,
       max_tokens: advancedParams.max_tokens,
