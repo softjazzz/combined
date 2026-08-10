@@ -286,6 +286,7 @@ def test_records_endpoint_returns_only_hashed_record_summaries_with_filters():
             "/api/v1/system/llm-observability/records",
             params={
                 "business_scene": "luxian_0609_qc",
+                "provider_code": "alibaba",
                 "model": "qwen-plus",
                 "page": 2,
                 "page_size": 1,
@@ -394,6 +395,7 @@ def test_overview_forwards_supported_filters_and_rejects_inverted_range():
                 "start_at": "2026-08-01T00:00:00Z",
                 "end_at": "2026-08-10T00:00:00Z",
                 "business_scene": "luxian_0609_qc",
+                "provider_code": "alibaba",
                 "model": "qwen-plus",
                 "root_job_id": "job-1",
             },
@@ -412,6 +414,7 @@ def test_overview_forwards_supported_filters_and_rejects_inverted_range():
             "start_at": _dt("2026-08-01T00:00:00"),
             "end_at": _dt("2026-08-10T00:00:00"),
             "business_scene": "luxian_0609_qc",
+            "provider_code": "alibaba",
             "model": "qwen-plus",
             "root_job_id": "job-1",
             "record_key_hash": None,
@@ -481,6 +484,7 @@ def test_postgres_reader_uses_explicit_sys_table_and_parameterized_filters(monke
             start_at=_dt("2026-08-01T00:00:00"),
             end_at=_dt("2026-08-10T00:00:00"),
             business_scene="scene'; DROP TABLE sys.llm_call_events; --",
+            provider_code="alibaba",
             model="qwen-plus",
             root_job_id="job-1",
             record_key_hash=None,
@@ -491,6 +495,7 @@ def test_postgres_reader_uses_explicit_sys_table_and_parameterized_filters(monke
     assert "FROM sys.llm_call_events" in captured["sql"]
     assert "DROP TABLE" not in captured["sql"]
     assert captured["params"]["business_scene"] == "scene'; DROP TABLE sys.llm_call_events; --"
+    assert captured["params"]["provider_code"] == "alibaba"
     assert captured["closed"] is True
 
 

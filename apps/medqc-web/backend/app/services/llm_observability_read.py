@@ -79,6 +79,7 @@ class LLMObservabilityFilters:
     start_at: datetime | None = None
     end_at: datetime | None = None
     business_scene: str | None = None
+    provider_code: str | None = None
     model: str | None = None
     root_job_id: str | None = None
     record_key_hash: str | None = None
@@ -106,6 +107,7 @@ class PostgresLLMCallEventReader:
             ("start_at", ">="),
             ("end_at", "<="),
             ("business_scene", "="),
+            ("provider_code", "="),
             ("model", "="),
             ("root_job_id", "="),
             ("record_key_hash", "="),
@@ -423,6 +425,7 @@ class LLMObservabilityReadService:
             start_at=filters.start_at,
             end_at=filters.end_at,
             business_scene=filters.business_scene,
+            provider_code=filters.provider_code,
             model=filters.model,
             root_job_id=filters.root_job_id,
             record_key_hash=None,
@@ -461,6 +464,7 @@ class LLMObservabilityReadService:
                 "start_at": _iso(filters.start_at),
                 "end_at": _iso(filters.end_at),
                 "business_scene": filters.business_scene,
+                "provider_code": filters.provider_code,
                 "model": filters.model,
                 "root_job_id": filters.root_job_id,
                 "timezone": "Asia/Shanghai",
@@ -488,6 +492,7 @@ class LLMObservabilityReadService:
             start_at=None,
             end_at=None,
             business_scene=None,
+            provider_code=None,
             model=None,
             root_job_id=None,
             record_key_hash=record_key_hash,
@@ -528,6 +533,7 @@ class LLMObservabilityReadService:
             start_at=filters.start_at,
             end_at=filters.end_at,
             business_scene=filters.business_scene,
+            provider_code=filters.provider_code,
             model=filters.model,
             root_job_id=filters.root_job_id,
             record_key_hash=None,
@@ -540,6 +546,7 @@ class LLMObservabilityReadService:
                 "start_at": _iso(filters.start_at),
                 "end_at": _iso(filters.end_at),
                 "business_scene": filters.business_scene,
+                "provider_code": filters.provider_code,
                 "model": filters.model,
                 "root_job_id": filters.root_job_id,
                 "timezone": "Asia/Shanghai",

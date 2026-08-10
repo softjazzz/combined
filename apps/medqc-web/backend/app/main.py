@@ -32,6 +32,7 @@ from .routers import semantic_rules as semantic_rules_router
 from .routers import tasks as tasks_router
 from .routers import classification as classification_router
 from .routers import llm_configs as llm_configs_router
+from .routers import llm_observability_read as llm_observability_read_router
 from .routers import medical_records_alias as medical_records_alias_router
 from .routers import reports as reports_router
 from .routers import appeals as appeals_router
@@ -257,6 +258,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks_router.router)
     app.include_router(classification_router.router)
     app.include_router(llm_configs_router.router)
+    app.include_router(llm_observability_read_router.router)
     # Compatibility alias for /api/medical-records endpoints
     app.include_router(medical_records_alias_router.router)
     app.include_router(reports_router.router)
