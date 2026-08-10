@@ -3231,6 +3231,7 @@ def _sample_validation_batch_job_status_table() -> Table:
         metadata,
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("status", sa.String(20), nullable=False),
+        sa.Column("created_by", sa.String(64), nullable=False),
         schema=_schema(),
     )
 
@@ -3523,6 +3524,45 @@ class CustomQCSamplePoolService:
             )
             row = session.execute(stmt).mappings().first()
             return self._row_to_pool(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def resolve_unique_pool_id_for_latest_job(
+        self,
+        *,
+        job_id: str,
+    ) -> Optional[tuple[str, str]]:
+        """解析共享样本池唯一指向的最新任务及其创建人；异常关联一律拒绝。"""
+
+        normalized_job_id = _safe_text(job_id)
+        if not normalized_job_id:
+            return None
+        session = _session()
+        try:
+            rows = (
+                session.execute(
+                    select(
+                        self._pool_table.c.id.label("pool_id"),
+                        self._batch_job_status_table.c.created_by.label("job_created_by"),
+                    )
+                    .join(
+                        self._batch_job_status_table,
+                        self._batch_job_status_table.c.id
+                        == self._pool_table.c.latest_job_id,
+                    )
+                    .where(self._pool_table.c.latest_job_id == normalized_job_id)
+                    .limit(2)
+                )
+                .mappings()
+                .all()
+            )
+            if len(rows) != 1:
+                return None
+            pool_id = _safe_text(rows[0].get("pool_id"))
+            job_created_by = _safe_text(rows[0].get("job_created_by"))
+            if not pool_id or not job_created_by:
+                return None
+            return pool_id, job_created_by
         finally:
             session.close()
 

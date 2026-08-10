@@ -4886,6 +4886,7 @@ def _deletion_test_service(monkeypatch):
         metadata,
         sa.Column("id", sa.String, primary_key=True),
         sa.Column("status", sa.String),
+        sa.Column("created_by", sa.String),
     )
     metadata.create_all(engine)
     session_factory = sa.orm.sessionmaker(bind=engine)
@@ -4903,6 +4904,48 @@ def _deletion_test_service(monkeypatch):
         sync_job_table,
         batch_job_status_table,
     )
+
+
+@pytest.mark.parametrize(
+    ("pool_rows", "expected"),
+    [
+        ([], None),
+        (
+            [{"id": "pool-1", "latest_job_id": "job-1"}],
+            ("pool-1", "admin-001"),
+        ),
+        (
+            [
+                {"id": "pool-1", "latest_job_id": "job-1"},
+                {"id": "pool-2", "latest_job_id": "job-1"},
+            ],
+            None,
+        ),
+    ],
+    ids=["not-shared-latest", "unique-shared-latest", "duplicate-pool-pointer"],
+)
+def test_resolve_unique_pool_id_for_latest_job_fails_closed(
+    monkeypatch,
+    pool_rows,
+    expected,
+):
+    service, session_factory, pool_table, _item_table, _sync_job_table, batch_job_table = (
+        _deletion_test_service(monkeypatch)
+    )
+    session = session_factory()
+    if pool_rows:
+        session.execute(pool_table.insert(), pool_rows)
+    session.execute(
+        batch_job_table.insert().values(
+            id="job-1",
+            status="completed",
+            created_by="admin-001",
+        )
+    )
+    session.commit()
+    session.close()
+
+    assert service.resolve_unique_pool_id_for_latest_job(job_id="job-1") == expected
 
 
 def test_delete_pool_removes_only_pool_owned_rows(monkeypatch):

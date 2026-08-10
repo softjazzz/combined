@@ -49,6 +49,7 @@ from ..services.custom_qc_workspace_service import (
     customer_safe_projection_key,
     project_customer_safe_batch_job,
 )
+from ..services.custom_qc_sample_pool_service import CustomQCSamplePoolService
 from ..services.case_identity import CaseRef, case_refs_from_records
 from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from ..services.luxian_0609.runtime_shadow_hook import run_luxian_0609_runtime_shadow
@@ -2351,6 +2352,42 @@ async def evaluate_batch(
 
 def _sichuan_workspace_service() -> CustomQCWorkspaceService:
     return CustomQCWorkspaceService()
+
+
+def _shared_sample_pool_service() -> CustomQCSamplePoolService:
+    return CustomQCSamplePoolService()
+
+
+_SHARED_SAMPLE_JOB_READ_ROLES = frozenset({"admin", "qc_manager", "sync_admin"})
+_SHARED_SAMPLE_JOB_SOURCES = frozenset(
+    {"manual_problem_sample_pool", "manual_sample_formal_fast_screen_full"}
+)
+
+
+def _resolve_shared_sample_pool_latest_job(
+    *,
+    workspace: CustomQCWorkspaceService,
+    job_id: str,
+    current_user: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if not _extract_user_roles(current_user).intersection(_SHARED_SAMPLE_JOB_READ_ROLES):
+        return None
+    resolved = _shared_sample_pool_service().resolve_unique_pool_id_for_latest_job(
+        job_id=job_id
+    )
+    if not resolved:
+        return None
+    pool_id, job_created_by = resolved
+    job = workspace.get_batch_job(job_id=job_id, created_by=job_created_by)
+    if not _is_workspace_batch_job(job):
+        return None
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    if str(filters.get("sample_pool_id") or "").strip() != pool_id:
+        return None
+    source = str(filters.get("source") or "").strip().lower()
+    if source not in _SHARED_SAMPLE_JOB_SOURCES:
+        return None
+    return job
 
 
 async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
@@ -4735,11 +4772,30 @@ async def get_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    shared_read = False
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job:
+        job = _resolve_shared_sample_pool_latest_job(
+            workspace=workspace,
+            job_id=job_id,
+            current_user=current_user,
+        )
+        shared_read = job is not None
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    response_data = (
+        {
+            **project_customer_safe_batch_job(
+                job,
+                hmac_key=customer_safe_projection_key(),
+            ),
+            "read_only": True,
+        }
+        if shared_read
+        else _workspace_batch_response_item(job)
+    )
     return success_response(
-        data=_workspace_batch_response_item(job),
+        data=response_data,
         message="获取四川规则批量任务详情成功",
         trace_id=get_trace_id(request),
     )
