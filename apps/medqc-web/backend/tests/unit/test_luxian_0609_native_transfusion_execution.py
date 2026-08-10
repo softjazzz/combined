@@ -1470,6 +1470,52 @@ async def test_046_each_complete_dedicated_record_is_compliant_without_model(
 
 
 @pytest.mark.asyncio
+async def test_046_checks_every_transfusion_record_beyond_prompt_projection_limit(
+    monkeypatch,
+):
+    """确定性完整性核对必须覆盖全部记录，不能静默忽略第九份。"""
+
+    monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
+    complete_content = (
+        "输血目的：纠正贫血；开始时间14:20，输注去白悬浮红细胞2U，"
+        "结束时间16:10。输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+    )
+    rows = [
+        {"document_id": f"blood-046-complete-{index}", "content": complete_content}
+        for index in range(1, 9)
+    ]
+    rows.append(
+        {
+            "document_id": "blood-046-incomplete-9",
+            "content": (
+                "输血目的：纠正贫血；开始时间18:00，结束时间19:00。"
+                "输血过程中严密观察，生命体征平稳，未见输血不良反应。"
+            ),
+        }
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-046",),
+        wrapper_rules=[_wrapper("LX0609-046")],
+        evidence_payload=_documents(bloodtrans_record=rows),
+        institute_id="safe-institute",
+        patient_id="safe-patient",
+        visit_id="safe-visit",
+        source_schema=None,
+        llm_client=_Client([]),
+    )
+
+    assert result.results[0]["status"] == "non_compliant"
+    assert result.results[0]["metadata"]["reason_code"] == (
+        "transfusion_course_record_incomplete"
+    )
+    facts = dict(result.customer_display_facts)["LX0609-046"]
+    assert facts["record_count"] == 9
+    assert facts["missing_fields"] == ["component", "dose"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 async def test_046_recognizes_complete_customer_narrative_wording(monkeypatch):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
     client = _Client([{"is_compliant": False}])

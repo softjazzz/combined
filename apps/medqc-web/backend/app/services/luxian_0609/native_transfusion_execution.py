@@ -629,14 +629,20 @@ def _source_rows(documents: Mapping[str, Any], source_key: str) -> list[str]:
     return rows
 
 
-def _source_entries(documents: Mapping[str, Any], source_key: str) -> list[str]:
+def _source_entries(
+    documents: Mapping[str, Any],
+    source_key: str,
+    *,
+    limit: int | None = _MAX_ROWS_PER_SOURCE,
+) -> list[str]:
     """为单文书判定保留标题与正文边界，避免跨文书拼接临床事实。"""
 
     raw_rows = documents.get(source_key)
     if not isinstance(raw_rows, list):
         return []
     entries: list[str] = []
-    for raw_row in raw_rows[:_MAX_ROWS_PER_SOURCE]:
+    bounded_rows = raw_rows if limit is None else raw_rows[:limit]
+    for raw_row in bounded_rows:
         if not isinstance(raw_row, Mapping):
             continue
         title = _clean(raw_row.get("document_title") or raw_row.get("title"))
@@ -653,11 +659,7 @@ def _source_document_rows(
     raw_rows = documents.get(source_key)
     if not isinstance(raw_rows, list):
         return []
-    return [
-        raw_row
-        for raw_row in raw_rows[:_MAX_ROWS_PER_SOURCE]
-        if isinstance(raw_row, Mapping)
-    ]
+    return [raw_row for raw_row in raw_rows if isinstance(raw_row, Mapping)]
 
 
 def _required_projection_failure(
@@ -1116,13 +1118,17 @@ def _programmatic_044_status(documents: Mapping[str, Any]) -> tuple[str, str] | 
     entries = tuple(
         entry
         for source_key in _RULE_CONTEXT_SOURCES["LX0609-044"]
-        for entry in _source_entries(documents, source_key)
+        for entry in _source_entries(documents, source_key, limit=None)
     )
     if any(_PRETRANSFUSION_ASSESSMENT_MISSING_PATTERN.search(entry) for entry in entries):
         return "non_compliant", "pretransfusion_assessment_missing"
 
-    bloodtrans_entries = tuple(_source_entries(documents, "bloodtrans_record"))
-    has_application = bool(_source_entries(documents, "blood_application"))
+    bloodtrans_entries = tuple(
+        _source_entries(documents, "bloodtrans_record", limit=None)
+    )
+    has_application = bool(
+        _source_entries(documents, "blood_application", limit=None)
+    )
 
     if any(
         _PRETRANSFUSION_ASSESSMENT_PATTERN.search(entry)
@@ -1190,7 +1196,7 @@ def _is_substantive_transfusion_course_entry(entry: str) -> bool:
 def _programmatic_045_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
-    entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    entries = tuple(_source_entries(documents, "bloodtrans_record", limit=None))
     if any(_TRANSFUSION_COURSE_MISSING_PATTERN.search(entry) for entry in entries):
         return "non_compliant", "transfusion_course_record_missing"
     if any(_is_substantive_transfusion_course_entry(entry) for entry in entries):
@@ -1277,7 +1283,7 @@ def _046_component_llm_candidate(
 def _programmatic_046_status(
     documents: Mapping[str, Any],
 ) -> tuple[str, str] | None:
-    entries = tuple(_source_entries(documents, "bloodtrans_record"))
+    entries = tuple(_source_entries(documents, "bloodtrans_record", limit=None))
     if entries and any(
         _TRANSFUSION_COURSE_INCOMPLETE_PATTERN.search(entry) for entry in entries
     ):
@@ -1799,9 +1805,9 @@ def _programmatic_transfusion_display_facts(
     records = _source_document_rows(documents, "bloodtrans_record")
     if rule_id == "LX0609-044":
         entries = [
-            *_source_entries(documents, "blood_application"),
-            *_source_entries(documents, "bloodtrans_record"),
-            *_source_entries(documents, "daily_course_record"),
+            *_source_entries(documents, "blood_application", limit=None),
+            *_source_entries(documents, "bloodtrans_record", limit=None),
+            *_source_entries(documents, "daily_course_record", limit=None),
         ]
         joined = " ".join(entries)
         checked = {
