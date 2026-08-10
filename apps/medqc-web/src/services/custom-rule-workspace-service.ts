@@ -10,6 +10,7 @@ import type {
   CustomRulePublishResult,
   CustomRuleSingleTestResult,
   CustomRuleWorkspaceFilters,
+  CustomRuleWorkspaceBatchJobCreatePayload,
   CustomRuleWorkspaceRecord,
   CustomRuleWorkspaceRecordQuery,
   CustomRuleWorkspaceTestRecord,
@@ -192,28 +193,36 @@ export async function runWorkspaceBatchTest(payload: {
   )
 }
 
-export async function createWorkspaceBatchJob(payload: {
-  draft_id?: string
-  draft_ids?: string[]
-  execution_mode?: 'single' | 'multi'
-  run_mode?: 'serial' | 'parallel'
-  scope: 'all' | 'running' | 'final'
-  department?: string
-  doctor?: string
-  date_field: 'admission' | 'discharge'
-  start_date?: string
-  end_date?: string
-  keyword?: string
-  record_ids?: string[]
-  temperature?: number
-  top_p?: number
-  max_tokens?: number
-}) {
+export async function createWorkspaceBatchJob(payload: CustomRuleWorkspaceBatchJobCreatePayload) {
+  const recordRefs = payload.record_refs?.length
+    ? payload.record_refs.map((item) => ({
+        institute_id: item.institute_id,
+        patient_id: item.patient_id,
+        visit_id: item.visit_id,
+      }))
+    : undefined
+  const data: CustomRuleWorkspaceBatchJobCreatePayload = {
+    draft_id: payload.draft_id,
+    draft_ids: payload.draft_ids,
+    execution_mode: payload.execution_mode,
+    run_mode: payload.run_mode,
+    scope: payload.scope,
+    department: payload.department,
+    doctor: payload.doctor,
+    date_field: payload.date_field,
+    start_date: payload.start_date,
+    end_date: payload.end_date,
+    keyword: payload.keyword,
+    ...(recordRefs ? { record_refs: recordRefs } : {}),
+    temperature: payload.temperature,
+    top_p: payload.top_p,
+    max_tokens: payload.max_tokens,
+  }
   return requestEnvelope<CustomRuleBatchJob>(
     {
       method: 'POST',
       url: '/api/v1/custom-qc/workspace/batch-jobs',
-      data: payload,
+      data,
     },
     '创建批量任务失败',
   )

@@ -48,9 +48,18 @@ export interface CustomRuleDraftPayload {
   check_logic?: Record<string, unknown>
 }
 
+export interface CustomRuleWorkspaceRecordRef {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}
+
 export interface CustomRuleWorkspaceRecord {
+  institute_id: string
+  patient_id: string
   record_id: string
   visit_id: string
+  record_key: string
   patient_name: string
   mr_no?: string
   inpat_no?: string
@@ -61,6 +70,24 @@ export interface CustomRuleWorkspaceRecord {
   discharge_date: string
   status: string
   medical_text_length: number
+}
+
+export interface CustomRuleWorkspaceBatchJobCreatePayload {
+  draft_id?: string
+  draft_ids?: string[]
+  execution_mode?: 'single' | 'multi'
+  run_mode?: 'serial' | 'parallel'
+  scope: WorkspaceScope
+  department?: string
+  doctor?: string
+  date_field: 'admission' | 'discharge'
+  start_date?: string
+  end_date?: string
+  keyword?: string
+  record_refs?: CustomRuleWorkspaceRecordRef[]
+  temperature?: number
+  top_p?: number
+  max_tokens?: number
 }
 
 export interface CustomRuleWorkspaceFilters {

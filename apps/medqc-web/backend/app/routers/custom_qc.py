@@ -1,11 +1,11 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Mapping, Optional, Sequence
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
@@ -130,6 +130,20 @@ class WorkspaceTestRequest(BaseModel):
     max_tokens: Optional[int] = None
 
 
+NonEmptyRecordCoordinate = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
+
+
+class WorkspaceBatchRecordRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    institute_id: NonEmptyRecordCoordinate
+    patient_id: NonEmptyRecordCoordinate
+    visit_id: NonEmptyRecordCoordinate
+
+
 class WorkspaceBatchJobCreateRequest(BaseModel):
     draft_id: Optional[str] = None
     draft_ids: List[str] = Field(default_factory=list)
@@ -142,6 +156,8 @@ class WorkspaceBatchJobCreateRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     keyword: Optional[str] = None
+    record_refs: List[WorkspaceBatchRecordRef] = Field(default_factory=list)
+    # 仅保留旧客户端的显式失败提示；新任务不得再用 visit_id 列表创建。
     record_ids: List[str] = Field(default_factory=list)
     temperature: Optional[float] = None
     top_p: Optional[float] = None
@@ -162,6 +178,50 @@ def _batch_job_payload_filters(payload: WorkspaceBatchJobCreateRequest) -> Dict[
         "execution_mode": payload.execution_mode,
         "run_mode": payload.run_mode,
     }
+
+
+def _record_ref_key(value: Mapping[str, Any]) -> tuple[str, str, str] | None:
+    coordinates = tuple(
+        str(value.get(field_name) or "").strip()
+        for field_name in ("institute_id", "patient_id", "visit_id")
+    )
+    return coordinates if all(coordinates) else None
+
+
+def _record_ref_matches_are_exact(
+    *,
+    record_refs: Sequence[Mapping[str, Any]],
+    records: Sequence[Mapping[str, Any]],
+) -> bool:
+    requested_keys = [_record_ref_key(item) for item in record_refs]
+    if (
+        not requested_keys
+        or any(item is None for item in requested_keys)
+        or len(set(requested_keys)) != len(requested_keys)
+    ):
+        return False
+    match_counts = {item: 0 for item in requested_keys if item is not None}
+    for record in records:
+        record_key = _record_ref_key(record)
+        if record_key not in match_counts:
+            return False
+        match_counts[record_key] += 1
+    return all(count == 1 for count in match_counts.values())
+
+
+def _validated_worker_record_refs(raw: Any) -> List[Dict[str, str]]:
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("批量任务 record_refs 缺失或无效")
+    try:
+        record_refs = [
+            WorkspaceBatchRecordRef.model_validate(item).model_dump()
+            for item in raw
+        ]
+    except ValidationError as exc:
+        raise ValueError("批量任务 record_refs 缺失或无效") from exc
+    if not _record_ref_matches_are_exact(record_refs=record_refs, records=record_refs):
+        raise ValueError("批量任务 record_refs 重复或无效")
+    return record_refs
 
 
 def _normalize_execution_mode(value: Optional[str]) -> str:
@@ -204,6 +264,13 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             drafts.append(draft)
 
         total_rules = max(1, len(drafts))
+        if "record_refs" in filters:
+            worker_record_refs = _validated_worker_record_refs(filters.get("record_refs"))
+            worker_record_ids = None
+        else:
+            # 仅升级前已持久化且明确没有 record_refs 的任务允许 visit_id 兼容读取。
+            worker_record_refs = None
+            worker_record_ids = current_job.get("record_ids") or None
         records = workspace.collect_records(
             scope=current_job.get("scope") or "final",
             department=filters.get("department"),
@@ -212,8 +279,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             start_date=filters.get("start_date"),
             end_date=filters.get("end_date"),
             keyword=filters.get("keyword"),
-            record_ids=current_job.get("record_ids") or None,
+            record_ids=worker_record_ids,
+            record_refs=worker_record_refs,
         )
+        if worker_record_refs is not None and not _record_ref_matches_are_exact(
+            record_refs=worker_record_refs,
+            records=records,
+        ):
+            raise ValueError("批量任务 record_refs 未唯一命中完整病历")
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
         total_records = len(hydrated_records)
         workspace.update_batch_job_progress(
@@ -1069,6 +1142,17 @@ async def create_workspace_batch_job(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     created_by = _current_user_id(current_user)
+    if payload.record_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="新建批量任务不再接受 record_ids，请提交完整三坐标 record_refs",
+        )
+    record_refs = [item.model_dump() for item in payload.record_refs]
+    if record_refs and not _record_ref_matches_are_exact(
+        record_refs=record_refs,
+        records=record_refs,
+    ):
+        raise HTTPException(status_code=422, detail="record_refs 存在重复或无效三坐标")
     requested_draft_ids = [str(item).strip() for item in (payload.draft_ids or []) if str(item).strip()]
     if payload.draft_id:
         draft_id = str(payload.draft_id).strip()
@@ -1102,10 +1186,32 @@ async def create_workspace_batch_job(
         start_date=payload.start_date,
         end_date=payload.end_date,
         keyword=payload.keyword,
-        record_ids=payload.record_ids or None,
+        record_ids=None,
+        record_refs=record_refs or None,
     )
-    if not records:
-        raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行的病历")
+    if record_refs:
+        effective_record_refs = record_refs
+    else:
+        effective_record_refs = [
+            {
+                "institute_id": str(item.get("institute_id") or "").strip(),
+                "patient_id": str(item.get("patient_id") or "").strip(),
+                "visit_id": str(item.get("visit_id") or "").strip(),
+            }
+            for item in records
+        ]
+    if not _record_ref_matches_are_exact(
+        record_refs=effective_record_refs,
+        records=records,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "请求的 record_refs 未全部唯一命中完整三坐标病历"
+                if record_refs
+                else "筛选结果为空或包含无法唯一识别的三坐标病历"
+            ),
+        )
 
     execution_mode = _normalize_execution_mode(payload.execution_mode)
     if len(drafts) > 1:
@@ -1126,7 +1232,8 @@ async def create_workspace_batch_job(
         created_by=created_by,
         scope=payload.scope,
         filters=_batch_job_payload_filters(payload),
-        record_ids=payload.record_ids or [],
+        record_ids=[item["visit_id"] for item in effective_record_refs],
+        record_refs=effective_record_refs,
         total_records=len(records),
         draft_ids=[str(item.get("id") or "") for item in drafts],
         execution_mode=execution_mode,
