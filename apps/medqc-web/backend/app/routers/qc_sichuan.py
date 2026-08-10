@@ -2461,6 +2461,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         has_persisted_record_refs = isinstance(persisted_record_refs, list) and bool(
             persisted_record_refs
         )
+        is_sample_pool_job = bool(str(filters.get("sample_pool_id") or "").strip())
+        if is_sample_pool_job and not has_persisted_record_refs:
+            raise ValueError(
+                "样本池任务缺少 filters.record_refs，拒绝按 record_ids 回退"
+            )
         records = workspace.collect_records(
             scope=str(current.get("scope") or "all"),
             department=filters.get("department"),

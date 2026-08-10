@@ -982,6 +982,11 @@ async def run_sample_pool_intrinsic_validation(
     payload: SamplePoolRunRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if payload.record_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="record_ids 已停止用于新质控任务，请提交完整 record_refs 三坐标",
+        )
     service = _service()
     pool = service.get_pool(pool_id=pool_id)
     if not pool:
@@ -1006,11 +1011,6 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="所选质控点不能为空")
     if requested_selected_rule_ids and validation_mode != "customer":
         raise HTTPException(status_code=422, detail="selected_rule_ids 仅支持客户专项规则验证模式")
-    if payload.record_ids:
-        raise HTTPException(
-            status_code=422,
-            detail="record_ids 已停止用于新质控任务，请提交完整 record_refs 三坐标",
-        )
     requested_record_ref_values = [
         CaseRef(item.institute_id, item.patient_id, item.visit_id)
         for item in list(payload.record_refs or [])

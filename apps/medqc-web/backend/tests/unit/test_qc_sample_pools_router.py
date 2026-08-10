@@ -48,6 +48,7 @@ def _capture_detached_tasks(monkeypatch):
 
 class _SamplePoolServiceStub:
     def __init__(self) -> None:
+        self.get_pool_calls = 0
         self.get_runnable_items_calls = []
         self.updated_pool_job = None
         self.selection_readiness = {
@@ -58,6 +59,7 @@ class _SamplePoolServiceStub:
         }
 
     def get_pool(self, *, pool_id: str):
+        self.get_pool_calls += 1
         if pool_id != "pool-1":
             return None
         return {
@@ -1106,7 +1108,13 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
 async def test_run_sample_pool_rejects_legacy_record_ids_before_selection(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
-    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    service_factory_calls: list[bool] = []
+
+    def _service_factory():
+        service_factory_calls.append(True)
+        return sample_service
+
+    monkeypatch.setattr(qc_sample_pools, "_service", _service_factory)
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -1123,6 +1131,8 @@ async def test_run_sample_pool_rejects_legacy_record_ids_before_selection(monkey
 
     assert exc_info.value.status_code == 422
     assert "record_refs" in str(exc_info.value.detail)
+    assert service_factory_calls == []
+    assert sample_service.get_pool_calls == 0
     assert sample_service.get_runnable_items_calls == []
     assert workspace_service.create_batch_job_calls == []
 
@@ -1296,6 +1306,52 @@ async def test_sample_pool_worker_reads_persisted_record_refs_instead_of_legacy_
         _run_record_ref("I002", "P002", "V-SHARED"),
     ]
     assert workspace.failed_calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("persisted_record_refs", [None, []])
+async def test_sample_pool_worker_rejects_missing_record_refs_without_collecting_by_visit(
+    monkeypatch,
+    persisted_record_refs,
+):
+    workspace = _SamplePoolWorkerWorkspaceStub()
+    workspace.job["filters"]["sample_pool_id"] = "pool-1"
+    if persisted_record_refs is None:
+        workspace.job["filters"].pop("record_refs", None)
+    else:
+        workspace.job["filters"]["record_refs"] = persisted_record_refs
+
+    async def _qc_service_stub():
+        return object()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
+    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+
+    await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
+
+    assert workspace.collect_records_calls == []
+    assert workspace.failed_calls
+    assert "record_refs" in str(workspace.failed_calls[0]["error_message"])
+
+
+@pytest.mark.asyncio
+async def test_non_sample_historical_worker_keeps_record_id_compatibility(monkeypatch):
+    workspace = _SamplePoolWorkerWorkspaceStub()
+    workspace.job["filters"].pop("record_refs", None)
+
+    async def _qc_service_stub():
+        return object()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
+    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+
+    await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
+
+    assert len(workspace.collect_records_calls) == 1
+    assert workspace.collect_records_calls[0]["record_ids"] == ["V-SHARED"]
+    assert workspace.collect_records_calls[0]["record_refs"] is None
 
 
 @pytest.mark.asyncio
@@ -2059,7 +2115,6 @@ async def test_run_sample_pool_should_reject_explicit_blank_scope(monkeypatch):
             request=_build_request(),
             pool_id="pool-1",
             payload=qc_sample_pools.SamplePoolRunRequest(
-                record_ids=[" "],
                 sample_item_ids=[" "],
                 rule_set_key="luxian_0609_qc_v1",
                 selected_rule_ids=[" "],
