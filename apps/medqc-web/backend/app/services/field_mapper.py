@@ -15,6 +15,11 @@ import yaml
 from openai import OpenAI
 from dotenv import dotenv_values
 
+from .llm_observability import (
+    observe_llm_http_attempt,
+    safe_status_for_exception,
+)
+
 # ========== 路径配置 ==========
 SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
 FIELD_MAPPER_YAML = os.path.join(SKILLS_DIR, "field_mapper.yaml")
@@ -95,6 +100,45 @@ def _get_field_mapper_model() -> str:
         or _get_backend_llm_config().get("model", "")
         or DEFAULT_FIELD_MAPPER_MODEL
     ).strip()
+
+
+def _field_mapper_provider_code(base_url: str) -> str:
+    """根据实际 OpenAI 兼容端点给出不含端点明文的供应商标识。"""
+    normalized = str(base_url or "").strip().lower()
+    if "dashscope.aliyuncs.com" in normalized:
+        return "alibaba"
+    if "api.deepseek.com" in normalized:
+        return "deepseek"
+    if "siliconflow" in normalized:
+        return "siliconflow"
+    return "openai_compatible"
+
+
+def _sdk_usage_payload(response: Any) -> Dict[str, int] | None:
+    """只提取 SDK usage 数值；不把响应对象交给观测存储。"""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    required_values = {
+        "prompt_tokens": getattr(usage, "prompt_tokens", None),
+        "completion_tokens": getattr(usage, "completion_tokens", None),
+    }
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in required_values.values()
+    ):
+        return None
+    result = dict(required_values)
+    total_tokens = getattr(usage, "total_tokens", None)
+    if total_tokens is not None:
+        if (
+            isinstance(total_tokens, bool)
+            or not isinstance(total_tokens, int)
+            or total_tokens < 0
+        ):
+            return None
+        result["total_tokens"] = total_tokens
+    return result
 
 
 def _load_field_config() -> Dict[str, Any]:
@@ -265,15 +309,30 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
         model = _get_field_mapper_model()
         base_url = _get_dashscope_base_url()
         client = OpenAI(api_key=_get_dashscope_api_key(), base_url=base_url, timeout=45.0)
-        response = client.chat.completions.create(
+        async def _request() -> Dict[str, Any]:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,
+                max_tokens=1200,
+            )
+            observed_result: Dict[str, Any] = {"response": response}
+            usage = _sdk_usage_payload(response)
+            if usage is not None:
+                observed_result["usage"] = usage
+            return observed_result
+
+        observed_result = await observe_llm_http_attempt(
+            _request,
+            provider_code=_field_mapper_provider_code(base_url),
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-            max_tokens=1200,
+            business_scene="smart_upload_field_mapping",
+            executor_key="field_mapper",
         )
+        response = observed_result["response"]
 
         content = (response.choices[0].message.content or "").strip()
         result = _parse_llm_json(content)
@@ -313,12 +372,13 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
             "fallback": False,
         }
     except Exception as exc:
-        logger.exception(
-            "Field mapping LLM failed; fallback to rule-based mapping. model=%s base_url=%s",
-            _get_field_mapper_model(),
-            _get_dashscope_base_url(),
+        _, safe_error_kind = safe_status_for_exception(exc)
+        logger.warning(
+            "field_mapping_llm_failed fallback=rule_based error_kind=%s error_type=%s",
+            safe_error_kind,
+            type(exc).__name__,
         )
-        return _fallback_mapping(columns, reason=f"{type(exc).__name__}: {exc}")
+        return _fallback_mapping(columns, reason=safe_error_kind)
 
 
 def _fallback_mapping(columns: List[str], reason: str | None = None) -> Dict[str, Any]:

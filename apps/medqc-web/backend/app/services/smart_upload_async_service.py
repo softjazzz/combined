@@ -17,6 +17,7 @@ from fastapi import HTTPException
 
 from . import async_job_store
 from .field_mapper import suggest_field_mapping
+from .llm_observability import llm_observation_context
 from .multi_file_processor import MultiFileProcessor
 
 logger = logging.getLogger(__name__)
@@ -357,9 +358,20 @@ class SmartUploadAsyncService:
         samples: list[Dict[str, Any]],
     ) -> None:
         try:
-            result = suggest_field_mapping(columns_list, samples)
-            if asyncio.iscoroutine(result):
-                result = self._await_coroutine_safely(result)
+            async def _run_mapping_with_task_context() -> Any:
+                with llm_observation_context(
+                    business_scene="smart_upload_field_mapping",
+                    root_job_id=task_id,
+                    executor_key="field_mapper",
+                ):
+                    result = suggest_field_mapping(columns_list, samples)
+                    if asyncio.iscoroutine(result):
+                        return await result
+                    return result
+
+            result = self._await_coroutine_safely(
+                _run_mapping_with_task_context()
+            )
 
             if isinstance(result, dict) and isinstance(result.get("mappings"), dict) and result.get("mappings"):
                 cache_path = os.path.join(target_dir, "mapping.json")

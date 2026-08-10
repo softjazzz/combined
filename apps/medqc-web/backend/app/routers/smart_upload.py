@@ -24,6 +24,7 @@ from ..core.rate_limit import enforce_rate_limit
 from ..core.security import get_current_user
 from ..core.upload_security import validate_uploaded_file
 from ..services.field_mapper import STANDARD_FIELDS, suggest_field_mapping
+from ..services.llm_observability import llm_observation_context
 from ..services.multi_file_processor import MultiFileProcessor
 from ..services.smart_upload_async_service import get_smart_upload_async_service
 
@@ -244,7 +245,12 @@ async def suggest_mapping(request: MappingSuggestRequest):
     columns = list(preview_df.columns)
     sample_data = preview_df.fillna("").astype(str).to_dict(orient="records")
     
-    mapping_result = await suggest_field_mapping(columns, sample_data)
+    with llm_observation_context(
+        business_scene="smart_upload_field_mapping",
+        root_job_id=file_id,
+        executor_key="field_mapper",
+    ):
+        mapping_result = await suggest_field_mapping(columns, sample_data)
     
     # 写入缓存
     try:
