@@ -2015,6 +2015,14 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-055": {"antimicrobial_effect_evaluation_check"},
         "LX0609-057": {"empiric_antimicrobial_reason_check"},
         "LX0609-058": {"special_antimicrobial_expert_support_check"},
+        "LX0609-049": {
+            "transfusion_order_record_consistent",
+            "transfusion_order_record_inconsistent",
+        },
+        "LX0609-059": {
+            "antimicrobial_course_documentation_complete",
+            "antimicrobial_course_documentation_missing",
+        },
         "LX0609-060": {"death_record_presence_check"},
         "LX0609-061": {"discharge_record_timeliness_check"},
         "LX0609-062": {"discharge_medication_completeness_check"},
@@ -2023,11 +2031,19 @@ def safe_luxian_0609_customer_display_facts(
         "LX0609-065": {"postoperative_senior_round_check"},
         "LX0609-066": {"postoperative_first_course_presence_check"},
         "LX0609-067": {"predischarge_course_presence_check"},
+        "LX0609-068": {
+            "senior_discharge_approval_present",
+            "senior_discharge_approval_missing",
+        },
         "LX0609-069": {"consultation_timeliness_check"},
         "LX0609-071": {"physician_handoff_timeliness_check"},
         "LX0609-072": {"transfer_record_timeliness_check", "transfer_records_missing"},
         "LX0609-073": {"transfer_record_presence_check", "transfer_records_missing"},
         "LX0609-074": {"diagnosis_change_documentation_check"},
+        "LX0609-075": {
+            "invasive_procedure_course_record_complete",
+            "invasive_procedure_course_record_missing",
+        },
     }
     extended_allowed_keys = {
         "uncertain_diagnosis_discussion_check": {
@@ -2059,6 +2075,22 @@ def safe_luxian_0609_customer_display_facts(
         "special_antimicrobial_expert_support_check": {
             "special_antimicrobials", "expert_support_present",
         },
+        "transfusion_order_record_consistent": {
+            "performed_transfusion_confirmed", "order_count", "record_count",
+            "ordered_components", "recorded_components",
+            "order_record_consistent", "billing_checked",
+        },
+        "transfusion_order_record_inconsistent": {
+            "performed_transfusion_confirmed", "order_count", "record_count",
+            "ordered_components", "recorded_components",
+            "order_record_consistent", "billing_checked",
+        },
+        "antimicrobial_course_documentation_complete": {
+            "antimicrobials", "course_documented",
+        },
+        "antimicrobial_course_documentation_missing": {
+            "antimicrobials", "course_documented",
+        },
         "death_record_presence_check": {"death_confirmed", "death_time", "death_record_count"},
         "discharge_record_timeliness_check": {
             "discharge_time", "record_time", "threshold_hours", "actual_interval_hours",
@@ -2082,6 +2114,14 @@ def safe_luxian_0609_customer_display_facts(
         "predischarge_course_presence_check": {
             "discharge_date", "checked_dates", "course_present",
         },
+        "senior_discharge_approval_present": {
+            "discharge_date", "checked_dates", "checked_source",
+            "approval_present", "approval_path",
+        },
+        "senior_discharge_approval_missing": {
+            "discharge_date", "checked_dates", "checked_source",
+            "approval_present",
+        },
         "consultation_timeliness_check": {
             "threshold_hours", "actual_interval_hours", "request_times", "record_times",
         },
@@ -2099,6 +2139,12 @@ def safe_luxian_0609_customer_display_facts(
         },
         "diagnosis_change_documentation_check": {
             "diagnosis_change_count", "reason_recorded", "basis_recorded",
+        },
+        "invasive_procedure_course_record_complete": {
+            "ordered_procedures", "course_documented",
+        },
+        "invasive_procedure_course_record_missing": {
+            "ordered_procedures", "course_documented",
         },
     }
 
@@ -4099,6 +4145,39 @@ def _customer_evidence_from_display_facts(
         )
     if source_type and source_document_id:
         return [{"source_type": source_type, "source_document_id": source_document_id}]
+
+    if rule_id in {
+        "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
+    }:
+        allowed_source_types = {
+            "exam_master", "exam_item_report", "labtest_master", "labtest_item_report",
+            "first_course_record", "daily_course_record", "senior_course_record",
+            "rescue_record",
+        }
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
+            located: list[dict[str, str]] = []
+            seen: set[tuple[str, str]] = set()
+            for item in raw_refs:
+                if not isinstance(item, Mapping):
+                    return []
+                located_source_type = str(item.get("source_type") or "").strip()
+                located_document_id = valid_document_id(item.get("source_document_id"))
+                key = (located_source_type, located_document_id)
+                if (
+                    located_source_type not in allowed_source_types
+                    or not located_document_id
+                ):
+                    return []
+                if key in seen:
+                    continue
+                seen.add(key)
+                located.append({
+                    "source_type": located_source_type,
+                    "source_document_id": located_document_id,
+                })
+            if located:
+                return located
 
     if rule_id not in {
         "LX0609-010",

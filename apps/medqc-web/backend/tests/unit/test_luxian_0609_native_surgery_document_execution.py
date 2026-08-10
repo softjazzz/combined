@@ -253,6 +253,35 @@ async def test_typed_029_multiple_surgeries_without_linkage_is_data_gap():
 
 
 @pytest.mark.asyncio
+async def test_typed_029_multiple_surgeries_and_empty_summary_is_non_compliant():
+    session = _typed_029_session(surgery_mode="multi", summary_rows=())
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-029",),
+        wrapper_rules=[],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-029",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-029",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state.value == "non_compliant"
+    assert reduced[0].reason_code == "required_document_missing"
+    assert dict(result.customer_display_facts)["LX0609-029"] == {
+        "failure_kind": "surgery_document_missing",
+        "target_document": "presurg_summary",
+        "performed_surgery_confirmed": True,
+    }
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mr_surgery_mode", ("unavailable", "error"))
 async def test_typed_029_confirmed_surgery_record_overrides_other_source_blocker(
     mr_surgery_mode: str,

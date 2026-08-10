@@ -798,6 +798,87 @@ def test_multiple_report_business_ids_are_an_association_conflict():
     assert "event_binding" in projection.culture_event.conflict_roles
 
 
+def test_many_unrelated_rows_do_not_hide_one_bound_mri_event():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": tuple(
+                {
+                    "exam_id": f"US-{index}",
+                    "performed_dept": "超声医学科",
+                    "report_time": "2026-06-20 19:13:42",
+                }
+                for index in range(45)
+            ),
+            "exam_item_report": ({
+                "exam_id": "MRI-001",
+                "exam_name": "腰椎MRI检查",
+                "report_time": "2026-06-21 21:19:08",
+                "record_content": "阳性：L4/5椎间盘突出并右侧神经根受压。",
+            },),
+            "labtest_master": tuple(
+                {
+                    "test_id": f"LAB-{index}",
+                    "labtest_subject": "临床科室检验",
+                    "report_datetime": "2026-06-20 17:38:48",
+                }
+                for index in range(45)
+            ),
+            "daily_course_record": ({
+                "document_id": "COURSE-MRI-001",
+                "record_time": "2026-06-22 01:19:08",
+                "record_content": "已阅腰椎MRI报告，提示L4/5椎间盘突出并神经根受压。",
+            },),
+        },
+        max_context_chars=3000,
+    )
+
+    assert projection.imaging_event is not None
+    assert projection.imaging_event.target_confirmed is True
+    assert projection.imaging_event.document_refs == ("E02-01",)
+    assert "L4/5" in projection.context
+    assert projection.context.count("SOURCE=exam_master") == 0
+    assert projection.culture_event is not None
+    assert "event_binding" in projection.culture_event.conflict_roles
+
+
+def test_two_report_families_keep_eight_bounded_course_documents_without_false_gap():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": ({
+                "exam_type": "MRI",
+                "exam_time": "2026-06-21 09:00:00",
+                "report_time": "2026-06-21 10:00:00",
+                "exam_conclusion": "MRI阳性：椎间盘突出。",
+            },),
+            "labtest_master": ({
+                "labtest_subject": "血培养及药敏",
+                "report_time": "2026-06-22 10:00:00",
+                "result": "培养阳性，药敏结果已报告。",
+            },),
+            "daily_course_record": tuple(
+                {
+                    "record_time": value,
+                    "record_content": f"病程记录{index}",
+                }
+                for index, value in enumerate(
+                    (
+                        "2026-06-21 08:00:00",
+                        "2026-06-21 11:00:00",
+                        "2026-06-21 15:00:00",
+                        "2026-06-22 11:00:00",
+                        "2026-06-22 15:00:00",
+                        "2026-06-23 09:00:00",
+                    ),
+                    start=1,
+                )
+            ),
+        }
+    )
+
+    assert len(projection.course_times) == 6
+    assert projection.course_projection_truncated is False
+
+
 def test_long_stay_course_rows_are_filtered_before_projection_limit():
     course_rows = tuple(
         {
@@ -1590,6 +1671,7 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
         ),
         course_rows=(
             {
+                "document_id": "course-012",
                 "record_time": "2026-04-26 13:00:00",
                 "record_content": "胸部CT报告提示右肺占位。",
             },
@@ -1639,10 +1721,17 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     assert canonical["customer_display_facts"]["reviewed_record_scope"] == (
         "首次病程记录及后续病程记录"
     )
-    assert canonical["customer_evidence"] == [{
-        "source_type": "exam_master",
-        "source_document_id": "ct-report-012",
-    }]
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "exam_master",
+            "source_document_id": "ct-report-012",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "course-012",
+        },
+    ]
+    assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
 
 

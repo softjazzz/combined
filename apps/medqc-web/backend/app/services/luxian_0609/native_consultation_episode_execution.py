@@ -58,8 +58,10 @@ _MAX_EPISODES = 12
 _MAX_EPISODE_OPINION_CHARS = 1200
 _MAX_RECOMMENDATIONS = 24
 _MAX_RECOMMENDATION_CHARS = 240
-_MAX_CANDIDATES_PER_SOURCE = 12
-_MAX_CANDIDATE_CHARS = 1000
+# 病程是 4.20.4 的主执行证据。完整 Snapshot 中真实病程常超过 12 份，
+# 单份上级查房记录也常超过 1000 字；不能因为展示/提示词投影上限把整类
+# 权威病程误判为不完整。提示词在第二阶段按引用去重，硬上限仅防御异常巨行。
+_MAX_CANDIDATE_CHARS = 5000
 _ORDER_EXECUTION_SOURCE_KEYS = frozenset(
     {"inpat_drug_order", "inpat_nondrug_order"}
 )
@@ -786,16 +788,9 @@ def _candidate_documents(
             )
             if observation is None or observation.completeness is not SourceCompleteness.COMPLETE:
                 source_is_complete = False
-        source_limit = (
-            _MAX_ORDER_CANDIDATES_PER_SOURCE
-            if is_order_source
-            else _MAX_CANDIDATES_PER_SOURCE
-        )
-        if len(rows) > source_limit:
-            if not is_order_source:
-                source_incomplete_keys.add(source_key)
-                continue
-            # 医嘱是 020/023 的主执行证据，真实病例中常为高频清单。
+        source_limit = _MAX_ORDER_CANDIDATES_PER_SOURCE
+        if is_order_source and len(rows) > source_limit:
+            # 医嘱是 020/023 的辅助执行证据，真实病例中常为高频清单。
             # 这里采用会诊后时间排序的固定上限候选集，避免“医嘱很多”
             # 本身把所有建议都拖成资料不足；行级缺时间/缺内容仍会在
             # 下方标记为来源不完整。
@@ -1197,8 +1192,9 @@ def _execution_prompt(
 ) -> tuple[str, Mapping[str, frozenset[str]]]:
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
+    documents_by_ref: dict[str, dict[str, object]] = {}
     for item in completed:
-        related: list[dict[str, object]] = []
+        related_refs: list[str] = []
         eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
             item.recommendation.action_type,
             frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
@@ -1218,14 +1214,15 @@ def _execution_prompt(
                 # 仅做语义关联。唯有两侧均有精确时间且候选更早时才排除。
                 include = True
             if include:
-                related.append({
+                related_refs.append(candidate.ref)
+                documents_by_ref.setdefault(candidate.ref, {
                     "ref": candidate.ref,
                     "source": candidate.source_key,
                     "date": candidate.observed_time.value.isoformat(),
                     "text": candidate.text,
                 })
         allowed_refs[item.recommendation.recommendation_ref] = frozenset(
-            str(candidate["ref"]) for candidate in related
+            related_refs
         )
         entries.append({
             "recommendation_ref": item.recommendation.recommendation_ref,
@@ -1233,9 +1230,12 @@ def _execution_prompt(
             "source_quote": item.recommendation.source_quote,
             "normalized_action": item.recommendation.normalized_action,
             "opinion_date": item.opinion_time.value.isoformat(),
-            "candidate_documents": related,
+            "candidate_refs": related_refs,
         })
-    payload = json.dumps({"recommendations": entries}, ensure_ascii=False)
+    payload = json.dumps({
+        "recommendations": entries,
+        "candidate_documents": list(documents_by_ref.values()),
+    }, ensure_ascii=False)
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
     prompt = (
@@ -1260,7 +1260,7 @@ def _execution_prompt(
         "这只适用于同一临床治疗类别，绝不得用一句泛化记录覆盖药物、检查、转运等跨类别建议。"
         "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
         "confidence只能为high/medium/low。"
-        "trace_refs和structured_action_refs只能引用该建议输入candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
+        "trace_refs和structured_action_refs只能引用该建议candidate_refs所指向的candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
         "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
         "没有可验证的candidate_documents ref时必须返回unknown。"
         "每个非空trace_refs或structured_action_refs都必须返回execution_quotes：每项是所引执行候选中的连续原文摘录，"

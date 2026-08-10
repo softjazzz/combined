@@ -242,6 +242,18 @@ def build_text_outcome_display_facts(
             (first_response - event.report_time).total_seconds() / 3600,
             2,
         )
+    source_document_refs = projection.source_document_refs or {}
+    evidence_refs = tuple(fact.evidence_refs)
+    if status == "non_compliant" and not fact.course_doc_refs:
+        evidence_refs = tuple((*evidence_refs, *projection.course_times.keys()))
+    located_documents = [
+        {"source_type": source_type, "source_document_id": source_document_id}
+        for ref in dict.fromkeys(evidence_refs)
+        if (located := source_document_refs.get(ref)) is not None
+        for source_type, source_document_id in (located,)
+    ]
+    if located_documents:
+        facts["source_document_refs"] = located_documents
     return facts
 
 

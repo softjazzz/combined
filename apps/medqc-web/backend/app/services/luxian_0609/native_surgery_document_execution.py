@@ -1317,14 +1317,6 @@ async def _typed_029_outcome(
             outcome,
             0, 0, 0, 0, 0.0,
         )
-    surgery_count = _source_row_count(materials, "surgery_record")
-    if surgery_count is not None and surgery_count > 1:
-        return (
-            _SurgeryDocumentOutcome(
-                "LX0609-029", "data_gap", "association_failed", "program"
-            ),
-            0, 0, 0, 0, 0.0,
-        )
     target_gate = _typed_source_gate(
         rule_id="LX0609-029", source_key="presurg_summary", snapshot=snapshot
     )
@@ -1333,7 +1325,23 @@ async def _typed_029_outcome(
     if _typed_observation_state(snapshot, "presurg_summary") == "empty":
         return (
             _SurgeryDocumentOutcome(
-                "LX0609-029", "non_compliant", "preop_summary_missing", "program"
+                "LX0609-029",
+                "non_compliant",
+                "preop_summary_missing",
+                "program",
+                {
+                    "failure_kind": "surgery_document_missing",
+                    "target_document": "presurg_summary",
+                    "performed_surgery_confirmed": True,
+                },
+            ),
+            0, 0, 0, 0, 0.0,
+        )
+    surgery_count = _source_row_count(materials, "surgery_record")
+    if surgery_count is not None and surgery_count > 1:
+        return (
+            _SurgeryDocumentOutcome(
+                "LX0609-029", "data_gap", "association_failed", "program"
             ),
             0, 0, 0, 0, 0.0,
         )

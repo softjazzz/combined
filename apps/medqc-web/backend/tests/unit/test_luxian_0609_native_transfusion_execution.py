@@ -86,6 +86,7 @@ def _typed_decision_session(
     performed: bool = True,
     bloodtrans_content: str | None = None,
     daily_content: str | None = None,
+    source_rows: dict[str, list[dict]] | None = None,
 ):
     bloodtrans_material = (
         "输血前评估：患者具有输血指征，输血目的为纠正贫血，血红蛋白降低，"
@@ -123,6 +124,7 @@ def _typed_decision_session(
                 }
             ] if performed else [],
         }
+        rows_by_source.update(source_rows or {})
         return SnapshotSourceRows.create(
             source_key=source_key,
             rows=rows_by_source.get(source_key, []),
@@ -575,7 +577,7 @@ async def test_remaining_transfusion_typed_scope_is_ordered_and_fails_closed(
         "LX0609-043": "non_compliant",
         "LX0609-044": "non_compliant",
         "LX0609-048": "not_applicable",
-        "LX0609-049": "data_gap",
+        "LX0609-049": "non_compliant",
     }
     decision_by_rule = {item.rule_id: item for item in result.decisions}
     assert decision_by_rule["LX0609-042"].reason_code == "eligibility_not_met"
@@ -671,7 +673,7 @@ async def test_remaining_typed_rules_do_not_promote_proxy_sources_or_call_model(
     assert [
         reduce_luxian_0609_rule_decision(item).final_state.value
         for item in result.decisions
-    ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "data_gap"]
+    ] == ["non_compliant", "not_applicable", "non_compliant", "not_applicable", "non_compliant"]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
     assert private_marker not in repr(result)
@@ -1042,7 +1044,7 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         "non_compliant",
         "compliant",
         "not_applicable",
-        "data_gap",
+        "non_compliant",
     ]
     assert result.llm_call_count == 1
     assert result.total_tokens == 110
@@ -2484,9 +2486,127 @@ async def test_044_clear_pretransfusion_assessment_truth_is_deterministic_withou
         source_schema=None,
         llm_client=application_client,
     )
-    assert application_gray.results[0]["status"] == "compliant"
-    assert application_gray.results[0]["metadata"]["reason_code"] == "transfusion_customer_prompt"
-    assert application_gray.llm_call_count == 1
+    assert application_gray.results[0]["status"] == "non_compliant"
+    assert application_gray.results[0]["metadata"]["reason_code"] == (
+        "pretransfusion_assessment_incomplete"
+    )
+    assert application_gray.llm_call_count == 0
+    assert application_client.prompts == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("order_component", "record_component", "expected_status", "expected_reason"),
+    [
+        ("去白细胞悬浮红细胞", "去白细胞悬浮红细胞", "compliant", "requirement_satisfied"),
+        ("去白细胞悬浮红细胞", "血浆", "non_compliant", "requirement_violated"),
+    ],
+)
+async def test_049_compares_transfusion_order_with_record_without_billing(
+    monkeypatch,
+    order_component,
+    record_component,
+    expected_status,
+    expected_reason,
+):
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-049",),
+        source_rows={
+            "bloodtrans_record": [{
+                "document_id": "BT-049",
+                "record_content": f"输血记录：实际输注{record_component}2U。",
+            }],
+            "blood_application": [{
+                "application_id": "APP-049",
+                "transfuse_variety": order_component,
+                "transfuse_volume": "2",
+                "transfuse_volume_unit": "U",
+            }],
+            "inpat_nondrug_order": [{
+                "order_id": "ORDER-049",
+                "application_id": "APP-049",
+                "order_name": f"输注{order_component}",
+                "order_status": "已执行",
+            }],
+            "inpat_bill_item": [],
+        },
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-049",),
+        wrapper_rules=[_wrapper("LX0609-049")],
+        evidence_payload=_documents(inpat_bill_item=[]),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-049",),
+    )
+
+    reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
+    assert reduced.final_state.value == expected_status
+    assert reduced.reason_code == expected_reason
+    assert result.llm_call_count == result.total_tokens == 0
+    facts = dict(result.customer_display_facts)["LX0609-049"]
+    assert facts["billing_checked"] is False
+    assert facts["order_record_consistent"] is (expected_status == "compliant")
+
+
+@pytest.mark.asyncio
+async def test_049_one_aggregate_order_can_cover_multiple_matching_transfusion_records(monkeypatch):
+    session = _typed_decision_session(
+        selected_rule_ids=("LX0609-049",),
+        source_rows={
+            "bloodtrans_record": [
+                {"document_id": "BT-049-A", "record_content": "实际输注红细胞2U。"},
+                {"document_id": "BT-049-B", "record_content": "实际输注红细胞2U。"},
+            ],
+            "blood_application": [{
+                "application_id": "APP-049",
+                "transfuse_variety": "红细胞",
+            }],
+            "inpat_nondrug_order": [{
+                "order_id": "ORDER-049",
+                "application_id": "APP-049",
+                "order_name": "输注红细胞",
+                "order_status": "已执行",
+            }],
+        },
+    )
+    monkeypatch.setattr(
+        transfusion,
+        "read_luxian_0609_native_source_rows",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("no live read")),
+    )
+
+    result = await transfusion.execute_luxian_0609_native_transfusion_rules(
+        rule_ids=("LX0609-049",),
+        wrapper_rules=[_wrapper("LX0609-049")],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=None,
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-049",),
+    )
+
+    reduced = reduce_luxian_0609_rule_decision(result.decisions[0])
+    assert reduced.final_state.value == "compliant"
+    assert reduced.reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-049"]
+    assert facts["order_count"] == 1
+    assert facts["record_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -2849,7 +2969,7 @@ async def test_048_compares_component_and_dose_across_three_documents(
 
 
 @pytest.mark.asyncio
-async def test_conservative_transfusion_gaps_explain_missing_material_not_patient_defect(
+async def test_transfusion_contract_gaps_and_order_record_defect_remain_distinct(
     monkeypatch,
 ):
     monkeypatch.setattr(transfusion, "read_luxian_0609_native_source_rows", _reader)
@@ -2865,17 +2985,22 @@ async def test_conservative_transfusion_gaps_explain_missing_material_not_patien
         llm_client=_Client([]),
     )
 
-    assert [item["status"] for item in result.results] == ["data_gap"] * 4
+    assert [item["status"] for item in result.results] == [
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "non_compliant",
+    ]
     assert [item["metadata"]["reason_code"] for item in result.results] == [
         "consent_source_unavailable",
         "consent_signature_contract_unavailable",
         "pretransfusion_item_contract_unavailable",
-        "billing_linkage_source_unavailable",
+        "requirement_violated",
     ]
     assert all(
         item["metadata"]["data_gap_kind"] == "system_data_contract_gap"
         and item["metadata"]["gap_owner"] == "system_integration"
-        for item in result.results
+        for item in result.results[:3]
     )
     customer_copy = " ".join(
         str(item[field])
@@ -2921,7 +3046,9 @@ async def test_source_error_and_invalid_model_output_fail_closed_without_echo(mo
         source_schema=None,
         llm_client=_Client([f"not-json {secret}"]),
     )
-    assert invalid.results[0]["status"] == "data_gap"
+    assert invalid.results[0]["status"] == "non_compliant"
+    assert invalid.results[0]["metadata"]["reason_code"] == "requirement_violated"
+    assert invalid.llm_call_count == 0
     assert secret not in repr(invalid)
 
 

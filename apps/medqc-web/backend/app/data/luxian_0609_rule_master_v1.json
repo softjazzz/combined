@@ -393,10 +393,10 @@
     {
       "rule_id": "LX0609-049",
       "source_document": "输血医嘱",
-      "qc_point": "输血医嘱与收费不一致",
+      "qc_point": "输血医嘱与实际输血记录不一致",
       "implementation_status": "active",
       "policy_sources": ["sichuan_2026_handbook", "customer_confirmed"],
-      "policy_summary": "当前先评医嘱-输血记录一致；收费数据未接入时不评医嘱-收费一致，本任务不改变现有行为。"
+      "policy_summary": "当前仅核对输血医嘱与实际输血记录是否一致；收费数据未接入时不评价收费一致性，也不因收费资料缺失判数据不足。"
     },
     {
       "rule_id": "LX0609-050",

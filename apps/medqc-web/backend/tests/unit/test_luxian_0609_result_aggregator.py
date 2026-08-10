@@ -110,6 +110,56 @@ def test_critical_value_missing_result_detail_facts_are_preserved(rule_id):
     ("rule_id", "facts"),
     [
         (
+            "LX0609-059",
+            {
+                "failure_kind": "antimicrobial_course_documentation_missing",
+                "antimicrobials": ["美罗培南"],
+                "course_documented": False,
+            },
+        ),
+        (
+            "LX0609-068",
+            {
+                "failure_kind": "senior_discharge_approval_missing",
+                "discharge_date": "2026-07-13",
+                "checked_dates": ["2026-07-12", "2026-07-13"],
+                "checked_source": "daily_course_record,senior_course_record",
+                "approval_present": False,
+            },
+        ),
+        (
+            "LX0609-075",
+            {
+                "failure_kind": "invasive_procedure_course_record_missing",
+                "ordered_procedures": ["中心静脉置管术"],
+                "course_documented": False,
+            },
+        ),
+    ],
+)
+def test_extended_defect_facts_survive_customer_projection(rule_id, facts):
+    safe = safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts)
+
+    assert safe == facts
+    finalized = __import__(
+        "app.services.luxian_0609.canonical_result_finalizer",
+        fromlist=["finalize_luxian_0609_canonical_result"],
+    ).finalize_luxian_0609_canonical_result(
+        {
+            "rule_id": rule_id,
+            "status": "non_compliant",
+            "reason_code": "requirement_violated",
+            "customer_display_facts": safe,
+        }
+    )
+    assert finalized["status"] == "non_compliant"
+    assert finalized["reason_code"] == "requirement_violated"
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "facts"),
+    [
+        (
             "LX0609-020",
             {
                 "verification_kind": "consultation_execution_relation_check",
@@ -1540,9 +1590,27 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
                 "event_phase": "report",
                 "checked_sources": ["exam_lab_report", "course_record"],
                 "reviewed_record_scope": "首次病程记录及后续病程记录",
-                "source_document_ids": ["private-ct-report-document-id"],
+                "source_document_refs": [
+                    {
+                        "source_type": "exam_master",
+                        "source_document_id": "private-ct-report-document-id",
+                    },
+                    {
+                        "source_type": "daily_course_record",
+                        "source_document_id": "private-course-document-id",
+                    },
+                ],
             },
-            [{"source_type": "exam_master", "source_document_id": "private-ct-report-document-id"}],
+            [
+                {
+                    "source_type": "exam_master",
+                    "source_document_id": "private-ct-report-document-id",
+                },
+                {
+                    "source_type": "daily_course_record",
+                    "source_document_id": "private-course-document-id",
+                },
+            ],
         ),
         (
             "LX0609-034",

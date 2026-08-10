@@ -459,7 +459,6 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "mr_bloodtrans",
         "blood_application",
         "inpat_nondrug_order",
-        "inpat_bill_item",
     ),
     "LX0609-050": (
         "inpat_registration",

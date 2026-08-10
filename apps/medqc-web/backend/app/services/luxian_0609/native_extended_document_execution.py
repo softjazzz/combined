@@ -1230,7 +1230,19 @@ async def execute_luxian_0609_native_extended_document_rules(
                 )
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = "requirement_satisfied" if complete else "requirement_violated"
-                display.append((rule_id, {"checked_antimicrobials": used_names}))
+                display.append((rule_id, {
+                    (
+                        "verification_kind"
+                        if complete
+                        else "failure_kind"
+                    ): (
+                        "antimicrobial_course_documentation_complete"
+                        if complete
+                        else "antimicrobial_course_documentation_missing"
+                    ),
+                    "antimicrobials": list(used_names),
+                    "course_documented": complete,
+                }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=(
@@ -1336,7 +1348,19 @@ async def execute_luxian_0609_native_extended_document_rules(
                 complete = all(_has_any_text(daily_rows, (name,)) for name in ordered_names)
                 final_state = "compliant" if complete else "non_compliant"
                 reason_code = "requirement_satisfied" if complete else "required_document_missing"
-                display.append((rule_id, {"ordered_procedures": ordered_names}))
+                display.append((rule_id, {
+                    (
+                        "verification_kind"
+                        if complete
+                        else "failure_kind"
+                    ): (
+                        "invasive_procedure_course_record_complete"
+                        if complete
+                        else "invasive_procedure_course_record_missing"
+                    ),
+                    "ordered_procedures": list(ordered_names),
+                    "course_documented": complete,
+                }))
             decisions.append(_decision(
                 rule_id=rule_id, snapshot=evidence_snapshot,
                 source_keys=("inpat_nondrug_order", "daily_course_record"),
@@ -1985,7 +2009,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                         (
                             rule_id,
                             {
-                                "failure_kind": (
+                                (
+                                    "verification_kind"
+                                    if present
+                                    else "failure_kind"
+                                ): (
                                     "senior_discharge_approval_present"
                                     if present
                                     else "senior_discharge_approval_missing"

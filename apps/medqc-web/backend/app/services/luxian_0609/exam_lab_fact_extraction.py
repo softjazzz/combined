@@ -94,6 +94,7 @@ class ExamLabTextProjection:
     course_time_incomplete: bool = False
     course_projection_truncated: bool = False
     course_texts: Mapping[str, str] | None = None
+    source_document_refs: Mapping[str, tuple[str, str]] | None = None
 
     def __repr__(self) -> str:
         return (
@@ -268,7 +269,7 @@ def build_exam_lab_text_projection(
     *,
     rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
     horizon_unavailable_reason: str | None = None,
-    max_course_rows: int = 4,
+    max_course_rows: int = 8,
     max_row_chars: int = 2000,
     max_context_chars: int = 10000,
 ) -> ExamLabTextProjection:
@@ -280,6 +281,7 @@ def build_exam_lab_text_projection(
     )
     refs: set[str] = set()
     safe_refs: dict[str, str] = {}
+    source_document_refs: dict[str, tuple[str, str]] = {}
     course_times: dict[str, datetime | None] = {}
     course_texts: dict[str, str] = {}
     parts: list[str] = []
@@ -287,6 +289,9 @@ def build_exam_lab_text_projection(
     family_refs: dict[str, list[str]] = {"exam": [], "culture": []}
     generic_rows: dict[str, list[Mapping[str, Any]]] = {"exam": [], "culture": []}
     generic_refs: dict[str, list[str]] = {"exam": [], "culture": []}
+    non_course_entries: dict[
+        str, tuple[str, str, int, Mapping[str, Any], str]
+    ] = {}
     course_entries: list[tuple[int, str, int, Mapping[str, Any], str]] = []
 
     for source_position, source_key in enumerate(source_order, start=1):
@@ -306,8 +311,13 @@ def build_exam_lab_text_projection(
                 else _CULTURE_CANDIDATE_PATTERN
             )
             doc_ref = f"{prefix}{source_position:02d}-{row_index:02d}"
-            refs.add(doc_ref)
-            safe_refs[doc_ref] = _safe_ref(source_key, row_index, row)
+            non_course_entries[doc_ref] = (
+                family,
+                source_key,
+                row_index,
+                row,
+                text,
+            )
             is_target_candidate = bool(candidate_pattern.search(text))
             if is_target_candidate:
                 family_refs[family].append(doc_ref)
@@ -317,22 +327,23 @@ def build_exam_lab_text_projection(
                 # 后续由一次受控 LLM 确认目标事件或保持 unknown。
                 generic_refs[family].append(doc_ref)
                 generic_rows[family].append(row)
-            label = (
-                f"EVENT_DOC={doc_ref}|FAMILY={family}|SOURCE={source_key}"
-                if is_target_candidate
-                else f"CANDIDATE_DOC={doc_ref}|FAMILY={family}|SOURCE={source_key}"
-            )
-            parts.append(
-                f"[{label}] <UNTRUSTED_CLINICAL_TEXT>"
-                f"{_bounded_text(text, max_row_chars) or '（无正文）'}"
-                "</UNTRUSTED_CLINICAL_TEXT>"
-            )
 
     def build_event(family: str) -> ExamLabSingleEvent | None:
         target_confirmed = bool(family_refs[family])
-        rows = list(family_rows[family] if target_confirmed else generic_rows[family])
+        generic_projection_limit = 8
+        generic_projection_truncated = (
+            not target_confirmed
+            and len(generic_rows[family]) > generic_projection_limit
+        )
+        rows = list(
+            family_rows[family]
+            if target_confirmed
+            else generic_rows[family][:generic_projection_limit]
+        )
         row_refs = list(
-            family_refs[family] if target_confirmed else generic_refs[family]
+            family_refs[family]
+            if target_confirmed
+            else generic_refs[family][:generic_projection_limit]
         )
         if target_confirmed:
             target_identities = {
@@ -352,6 +363,11 @@ def build_exam_lab_text_projection(
         if not row_refs:
             return None
         conflicts: set[str] = set()
+        if generic_projection_truncated:
+            # 泛检查/检验记录没有足够的结构化类型用于确认目标事件。内部只投影
+            # 有界样本供模型解释，截断本身必须保留为关联冲突，不能把样本沉默
+            # 当作“本次没有CT/MRI或培养”的可靠阴性。
+            conflicts.add("event_binding")
         event_identities = {
             _event_identity(family, row, index)
             for index, row in enumerate(rows, start=1)
@@ -419,6 +435,35 @@ def build_exam_lab_text_projection(
 
     imaging_event = build_event("exam")
     culture_event = build_event("culture")
+
+    # 非病程材料只投递事件实际绑定的文书。旧实现先把所有泛检查、泛检验行
+    # 写入上下文，再在 Python 中选事件；真实病例中几十条无关主表会因此触发
+    # 上下文上限，并把已唯一绑定的 MRI 一并错误降级为来源不可用。
+    target_refs = {
+        ref
+        for event in (imaging_event, culture_event)
+        if event is not None
+        for ref in event.document_refs
+    }
+    for doc_ref, (_, source_key, row_index, row, text) in non_course_entries.items():
+        if doc_ref not in target_refs:
+            continue
+        refs.add(doc_ref)
+        safe_refs[doc_ref] = _safe_ref(source_key, row_index, row)
+        document_id = _clean(row.get("document_id"))
+        if document_id:
+            source_document_refs[doc_ref] = (source_key, document_id)
+        family = "exam" if source_key.startswith("exam") else "culture"
+        label = (
+            f"EVENT_DOC={doc_ref}|FAMILY={family}|SOURCE={source_key}"
+            if doc_ref in family_refs[family]
+            else f"CANDIDATE_DOC={doc_ref}|FAMILY={family}|SOURCE={source_key}"
+        )
+        parts.append(
+            f"[{label}] <UNTRUSTED_CLINICAL_TEXT>"
+            f"{_bounded_text(text, max_row_chars) or '（无正文）'}"
+            "</UNTRUSTED_CLINICAL_TEXT>"
+        )
 
     selected_course_entries: set[tuple[int, str, int]] = set()
     parsed_course_entries = tuple(
@@ -490,6 +535,9 @@ def build_exam_lab_text_projection(
         doc_ref = f"D{source_position:02d}-{row_index:02d}"
         refs.add(doc_ref)
         safe_refs[doc_ref] = _safe_ref(source_key, row_index, row)
+        document_id = _clean(row.get("document_id"))
+        if document_id:
+            source_document_refs[doc_ref] = (source_key, document_id)
         course_times[doc_ref] = _parse_datetime(row.get("record_time"))
         course_texts[doc_ref] = text
         parts.append(
@@ -530,6 +578,7 @@ def build_exam_lab_text_projection(
         ),
         course_projection_truncated=course_projection_truncated,
         course_texts=dict(course_texts),
+        source_document_refs=dict(source_document_refs),
     )
 
 

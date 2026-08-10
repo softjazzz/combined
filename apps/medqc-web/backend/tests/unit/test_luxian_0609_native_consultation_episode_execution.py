@@ -2267,13 +2267,33 @@ async def test_typed_020_023_use_final_status_and_safe_snapshot_refs(monkeypatch
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "daily_rows",
+    "daily_rows,linked_ref,linked_quote",
     [
-        _rows(*[f"候选病程{index}" for index in range(13)]),
-        [{"document_title": "病程", "record_time": "2026-07-20 01:00:00", "record_content": "x" * 1001}],
+        (
+            _rows(*[
+                *(f"候选病程{index}" for index in range(12)),
+                "已按会诊意见启动抗感染治疗",
+            ], hour_start=2, action_suffix=False),
+            "daily_course_record-13",
+            "已按会诊意见启动抗感染治疗",
+        ),
+        (
+            [{
+                "document_title": "病程",
+                "record_time": "2026-07-20 02:00:00",
+                "record_content": "已按会诊意见启动抗感染治疗" + "x" * 1200,
+            }],
+            "daily_course_record-1",
+            "已按会诊意见启动抗感染治疗",
+        ),
     ],
 )
-async def test_stage_two_candidate_limit_or_content_budget_is_data_gap_without_second_call(monkeypatch, daily_rows):
+async def test_many_or_long_course_candidates_remain_available_to_stage_two(
+    monkeypatch,
+    daily_rows,
+    linked_ref,
+    linked_quote,
+):
     source_rows = {
         "consultation_record": _rows("申请与明确会诊意见"),
         "daily_course_record": daily_rows,
@@ -2281,21 +2301,60 @@ async def test_stage_two_candidate_limit_or_content_budget_is_data_gap_without_s
         "labtest_item_report": [], "surgery_record": [],
     }
     monkeypatch.setattr(episode, "read_luxian_0609_native_source_rows", lambda *, source_key, **_: source_rows[source_key])
-    client = _SequentialClient(_payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]))
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": [linked_ref],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [linked_quote],
+            "confidence": "high",
+        }),
+    )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert {item["status"] for item in result.results} == {"data_gap"}
-    assert result.llm_call_count == 1
-    assert len(client.prompts) == 1
-    diagnostics = result.results[0]["metadata"]["consultation_link_diagnostics"]
-    assert diagnostics[0]["link_state"] in {"no_candidate", "ambiguous"}
-    assert diagnostics[0]["unknown_reason"] == "source_truncated"
-    assert "daily_course_record" in diagnostics[0]["source_incomplete_types"]
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    assert len(client.prompts) == 2
+    assert linked_ref in client.prompts[1]
 
 
 @pytest.mark.asyncio
-async def test_typed_candidate_scope_incomplete_returns_safe_data_gap_decision():
+async def test_course_candidate_over_hard_content_budget_is_data_gap_without_second_call(monkeypatch):
+    source_rows = {
+        "consultation_record": _rows("申请与明确会诊意见"),
+        "daily_course_record": [{
+            "document_title": "病程",
+            "record_time": "2026-07-20 01:00:00",
+            "record_content": "x" * 5001,
+        }],
+        "senior_course_record": [], "inpat_drug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
+    )
+
+    assert {item["status"] for item in result.results} == {"data_gap"}
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+
+
+@pytest.mark.asyncio
+async def test_typed_complete_course_scope_over_twelve_rows_reaches_stage_two():
     secret = "CONSULTATION_CANDIDATE_SCOPE_SECRET_20260722"
     session = _window_session(rows_by_source={
         "inpat_registration": ({"admission_datetime": "2026-07-20 00:00:00"},),
@@ -2307,6 +2366,15 @@ async def test_typed_candidate_scope_incomplete_returns_safe_data_gap_decision()
     })
     client = _SequentialClient(
         _payload(episodes=[_episode("consultation_record-1", ["consultation_record-1"])]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-13"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [f"{secret}_12"],
+            "confidence": "high",
+        }),
     )
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"),
@@ -2321,24 +2389,24 @@ async def test_typed_candidate_scope_incomplete_returns_safe_data_gap_decision()
     )
     assert result.results == ()
     assert [item.evidence_state for item in result.decisions] == [
-        episode.EvidenceState.DATA_GAP,
-        episode.EvidenceState.DATA_GAP,
+        episode.EvidenceState.SUFFICIENT,
+        episode.EvidenceState.SUFFICIENT,
     ]
     assert [item.reason_code for item in result.decisions] == [
-        "candidate_scope_incomplete",
-        "candidate_scope_incomplete",
+        "requirement_satisfied",
+        "requirement_satisfied",
     ]
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
         expected_rule_ids=("LX0609-020", "LX0609-023"),
         snapshot=session.snapshot,
     )
-    assert [item.final_state.value for item in reduced] == ["data_gap", "data_gap"]
+    assert [item.final_state.value for item in reduced] == ["compliant", "compliant"]
     assert [item.reason_code for item in reduced] == [
-        "candidate_scope_incomplete",
-        "candidate_scope_incomplete",
+        "requirement_satisfied",
+        "requirement_satisfied",
     ]
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
     assert secret not in repr(result)
 
 

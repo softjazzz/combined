@@ -392,7 +392,7 @@ async def test_068_binds_discharge_gate_and_senior_opinion_without_daily_source(
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT, reduced.reason_code
     assert dict(result.customer_display_facts)["LX0609-068"] == {
-        "failure_kind": "senior_discharge_approval_present",
+        "verification_kind": "senior_discharge_approval_present",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
         "checked_source": "senior_course_record",
@@ -454,7 +454,7 @@ async def test_068_accepts_complete_automatic_discharge_process_in_daily_course(
 
     assert reduced.final_state is CustomerFinalState.COMPLIANT
     assert dict(result.customer_display_facts)["LX0609-068"] == {
-        "failure_kind": "senior_discharge_approval_present",
+        "verification_kind": "senior_discharge_approval_present",
         "discharge_date": "2026-07-03",
         "checked_dates": ("2026-07-02", "2026-07-03"),
         "checked_source": "daily_course_record",
@@ -1937,6 +1937,24 @@ async def test_057_empiric_antimicrobial_without_reason_is_non_compliant() -> No
 
 
 @pytest.mark.asyncio
+async def test_059_antimicrobial_without_course_record_delivers_defect_facts() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-059",
+        {
+            "inpat_drug_order": ({"generic_name": "美罗培南"},),
+            "daily_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-059"] == {
+        "failure_kind": "antimicrobial_course_documentation_missing",
+        "antimicrobials": ["美罗培南"],
+        "course_documented": False,
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("evaluation_time", "expected_interval"),
     [
@@ -2729,3 +2747,21 @@ async def test_075_invasive_order_with_matching_record_is_compliant() -> None:
         },
     )
     assert reduced.final_state is CustomerFinalState.COMPLIANT
+
+
+@pytest.mark.asyncio
+async def test_075_invasive_order_without_course_record_delivers_defect_facts() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-075",
+        {
+            "inpat_nondrug_order": ({"order_name": "中心静脉置管术"},),
+            "daily_course_record": (),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NON_COMPLIANT
+    assert dict(result.customer_display_facts)["LX0609-075"] == {
+        "failure_kind": "invasive_procedure_course_record_missing",
+        "ordered_procedures": ["中心静脉置管"],
+        "course_documented": False,
+    }
