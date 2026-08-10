@@ -623,8 +623,19 @@ def build_exam_lab_text_projection(
                 key,
             ),
         )[:max_course_rows])
+    course_position_by_entry = {
+        key: position
+        for position, key in enumerate(
+            sorted(
+                selected_course_entries,
+                key=lambda item: f"D{item[0]:02d}-{item[2]:02d}",
+            ),
+            start=1,
+        )
+    }
     for source_position, source_key, row_index, row, text in course_entries:
-        if (source_position, source_key, row_index) not in selected_course_entries:
+        entry_key = (source_position, source_key, row_index)
+        if entry_key not in selected_course_entries:
             continue
         doc_ref = f"D{source_position:02d}-{row_index:02d}"
         refs.add(doc_ref)
@@ -635,7 +646,8 @@ def build_exam_lab_text_projection(
         course_times[doc_ref] = _parse_datetime(row.get("record_time"))
         course_texts[doc_ref] = text
         parts.append(
-            f"[COURSE_DOC={doc_ref}|SOURCE={source_key}] "
+            f"[COURSE_DOC_POSITION={course_position_by_entry[entry_key]}|"
+            f"COURSE_DOC={doc_ref}|SOURCE={source_key}] "
             f"<UNTRUSTED_CLINICAL_TEXT>"
             f"{_bounded_text(text, max_row_chars) or '（无正文）'}"
             "</UNTRUSTED_CLINICAL_TEXT>"
@@ -872,7 +884,7 @@ def parse_exam_lab_fact_response(
             raise ExamLabFactParseError(
                 "scope" if fact_key not in expected_pairs or fact_key in covered else "value"
             )
-        if (
+        reference_invalid = (
             not isinstance(course_positions, list)
             or any(
                 not isinstance(position, int) or isinstance(position, bool)
@@ -880,11 +892,16 @@ def parse_exam_lab_fact_response(
             )
             or len(course_positions) != len(set(course_positions))
             or any(position < 1 or position > len(allowed_course) for position in course_positions)
-        ):
+        )
+        if reference_invalid and not multi_event_schema:
             raise ExamLabFactParseError("evidence_ref")
-        normalized_course = tuple(
-            course_refs_in_position_order[position - 1]
-            for position in course_positions
+        normalized_course = (
+            ()
+            if reference_invalid
+            else tuple(
+                course_refs_in_position_order[position - 1]
+                for position in course_positions
+            )
         )
         family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
         event = events_for_family(projection, family)[event_position - 1]
@@ -914,6 +931,7 @@ def parse_exam_lab_fact_response(
             if positive == "negative":
                 semantic = "absent"
                 normalized_course = ()
+                reference_invalid = False
         elif rule_id == "LX0609-012" and event is not None and event.target_confirmed:
             # 012 的阳性门控只能来自 Python 识别的原文明确“阳性”；模型无权
             # 把其他临床描述提升为阳性，否则保持资料不足。
@@ -949,17 +967,37 @@ def parse_exam_lab_fact_response(
             # 避免模型虚构 COURSE_DOC 或输出 present+空引用导致整病例失败。
             normalized_course = ()
             semantic = "absent"
+            reference_invalid = False
         # 单事件口径下，EVENT_DOC 由 Python 唯一绑定；模型只选择病程引用。
         # 不让模型漏写/多写 evidence_refs 破坏整病例，但病程引用仍必须来自
         # 本次裁剪白名单且与 semantic_state 严格一致。
-        normalized_evidence = tuple(sorted((*event_refs, *normalized_course)))
-        if (
-            not normalized_evidence
-            or any(item not in allowed_course for item in normalized_course)
+        reference_invalid = reference_invalid or (
+            any(item not in allowed_course for item in normalized_course)
             or any(item not in allowed_event_course for item in normalized_course)
             or (semantic == "present" and not normalized_course)
             or (semantic != "present" and normalized_course)
             or (applicability != "applicable" and semantic == "present")
+        )
+        if reference_invalid and not multi_event_schema:
+            raise ExamLabFactParseError("evidence_ref")
+        if reference_invalid:
+            # 单个事件的模型引用不合法时，只将该事件保守降为 unknown。
+            # JSON、schema 和规则/事件范围错误仍由上方整批失败关闭；这里避免
+            # 一条跨窗口引用把同批所有规则都升级为技术异常。
+            normalized_course = ()
+            semantic = "unknown"
+            if rule_id not in {"LX0609-012", "LX0609-015"}:
+                applicability = "unknown"
+                positive = "not_relevant"
+            elif event is not None and event.positive_hint == "positive":
+                applicability = "applicable"
+                positive = "positive"
+            else:
+                applicability = "unknown"
+                positive = "unknown"
+        normalized_evidence = tuple(sorted((*event_refs, *normalized_course)))
+        if (
+            not normalized_evidence
             or (
                 rule_id not in {"LX0609-012", "LX0609-015"}
                 and positive != "not_relevant"

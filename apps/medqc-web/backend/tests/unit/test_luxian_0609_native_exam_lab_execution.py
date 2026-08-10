@@ -2714,11 +2714,12 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     assert "event_position" in client.prompts[0]
+    assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]
     assert "每个rule_id各一条" not in client.prompts[0]
 
 
-def test_multi_event_parser_rejects_course_outside_the_event_window():
+def test_multi_event_parser_localizes_course_outside_the_event_window():
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "exam_master": (
@@ -2775,12 +2776,19 @@ def test_multi_event_parser_rejects_course_outside_the_event_window():
         ],
     }
 
-    with pytest.raises(ValueError, match="evidence ref mismatch"):
-        parse_exam_lab_fact_response(
-            response={"content": json.dumps(response, ensure_ascii=False)},
-            selected_rule_ids=("LX0609-011",),
-            projection=projection,
-        )
+    facts = parse_exam_lab_fact_response(
+        response={"content": json.dumps(response, ensure_ascii=False)},
+        selected_rule_ids=("LX0609-011",),
+        projection=projection,
+    )
+
+    assert facts[0].event_position == 1
+    assert facts[0].applicability == "unknown"
+    assert facts[0].semantic_state == "unknown"
+    assert facts[0].course_doc_refs == ()
+    assert facts[1].event_position == 2
+    assert facts[1].semantic_state == "present"
+    assert len(facts[1].course_doc_refs) == 1
 
 
 @pytest.mark.asyncio
