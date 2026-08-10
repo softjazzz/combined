@@ -1,5 +1,3 @@
-﻿from __future__ import annotations
-
 """
 病案首页自动生成服务（LLM 抽取版）
 
@@ -8,6 +6,8 @@
 - 调用 LLM 分步抽取各模块字段（患者信息、住院信息、诊断、手术等）
 - 返回结构化的 FrontPageDraft
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple, Coroutine
@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from ..schemas.frontpage import FrontPageDraft
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
+from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,9 @@ class FrontPageLLMClient:
         self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
         self.api_key = s.LLM_API_KEY
         self.model = s.LLM_MODEL
-        self.provider_code = "alibaba"
+        self.provider_code = str(
+            getattr(s, "LLM_DEFAULT_PROVIDER", None) or "unknown"
+        )
         self.timeout_seconds = 60
         self.temperature = 0.1
         self.max_tokens = 4000
@@ -98,11 +101,17 @@ class FrontPageLLMClient:
         }
 
         try:
-            result = await safe_post_json(
-                url=f"{self.api_endpoint}/chat/completions",
-                headers=headers,
-                payload=payload,
-                timeout_seconds=self.timeout_seconds,
+            result = await observe_llm_http_attempt(
+                lambda: safe_post_json(
+                    url=f"{self.api_endpoint}/chat/completions",
+                    headers=headers,
+                    payload=payload,
+                    timeout_seconds=self.timeout_seconds,
+                ),
+                provider_code=self.provider_code,
+                model=self.model,
+                business_scene="frontpage_extraction",
+                executor_key="frontpage_extraction",
             )
             choices = result.get("choices", [])
             if choices:
@@ -1825,7 +1834,7 @@ class FrontPageExtractionService:
         fp_data["other_medical_info"] = self._normalize_other_medical_info_structure(
             fp_data.get("other_medical_info")
         )
-        logger.info(f"_prefill_from_cdm 完成: 已从源头表填充首页草稿")
+        logger.info("_prefill_from_cdm 完成: 已从源头表填充首页草稿")
         return fp_data
 
     @staticmethod
@@ -2164,7 +2173,7 @@ class FrontPageExtractionService:
                             if val and str(val).strip():
                                 sections.append(f"{label}: {val}")
                         sections.append("")
-                        logger.info(f"  admission_record 表查询成功")
+                        logger.info("  admission_record 表查询成功")
                 except Exception as e:
                     logger.warning(f"  admission_record 表查询失败: {e}")
 
@@ -2189,7 +2198,7 @@ class FrontPageExtractionService:
                             if val and str(val).strip():
                                 sections.append(f"{label}: {val}")
                         sections.append("")
-                        logger.info(f"  discharge_record 表查询成功")
+                        logger.info("  discharge_record 表查询成功")
                 except Exception as e:
                     logger.warning(f"  discharge_record 表查询失败: {e}")
 
@@ -2238,7 +2247,7 @@ class FrontPageExtractionService:
                                 if content and str(content).strip():
                                     sections.append(f"【{label} - {idx}】\n{content}\n")
                             logger.info(f"  {table_name} 表查询成功: {len(rows)} 条")
-                    except Exception as e:
+                    except Exception:
                         # 兼容有些表还没创建或查询异常的情况
                         pass
 

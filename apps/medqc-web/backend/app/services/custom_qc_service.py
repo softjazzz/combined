@@ -11,6 +11,7 @@ from starlette import status
 from ..core.http import safe_post_json
 from ..core.settings import get_settings
 from .llm_config_loader import LLMConfigLoader
+from .llm_observability import observe_llm_http_attempt
 from .document_domain_alignment import align_document_domain_fields
 from .sichuan_qc_service import SichuanQCService
 
@@ -206,30 +207,40 @@ async def generate_custom_prompt(
     if not target_url.endswith("/chat/completions"):
         target_url = f"{target_url}/chat/completions"
 
-    llm_response = await safe_post_json(
-        target_url,
-        {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        {
-            "model": model,
-            "temperature": 0.2,
-            "messages": [
-                {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": _build_prompt_generation_user_prompt(
-                        scene=scene,
-                        document_type=document_type,
-                        rule_name=rule_name,
-                        description=description,
-                        severity=severity,
-                    ),
-                },
-            ],
-        },
-        timeout_seconds=60,
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    payload = {
+        "model": model,
+        "temperature": 0.2,
+        "messages": [
+            {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": _build_prompt_generation_user_prompt(
+                    scene=scene,
+                    document_type=document_type,
+                    rule_name=rule_name,
+                    description=description,
+                    severity=severity,
+                ),
+            },
+        ],
+    }
+    llm_response = await observe_llm_http_attempt(
+        lambda: safe_post_json(
+            target_url,
+            headers,
+            payload,
+            timeout_seconds=60,
+        ),
+        provider_code=str(
+            getattr(settings, "LLM_DEFAULT_PROVIDER", None) or "unknown"
+        ),
+        model=str(model),
+        business_scene="custom_qc_prompt_generation",
+        executor_key="custom_qc_prompt_generation",
     )
 
     if isinstance(llm_response, dict) and llm_response.get("__error__"):

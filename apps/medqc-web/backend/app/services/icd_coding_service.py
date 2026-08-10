@@ -1,5 +1,3 @@
-﻿from __future__ import annotations
-
 """
 ICD 编码推荐服务
 
@@ -9,12 +7,15 @@ ICD 编码推荐服务
 - 复用 DRG/DIP 模块的编码库
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict, List, Optional
 import logging
 import json
 
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
+from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +81,15 @@ class ICDCodingService:
             self.api_endpoint = llm_config.get("api_endpoint")
             self.api_key = llm_config.get("api_key")
             self.model = llm_config.get("model", "qwen-max")
+            self.provider_code = str(llm_config.get("provider_code") or "unknown")
         else:
             s = get_settings()
             self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
             self.api_key = s.LLM_API_KEY
             self.model = s.LLM_MODEL
+            self.provider_code = str(
+                getattr(s, "LLM_DEFAULT_PROVIDER", None) or "unknown"
+            )
 
         self._use_llm = bool(self.api_endpoint and self.api_key)
         logger.info(f"ICDCodingService 初始化: use_llm={self._use_llm}")
@@ -217,11 +222,17 @@ class ICDCodingService:
             "enable_thinking": False,
         }
 
-        result = await safe_post_json(
-            url=f"{self.api_endpoint}/chat/completions",
-            headers=headers,
-            payload=payload,
-            timeout_seconds=30,
+        result = await observe_llm_http_attempt(
+            lambda: safe_post_json(
+                url=f"{self.api_endpoint}/chat/completions",
+                headers=headers,
+                payload=payload,
+                timeout_seconds=30,
+            ),
+            provider_code=self.provider_code,
+            model=self.model,
+            business_scene="icd_coding",
+            executor_key="icd_coding",
         )
 
         choices = result.get("choices", [])

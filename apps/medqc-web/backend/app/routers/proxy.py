@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
-from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
+from ..core.response import StatusCode, get_trace_id
 from ..core.http import safe_post_json
 from ..core.settings import get_settings
+from ..services.llm_observability import (
+    llm_observation_context,
+    observe_llm_http_attempt,
+)
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-proxy"])
 
@@ -19,6 +23,12 @@ async def llm_parse_text_proxy(
     api_endpoint = str(api_config.get("apiEndpoint") or settings.LLM_API_ENDPOINT or "").strip()
     api_key = str(api_config.get("apiKey") or settings.LLM_API_KEY or "").strip()
     model_name = str(request_body.get("model") or api_config.get("model") or settings.LLM_MODEL or "").strip()
+    provider_code = str(
+        api_config.get("providerCode")
+        or api_config.get("provider_code")
+        or getattr(settings, "LLM_DEFAULT_PROVIDER", None)
+        or "unknown"
+    ).strip()
     if model_name and not request_body.get("model"):
         request_body["model"] = model_name
 
@@ -54,12 +64,23 @@ async def llm_parse_text_proxy(
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        result = await safe_post_json(
-            api_endpoint,
-            headers,
-            request_body,
-            timeout_seconds=max(1, int(settings.LLM_TIMEOUT_SECONDS)),
-        )
+        with llm_observation_context(
+            business_scene="legacy_llm_proxy",
+            root_job_id=get_trace_id(request),
+            executor_key="legacy_llm_proxy",
+        ):
+            result = await observe_llm_http_attempt(
+                lambda: safe_post_json(
+                    api_endpoint,
+                    headers,
+                    request_body,
+                    timeout_seconds=max(1, int(settings.LLM_TIMEOUT_SECONDS)),
+                ),
+                provider_code=provider_code,
+                model=model_name,
+                business_scene="legacy_llm_proxy",
+                executor_key="legacy_llm_proxy",
+            )
         # 若上游返回错误，透传其状态码与消息
         if isinstance(result, dict) and result.get("__error__"):
             return JSONResponse(status_code=int(result.get("__status__", StatusCode.BAD_GATEWAY)), content=result.get("body") or {"error": "UpstreamError"})

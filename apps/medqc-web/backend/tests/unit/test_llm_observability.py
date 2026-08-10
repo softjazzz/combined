@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+import app.services.llm_observability as llm_observability_module
 import app.services.qc_llm_client as qc_llm_client_module
 from app.services.llm_observability import (
     LLMObservabilityRecorder,
@@ -40,6 +41,7 @@ async def test_generate_persists_one_safe_http_attempt_with_real_usage(monkeypat
     monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
     store = _MemoryEventStore()
     recorder = LLMObservabilityRecorder(store=store)
+    monkeypatch.setattr(llm_observability_module, "_TEST_RECORDER", recorder)
     client = SichuanQCLLMClient(
         config={
             "api_endpoint": "https://api.deepseek.com",

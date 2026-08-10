@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 疾病诊断和手术操作画像服务 (F13)
 
@@ -9,14 +7,16 @@ from __future__ import annotations
 3. 首页书写差异分析 - 校验首页与病历画像一致性
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict, List, Literal, Optional
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
 import logging
 import json
 
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
+from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -160,11 +160,15 @@ class DiagnosisSurgeryProfilingService:
             self.api_endpoint = llm_config.get("api_endpoint")
             self.api_key = llm_config.get("api_key")
             self.model = llm_config.get("model", "qwen-max")
+            self.provider_code = str(llm_config.get("provider_code") or "unknown")
         else:
             s = get_settings()
             self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
             self.api_key = s.LLM_API_KEY
             self.model = s.LLM_MODEL
+            self.provider_code = str(
+                getattr(s, "LLM_DEFAULT_PROVIDER", None) or "unknown"
+            )
 
         self._use_llm = bool(self.api_endpoint and self.api_key)
         logger.info(f"DiagnosisSurgeryProfilingService 初始化: use_llm={self._use_llm}")
@@ -308,7 +312,6 @@ class DiagnosisSurgeryProfilingService:
                 ))
         
         # 手术差异
-        profile_proc_names = {s.surgery_name.lower().strip() for s in profile.surgery_verification}
         frontpage_proc_names = {p.lower().strip() for p in (frontpage_procedures or [])}
         
         # 病历中有但首页未填
@@ -369,11 +372,17 @@ class DiagnosisSurgeryProfilingService:
             base = self.api_endpoint.rstrip("/")
             if not base.endswith("/v1"):
                 base = f"{base}/v1"
-            result = await safe_post_json(
-                url=f"{base}/chat/completions",
-                headers=headers,
-                payload=payload,
-                timeout_seconds=60,
+            result = await observe_llm_http_attempt(
+                lambda: safe_post_json(
+                    url=f"{base}/chat/completions",
+                    headers=headers,
+                    payload=payload,
+                    timeout_seconds=60,
+                ),
+                provider_code=self.provider_code,
+                model=self.model,
+                business_scene="diagnosis_surgery_profiling",
+                executor_key="diagnosis_surgery_profiling",
             )
             choices = result.get("choices", [])
             if choices:

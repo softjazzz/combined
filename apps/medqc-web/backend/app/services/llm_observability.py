@@ -16,7 +16,7 @@ import hmac
 import logging
 import os
 import time
-from typing import Any, Awaitable, Iterator, Mapping, Optional, Protocol
+from typing import Any, Awaitable, Callable, Iterator, Mapping, Optional, Protocol, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -202,6 +202,9 @@ _DEFAULT_RECORDER = LLMObservabilityRecorder()
 _TEST_RECORDER = LLMObservabilityRecorder(store=NullLLMCallEventStore())
 
 
+_LLM_HTTP_RESULT = TypeVar("_LLM_HTTP_RESULT", bound=Mapping[str, Any])
+
+
 def get_llm_observability_recorder() -> LLMObservabilityRecorder:
     if os.getenv("PYTEST_CURRENT_TEST"):
         return _TEST_RECORDER
@@ -291,9 +294,32 @@ def observed_usage(result: Mapping[str, Any]) -> Optional[dict[str, int]]:
     }
     if not any(key in usage for key in recognized_keys):
         return None
-    input_tokens = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
-    output_tokens = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
-    total_tokens = int(usage.get("total_tokens") or usage.get("total") or (input_tokens + output_tokens))
+    if not any(key in usage for key in ("prompt_tokens", "input_tokens")):
+        return None
+    if not any(key in usage for key in ("completion_tokens", "output_tokens")):
+        return None
+    for key in recognized_keys:
+        if key not in usage:
+            continue
+        value = usage[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+
+    input_tokens = int(
+        usage["prompt_tokens"]
+        if "prompt_tokens" in usage
+        else usage.get("input_tokens", 0)
+    )
+    output_tokens = int(
+        usage["completion_tokens"]
+        if "completion_tokens" in usage
+        else usage.get("output_tokens", 0)
+    )
+    total_tokens = int(
+        usage["total_tokens"]
+        if "total_tokens" in usage
+        else usage.get("total", input_tokens + output_tokens)
+    )
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -327,3 +353,84 @@ def safe_status_for_exception(error: BaseException) -> tuple[str, str]:
     if isinstance(error, (ValueError, RuntimeError)):
         return "configuration_error", "configuration"
     return "unclassified", "unclassified"
+
+
+@contextmanager
+def _llm_http_attempt_context(
+    *,
+    business_scene: str,
+    executor_key: str,
+) -> Iterator[None]:
+    """为独立模型出口补齐安全分类，同时保留外层任务/病例上下文。"""
+
+    current = _OBSERVATION_CONTEXT.get()
+    token = _OBSERVATION_CONTEXT.set(
+        LLMObservationContext(
+            business_scene=(
+                current.business_scene
+                if current.business_scene != "unclassified"
+                else str(business_scene or "unclassified")
+            ),
+            root_job_id=current.root_job_id,
+            record_key_hash=current.record_key_hash,
+            rule_set_key=current.rule_set_key,
+            rule_set_version=current.rule_set_version,
+            executor_key=str(executor_key or "unclassified"),
+        )
+    )
+    try:
+        yield
+    finally:
+        _OBSERVATION_CONTEXT.reset(token)
+
+
+async def observe_llm_http_attempt(
+    request: Callable[[], Awaitable[_LLM_HTTP_RESULT]],
+    *,
+    provider_code: str,
+    model: str,
+    business_scene: str,
+    executor_key: str,
+    model_role: str = "first_pass",
+    recorder: Optional[LLMObservabilityRecorder] = None,
+) -> _LLM_HTTP_RESULT:
+    """记录一次真实模型 HTTP 尝试，并原样返回上游结果。
+
+    ``request`` 闭包可持有请求所需的敏感参数，但本边界只接收和持久化脱敏
+    元数据，不读取或记录提示词、响应正文、端点、密钥与异常正文。
+    """
+
+    active_recorder = recorder or get_llm_observability_recorder()
+    with _llm_http_attempt_context(
+        business_scene=business_scene,
+        executor_key=executor_key,
+    ):
+        event_id, started_timestamp = await active_recorder.start_attempt(
+            logical_call_id=str(uuid4()),
+            attempt_no=1,
+            provider_code=provider_code,
+            model=model,
+            model_role=model_role,
+        )
+        try:
+            result = await request()
+        except BaseException as error:
+            status, safe_error_kind = safe_status_for_exception(error)
+            await active_recorder.finish_attempt(
+                event_id=event_id,
+                started_timestamp=started_timestamp,
+                status=status,
+                safe_error_kind=safe_error_kind,
+                usage=None,
+            )
+            raise
+
+        status, safe_error_kind = safe_status_for_http_result(result)
+        await active_recorder.finish_attempt(
+            event_id=event_id,
+            started_timestamp=started_timestamp,
+            status=status,
+            safe_error_kind=safe_error_kind,
+            usage=observed_usage(result),
+        )
+        return result

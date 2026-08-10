@@ -26,6 +26,8 @@ from ..services.frontpage_report_generation_service import (
     FrontPageReportInputError,
     default_frontpage_report_generation_service,
 )
+from ..services.frontpage_export_service import FrontpageExportService, ExportFormat
+from ..services.llm_observability import llm_observation_context
 from ..services.medical_records.maintenance_service import save_ai_frontpage_draft
 from ..services.frontpage_settings import load_frontpage_settings, resolve_force_llm
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
@@ -59,6 +61,27 @@ def _resolve_visit_identity(visit_id: str) -> Dict[str, Optional[str]]:
             "patient_id": record.patient_id,
             "institute_id": record.institute_id,
         }
+
+
+def _observation_record_identity(
+    visit_id: str,
+) -> Optional[tuple[str, str, str]]:
+    if not str(visit_id or "").strip():
+        return None
+    try:
+        identity = _resolve_visit_identity(visit_id)
+    except Exception as error:
+        logger.warning(
+            "frontpage_observation_identity_unavailable error_type=%s",
+            type(error).__name__,
+        )
+        return None
+    parts = (
+        str(identity.get("institute_id") or "").strip(),
+        str(identity.get("patient_id") or "").strip(),
+        str(identity.get("visit_id") or "").strip(),
+    )
+    return parts if all(parts) else None
 
 
 
@@ -301,13 +324,23 @@ async def generate_frontpage_report_draft(
         )
 
     try:
-        result = await service.generate(
-            scene=payload.report_scene or payload.scene,
-            medical_text=payload.medical_text,
-            documents=[doc.model_dump() for doc in payload.documents] if payload.documents else None,
-            visit_id=payload.visit_id,
-            patient_id=payload.patient_id,
-        )
+        with llm_observation_context(
+            business_scene="frontpage_report_generation",
+            root_job_id=trace_id,
+            record_identity=_observation_record_identity(payload.visit_id or ""),
+            executor_key="frontpage_report_generation",
+        ):
+            result = await service.generate(
+                scene=payload.report_scene or payload.scene,
+                medical_text=payload.medical_text,
+                documents=(
+                    [doc.model_dump() for doc in payload.documents]
+                    if payload.documents
+                    else None
+                ),
+                visit_id=payload.visit_id,
+                patient_id=payload.patient_id,
+            )
         return success_response(
             data=result,
             message="生成病案首页和医保结算清单草稿成功",
@@ -368,22 +401,39 @@ async def auto_generate_frontpage_draft(
                 user_id=user_id,
             )
 
+        observation_root_job_id = run_id or trace_id
+        observation_record_identity = _observation_record_identity(visit_id_for_state)
+
         source_medical_text: Optional[str] = None
         source_type = "medical_text" if payload.medical_text else "documents" if payload.documents else "visit_id"
 
         if payload.medical_text:
             # 直接从传入的病历文本提取
             source_medical_text = payload.medical_text
-            draft: FrontPageDraft = await service.extract_from_text(source_medical_text)
+            with llm_observation_context(
+                business_scene="frontpage_extraction",
+                root_job_id=observation_root_job_id,
+                record_identity=observation_record_identity,
+                executor_key="frontpage_extraction",
+            ):
+                draft: FrontPageDraft = await service.extract_from_text(
+                    source_medical_text
+                )
         elif payload.documents:
             source_medical_text = "\n\n".join(
                 f"【{doc.type or '未知文书'}】\n{doc.content or ''}"
                 for doc in payload.documents
                 if str(doc.content or "").strip()
             )
-            draft = await service.generate_draft_from_documents(
-                [doc.model_dump() for doc in payload.documents]
-            )
+            with llm_observation_context(
+                business_scene="frontpage_extraction",
+                root_job_id=observation_root_job_id,
+                record_identity=observation_record_identity,
+                executor_key="frontpage_extraction",
+            ):
+                draft = await service.generate_draft_from_documents(
+                    [doc.model_dump() for doc in payload.documents]
+                )
         else:
             visit_medical_text = await service._get_medical_text(
                 visit_id_for_state,
@@ -391,7 +441,13 @@ async def auto_generate_frontpage_draft(
             )
             if visit_medical_text and visit_medical_text.strip():
                 source_medical_text = visit_medical_text
-                draft = await service.extract_from_text(source_medical_text)
+                with llm_observation_context(
+                    business_scene="frontpage_extraction",
+                    root_job_id=observation_root_job_id,
+                    record_identity=observation_record_identity,
+                    executor_key="frontpage_extraction",
+                ):
+                    draft = await service.extract_from_text(source_medical_text)
             else:
                 if run_id and visit_id_for_state:
                     default_workflow_queue_state_service.finish_failed(
@@ -531,13 +587,32 @@ async def auto_generate_frontpage_draft_stream(
         producer_task: Optional[asyncio.Task] = None
 
         async def produce():
-            try:
-                async for event_name, data in service.extract_from_text_stream(medical_text, visit_id=visit_id, force_llm=force_llm):
-                    await queue.put((event_name, data))
-            except Exception as exc:
-                await queue.put(("error", {"success": False, "error": str(exc), "trace_id": trace_id}))
-            finally:
-                await queue.put(("__done__", None))
+            with llm_observation_context(
+                business_scene="frontpage_extraction",
+                root_job_id=trace_id,
+                record_identity=_observation_record_identity(visit_id),
+                executor_key="frontpage_extraction",
+            ):
+                try:
+                    async for event_name, data in service.extract_from_text_stream(
+                        medical_text,
+                        visit_id=visit_id,
+                        force_llm=force_llm,
+                    ):
+                        await queue.put((event_name, data))
+                except Exception as exc:
+                    await queue.put(
+                        (
+                            "error",
+                            {
+                                "success": False,
+                                "error": str(exc),
+                                "trace_id": trace_id,
+                            },
+                        )
+                    )
+                finally:
+                    await queue.put(("__done__", None))
 
         try:
             # Flush headers/body immediately to avoid proxy idle timeouts
@@ -633,11 +708,17 @@ async def analyze_medical_profile(
             )
         
         # 分析画像
-        profile = await service.analyze_medical_profile(
-            medical_text=medical_text,
-            frontpage_diagnoses=payload.frontpage_diagnoses,
-            frontpage_procedures=payload.frontpage_procedures,
-        )
+        with llm_observation_context(
+            business_scene="diagnosis_surgery_profiling",
+            root_job_id=trace_id,
+            record_identity=_observation_record_identity(payload.visit_id or ""),
+            executor_key="diagnosis_surgery_profiling",
+        ):
+            profile = await service.analyze_medical_profile(
+                medical_text=medical_text,
+                frontpage_diagnoses=payload.frontpage_diagnoses,
+                frontpage_procedures=payload.frontpage_procedures,
+            )
         
         return success_response(
             data=profile.to_dict(),
@@ -653,8 +734,6 @@ async def analyze_medical_profile(
 
 
 # ==================== 首页导出 API ====================
-
-from ..services.frontpage_export_service import FrontpageExportService, ExportFormat
 
 _export_service = FrontpageExportService()
 
@@ -695,10 +774,6 @@ async def export_frontpage(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
-from io import BytesIO as _BytesIO  # 避免与已有导入冲突
-
-# 替换上面的 BytesIO 引用
 @router.get("/export/formats")
 async def get_export_formats(request: Request):
     """获取支持的导出格式列表。"""
@@ -712,4 +787,3 @@ async def get_export_formats(request: Request):
         message=f"支持 {len(formats)} 种导出格式",
         trace_id=get_trace_id(request),
     )
-

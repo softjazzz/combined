@@ -16,6 +16,7 @@ from ..services.custom_qc_service import (
     generate_custom_prompt,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.llm_observability import llm_observation_context
 from ..services.sichuan_qc_service import SichuanQCService
 
 logger = logging.getLogger(__name__)
@@ -510,17 +511,23 @@ async def _run_workspace_batch_job(job_id: str) -> None:
 
 @router.post("/prompt/generate")
 async def generate_prompt(request: Request, payload: PromptGenerateRequest):
-    result = await generate_custom_prompt(
-        scene=payload.scene,
-        document_type=payload.document_type,
-        rule_name=payload.rule_name,
-        description=payload.description,
-        severity=payload.severity,
-    )
+    trace_id = get_trace_id(request)
+    with llm_observation_context(
+        business_scene="custom_qc_prompt_generation",
+        root_job_id=trace_id,
+        executor_key="custom_qc_prompt_generation",
+    ):
+        result = await generate_custom_prompt(
+            scene=payload.scene,
+            document_type=payload.document_type,
+            rule_name=payload.rule_name,
+            description=payload.description,
+            severity=payload.severity,
+        )
     return success_response(
         data=result,
         message="生成自定义质控 Prompt 成功",
-        trace_id=get_trace_id(request),
+        trace_id=trace_id,
     )
 
 
@@ -752,13 +759,19 @@ async def generate_workspace_draft_prompt(
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    prompt_result = await generate_custom_prompt(
-        scene=str(draft.get("scene") or "running"),
-        document_type=str(draft.get("document_type") or "日常病程记录"),
-        rule_name=str(draft.get("name") or "未命名规则"),
-        description=str(draft.get("description") or ""),
-        severity=str(draft.get("severity") or "major"),
-    )
+    trace_id = get_trace_id(request)
+    with llm_observation_context(
+        business_scene="custom_qc_prompt_generation",
+        root_job_id=trace_id,
+        executor_key="custom_qc_prompt_generation",
+    ):
+        prompt_result = await generate_custom_prompt(
+            scene=str(draft.get("scene") or "running"),
+            document_type=str(draft.get("document_type") or "日常病程记录"),
+            rule_name=str(draft.get("name") or "未命名规则"),
+            description=str(draft.get("description") or ""),
+            severity=str(draft.get("severity") or "major"),
+        )
     check_logic = dict(draft.get("check_logic") or {})
     check_logic["generated_check_points"] = prompt_result.get("check_points") or []
     check_logic["examples"] = prompt_result.get("examples") or []
@@ -781,7 +794,7 @@ async def generate_workspace_draft_prompt(
             "prompt_result": prompt_result,
         },
         message="生成 Prompt 成功",
-        trace_id=get_trace_id(request),
+        trace_id=trace_id,
     )
 
 
