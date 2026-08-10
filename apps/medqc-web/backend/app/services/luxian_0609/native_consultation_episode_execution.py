@@ -631,6 +631,15 @@ def _row_time(
             "update_time",
             "record_time",
         )
+    elif source_key in _COURSE_EXECUTION_SOURCE_KEYS:
+        # 与病程质量规则共用同一权威时间口径：优先正式记录时间，客户CDM
+        # 未回传该字段时使用提交时间；不从正文、同步时间或文件顺序猜测。
+        time_keys = (
+            "record_time",
+            "record_datetime",
+            "submit_time",
+            "submit_datetime",
+        )
     else:
         time_keys = (
             "record_time",
@@ -1193,13 +1202,22 @@ def _execution_prompt(
     entries: list[dict[str, object]] = []
     allowed_refs: dict[str, frozenset[str]] = {}
     documents_by_ref: dict[str, dict[str, object]] = {}
+    course_candidates = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+    )
+    # 4.20.4 的主核对对象是会诊后的病程记录。已有病程候选时，不再把
+    # 数百条医嘱塞入同一次语义提示词；医嘱只能在完全没有病程候选时作为
+    # 辅助诊断线索，绝不能替代020/023要求的病程执行记录。
+    prompt_candidates = course_candidates or tuple(candidates)
     for item in completed:
         related_refs: list[str] = []
         eligible_sources = _ACTION_TYPE_SOURCE_KEYS.get(
             item.recommendation.action_type,
             frozenset((*_EXECUTION_SOURCE_KEYS, "inpat_nondrug_order")),
         )
-        for candidate in candidates:
+        for candidate in prompt_candidates:
             if candidate.source_key not in eligible_sources:
                 continue
             if candidate.observed_time.day > item.opinion_time.day:
@@ -1245,6 +1263,8 @@ def _execution_prompt(
         "generic_trace=仅写遵会诊意见执行/已按建议处理等笼统表述；"
         "copied_opinion=照抄会诊意见、没有归纳执行情况；"
         "no_trace=未见请会诊执行记录痕迹；unknown=无法判断。"
+        "病程明确写出予以、给予、已行或已实施某项具体治疗、检查、固定、制动或监测措施，"
+        "属于specific_trace；不得仅因没有重复会诊原句或没有结构化医嘱而降为generic_trace或unknown。"
         "第二步可辅助判断结构化医嘱/操作候选是否与该建议存在动作对应关系，"
         "但结构化匹配不是020或023的合规硬条件。"
         "同一执行文书可同时落实多条建议，禁止要求唯一归属。"
@@ -1339,6 +1359,27 @@ def _parse_executions(
             ]
             if trace_refs and not structured_refs and state in {"linked_specific", "linked_vague"}:
                 state = "absent"
+        # 部分模型会把同一病程ref同时放入trace和辅助结构化字段。病程只能
+        # 作为020/023主证据；安全丢弃这个冗余辅助副本，不把仅出现在辅助
+        # 字段的病程反向提升为执行记录。嵌套、伪造和越界ref仍由下方拒绝。
+        duplicated_course_refs = {
+            ref
+            for ref in structured_refs
+            if ref in trace_refs
+            and ref in candidate_by_ref
+            and candidate_by_ref[ref].source_key in _COURSE_EXECUTION_SOURCE_KEYS
+        }
+        if duplicated_course_refs:
+            structured_refs = [
+                ref for ref in structured_refs if ref not in duplicated_course_refs
+            ]
+        if trace_refs and not structured_refs and state in {
+            "linked_specific",
+            "linked_vague",
+        }:
+            # 结构化动作状态是辅助维度；没有结构化ref时统一收敛为absent，
+            # 但保留已经逐字落地的病程trace，不让模型的冗余枚举作废主事实。
+            state = "absent"
         all_refs = [*trace_refs, *structured_refs]
         if (
             len(trace_refs) != len(set(trace_refs))
@@ -1373,11 +1414,19 @@ def _parse_executions(
             candidate_by_ref[ref] for ref in all_refs if ref in candidate_by_ref
         )
         if all_refs:
-            if not quotes or any(
-                not any(_quote_is_grounded(quote=quote, source=candidate.text) for candidate in selected_documents)
+            grounded_quotes = tuple(
+                quote
                 for quote in quotes
-            ):
+                if any(
+                    _quote_is_grounded(quote=quote, source=candidate.text)
+                    for candidate in selected_documents
+                )
+            )
+            # 模型偶尔在已落地摘录之外追加一段无法落地的冗余文字。只保留
+            # 已逐字命中受控候选的摘录；若一段都不能落地，仍严格拒绝。
+            if not grounded_quotes:
                 raise _SemanticInvalid()
+            quotes = grounded_quotes
         elif quotes:
             raise _SemanticInvalid()
         seen.add(recommendation_ref)
@@ -1470,13 +1519,21 @@ def _execution_outcome(
         return "evaluation_unknown", "semantic_output_unknown"
     # 020 没有找到执行记录时，023 不重复判“无记录”；023 只评价已找到的
     # 执行病程是否笼统、照抄或已明确说明具体落实情况。
-    if no_course_trace_refs:
+    if len(no_course_trace_refs) == len(assessments):
         if course_source_incomplete:
             return "data_gap", "candidate_scope_incomplete"
         return "not_applicable", "trigger_absent_complete"
-    if any(state in {"generic_trace", "copied_opinion"} for state in trace_states):
+    recorded_trace_states = tuple(
+        state for state in trace_states if state != "no_trace"
+    )
+    if any(
+        state in {"generic_trace", "copied_opinion"}
+        for state in recorded_trace_states
+    ):
         return "non_compliant", "requirement_violated"
-    if all(state == "specific_trace" for state in trace_states):
+    if recorded_trace_states and all(
+        state == "specific_trace" for state in recorded_trace_states
+    ):
         return "compliant", "requirement_satisfied"
     if source_technical:
         return "technical_error", "source_query_error"

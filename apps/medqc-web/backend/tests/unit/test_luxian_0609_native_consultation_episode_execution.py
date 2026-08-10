@@ -254,6 +254,21 @@ def test_candidate_time_accepts_short_timezone_suffix_and_order_update_fallback(
     assert "request_time" in source_evidence_reader._NATIVE_SOURCE_FIELDS["exam_master"]
 
 
+def test_course_candidate_uses_submit_datetime_when_record_time_is_missing():
+    """病程正式记录时间缺失时，提交时间仍是现有CDM认可的权威文书时间。"""
+
+    observed = episode._row_time(
+        {
+            "record_time": None,
+            "submit_datetime": datetime(2026, 7, 10, 9, 30, 0),
+        },
+        source_key="senior_course_record",
+    )
+
+    assert observed is not None
+    assert observed.value == datetime(2026, 7, 10, 9, 30, 0)
+
+
 def test_high_frequency_order_candidates_are_bounded_without_scope_gap():
     session = _window_session(rows_by_source={
         "inpat_nondrug_order": tuple(
@@ -717,7 +732,7 @@ async def test_two_recommendations_one_specific_and_one_absent_is_020_non_compli
         institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
 
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "compliant"]
     assert result.llm_call_count == 2
     assert "recommendation_ref" in client.prompts[1]
     assert "source_quote" in client.prompts[1]
@@ -1383,9 +1398,12 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "specific_trace",
             "trace_refs": ["daily_course_record-1"],
-            "execution_state": "absent",
-            "structured_action_refs": [],
-            "execution_quotes": ["启动抗感染治疗"],
+            "execution_state": "linked_specific",
+            "structured_action_refs": ["daily_course_record-1"],
+            "execution_quotes": [
+                "启动抗感染治疗",
+                "未出现在所选病程中的冗余摘录",
+            ],
             "confidence": "high",
         }),
     )
@@ -1405,6 +1423,7 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
     assert display["completed_opinion_episode_count"] == 1
     assert display["recommendation_count"] == 1
     assert display["specific_execution_count"] == 1
+    assert "属于specific_trace" in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -1482,9 +1501,9 @@ async def test_020_requires_course_trace_even_when_structured_order_is_linked(mo
             "recommendation_ref": "consultation_record-1#r1",
             "execution_record_state": "no_trace",
             "trace_refs": [],
-            "execution_state": "linked_specific",
-            "structured_action_refs": ["inpat_drug_order-1"],
-            "execution_quotes": ["抗感染治疗"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
             "confidence": "high",
         }),
     )
@@ -1496,6 +1515,7 @@ async def test_020_requires_course_trace_even_when_structured_order_is_linked(mo
 
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
     assert result.llm_call_count == 2
+    assert "头孢哌酮舒巴坦" not in client.prompts[1]
 
 
 @pytest.mark.asyncio
@@ -1588,7 +1608,7 @@ async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_023_is_not_applicable_when_any_completed_opinion_has_no_execution(monkeypatch):
+async def test_023_evaluates_generic_trace_when_another_opinion_has_no_execution(monkeypatch):
     source_rows = {
         "consultation_record": _rows("第一份会诊意见", "第二份会诊意见"),
         "daily_course_record": _rows("仅笼统遵第二份会诊意见", hour_start=3),
@@ -1609,7 +1629,7 @@ async def test_023_is_not_applicable_when_any_completed_opinion_has_no_execution
     result = await episode.execute_luxian_0609_native_consultation_episode_rules(
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
-    assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
 
 
 @pytest.mark.asyncio
