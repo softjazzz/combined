@@ -943,7 +943,11 @@ async def trigger_sync(
     except Exception as exc:
         logger.warning("写入同步历史失败: %s", exc)
 
-    if isinstance(result, dict) and bool(result.get("success")) is False:
+    if (
+        isinstance(result, dict)
+        and bool(result.get("success")) is False
+        and status_name != "partial"
+    ):
         complete_sync_trigger(
             idempotency_key=idempotency_key,
             status="failed",

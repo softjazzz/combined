@@ -18,6 +18,7 @@ from ..database.connection import engine
 logger = logging.getLogger(__name__)
 _MEMORY_LOCK = threading.Lock()
 _MEMORY_STORE: dict[str, dict[str, Any]] = {}
+_RETRYABLE_TRIGGER_STATUSES = frozenset({"failed", "rejected", "partial"})
 
 
 @dataclass
@@ -75,12 +76,37 @@ def reserve_sync_trigger(
         with _MEMORY_LOCK:
             row = _MEMORY_STORE.get(idempotency_key)
             if row:
+                existing_status = str(row.get("status") or "pending").strip().lower()
+                if existing_status not in _RETRYABLE_TRIGGER_STATUSES:
+                    return SyncTriggerReservation(
+                        created=False,
+                        run_id=str(row.get("run_id") or ""),
+                        status=existing_status,
+                        result=(
+                            row.get("result")
+                            if isinstance(row.get("result"), dict)
+                            else None
+                        ),
+                        error=str(row.get("error") or ""),
+                    )
+                run_id = _new_run_id()
+                row.update(
+                    {
+                        "run_id": run_id,
+                        "status": "pending",
+                        "result": None,
+                        "error": "",
+                        "source": source,
+                        "tier": tier,
+                        "sync_date": sync_date,
+                        "operator_email": operator_email,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                )
                 return SyncTriggerReservation(
-                    created=False,
-                    run_id=str(row.get("run_id") or ""),
-                    status=str(row.get("status") or "pending"),
-                    result=row.get("result") if isinstance(row.get("result"), dict) else None,
-                    error=str(row.get("error") or ""),
+                    created=True,
+                    run_id=run_id,
+                    status="pending",
                 )
             run_id = _new_run_id()
             _MEMORY_STORE[idempotency_key] = {
@@ -120,7 +146,36 @@ def reserve_sync_trigger(
                 "operator_email": operator_email,
             },
         )
-        session.commit()
+
+        # 失败类终态允许同一幂等键被原子接管。并发请求中只有第一个请求能把
+        # 终态改成 pending；后续请求的条件 UPDATE 不命中，并复用新的 run_id。
+        session.execute(
+            text(
+                """
+                UPDATE sync_trigger_idempotency
+                SET
+                    run_id = :run_id,
+                    source = :source,
+                    tier = :tier,
+                    sync_date = :sync_date,
+                    operator_email = :operator_email,
+                    status = 'pending',
+                    result_json = NULL,
+                    error = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE idempotency_key = :idempotency_key
+                  AND LOWER(status) IN ('failed', 'rejected', 'partial')
+                """
+            ),
+            {
+                "idempotency_key": idempotency_key,
+                "run_id": run_id,
+                "source": source,
+                "tier": tier,
+                "sync_date": sync_date,
+                "operator_email": operator_email,
+            },
+        )
 
         row = session.execute(
             text(
@@ -132,6 +187,7 @@ def reserve_sync_trigger(
             ),
             {"idempotency_key": idempotency_key},
         ).mappings().first()
+        session.commit()
         if row is None:
             logger.warning("reserve_sync_trigger lost row for key=%s", idempotency_key)
             return SyncTriggerReservation(created=True, run_id=run_id, status="pending")

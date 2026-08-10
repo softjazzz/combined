@@ -544,6 +544,101 @@ class TestSyncRouter:
         assert data["idempotent_reused"] is True
         assert data["warnings"] == ["同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见"]
 
+    def test_trigger_fresh_partial_result_keeps_partial_success_envelope(
+        self,
+        client,
+        monkeypatch,
+    ):
+        _override_user(client, ["admin"])
+        completion: dict[str, object] = {}
+        history: list[dict] = []
+        warnings = ["同步部分完成：1份病例缺少可见主记录"]
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-fresh-partial",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **kwargs: completion.update(kwargs),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda record: history.append(record),
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": False,
+                "status": "partial",
+                "total_records": 7,
+                "warnings": warnings,
+                "tables": [
+                    {"table_name": "mr", "status": "success"},
+                    {"table_name": "daily_course_record", "status": "failed"},
+                ],
+            },
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all"},
+        )
+
+        assert response.status_code == 200
+        data = _assert_success_shell(response.json())
+        assert data["status"] == "partial"
+        assert data["idempotent_reused"] is False
+        assert data["warnings"] == warnings
+        assert completion["status"] == "partial"
+        assert completion["error"] == ""
+        assert history[0]["status"] == "partial"
+
+    def test_trigger_fresh_failed_result_remains_error_envelope(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        completion: dict[str, object] = {}
+        history: list[dict] = []
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=True,
+                run_id="syncrun-fresh-failed",
+                status="pending",
+            ),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.complete_sync_trigger",
+            lambda **kwargs: completion.update(kwargs),
+        )
+        monkeypatch.setattr(
+            "app.services.sync_run_history.append_sync_run_record",
+            lambda record: history.append(record),
+        )
+        monkeypatch.setattr(
+            "app.services.etl_sync.run_sync",
+            lambda **_kwargs: {
+                "success": False,
+                "status": "failed",
+                "error": "同步执行失败",
+                "total_records": 0,
+                "warnings": [],
+                "tables": [],
+            },
+        )
+
+        response = client.post(
+            "/api/v1/sync/trigger",
+            json={"source": "pg", "tier": "all"},
+        )
+
+        assert response.status_code == 200
+        _assert_error_shell(response.json(), expected_code="SYNC_TRIGGER_FAILED")
+        assert completion["status"] == "failed"
+        assert history[0]["status"] == "failed"
+
     def test_get_runs(self, client, monkeypatch):
         _override_user(client, ["qc_manager"])
         monkeypatch.setattr(

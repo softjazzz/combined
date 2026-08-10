@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
 from sqlalchemy import create_engine
 
 from app.services import sync_idempotency
@@ -62,3 +66,112 @@ def test_complete_persists_result(monkeypatch):
     assert reused.run_id == reserved.run_id
     assert reused.status == "success"
     assert reused.result == {"success": True, "total_records": 12}
+
+
+@pytest.mark.parametrize("storage", ("memory", "sqlite"))
+@pytest.mark.parametrize(
+    ("completed_status", "retry_expected"),
+    (
+        ("pending", False),
+        ("running", False),
+        ("success", False),
+        ("failed", True),
+        ("rejected", True),
+        ("partial", True),
+    ),
+)
+def test_reserve_status_contract_matches_memory_and_sqlite(
+    monkeypatch,
+    storage: str,
+    completed_status: str,
+    retry_expected: bool,
+):
+    db_engine = (
+        None
+        if storage == "memory"
+        else create_engine("sqlite+pysqlite:///:memory:", future=True)
+    )
+    monkeypatch.setattr(sync_idempotency, "engine", db_engine)
+    if storage == "memory":
+        sync_idempotency.reset_sync_idempotency_for_testing()
+    key = f"pg:all:2026-03-25:{storage}-{completed_status}@medqc.com"
+
+    first = sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-03-25",
+        operator_email=f"{storage}@medqc.com",
+    )
+    if completed_status != "pending":
+        sync_idempotency.complete_sync_trigger(
+            idempotency_key=key,
+            status=completed_status,
+            result={"marker": completed_status},
+            error="上一轮已结束",
+        )
+
+    reserved = sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-03-25",
+        operator_email=f"{storage}@medqc.com",
+    )
+
+    assert reserved.created is retry_expected
+    if retry_expected:
+        assert reserved.run_id != first.run_id
+        assert reserved.status == "pending"
+        assert reserved.result is None
+        assert reserved.error == ""
+        reused = sync_idempotency.reserve_sync_trigger(
+            idempotency_key=key,
+            source="pg",
+            tier="all",
+            sync_date="2026-03-25",
+            operator_email=f"{storage}@medqc.com",
+        )
+        assert reused.created is False
+        assert reused.run_id == reserved.run_id
+    else:
+        assert reserved.run_id == first.run_id
+        assert reserved.status == completed_status
+
+
+def test_memory_concurrent_retry_creates_only_one_new_run(monkeypatch):
+    monkeypatch.setattr(sync_idempotency, "engine", None)
+    sync_idempotency.reset_sync_idempotency_for_testing()
+    key = "pg:all:2026-03-25:memory-concurrent@medqc.com"
+    first = sync_idempotency.reserve_sync_trigger(
+        idempotency_key=key,
+        source="pg",
+        tier="all",
+        sync_date="2026-03-25",
+        operator_email="memory-concurrent@medqc.com",
+    )
+    sync_idempotency.complete_sync_trigger(
+        idempotency_key=key,
+        status="failed",
+        result={"success": False},
+        error="上一轮失败",
+    )
+    barrier = Barrier(8)
+
+    def retry_once():
+        barrier.wait()
+        return sync_idempotency.reserve_sync_trigger(
+            idempotency_key=key,
+            source="pg",
+            tier="all",
+            sync_date="2026-03-25",
+            operator_email="memory-concurrent@medqc.com",
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        reservations = tuple(executor.map(lambda _index: retry_once(), range(8)))
+
+    assert sum(item.created for item in reservations) == 1
+    assert len({item.run_id for item in reservations}) == 1
+    assert reservations[0].run_id != first.run_id
+    assert {item.status for item in reservations} == {"pending"}
