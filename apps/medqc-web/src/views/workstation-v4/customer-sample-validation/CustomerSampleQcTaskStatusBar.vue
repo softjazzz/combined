@@ -40,7 +40,7 @@
               {{ presentation?.isRunning ? '查看实时结果' : '查看结果' }}
             </a-button>
             <a-button
-              v-if="presentation?.isRunning"
+              v-if="presentation?.isRunning && !task.read_only"
               danger
               size="small"
               :loading="canceling"
@@ -50,7 +50,7 @@
               停止质控
             </a-button>
             <a-dropdown
-              v-if="task.status === 'completed'"
+              v-if="task.status === 'completed' && !task.read_only"
               placement="bottomRight"
             >
               <a-button
@@ -136,7 +136,11 @@
           >
             <div class="qc-task-status__live-result-label">
               <span aria-hidden="true" />
-              {{ presentation.liveResultLines.length ? '已回写结果' : presentation.liveExecutionPhase?.label || '实时结果' }}
+              {{
+                presentation.liveResultLines.length
+                  ? '已回写结果'
+                  : presentation.liveExecutionPhase?.label || '实时结果'
+              }}
             </div>
             <div class="qc-task-status__live-result-content">
               <Transition

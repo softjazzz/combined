@@ -523,6 +523,7 @@ export interface SichuanBatchJobResultTrace {
 
 export interface SichuanBatchJob {
   id: string
+  read_only?: boolean
   draft_id?: string
   draft_ids?: string[]
   job_kind?: string

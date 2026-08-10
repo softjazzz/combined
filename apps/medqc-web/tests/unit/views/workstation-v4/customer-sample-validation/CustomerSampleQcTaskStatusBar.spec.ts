@@ -242,6 +242,23 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(wrapper.emitted('export')).toEqual([['job-1']])
   })
 
+  it('共享只读任务仅保留结果查看与质控记录入口', () => {
+    const wrapper = mount(CustomerSampleQcTaskStatusBar, {
+      props: {
+        task: buildJob({
+          status: 'completed',
+          read_only: true,
+        }),
+      },
+      global: { stubs },
+    })
+
+    expect(wrapper.get('[data-testid="qc-task-view-result"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="qc-task-open-history"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qc-task-cancel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="qc-task-more-actions"]').exists()).toBe(false)
+  })
+
   it('复核执行中在更多菜单内保留禁用与进行中反馈', () => {
     const wrapper = mount(CustomerSampleQcTaskStatusBar, {
       props: {
