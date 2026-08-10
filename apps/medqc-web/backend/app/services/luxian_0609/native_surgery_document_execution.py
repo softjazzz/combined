@@ -873,12 +873,6 @@ def _typed_terminal_outcome(
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "performed_surgery_fact_unavailable", "program"
             )
-        surgery_count = _source_row_count(materials, "surgery_record")
-        if surgery_count is not None and surgery_count > 1:
-            return _SurgeryDocumentOutcome(
-                rule_id, "data_gap", "association_failed", "program"
-            )
-
         if "rescue_record" not in _typed_binding_source_keys(rule_id):
             return _SurgeryDocumentOutcome(
                 rule_id, "data_gap", "emergency_exception_source_unavailable", "program"
@@ -951,6 +945,13 @@ def _typed_terminal_outcome(
                 "preop_discussion_missing",
                 "program",
                 facts,
+            )
+        surgery_count = _source_row_count(materials, "surgery_record")
+        if surgery_count is not None and surgery_count > 1:
+            # 多次手术只在需要把术者与具体术前讨论关联时失败关闭；
+            # 权威来源完整且术前讨论为空时，缺失事实本身无需事件关联。
+            return _SurgeryDocumentOutcome(
+                rule_id, "data_gap", "association_failed", "program"
             )
         people = _surgery_and_discussion_people(materials)
         if people is None:

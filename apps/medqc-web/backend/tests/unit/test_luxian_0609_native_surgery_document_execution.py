@@ -432,11 +432,21 @@ def _typed_session(
                 raise SourceEvidenceQueryError()
             if surgery_mode == "unavailable":
                 raise SourceEvidenceUnavailable()
-            rows = (
-                ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
-                if surgery_mode == "exact"
-                else ()
-            )
+            if surgery_mode == "exact":
+                rows = ({"surgery_begin_time": "2026-01-01 08:00:00+08"},)
+            elif surgery_mode == "multi":
+                rows = (
+                    {
+                        "surgery_begin_time": "2026-01-01 08:00:00+08",
+                        "record_content": "本次手术不属于紧急抢救手术。",
+                    },
+                    {
+                        "surgery_begin_time": "2026-01-02 08:00:00+08",
+                        "record_content": "本次手术不属于紧急抢救手术。",
+                    },
+                )
+            else:
+                rows = ()
         elif source_key == "mr_surgery":
             if mr_surgery_mode == "error":
                 raise SourceEvidenceQueryError()
@@ -1487,6 +1497,37 @@ async def test_typed_039_does_not_call_empty_discussion_defect_without_emergency
     assert result.decisions[0].applicability.value == "unknown"
     assert result.decisions[0].evidence_state.value == "data_gap"
     assert result.decisions[0].qc_direction.value == "unknown"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_typed_039_multiple_surgeries_with_complete_empty_discussion_is_non_compliant(
+    monkeypatch,
+):
+    original = surgery_doc._typed_binding_source_keys
+    monkeypatch.setattr(
+        surgery_doc,
+        "_typed_binding_source_keys",
+        lambda rule_id: original(rule_id) | {"surgery_record"},
+    )
+    session = _typed_session(surgery_mode="multi", discussion_mode="empty")
+
+    result = await surgery_doc.execute_luxian_0609_native_surgery_document_rules(
+        rule_ids=("LX0609-039",),
+        wrapper_rules=[_wrapper("LX0609-039")],
+        evidence_payload=None,
+        llm_client=_Client([]),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+        decision_rule_ids=("LX0609-039",),
+    )
+
+    assert result.decisions[0].evidence_state.value == "sufficient"
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert result.decisions[0].reason_code == "required_document_missing"
+    assert dict(result.customer_display_facts)["LX0609-039"]["failure_kind"] == (
+        "preop_discussion_missing"
+    )
     assert result.llm_call_count == 0
 
 

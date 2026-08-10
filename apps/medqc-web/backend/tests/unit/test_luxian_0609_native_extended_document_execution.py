@@ -2611,6 +2611,39 @@ async def test_062_incomplete_discharge_medication_is_non_compliant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_062_generic_discharge_instruction_without_medication_is_not_applicable() -> None:
+    result, reduced = await _evaluate(
+        "LX0609-062",
+        {
+            "discharge_record": ({
+                "record_time": "2026-06-09 09:00:00",
+                "discharge_order": "出院后注意休息，清淡饮食，定期复诊。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.NOT_APPLICABLE
+    assert reduced.reason_code == "trigger_absent_complete"
+    assert result.llm_call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_062_unstructured_medication_instruction_remains_data_gap() -> None:
+    _result, reduced = await _evaluate(
+        "LX0609-062",
+        {
+            "discharge_record": ({
+                "record_time": "2026-06-09 09:00:00",
+                "discharge_order": "出院后继续服用阿莫西林，按医嘱执行。",
+            },),
+        },
+    )
+
+    assert reduced.final_state is CustomerFinalState.DATA_GAP
+    assert reduced.reason_code == "required_field_missing"
+
+
+@pytest.mark.asyncio
 async def test_063_mismatched_discharge_diagnoses_are_non_compliant() -> None:
     result, reduced = await _evaluate(
         "LX0609-063",

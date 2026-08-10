@@ -105,6 +105,9 @@ EXTENDED_DOCUMENT_SOURCE_KEYS = (
 _DEATH_MARKERS = ("死亡", "病故")
 _ALIVE_DISCHARGE_MARKERS = ("出院", "转院", "医嘱离院", "非医嘱离院")
 _UNCERTAIN_DIAGNOSIS_MARKERS = ("诊断仍不明确", "诊断不明确", "原因待查", "性质待定")
+_DISCHARGE_MEDICATION_SIGNAL_PATTERN = re.compile(
+    r"(?:药品|药物|用药|服药|服用|口服|停药|带药)"
+)
 _SPECIAL_ANTIMICROBIALS = (
     "头孢他啶/阿维巴坦", "头孢吡肟", "氨曲南", "美罗培南",
     "亚胺培南", "万古霉素", "伏立康唑",
@@ -539,10 +542,17 @@ def _structured_discharge_medications(
         if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
             return list(value), ""
         return None, "required_field_missing"
+    has_discharge_instruction = False
+    has_medication_signal = False
     for row in rows:
         value = _clean(row.get("discharge_order"))
         if not value:
             continue
+        has_discharge_instruction = True
+        has_medication_signal = (
+            has_medication_signal
+            or _DISCHARGE_MEDICATION_SIGNAL_PATTERN.search(value) is not None
+        )
         labels = {
             "drug_name": "药品名称",
             "dose": "用药剂量",
@@ -556,6 +566,8 @@ def _structured_discharge_medications(
                 parsed[key] = match.group(1).strip()
         if parsed:
             return [parsed], ""
+    if has_discharge_instruction and not has_medication_signal:
+        return [], ""
     return None, "required_field_missing"
 
 
