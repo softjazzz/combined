@@ -31,6 +31,8 @@ PRIMARY_CASE_TABLES = ("mr", "inpat_registration", "admission_record")
 class CaseSetSyncResult:
     case_refs: tuple[CaseRef, ...]
     primary_visible: bool
+    visible_case_refs: tuple[CaseRef, ...]
+    missing_primary_case_refs: tuple[CaseRef, ...]
     synced_tables: tuple[dict[str, Any], ...]
     source_rows_by_table: Mapping[str, tuple[dict[str, Any], ...]]
     total_rows_pulled: int
@@ -41,6 +43,12 @@ class CaseSetSyncResult:
         return {
             "eligible_visits": len(self.case_refs),
             "primary_visible": self.primary_visible,
+            "visible_case_refs": [
+                case_ref.as_dict() for case_ref in self.visible_case_refs
+            ],
+            "missing_primary_case_refs": [
+                case_ref.as_dict() for case_ref in self.missing_primary_case_refs
+            ],
             "synced_tables": [dict(item) for item in self.synced_tables],
             "total_rows_pulled": self.total_rows_pulled,
             "total_rows_upserted": self.total_rows_upserted,
@@ -161,6 +169,7 @@ class CaseSetSyncService:
 
         def _sync_one(
             table_name: str,
+            target_case_refs: Sequence[CaseRef],
         ) -> tuple[str, tuple[dict[str, Any], ...], dict[str, Any]]:
             table_config = catalog.get(table_name)
             if table_config is None:
@@ -175,7 +184,7 @@ class CaseSetSyncService:
                     remote_url=remote_url,
                     remote_schema=remote_schema,
                     source_table=source_table,
-                    case_refs=list(normalized_refs),
+                    case_refs=list(target_case_refs),
                     default_institute_id=default_institute_id,
                 )
             except (psycopg2.errors.UndefinedColumn, psycopg2.errors.UndefinedTable):
@@ -251,7 +260,7 @@ class CaseSetSyncService:
                         "total_tables": len(ordered_tables),
                     }
                 )
-            result_name, rows, table_result = _sync_one(table_name)
+            result_name, rows, table_result = _sync_one(table_name, normalized_refs)
             source_rows_by_table[result_name] = rows
             table_results_by_name[result_name] = table_result
             processed_tables += 1
@@ -271,7 +280,13 @@ class CaseSetSyncService:
                     sync_interval_minutes=30,
                 )
 
-        primary_visible = bool(set(normalized_refs).intersection(primary_identities))
+        visible_case_refs = tuple(
+            case_ref for case_ref in normalized_refs if case_ref in primary_identities
+        )
+        missing_primary_case_refs = tuple(
+            case_ref for case_ref in normalized_refs if case_ref not in primary_identities
+        )
+        primary_visible = bool(visible_case_refs)
         if progress_callback is not None:
             progress_callback(
                 {
@@ -289,7 +304,11 @@ class CaseSetSyncService:
                 thread_name_prefix="case-set-sync",
             ) as executor:
                 futures = {
-                    executor.submit(_sync_one, table_name): table_name
+                    executor.submit(
+                        _sync_one,
+                        table_name,
+                        visible_case_refs,
+                    ): table_name
                     for table_name in detail_tables
                 }
                 for future in as_completed(futures):
@@ -323,6 +342,8 @@ class CaseSetSyncService:
             return CaseSetSyncResult(
                 case_refs=normalized_refs,
                 primary_visible=False,
+                visible_case_refs=visible_case_refs,
+                missing_primary_case_refs=missing_primary_case_refs,
                 synced_tables=tuple(table_results),
                 source_rows_by_table=source_rows_by_table,
                 total_rows_pulled=total_rows_pulled,
@@ -330,7 +351,7 @@ class CaseSetSyncService:
                 bundle_refresh={},
             )
         bundle_refresh = self.refresh_case_set_bundles(
-            case_refs=normalized_refs,
+            case_refs=visible_case_refs,
             policy_version=policy_version,
         )
         if progress_callback is not None:
@@ -345,6 +366,8 @@ class CaseSetSyncService:
         return CaseSetSyncResult(
             case_refs=normalized_refs,
             primary_visible=True,
+            visible_case_refs=visible_case_refs,
+            missing_primary_case_refs=missing_primary_case_refs,
             synced_tables=tuple(table_results),
             source_rows_by_table=source_rows_by_table,
             total_rows_pulled=total_rows_pulled,
