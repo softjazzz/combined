@@ -202,6 +202,125 @@ def test_068_binds_daily_and_senior_course_sources() -> None:
     assert "senior_course_record" in sources
 
 
+def test_death_and_ordinary_discharge_rules_bind_mutual_exclusion_sources() -> None:
+    expected_by_rule = {
+        "LX0609-051": {"inpat_registration", "discharge_record"},
+        "LX0609-060": {"inpat_registration", "discharge_record"},
+        "LX0609-061": {"inpat_registration", "death_record"},
+        "LX0609-068": {"inpat_registration", "death_record"},
+    }
+
+    assert {
+        rule_id: set(resolve_luxian_0609_decision_support_source_keys((rule_id,)))
+        for rule_id in expected_by_rule
+    } == expected_by_rule
+
+
+@pytest.mark.asyncio
+async def test_death_rules_treat_complete_discharge_record_as_non_death() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-051", "LX0609-060"),
+        {
+            "inpat_registration": (
+                {"discharge_datetime": "2026-07-15 16:20:31"},
+            ),
+            "discharge_record": (
+                {"record_time": "2026-07-15 16:10:00"},
+            ),
+        },
+    )
+
+    assert {
+        item.rule_id: (item.final_state, item.reason_code)
+        for item in reduced
+    } == {
+        "LX0609-051": (
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        "LX0609-060": (
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_death_case_skips_ordinary_discharge_rules() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-051", "LX0609-060", "LX0609-061", "LX0609-068"),
+        {
+            "inpat_registration": (
+                {"discharge_datetime": "2026-07-15 16:20:31"},
+            ),
+            "death_record": (
+                {
+                    "record_time": "2026-07-15 21:22:22",
+                    "death_datetime": "2026-07-15 21:22:22",
+                },
+            ),
+            "death_discussion": (
+                {"record_time": "2026-07-20 19:21:30"},
+            ),
+        },
+    )
+
+    assert {
+        item.rule_id: (item.final_state, item.reason_code)
+        for item in reduced
+    } == {
+        "LX0609-051": (
+            CustomerFinalState.COMPLIANT,
+            "requirement_within_threshold",
+        ),
+        "LX0609-060": (
+            CustomerFinalState.COMPLIANT,
+            "requirement_satisfied",
+        ),
+        "LX0609-061": (
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+        "LX0609-068": (
+            CustomerFinalState.NOT_APPLICABLE,
+            "trigger_absent_complete",
+        ),
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_ordinary_discharge_rules_fail_closed_when_death_source_is_unavailable() -> None:
+    _, _, result, reduced = await _evaluate_selected(
+        ("LX0609-061", "LX0609-068"),
+        {
+            "inpat_registration": (
+                {"discharge_datetime": "2026-07-15 16:20:31"},
+            ),
+        },
+        unavailable_sources=frozenset({"death_record"}),
+    )
+
+    assert {
+        item.rule_id: (item.final_state, item.reason_code)
+        for item in reduced
+    } == {
+        "LX0609-061": (
+            CustomerFinalState.DATA_GAP,
+            "source_unavailable",
+        ),
+        "LX0609-068": (
+            CustomerFinalState.DATA_GAP,
+            "source_unavailable",
+        ),
+    }
+    assert result.llm_call_count == 0
+    assert result.total_tokens == 0
+
+
 @pytest.mark.asyncio
 async def test_060_death_patient_without_death_record_is_non_compliant() -> None:
     result, reduced = await _evaluate(

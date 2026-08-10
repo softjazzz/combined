@@ -392,6 +392,7 @@ def _death_context(
     *,
     registration_rows: Sequence[Mapping[str, Any]],
     death_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
 ) -> tuple[str, datetime | None]:
     if death_rows:
         death_time = next(
@@ -440,7 +441,9 @@ def _death_context(
     )
     if death_time is not None or any(marker in status for marker in _DEATH_MARKERS):
         return "present", death_time
-    if status and any(marker in status for marker in _ALIVE_DISCHARGE_MARKERS):
+    if (
+        status and any(marker in status for marker in _ALIVE_DISCHARGE_MARKERS)
+    ) or discharge_rows:
         return "absent", None
     return "unknown", None
 
@@ -962,6 +965,7 @@ async def execute_luxian_0609_native_extended_document_rules(
     death_state, death_time = _death_context(
         registration_rows=registration_rows,
         death_rows=death_rows,
+        discharge_rows=discharge_rows,
     )
     decisions: list[RuleDecision] = []
     display: list[tuple[str, Mapping[str, Any]]] = []
@@ -1369,13 +1373,17 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {"LX0609-051", "LX0609-060"}:
-            source_error = registration_error or death_error
+            source_error = registration_error or death_error or discharge_error
             if source_error and death_state == "unknown":
                 decisions.append(
                     _decision(
                         rule_id=rule_id,
                         snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "death_record"),
+                        source_keys=(
+                            "inpat_registration",
+                            "death_record",
+                            "discharge_record",
+                        ),
                         final_state="data_gap",
                         reason_code=source_error,
                     )
@@ -1386,7 +1394,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     _decision(
                         rule_id=rule_id,
                         snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "death_record"),
+                        source_keys=(
+                            "inpat_registration",
+                            "death_record",
+                            "discharge_record",
+                        ),
                         final_state="not_applicable",
                         reason_code="trigger_absent_complete",
                     )
@@ -1397,7 +1409,11 @@ async def execute_luxian_0609_native_extended_document_rules(
                     _decision(
                         rule_id=rule_id,
                         snapshot=evidence_snapshot,
-                        source_keys=("inpat_registration", "death_record"),
+                        source_keys=(
+                            "inpat_registration",
+                            "death_record",
+                            "discharge_record",
+                        ),
                         final_state="data_gap",
                         reason_code="applicability_source_gap",
                     )
@@ -1508,6 +1524,28 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id == "LX0609-061":
+            if death_state == "present":
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="not_applicable",
+                        reason_code="trigger_absent_complete",
+                    )
+                )
+                continue
+            if death_state == "unknown" and death_error:
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="data_gap",
+                        reason_code=death_error,
+                    )
+                )
+                continue
             if registration_error or discharge_error:
                 decisions.append(
                     _decision(
@@ -1944,6 +1982,32 @@ async def execute_luxian_0609_native_extended_document_rules(
             continue
 
         if rule_id in {"LX0609-067", "LX0609-068"}:
+            if rule_id == "LX0609-068" and death_state == "present":
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="not_applicable",
+                        reason_code="trigger_absent_complete",
+                    )
+                )
+                continue
+            if (
+                rule_id == "LX0609-068"
+                and death_state == "unknown"
+                and death_error
+            ):
+                decisions.append(
+                    _decision(
+                        rule_id=rule_id,
+                        snapshot=evidence_snapshot,
+                        source_keys=("inpat_registration", "death_record"),
+                        final_state="data_gap",
+                        reason_code=death_error,
+                    )
+                )
+                continue
             source_error = registration_error or discharge_error
             discharge_time = _discharge_time(registration_rows, discharge_rows)
             approval_match: tuple[str, str] | None = None
