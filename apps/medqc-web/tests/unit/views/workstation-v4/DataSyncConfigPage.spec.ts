@@ -88,7 +88,11 @@ function mountPage() {
         'a-option': { template: '<option><slot /></option>' },
         'a-input': { template: '<input />' },
         'a-input-password': { template: '<input />' },
-        'a-date-picker': { template: '<input />' },
+        'a-date-picker': {
+          props: ['locale', 'placeholder'],
+          template:
+            '<input class="date-picker-stub" :data-locale="locale?.lang?.placeholder" :placeholder="placeholder" />',
+        },
         'a-empty': { template: '<div />' },
         ConnectionStudio: { template: '<div />' },
         SyncRunPanel: { template: '<div />' },
@@ -176,15 +180,25 @@ describe('DataSyncConfigPage visit progress', () => {
     expect(wrapper.text()).not.toContain('安全说明')
   })
 
-  it('在院范围只展示截止日期，不伪装成出院日期区间', async () => {
+  it('在院范围展示入院起止日期并使用中文日期选择器', async () => {
     mockState.policyForm.scope = 'running'
 
     const wrapper = mountPage()
     await wrapper.vm.$nextTick()
 
+    expect(wrapper.text()).toContain('入院开始日期')
     expect(wrapper.text()).toContain('在院截止日期')
     expect(wrapper.text()).not.toContain('出院开始日期')
     expect(wrapper.text()).not.toContain('出院结束日期')
+    const datePickers = wrapper.findAll('.date-picker-stub')
+    expect(datePickers).toHaveLength(2)
+    expect(datePickers.every((picker) => picker.attributes('data-locale') === '请选择日期')).toBe(
+      true,
+    )
+    expect(datePickers.map((picker) => picker.attributes('placeholder'))).toEqual([
+      '请选择入院开始日期',
+      '请选择在院截止日期',
+    ])
     mockState.policyForm.scope = 'final'
   })
 

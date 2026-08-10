@@ -2302,7 +2302,7 @@ def estimate_pg_sync_impact(
     """使用正式三坐标病例范围服务估算同步影响，不读取或写入病历明细。"""
     resolved_scene = _normalize_sync_scene(scene)
     policy = load_sync_policy()
-    as_of_date, discharge_start_date, discharge_end_date, dept_filters, window_error = (
+    as_of_date, range_start_date, discharge_end_date, dept_filters, window_error = (
         _resolve_case_scope_window(
             scene=resolved_scene,
             sync_date=None,
@@ -2316,18 +2316,18 @@ def estimate_pg_sync_impact(
     scope_result = _create_case_scope_service().resolve_hospitalization_scope(
         scope_mode=_scope_mode_for_scene(resolved_scene),
         as_of_date=as_of_date,
-        discharge_start_date=discharge_start_date,
+        admission_start_date=range_start_date if resolved_scene in {"running", "both"} else None,
+        discharge_start_date=range_start_date if resolved_scene != "running" else None,
         discharge_end_date=discharge_end_date,
         departments=dept_filters,
     )
-    effective_window = (
-        {"end": as_of_date.isoformat()}
-        if resolved_scene == "running"
-        else {
-            "start": discharge_start_date.isoformat() if discharge_start_date else "",
-            "end": discharge_end_date.isoformat() if discharge_end_date else "",
-        }
+    effective_end_date = (
+        as_of_date if resolved_scene == "running" else discharge_end_date
     )
+    effective_window = {
+        "start": range_start_date.isoformat() if range_start_date else "",
+        "end": effective_end_date.isoformat() if effective_end_date else "",
+    }
     return {
         "estimated_impact": len(scope_result.case_refs),
         "estimate_basis": "case_ref_count",
@@ -2835,15 +2835,26 @@ def _resolve_case_scope_window(
         return end_date, start_date, end_date, departments, error
 
     window_payload = date_window if isinstance(date_window, dict) else {}
+    start_text = str(
+        window_payload.get("start")
+        or window_payload.get("start_date")
+        or policy.get("start_date")
+        or ""
+    ).strip()
     as_of_text = str(
         window_payload.get("end")
         or window_payload.get("end_date")
         or sync_date
         or ""
     ).strip()
+    admission_start_date = _parse_ymd_or_none(start_text)
     as_of_date = _parse_ymd_or_none(as_of_text)
-    if as_of_date is None:
-        return None, None, None, [], "请先设置在院截止日期后再执行抽取"
+    if admission_start_date is None or as_of_date is None:
+        return None, None, None, [], "请先设置入院开始日期和在院截止日期后再执行抽取"
+    if admission_start_date > as_of_date:
+        return None, None, None, [], "入院日期范围非法：开始日期不能晚于截止日期"
+    if (as_of_date - admission_start_date).days > 180:
+        return None, None, None, [], "入院日期范围过大（最多 180 天），请缩小后重试"
     override_departments = (
         _normalize_target_departments(target_departments)
         if isinstance(target_departments, list)
@@ -2851,7 +2862,7 @@ def _resolve_case_scope_window(
     )
     policy_departments = _normalize_target_departments(policy.get("target_departments"))
     departments = override_departments if override_departments else policy_departments
-    return as_of_date, None, None, departments, None
+    return as_of_date, admission_start_date, None, departments, None
 
 
 def run_sync(
@@ -2874,7 +2885,7 @@ def run_sync(
         scene: 同步场景（决定公共住院范围：在院、出院或合并）
         policy_version: 策略版本（用于幂等与追溯）
         tables_hash: 表范围哈希（用于幂等与追溯）
-        date_window: 出院日期范围覆盖（start/end 或 start_date/end_date）
+        date_window: 在院入院日期或出院日期范围（start/end 或 start_date/end_date）
         target_departments: 目标科室覆盖（空或 * 表示全院）
     
     Returns:
@@ -2985,7 +2996,7 @@ def run_sync(
             }
 
         policy = load_sync_policy()
-        as_of_date, discharge_start_date, discharge_end_date, dept_filters, window_error = (
+        as_of_date, range_start_date, discharge_end_date, dept_filters, window_error = (
             _resolve_case_scope_window(
                 scene=resolved_scene,
                 sync_date=sync_date,
@@ -3024,7 +3035,7 @@ def run_sync(
             }
 
         target_table_names = [str(item.get("name") or "") for item in target_tables]
-        effective_start_date = discharge_start_date or as_of_date
+        effective_start_date = range_start_date or as_of_date
         effective_end_date = discharge_end_date or as_of_date
         effective_date_window = {
             "start": effective_start_date.isoformat(),
@@ -3041,7 +3052,8 @@ def run_sync(
             scope_result = _create_case_scope_service().resolve_hospitalization_scope(
                 scope_mode=scope_mode,
                 as_of_date=as_of_date,
-                discharge_start_date=discharge_start_date,
+                admission_start_date=range_start_date if resolved_scene in {"running", "both"} else None,
+                discharge_start_date=range_start_date if resolved_scene != "running" else None,
                 discharge_end_date=discharge_end_date,
                 departments=dept_filters,
             )

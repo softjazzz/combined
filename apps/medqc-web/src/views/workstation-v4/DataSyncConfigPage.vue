@@ -78,27 +78,28 @@
                       @change="handlePolicyDepartmentChange"
                     />
                   </label>
-                  <label
-                    v-if="state.policyForm.scope !== 'running'"
-                    class="system-config-scope-field sync-filter-row__date"
-                  >
-                    <span>出院开始日期</span>
+                  <label class="system-config-scope-field sync-filter-row__date">
+                    <span>{{ syncStartDateLabel }}</span>
                     <a-date-picker
                       v-model:value="state.policyForm.start_date"
+                      :locale="datePickerZhCN"
+                      format="YYYY年MM月DD日"
                       value-format="YYYY-MM-DD"
                       :disabled="isReadonly"
                       style="width: 100%"
-                      placeholder="开始日期"
+                      :placeholder="syncStartDatePlaceholder"
                     />
                   </label>
                   <label class="system-config-scope-field sync-filter-row__date">
                     <span>{{ syncEndDateLabel }}</span>
                     <a-date-picker
                       v-model:value="state.policyForm.end_date"
+                      :locale="datePickerZhCN"
+                      format="YYYY年MM月DD日"
                       value-format="YYYY-MM-DD"
                       :disabled="isReadonly"
                       style="width: 100%"
-                      placeholder="结束日期"
+                      :placeholder="syncEndDatePlaceholder"
                     />
                   </label>
                   <a-button
@@ -258,9 +259,7 @@
                       :disabled="isReadonly"
                     >
                     <span>我已确认同步
-                      {{
-                        Number(state.preflightResult?.estimated_impact || 0).toLocaleString()
-                      }}
+                      {{ Number(state.preflightResult?.estimated_impact || 0).toLocaleString() }}
                       份病历</span>
                   </label>
                   <a-tooltip :title="syncScopeConfirmed ? '正式写入本地 CDM' : '请先确认同步范围'">
@@ -402,6 +401,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import datePickerZhCN from 'ant-design-vue/es/date-picker/locale/zh_CN'
+import 'dayjs/locale/zh-cn'
 import type { SyncTableValidationItem } from '@/api/sync'
 import ConnectionStudio from './components/sync-console/ConnectionStudio.vue'
 import SyncRunPanel from './components/sync-console/SyncRunPanel.vue'
@@ -461,7 +462,7 @@ const syncScopeDisplayLabel = computed(() => {
 
 const syncScopeDescription = computed(() => {
   if (state.policyForm.scope === 'running') {
-    return '按在院截止日期和当前科室筛选；不要求病案首页号，修改后需要重新预检。'
+    return '按入院日期范围和当前科室筛选截止日仍在院的病历；不要求病案首页号。'
   }
   if (state.policyForm.scope === 'both') {
     return '同时筛选截止日期仍在院的病历和出院日期区间内的病历；修改后需要重新预检。'
@@ -469,12 +470,25 @@ const syncScopeDescription = computed(() => {
   return '按出院日期和科室筛选已出院病历；修改后需要重新预检。'
 })
 
+const syncStartDateLabel = computed(() => {
+  if (state.policyForm.scope === 'running') return '入院开始日期'
+  if (state.policyForm.scope === 'both') return '日期范围开始'
+  return '出院开始日期'
+})
+
+const syncStartDatePlaceholder = computed(() => `请选择${syncStartDateLabel.value}`)
+
 const syncEndDateLabel = computed(() =>
-  state.policyForm.scope === 'running' ? '在院截止日期' : '出院结束日期',
+  state.policyForm.scope === 'running'
+    ? '在院截止日期'
+    : state.policyForm.scope === 'both'
+      ? '日期范围结束'
+      : '出院结束日期',
 )
+const syncEndDatePlaceholder = computed(() => `请选择${syncEndDateLabel.value}`)
 
 const syncAnchorLabel = computed(() => {
-  if (state.policyForm.scope === 'running') return '住院登记 / 在院截止日期'
+  if (state.policyForm.scope === 'running') return '住院登记 / 入院日期范围'
   if (state.policyForm.scope === 'both') return '住院登记 + 出院记录 / 日期范围'
   return '出院记录 / 出院日期'
 })

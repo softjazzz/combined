@@ -68,9 +68,12 @@ class CaseScopeService:
         discharge_start_date: date | None,
         discharge_end_date: date | None,
         departments: Sequence[str],
+        admission_start_date: date | None = None,
     ) -> HospitalizationScopeResult:
         normalized_mode = _normalize_scope(
             scope_mode=scope_mode,
+            admission_start_date=admission_start_date,
+            as_of_date=as_of_date,
             discharge_start_date=discharge_start_date,
             discharge_end_date=discharge_end_date,
         )
@@ -184,15 +187,23 @@ class CaseScopeService:
                     alias="discharge_department",
                 )
                 if role == "active":
+                    admission_start_sql = (
+                        f"{admission_column} >= %s::date AND "
+                        if admission_start_date
+                        else ""
+                    )
                     where_sql = (
-                        f"{admission_column} < (%s::date + INTERVAL '1 day') "
+                        admission_start_sql
+                        + f"{admission_column} < (%s::date + INTERVAL '1 day') "
                         f"AND ({discharge_column} IS NULL "
                         f"OR {discharge_column} >= (%s::date + INTERVAL '1 day'))"
                     )
-                    date_params: list[Any] = [
-                        as_of_date.isoformat(),
-                        as_of_date.isoformat(),
-                    ]
+                    date_params: list[Any] = []
+                    if admission_start_date:
+                        date_params.append(admission_start_date.isoformat())
+                    date_params.extend(
+                        [as_of_date.isoformat(), as_of_date.isoformat()]
+                    )
                 else:
                     if discharge_start_date is None or discharge_end_date is None:
                         raise ValueError("期间出院范围必须填写出院开始日期和结束日期")
@@ -314,6 +325,7 @@ class CaseScopeService:
                 candidates=candidates,
                 scope_mode=normalized_mode,
                 as_of_date=as_of_date,
+                admission_start_date=admission_start_date,
                 discharge_start_date=discharge_start_date,
                 discharge_end_date=discharge_end_date,
                 departments=(),
@@ -322,6 +334,7 @@ class CaseScopeService:
                 candidates=all_selected,
                 scope_mode=normalized_mode,
                 as_of_date=as_of_date,
+                admission_start_date=admission_start_date,
                 discharge_start_date=discharge_start_date,
                 discharge_end_date=discharge_end_date,
                 departments=departments,
@@ -394,6 +407,7 @@ def _select_candidates(
     candidates: Sequence[Mapping[str, Any]],
     scope_mode: str,
     as_of_date: date,
+    admission_start_date: date | None,
     discharge_start_date: date | None,
     discharge_end_date: date | None,
     departments: Sequence[str],
@@ -416,6 +430,7 @@ def _select_candidates(
         )
         is_active = bool(
             admission_time
+            and (admission_start_date is None or admission_time.date() >= admission_start_date)
             and admission_time < as_of_end
             and (discharge_time is None or discharge_time >= as_of_end)
         )
@@ -512,12 +527,19 @@ def _backfill_patient_names(
 def _normalize_scope(
     *,
     scope_mode: str,
+    admission_start_date: date | None,
+    as_of_date: date,
     discharge_start_date: date | None,
     discharge_end_date: date | None,
 ) -> str:
     normalized_mode = _text(scope_mode).lower()
     if normalized_mode not in _SCOPE_MODES:
         raise ValueError("住院范围仅支持当前在院、期间出院或两者合并")
+    if normalized_mode in {"active", "active_and_discharged"} and admission_start_date:
+        if admission_start_date > as_of_date:
+            raise ValueError("入院开始日期不能晚于在院截止日期")
+        if (as_of_date - admission_start_date).days > 180:
+            raise ValueError("入院日期范围最多 180 天")
     if normalized_mode in {"discharged", "active_and_discharged"}:
         if discharge_start_date is None or discharge_end_date is None:
             raise ValueError("期间出院范围必须填写出院开始日期和结束日期")

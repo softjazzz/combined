@@ -170,6 +170,56 @@ def test_combined_scope_returns_active_and_period_discharge_case_refs():
     assert result.source_status == "ready"
 
 
+def test_active_scope_filters_by_admission_start_date():
+    identity_columns = {"institute_id", "patient_id", "visit_id"}
+    cursor = _SourceCursor(
+        table_columns={
+            "inpat_registration": identity_columns
+            | {
+                "admission_datetime",
+                "discharge_datetime",
+                "current_dept_name",
+            },
+        },
+        source_rows={
+            "inpat_registration": [
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-OLD",
+                    "visit_id": "V-OLD",
+                    "admission_time": "2026-06-30 08:00:00",
+                    "discharge_time": None,
+                    "current_department": "重症医学科（ICU）",
+                },
+                {
+                    "institute_id": "H1",
+                    "patient_id": "P-IN-RANGE",
+                    "visit_id": "V-IN-RANGE",
+                    "admission_time": "2026-07-01 00:00:00",
+                    "discharge_time": None,
+                    "current_department": "重症医学科（ICU）",
+                },
+            ]
+        },
+    )
+    service = CaseScopeService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+        connection_factory=lambda *_args, **_kwargs: _SourceConnection(cursor),
+    )
+
+    result = service.resolve_hospitalization_scope(
+        scope_mode="active",
+        as_of_date=date(2026, 7, 31),
+        admission_start_date=date(2026, 7, 1),
+        discharge_start_date=None,
+        discharge_end_date=None,
+        departments=(),
+    )
+
+    assert result.case_refs == (CaseRef("H1", "P-IN-RANGE", "V-IN-RANGE"),)
+
+
 def test_active_scope_deduplicates_full_coordinates_and_filters_effective_department():
     identity_columns = {"institute_id", "patient_id", "visit_id"}
     first = {
