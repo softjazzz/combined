@@ -30,6 +30,55 @@ SNAPSHOT_HASH = "a" * 64
 FACT_REF = "b" * 64
 
 
+def test_010_association_facts_render_exact_customer_counts() -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-010",
+        facts={
+            "failure_kind": "exam_order_exam_association_failed",
+            "subject": "ct_mri",
+            "checked_sources": [
+                "exam_lab_order",
+                "exam_master",
+                "exam_lab_report",
+                "course_record",
+            ],
+            "requirement": "order_course_report_consistency",
+            "requirement_met": False,
+            "order_count": 6,
+            "exam_master_count": 1,
+            "uniquely_linked_order_count": 1,
+            "unmatched_or_ambiguous_order_count": 5,
+            "association_issue_kind": "order_without_exam_master",
+        },
+    )
+
+    assert finding == (
+        "已核对6条CT/MRI医嘱与1条检查主记录，其中5条医嘱未找到唯一对应检查主记录，"
+        "暂无法确认属于同一次诊疗事件。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected"),
+    (
+        ("exam_order_reason_missing", "检查前病程未记录检查原因"),
+        ("exam_course_without_order", "未找到对应检查医嘱"),
+        ("exam_order_course_missing", "未找到对应病程记录"),
+        ("exam_report_missing", "未找到对应检查报告"),
+    ),
+)
+def test_010_other_deterministic_failures_render_specific_customer_copy(
+    failure_kind: str,
+    expected: str,
+) -> None:
+    finding = customer_finding_from_controlled_facts(
+        rule_id="LX0609-010",
+        facts={"failure_kind": failure_kind},
+    )
+
+    assert expected in finding
+
+
 def test_068_compliant_message_covers_regular_and_automatic_discharge_paths() -> None:
     finding = compliant_customer_finding(
         rule_id="LX0609-068",

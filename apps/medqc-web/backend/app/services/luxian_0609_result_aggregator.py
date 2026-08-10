@@ -2531,6 +2531,124 @@ def safe_luxian_0609_customer_display_facts(
             "requirement": requirement,
             "checked_sources": list(checked_sources),
         }
+    if (
+        rule_id == "LX0609-010"
+        and raw.get("requirement") == "order_course_report_consistency"
+    ):
+        allowed_public_keys = {
+            "failure_kind",
+            "verification_kind",
+            "subject",
+            "checked_sources",
+            "requirement",
+            "requirement_met",
+            "order_count",
+            "exam_master_count",
+            "uniquely_linked_order_count",
+            "unmatched_or_ambiguous_order_count",
+            "association_issue_kind",
+        }
+        allowed_internal_keys = {"source_document_ids", "source_document_refs"}
+        if not set(raw).issubset(allowed_public_keys | allowed_internal_keys):
+            return None
+        failure_kind = raw.get("failure_kind")
+        verification_kind = raw.get("verification_kind")
+        allowed_failure_kinds = {
+            "exam_order_reason_missing",
+            "exam_course_without_order",
+            "exam_order_course_missing",
+            "exam_report_missing",
+            "exam_order_exam_association_failed",
+            "exam_order_contract_data_gap",
+        }
+        if (
+            (failure_kind is None) == (verification_kind is None)
+            or (
+                failure_kind is not None
+                and failure_kind not in allowed_failure_kinds
+            )
+            or (
+                verification_kind is not None
+                and verification_kind != "exam_order_course_report_consistent"
+            )
+            or raw.get("subject") != "ct_mri"
+            or raw.get("checked_sources")
+            != ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"]
+            or type(raw.get("requirement_met")) is not bool
+            or bool(raw.get("requirement_met")) != (verification_kind is not None)
+        ):
+            return None
+        source_document_ids = raw.get("source_document_ids")
+        if source_document_ids is not None and (
+            not isinstance(source_document_ids, list)
+            or any(not isinstance(item, str) for item in source_document_ids)
+        ):
+            return None
+        source_document_refs = raw.get("source_document_refs")
+        if source_document_refs is not None:
+            if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
+                return None
+            for item in source_document_refs:
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item) != {"source_type", "source_document_id"}
+                    or item.get("source_type") not in {"exam_master", "exam_item_report"}
+                    or not isinstance(item.get("source_document_id"), str)
+                ):
+                    return None
+
+        result: dict[str, Any] = {
+            (
+                "failure_kind" if failure_kind is not None else "verification_kind"
+            ): failure_kind or verification_kind,
+            "subject": "ct_mri",
+            "checked_sources": [
+                "exam_lab_order",
+                "exam_master",
+                "exam_lab_report",
+                "course_record",
+            ],
+            "requirement": "order_course_report_consistency",
+            "requirement_met": bool(raw.get("requirement_met")),
+        }
+        association_keys = (
+            "order_count",
+            "exam_master_count",
+            "uniquely_linked_order_count",
+            "unmatched_or_ambiguous_order_count",
+        )
+        is_association_failure = failure_kind == "exam_order_exam_association_failed"
+        if not is_association_failure and any(key in raw for key in association_keys):
+            return None
+        if not is_association_failure and "association_issue_kind" in raw:
+            return None
+        if is_association_failure:
+            counts = {key: raw.get(key) for key in association_keys}
+            if any(type(value) is not int or value < 0 for value in counts.values()):
+                return None
+            order_count = counts["order_count"]
+            master_count = counts["exam_master_count"]
+            uniquely_linked = counts["uniquely_linked_order_count"]
+            unmatched = counts["unmatched_or_ambiguous_order_count"]
+            if (
+                uniquely_linked > min(order_count, master_count)
+                or unmatched != order_count - uniquely_linked
+            ):
+                return None
+            issue_kind = raw.get("association_issue_kind")
+            if issue_kind not in {
+                "invalid_business_key",
+                "exam_master_without_order",
+                "ambiguous_exam_master_linkage",
+                "order_without_exam_master",
+                "mixed_association_failure",
+                "association_cardinality_mismatch",
+            }:
+                return None
+            result.update(counts)
+            result["association_issue_kind"] = issue_kind
+        return result
+
     if rule_id in {"LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
         subject = raw.get("subject")
         requirement = raw.get("requirement")
@@ -4495,10 +4613,18 @@ def aggregate_luxian_0609_results(
             or not isinstance(facts, Mapping)
         ):
             raise ValueError("invalid customer display facts scope")
-        display_facts_by_rule[rule_id] = (
-            safe_luxian_0609_customer_display_facts(rule_id=rule_id, raw=facts)
-            or _strip_sensitive(dict(facts))
+        safe_facts = safe_luxian_0609_customer_display_facts(
+            rule_id=rule_id,
+            raw=facts,
         )
+        is_010_new_contract = (
+            rule_id == "LX0609-010"
+            and facts.get("requirement") == "order_course_report_consistency"
+        )
+        if safe_facts is not None:
+            display_facts_by_rule[rule_id] = safe_facts
+        elif not is_010_new_contract:
+            display_facts_by_rule[rule_id] = _strip_sensitive(dict(facts))
         customer_evidence = _customer_evidence_from_display_facts(
             rule_id=rule_id,
             raw=facts,

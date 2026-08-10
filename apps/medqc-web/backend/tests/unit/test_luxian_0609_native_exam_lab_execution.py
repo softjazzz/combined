@@ -70,6 +70,7 @@ def _typed_session(
     culture_report_rows: tuple[dict, ...] = (),
     nondrug_order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] | None = None,
+    rescue_rows: tuple[dict, ...] = (),
     discharge_horizon_rows: tuple[dict, ...] = (),
     evaluation_horizon_rows: tuple[dict, ...] = (),
     source_states: dict[str, str] | None = None,
@@ -109,7 +110,7 @@ def _typed_session(
             },
         ),
         "senior_course_record": (),
-        "rescue_record": (),
+        "rescue_record": rescue_rows,
         "inpat_registration.discharge_horizon": discharge_horizon_rows,
         "evaluation_context.horizon": evaluation_horizon_rows,
     }
@@ -1324,6 +1325,7 @@ async def _run_010_public_native(
     exam_report_rows: tuple[dict, ...] = (),
     order_rows: tuple[dict, ...] = (),
     course_rows: tuple[dict, ...] = (),
+    rescue_rows: tuple[dict, ...] = (),
 ):
     snapshot, materials = _typed_session(
         monkeypatch,
@@ -1331,6 +1333,7 @@ async def _run_010_public_native(
         exam_report_rows=exam_report_rows,
         nondrug_order_rows=order_rows,
         course_rows=course_rows,
+        rescue_rows=rescue_rows,
     )
     client = _Client([])
     result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
@@ -1541,7 +1544,13 @@ async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
     assert decision.reason_code == "association_failed"
     assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "association_failed"
-    assert dict(result.customer_display_facts)["LX0609-010"]["failure_kind"] == "exam_order_exam_association_failed"
+    facts = dict(result.customer_display_facts)["LX0609-010"]
+    assert facts["failure_kind"] == "exam_order_exam_association_failed"
+    assert facts["order_count"] == 1
+    assert facts["exam_master_count"] == 2
+    assert facts["uniquely_linked_order_count"] == 0
+    assert facts["unmatched_or_ambiguous_order_count"] == 1
+    assert facts["association_issue_kind"] == "ambiguous_exam_master_linkage"
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 
@@ -1587,6 +1596,86 @@ async def test_010_effective_order_without_exam_master_stays_data_gap(monkeypatc
     assert canonical["status"] == "data_gap"
     assert canonical["reason_code"] == "association_failed"
     assert dict(result.customer_display_facts)["LX0609-010"]["failure_kind"] == "exam_order_exam_association_failed"
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_010_association_gap_delivers_counts_and_only_association_evidence(monkeypatch):
+    order_rows = tuple(
+        {
+            "order_id": f"ORD-{index}",
+            "order_name": "胸部CT平扫",
+            "order_status": "新开",
+            "prescribed_datetime": f"2026-07-07 {index + 7:02d}:00:00",
+            "document_id": f"ORDER-DOC-{index}",
+        }
+        for index in range(1, 7)
+    )
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-1",
+                "exam_name": "胸部CT平扫",
+                "exam_time": "2026-07-07 09:00:00",
+                "report_time": "2026-07-07 10:00:00",
+                "document_id": "MASTER-DOC-1",
+            },
+        ),
+        exam_report_rows=(
+            {
+                "exam_id": "EX-1",
+                "exam_name": "胸部CT平扫",
+                "report_time": "2026-07-07 10:00:00",
+                "document_id": "REPORT-DOC-1",
+            },
+        ),
+        order_rows=order_rows,
+        course_rows=(
+            {
+                "record_time": "2026-07-07 07:00:00",
+                "record_content": "拟行胸部CT检查。",
+                "document_id": "COURSE-DOC-1",
+            },
+        ),
+        rescue_rows=(
+            {
+                "record_time": "2026-07-07 07:10:00",
+                "record_content": "抢救期间记录胸部CT计划。",
+                "document_id": "RESCUE-DOC-1",
+            },
+        ),
+    )
+
+    assert decision.reason_code == "association_failed"
+    assert canonical["status"] == "data_gap"
+    assert canonical["reason_code"] == "association_failed"
+    assert dict(result.customer_display_facts)["LX0609-010"] == {
+        "failure_kind": "exam_order_exam_association_failed",
+        "subject": "ct_mri",
+        "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
+        "requirement": "order_course_report_consistency",
+        "requirement_met": False,
+        "order_count": 6,
+        "exam_master_count": 1,
+        "uniquely_linked_order_count": 1,
+        "unmatched_or_ambiguous_order_count": 5,
+        "association_issue_kind": "order_without_exam_master",
+    }
+    assert canonical["findings"] == (
+        "已核对6条CT/MRI医嘱与1条检查主记录，其中5条医嘱未找到唯一对应检查主记录，"
+        "暂无法确认属于同一次诊疗事件。"
+    )
+    assert {
+        item["source_type"] for item in canonical.get("customer_evidence", [])
+    } == {"exam_master", "exam_item_report"}
+    assert not {
+        "first_course_record", "daily_course_record", "senior_course_record", "rescue_record"
+    }.intersection(
+        item["source_type"] for item in canonical.get("customer_evidence", [])
+    )
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []
 

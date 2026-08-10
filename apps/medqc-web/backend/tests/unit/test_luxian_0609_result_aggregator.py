@@ -26,6 +26,64 @@ CREATED = "2026-07-12T14:00:00+08:00"
 EXPECTED = {FindingKind.REQUIREMENT_SATISFIED: FinalState.COMPLIANT, FindingKind.REQUIRED_DOCUMENT_MISSING: FinalState.NON_COMPLIANT, FindingKind.TRIGGER_ABSENT: FinalState.NOT_APPLICABLE, FindingKind.SOURCE_INCOMPLETE: FinalState.DATA_GAP, FindingKind.TECHNICAL_FAILURE: FinalState.TECHNICAL_ERROR, FindingKind.EVIDENCE_CONFLICT: FinalState.EVALUATION_UNKNOWN}
 
 
+def _010_association_facts() -> dict[str, object]:
+    return {
+        "failure_kind": "exam_order_exam_association_failed",
+        "subject": "ct_mri",
+        "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
+        "requirement": "order_course_report_consistency",
+        "requirement_met": False,
+        "order_count": 6,
+        "exam_master_count": 1,
+        "uniquely_linked_order_count": 1,
+        "unmatched_or_ambiguous_order_count": 5,
+        "association_issue_kind": "order_without_exam_master",
+    }
+
+
+def test_010_new_contract_accepts_only_controlled_association_counts() -> None:
+    facts = _010_association_facts()
+
+    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) == facts
+
+
+@pytest.mark.parametrize(
+    "patch",
+    (
+        {"order_count": -1},
+        {"order_count": True},
+        {"unmatched_or_ambiguous_order_count": 4},
+        {"association_issue_kind": "uncontrolled_value"},
+        {"private_text": "must-not-pass"},
+    ),
+)
+def test_010_new_contract_rejects_invalid_or_private_association_facts(
+    patch: dict[str, object],
+) -> None:
+    facts = {**_010_association_facts(), **patch}
+
+    assert safe_luxian_0609_customer_display_facts(rule_id="LX0609-010", raw=facts) is None
+
+
+def test_010_invalid_new_contract_never_falls_back_to_uncontrolled_display_facts() -> None:
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    invalid = {**_010_association_facts(), "private_text": "must-not-pass"}
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-010"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-010"),),
+        customer_display_facts=(("LX0609-010", invalid),),
+    )[0]
+
+    assert "customer_display_facts" not in result
+    assert "customer_evidence" not in result
+    assert "must-not-pass" not in repr(result)
+
+
 @pytest.mark.parametrize(
     ("rule_id", "facts"),
     [

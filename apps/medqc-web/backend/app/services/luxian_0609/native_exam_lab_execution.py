@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import json
@@ -738,7 +739,85 @@ def _legacy_order_based_exam_reason_outcome(
     )
 
 
-def _order_contract_display_facts(outcome: _ExamLabOutcome) -> Mapping[str, Any]:
+def _order_exam_association_summary(
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any]:
+    """仅以受控业务键汇总 010 关联失败，不输出任何业务键或正文。"""
+
+    orders = _effective_target_orders(rows_by_source, fact_kind="exam")
+    exam_rows = tuple(
+        row
+        for row in rows_by_source.get("exam_master", ())
+        if isinstance(row, Mapping)
+        and any(
+            _EXAM_TRIGGER_PATTERN.search(_clean(row.get(field)))
+            for field in _EXAM_CONTROLLED_FIELDS
+        )
+    )
+    order_ids = tuple(_clean(row.get("order_id")) for _time, row in orders)
+    exam_order_ids = tuple(_clean(row.get("order_id")) for row in exam_rows)
+    exam_ids = tuple(_clean(row.get("exam_id")) for row in exam_rows)
+    order_id_counts = Counter(order_ids)
+    exam_id_counts = Counter(exam_ids)
+    exams_by_order: dict[str, list[Mapping[str, Any]]] = {}
+    for row, order_id in zip(exam_rows, exam_order_ids):
+        if order_id:
+            exams_by_order.setdefault(order_id, []).append(row)
+
+    uniquely_linked = 0
+    for order_id in order_ids:
+        linked = exams_by_order.get(order_id, ())
+        if order_id_counts[order_id] != 1 or len(linked) != 1:
+            continue
+        exam_id = _clean(linked[0].get("exam_id"))
+        if exam_id and exam_id_counts[exam_id] == 1:
+            uniquely_linked += 1
+
+    order_count = len(orders)
+    unmatched_or_ambiguous = max(0, order_count - uniquely_linked)
+    issues: set[str] = set()
+    if (
+        any(not value for value in order_ids)
+        or any(not value for value in exam_order_ids)
+        or any(not value for value in exam_ids)
+    ):
+        issues.add("invalid_business_key")
+    known_order_ids = {value for value in order_ids if value}
+    if any(value and value not in known_order_ids for value in exam_order_ids):
+        issues.add("exam_master_without_order")
+    if any(count > 1 for value, count in order_id_counts.items() if value) or any(
+        len(values) > 1 for values in exams_by_order.values()
+    ) or any(count > 1 for value, count in exam_id_counts.items() if value):
+        issues.add("ambiguous_exam_master_linkage")
+    if any(
+        value
+        and order_id_counts[value] == 1
+        and not exams_by_order.get(value)
+        for value in order_ids
+    ):
+        issues.add("order_without_exam_master")
+
+    association_issue_kind = (
+        next(iter(issues))
+        if len(issues) == 1
+        else "mixed_association_failure"
+        if issues
+        else "association_cardinality_mismatch"
+    )
+    return {
+        "order_count": order_count,
+        "exam_master_count": len(exam_rows),
+        "uniquely_linked_order_count": uniquely_linked,
+        "unmatched_or_ambiguous_order_count": unmatched_or_ambiguous,
+        "association_issue_kind": association_issue_kind,
+    }
+
+
+def _order_contract_display_facts(
+    outcome: _ExamLabOutcome,
+    *,
+    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any]:
     """010 三个确定性子判定的客户事实；不在后续层重释状态。"""
 
     failure_kind = {
@@ -749,13 +828,16 @@ def _order_contract_display_facts(outcome: _ExamLabOutcome) -> Mapping[str, Any]
         "exam_report_missing": "exam_report_missing",
         "association_failed": "exam_order_exam_association_failed",
     }.get(outcome.reason_code, "exam_order_contract_data_gap")
-    return {
+    facts: dict[str, Any] = {
         "failure_kind" if outcome.status != "compliant" else "verification_kind": failure_kind,
         "subject": "ct_mri",
         "checked_sources": ["exam_lab_order", "exam_master", "exam_lab_report", "course_record"],
         "requirement": "order_course_report_consistency",
         "requirement_met": outcome.status == "compliant",
     }
+    if outcome.reason_code == "association_failed":
+        facts.update(_order_exam_association_summary(rows_by_source))
+    return facts
 
 
 def _typed_context(
@@ -802,6 +884,9 @@ def _decision_from_outcome(
     snapshot: Luxian0609EvidenceSnapshot,
 ) -> RuleDecision:
     allowed_source_keys = set(_TYPED_RULE_SOURCE_KEYS[outcome.rule_id])
+    if outcome.rule_id == "LX0609-010" and outcome.reason_code == "association_failed":
+        # 关联失败只由医嘱、检查主表和报告支持；病程来源不能作为该结论的关键证据。
+        allowed_source_keys = {_ORDER_SOURCE_KEY, *_EXAM_SOURCE_KEYS}
     if outcome.rule_id in _POST_RULE_IDS:
         allowed_source_keys.update(_HORIZON_SOURCE_KEYS)
     return build_exam_lab_rule_decision(
@@ -1309,7 +1394,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         order_outcome.rule_id,
                         order_outcome.status,
                         order_outcome.reason_code,
-                        display_facts=_order_contract_display_facts(order_outcome),
+                        display_facts=_order_contract_display_facts(
+                            order_outcome,
+                            rows_by_source=rows_by_source,
+                        ),
                     )
                     typed_processed.add("LX0609-010")
                     eligible_rule_ids.remove("LX0609-010")

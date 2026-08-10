@@ -1126,6 +1126,7 @@ def customer_finding_from_controlled_facts(
 
     if rule_id not in {
         "LX0609-009",
+        "LX0609-010",
         "LX0609-011",
         "LX0609-012",
         "LX0609-013",
@@ -1160,6 +1161,51 @@ def customer_finding_from_controlled_facts(
     def joined(key: str) -> str:
         values = facts.get(key)
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
+
+    if rule_id == "LX0609-010":
+        if kind == "exam_order_exam_association_failed":
+            count_keys = (
+                "order_count",
+                "exam_master_count",
+                "uniquely_linked_order_count",
+                "unmatched_or_ambiguous_order_count",
+            )
+            if any(type(facts.get(key)) is not int or facts[key] < 0 for key in count_keys):
+                return ""
+            order_count = facts["order_count"]
+            master_count = facts["exam_master_count"]
+            uniquely_linked = facts["uniquely_linked_order_count"]
+            unmatched = facts["unmatched_or_ambiguous_order_count"]
+            if (
+                uniquely_linked > min(order_count, master_count)
+                or unmatched != order_count - uniquely_linked
+            ):
+                return ""
+            if unmatched:
+                return (
+                    f"已核对{order_count}条CT/MRI医嘱与{master_count}条检查主记录，"
+                    f"其中{unmatched}条医嘱未找到唯一对应检查主记录，"
+                    "暂无法确认属于同一次诊疗事件。"
+                )
+            unlinked_master_count = max(0, master_count - uniquely_linked)
+            return (
+                f"已核对{order_count}条CT/MRI医嘱与{master_count}条检查主记录；"
+                f"其中{unlinked_master_count}条检查主记录未找到唯一对应医嘱，"
+                "暂无法确认属于同一次诊疗事件。"
+            )
+        if kind == "exam_order_reason_missing":
+            return "已核对CT/MRI医嘱、检查主记录、报告及病程，检查前病程未记录检查原因。"
+        if kind == "exam_course_without_order":
+            return "病程已记录CT/MRI检查，但未找到对应检查医嘱。"
+        if kind == "exam_order_course_missing":
+            return "已找到CT/MRI医嘱及检查主记录，但未找到对应病程记录。"
+        if kind == "exam_report_missing":
+            return "已找到CT/MRI医嘱及检查主记录，但未找到对应检查报告。"
+        if kind == "exam_order_course_report_consistent":
+            return "已核对CT/MRI医嘱、病程、检查主记录及报告，三项记录一致且检查前已说明原因。"
+        if kind == "exam_order_contract_data_gap":
+            return "CT/MRI医嘱、检查主记录、报告或病程资料不完整，暂无法完成一致性核对。"
+        return ""
 
     if rule_id == "LX0609-033":
         if facts.get("performed_surgery_confirmed") is not True:
