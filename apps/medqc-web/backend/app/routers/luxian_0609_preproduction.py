@@ -13,7 +13,9 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..core.security import optional_security, resolve_current_user_from_token
+from ..core.response import get_trace_id
 from ..core.settings import get_settings
+from ..services.llm_observability import llm_observation_context
 from ..services.luxian_0609.preproduction_runner import (
     run_luxian_0609_preproduction,
 )
@@ -127,14 +129,25 @@ async def evaluate_luxian_0609_preproduction(
             detail="准生产评估服务暂不可用",
         ) from None
     try:
-        return await run_luxian_0609_preproduction(
-            bundle=bundle,
-            selected_customer_rule_ids=payload.selected_customer_rule_ids,
-            evaluation_as_of_date=payload.evaluation_as_of_date,
-            llm_client=client,
-            base_settings=settings,
-            model_name=str(client.model or ""),
-        )
+        with llm_observation_context(
+            business_scene="luxian_0609_preproduction",
+            root_job_id=get_trace_id(request),
+            record_identity=(
+                payload.institute_id,
+                payload.patient_id,
+                payload.visit_id,
+            ),
+            rule_set_key="luxian_0609_qc_v1",
+            executor_key="preproduction_adjudicator",
+        ):
+            return await run_luxian_0609_preproduction(
+                bundle=bundle,
+                selected_customer_rule_ids=payload.selected_customer_rule_ids,
+                evaluation_as_of_date=payload.evaluation_as_of_date,
+                llm_client=client,
+                base_settings=settings,
+                model_name=str(client.model or ""),
+            )
     except (TypeError, ValueError):
         raise _safe_contract_error() from None
     except HTTPException:

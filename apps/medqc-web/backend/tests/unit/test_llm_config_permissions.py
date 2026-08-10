@@ -309,6 +309,12 @@ def test_llm_connection_failure_does_not_leak_endpoint_or_exception(client, monk
     _override_user(client, ["sync_admin"])
 
     async def _fail_generate(*_args, **_kwargs):
+        from app.services.llm_observability import current_llm_observation_context
+
+        context = current_llm_observation_context()
+        assert context.business_scene == "llm_config_probe"
+        assert context.executor_key == "llm_config_probe"
+        assert context.record_key_hash is None
         raise RuntimeError("SECRET_REASON endpoint=https://secret.example/v1 token=SECRET")
 
     monkeypatch.setattr(

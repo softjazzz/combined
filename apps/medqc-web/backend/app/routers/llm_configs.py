@@ -16,6 +16,7 @@ from ..services.llm_config_loader import (
     get_enabled_provider_codes,
 )
 from ..services.qc_llm_client import SichuanQCLLMClient
+from ..services.llm_observability import llm_observation_context
 
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
@@ -468,7 +469,12 @@ async def test_config(
                 detail="llm_connection_test_not_configured",
             )
 
-        result = await client.generate("请只返回“pong”，不要输出其他内容。")
+        with llm_observation_context(
+            business_scene="llm_config_probe",
+            root_job_id=get_trace_id(request),
+            executor_key="llm_config_probe",
+        ):
+            result = await client.generate("请只返回“pong”，不要输出其他内容。")
         content = str(
             ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
         ).strip()

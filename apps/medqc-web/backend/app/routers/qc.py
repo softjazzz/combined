@@ -21,6 +21,7 @@ from ..core.permissions import (
 )
 from ..services.qc_persistence_service import default_qc_persistence_service
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
+from ..services.llm_observability import llm_observation_context
 from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
     resolve_sc_intrinsic_launch_tier,
@@ -940,11 +941,21 @@ async def check_coding_qc(
 
         engine = _get_coding_qc_engine()
 
-        if skip_llm:
-            temp_engine = CodingQCEngine(llm_client=None)
-            report = await temp_engine.run_all(frontpage)
-        else:
-            report = await engine.run_all(frontpage)
+        with llm_observation_context(
+            business_scene="coding_qc",
+            root_job_id=run_id or get_trace_id(request),
+            record_identity=(
+                str(payload.get("institute_id") or ""),
+                str(patient_id or ""),
+                str(visit_id or ""),
+            ),
+            executor_key="coding_qc_engine",
+        ):
+            if skip_llm:
+                temp_engine = CodingQCEngine(llm_client=None)
+                report = await temp_engine.run_all(frontpage)
+            else:
+                report = await engine.run_all(frontpage)
         report_dict = report.to_dict()
         persistence_result = _build_coding_qc_persistence_result(payload, report_dict)
         persistence = await default_qc_persistence_service.persist_analysis(

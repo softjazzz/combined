@@ -55,6 +55,41 @@ class TestCodingQCAPI:
         # 应有 rule_issues 和 llm_issues 两个 key
         assert "rule_issues" in data or "total_issues" in data
 
+    def test_coding_qc_injects_safe_record_observation_context(self):
+        """编码质控复用核心客户端时，应带业务场景和三坐标哈希上下文。"""
+        from app.services.coding_qc_service import CodingQCEngine
+        from app.services.llm_observability import current_llm_observation_context
+
+        captured = {}
+        frontpage = {
+            "diagnoses": [{"code": "J18.9", "name": "肺炎"}],
+            "surgeries": [],
+        }
+
+        class _CapturingEngine:
+            async def run_all(self, received_frontpage):
+                captured["context"] = current_llm_observation_context()
+                return await CodingQCEngine(llm_client=None).run_all(received_frontpage)
+
+        with (
+            patch("app.routers.qc._load_frontpage_from_pg", return_value=frontpage),
+            patch("app.routers.qc._get_coding_qc_engine", return_value=_CapturingEngine()),
+        ):
+            response = self.client.post(
+                self.base_url,
+                json={
+                    "institute_id": "hospital-observe",
+                    "patient_id": "patient-observe",
+                    "visit_id": "visit-observe",
+                },
+            )
+
+        assert response.status_code == 200
+        context = captured["context"]
+        assert context.business_scene == "coding_qc"
+        assert context.executor_key == "coding_qc_engine"
+        assert context.record_key_hash
+
     def test_skip_llm_mode(self):
         """skip_llm=true 时只返回规则层结果，不调用 LLM。"""
         payload = {

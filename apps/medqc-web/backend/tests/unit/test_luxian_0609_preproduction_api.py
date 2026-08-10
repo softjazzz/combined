@@ -189,8 +189,11 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
         return fake_client
 
     async def run_runner(**kwargs):
+        from app.services.llm_observability import current_llm_observation_context
+
         captured["runner"] += 1
         captured["kwargs"] = kwargs
+        captured["observation_context"] = current_llm_observation_context()
         return {
             "schema_version": "lx0609-preproduction-runner-v1",
             "results": [{"rule_id": "LX0609-007", "status": "compliant"}],
@@ -233,6 +236,9 @@ def test_preproduction_api_enabled_passes_exact_safe_contract_once(monkeypatch) 
     assert captured["loader"] == 1
     assert captured["client"] == 1
     assert captured["runner"] == 1
+    assert captured["observation_context"].business_scene == "luxian_0609_preproduction"
+    assert captured["observation_context"].record_key_hash
+    assert captured["observation_context"].executor_key == "preproduction_adjudicator"
     assert captured["loader_kwargs"] == {
         "scene": "running",
         "institute_id": "institute-safe-coordinate",

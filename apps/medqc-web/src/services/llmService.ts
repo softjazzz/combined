@@ -528,42 +528,10 @@ export class LLMService {
   }
 
   /**
-   * 解析医疗文件（支持PDF等格式）- 直接调用LLM API（已废弃）
+   * 解析医疗文件（兼容入口）。文件统一经后端代理，避免浏览器直连模型厂商形成观测盲区。
    */
   async parseMedicalFile(file: File, options: ParseOptions = {}): Promise<ParseResult> {
-    const startTime = Date.now()
-
-    try {
-      console.log('开始解析文件:', file.name, file.type)
-
-      // 构建文件上传的提示词
-      const prompt = this.buildFileExtractionPrompt(options)
-
-      // 调用支持文件上传的LLM API
-      const response = await this.callLLMAPIWithFile(prompt, file)
-
-      // 解析响应
-      const extractedData = this.parseResponse(response)
-
-      // 后处理和验证
-      const validatedData = this.validateAndCleanData(extractedData)
-
-      const processingTime = Date.now() - startTime
-
-      return {
-        success: true,
-        data: validatedData,
-        processingTime,
-        tokensUsed: response.tokensUsed,
-      }
-    } catch (error) {
-      console.error('LLM文件解析失败:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '文件解析失败',
-        processingTime: Date.now() - startTime,
-      }
-    }
+    return this.parseMedicalFileViaBackend(file, options)
   }
 
   /**
@@ -2454,56 +2422,6 @@ ${text.substring(0, 500)}...
     )
 
     return sections.join('\n')
-  }
-
-  /**
-   * 调用支持文件上传的LLM API
-   */
-  private async callLLMAPIWithFile(prompt: string, file: File): Promise<any> {
-    try {
-      // 构建FormData
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('prompt', prompt)
-      formData.append('model', this.model)
-
-      // 构建请求头
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${this.apiKey}`,
-      }
-
-      console.log('发送文件到LLM API:', {
-        endpoint: this.apiEndpoint,
-        fileName: file.name,
-        fileSize: file.size,
-        model: this.model,
-      })
-
-      // 发送请求
-      const response = await fetch(this.apiEndpoint, {
-        method: 'POST',
-        headers,
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('LLM API错误响应:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorText,
-        })
-        throw new Error(`API请求失败: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log('LLM API响应:', data)
-
-      return this.parseAPIResponse(data)
-    } catch (error) {
-      console.error('调用LLM API失败:', error)
-      throw error
-    }
   }
 }
 
