@@ -1,4 +1,4 @@
-"""LX0609 检查检验族原生执行：单事件投影、一次事实抽取、Python 判定。"""
+"""LX0609 检查检验族原生执行：多事件投影、一次事实抽取、Python 判定。"""
 
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ from .exam_lab_fact_extraction import (
     ExamLabTextProjection,
     build_exam_lab_fact_prompt,
     build_exam_lab_text_projection,
+    event_for_fact,
+    events_for_family,
     parse_exam_lab_fact_response,
     resolve_exam_lab_controlled_terminal,
 )
@@ -187,7 +189,6 @@ _RESULT_COURSE_PATTERN = re.compile(
     r"提示|显示|结果|结合|诊断意见|未见|发现|阳性|阴性|无生长|检出|分离|"
     r"血肿|出血|梗死|骨折|异常|菌|\d+\+|敏感|耐药"
 )
-_MAX_RELEVANT_COURSE_ROWS = 4
 
 _CONTROLLED_MESSAGES = {
     "compliant": ("检查检验相关记录满足该项要求。", ""),
@@ -452,119 +453,6 @@ def _effective_target_orders(
         if not _CANCELLED_ORDER_PATTERN.search(_clean(row.get("order_status")))
         and pattern.search(_clean(row.get("order_name")))
     )
-
-
-def _course_rows_relevant_to_target_orders(
-    rows_by_source: Mapping[str, Sequence[Mapping[str, Any]]],
-) -> dict[str, tuple[Mapping[str, Any], ...]]:
-    """先按目标事件和时序筛病程，再做 LLM 预算裁剪。
-
-    医嘱仅证明目标事项已下达，绝不伪造实际检查时间、报告时间或结果。
-    """
-
-    projected = {
-        key: tuple(row for row in rows if isinstance(row, Mapping))
-        for key, rows in rows_by_source.items()
-    }
-    anchors = {
-        fact_kind: min(
-            (time for time, _row in _effective_target_orders(projected, fact_kind=fact_kind)
-             if time is not None),
-            default=None,
-        )
-        for fact_kind in ("exam", "culture")
-    }
-    if all(anchor is None for anchor in anchors.values()):
-        return projected
-
-    entries: list[
-        tuple[str, int, Mapping[str, Any], datetime | None, str, frozenset[str]]
-    ] = []
-    for source_key in _COURSE_SOURCE_KEYS:
-        for index, row in enumerate(projected.get(source_key, ())):
-            text = _row_text(row)
-            families = frozenset(
-                fact_kind
-                for fact_kind in ("exam", "culture")
-                if _target_order_pattern(fact_kind).search(text)
-            )
-            if not families or not (
-                _REASON_COURSE_PATTERN.search(text)
-                or _RESULT_COURSE_PATTERN.search(text)
-            ):
-                continue
-            entries.append(
-                (
-                    source_key,
-                    index,
-                    row,
-                    _parse_current_visit_time(authoritative_document_time_value(row)),
-                    text,
-                    families,
-                )
-            )
-
-    selected: set[tuple[str, int]] = set()
-    for fact_kind, anchor in anchors.items():
-        if anchor is None:
-            continue
-        family_entries = [item for item in entries if fact_kind in item[5] and item[3] is not None]
-        before = [
-            item
-            for item in family_entries
-            if item[3] <= anchor and _REASON_COURSE_PATTERN.search(item[4])
-        ]
-        after = [
-            item
-            for item in family_entries
-            if item[3] >= anchor and _RESULT_COURSE_PATTERN.search(item[4])
-        ]
-        if before:
-            item = min(before, key=lambda candidate: anchor - candidate[3])
-            selected.add((item[0], item[1]))
-        if after:
-            item = min(after, key=lambda candidate: candidate[3] - anchor)
-            selected.add((item[0], item[1]))
-
-    ranked = sorted(
-        entries,
-        key=lambda item: (
-            -int(bool(_RESULT_COURSE_PATTERN.search(item[4]))),
-            min(
-                (
-                    abs((item[3] - anchors[family]).total_seconds())
-                    for family in item[5]
-                    if item[3] is not None and anchors[family] is not None
-                ),
-                default=float("inf"),
-            ),
-            item[3] or datetime.max,
-            item[0],
-            item[1],
-        ),
-    )
-    for item in ranked:
-        if len(selected) >= _MAX_RELEVANT_COURSE_ROWS:
-            break
-        selected.add((item[0], item[1]))
-    if len(selected) > _MAX_RELEVANT_COURSE_ROWS:
-        selected = set(
-            sorted(
-                selected,
-                key=lambda key: next(
-                    index
-                    for index, item in enumerate(ranked)
-                    if (item[0], item[1]) == key
-                ),
-            )[:_MAX_RELEVANT_COURSE_ROWS]
-        )
-    for source_key in _COURSE_SOURCE_KEYS:
-        projected[source_key] = tuple(
-            row
-            for index, row in enumerate(projected.get(source_key, ()))
-            if (source_key, index) in selected
-        )
-    return projected
 
 
 def _order_based_exam_reason_outcome(
@@ -1024,17 +912,14 @@ def _usage(response: Mapping[str, Any]) -> tuple[int, int, int, float]:
     return prompt, completion, total, float(response.get("_api_time") or 0.0)
 
 
-def _text_fact_outcome(
+def _single_text_fact_outcome(
     *,
     rule_id: str,
-    facts: Sequence[ExamLabEventFact],
+    fact: ExamLabEventFact,
     projection: ExamLabTextProjection,
 ) -> _ExamLabOutcome:
-    """由单事件语义事实和权威字段时间合成单条规则。"""
+    """由一个事件的语义事实和权威字段时间生成事件级结果。"""
 
-    fact = next((item for item in facts if item.rule_id == rule_id), None)
-    if fact is None:
-        return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_fact_scope_missing")
     safe_refs = projection.safe_refs or {}
     refs = tuple(
         safe_refs[item]
@@ -1051,7 +936,7 @@ def _text_fact_outcome(
         if fact.positive_state != "positive":
             return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown", refs)
 
-    event = projection.imaging_event if rule_id in EXAM_RULE_IDS else projection.culture_event
+    event = event_for_fact(projection, fact)
     role = "exam_time" if rule_id == "LX0609-010" else "report_time"
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
@@ -1137,14 +1022,76 @@ def _text_fact_outcome(
     )
 
 
+def _text_fact_outcome(
+    *,
+    rule_id: str,
+    facts: Sequence[ExamLabEventFact],
+    projection: ExamLabTextProjection,
+) -> _ExamLabOutcome:
+    """逐事件判定后汇总；明确违规不得被其他事件的资料缺口遮蔽。"""
+
+    rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
+    expected_count = len(events_for_family(
+        projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    ))
+    if not rule_facts or len(rule_facts) != expected_count:
+        return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_fact_scope_missing")
+    outcomes = tuple(
+        _single_text_fact_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+        )
+        for fact in rule_facts
+    )
+    for status in ("non_compliant", "data_gap", "compliant", "not_applicable"):
+        selected = tuple(item for item in outcomes if item.status == status)
+        if selected:
+            return _ExamLabOutcome(
+                rule_id,
+                status,
+                selected[0].reason_code,
+                tuple(dict.fromkeys(
+                    ref for item in selected for ref in item.fact_refs
+                )),
+            )
+    return _ExamLabOutcome(rule_id, "data_gap", "exam_lab_text_fact_unknown")
+
+
+def _fact_for_outcome_display(
+    *,
+    rule_id: str,
+    facts: Sequence[ExamLabEventFact],
+    projection: ExamLabTextProjection,
+    outcome: _ExamLabOutcome,
+) -> ExamLabEventFact:
+    """选择实际决定规则状态的事件，避免展示另一事件的时间和证据。"""
+
+    rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
+    for fact in rule_facts:
+        event_outcome = _single_text_fact_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+        )
+        if event_outcome.status == outcome.status:
+            return fact
+    return rule_facts[0]
+
+
 def _strong_semantic_fact(
     *, rule_id: str, projection: ExamLabTextProjection
 ) -> ExamLabEventFact | None:
     """提取可由明确短语验证的病程语义；灰区返回 None 交给一次 LLM。"""
 
-    event = projection.imaging_event if rule_id in EXAM_RULE_IDS else projection.culture_event
-    if event is None:
+    events = events_for_family(
+        projection, "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    )
+    # 多事件必须逐事件绑定病程；全局关键词强匹配无法证明具体归属，交给
+    # 同一次受控事实抽取，避免把一份病程复制给所有事件。
+    if len(events) != 1:
         return None
+    event = events[0]
     if rule_id in {"LX0609-012", "LX0609-015"}:
         if event.positive_hint == "negative":
             return ExamLabEventFact(
@@ -1459,7 +1406,9 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     None,
                 )
                 projection = build_exam_lab_text_projection(
-                    rows_by_source=_course_rows_relevant_to_target_orders(rows_by_source),
+                    # 事件级窗口选择由事实投影模块统一完成。旧的最早医嘱预筛
+                    # 最多只保留4份病程，会系统性丢失后续检查事件。
+                    rows_by_source=rows_by_source,
                     horizon_unavailable_reason=(
                         horizon_observation.reason_code
                         if horizon_observation is not None
@@ -1472,14 +1421,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
             if projection is not None:
                 semantic_rule_ids: list[str] = []
                 for rule_id in eligible_rule_ids:
-                    event = (
-                        projection.imaging_event
-                        if rule_id in EXAM_RULE_IDS
-                        else projection.culture_event
-                    )
-                    if event is None:
-                        fact_kind = "exam" if rule_id in EXAM_RULE_IDS else "culture"
-                        if _effective_target_orders(rows_by_source, fact_kind=fact_kind):
+                    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                    events = events_for_family(projection, family)
+                    if not events:
+                        if _effective_target_orders(rows_by_source, fact_kind=family):
                             emit_typed(
                                 rule_id,
                                 "data_gap",
@@ -1492,32 +1437,49 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 "exam_lab_target_event_absent",
                             )
                         typed_processed.add(rule_id)
-                    elif event.target_explicitly_absent:
-                        # 单事件口径下，腹超/血常规这类可验证的非目标项目可直接
-                        # 排除；类型含混的候选仍保留给一次受控 LLM，不能混为阴性。
-                        emit_typed(rule_id, "not_applicable", "exam_lab_target_event_absent")
+                    elif all(event.target_explicitly_absent for event in events):
+                        emit_typed(
+                            rule_id,
+                            "not_applicable",
+                            "exam_lab_target_event_absent",
+                        )
                         typed_processed.add(rule_id)
-                    elif "event_binding" in event.conflict_roles:
-                        emit_typed(rule_id, "data_gap", "multiple_event_or_time_conflict")
+                    elif any("event_binding" in event.conflict_roles for event in events):
+                        emit_typed(
+                            rule_id,
+                            "data_gap",
+                            "multiple_event_or_time_conflict",
+                        )
                         typed_processed.add(rule_id)
-                    elif not event.target_confirmed and not event.readable_text:
-                        emit_typed(rule_id, "data_gap", "exam_lab_candidate_text_missing")
+                    elif any(
+                        not event.target_confirmed and not event.readable_text
+                        for event in events
+                    ):
+                        emit_typed(
+                            rule_id,
+                            "data_gap",
+                            "exam_lab_candidate_text_missing",
+                        )
                         typed_processed.add(rule_id)
-                    elif event.target_confirmed and (
-                        (
-                            rule_id == "LX0609-010"
-                            and (
-                                "exam_time" in event.conflict_roles
-                                or event.exam_time is None
+                    elif any(
+                        event.target_confirmed
+                        and (
+                            (
+                                rule_id == "LX0609-010"
+                                and (
+                                    "exam_time" in event.conflict_roles
+                                    or event.exam_time is None
+                                )
+                            )
+                            or (
+                                rule_id != "LX0609-010"
+                                and (
+                                    "report_time" in event.conflict_roles
+                                    or event.report_time is None
+                                )
                             )
                         )
-                        or (
-                            rule_id != "LX0609-010"
-                            and (
-                                "report_time" in event.conflict_roles
-                                or event.report_time is None
-                            )
-                        )
+                        for event in events
                     ):
                         # 时间窗只能由受控字段计算；模型不能补造或推断时间。
                         emit_typed(rule_id, "data_gap", "authoritative_time_missing")
@@ -1596,11 +1558,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 and not projection.course_time_incomplete
                 and not projection.course_projection_truncated
                 and all(
-                    (
-                        projection.imaging_event
-                        if rule_id in EXAM_RULE_IDS
-                        else projection.culture_event
-                    ).target_confirmed
+                    all(event.target_confirmed for event in events_for_family(
+                        projection,
+                        "exam" if rule_id in EXAM_RULE_IDS else "culture",
+                    ))
                     for rule_id in eligible_rule_ids
                 )
             ):
@@ -1608,40 +1569,47 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 # 可由 Python 直接确定；012/015 仅接受事件结果中的强阳性/阴性
                 # 提示，含混结果保持 DG。避免模型在空 COURSE_DOC 上虚构引用。
                 for rule_id in tuple(eligible_rule_ids):
-                    event = (
-                        projection.imaging_event
-                        if rule_id in EXAM_RULE_IDS
-                        else projection.culture_event
-                    )
-                    assert event is not None
-                    if rule_id in {"LX0609-012", "LX0609-015"}:
-                        if event.positive_hint == "unknown":
-                            emit_typed(
-                                rule_id,
-                                "data_gap",
-                                "exam_lab_text_fact_unknown",
-                            )
-                            typed_processed.add(rule_id)
-                            continue
-                        positive_state = event.positive_hint
-                    else:
-                        positive_state = "not_relevant"
-                    fact = ExamLabEventFact(
-                        rule_id=rule_id,
-                        applicability=(
-                            "not_applicable"
-                            if positive_state == "negative"
-                            else "applicable"
-                        ),
-                        semantic_state="absent",
-                        positive_state=positive_state,
-                        course_doc_refs=(),
-                        evidence_refs=event.document_refs,
+                    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+                    facts = tuple(
+                        ExamLabEventFact(
+                            rule_id=rule_id,
+                            applicability=(
+                                "unknown"
+                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                and event.positive_hint == "unknown"
+                                else "not_applicable"
+                                if event.positive_hint == "negative"
+                                else "applicable"
+                            ),
+                            semantic_state=(
+                                "unknown"
+                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                and event.positive_hint == "unknown"
+                                else "absent"
+                            ),
+                            positive_state=(
+                                event.positive_hint
+                                if rule_id in {"LX0609-012", "LX0609-015"}
+                                else "not_relevant"
+                            ),
+                            course_doc_refs=(),
+                            evidence_refs=event.document_refs,
+                            event_position=event_position,
+                        )
+                        for event_position, event in enumerate(
+                            events_for_family(projection, family), start=1
+                        )
                     )
                     outcome = _text_fact_outcome(
                         rule_id=rule_id,
-                        facts=(fact,),
+                        facts=facts,
                         projection=projection,
+                    )
+                    display_fact = _fact_for_outcome_display(
+                        rule_id=rule_id,
+                        facts=facts,
+                        projection=projection,
+                        outcome=outcome,
                     )
                     emit_typed(
                         rule_id,
@@ -1651,7 +1619,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         display_facts=_text_outcome_display_facts(
                             rule_id=rule_id,
                             status=outcome.status,
-                            fact=fact,
+                            fact=display_fact,
                             projection=projection,
                         ),
                     )
@@ -1717,6 +1685,16 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 projection=projection,
                             )
                         )
+                        display_fact = (
+                            _fact_for_outcome_display(
+                                rule_id=rule_id,
+                                facts=text_facts,
+                                projection=projection,
+                                outcome=outcome,
+                            )
+                            if text_facts is not None
+                            else None
+                        )
                         emit_typed(
                             rule_id,
                             outcome.status,
@@ -1726,14 +1704,10 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 _text_outcome_display_facts(
                                     rule_id=rule_id,
                                     status=outcome.status,
-                                    fact=next(
-                                        item
-                                        for item in text_facts
-                                        if item.rule_id == rule_id
-                                    ),
+                                    fact=display_fact,
                                     projection=projection,
                                 )
-                                if text_facts is not None
+                                if display_fact is not None
                                 else None
                             ),
                         )

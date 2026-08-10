@@ -13,7 +13,12 @@ from .decision_model import (
     RuleDecision,
 )
 from .evidence_snapshot import Luxian0609EvidenceSnapshot
-from .exam_lab_fact_extraction import ExamLabEventFact, ExamLabTextProjection
+from .exam_lab_fact_extraction import (
+    ExamLabEventFact,
+    ExamLabTextProjection,
+    event_for_fact,
+    events_for_family,
+)
 
 
 @dataclass(frozen=True)
@@ -192,7 +197,7 @@ def build_text_outcome_display_facts(
     ):
         return None
     is_exam_rule = rule_id in {"LX0609-011", "LX0609-012"}
-    event = projection.imaging_event if is_exam_rule else projection.culture_event
+    event = event_for_fact(projection, fact)
     if event is None:
         return None
     subject = "ct_mri" if is_exam_rule else "culture_susceptibility"
@@ -228,6 +233,10 @@ def build_text_outcome_display_facts(
         "positive_state": fact.positive_state,
         "threshold_hours": 24,
         "response_record_count": len(response_times),
+        "event_count": len(events_for_family(
+            projection, "exam" if is_exam_rule else "culture"
+        )),
+        "event_position": fact.event_position,
     }
     # 对报告后病程规则，向客户明确“查找范围”，而不是把内部 source key
     # 直接交给界面。该字段描述的是已核对范围，不是命中的关键证据。

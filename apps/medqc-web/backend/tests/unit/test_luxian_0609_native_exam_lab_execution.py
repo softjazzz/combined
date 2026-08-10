@@ -777,7 +777,7 @@ def test_lab_item_rows_with_same_test_id_form_one_report_event():
     assert projection.culture_event.positive_hint == "positive"
 
 
-def test_multiple_report_business_ids_are_an_association_conflict():
+def test_multiple_report_business_ids_are_independent_events():
     projection = build_exam_lab_text_projection(
         rows_by_source={
             "labtest_master": (
@@ -795,8 +795,9 @@ def test_multiple_report_business_ids_are_an_association_conflict():
         }
     )
 
-    assert projection.culture_event is not None
-    assert "event_binding" in projection.culture_event.conflict_roles
+    assert projection.culture_event is None
+    assert len(projection.culture_events) == 2
+    assert all(not event.conflict_roles for event in projection.culture_events)
 
 
 def test_many_unrelated_rows_do_not_hide_one_bound_mri_event():
@@ -1132,7 +1133,7 @@ def test_fact_parser_maps_model_course_positions_to_real_evidence_refs():
         }
     )
     payload = _fact_response(("LX0609-010",))
-    payload["facts"][0]["course_doc_positions"] = [2]
+    payload["facts"][0]["course_doc_positions"] = [1]
     facts = parse_exam_lab_fact_response(
         response={"content": json.dumps(payload)},
         selected_rule_ids=("LX0609-010",),
@@ -2625,6 +2626,221 @@ async def test_typed_decisions_bind_through_unified_reducer(monkeypatch):
         )
         assert display_facts[rule_id]["interval_hours"] == 1.0
         assert display_facts[rule_id]["threshold_hours"] == 24
+
+
+@pytest.mark.asyncio
+async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
+    monkeypatch,
+):
+    """同次住院的多次检查必须逐事件核对，不能合并成时间冲突。"""
+
+    exam_rows = tuple(
+        {
+            "exam_id": f"EXAM-{position}",
+            "exam_name": "胸部CT" if position % 2 else "头颅MRI",
+            "exam_time": f"2026-04-{position:02d} 08:00:00",
+            "report_time": f"2026-04-{position:02d} 12:00:00",
+            "exam_conclusion": f"阳性：第{position}次检查存在明确异常。",
+        }
+        for position in range(1, 7)
+    )
+    report_rows = tuple(
+        {
+            "exam_id": f"EXAM-{position}",
+            "report_time": f"2026-04-{position:02d} 12:00:00",
+            "exam_item_name": "CT/MRI报告",
+            "exam_result": f"阳性：第{position}次检查存在明确异常。",
+        }
+        for position in range(1, 7)
+    )
+    course_rows = tuple(
+        {
+            "record_time": f"2026-04-{position:02d} 13:00:00",
+            "record_content": f"第{position}次结果已复核，并完成临床判断与处置。",
+        }
+        for position in range(1, 7)
+    )
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=exam_rows,
+        exam_report_rows=report_rows,
+        nondrug_order_rows=tuple(
+            {
+                "order_id": f"ORDER-{position}",
+                "order_name": "胸部CT" if position % 2 else "头颅MRI",
+                "order_time": f"2026-04-{position:02d} 08:00:00",
+            }
+            for position in range(1, 7)
+        ),
+        course_rows=course_rows,
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    facts = [
+        {
+            "rule_id": rule_id,
+            "event_position": event_position,
+            "applicability": "applicable",
+            "semantic_state": "present",
+            "positive_state": (
+                "positive" if rule_id == "LX0609-012" else "not_relevant"
+            ),
+            "course_doc_positions": [event_position],
+        }
+        for rule_id in ("LX0609-011", "LX0609-012")
+        for event_position in range(1, 7)
+    ]
+    client = _Client([
+        {
+            "schema_version": "lx0609-exam-lab-text-facts-v4",
+            "facts": facts,
+        }
+    ])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011", "LX0609-012"),
+        wrapper_rules=[_wrapper("LX0609-011"), _wrapper("LX0609-012")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011", "LX0609-012"),
+    )
+
+    assert [item.qc_direction.value for item in result.decisions] == [
+        "satisfied",
+        "satisfied",
+    ]
+    assert result.llm_call_count == 1
+    assert result.total_tokens == 110
+    assert len(client.prompts) == 1
+    assert "event_position" in client.prompts[0]
+    assert "每个规则与事件组合各一条" in client.prompts[0]
+    assert "每个rule_id各一条" not in client.prompts[0]
+
+
+def test_multi_event_parser_rejects_course_outside_the_event_window():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "EXAM-1",
+                    "exam_name": "胸部CT",
+                    "exam_time": "2026-04-01 08:00:00",
+                    "report_time": "2026-04-01 12:00:00",
+                    "exam_conclusion": "阳性。",
+                },
+                {
+                    "exam_id": "EXAM-2",
+                    "exam_name": "头颅MRI",
+                    "exam_time": "2026-04-10 08:00:00",
+                    "report_time": "2026-04-10 12:00:00",
+                    "exam_conclusion": "阳性。",
+                },
+            ),
+            "daily_course_record": (
+                {
+                    "record_time": "2026-04-01 13:00:00",
+                    "record_content": "第一次检查结果记录。",
+                },
+                {
+                    "record_time": "2026-04-03 13:00:00",
+                    "record_content": "阶段病程。",
+                },
+                {
+                    "record_time": "2026-04-10 13:00:00",
+                    "record_content": "第二次检查结果记录。",
+                },
+            ),
+        }
+    )
+    response = {
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-011",
+                "event_position": 1,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [3],
+            },
+            {
+                "rule_id": "LX0609-011",
+                "event_position": 2,
+                "applicability": "applicable",
+                "semantic_state": "present",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [3],
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="evidence ref mismatch"):
+        parse_exam_lab_fact_response(
+            response={"content": json.dumps(response, ensure_ascii=False)},
+            selected_rule_ids=("LX0609-011",),
+            projection=projection,
+        )
+
+
+@pytest.mark.asyncio
+async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
+    monkeypatch,
+):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-01 12:00:00",
+            },
+            {
+                "exam_id": "EXAM-2",
+                "exam_name": "头颅MRI",
+                "report_time": "2026-04-04 12:00:00",
+            },
+        ),
+        course_rows=({
+            "record_time": "2026-04-01 13:00:00",
+            "record_content": "住院期间一般病程。",
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    client = _Client([{
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-011",
+                "event_position": 1,
+                "applicability": "unknown",
+                "semantic_state": "unknown",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [],
+            },
+            {
+                "rule_id": "LX0609-011",
+                "event_position": 2,
+                "applicability": "applicable",
+                "semantic_state": "absent",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [],
+            },
+        ],
+    }])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011",),
+        wrapper_rules=[_wrapper("LX0609-011")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011",),
+    )
+
+    assert result.decisions[0].qc_direction.value == "defect"
+    assert result.llm_call_count == 1
 
 
 @pytest.mark.asyncio
