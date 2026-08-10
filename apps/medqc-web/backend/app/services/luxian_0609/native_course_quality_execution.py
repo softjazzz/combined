@@ -1827,7 +1827,7 @@ def _rule_009_semantic_prompt(*, context: str) -> str:
 
 Python 已确认病危期间每日病程覆盖。不要判定整条规则状态、不要重判每日频次。
 只抽取“相对既往基线发生明确改变”的事件：主观症状(subjective)、客观体征(objective)、检查检验(exam_lab)、并发症/合并症(complication)、特殊状态(special_state)。
-"病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref、course_ref 和时间，不得编造或改写时间；若材料标注“待核验”，仍可引用明确变化事件，但 change_time 必须留空。
+"病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref 和 course_ref，不得编造引用；事件发生时间由 Python 根据受控 event_ref 唯一确定。
 若同一病程已经明确记录变化及处置，可把该病程作为对应病程。
 
 只能使用以下当前就诊、评价区间内的病程事件和临床事件。external_event_ref 仅用于检查检验变化；
@@ -1835,7 +1835,7 @@ course_event_ref 可用于主观症状、客观体征、并发症/合并症和�
 对应病程只能从该事件列出的 candidate_course_refs 中选择：
 {context}
 
-只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","change_time":"YYYY-MM-DD HH:MM:SS","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""
+只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""
 
 
 def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | None:
@@ -1851,15 +1851,11 @@ def _parse_rule_009_change_events(response: Mapping[str, Any]) -> tuple[Mapping[
         if category not in _RULE_009_CHANGE_CATEGORIES or item.get("is_explicit_change") is not True:
             return None
         event_ref = _clean(item.get("event_ref"))
-        change_time = _clean(item.get("change_time"))
-        if not event_ref or (
-            change_time and _authoritative_course_time(change_time) is None
-        ):
+        if not event_ref:
             return None
         parsed.append({
             "event_ref": event_ref,
             "change_category": category,
-            "change_time": change_time,
             "corresponding_course_ref": _clean(item.get("corresponding_course_ref")),
         })
     return tuple(parsed)
@@ -1925,8 +1921,8 @@ def _rule_009_semantic_decision(
         qc_direction=qc_direction,
         reason_code=reason_code,
         fact_refs=base_decision.fact_refs,
-        # v2 将同次就诊、同一快照的外部临床事件纳入 009 语义核对。
-        evaluator_version="course-severity-semantic-v2",
+        # v3 仅由受控 event_ref 解析权威时间，模型不再复述或改写时间。
+        evaluator_version="course-severity-semantic-v3",
         confidence=confidence,
     )
 
@@ -1945,9 +1941,8 @@ def _rule_009_change_event_decision(
     for event in events:
         event_ref = str(event["event_ref"])
         event_time = event_times.get(event_ref)
-        declared_time = _authoritative_course_time(event.get("change_time"))
         course_ref = str(event.get("corresponding_course_ref") or "")
-        if event_time is None or declared_time is None or declared_time != event_time:
+        if event_time is None:
             return (
                 _rule_009_semantic_decision(
                     base_decision=base_decision,

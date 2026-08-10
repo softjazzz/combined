@@ -2168,6 +2168,37 @@ async def test_course_009_explicit_external_change_within_24h_is_compliant() -> 
 
 
 @pytest.mark.asyncio
+async def test_course_009_uses_authoritative_event_time_without_model_echo() -> None:
+    session = _severity_session(
+        rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("患者突发胸痛，已评估并处理。", "2026-01-02 14:00:00"),
+            _row("第三日病危记录。", "2026-01-03 08:00:00"),
+            _row("第四日病危记录。", "2026-01-04 08:00:00"),
+        ],
+        external_rows={"exam_item_report": [{
+            "report_time": "2026-01-02 10:00:00",
+            "exam_impression": "新发异常改变",
+        }]},
+        evaluation_as_of_date="2026-01-04",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "exam_item_report:row-1",
+        "change_category": "exam_lab",
+        "is_explicit_change": True,
+        "corresponding_course_ref": "daily_course_record:row-2",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    facts = dict(result.customer_display_facts)["LX0609-009"]
+    assert facts["change_events"][0]["event_time"] == "2026-01-02 10:00:00"
+
+
+@pytest.mark.asyncio
 async def test_course_009_unreferenced_external_row_without_time_does_not_downgrade() -> None:
     session = _severity_session(
         rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
@@ -2396,12 +2427,17 @@ async def test_course_009_precise_horizon_before_change_24h_deadline_is_not_matu
 
 
 @pytest.mark.asyncio
-async def test_course_009_change_time_or_reference_not_verifiable_is_data_gap() -> None:
+async def test_course_009_ignores_model_echoed_time_and_uses_event_reference() -> None:
     session = _severity_session(
         rows=[{"severity": "critical", "prescribed_datetime": "2026-01-01 08:00:00"}],
-        daily_rows=[_row("首日病危记录。", "2026-01-01 08:00:00"), _row("次日病危记录。", "2026-01-02 09:00:00")],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 09:00:00"),
+            _row("第三日病危记录。", "2026-01-03 09:00:00"),
+            _row("第四日病危记录。", "2026-01-04 09:00:00"),
+        ],
         external_rows={"exam_item_report": [{"report_time": "2026-01-02 10:00:00", "exam_impression": "新发异常改变"}]},
-        evaluation_as_of_date="2026-01-02",
+        evaluation_as_of_date="2026-01-04",
     )
     client = _Client([{"events": [{
         "event_ref": "exam_item_report:row-1", "change_category": "exam_lab",
@@ -2409,8 +2445,8 @@ async def test_course_009_change_time_or_reference_not_verifiable_is_data_gap() 
         "corresponding_course_ref": "",
     }]}])
     result, reduced = await _run_typed_009(session, client)
-    assert reduced[0].final_state is CustomerFinalState.DATA_GAP
-    assert reduced[0].reason_code == "authoritative_time_missing"
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert reduced[0].reason_code == "requirement_violated"
     assert result.llm_call_count == 1
 
 
