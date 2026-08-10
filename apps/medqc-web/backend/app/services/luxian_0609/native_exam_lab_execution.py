@@ -671,14 +671,50 @@ def _order_based_exam_reason_outcome(
     if not course_rows:
         return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_course_missing")
 
-    # 病程没有结构化医嘱号时，只能在“本次恰有一台已执行检查”时以目标文本和
-    # 时序形成唯一关联；多次检查不能用相同泛化病程互相顶替。
+    # 病程表没有 order_id 字段时，允许以“完整检查名称 + 检查前最近权威时间”
+    # 建立唯一关系。只有候选唯一且不同检查不复用同一病程时才接受；任何并列、
+    # 缺失或复用仍失败关闭，不能用相同泛化病程互相顶替。
     has_course_order_id = any(_clean(row.get("order_id")) for row in course_rows)
-    if len(executed) > 1 and not has_course_order_id:
-        return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
-    for order_id, _order_time, _exam in executed:
-        if has_course_order_id and not any(_clean(row.get("order_id")) == order_id for row in course_rows):
-            return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_order_course_missing")
+    course_rows_by_order: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    if has_course_order_id:
+        for order_id, _order_time, _exam in executed:
+            linked_rows = tuple(
+                row for row in course_rows if _clean(row.get("order_id")) == order_id
+            )
+            if not linked_rows:
+                return _ExamLabOutcome(
+                    "LX0609-010", "non_compliant", "exam_order_course_missing"
+                )
+            course_rows_by_order[order_id] = linked_rows
+    elif len(executed) == 1:
+        course_rows_by_order[executed[0][0]] = course_rows
+    else:
+        used_course_rows: set[int] = set()
+        for order_id, order_time, _exam in sorted(executed, key=lambda item: item[1]):
+            order_name = _clean(orders_by_id[order_id][1].get("order_name"))
+            candidates: list[tuple[datetime, Mapping[str, Any]]] = []
+            for row in course_rows:
+                record_time = _parse_current_visit_time(
+                    authoritative_document_time_value(row)
+                )
+                if (
+                    not order_name
+                    or record_time is None
+                    or record_time > order_time
+                    or order_name.casefold() not in _row_text(row).casefold()
+                ):
+                    continue
+                candidates.append((record_time, row))
+            if not candidates:
+                return _ExamLabOutcome(
+                    "LX0609-010", "non_compliant", "exam_order_course_missing"
+                )
+            latest_time = max(item[0] for item in candidates)
+            latest_rows = [row for time, row in candidates if time == latest_time]
+            if len(latest_rows) != 1 or id(latest_rows[0]) in used_course_rows:
+                return _ExamLabOutcome("LX0609-010", "data_gap", "association_failed")
+            used_course_rows.add(id(latest_rows[0]))
+            course_rows_by_order[order_id] = (latest_rows[0],)
 
     report_rows = tuple(
         row
@@ -695,11 +731,7 @@ def _order_based_exam_reason_outcome(
             return _ExamLabOutcome("LX0609-010", "non_compliant", "exam_report_missing")
 
     for order_id, order_time, _exam in executed:
-        candidates = (
-            tuple(row for row in course_rows if _clean(row.get("order_id")) == order_id)
-            if has_course_order_id
-            else course_rows
-        )
+        candidates = course_rows_by_order[order_id]
         if not any(
             (record_time := _parse_current_visit_time(authoritative_document_time_value(row)))
             is not None

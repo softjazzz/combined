@@ -1594,12 +1594,12 @@ def _rule_009_group_event_time(
     return None
 
 
-def _rule_009_candidate_course_refs(
+def _rule_009_baseline_course_ref(
     *,
     event_time: datetime,
     course_rows: Sequence[tuple[datetime | None, str, str]],
-) -> tuple[str, tuple[str, ...]]:
-    """返回最近基线及事件后24小时内候选病程，不重复投递病程正文。"""
+) -> str:
+    """返回事件前最近基线；对应病程的24小时时限由Python最终校验。"""
 
     timed_rows = tuple(
         (course_time, ref)
@@ -1607,14 +1607,7 @@ def _rule_009_candidate_course_refs(
         if course_time is not None
     )
     prior = tuple(item for item in timed_rows if item[0] < event_time)
-    baseline_ref = max(prior, default=(datetime.min, ""), key=lambda item: item[0])[1]
-    deadline = event_time + _RULE_009_CHANGE_WINDOW
-    candidates = tuple(
-        ref
-        for course_time, ref in timed_rows
-        if event_time <= course_time <= deadline
-    )
-    return baseline_ref, tuple(dict.fromkeys(candidates))
+    return max(prior, default=(datetime.min, ""), key=lambda item: item[0])[1]
 
 
 def _rule_009_semantic_context(
@@ -1744,33 +1737,31 @@ def _rule_009_semantic_context(
     course_rows.sort(key=lambda item: (item[0] is None, item[0] or datetime.max, item[1]))
     for record_time, ref, content in course_rows:
         if record_time is not None:
-            baseline_ref, candidate_refs = _rule_009_candidate_course_refs(
+            baseline_ref = _rule_009_baseline_course_ref(
                 event_time=record_time,
                 course_rows=course_rows,
             )
         else:
-            baseline_ref, candidate_refs = "", ()
+            baseline_ref = ""
         parts.append(
             f"[course_event_ref={ref}] 事件/记录时间="
             f"{record_time.strftime('%Y-%m-%d %H:%M:%S') if record_time else '待核验'}；"
             f"baseline_course_ref={baseline_ref or '无'}；"
-            f"candidate_course_refs={','.join(candidate_refs) or '无'}；"
             f"内容={content}"
         )
     for event_time, ref, content in external_events:
         event_times[ref] = event_time
         if event_time is not None:
-            baseline_ref, candidate_refs = _rule_009_candidate_course_refs(
+            baseline_ref = _rule_009_baseline_course_ref(
                 event_time=event_time,
                 course_rows=course_rows,
             )
         else:
-            baseline_ref, candidate_refs = "", ()
+            baseline_ref = ""
         parts.append(
             f"[external_event_ref={ref}] 事件时间="
             f"{event_time.strftime('%Y-%m-%d %H:%M:%S') if event_time else '待核验'}；"
             f"baseline_course_ref={baseline_ref or '无'}；"
-            f"candidate_course_refs={','.join(candidate_refs) or '无'}；"
             f"内容={content}"
         )
     expected_dates = {
@@ -1832,7 +1823,7 @@ Python 已确认病危期间每日病程覆盖。不要判定整条规则状态�
 
 只能使用以下当前就诊、评价区间内的病程事件和临床事件。external_event_ref 仅用于检查检验变化；
 course_event_ref 可用于主观症状、客观体征、并发症/合并症和特殊状态变化，也可作为对应病程。
-对应病程只能从该事件列出的 candidate_course_refs 中选择：
+对应病程只能引用下列 course_event_ref；Python 会按权威时间严格校验它是否位于事件发生后 24 小时内：
 {context}
 
 只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""

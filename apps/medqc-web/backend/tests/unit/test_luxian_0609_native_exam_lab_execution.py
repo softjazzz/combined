@@ -1506,6 +1506,75 @@ async def test_010_public_native_uses_order_exam_report_contract(
 
 
 @pytest.mark.asyncio
+async def test_010_multiple_exams_use_unique_name_and_pre_exam_time_when_course_has_no_order_id(
+    monkeypatch,
+):
+    """病程表无医嘱号时，只接受检查全名与最近检查前时间形成的唯一关系。"""
+
+    result, decision, canonical, client = await _run_010_public_native(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EX-1",
+                "order_id": "ORD-1",
+                "exam_name": "头颅CT平扫",
+                "exam_time": "2026-07-07 09:00:00",
+            },
+            {
+                "exam_id": "EX-2",
+                "order_id": "ORD-2",
+                "exam_name": "腰椎MRI平扫",
+                "exam_time": "2026-07-07 12:00:00",
+            },
+        ),
+        exam_report_rows=(
+            {
+                "exam_id": "EX-1",
+                "exam_name": "头颅CT平扫",
+                "report_time": "2026-07-07 10:00:00",
+            },
+            {
+                "exam_id": "EX-2",
+                "exam_name": "腰椎MRI平扫",
+                "report_time": "2026-07-07 13:00:00",
+            },
+        ),
+        order_rows=(
+            {
+                "order_id": "ORD-1",
+                "order_name": "头颅CT平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 08:00:00",
+            },
+            {
+                "order_id": "ORD-2",
+                "order_name": "腰椎MRI平扫",
+                "order_status": "新开",
+                "prescribed_datetime": "2026-07-07 11:00:00",
+            },
+        ),
+        course_rows=(
+            {
+                "record_time": "2026-07-07 07:30:00",
+                "record_content": "为明确头痛原因，拟行头颅CT平扫。",
+            },
+            {
+                "record_time": "2026-07-07 10:30:00",
+                "record_content": "为明确腰痛原因，拟行腰椎MRI平扫。",
+            },
+        ),
+    )
+
+    assert decision.reason_code == "requirement_satisfied"
+    assert canonical["status"] == "compliant"
+    assert dict(result.customer_display_facts)["LX0609-010"]["verification_kind"] == (
+        "exam_order_course_report_consistent"
+    )
+    assert result.llm_call_count == result.total_tokens == 0
+    assert client.prompts == []
+
+
+@pytest.mark.asyncio
 async def test_010_ambiguous_order_exam_linkage_stays_data_gap(monkeypatch):
     """一个医嘱关联多条正式检查，不能猜测为一致或不一致。"""
 

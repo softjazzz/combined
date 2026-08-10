@@ -572,7 +572,7 @@ def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]],
         "prescribed_datetime": exam_request,
         "prescribed_doctor": "合成验证医师",
         "order_status": "已执行",
-        "record_content": "因腰痛伴右下肢麻木，为明确神经根受压情况，拟行腰椎MRI检查。",
+        "record_content": "因腰痛伴右下肢麻木，为明确神经根受压情况，拟行腰椎MRI平扫。",
     })
     _append(rows_by_table, "exam_item_report", {
         **base_exam,
@@ -644,7 +644,7 @@ def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]],
         "submit_datetime": exam_course_before,
         "record_time": exam_course_before,
         "order_id": f"{case.target_visit_id}-exam-order-001",
-        "record_content": "患者腰痛伴右下肢麻木持续，拟行腰椎MRI检查以明确神经根受压情况，已向患者说明检查目的。",
+        "record_content": "患者腰痛伴右下肢麻木持续，拟行腰椎MRI平扫以明确神经根受压情况，已向患者说明检查目的。",
     })
     _append(rows_by_table, "daily_course_record", {
         **_base(case, exam_course_after),

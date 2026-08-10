@@ -1682,6 +1682,47 @@ async def test_course_009_208790_shape_fits_one_event_window_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_course_009_208790_full_projection_does_not_repeat_candidate_lists() -> None:
+    """冻结真实重建后的29份病程规模，候选引用不得造成二次膨胀。"""
+
+    daily_rows = [
+        _row(
+            f"日常病程{index}。" + "甲" * 450,
+            f"2026-07-{7 + index % 7:02d} {8 + index % 8:02d}:00:00",
+        )
+        for index in range(22)
+    ]
+    senior_lengths = (915, 4140, 2104, 2022, 1195, 1579, 1742)
+    senior_rows = [
+        _row(
+            f"上级查房{index}。" + "乙" * length,
+            f"2026-07-{7 + index:02d} 15:00:00",
+        )
+        for index, length in enumerate(senior_lengths)
+    ]
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-07-07 14:25:24",
+        }],
+        daily_rows=daily_rows,
+        senior_rows=senior_rows,
+        evaluation_as_of_date="2026-07-13",
+    )
+    client = _Client([{"events": []}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 1
+    assert len(client.prompts) == 1
+    assert client.prompts[0].count("[course_event_ref=") == 29
+    assert "candidate_course_refs=" not in client.prompts[0]
+    assert len(client.prompts[0]) < 32000
+
+
+@pytest.mark.asyncio
 async def test_course_009_course_record_can_be_change_event_and_its_own_timely_record() -> None:
     session = _severity_session(
         rows=[{
