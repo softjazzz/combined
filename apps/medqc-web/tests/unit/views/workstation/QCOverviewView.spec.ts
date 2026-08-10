@@ -78,7 +78,7 @@ const clinicalQcPayload = {
         patient_name: '测试患者',
         department: '神经外科',
         priority_kind: 'non_compliant',
-        status_counts: { non_compliant: 2, data_gap: 1 },
+        status_counts: { non_compliant: 2, data_gap: 1, uncertain: 1 },
         completed_at: '2026-08-08T09:20:00+08:00',
       },
     ],
@@ -135,6 +135,8 @@ describe('QCOverviewView', () => {
     expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('高风险待复核')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('测试患者')
     expect(wrapper.get('[data-testid="priority-queue"]').text()).toContain('确定问题 2 项')
+    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('资料待核实')
+    expect(wrapper.get('[data-testid="priority-queue"]').text()).not.toContain('待判断')
     expect(wrapper.text()).not.toContain('较昨日')
     expect(wrapper.text()).not.toContain('近7天')
     expect(wrapper.find('[data-testid="home-trend"]').exists()).toBe(false)

@@ -98,7 +98,7 @@
               <header class="qc-home-panel__head">
                 <div>
                   <h2>优先复核</h2>
-                  <p>按确定问题、资料待核实、待判断的结构化结果排序。</p>
+                  <p>按确定问题数量排序，优先复核需要处理的病历。</p>
                 </div>
                 <a-button
                   type="link"
@@ -127,18 +127,6 @@
                       class="is-danger"
                     >
                       确定问题 {{ countOf(item, 'non_compliant') }} 项
-                    </span>
-                    <span
-                      v-if="countOf(item, 'data_gap')"
-                      class="is-warning"
-                    >
-                      资料待核实 {{ countOf(item, 'data_gap') }} 项
-                    </span>
-                    <span
-                      v-if="countOf(item, 'uncertain')"
-                      class="is-neutral"
-                    >
-                      待判断 {{ countOf(item, 'uncertain') }} 项
                     </span>
                   </div>
                   <button
