@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.security import get_current_user
+from app.main import create_app
 from app.routers.llm_observability_read import (
     get_llm_observability_read_service,
     router,
@@ -73,6 +74,23 @@ def _event(**overrides) -> dict:
     }
     row.update(overrides)
     return row
+
+
+def test_observability_routes_are_registered_on_the_production_app():
+    def collect_paths(routes):
+        paths = set()
+        for route in routes:
+            if path := getattr(route, "path", None):
+                paths.add(path)
+            if original_router := getattr(route, "original_router", None):
+                paths.update(collect_paths(original_router.routes))
+        return paths
+
+    paths = collect_paths(create_app().routes)
+
+    assert "/api/v1/system/llm-observability/overview" in paths
+    assert "/api/v1/system/llm-observability/records" in paths
+    assert "/api/v1/system/llm-observability/records/{record_key_hash}/calls" in paths
 
 
 def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurrency():
