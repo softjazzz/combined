@@ -1521,17 +1521,31 @@ async function handleSave(runAfterSave: boolean) {
     const poolId = result.data.pool?.id
     const visitId = result.data.visit_id
     let createdJobId = ''
-    if (runAfterSave && poolId && visitId) {
-      const runResult = await runManualSamplePool(
-        poolId,
-        buildSyntheticCaseRunPayload(form.value, visitId),
-        { timeout: 90000 },
-      )
-      if (!runResult.success || !runResult.data) {
-        message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
+    if (runAfterSave) {
+      const createdItem = result.data.item
+      const sampleItemId = String(createdItem?.id || '').trim()
+      const instituteId = String(createdItem?.matched_institute_id || '').trim()
+      const patientId = String(createdItem?.matched_patient_id || '').trim()
+      const matchedVisitId = String(createdItem?.matched_visit_id || '').trim()
+      if (!poolId || !sampleItemId || !instituteId || !patientId || !matchedVisitId) {
+        message.warning('测试病历已保存，但病例三坐标尚未完整生成，未发起验证任务')
       } else {
-        createdJobId = runResult.data.job_id
-        message.success('测试病历已保存，验证任务已创建')
+        const runResult = await runManualSamplePool(
+          poolId,
+          buildSyntheticCaseRunPayload(form.value, {
+            sampleItemId,
+            instituteId,
+            patientId,
+            visitId: matchedVisitId,
+          }),
+          { timeout: 90000 },
+        )
+        if (!runResult.success || !runResult.data) {
+          message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
+        } else {
+          createdJobId = runResult.data.job_id
+          message.success('测试病历已保存，验证任务已创建')
+        }
       }
     } else {
       message.success(`测试病历已创建：${result.data.mr_no || visitId}`)

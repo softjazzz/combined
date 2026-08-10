@@ -474,7 +474,6 @@ export function useCustomerSampleEditableCopyController(
     }
     message.success('编辑副本已保存为自建测试病历')
     editableCopyOpen.value = false
-    const createdVisitId = createResult.data.visit_id
     await loadPools()
     if (selectedPoolId.value !== CUSTOMER_TEST_POOL_ID) {
       selectedPoolId.value = CUSTOMER_TEST_POOL_ID
@@ -483,8 +482,24 @@ export function useCustomerSampleEditableCopyController(
     await loadRecords()
     if (!options.runAfterSave) return
 
+    const createdItem = createResult.data.item
+    const createdSampleItemId = String(createdItem?.id || '').trim()
+    const createdInstituteId = String(createdItem?.matched_institute_id || '').trim()
+    const createdPatientId = String(createdItem?.matched_patient_id || '').trim()
+    const createdVisitId = String(createdItem?.matched_visit_id || '').trim()
+    if (!createdSampleItemId || !createdInstituteId || !createdPatientId || !createdVisitId) {
+      message.error('编辑副本已保存，但病例三坐标尚未完整生成，未发起质控任务')
+      return
+    }
     const runPayload = {
-      record_ids: [createdVisitId],
+      sample_item_ids: [createdSampleItemId],
+      record_refs: [
+        {
+          institute_id: createdInstituteId,
+          patient_id: createdPatientId,
+          visit_id: createdVisitId,
+        },
+      ],
       max_parallel_records: 1,
       validation_mode: selectedValidationMode.value,
       rule_set_key: selectedRuleSetPayloadKey.value,

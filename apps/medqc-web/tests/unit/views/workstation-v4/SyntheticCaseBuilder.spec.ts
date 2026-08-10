@@ -127,15 +127,38 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     const form = createDefaultSyntheticCaseForm()
     form.selectedRuleIds = ['lx0609-020', 'LX0609-021', 'LX0609-020']
 
-    const payload = buildSyntheticCaseRunPayload(form, 'VISIT-SCOPE-001')
+    const payload = buildSyntheticCaseRunPayload(form, {
+      sampleItemId: 'ITEM-SCOPE-001',
+      instituteId: 'HOSPITAL-001',
+      patientId: 'PATIENT-001',
+      visitId: 'VISIT-SCOPE-001',
+    })
 
     expect(payload).toMatchObject({
       rule_set_key: 'luxian_0609_qc_v1',
       validation_mode: 'customer',
-      record_ids: ['VISIT-SCOPE-001'],
+      sample_item_ids: ['ITEM-SCOPE-001'],
+      record_refs: [
+        {
+          institute_id: 'HOSPITAL-001',
+          patient_id: 'PATIENT-001',
+          visit_id: 'VISIT-SCOPE-001',
+        },
+      ],
       max_parallel_records: 1,
     })
     expect(payload.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+  })
+
+  it('缺少样本标识或病例三坐标时拒绝构造运行请求', () => {
+    expect(() =>
+      buildSyntheticCaseRunPayload(createDefaultSyntheticCaseForm(), {
+        sampleItemId: '',
+        instituteId: 'HOSPITAL-001',
+        patientId: 'PATIENT-001',
+        visitId: 'VISIT-SCOPE-001',
+      }),
+    ).toThrow('三坐标')
   })
 
   it('按质控点生成的测试病历名称应包含规则族、质控点和创建时间', () => {

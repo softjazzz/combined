@@ -541,32 +541,94 @@ export async function getManualSamplePoolSyncJob(jobId: string) {
   )
 }
 
+export type ManualSamplePoolRunRecordRef = {
+  institute_id: string
+  patient_id: string
+  visit_id: string
+}
+
+export type ManualSamplePoolRunPayload = {
+  department?: string
+  doctor?: string
+  model_code?: string
+  top_p?: number
+  temperature?: number
+  max_tokens?: number
+  max_parallel_records?: number
+  sample_item_ids?: string[]
+  record_refs?: ManualSamplePoolRunRecordRef[]
+  selected_rule_ids?: string[]
+  group_by_luxian_family?: boolean
+  validation_mode?: string
+  rule_set_key?: string
+}
+
 export async function runManualSamplePool(
   poolId: string,
-  payload?: {
-    department?: string
-    doctor?: string
-    model_code?: string
-    top_p?: number
-    temperature?: number
-    max_tokens?: number
-    max_parallel_records?: number
-    sample_item_ids?: string[]
-    record_ids?: string[]
-    selected_rule_ids?: string[]
-    group_by_luxian_family?: boolean
-    validation_mode?: string
-    rule_set_key?: string
-  },
+  payload?: ManualSamplePoolRunPayload,
   options?: {
     timeout?: number
   },
 ) {
+  const runtimePayload = (payload || {}) as ManualSamplePoolRunPayload & { record_ids?: unknown }
+  if (
+    Array.isArray(runtimePayload.record_ids) &&
+    runtimePayload.record_ids.some((value) => String(value || '').trim())
+  ) {
+    throw new Error('record_ids 已停止用于新质控任务，请提交完整 record_refs 三坐标')
+  }
+
+  const normalizeUniqueValues = (values: string[] | undefined, fieldName: string) => {
+    const normalized = (values || []).map((value) => String(value || '').trim()).filter(Boolean)
+    if (new Set(normalized).size !== normalized.length) {
+      throw new Error(`${fieldName} 存在重复值`)
+    }
+    return normalized
+  }
+  const sampleItemIds = normalizeUniqueValues(payload?.sample_item_ids, 'sample_item_ids')
+  const selectedRuleIds = normalizeUniqueValues(payload?.selected_rule_ids, 'selected_rule_ids')
+  const recordRefs = (payload?.record_refs || []).map((item) => ({
+    institute_id: String(item?.institute_id || '').trim(),
+    patient_id: String(item?.patient_id || '').trim(),
+    visit_id: String(item?.visit_id || '').trim(),
+  }))
+  if (recordRefs.some((item) => !item.institute_id || !item.patient_id || !item.visit_id)) {
+    throw new Error('record_refs 必须包含完整的机构、患者和就诊三坐标')
+  }
+  const recordRefKeys = recordRefs.map((item) =>
+    JSON.stringify([item.institute_id, item.patient_id, item.visit_id]),
+  )
+  if (new Set(recordRefKeys).size !== recordRefKeys.length) {
+    throw new Error('record_refs 存在重复三坐标')
+  }
+  if (Boolean(sampleItemIds.length) !== Boolean(recordRefs.length)) {
+    throw new Error('显式选择病历时必须同时提交 sample_item_ids 与 record_refs')
+  }
+
+  const data = {
+    ...(payload?.department !== undefined ? { department: payload.department } : {}),
+    ...(payload?.doctor !== undefined ? { doctor: payload.doctor } : {}),
+    ...(payload?.model_code !== undefined ? { model_code: payload.model_code } : {}),
+    ...(payload?.top_p !== undefined ? { top_p: payload.top_p } : {}),
+    ...(payload?.temperature !== undefined ? { temperature: payload.temperature } : {}),
+    ...(payload?.max_tokens !== undefined ? { max_tokens: payload.max_tokens } : {}),
+    ...(payload?.max_parallel_records !== undefined
+      ? { max_parallel_records: payload.max_parallel_records }
+      : {}),
+    ...(sampleItemIds.length ? { sample_item_ids: sampleItemIds } : {}),
+    ...(recordRefs.length ? { record_refs: recordRefs } : {}),
+    ...(payload?.selected_rule_ids !== undefined ? { selected_rule_ids: selectedRuleIds } : {}),
+    ...(payload?.group_by_luxian_family !== undefined
+      ? { group_by_luxian_family: payload.group_by_luxian_family }
+      : {}),
+    ...(payload?.validation_mode !== undefined ? { validation_mode: payload.validation_mode } : {}),
+    ...(payload?.rule_set_key !== undefined ? { rule_set_key: payload.rule_set_key } : {}),
+  }
   return requestEnvelope<ManualSamplePoolRunResult>(
     {
       method: 'POST',
       url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/run`,
-      data: payload || {},
+      data,
       timeout: options?.timeout,
     },
     '创建客户样本验证任务失败',

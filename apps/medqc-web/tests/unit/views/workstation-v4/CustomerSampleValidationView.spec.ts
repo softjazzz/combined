@@ -689,6 +689,22 @@ function buildRecord(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function buildRunIdentity(
+  visitId: string,
+  options: { instituteId?: string; patientId?: string; sampleItemId?: string } = {},
+) {
+  return {
+    sample_item_ids: [options.sampleItemId || 'item-1'],
+    record_refs: [
+      {
+        institute_id: options.instituteId || 'H1',
+        patient_id: options.patientId || 'P001',
+        visit_id: visitId,
+      },
+    ],
+  }
+}
+
 function buildExactReviewAcceptance() {
   return {
     generated_at: '2026-05-03',
@@ -1251,6 +1267,9 @@ describe('CustomerSampleValidationView', () => {
           expected_scene: 'running',
           candidate_rule_ids: ['LX0609-001'],
           include_in_batch_1: true,
+          matched_institute_id: 'H1',
+          matched_patient_id: 'P_EDIT_COPY',
+          matched_visit_id: 'CUSTOMER_TEST_EDIT_COPY',
           match_status: 'matched',
           sync_status: 'synced',
           bundle_status: 'ready',
@@ -1767,7 +1786,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['V001'],
+        ...buildRunIdentity('V001'),
         max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
@@ -1775,6 +1794,75 @@ describe('CustomerSampleValidationView', () => {
       { timeout: 90000 },
     )
     expect(message.success).toHaveBeenCalled()
+  })
+
+  it('同一 visit 的不同三坐标病例可同时精确提交', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({ id: 'row-a', matched_visit_id: 'V-SHARED', sample_item_ids: ['item-a'] }),
+          buildRecord({
+            id: 'row-b',
+            matched_institute_id: 'H2',
+            matched_patient_id: 'P002',
+            matched_visit_id: 'V-SHARED',
+            sample_item_ids: ['item-b'],
+          }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+    for (const checkbox of wrapper.findAll('input.record-checkbox')) {
+      await checkbox.setValue(true)
+    }
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      expect.objectContaining({
+        sample_item_ids: ['item-a', 'item-b'],
+        record_refs: [
+          { institute_id: 'H1', patient_id: 'P001', visit_id: 'V-SHARED' },
+          { institute_id: 'H2', patient_id: 'P002', visit_id: 'V-SHARED' },
+        ],
+      }),
+      { timeout: 90000 },
+    )
+  })
+
+  it('两个选择项映射同一三坐标时失败关闭且不调用运行接口', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({ id: 'row-a', sample_item_ids: ['item-a'] }),
+          buildRecord({ id: 'row-b', sample_item_ids: ['item-b'] }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+    for (const checkbox of wrapper.findAll('input.record-checkbox')) {
+      await checkbox.setValue(true)
+    }
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始0609质控'))
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+    expect(message.warning).toHaveBeenCalledWith(expect.stringContaining('三坐标'))
   })
 
   it('将最近任务与选中病历操作合并为唯一工作底栏，并保留全部主操作', async () => {
@@ -1810,7 +1898,12 @@ describe('CustomerSampleValidationView', () => {
     await clearButton!.trigger('click')
     await nextTick()
 
-    expect(wrapper.get('[data-testid="customer-sample-work-dock"]').find('.customer-sample-work-dock__selection').exists()).toBe(false)
+    expect(
+      wrapper
+        .get('[data-testid="customer-sample-work-dock"]')
+        .find('.customer-sample-work-dock__selection')
+        .exists(),
+    ).toBe(false)
     expect((recordCheckboxes[0].element as HTMLInputElement).checked).toBe(false)
   })
 
@@ -2687,7 +2780,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['LX0609_SYN_001'],
+        ...buildRunIdentity('LX0609_SYN_001'),
         max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
@@ -2935,7 +3028,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['LX0609_SYN_001'],
+        ...buildRunIdentity('LX0609_SYN_001'),
         max_parallel_records: 2,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
@@ -3157,7 +3250,10 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'customer-created-test-records-v1',
       {
-        record_ids: ['CUSTOMER_TEST_EDIT_COPY'],
+        ...buildRunIdentity('CUSTOMER_TEST_EDIT_COPY', {
+          patientId: 'P_EDIT_COPY',
+          sampleItemId: 'ct-edit-copy',
+        }),
         max_parallel_records: 1,
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
@@ -3536,7 +3632,27 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['V001'],
+        ...buildRunIdentity('V001'),
+        max_parallel_records: 2,
+        validation_mode: 'sc',
+        rule_set_key: '',
+      },
+      undefined,
+    )
+  })
+
+  it('SC 全池运行不由前端跨页拼接病例三坐标', async () => {
+    const wrapper = await mountView()
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === 'SC 样本规则模式')
+    await modeButton!.trigger('click')
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('开始样本验证'))
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
         max_parallel_records: 2,
         validation_mode: 'sc',
         rule_set_key: '',
@@ -3588,7 +3704,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['V008'],
+        ...buildRunIdentity('V008'),
         max_parallel_records: 2,
         validation_mode: 'programmatic',
         rule_set_key: 'sample_programmatic_gate_v1',
@@ -3655,7 +3771,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['V084'],
+        ...buildRunIdentity('V084'),
         max_parallel_records: 2,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',
@@ -3751,6 +3867,9 @@ describe('CustomerSampleValidationView', () => {
       status: 'running',
       rule_set_key: 'sc_content_full_v1',
       record_ids: ['V084'],
+      filters: {
+        record_refs: buildRunIdentity('V084').record_refs,
+      },
       created_at: new Date().toISOString(),
     }
     listManualSamplePools
@@ -3824,7 +3943,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith(
       'pool-1',
       {
-        record_ids: ['V084'],
+        ...buildRunIdentity('V084'),
         max_parallel_records: 2,
         validation_mode: 'formal_fast_screen_full',
         rule_set_key: 'sc_content_full_v1',

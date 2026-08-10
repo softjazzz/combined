@@ -702,6 +702,8 @@ export function useCustomerSampleValidationController() {
           counts.ambiguous += 1
         } else if (record.match_status !== 'matched' || !record.matched_visit_id) {
           counts.unmatched += 1
+        } else if (!recordRefFromRecord(record) || !sampleItemIdsFromRecord(record).length) {
+          counts.identityIncomplete += 1
         } else if (!isRecordSyncedForValidation(record)) {
           counts.notSynced += 1
         } else if (
@@ -719,16 +721,34 @@ export function useCustomerSampleValidationController() {
         unmatched: 0,
         notSynced: 0,
         bundleNotReady: 0,
+        identityIncomplete: 0,
+        identityConflict: 0,
       },
     )
+    const runnableRecordRefs = runnableRecords
+      .map((record) => recordRefFromRecord(record))
+      .filter((item): item is NonNullable<SamplePoolRunPayload['record_refs']>[number] =>
+        Boolean(item),
+      )
+    const runnableRecordRefKeys = runnableRecordRefs.map((item) => recordRefKey(item))
+    const runnableSampleItemIds = runnableRecords.flatMap((record) =>
+      sampleItemIdsFromRecord(record),
+    )
+    blockerCounts.identityConflict =
+      runnableRecordRefKeys.length -
+      new Set(runnableRecordRefKeys).size +
+      runnableSampleItemIds.length -
+      new Set(runnableSampleItemIds).size
     return {
       selectedCount: selectedRecords.length,
       runnableCount: runnableRecords.length,
-      blockedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
+      blockedCount:
+        Math.max(0, selectedRecords.length - runnableRecords.length) +
+        (blockerCounts.identityConflict > 0 ? 1 : 0),
       blockerCounts,
-      runnableRecordIds: runnableRecords
-        .map((record) => String(record.matched_visit_id || '').trim())
-        .filter((recordId) => Boolean(recordId)),
+      runnableRecordRefs,
+      runnableRecordRefKeys,
+      runnableSampleItemIds: [...new Set(runnableSampleItemIds)],
     }
   })
 
@@ -752,16 +772,16 @@ export function useCustomerSampleValidationController() {
     runLoading.value
       ? '正在创建…'
       : isFormalFastScreenMode.value
-      ? selectedRecordStats.value.selectedCount > 0
-        ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
-        : '请先选择病历'
-      : isLuxian0609Mode.value
         ? selectedRecordStats.value.selectedCount > 0
           ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
           : '请先选择病历'
-        : selectedRecordStats.value.selectedCount > 0
-          ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
-          : runButtonActionText.value,
+        : isLuxian0609Mode.value
+          ? selectedRecordStats.value.selectedCount > 0
+            ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+            : '请先选择病历'
+          : selectedRecordStats.value.selectedCount > 0
+            ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+            : runButtonActionText.value,
   )
 
   const selectedRunScopeSummary = computed(() => {
@@ -1104,27 +1124,51 @@ export function useCustomerSampleValidationController() {
     return record.sync_status === 'synced' || record.sync_status === 'synthetic_seeded'
   }
 
+  function recordRefFromRecord(
+    record: ManualSamplePoolRecord,
+  ): NonNullable<SamplePoolRunPayload['record_refs']>[number] | null {
+    const instituteId = String(record.matched_institute_id || '').trim()
+    const patientId = String(record.matched_patient_id || '').trim()
+    const visitId = String(record.matched_visit_id || '').trim()
+    if (!instituteId || !patientId || !visitId) return null
+    return {
+      institute_id: instituteId,
+      patient_id: patientId,
+      visit_id: visitId,
+    }
+  }
+
+  function recordRefKey(recordRef: NonNullable<SamplePoolRunPayload['record_refs']>[number]) {
+    return JSON.stringify([recordRef.institute_id, recordRef.patient_id, recordRef.visit_id])
+  }
+
+  function sampleItemIdsFromRecord(record: ManualSamplePoolRecord): string[] {
+    return (record.sample_item_ids || []).map((item) => String(item || '').trim()).filter(Boolean)
+  }
+
   function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
+    const hasExecutionIdentity =
+      Boolean(recordRefFromRecord(record)) && sampleItemIdsFromRecord(record).length > 0
     if (isLuxian0609Mode.value) {
       return (
         record.match_status === 'matched' &&
         isRecordSyncedForValidation(record) &&
         record.bundle_status === 'ready' &&
-        !!record.matched_visit_id
+        hasExecutionIdentity
       )
     }
     if (isSyncedOnlyValidationMode.value) {
       return (
         record.match_status === 'matched' &&
         isRecordSyncedForValidation(record) &&
-        !!record.matched_visit_id
+        hasExecutionIdentity
       )
     }
     return (
       record.match_status === 'matched' &&
       isRecordSyncedForValidation(record) &&
       record.bundle_status === 'ready' &&
-      !!record.matched_visit_id
+      hasExecutionIdentity
     )
   }
 
@@ -1161,6 +1205,10 @@ export function useCustomerSampleValidationController() {
       blockerCounts.unmatched > 0 ? `未关联病历 ${blockerCounts.unmatched} 份` : '',
       blockerCounts.notSynced > 0 ? `尚未同步 ${blockerCounts.notSynced} 份` : '',
       blockerCounts.bundleNotReady > 0 ? `病历包未就绪 ${blockerCounts.bundleNotReady} 份` : '',
+      blockerCounts.identityIncomplete > 0
+        ? `病例三坐标或样本标识不完整 ${blockerCounts.identityIncomplete} 份`
+        : '',
+      blockerCounts.identityConflict > 0 ? '病例三坐标或样本标识存在冲突' : '',
     ].filter(Boolean)
     return `已选 ${selectedCount} 份病历，完整范围未提交：${reasons.join('，')}。请处理后重试`
   }
@@ -1946,8 +1994,14 @@ export function useCustomerSampleValidationController() {
   async function handleRunPool() {
     if (runLoading.value) return
     if (!selectedPoolId.value) return
-    const { selectedCount, runnableCount, blockedCount, runnableRecordIds } =
-      selectedRecordStats.value
+    const {
+      selectedCount,
+      runnableCount,
+      blockedCount,
+      runnableRecordRefs,
+      runnableRecordRefKeys,
+      runnableSampleItemIds,
+    } = selectedRecordStats.value
     if (requiresSelectedRecords.value && selectedCount === 0) {
       message.warning('请先选择要质控的病历')
       return
@@ -1964,7 +2018,7 @@ export function useCustomerSampleValidationController() {
       selectedPoolId.value,
       selectedRuleSetPayloadKey.value,
       selectedValidationMode.value,
-      runnableRecordIds,
+      runnableRecordRefKeys,
       isLuxian0609Mode.value ? selectedLuxianCustomerRuleIds.value : [],
     )
     const now = Date.now()
@@ -1997,10 +2051,13 @@ export function useCustomerSampleValidationController() {
       duration: 0,
     })
     const runPayload: SamplePoolRunPayload = {
-      record_ids: runnableRecordIds,
       max_parallel_records: runOptions.value.maxParallelRecords,
       validation_mode: selectedValidationMode.value,
       rule_set_key: selectedRuleSetPayloadKey.value,
+    }
+    if (selectedCount > 0) {
+      runPayload.record_refs = runnableRecordRefs
+      runPayload.sample_item_ids = runnableSampleItemIds
     }
     if (isLuxian0609Mode.value && selectedLuxianCustomerRuleIds.value.length) {
       runPayload.selected_rule_ids = selectedLuxianCustomerRuleIds.value
@@ -2026,7 +2083,7 @@ export function useCustomerSampleValidationController() {
         message.info('请求等待较久，正在确认后台任务状态')
         const recovered = await recoverRunAfterSlowRequest({
           poolId: selectedPoolId.value,
-          recordIds: runnableRecordIds,
+          recordRefs: runnableRecordRefs,
           startedAt: now,
           previousJobId: selectedPool.value?.latest_job_id,
           runKey,
@@ -2117,16 +2174,16 @@ export function useCustomerSampleValidationController() {
     poolId: string,
     ruleSetKey: string,
     validationMode: ManualSampleValidationMode,
-    recordIds: string[],
+    recordRefKeys: string[],
     selectedRuleIds: string[] = [],
   ): string {
-    const normalizedRecordIds = recordIds.map((item) => String(item)).sort()
+    const normalizedRecordRefKeys = recordRefKeys.map((item) => String(item)).sort()
     const normalizedRuleIds = normalizeLuxianRuleIds(selectedRuleIds)
     return [
       poolId,
       ruleSetKey || '-',
       validationMode,
-      normalizedRecordIds.join(',') || 'all',
+      normalizedRecordRefKeys.join(',') || 'all',
       normalizedRuleIds.join(',') || 'full',
     ].join('|')
   }
@@ -2138,19 +2195,30 @@ export function useCustomerSampleValidationController() {
     return Math.abs(createdTime - startedAt) <= 5 * 60 * 1000
   }
 
-  function isSameRecordScope(job: SichuanBatchJob, recordIds: string[]): boolean {
-    if (!recordIds.length || !Array.isArray(job.record_ids) || !job.record_ids.length) {
-      return true
-    }
-    const expected = recordIds
-      .map((item) => String(item))
+  function isSameRecordScope(
+    job: SichuanBatchJob,
+    recordRefs: NonNullable<SamplePoolRunPayload['record_refs']>,
+  ): boolean {
+    if (!recordRefs.length) return false
+    const filters = job.filters && typeof job.filters === 'object' ? job.filters : {}
+    if (!Array.isArray(filters.record_refs)) return false
+    const actualRefs = filters.record_refs.map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const mapping = item as Record<string, unknown>
+      const instituteId = String(mapping.institute_id || '').trim()
+      const patientId = String(mapping.patient_id || '').trim()
+      const visitId = String(mapping.visit_id || '').trim()
+      if (!instituteId || !patientId || !visitId) return null
+      return { institute_id: instituteId, patient_id: patientId, visit_id: visitId }
+    })
+    if (actualRefs.some((item) => item === null)) return false
+    const expectedKeys = recordRefs.map((item) => recordRefKey(item)).sort()
+    const actualKeys = actualRefs
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .map((item) => recordRefKey(item))
       .sort()
-      .join('|')
-    const actual = job.record_ids
-      .map((item) => String(item))
-      .sort()
-      .join('|')
-    return expected === actual
+    if (new Set(actualKeys).size !== actualKeys.length) return false
+    return expectedKeys.join('|') === actualKeys.join('|')
   }
 
   function resolveRecordResultFocus(record: ManualSamplePoolRecord) {
@@ -2206,14 +2274,14 @@ export function useCustomerSampleValidationController() {
 
   function isRecoverableRunJob(
     job: SichuanBatchJob,
-    recordIds: string[],
+    recordRefs: NonNullable<SamplePoolRunPayload['record_refs']>,
     startedAt: number,
     ruleSetKey = FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
     selectedRuleIds: string[] = [],
   ): boolean {
     return (
       job.rule_set_key === ruleSetKey &&
-      isSameRecordScope(job, recordIds) &&
+      isSameRecordScope(job, recordRefs) &&
       isSameLuxianRuleScope(job, selectedRuleIds) &&
       isCloseToRunStart(job.created_at, startedAt)
     )
@@ -2221,7 +2289,7 @@ export function useCustomerSampleValidationController() {
 
   async function recoverRunAfterSlowRequest(options: {
     poolId: string
-    recordIds: string[]
+    recordRefs: NonNullable<SamplePoolRunPayload['record_refs']>
     startedAt: number
     previousJobId?: string
     runKey: string
@@ -2241,7 +2309,7 @@ export function useCustomerSampleValidationController() {
     if (
       !isRecoverableRunJob(
         jobResult.data,
-        options.recordIds,
+        options.recordRefs,
         options.startedAt,
         options.ruleSetKey,
         options.selectedRuleIds || [],

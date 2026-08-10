@@ -5,11 +5,11 @@ import os
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
@@ -165,6 +165,20 @@ class SamplePoolImportRequest(BaseModel):
     scene: str = Field(default="running", description="目标场景")
 
 
+NonEmptySampleRecordCoordinate = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1),
+]
+
+
+class SamplePoolRunRecordRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    institute_id: NonEmptySampleRecordCoordinate
+    patient_id: NonEmptySampleRecordCoordinate
+    visit_id: NonEmptySampleRecordCoordinate
+
+
 class SamplePoolRunRequest(BaseModel):
     department: Optional[str] = None
     doctor: Optional[str] = None
@@ -174,6 +188,8 @@ class SamplePoolRunRequest(BaseModel):
     max_tokens: Optional[int] = None
     max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
+    record_refs: list[SamplePoolRunRecordRef] = Field(default_factory=list, description="选中病历的完整三坐标")
+    # 仅保留旧客户端的明确失败提示；新运行请求不得以 visit_id 授权病例范围。
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
     selected_rule_ids: list[str] = Field(default_factory=list, description="仅验证这些客户质控点 ID")
     group_by_luxian_family: bool = Field(default=False, description="泸县0609按规则族创建父子任务")
@@ -990,13 +1006,22 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="所选质控点不能为空")
     if requested_selected_rule_ids and validation_mode != "customer":
         raise HTTPException(status_code=422, detail="selected_rule_ids 仅支持客户专项规则验证模式")
-    requested_record_ids = [
-        str(record_id or "").strip()
-        for record_id in list(payload.record_ids or [])
-        if str(record_id or "").strip()
+    if payload.record_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="record_ids 已停止用于新质控任务，请提交完整 record_refs 三坐标",
+        )
+    requested_record_ref_values = [
+        CaseRef(item.institute_id, item.patient_id, item.visit_id)
+        for item in list(payload.record_refs or [])
     ]
-    if "record_ids" in explicit_fields and payload.record_ids and not requested_record_ids:
-        raise HTTPException(status_code=422, detail="所选病历不能为空")
+    requested_record_refs = (
+        normalize_case_refs(requested_record_ref_values)
+        if requested_record_ref_values
+        else ()
+    )
+    if len(requested_record_refs) != len(requested_record_ref_values):
+        raise HTTPException(status_code=422, detail="所选病历三坐标存在重复")
     requested_sample_item_ids = [
         str(item_id or "").strip()
         for item_id in list(payload.sample_item_ids or [])
@@ -1004,52 +1029,68 @@ async def run_sample_pool_intrinsic_validation(
     ]
     if "sample_item_ids" in explicit_fields and payload.sample_item_ids and not requested_sample_item_ids:
         raise HTTPException(status_code=422, detail="所选样本不能为空")
-    if is_formal_fast_screen_full and not requested_record_ids:
-        raise HTTPException(status_code=422, detail="正式84条质控请先选择病历")
-
-    readiness = service.inspect_run_selection(
-        pool_id=pool_id,
-        validation_mode=validation_mode,
-        item_ids=requested_sample_item_ids,
-        record_ids=requested_record_ids,
-    )
-    if not bool(readiness.get("ready")):
-        readiness_messages = {
-            "missing_item": "所选样本不存在或不属于当前样本池",
-            "missing_record": "所选病历未匹配到当前样本池",
-            "selection_mismatch": "所选样本与病历范围不一致",
-            "ambiguous": "所选样本的病历匹配存在歧义",
-            "unmatched": "所选样本包含未匹配病历",
-            "not_synced": "所选样本尚未同步到本地",
-            "bundle_not_ready": "所选样本的病历包尚未就绪",
-            "empty_selection": "当前样本池没有可执行样本",
-        }
-        reason_code = str(readiness.get("reason_code") or "empty_selection")
+    if len(set(requested_sample_item_ids)) != len(requested_sample_item_ids):
+        raise HTTPException(status_code=422, detail="所选样本存在重复")
+    if bool(requested_sample_item_ids) != bool(requested_record_refs):
         raise HTTPException(
             status_code=422,
-            detail=readiness_messages.get(reason_code, "所选样本当前不可执行"),
+            detail="显式选择病历时必须同时提交 sample_item_ids 与 record_refs",
         )
+    requires_explicit_sample_selection = (
+        is_formal_fast_screen_full
+        or requested_rule_set_key == LUXIAN_0609_QC_RULE_SET_KEY
+    )
+    if requires_explicit_sample_selection and not (
+        requested_sample_item_ids or requested_record_refs
+    ):
+        selection_name = "正式84条质控" if is_formal_fast_screen_full else "泸县0609质控"
+        raise HTTPException(status_code=422, detail=f"{selection_name}请先选择病历")
+
+    if requested_sample_item_ids or not requested_record_refs:
+        readiness = service.inspect_run_selection(
+            pool_id=pool_id,
+            validation_mode=validation_mode,
+            item_ids=requested_sample_item_ids,
+            record_ids=[],
+        )
+        if not bool(readiness.get("ready")):
+            readiness_messages = {
+                "missing_item": "所选样本不存在或不属于当前样本池",
+                "missing_record": "所选病历未匹配到当前样本池",
+                "selection_mismatch": "所选样本与病历范围不一致",
+                "ambiguous": "所选样本的病历匹配存在歧义",
+                "unmatched": "所选样本包含未匹配病历",
+                "not_synced": "所选样本尚未同步到本地",
+                "bundle_not_ready": "所选样本的病历包尚未就绪",
+                "empty_selection": "当前样本池没有可执行样本",
+            }
+            reason_code = str(readiness.get("reason_code") or "empty_selection")
+            raise HTTPException(
+                status_code=422,
+                detail=readiness_messages.get(reason_code, "所选样本当前不可执行"),
+            )
 
     runnable_items = service.get_runnable_items(
         pool_id=pool_id,
         validation_mode=validation_mode,
         item_ids=requested_sample_item_ids,
-        record_ids=requested_record_ids,
+        record_ids=[],
     )
+    if requested_sample_item_ids:
+        runnable_item_ids = {
+            str(item.get("id") or "").strip()
+            for item in runnable_items
+            if str(item.get("id") or "").strip()
+        }
+        if runnable_item_ids != set(requested_sample_item_ids):
+            raise HTTPException(status_code=422, detail="所选样本范围已变化，请刷新后重试")
     if not runnable_items:
-        if payload.record_ids:
+        if requested_record_refs:
             raise HTTPException(status_code=422, detail="当前选中病历没有可执行的样本问题")
-        if payload.sample_item_ids:
+        if requested_sample_item_ids:
             raise HTTPException(status_code=422, detail="当前选中样本没有可执行的病历")
         raise HTTPException(status_code=422, detail="当前样本池没有可执行的样本病历")
 
-    record_ids = sorted(
-        {
-            str(item.get("matched_visit_id") or "").strip()
-            for item in runnable_items
-            if str(item.get("matched_visit_id") or "").strip()
-        }
-    )
     candidate_record_refs = [
         CaseRef(
             str(item.get("matched_institute_id") or "").strip(),
@@ -1058,11 +1099,13 @@ async def run_sample_pool_intrinsic_validation(
         )
         for item in runnable_items
     ]
-    record_refs = (
-        normalize_case_refs(candidate_record_refs)
-        if candidate_record_refs and all(all(ref) for ref in candidate_record_refs)
-        else ()
-    )
+    if not candidate_record_refs or not all(all(ref) for ref in candidate_record_refs):
+        raise HTTPException(status_code=422, detail="样本病历缺少完整三坐标，无法创建质控任务")
+    record_refs = normalize_case_refs(candidate_record_refs)
+    if requested_record_refs and set(record_refs) != set(requested_record_refs):
+        raise HTTPException(status_code=422, detail="所选样本与病历三坐标范围不一致，请刷新后重试")
+    record_ids = sorted({record_ref.visit_id for record_ref in record_refs})
+    selected_record_count = len(record_refs) if requested_record_refs or requested_sample_item_ids else 0
     record_rule_map: Dict[str, list[str]] = {}
     if not is_formal_fast_screen_full and resolved_rule_set is None:
         for item in runnable_items:
@@ -1071,15 +1114,13 @@ async def run_sample_pool_intrinsic_validation(
                 str(item.get("matched_patient_id") or "").strip(),
                 str(item.get("matched_visit_id") or "").strip(),
             )
-            record_map_key = record_ref.as_key() if all(record_ref) else record_ref.visit_id
-            if not record_map_key:
-                continue
+            record_map_key = record_ref.as_key()
             bucket = record_rule_map.setdefault(record_map_key, [])
             for rule_id in list(item.get("candidate_rule_ids") or []):
                 normalized_rule_id = str(rule_id or "").strip()
                 if normalized_rule_id and normalized_rule_id not in bucket:
                     bucket.append(normalized_rule_id)
-    if not record_ids:
+    if not record_refs:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
 
     if resolved_rule_set is not None:
@@ -1211,14 +1252,24 @@ async def run_sample_pool_intrinsic_validation(
         start_date=None,
         end_date=None,
         keyword=None,
-        record_ids=None if record_refs else record_ids,
-        record_refs=record_refs or None,
+        record_ids=None,
+        record_refs=record_refs,
     )
     record_count = len(selected_records)
     if record_count == 0 and is_formal_fast_screen_full:
         raise HTTPException(status_code=422, detail="选中病历未同步为终末病历，无法发起正式终末质控")
-    requested_record_count = len(record_refs) if record_refs else len(record_ids)
-    if requested_record_count and effective_scope != "all" and record_count < requested_record_count:
+
+    def _workspace_record_refs(records: list[Dict[str, Any]]) -> tuple[CaseRef, ...]:
+        candidates = [CaseRef.from_mapping(record) for record in records]
+        if candidates and not all(all(ref) for ref in candidates):
+            raise HTTPException(status_code=422, detail="样本病历缺少完整三坐标，无法创建质控任务")
+        refs = normalize_case_refs(candidates) if candidates else ()
+        if len(refs) != len(candidates):
+            raise HTTPException(status_code=422, detail="样本病历三坐标关联不唯一，无法创建质控任务")
+        return refs
+
+    selected_record_refs = _workspace_record_refs(selected_records)
+    if set(selected_record_refs) != set(record_refs) and effective_scope != "all":
         fallback_records = workspace.collect_records(
             scope="all",
             department=payload.department,
@@ -1227,38 +1278,19 @@ async def run_sample_pool_intrinsic_validation(
             start_date=None,
             end_date=None,
             keyword=None,
-            record_ids=None if record_refs else record_ids,
-            record_refs=record_refs or None,
+            record_ids=None,
+            record_refs=record_refs,
         )
-        fallback_record_count = len(fallback_records)
-        if fallback_record_count > record_count:
-            record_count = fallback_record_count
+        fallback_record_refs = _workspace_record_refs(fallback_records)
+        if set(fallback_record_refs) == set(record_refs):
+            record_count = len(fallback_records)
             effective_scope = "all"
             selected_records = fallback_records
+            selected_record_refs = fallback_record_refs
     if record_count == 0:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
-    try:
-        selected_record_refs = (
-            record_refs
-            if record_refs
-            else normalize_case_refs(
-                [CaseRef.from_mapping(record) for record in selected_records]
-            )
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="样本病历缺少完整三坐标，无法创建质控任务",
-        ) from exc
-    if not record_refs:
-        refs_by_visit: Dict[str, set[CaseRef]] = {}
-        for ref in selected_record_refs:
-            refs_by_visit.setdefault(ref.visit_id, set()).add(ref)
-        if any(len(refs_by_visit.get(visit_id) or set()) != 1 for visit_id in record_ids):
-            raise HTTPException(
-                status_code=422,
-                detail="样本住院号对应多份病历，无法安全解析三坐标",
-            )
+    if set(selected_record_refs) != set(record_refs):
+        raise HTTPException(status_code=422, detail="样本病历三坐标未完整命中当前病历池，请刷新后重试")
     record_refs = selected_record_refs
     if selected_execution_rule_ids:
         record_rule_map = {
@@ -1266,14 +1298,10 @@ async def run_sample_pool_intrinsic_validation(
             for record_ref in record_refs
         }
     elif record_rule_map:
-        legacy_rule_map = dict(record_rule_map)
+        exact_rule_map = dict(record_rule_map)
         mapped_rule_map: dict[str, list[str]] = {}
         for record_ref in record_refs:
-            mapped_rules = list(
-                legacy_rule_map.get(record_ref.as_key())
-                or legacy_rule_map.get(record_ref.visit_id)
-                or []
-            )
+            mapped_rules = list(exact_rule_map.get(record_ref.as_key()) or [])
             if mapped_rules:
                 mapped_rule_map[record_ref.as_key()] = mapped_rules
         record_rule_map = mapped_rule_map
@@ -1324,7 +1352,7 @@ async def run_sample_pool_intrinsic_validation(
         "source": "manual_sample_formal_fast_screen_full" if is_formal_fast_screen_full else "manual_problem_sample_pool",
         "sample_pool_id": pool_id,
         "selected_rule_ids": requested_selected_rule_ids,
-        "selected_record_ids": requested_record_ids,
+        "selected_record_ids": record_ids if selected_record_count else [],
         "scoped_customer_rule_ids": requested_selected_rule_ids,
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
@@ -1409,7 +1437,7 @@ async def run_sample_pool_intrinsic_validation(
                 "child_job_ids": list(duplicate_job.get("child_job_ids") or []),
                 "family_scopes": luxian_family_scopes,
                 "sample_item_count": len(runnable_items),
-                "selected_record_count": len(requested_record_ids),
+                "selected_record_count": selected_record_count,
                 "record_count": record_count,
                 "rule_count": len(rule_ids),
                 "customer_rule_count": customer_rule_count,
@@ -1572,7 +1600,7 @@ async def run_sample_pool_intrinsic_validation(
                 "child_jobs": child_jobs,
                 "family_scopes": luxian_family_scopes,
                 "sample_item_count": len(runnable_items),
-                "selected_record_count": len(requested_record_ids),
+                "selected_record_count": selected_record_count,
                 "record_count": record_count,
                 "rule_count": len(rule_ids),
                 "customer_rule_count": len(parent_filters["scoped_customer_rule_ids"]),
@@ -1620,7 +1648,7 @@ async def run_sample_pool_intrinsic_validation(
             "pool_id": pool_id,
             "job_id": job["id"],
             "sample_item_count": len(runnable_items),
-            "selected_record_count": len(requested_record_ids),
+            "selected_record_count": selected_record_count,
             "record_count": record_count,
             "rule_count": len(rule_ids),
             "customer_rule_count": customer_rule_count,

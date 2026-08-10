@@ -157,7 +157,8 @@ describe('editable medical-record document normalization', () => {
     })
 
     const result = await runManualSamplePool('pool-1', {
-      record_ids: ['visit-1'],
+      sample_item_ids: ['item-1'],
+      record_refs: [{ institute_id: 'hospital-1', patient_id: 'patient-1', visit_id: 'visit-1' }],
       selected_rule_ids: ['LX0609-001', 'LX0609-002'],
       group_by_luxian_family: false,
       validation_mode: 'customer',
@@ -168,7 +169,8 @@ describe('editable medical-record document normalization', () => {
       method: 'POST',
       url: '/api/v1/qc/sample-pools/pool-1/run',
       data: {
-        record_ids: ['visit-1'],
+        sample_item_ids: ['item-1'],
+        record_refs: [{ institute_id: 'hospital-1', patient_id: 'patient-1', visit_id: 'visit-1' }],
         selected_rule_ids: ['LX0609-001', 'LX0609-002'],
         group_by_luxian_family: false,
         validation_mode: 'customer',
@@ -181,6 +183,53 @@ describe('editable medical-record document normalization', () => {
       execution_scope_hash: 'a'.repeat(64),
       deduplicated: true,
     })
+  })
+
+  it('keeps filter-only runs free of record refs and rejects legacy record ids before the API', async () => {
+    mocks.requestRaw.mockResolvedValue({ data: { pool_id: 'pool-1', job_id: 'job-1' } })
+
+    await runManualSamplePool('pool-1', {
+      validation_mode: 'sc',
+      rule_set_key: '',
+    })
+
+    expect(mocks.requestRaw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: { validation_mode: 'sc', rule_set_key: '' },
+      }),
+    )
+
+    await expect(
+      runManualSamplePool('pool-1', {
+        record_ids: ['visit-1'],
+        validation_mode: 'sc',
+        rule_set_key: '',
+      } as never),
+    ).rejects.toThrow('record_ids')
+    expect(mocks.requestRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    {
+      label: 'sample_item_ids only',
+      payload: { sample_item_ids: ['item-1'] },
+    },
+    {
+      label: 'record_refs only',
+      payload: {
+        record_refs: [{ institute_id: 'hospital-1', patient_id: 'patient-1', visit_id: 'visit-1' }],
+      },
+    },
+  ])('rejects partial explicit selection locally: $label', async ({ payload }) => {
+    await expect(
+      runManualSamplePool('pool-1', {
+        ...payload,
+        validation_mode: 'sc',
+        rule_set_key: '',
+      }),
+    ).rejects.toThrow('sample_item_ids')
+
+    expect(mocks.requestRaw).not.toHaveBeenCalled()
   })
 
   it('previews the selected hospitalization scope through the dedicated API', async () => {

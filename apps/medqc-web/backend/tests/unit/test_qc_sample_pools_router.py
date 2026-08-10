@@ -6,11 +6,23 @@ from types import SimpleNamespace
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
-from app.routers import qc_sample_pools
+from app.routers import qc_sample_pools, qc_sichuan
 from app.services.case_identity import CaseRef
 from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services import sample_validation_rule_sets
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
+
+
+def _run_record_ref(
+    institute_id: str = "I001",
+    patient_id: str = "P001",
+    visit_id: str = "V001",
+) -> dict[str, str]:
+    return {
+        "institute_id": institute_id,
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +88,7 @@ class _SamplePoolServiceStub:
                 "record_ids": list(record_ids),
             }
         )
-        return [
+        rows = [
             {
                 "id": "item-1",
                 "matched_institute_id": "I001",
@@ -91,6 +103,14 @@ class _SamplePoolServiceStub:
                 "matched_visit_id": "V002",
                 "candidate_rule_ids": ["SC-026"],
             },
+        ]
+        selected_item_ids = {str(value or "").strip() for value in item_ids if str(value or "").strip()}
+        selected_record_ids = {str(value or "").strip() for value in record_ids if str(value or "").strip()}
+        return [
+            row
+            for row in rows
+            if (not selected_item_ids or str(row.get("id") or "").strip() in selected_item_ids)
+            and (not selected_record_ids or str(row.get("matched_visit_id") or "").strip() in selected_record_ids)
         ]
 
     def inspect_run_selection(self, **_kwargs):
@@ -125,6 +145,7 @@ class _WorkspaceServiceStub:
             ],
         }
 
+
     def collect_records(
         self,
         *,
@@ -148,13 +169,27 @@ class _WorkspaceServiceStub:
                 "record_refs": list(record_refs or []),
             }
         )
-        return [
+        rows = [
             {
                 "institute_id": str(record.get("institute_id") or "I001"),
                 "patient_id": str(record.get("patient_id") or f"P-{record.get('visit_id')}"),
                 **record,
             }
             for record in self.records_by_scope.get(scope, [])
+        ]
+        selected_record_ids = {str(value or "").strip() for value in list(record_ids or []) if str(value or "").strip()}
+        selected_record_refs = {
+            ref if isinstance(ref, CaseRef) else CaseRef.from_mapping(ref)
+            for ref in list(record_refs or [])
+        }
+        return [
+            row
+            for row in rows
+            if (
+                not selected_record_ids
+                or str(row.get("visit_id") or row.get("record_id") or "").strip() in selected_record_ids
+            )
+            and (not selected_record_refs or CaseRef.from_mapping(row) in selected_record_refs)
         ]
 
     def count_records(
@@ -210,14 +245,26 @@ class _WorkspaceServiceStub:
         family_name=None,
     ):
         job_id = f"job-sample-pool-{len(self.create_batch_job_calls) + 1}"
+        normalized_record_refs = [
+            ref if isinstance(ref, CaseRef) else CaseRef.from_mapping(ref)
+            for ref in list(record_refs or [])
+        ]
+        persisted_filters = {
+            **dict(filters or {}),
+            **(
+                {"record_refs": [ref.as_dict() for ref in normalized_record_refs]}
+                if normalized_record_refs
+                else {}
+            ),
+        }
         call = {
             "id": job_id,
             "draft": draft,
             "created_by": created_by,
             "scope": scope,
-            "filters": filters,
+            "filters": persisted_filters,
             "record_ids": list(record_ids),
-            "record_refs": list(record_refs or []),
+            "record_refs": normalized_record_refs,
             "total_records": total_records,
             "draft_ids": list(draft_ids or []),
             "execution_mode": execution_mode,
@@ -249,6 +296,47 @@ class _WorkspaceServiceStub:
             page=1,
             page_size=100,
         )
+
+
+class _SamplePoolWorkerWorkspaceStub:
+    def __init__(self) -> None:
+        self.collect_records_calls: list[dict[str, object]] = []
+        self.failed_calls: list[dict[str, object]] = []
+        self.job = {
+            "id": "job-sample-worker",
+            "job_kind": "leaf",
+            "draft_id": "draft-sc",
+            "draft_ids": ["SC-001"],
+            "created_by": "tester",
+            "scope": "running",
+            "run_mode": "parallel",
+            "record_ids": ["V-SHARED"],
+            "filters": {
+                "rule_ids": ["SC-001"],
+                "validation_mode": "sc",
+                "rule_set_key": "sc",
+                "date_field": "admission",
+                "record_refs": [
+                    _run_record_ref("I001", "P001", "V-SHARED"),
+                    _run_record_ref("I002", "P002", "V-SHARED"),
+                ],
+            },
+        }
+
+    def get_batch_job_for_processing(self, *, job_id: str):
+        assert job_id == self.job["id"]
+        return self.job
+
+    def mark_batch_job_running(self, *, job_id: str) -> bool:
+        assert job_id == self.job["id"]
+        return True
+
+    def collect_records(self, **kwargs):
+        self.collect_records_calls.append(kwargs)
+        raise RuntimeError("stop-after-record-ref-boundary")
+
+    def fail_batch_job(self, **kwargs) -> None:
+        self.failed_calls.append(kwargs)
 
 
 class _SyncServiceStub:
@@ -810,6 +898,8 @@ class _SamplePoolLifecycleServiceStub:
         self.items_by_pool[pool["id"]] = [
             {
                 "id": f"item-{index + 1}",
+                "matched_institute_id": "I001",
+                "matched_patient_id": "P001",
                 "matched_visit_id": row.get("visit_id") or row.get("mr_no"),
                 "candidate_rule_ids": ["SC-023"] if index == 0 else ["SC-026"],
                 "manual_issue_text": row.get("manual_issue_text") or "",
@@ -908,7 +998,7 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
 
     request = _build_request()
     payload = qc_sample_pools.SamplePoolRunRequest(
-        record_ids=["V001", "V002"],
+        record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
         sample_item_ids=["item-1", "item-2"],
         max_parallel_records=2,
         model_code="qwen3.6-35b-a3b",
@@ -931,7 +1021,7 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
             "pool_id": "pool-1",
             "validation_mode": "sc",
             "item_ids": ["item-1", "item-2"],
-            "record_ids": ["V001", "V002"],
+            "record_ids": [],
         }
     ]
     assert workspace_service.collect_records_calls == [
@@ -993,6 +1083,10 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     ]
     assert created["filters"]["validation_mode"] == "sc"
     assert created["filters"]["rule_set_name"] == "SC样本规则模式"
+    assert created["filters"]["record_refs"] == [
+        _run_record_ref(),
+        _run_record_ref("I001", "P002", "V002"),
+    ]
 
     assert sample_service.updated_pool_job == {
         "pool_id": "pool-1",
@@ -1006,6 +1100,202 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert response["data"]["selected_record_count"] == 2
     assert response["data"]["record_count"] == 2
     assert response["data"]["rule_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_rejects_legacy_record_ids_before_selection(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                sample_item_ids=["item-1"],
+                record_ids=["V001"],
+                validation_mode="sc",
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "record_refs" in str(exc_info.value.detail)
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.create_batch_job_calls == []
+
+
+def test_sample_pool_run_request_rejects_incomplete_record_ref() -> None:
+    with pytest.raises(ValueError):
+        qc_sample_pools.SamplePoolRunRequest(
+            sample_item_ids=["item-1"],
+            record_refs=[{"institute_id": "I001", "patient_id": " ", "visit_id": "V001"}],
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_rejects_record_ref_drift_from_selected_sample(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    sample_service.get_runnable_items = lambda **_kwargs: [  # type: ignore[method-assign]
+        {
+            "id": "item-1",
+            "matched_institute_id": "I002",
+            "matched_patient_id": "P002",
+            "matched_visit_id": "V001",
+            "candidate_rule_ids": ["SC-023"],
+        }
+    ]
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                sample_item_ids=["item-1"],
+                record_refs=[_run_record_ref()],
+                validation_mode="sc",
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert workspace_service.collect_records_calls == []
+    assert workspace_service.create_batch_job_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "selection_payload",
+    [
+        {"sample_item_ids": ["item-1"]},
+        {"record_refs": [_run_record_ref()]},
+    ],
+)
+async def test_run_sample_pool_rejects_partial_explicit_selection_identity(
+    monkeypatch,
+    selection_payload,
+):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                validation_mode="sc",
+                **selection_payload,
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "sample_item_ids" in str(exc_info.value.detail)
+    assert "record_refs" in str(exc_info.value.detail)
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.create_batch_job_calls == []
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_keeps_two_triple_identities_with_the_same_visit(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    sample_service.get_runnable_items = lambda **_kwargs: [  # type: ignore[method-assign]
+        {
+            "id": "item-a",
+            "matched_institute_id": "I001",
+            "matched_patient_id": "P001",
+            "matched_visit_id": "V-SHARED",
+            "candidate_rule_ids": ["SC-023"],
+        },
+        {
+            "id": "item-b",
+            "matched_institute_id": "I002",
+            "matched_patient_id": "P002",
+            "matched_visit_id": "V-SHARED",
+            "candidate_rule_ids": ["SC-026"],
+        },
+    ]
+    workspace_service = _WorkspaceServiceStub()
+    workspace_service.records_by_scope["running"] = [
+        {"institute_id": "I001", "patient_id": "P001", "visit_id": "V-SHARED"},
+        {"institute_id": "I002", "patient_id": "P002", "visit_id": "V-SHARED"},
+    ]
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            sample_item_ids=["item-a", "item-b"],
+            record_refs=[
+                _run_record_ref("I001", "P001", "V-SHARED"),
+                _run_record_ref("I002", "P002", "V-SHARED"),
+            ],
+            validation_mode="sc",
+        ),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["record_ids"] == ["V-SHARED"]
+    assert created["record_refs"] == [
+        CaseRef("I001", "P001", "V-SHARED"),
+        CaseRef("I002", "P002", "V-SHARED"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_filter_only_freezes_all_runnable_record_refs(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(validation_mode="sc"),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["record_refs"] == [CaseRef("I001", "P001", "V001"), CaseRef("I001", "P002", "V002")]
+    assert created["record_ids"] == ["V001", "V002"]
+    assert response["data"]["selected_record_count"] == 0
+    assert response["data"]["record_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_sample_pool_worker_reads_persisted_record_refs_instead_of_legacy_visit_ids(
+    monkeypatch,
+):
+    workspace = _SamplePoolWorkerWorkspaceStub()
+
+    async def _qc_service_stub():
+        return object()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _qc_service_stub)
+    monkeypatch.setattr(qc_sichuan.logger, "exception", lambda *_args, **_kwargs: None)
+
+    await qc_sample_pools._run_sichuan_workspace_batch_job("job-sample-worker")
+
+    assert len(workspace.collect_records_calls) == 1
+    collect_call = workspace.collect_records_calls[0]
+    assert collect_call["record_ids"] is None
+    assert collect_call["record_refs"] == [
+        _run_record_ref("I001", "P001", "V-SHARED"),
+        _run_record_ref("I002", "P002", "V-SHARED"),
+    ]
+    assert workspace.failed_calls
 
 
 @pytest.mark.asyncio
@@ -1053,7 +1343,7 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         request=request,
         pool_id=pool_id,
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1", "item-2"],
             max_parallel_records=4,
             validation_mode="sc",
@@ -1121,8 +1411,8 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
     workspace_service = _WorkspaceServiceStub()
     workspace_service.records_by_scope["running"] = []
     workspace_service.records_by_scope["all"] = [
-        {"record_id": "V001", "visit_id": "V001"},
-        {"record_id": "V002", "visit_id": "V002"},
+        {"institute_id": "I001", "patient_id": "P001", "record_id": "V001", "visit_id": "V001"},
+        {"institute_id": "I001", "patient_id": "P002", "record_id": "V002", "visit_id": "V002"},
     ]
 
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
@@ -1131,7 +1421,7 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
 
     request = _build_request()
     payload = qc_sample_pools.SamplePoolRunRequest(
-        record_ids=["V001", "V002"],
+        record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
         sample_item_ids=["item-1", "item-2"],
         max_parallel_records=2,
         validation_mode="sc",
@@ -1199,7 +1489,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             max_parallel_records=2,
         ),
@@ -1232,7 +1522,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             max_parallel_records=2,
             rule_set_key="luxian_0609_qc_v1",
@@ -1286,6 +1576,30 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
 
 
 @pytest.mark.asyncio
+async def test_run_sample_pool_luxian_0609_requires_explicit_sample_selection(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                rule_set_key="luxian_0609_qc_v1",
+            ),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "选择病历" in str(exc_info.value.detail)
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.collect_records_calls == []
+    assert workspace_service.create_batch_job_calls == []
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalog_rule_set(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()
@@ -1298,7 +1612,7 @@ async def test_run_sample_pool_should_skip_paused_customer_rules_but_keep_catalo
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
         ),
@@ -1327,7 +1641,7 @@ async def test_run_sample_pool_should_filter_paused_customer_rules_from_explicit
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-020", "LX0609-033", "LX0609-042", "LX0609-049"],
@@ -1354,7 +1668,7 @@ async def test_run_sample_pool_should_reject_scope_with_only_paused_customer_rul
             request=_build_request(),
             pool_id="pool-1",
             payload=qc_sample_pools.SamplePoolRunRequest(
-                record_ids=["V001"],
+                record_refs=[_run_record_ref()],
                 sample_item_ids=["item-1"],
                 rule_set_key="luxian_0609_qc_v1",
                 selected_rule_ids=[
@@ -1385,7 +1699,7 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             max_parallel_records=1,
             rule_set_key="luxian_0609_qc_v1",
@@ -1403,7 +1717,6 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
     assert created["filters"]["selected_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert created["filters"]["record_rule_map"] == {
         CaseRef("I001", "P001", "V001").as_key(): expected_execution_rule_ids,
-        CaseRef("I001", "P002", "V002").as_key(): expected_execution_rule_ids,
     }
     assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert created["filters"]["customer_rule_count"] == 2
@@ -1416,7 +1729,6 @@ async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_sel
     assert response["data"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
     assert response["data"]["record_rule_map"] == {
         CaseRef("I001", "P001", "V001").as_key(): expected_execution_rule_ids,
-        CaseRef("I001", "P002", "V002").as_key(): expected_execution_rule_ids,
     }
     assert response["data"]["gate_only_customer_rule_ids"] == []
     assert response["data"]["rule_ids"] == expected_execution_rule_ids
@@ -1433,7 +1745,7 @@ async def test_run_sample_pool_should_return_safe_execution_identity(monkeypatch
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-001"],
@@ -1466,7 +1778,7 @@ async def test_run_sample_pool_should_reuse_recent_identical_operation(monkeypat
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
 
     payload = qc_sample_pools.SamplePoolRunRequest(
-        record_ids=["V001"],
+        record_refs=[_run_record_ref()],
         sample_item_ids=["item-1"],
         rule_set_key="luxian_0609_qc_v1",
         selected_rule_ids=["LX0609-001"],
@@ -1512,6 +1824,8 @@ async def test_record_evaluation_snapshot_must_change_sample_validation_identity
     sample_service.get_runnable_items = lambda **_: [  # type: ignore[method-assign]
         {
             "id": "item-1",
+            "matched_institute_id": "I001",
+            "matched_patient_id": "P001",
             "matched_visit_id": "V001",
             "candidate_rule_ids": ["LX0609-012"],
         }
@@ -1519,6 +1833,8 @@ async def test_record_evaluation_snapshot_must_change_sample_validation_identity
     workspace_service = _WorkspaceServiceStub()
     workspace_service.records_by_scope["running"] = [
         {
+            "institute_id": "I001",
+            "patient_id": "P001",
             "record_id": "V001",
             "visit_id": "V001",
             "scope": "final",
@@ -1529,7 +1845,7 @@ async def test_record_evaluation_snapshot_must_change_sample_validation_identity
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
     payload = qc_sample_pools.SamplePoolRunRequest(
-        record_ids=["V001"],
+        record_refs=[_run_record_ref()],
         sample_item_ids=["item-1"],
         rule_set_key="luxian_0609_qc_v1",
         selected_rule_ids=["LX0609-012"],
@@ -1584,7 +1900,7 @@ async def test_native_customer_rule_selection_must_change_execution_identity(mon
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-001"],
@@ -1605,7 +1921,7 @@ async def test_native_customer_rule_selection_must_change_execution_identity(mon
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-002"],
@@ -1616,7 +1932,7 @@ async def test_native_customer_rule_selection_must_change_execution_identity(mon
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
         ),
@@ -1652,7 +1968,7 @@ async def test_run_sample_pool_should_not_reuse_terminal_or_expired_operation(
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
     monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
     payload = qc_sample_pools.SamplePoolRunRequest(
-        record_ids=["V001"],
+        record_refs=[_run_record_ref()],
         sample_item_ids=["item-1"],
         rule_set_key="luxian_0609_qc_v1",
         selected_rule_ids=["LX0609-001"],
@@ -1717,7 +2033,7 @@ async def test_run_sample_pool_should_reject_mixed_unready_selection(
             request=_build_request(),
             pool_id="pool-1",
             payload=qc_sample_pools.SamplePoolRunRequest(
-                record_ids=["V001"],
+                record_refs=[_run_record_ref()],
                 sample_item_ids=["item-1", "item-blocked"],
                 rule_set_key="luxian_0609_qc_v1",
                 selected_rule_ids=["LX0609-001"],
@@ -1768,7 +2084,7 @@ async def test_family_jobs_should_share_safe_identity_and_keep_scope_order(monke
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-001", "LX0609-020", "LX0609-021"],
@@ -1820,7 +2136,7 @@ async def test_run_sample_pool_intrinsic_validation_should_execute_selected_luxi
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             max_parallel_records=1,
             rule_set_key="luxian_0609_qc_v1",
@@ -1838,7 +2154,6 @@ async def test_run_sample_pool_intrinsic_validation_should_execute_selected_luxi
     assert created["filters"]["gate_only_customer_rule_ids"] == []
     assert created["filters"]["record_rule_map"] == {
         CaseRef("I001", "P001", "V001").as_key(): ["LX0609-028"],
-        CaseRef("I001", "P002", "V002").as_key(): ["LX0609-028"],
     }
     assert response["data"]["gate_only_customer_rule_ids"] == []
 
@@ -1856,7 +2171,7 @@ async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             rule_set_key="luxian_0609_qc_v1",
             selected_rule_ids=["LX0609-001", "LX0609-020", "LX0609-021"],
@@ -1888,6 +2203,15 @@ async def test_run_sample_pool_intrinsic_validation_should_create_luxian_parent_
         ["LX0609-001"],
         ["LX0609-020", "LX0609-021"],
     ]
+    expected_record_refs = [CaseRef("I001", "P001", "V001")]
+    assert parent_call["record_refs"] == expected_record_refs
+    assert all(call["record_refs"] == expected_record_refs for call in child_calls)
+    expected_persisted_refs = [_run_record_ref()]
+    assert parent_call["filters"]["record_refs"] == expected_persisted_refs
+    assert all(
+        call["filters"]["record_refs"] == expected_persisted_refs
+        for call in child_calls
+    )
     assert all(call["filters"]["record_rule_map"] for call in child_calls)
     assert sample_service.updated_pool_job == {
         "pool_id": "pool-1",
@@ -1913,7 +2237,7 @@ async def test_run_sample_pool_intrinsic_validation_should_reject_unknown_rule_s
             request=_build_request(),
             pool_id="pool-1",
             payload=qc_sample_pools.SamplePoolRunRequest(
-                record_ids=["V001"],
+                record_refs=[_run_record_ref()],
                 sample_item_ids=["item-1"],
                 rule_set_key="unknown_rule_set",
             ),
@@ -1939,7 +2263,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001"],
+            record_refs=[_run_record_ref()],
             sample_item_ids=["item-1"],
             max_parallel_records=2,
             validation_mode="programmatic",
@@ -1971,7 +2295,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V001", "V002"],
+            record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
             sample_item_ids=["item-1", "item-2"],
             max_parallel_records=2,
             validation_mode="formal_fast_screen_full",
@@ -2060,7 +2384,8 @@ async def test_run_sample_pool_intrinsic_validation_formal_mode_should_not_fallb
             request=_build_request(),
             pool_id="pool-1",
             payload=qc_sample_pools.SamplePoolRunRequest(
-                record_ids=["V001", "V002"],
+                record_refs=[_run_record_ref(), _run_record_ref("I001", "P002", "V002")],
+                sample_item_ids=["item-1", "item-2"],
                 validation_mode="formal_fast_screen_full",
                 rule_set_key="sc_content_full_v1",
             ),
@@ -2093,6 +2418,8 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_
         return [
             {
                 "id": "item-69",
+                "matched_institute_id": "I001",
+                "matched_patient_id": "P-V069",
                 "matched_visit_id": "V069",
                 "candidate_rule_ids": ["SC-069"],
             }
@@ -2108,7 +2435,7 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_
         request=_build_request(),
         pool_id="pool-1",
         payload=qc_sample_pools.SamplePoolRunRequest(
-            record_ids=["V069"],
+            record_refs=[_run_record_ref("I001", "P-V069", "V069")],
             sample_item_ids=["item-69"],
             max_parallel_records=2,
             validation_mode="sc",

@@ -32,7 +32,12 @@ export type LuxianRuleFamilyView = {
 }
 
 export type SamplePoolRunPayload = {
-  record_ids: string[]
+  sample_item_ids?: string[]
+  record_refs?: Array<{
+    institute_id: string
+    patient_id: string
+    visit_id: string
+  }>
   max_parallel_records: number
   validation_mode: ManualSampleValidationMode
   rule_set_key: string

@@ -358,11 +358,29 @@ export function hasSameRuleScope(left: string[], right: string[]): boolean {
   return normalizedLeft.every((ruleId, index) => ruleId === normalizedRight[index])
 }
 
-export function buildSyntheticCaseRunPayload(form: TestRecordForm, visitId: string) {
+export type SyntheticCaseRunIdentity = {
+  sampleItemId: string
+  instituteId: string
+  patientId: string
+  visitId: string
+}
+
+export function buildSyntheticCaseRunPayload(
+  form: TestRecordForm,
+  identity: SyntheticCaseRunIdentity,
+) {
+  const sampleItemId = String(identity.sampleItemId || '').trim()
+  const instituteId = String(identity.instituteId || '').trim()
+  const patientId = String(identity.patientId || '').trim()
+  const visitId = String(identity.visitId || '').trim()
+  if (!sampleItemId || !instituteId || !patientId || !visitId) {
+    throw new Error('测试病历缺少完整的样本标识或病例三坐标')
+  }
   return {
     rule_set_key: LUXIAN_0609_RULE_SET_KEY,
     validation_mode: 'customer',
-    record_ids: [visitId],
+    sample_item_ids: [sampleItemId],
+    record_refs: [{ institute_id: instituteId, patient_id: patientId, visit_id: visitId }],
     selected_rule_ids: normalizeRuleIds(form.selectedRuleIds),
     max_parallel_records: 1,
   }
