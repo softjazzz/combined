@@ -102,6 +102,37 @@ _RULE_DATA_GAP_EXPLANATIONS = {
             "现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。"
         ),
     },
+    ("LX0609-028", "required_field_missing"): {
+        "reason_label": "预防性抗菌药物时长字段不完整",
+        "missing_sources": [],
+        "missing_fields": [
+            "手术切口等级",
+            "预防性用药属性",
+            "抗菌药物实际给药时间",
+            "抗菌药物实际停用时间",
+        ],
+        "customer_message": (
+            "已读取手术及用药资料，但尚缺切口等级、预防性用药属性或抗菌药物实际给药/"
+            "停用时间中的至少一项；医嘱更新时间不能替代实际停用时间。"
+        ),
+    },
+    ("LX0609-031", "association_failed"): {
+        "reason_label": "手术签名信息暂无法核对",
+        "missing_sources": [],
+        "missing_fields": ["主刀医师签名", "手术事件与手术记录的对应关系"],
+        "customer_message": (
+            "已读取手术主表和手术记录，但尚未取得可与每次手术对应的主刀医师签名，"
+            "暂时无法完成签名资格核对。"
+        ),
+    },
+    ("LX0609-048", "transfusion_comparison_fields_unavailable"): {
+        "reason_label": "术中输血比对资料不完整",
+        "missing_sources": [],
+        "missing_fields": [],
+        "customer_message": (
+            "已确认存在术中输血，但三份文书的比对资料不完整，暂时无法完成一致性核对。"
+        ),
+    },
 }
 
 _DEFAULT_DATA_GAP_EXPLANATION = {
@@ -121,6 +152,9 @@ _CUSTOMER_SOURCE_LABELS = {
     "medical_order": "诊疗医嘱",
     "inpat_bill_item": "住院收费明细",
     "surgery_risk_assessment": "手术风险评估",
+    "surgery_record": "手术记录",
+    "anesthesia_record": "麻醉记录单",
+    "postsurg_firstcourse_record": "术后首次病程记录",
     "exam_attention_report": "检查危急值报告",
     "lab_attention_report": "检验危急值报告",
 }
@@ -183,8 +217,18 @@ def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
     missing_fields = list(
         consistent_value("missing_fields", defaults["missing_fields"])
     )
+    default_customer_message = defaults["customer_message"]
+    if (
+        rule_id == "LX0609-048"
+        and reason_code == "transfusion_comparison_fields_unavailable"
+        and missing_sources
+    ):
+        default_customer_message = (
+            f"已确认存在术中输血，但缺少{'、'.join(missing_sources)}，"
+            "暂时无法完成手术记录、麻醉记录单和术后首次病程记录的一致性核对。"
+        )
     customer_message = str(
-        consistent_value("customer_message", defaults["customer_message"])
+        consistent_value("customer_message", default_customer_message)
     ).strip()
     result["missing_sources"] = missing_sources
     result["missing_fields"] = missing_fields

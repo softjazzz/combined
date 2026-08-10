@@ -205,6 +205,63 @@ def test_rule_009_candidate_scope_gap_does_not_claim_missing_source() -> None:
     assert other_rule["data_gap_details"]["reason_label"] == "现有资料不足"
 
 
+def test_rule_048_names_the_missing_anesthesia_record_instead_of_generic_materials() -> None:
+    result = _finalize(
+        {
+            "rule_id": "LX0609-048",
+            "status": "data_gap",
+            "reason_code": "transfusion_comparison_fields_unavailable",
+            "customer_display_facts": {
+                "failure_kind": "transfusion_comparison_material_missing",
+                "missing_sources": ["anesthesia_record"],
+            },
+        }
+    )
+
+    assert result["missing_sources"] == ["麻醉记录单"]
+    assert result["missing_fields"] == []
+    assert result["data_gap_details"]["reason_label"] == "术中输血比对资料不完整"
+    assert "麻醉记录单" in result["customer_message"]
+    assert "完成本项质控所需资料" not in result["missing_sources"]
+
+
+def test_rule_031_signature_association_gap_names_the_unavailable_signature_fields() -> None:
+    result = _finalize(
+        {
+            "rule_id": "LX0609-031",
+            "status": "data_gap",
+            "reason_code": "association_failed",
+        }
+    )
+
+    assert result["missing_sources"] == []
+    assert result["missing_fields"] == ["主刀医师签名", "手术事件与手术记录的对应关系"]
+    assert result["data_gap_details"]["reason_label"] == "手术签名信息暂无法核对"
+    assert "主刀医师签名" in result["customer_message"]
+    assert "提交人" not in result["customer_message"]
+
+
+def test_rule_028_required_field_gap_names_the_actual_prophylaxis_inputs() -> None:
+    result = _finalize(
+        {
+            "rule_id": "LX0609-028",
+            "status": "data_gap",
+            "reason_code": "required_field_missing",
+        }
+    )
+
+    assert result["missing_sources"] == []
+    assert result["missing_fields"] == [
+        "手术切口等级",
+        "预防性用药属性",
+        "抗菌药物实际给药时间",
+        "抗菌药物实际停用时间",
+    ]
+    assert result["data_gap_details"]["reason_label"] == "预防性抗菌药物时长字段不完整"
+    assert "实际停用时间" in result["customer_message"]
+    assert "医嘱更新时间不能替代实际停用时间" in result["customer_message"]
+
+
 @pytest.mark.parametrize(
     ("reason_code", "reason_label", "expected_phrase"),
     [
