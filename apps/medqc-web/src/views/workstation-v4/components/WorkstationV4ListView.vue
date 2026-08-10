@@ -485,16 +485,6 @@ const kpiCards = computed(() =>
           icon: FileTextOutlined,
           tone: 'brand',
         },
-        {
-          key: 'result-error',
-          label: '结果校验异常',
-          value: props.qcSummary.technicalErrorRecords || '—',
-          desc: props.qcSummary.technicalErrorRecords
-            ? '请复核最新质控结果交付'
-            : '资料同步与执行状态待接入',
-          icon: SyncOutlined,
-          tone: 'info',
-        },
       ],
 )
 </script>

@@ -168,6 +168,8 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.text()).toContain('6')
     expect(wrapper.text()).toContain('资料待补')
     expect(wrapper.text()).toContain('4')
+    expect(wrapper.findAll('.wv4-analysis-kpi-card')).toHaveLength(4)
+    expect(wrapper.text()).not.toContain('结果校验异常')
     expect(wrapper.text()).not.toContain('当前正在处理中的病历数')
   })
 
