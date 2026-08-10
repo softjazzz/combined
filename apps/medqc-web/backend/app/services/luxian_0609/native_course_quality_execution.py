@@ -104,7 +104,7 @@ _ABSENT_FACT_STATES = frozenset(
 _MAX_ROWS_PER_SOURCE = 8
 _MAX_ROW_CHARS = 1400
 _MAX_CONTEXT_CHARS = 18000
-_MAX_RULE_009_EXTERNAL_EVENT_ROWS = 8
+_MAX_RULE_009_CONTEXT_CHARS = 32000
 _RULE_009_CHANGE_CATEGORIES = frozenset(
     {"subjective", "objective", "exam_lab", "complication", "special_state"}
 )
@@ -1524,6 +1524,18 @@ def _rule_009_external_event_text(
 ) -> str:
     """为009语义分支取最小事件描述，不能投递整行或坐标。"""
 
+    if source_key == "labtest_item_report":
+        parts = []
+        for field_name, label in (
+            ("item_name", "项目"),
+            ("result", "结果"),
+            ("abnormal_flag", "异常标志"),
+        ):
+            if (value := _clean(row.get(field_name))):
+                parts.append(f"{label}={value}")
+        if parts:
+            return "；".join(parts)
+
     fields_by_source = {
         "exam_item_report": (
             "exam_impression",
@@ -1534,7 +1546,7 @@ def _rule_009_external_event_text(
             "record_content",
         ),
         "labtest_master": ("record_content", "labtest_subject"),
-        "labtest_item_report": ("result", "record_content", "item_name"),
+        "labtest_item_report": ("record_content",),
         "inpat_drug_order": ("generic_name", "brand_name", "drug_type"),
         "surgery_record": ("surgery_process", "surgery_name", "record_content"),
         "mr_surgery": ("surgery_name", "surgery_code"),
@@ -1543,6 +1555,66 @@ def _rule_009_external_event_text(
         if (value := _clean(row.get(field_name))):
             return value
     return ""
+
+
+def _rule_009_external_event_identity(
+    source_key: str,
+    index: int,
+    row: Mapping[str, Any],
+) -> tuple[str, str]:
+    """按临床事件身份归并；同一检验的 master/item 只能形成一个事件。"""
+
+    if source_key == "exam_item_report":
+        exam_id = _clean(row.get("exam_id"))
+        if exam_id:
+            return "exam", f"exam_item_report:{exam_id}"
+    if source_key in {"labtest_master", "labtest_item_report"}:
+        test_id = _clean(row.get("test_id"))
+        if test_id:
+            return "lab", f"labtest:{test_id}"
+    return source_key, _rule_009_row_ref(source_key, index, row)
+
+
+def _rule_009_group_event_time(
+    *,
+    event_kind: str,
+    times_by_source: Mapping[str, Sequence[datetime]],
+) -> datetime | None:
+    """优先采用检验主记录时间；同一权威层冲突时不猜测。"""
+
+    source_priority = (
+        ("labtest_master", "labtest_item_report")
+        if event_kind == "lab"
+        else ("exam_item_report",)
+    )
+    for source_key in source_priority:
+        unique_times = tuple(dict.fromkeys(times_by_source.get(source_key, ())))
+        if unique_times:
+            return unique_times[0] if len(unique_times) == 1 else None
+    return None
+
+
+def _rule_009_candidate_course_refs(
+    *,
+    event_time: datetime,
+    course_rows: Sequence[tuple[datetime | None, str, str]],
+) -> tuple[str, tuple[str, ...]]:
+    """返回最近基线及事件后24小时内候选病程，不重复投递病程正文。"""
+
+    timed_rows = tuple(
+        (course_time, ref)
+        for course_time, ref, _content in course_rows
+        if course_time is not None
+    )
+    prior = tuple(item for item in timed_rows if item[0] < event_time)
+    baseline_ref = max(prior, default=(datetime.min, ""), key=lambda item: item[0])[1]
+    deadline = event_time + _RULE_009_CHANGE_WINDOW
+    candidates = tuple(
+        ref
+        for course_time, ref in timed_rows
+        if event_time <= course_time <= deadline
+    )
+    return baseline_ref, tuple(dict.fromkeys(candidates))
 
 
 def _rule_009_semantic_context(
@@ -1590,7 +1662,7 @@ def _rule_009_semantic_context(
     evaluation_horizon: datetime | date = horizon_datetime or horizon_date
 
     observation_by_source = {item.source_key: item for item in snapshot.observations}
-    external_events: list[tuple[datetime | None, str, str, str]] = []
+    grouped_external_events: dict[tuple[str, str], dict[str, Any]] = {}
     for source_key in _RULE_009_EXTERNAL_EVENT_SOURCES:
         observation = observation_by_source.get(source_key)
         if (
@@ -1610,20 +1682,37 @@ def _rule_009_semantic_context(
             event_time = _rule_009_external_event_time(source_key, row)
             # 不能因为一条尚未被模型识别为病情变化的外部行缺时间，就把整条
             # 规则降级。只有模型明确引用的事件才进入后续权威时间校验。
-            if event_time is None or anchor_date <= event_time.date() <= horizon_date:
-                external_events.append((event_time, source_key, _rule_009_row_ref(source_key, index, row), content))
-    external_events.sort(
-        key=lambda item: (
-            item[0] is None,
-            item[0] or datetime.max,
-            item[1],
-            item[2],
+            if event_time is not None and not (
+                anchor_date <= event_time.date() <= horizon_date
+            ):
+                continue
+            event_kind, event_ref = _rule_009_external_event_identity(
+                source_key, index, row
+            )
+            group = grouped_external_events.setdefault(
+                (event_kind, event_ref),
+                {"texts": [], "times_by_source": {}},
+            )
+            if content not in group["texts"]:
+                group["texts"].append(content)
+            if event_time is not None:
+                group["times_by_source"].setdefault(source_key, []).append(event_time)
+
+    external_events: list[tuple[datetime | None, str, str]] = []
+    for (event_kind, event_ref), group in grouped_external_events.items():
+        external_events.append(
+            (
+                _rule_009_group_event_time(
+                    event_kind=event_kind,
+                    times_by_source=group["times_by_source"],
+                ),
+                event_ref,
+                "；".join(group["texts"]),
+            )
         )
+    external_events.sort(
+        key=lambda item: (item[0] is None, item[0] or datetime.max, item[1])
     )
-    if len(external_events) > _MAX_RULE_009_EXTERNAL_EVENT_ROWS:
-        return "", True, False, {}, {}, evaluation_horizon
-    if not external_events:
-        return "", False, True, {}, {}, evaluation_horizon
 
     parts: list[str] = []
     course_times: dict[str, datetime | None] = {}
@@ -1631,12 +1720,12 @@ def _rule_009_semantic_context(
     # 校验，不能因无关外部行缺时间而提前降级整条规则。
     event_times: dict[str, datetime | None] = {}
     substantive_dates: set[date] = set()
+    course_rows: list[tuple[datetime | None, str, str]] = []
     for source_key in _RULE_007_RECORD_SOURCES:
         try:
             rows = materials.rows(source_key)
         except Exception:
             return "", False, False, {}, {}, evaluation_horizon
-        eligible: list[tuple[date | None, datetime | None, str, str]] = []
         for index, row in enumerate(rows):
             record_time = _authoritative_course_time(authoritative_document_time_value(row))
             record_date = record_time.date() if record_time is not None else None
@@ -1647,26 +1736,41 @@ def _rule_009_semantic_context(
             ):
                 continue
             ref = _rule_009_row_ref(source_key, index, row)
-            eligible.append((record_date, record_time, ref, content))
-            substantive_dates.add(record_date)
-        if len(eligible) > _MAX_ROWS_PER_SOURCE:
-            return "", True, False, {}, {}, evaluation_horizon
-        for record_date, record_time, ref, content in eligible:
-            if len(content) > _MAX_ROW_CHARS:
-                return "", True, False, {}, {}, evaluation_horizon
+            if record_date is not None:
+                substantive_dates.add(record_date)
             course_times[ref] = record_time
-            parts.append(
-                f"[course_ref={ref}] 记录时间="
-                f"{record_time.strftime('%Y-%m-%d %H:%M:%S') if record_time else '待核验'}；"
-                f"内容={content}"
+            event_times[ref] = record_time
+            course_rows.append((record_time, ref, content))
+    course_rows.sort(key=lambda item: (item[0] is None, item[0] or datetime.max, item[1]))
+    for record_time, ref, content in course_rows:
+        if record_time is not None:
+            baseline_ref, candidate_refs = _rule_009_candidate_course_refs(
+                event_time=record_time,
+                course_rows=course_rows,
             )
-    for event_time, source_key, ref, content in external_events:
-        if len(content) > _MAX_ROW_CHARS:
-            return "", True, False, {}, {}, evaluation_horizon
-        event_times[ref] = event_time
+        else:
+            baseline_ref, candidate_refs = "", ()
         parts.append(
-            f"[event_ref={ref}] 事件时间="
+            f"[course_event_ref={ref}] 事件/记录时间="
+            f"{record_time.strftime('%Y-%m-%d %H:%M:%S') if record_time else '待核验'}；"
+            f"baseline_course_ref={baseline_ref or '无'}；"
+            f"candidate_course_refs={','.join(candidate_refs) or '无'}；"
+            f"内容={content}"
+        )
+    for event_time, ref, content in external_events:
+        event_times[ref] = event_time
+        if event_time is not None:
+            baseline_ref, candidate_refs = _rule_009_candidate_course_refs(
+                event_time=event_time,
+                course_rows=course_rows,
+            )
+        else:
+            baseline_ref, candidate_refs = "", ()
+        parts.append(
+            f"[external_event_ref={ref}] 事件时间="
             f"{event_time.strftime('%Y-%m-%d %H:%M:%S') if event_time else '待核验'}；"
+            f"baseline_course_ref={baseline_ref or '无'}；"
+            f"candidate_course_refs={','.join(candidate_refs) or '无'}；"
             f"内容={content}"
         )
     expected_dates = {
@@ -1678,7 +1782,7 @@ def _rule_009_semantic_context(
     context = "\n".join(parts)
     return (
         ("", True, False, {}, {}, evaluation_horizon)
-        if len(context) > _MAX_CONTEXT_CHARS
+        if len(context) > _MAX_RULE_009_CONTEXT_CHARS
         else (context, False, True, event_times, course_times, evaluation_horizon)
     )
 
@@ -1726,7 +1830,9 @@ Python 已确认病危期间每日病程覆盖。不要判定整条规则状态�
 "病情稳定”“继续观察”、可能/考虑/待排等不构成明确变化。只能引用材料中给出的 event_ref、course_ref 和时间，不得编造或改写时间；若材料标注“待核验”，仍可引用明确变化事件，但 change_time 必须留空。
 若同一病程已经明确记录变化及处置，可把该病程作为对应病程。
 
-只能使用以下当前就诊、评价区间内的裁剪病程和最小外部事件：
+只能使用以下当前就诊、评价区间内的病程事件和临床事件。external_event_ref 仅用于检查检验变化；
+course_event_ref 可用于主观症状、客观体征、并发症/合并症和特殊状态变化，也可作为对应病程。
+对应病程只能从该事件列出的 candidate_course_refs 中选择：
 {context}
 
 只输出 JSON：{{"events":[{{"event_ref":"...","change_category":"subjective|objective|exam_lab|complication|special_state","change_time":"YYYY-MM-DD HH:MM:SS","is_explicit_change":true,"corresponding_course_ref":"...或空字符串"}}]}}。没有明确变化时events为空数组。"""
@@ -1853,24 +1959,6 @@ def _rule_009_change_event_decision(
                 },
             )
         deadline = event_time + _RULE_009_CHANGE_WINDOW
-        if isinstance(evaluation_horizon, datetime):
-            window_mature = evaluation_horizon >= deadline
-        else:
-            window_mature = evaluation_horizon > deadline.date()
-        if not window_mature:
-            return (
-                _rule_009_semantic_decision(
-                    base_decision=base_decision,
-                    data_gap_reason="evaluation_window_not_mature",
-                ),
-                {
-                    "failure_kind": "critical_change_window_not_mature",
-                    "event_ref": event_ref,
-                    "event_time": event_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "deadline_time": deadline.strftime("%Y-%m-%d %H:%M:%S"),
-                    "threshold_hours": 24,
-                },
-            )
         if course_ref and course_ref not in course_times:
             return (
                 _rule_009_semantic_decision(
@@ -1897,6 +1985,25 @@ def _rule_009_change_event_decision(
                 },
             )
         timely = course_time is not None and event_time <= course_time <= deadline
+        if not timely:
+            if isinstance(evaluation_horizon, datetime):
+                window_mature = evaluation_horizon >= deadline
+            else:
+                window_mature = evaluation_horizon > deadline.date()
+            if not window_mature:
+                return (
+                    _rule_009_semantic_decision(
+                        base_decision=base_decision,
+                        data_gap_reason="evaluation_window_not_mature",
+                    ),
+                    {
+                        "failure_kind": "critical_change_window_not_mature",
+                        "event_ref": event_ref,
+                        "event_time": event_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "deadline_time": deadline.strftime("%Y-%m-%d %H:%M:%S"),
+                        "threshold_hours": 24,
+                    },
+                )
         facts.append(
             {
                 "event_ref": event_ref,
@@ -3057,7 +3164,7 @@ async def execute_luxian_0609_native_course_quality_rules(
                 continue
             (
                 context,
-                context_truncated,
+                context_capacity_exceeded,
                 context_ready,
                 event_times,
                 course_times,
@@ -3068,12 +3175,11 @@ async def execute_luxian_0609_native_course_quality_rules(
                     materials=evidence_materials,
                 )
             )
-            if context_truncated:
-                customer_display_facts.extend(base_display_facts)
+            if context_capacity_exceeded:
                 decisions.append(
                     _rule_009_semantic_decision(
                         base_decision=base_decision,
-                        data_gap_reason="source_truncated",
+                        data_gap_reason="candidate_scope_incomplete",
                     )
                 )
                 continue
@@ -3110,6 +3216,10 @@ async def execute_luxian_0609_native_course_quality_rules(
             api_time += elapsed
             events = _parse_rule_009_change_events(response)
             if events is None:
+                customer_display_facts.extend(base_display_facts)
+                decisions.append(base_decision)
+                continue
+            if not events:
                 customer_display_facts.extend(base_display_facts)
                 decisions.append(base_decision)
                 continue

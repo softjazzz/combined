@@ -179,6 +179,32 @@ def test_data_gap_always_has_customer_readable_missing_data_contract():
     }
 
 
+def test_rule_009_candidate_scope_gap_does_not_claim_missing_source() -> None:
+    result = _finalize(
+        {
+            "rule_id": "LX0609-009",
+            "status": "data_gap",
+            "reason_code": "candidate_scope_incomplete",
+        }
+    )
+
+    assert result["missing_sources"] == []
+    assert result["missing_fields"] == []
+    assert result["data_gap_details"]["reason_label"] == "自动核对范围超限"
+    assert "现有资料无需补充" in result["customer_message"]
+    assert "后续资料" not in result["customer_message"]
+
+    other_rule = _finalize(
+        {
+            "rule_id": "LX0609-054",
+            "status": "data_gap",
+            "reason_code": "candidate_scope_incomplete",
+        }
+    )
+    assert other_rule["missing_sources"] == ["完成本项质控所需资料"]
+    assert other_rule["data_gap_details"]["reason_label"] == "现有资料不足"
+
+
 @pytest.mark.parametrize(
     ("reason_code", "reason_label", "expected_phrase"),
     [

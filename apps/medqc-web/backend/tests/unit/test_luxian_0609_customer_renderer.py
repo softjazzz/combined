@@ -481,6 +481,43 @@ def test_renderer_explains_data_gap_as_system_evidence_condition(
     assert "请补充或同步所需数据" not in result["suggestion"]
 
 
+def test_rule_009_candidate_scope_gap_has_rule_and_reason_specific_message() -> None:
+    decision = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-009",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="candidate_scope_incomplete",
+            fact_refs=(FACT_REF,),
+            evaluator_version="course-severity-semantic-v2",
+        )
+    )
+
+    result = render_luxian_0609_customer_result(decision=decision)
+
+    assert result["findings"] == "病情变化候选超过单次安全核对范围，暂未形成确定结论"
+    assert "病历资料缺失" in result["evidence"]
+    assert "无需补充病历资料" in result["suggestion"]
+
+    other_rule = reduce_luxian_0609_rule_decision(
+        RuleDecision(
+            rule_id="LX0609-054",
+            snapshot_hash=SNAPSHOT_HASH,
+            applicability=ApplicabilityState.APPLICABLE,
+            evidence_state=EvidenceState.DATA_GAP,
+            qc_direction=QcDirection.UNKNOWN,
+            reason_code="candidate_scope_incomplete",
+            fact_refs=(FACT_REF,),
+            evaluator_version="native-antimicrobial-v1",
+        )
+    )
+    other_result = render_luxian_0609_customer_result(decision=other_rule)
+    assert "抗菌药物" in other_result["findings"]
+    assert "病情变化候选" not in other_result["findings"]
+
+
 def test_rule_specific_gap_keeps_controlled_customer_reason_and_rule_context():
     decision = reduce_luxian_0609_rule_decision(
         RuleDecision(

@@ -92,6 +92,18 @@ _DATA_GAP_EXPLANATIONS = {
     },
 }
 
+_RULE_DATA_GAP_EXPLANATIONS = {
+    ("LX0609-009", "candidate_scope_incomplete"): {
+        "reason_label": "自动核对范围超限",
+        "missing_sources": [],
+        "missing_fields": [],
+        "customer_message": (
+            "本次病情变化候选超出单次自动核对的安全容量，暂未形成确定结论；"
+            "现有资料无需补充，请重新执行本项质控，如仍出现请联系系统管理员。"
+        ),
+    },
+}
+
 _DEFAULT_DATA_GAP_EXPLANATION = {
     "reason_label": "现有资料不足",
     "missing_sources": ["完成本项质控所需资料"],
@@ -130,10 +142,11 @@ def _missing_sources_from_customer_facts(result: Mapping[str, Any]) -> list[str]
 
 
 def _complete_data_gap_explanation(result: dict[str, Any]) -> None:
+    rule_id = str(result.get("rule_id") or result.get("rule_code") or "").strip().upper()
     reason_code = str(result.get("reason_code") or "").strip().lower()
-    defaults = _DATA_GAP_EXPLANATIONS.get(
-        reason_code,
-        _DEFAULT_DATA_GAP_EXPLANATION,
+    defaults = _RULE_DATA_GAP_EXPLANATIONS.get(
+        (rule_id, reason_code),
+        _DATA_GAP_EXPLANATIONS.get(reason_code, _DEFAULT_DATA_GAP_EXPLANATION),
     )
     existing_details = result.get("data_gap_details")
     completed_details = (
