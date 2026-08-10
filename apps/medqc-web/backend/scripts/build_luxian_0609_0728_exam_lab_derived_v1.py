@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from sqlalchemy import MetaData, Table, and_, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -37,14 +37,14 @@ from app.services.bundles.assembly import (  # noqa: E402
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService  # noqa: E402
 
 
-RECIPE_VERSION = "lx0609-0728-controlled-supplement-v2"
+RECIPE_VERSION = "lx0609-0728-controlled-supplement-v3"
 POOL_ID = "aacc704a-ef30-47bf-a74c-86fc91d29273"
 TARGET_INSTITUTE_ID = "LX0609_0728_DERIVED_V1"
 RULE_IDS = [
     "LX0609-010", "LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015",
     "LX0609-043", "LX0609-049", "LX0609-069", "LX0609-070", "LX0609-071",
 ]
-OUTPUT_PATH = ROOT / "tmp-0728-controlled-supplement-v2-manifest.json"
+OUTPUT_PATH = ROOT / "tmp-0728-controlled-supplement-v3-manifest.json"
 _CT_MRI_ORDER_PATTERN = re.compile(
     r"(?:^|[^A-Z])CT(?:$|[^A-Z])|(?:^|[^A-Z])MRI(?:$|[^A-Z])|磁共振|核磁",
     flags=re.IGNORECASE,
@@ -411,6 +411,121 @@ def _validate_ct_mri_associations(
         raise ValueError(f"{case.source_mr_no} 的 CT/MRI 报告自然键缺失或重复")
     if set(report_exam_ids) != exam_id_set or len(report_exam_ids) != len(exam_ids):
         raise ValueError(f"{case.source_mr_no} 的 CT/MRI 检查主记录与报告未形成一一对应")
+
+
+def _normalize_discharge_diagnosis_contract(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> None:
+    """将派生病例的出院诊断整理为唯一、可重复构建的双来源序列。"""
+
+    def is_target(row: Mapping[str, Any]) -> bool:
+        return (
+            row.get("institute_id") == TARGET_INSTITUTE_ID
+            and row.get("patient_id") == case.target_patient_id
+            and row.get("visit_id") == case.target_visit_id
+        )
+
+    source_rows = [
+        row
+        for row in rows_by_table.get("discharge_record_diagnosis", [])
+        if is_target(row) and str(row.get("diagnosis_name") or "").strip()
+    ]
+    if not source_rows:
+        return
+
+    discharge_time = _case_times(rows_by_table, case)[1]
+    discharge_document_id = next(
+        (
+            str(row.get("document_id") or "").strip()
+            for row in rows_by_table.get("discharge_record", [])
+            if is_target(row) and str(row.get("document_id") or "").strip()
+        ),
+        f"{case.target_visit_id}-discharge-record",
+    )
+    unique_rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for row in source_rows:
+        name = str(row.get("diagnosis_name") or "").strip()
+        code = str(row.get("diagnosis_code") or "").strip()
+        key = (name, code)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_rows.append(dict(row))
+
+    normalized_discharge: list[dict[str, Any]] = []
+    normalized_authoritative: list[dict[str, Any]] = []
+    for index, source in enumerate(unique_rows, start=1):
+        diagnosis_id = f"{case.target_visit_id}-discharge-diagnosis-{index:03d}"
+        common = {
+            "diagnosis_id": diagnosis_id,
+            "diagnosis_main": "1" if index == 1 else "0",
+            "diagnosis_no": index,
+            "diagnosis_name": str(source.get("diagnosis_name") or "").strip(),
+            "diagnosis_code": str(source.get("diagnosis_code") or "").strip(),
+            "diagnosis_type": "出院诊断",
+            "diagnosis_source": "controlled_discharge_diagnosis_contract",
+            "document_id": discharge_document_id,
+        }
+        normalized_discharge.append({
+            **source,
+            **common,
+            "diagnosis_time": source.get("diagnosis_time") or discharge_time,
+            "record_time": source.get("record_time") or discharge_time,
+        })
+        normalized_authoritative.append({
+            **_base(case, discharge_time),
+            **common,
+            "diagnosis_datetime": discharge_time,
+            "diagnosis_updatetime": discharge_time,
+        })
+
+    rows_by_table["discharge_record_diagnosis"] = [
+        row
+        for row in rows_by_table.get("discharge_record_diagnosis", [])
+        if not is_target(row)
+    ] + normalized_discharge
+    rows_by_table["diagnosis"] = [
+        row for row in rows_by_table.get("diagnosis", []) if not is_target(row)
+    ] + normalized_authoritative
+
+
+def _validate_discharge_diagnosis_contract(
+    rows_by_table: dict[str, list[dict[str, Any]]],
+    case: SourceCase,
+) -> None:
+    def target_rows(table_name: str) -> list[dict[str, Any]]:
+        return [
+            row
+            for row in rows_by_table.get(table_name, [])
+            if row.get("institute_id") == TARGET_INSTITUTE_ID
+            and row.get("patient_id") == case.target_patient_id
+            and row.get("visit_id") == case.target_visit_id
+        ]
+
+    written = target_rows("discharge_record_diagnosis")
+    if not written:
+        return
+    authoritative = target_rows("diagnosis")
+
+    def sequence(rows: list[dict[str, Any]]) -> list[tuple[int, str]]:
+        return sorted(
+            (
+                int(row.get("diagnosis_no") or 0),
+                str(row.get("diagnosis_name") or "").strip(),
+            )
+            for row in rows
+        )
+
+    ids = [str(row.get("diagnosis_id") or "").strip() for row in authoritative]
+    if (
+        not authoritative
+        or any(not diagnosis_id for diagnosis_id in ids)
+        or len(ids) != len(set(ids))
+        or sequence(authoritative) != sequence(written)
+    ):
+        raise ValueError(f"{case.source_mr_no} 的权威诊断与出院记录诊断序列不一致")
 
 
 def _append_exam_lab_supplements(rows_by_table: dict[str, list[dict[str, Any]]], case: SourceCase) -> list[dict[str, Any]]:
@@ -835,6 +950,7 @@ def build_rows() -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
         _ensure_authoritative_registration(rows_by_table, case)
     supplements: dict[str, list[dict[str, Any]]] = {}
     for case in CASES:
+        _normalize_discharge_diagnosis_contract(rows_by_table, case)
         supplements[case.target_visit_id] = [
             *_append_exam_lab_supplements(rows_by_table, case),
             *_append_transfusion_supplements(rows_by_table, case),
@@ -845,6 +961,15 @@ def build_rows() -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
             "table": "inpat_nondrug_order+exam_master+exam_item_report+daily_course_record",
             "reason": "controlled_complete_ct_mri_association_set",
         })
+        if any(
+            row.get("patient_id") == case.target_patient_id
+            and row.get("visit_id") == case.target_visit_id
+            for row in rows_by_table.get("diagnosis", [])
+        ):
+            supplements[case.target_visit_id].append({
+                "table": "diagnosis+discharge_record_diagnosis",
+                "reason": "controlled_consistent_discharge_diagnosis_sequence",
+            })
     return dict(rows_by_table), {"source_counts": source_counts, "supplements": supplements}
 
 
@@ -923,6 +1048,7 @@ def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> No
             if not any(row.get("visit_id") == case.target_visit_id for row in rows_by_table.get(table_name, [])):
                 raise ValueError(f"{case.source_mr_no} 缺少 {table_name} 补件")
         _validate_ct_mri_associations(rows_by_table, case)
+        _validate_discharge_diagnosis_contract(rows_by_table, case)
         admission, discharge = _case_times(rows_by_table, case)
         prefix = case.target_visit_id
         controlled_mr_bloodtrans = [

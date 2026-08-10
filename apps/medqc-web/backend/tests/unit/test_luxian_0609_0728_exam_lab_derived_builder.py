@@ -81,6 +81,52 @@ def _exam_rows(case: builder.SourceCase) -> dict[str, list[dict[str, object]]]:
     }
 
 
+def _discharge_diagnosis_rows(
+    case: builder.SourceCase,
+) -> dict[str, list[dict[str, object]]]:
+    discharge_time = datetime(2026, 7, 12, 9, 0)
+    base = {
+        "institute_id": builder.TARGET_INSTITUTE_ID,
+        "patient_id": case.target_patient_id,
+        "visit_id": case.target_visit_id,
+    }
+    return {
+        "inpat_registration": [{
+            **base,
+            "admission_datetime": datetime(2026, 7, 7, 8, 0),
+            "discharge_datetime": discharge_time,
+        }],
+        "discharge_record": [{
+            **base,
+            "document_id": f"{case.target_visit_id}-discharge-record",
+            "record_time": discharge_time,
+        }],
+        "discharge_record_diagnosis": [
+            {**base, "diagnosis_id": "legacy-1", "diagnosis_name": "重症肺炎", "diagnosis_code": "J18.900"},
+            {**base, "diagnosis_id": "legacy-2", "diagnosis_name": "高血压病", "diagnosis_code": "I10.x00"},
+            {**base, "diagnosis_id": "legacy-3", "diagnosis_name": "重症肺炎", "diagnosis_code": "J18.900"},
+        ],
+        "diagnosis": [],
+    }
+
+
+def test_discharge_diagnosis_contract_is_unique_consistent_and_idempotent() -> None:
+    case = builder.CASES[0]
+    rows = _discharge_diagnosis_rows(case)
+
+    builder._normalize_discharge_diagnosis_contract(rows, case)
+    first = deepcopy(rows)
+    builder._normalize_discharge_diagnosis_contract(rows, case)
+
+    assert rows == first
+    assert [row["diagnosis_no"] for row in rows["diagnosis"]] == [1, 2]
+    assert [row["diagnosis_name"] for row in rows["diagnosis"]] == [
+        row["diagnosis_name"] for row in rows["discharge_record_diagnosis"]
+    ]
+    assert len({row["diagnosis_id"] for row in rows["diagnosis"]}) == 2
+    builder._validate_discharge_diagnosis_contract(rows, case)
+
+
 @pytest.mark.parametrize("case", builder.CASES)
 def test_complete_ct_mri_associations_is_idempotent_for_each_derived_case(
     case: builder.SourceCase,
