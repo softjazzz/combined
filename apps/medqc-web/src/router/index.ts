@@ -1005,14 +1005,14 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),
-        meta: { title: '客户样本验证', permission: ['admin', 'qc_manager'] },
+        meta: { title: '客户样本验证', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'customer-sample-validation/synthetic-case/new',
         name: 'WorkstationV4SyntheticCaseNew',
         component: () =>
           import('@/views/workstation-v4/customer-sample-validation/SyntheticCaseBuilderView.vue'),
-        meta: { title: '创建测试病历', permission: ['admin', 'qc_manager'] },
+        meta: { title: '创建测试病历', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'customer-sample-validation/tasks',
@@ -1021,14 +1021,14 @@ const routes: RouteRecordRaw[] = [
           import(
             '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
           ),
-        meta: { title: '质控记录', permission: ['admin', 'qc_manager'] },
+        meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'customer-sample-validation/surgery-catalog',
         name: 'WorkstationV4SurgeryProcedureCatalog',
         component: () =>
           import('@/views/workstation-v4/components/SurgeryProcedureCatalogView.vue'),
-        meta: { title: '手术分级目录', permission: ['admin', 'qc_manager'] },
+        meta: { title: '手术分级目录', permission: ['admin', 'qc_manager', 'sync_admin'] },
       },
       {
         path: 'custom-qc-experience',

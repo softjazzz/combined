@@ -54,7 +54,7 @@ from ..services.qc_rule_sets import get_sichuan_rule_set
 router = APIRouter(
     prefix="/api/v1/qc/sample-pools",
     tags=["qc-sample-pools"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[Depends(require_roles("admin", "qc_manager", "sync_admin"))],
 )
 
 _IMPORT_UPLOAD_DIR = (
