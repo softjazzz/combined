@@ -1191,14 +1191,18 @@ def test_reduced_non_compliant_with_controlled_facts_keeps_customer_defect_statu
             {
                 "failure_kind": "implant_information_incomplete",
                 "missing_fields": ["implant_material", "implant_quantity", "PRIVATE_FIELD"],
+                "identified_implants": ["人工硬脑膜"],
                 "source_label": "手术记录",
+                "source_document_type": "surgery_record",
                 "source_document_id": "private-surgery-document-id",
                 "raw_surgery_text": "PRIVATE_SURGERY_TEXT",
             },
             {
                 "failure_kind": "implant_information_incomplete",
-                "missing_fields": ["implant_material", "implant_quantity"],
+                "missing_fields": ["implant_quantity"],
+                "identified_implants": ["人工硬脑膜"],
                 "source_label": "手术记录",
+                "source_document_type": "surgery_record",
             },
         ),
         (

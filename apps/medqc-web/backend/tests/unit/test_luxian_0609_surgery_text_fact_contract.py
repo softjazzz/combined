@@ -76,6 +76,26 @@ def _event(**overrides: object) -> dict[str, object]:
         "surgeon_signature": "present",
     }
     item.update(overrides)
+    if "implant_items" not in overrides:
+        if (
+            item["implant_use"] == "actual_permanent_implant"
+            and item["implant_name"] == "present"
+        ):
+            evidence_refs = item.get("evidence_refs")
+            evidence_ref = (
+                evidence_refs[0]
+                if isinstance(evidence_refs, list) and evidence_refs
+                else "S01-01"
+            )
+            item["implant_items"] = [
+                {
+                    "name": "人工硬脑膜",
+                    "use_kind": "permanent_implant",
+                    "evidence_ref": evidence_ref,
+                },
+            ]
+        else:
+            item["implant_items"] = []
     return item
 
 
@@ -121,7 +141,8 @@ def _session(
             ),
             "surgery_name": "本次手术",
             "surgery_process": (
-                "正文标记-A；2026-01-01 08:00实际给予预防抗菌药，"
+                "正文标记-A；术中置入人工硬脑膜；"
+                "2026-01-01 08:00实际给予预防抗菌药，"
                 f"{actual_stop_text}实际停止"
             ),
         },),
@@ -366,6 +387,101 @@ async def test_025_uses_implant_fact_contract_for_na_and_missing_field(
 
 
 @pytest.mark.asyncio
+async def test_025_missing_barcode_delivers_identified_implant_name() -> None:
+    session = _session(surgery_rows=({
+        "document_id": "surgery-025-identification",
+        "surgery_begin_time": "2026-01-01 08:00:00+08",
+        "surgery_name": "本次手术",
+        "surgery_process": (
+            "术中用人工硬脑膜覆盖修补，并置入颅内压监测探头进行临时监测。"
+        ),
+    },))
+    event = _event(
+        implant_items=[
+            {
+                "name": "人工硬脑膜",
+                "use_kind": "permanent_implant",
+                "evidence_ref": "S01-01",
+            },
+            {
+                "name": "颅内压监测探头",
+                "use_kind": "temporary_device",
+                "evidence_ref": "S01-01",
+            },
+        ],
+        implant_barcode="missing",
+    )
+    native = await execute_luxian_0609_native_surgery_gate_rules(
+        rule_ids=("LX0609-025",),
+        decision_rule_ids=("LX0609-025",),
+        wrapper_rules=[],
+        evidence_payload={},
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_Client({"schema_version": SCHEMA_VERSION, "events": [event]}),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions,
+        expected_rule_ids=("LX0609-025",),
+        snapshot=session.snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-025"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=native.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+    )
+
+    assert native.llm_call_count == 1
+    assert native.total_tokens == 100
+    assert canonical[0]["status"] == "non_compliant"
+    assert canonical[0]["customer_display_facts"]["identified_implants"] == [
+        "人工硬脑膜"
+    ]
+    assert canonical[0]["findings"] == (
+        "已确认实际使用永久性植入物：人工硬脑膜；手术记录缺少：植入物条码。"
+    )
+
+
+def test_025_rejects_implant_name_not_present_in_cited_document() -> None:
+    projection = SurgeryTextProjection(
+        context="<redacted>",
+        time_candidates={},
+        document_refs=frozenset({"S01-01"}),
+        document_texts={"S01-01": "术中置入人工硬脑膜一张。"},
+    )
+    response = {
+        "choices": [{"message": {"content": json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "events": [_event(
+                implant_items=[
+                    {
+                        "name": "心脏支架",
+                        "use_kind": "permanent_implant",
+                        "evidence_ref": "S01-01",
+                    },
+                ],
+            )],
+        }, ensure_ascii=False)}}],
+    }
+
+    with pytest.raises(ValueError, match="implant item evidence"):
+        parse_surgery_text_fact_response(
+            response=response,
+            projection=projection,
+            selected_rule_ids=("LX0609-025",),
+        )
+
+
+@pytest.mark.asyncio
 async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extensions_nonblocking() -> None:
     """025主项只核对条码、种类、数量；本院扩展字段不改变主结论。"""
     session = _session(
@@ -401,6 +517,13 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
     event = _event(
         implant_use="actual_permanent_implant",
         implant_name="present",
+        implant_items=[
+            {
+                "name": "人工硬脑膜",
+                "use_kind": "permanent_implant",
+                "evidence_ref": "S01-01",
+            },
+        ],
         implant_type="present",
         implant_specification="missing",
         implant_material="missing",
@@ -451,6 +574,7 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
     assert canonical[0]["customer_display_facts"] == {
         "verification_kind": "implant_information_complete",
         "performed_surgery_confirmed": True,
+        "identified_implants": ["人工硬脑膜"],
         "source_label": "手术记录",
         "source_document_type": "surgery_record",
         "checked_fields": [
@@ -463,6 +587,7 @@ async def test_025_llm_accepts_provincial_barcode_type_quantity_and_keeps_extens
             "implant_specification",
         ],
     }
+    assert "人工硬脑膜" in canonical[0]["findings"]
 
 
 @pytest.mark.asyncio
@@ -855,6 +980,9 @@ def test_025_prompt_includes_its_implant_specific_instruction(
         "缝线、引流、止血材料、器械、导管鞘、导丝、拟植入、取出旧物均不得当作本次实际植入。"
     ) in prompt
     assert "材料名称本身不能证明植入" in prompt
+    assert "use_kind只能是permanent_implant" in prompt
+    assert "颅内压监测探头、引流管" in prompt
+    assert "不能作为永久植入物" in prompt
 
 
 @pytest.mark.asyncio
@@ -1406,8 +1534,10 @@ def test_projection_repr_never_contains_raw_context_or_time() -> None:
             )
         },
         document_refs=frozenset({"S01-01"}),
+        document_texts={"S01-01": "SECRET_IMPLANT_BODY"},
     )
     assert "SECRET_BODY" not in repr(projection)
+    assert "SECRET_IMPLANT_BODY" not in repr(projection)
     assert "2026-01-01" not in repr(projection)
 
 

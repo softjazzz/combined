@@ -9,7 +9,7 @@ import re
 from typing import Any, Mapping, Sequence
 
 
-SCHEMA_VERSION = "lx0609-surgery-text-facts-v1"
+SCHEMA_VERSION = "lx0609-surgery-text-facts-v2"
 _DATETIME_PATTERN = re.compile(
     r"(?<!\d)(\d{4}[-年/]\d{1,2}[-月/]\d{1,2}(?:日)?"
     r"(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?)(?!\d)"
@@ -39,6 +39,9 @@ class SurgeryTextProjection:
     # 仅供服务端把已验证的临时 Sxx 引用绑定回实际文书；绝不进入提示词、
     # 客户展示事实或 repr。客户接口会将它转换为不可逆 source_ref。
     document_source_ids: Mapping[str, str] = field(default_factory=dict)
+    # 仅在服务端用于校验模型返回的植入物名称确实逐字来自所引文书；
+    # 不进入 repr、快照或客户接口。
+    document_texts: Mapping[str, str] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         return (
@@ -76,6 +79,8 @@ class SurgeryEventFact:
     consent_linkage: str
     patient_signature: str
     surgeon_signature: str
+    # (植入物原文名称, 使用性质, S文书引用)；仅025使用，名称已由Python逐字校验。
+    implant_items: tuple[tuple[str, str, str], ...] = ()
 
 
 _ENUMS = {
@@ -114,7 +119,7 @@ _RULE_FACT_FIELDS = {
     "LX0609-025": (
         "surgery_occurrence", "implant_use", "implant_name", "implant_type",
         "implant_specification", "implant_material", "implant_quantity",
-        "implant_barcode",
+        "implant_barcode", "implant_items",
     ),
     "LX0609-028": (
         "surgery_occurrence", "incision_class", "antimicrobial_intent",
@@ -138,6 +143,11 @@ _EXAMPLE_VALUES = {
     "implant_material": "present|missing|unknown",
     "implant_quantity": "present|missing|unknown",
     "implant_barcode": "present|missing|unknown",
+    "implant_items": [{
+        "name": "人工硬脑膜",
+        "use_kind": "permanent_implant",
+        "evidence_ref": "S01-01",
+    }],
     "incision_class": "I|II|other|unknown",
     "antimicrobial_intent": "prophylactic|therapeutic|both|explicit_none|unknown",
     "start_time_ref": None,
@@ -222,6 +232,7 @@ def build_surgery_text_projection(
     refs: set[str] = set()
     source_keys_by_ref: dict[str, str] = {}
     source_ids_by_ref: dict[str, str] = {}
+    document_texts_by_ref: dict[str, str] = {}
     times: dict[str, SurgeryTimeCandidate] = {}
     time_index = 0
     for source_position, source_key in enumerate(source_order, start=1):
@@ -241,6 +252,7 @@ def build_surgery_text_projection(
             doc_ref = f"S{source_position:02d}-{row_index:02d}"
             refs.add(doc_ref)
             source_keys_by_ref[doc_ref] = source_key
+            document_texts_by_ref[doc_ref] = text
             source_document_id = _clean(row.get("document_id") or row.get("id"))
             if source_document_id:
                 source_ids_by_ref[doc_ref] = source_document_id
@@ -287,6 +299,7 @@ def build_surgery_text_projection(
         frozenset(refs),
         source_keys_by_ref,
         source_ids_by_ref,
+        document_texts_by_ref,
     )
 
 
@@ -373,6 +386,12 @@ def build_surgery_text_fact_prompt(
             "材料名称本身不能证明植入，"
             "必须结合同一份手术记录或病程记录中本次实际使用、置入、覆盖或修补等明确动作与语境判断。"
             "025 的省标主项仅为 implant_barcode、implant_type、implant_quantity；"
+            "implant_items必须逐项输出本次有名称的植入/置入候选、使用性质及其S引用；"
+            "name必须是对应S文书中的连续原文，不能归纳、改写或猜测。"
+            "use_kind只能是permanent_implant、temporary_device、removed_item或unknown；"
+            "仅明确预期永久留在体内的材料可标permanent_implant。"
+            "颅内压监测探头、引流管等用于临时监测或引流且后续需移除的器械属于temporary_device，"
+            "不能作为永久植入物。"
             "implant_name、implant_specification、implant_material 仅作本院扩展，不得据此输出不合规。"
         )
     return f"""你是泸县0609手术事实抽取器。只抽取事实，不直接输出质控状态。本次规则：{','.join(selected)}。
@@ -381,7 +400,7 @@ def build_surgery_text_fact_prompt(
 只能引用给定S/T；无法确定必须unknown，禁止猜测。028引用start_time_ref或end_time_ref时，每个T所在文书的S引用都必须加入evidence_refs，不能只引用手术文书。
 材料：
 {projection.context}
-025只抽取各字段是否明确出现，不判断“整体完整”；028起止时间角色只有正文明确表示实际给药/实际停止时才输出actual_administration/actual_stop，否则输出planned_order、document_time或unknown。若预防用药后来转为治疗，只能选择预防阶段的起止并输出interval_scope=prophylactic_segment；选择了整个治疗疗程或无法区分时输出whole_course或unknown。
+025除字段状态外，还必须输出implant_items；每项只含name、use_kind和evidence_ref，name必须逐字来自该S文书。实际使用的永久植入物、临时器械、取出物均可列为候选，但只有use_kind=permanent_implant的项目属于025核对对象；无法确定使用性质时必须unknown。implant_use=actual_permanent_implant且implant_name=present时必须至少有一项permanent_implant，否则不得有permanent_implant项目。025不判断“整体完整”；028起止时间角色只有正文明确表示实际给药/实际停止时才输出actual_administration/actual_stop，否则输出planned_order、document_time或unknown。若预防用药后来转为治疗，只能选择预防阶段的起止并输出interval_scope=prophylactic_segment；选择了整个治疗疗程或无法区分时输出whole_course或unknown。
 028实际用药正例：仅当材料已经明确实际给药/实际停止，且下列S/T正是其对应证据时，必须按此结构输出；材料已经明确实际给药/实际停止时，不得填unknown或null。没有明示时仍必须unknown，不得猜测。{actual_028_example or "本次投影没有可成对的同文书T候选，不提供正例。"}
 028的special_extension_reason必须独立从正文抽取：明确特殊延长理由=>documented；明确未记录理由=>not_documented；其余unknown。不得仅根据用药时长、起止时间或正例示例猜测该字段。
 只输出示例中的字段，不要增加无关规则字段。start_time_ref/end_time_ref没有依据时必须为JSON null。{("输出不得超过" + str(max_completion_tokens) + "个token。") if max_completion_tokens is not None else ""}：{response_example}"""
@@ -423,7 +442,10 @@ def parse_surgery_text_fact_response(
         field for rule_id in selected for field in _RULE_FACT_FIELDS[rule_id]
     }
     required = {"event_ref", "evidence_refs", *selected_fields}
-    allowed_fields = {"event_ref", "evidence_refs", *_ENUMS, "start_time_ref", "end_time_ref"}
+    allowed_fields = {
+        "event_ref", "evidence_refs", *_ENUMS, "start_time_ref", "end_time_ref",
+        "implant_items",
+    }
     result: list[SurgeryEventFact] = []
     seen_refs: set[str] = set()
     for raw in payload["events"]:
@@ -470,6 +492,47 @@ def parse_surgery_text_fact_response(
             if value not in allowed:
                 raise ValueError("surgery event enum mismatch")
             values[key] = value
+        implant_items: list[tuple[str, str, str]] = []
+        if "implant_items" in selected_fields:
+            raw_implant_items = raw.get("implant_items")
+            if not isinstance(raw_implant_items, list) or len(raw_implant_items) > 12:
+                raise ValueError("surgery implant items mismatch")
+            seen_implant_items: set[tuple[str, str, str]] = set()
+            for raw_item in raw_implant_items:
+                if not isinstance(raw_item, Mapping) or set(raw_item) != {
+                    "name", "use_kind", "evidence_ref",
+                }:
+                    raise ValueError("surgery implant item schema mismatch")
+                name = _clean(raw_item.get("name"))
+                use_kind = _clean(raw_item.get("use_kind"))
+                evidence_ref = _clean(raw_item.get("evidence_ref"))
+                identity = (name, use_kind, evidence_ref)
+                if (
+                    not name
+                    or len(name) > 80
+                    or use_kind not in {
+                        "permanent_implant",
+                        "temporary_device",
+                        "removed_item",
+                        "unknown",
+                    }
+                    or evidence_ref not in normalized_evidence
+                    or identity in seen_implant_items
+                    or name not in projection.document_texts.get(evidence_ref, "")
+                ):
+                    raise ValueError("surgery implant item evidence mismatch")
+                seen_implant_items.add(identity)
+                implant_items.append(identity)
+            should_identify_implants = (
+                values["implant_use"] == "actual_permanent_implant"
+                and values["implant_name"] == "present"
+            )
+            has_permanent_implant = any(
+                use_kind == "permanent_implant"
+                for _name, use_kind, _evidence_ref in implant_items
+            )
+            if should_identify_implants != has_permanent_implant:
+                raise ValueError("surgery implant item state mismatch")
         time_refs: list[str | None] = []
         for key in ("start_time_ref", "end_time_ref"):
             value = raw.get(key) if key in selected_fields else None
@@ -511,5 +574,6 @@ def parse_surgery_text_fact_response(
             values["consent_role"],
             values["consent_linkage"], values["patient_signature"],
             values["surgeon_signature"],
+            tuple(implant_items),
         ))
     return tuple(result)

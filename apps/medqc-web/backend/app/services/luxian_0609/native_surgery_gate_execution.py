@@ -1105,6 +1105,7 @@ def _surgery_text_outcome(
     event_states: list[str] = []
     missing_implant_fields: set[str] = set()
     missing_implant_extension_fields: set[str] = set()
+    identified_implants: list[str] = []
     implant_source_document_id = ""
     implant_source_key = ""
     missing_consent_signatures: set[str] = set()
@@ -1152,6 +1153,18 @@ def _surgery_text_outcome(
             elif fact.implant_use != "actual_permanent_implant":
                 event_states.append("data_gap")
             else:
+                for implant_name, use_kind, evidence_ref in fact.implant_items:
+                    if use_kind != "permanent_implant":
+                        continue
+                    if implant_name not in identified_implants:
+                        identified_implants.append(implant_name)
+                    if implant_source_document_id:
+                        continue
+                    source_key = projection.document_source_keys.get(evidence_ref)
+                    candidate = _clean(projection.document_source_ids.get(evidence_ref))
+                    if source_key in {"surgery_record", "daily_course_record"} and candidate:
+                        implant_source_document_id = candidate
+                        implant_source_key = source_key
                 primary_field_states = (
                     ("implant_barcode", fact.implant_barcode),
                     ("implant_type", fact.implant_type),
@@ -1326,6 +1339,11 @@ def _surgery_text_outcome(
                 {
                     "failure_kind": "implant_information_incomplete",
                     "missing_fields": sorted(missing_implant_fields),
+                    **(
+                        {"identified_implants": list(identified_implants)}
+                        if identified_implants
+                        else {}
+                    ),
                     "source_label": (
                         "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
                     ),
@@ -1350,6 +1368,11 @@ def _surgery_text_outcome(
                         "implant_type",
                         "implant_quantity",
                     ],
+                    **(
+                        {"identified_implants": list(identified_implants)}
+                        if identified_implants
+                        else {}
+                    ),
                     "source_label": (
                         "病程记录" if implant_source_key == "daily_course_record" else "手术记录"
                     ),

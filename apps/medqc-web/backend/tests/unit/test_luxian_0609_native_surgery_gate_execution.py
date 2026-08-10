@@ -198,6 +198,13 @@ class _JointSurgeryFactClient:
                 surgery_occurrence="performed",
                 implant_use="actual_permanent_implant",
                 implant_name="present",
+                implant_items=[
+                    {
+                        "name": "人工硬脑膜",
+                        "use_kind": "permanent_implant",
+                        "evidence_ref": "S01-01",
+                    },
+                ],
                 implant_type="present",
                 implant_specification="present",
                 implant_material="present",
@@ -225,7 +232,7 @@ class _JointSurgeryFactClient:
             )
         return {
             "choices": [{"message": {"content": json.dumps({
-                "schema_version": "lx0609-surgery-text-facts-v1",
+                "schema_version": "lx0609-surgery-text-facts-v2",
                 "events": [event],
             }, ensure_ascii=False)}}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
@@ -841,6 +848,7 @@ async def test_typed_024_025_028_share_one_call_and_033_structured_signatures_sh
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": ({"specimen_name": "SAFE_PATHOLOGY_MARKER"},),
@@ -1090,6 +1098,7 @@ async def test_joint_fact_source_overflow_only_blocks_its_own_rule() -> None:
             "surgery_record": ({
                 "surgery_begin_time": "2026-01-01 08:00:00+08",
                 "surgery_name": "SAFE_SURGERY_MARKER",
+                "surgery_process": "术中置入人工硬脑膜。",
             },),
             "mr_surgery": ({"surgery_name": "SAFE_MR_SURGERY_MARKER"},),
             "pathology_exam_master": tuple(

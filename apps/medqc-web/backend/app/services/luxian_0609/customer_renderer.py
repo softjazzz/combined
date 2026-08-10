@@ -1184,9 +1184,22 @@ def customer_finding_from_controlled_facts(
             "implant_quantity": "植入物数量",
         }
         source = str(facts.get("source_label") or "手术记录或病程记录")
+        identified = facts.get("identified_implants")
+        implant_names = (
+            "、".join(str(item) for item in identified)
+            if isinstance(identified, list) and identified
+            else ""
+        )
         if kind == "implant_information_incomplete":
             missing = labels("missing_fields", primary_labels)
-            return f"已确认实际使用永久性植入物，但{source}缺少：{missing}。" if missing else ""
+            if not missing:
+                return ""
+            implant_fact = (
+                f"已确认实际使用永久性植入物：{implant_names}；"
+                if implant_names
+                else "已确认实际使用永久性植入物，但"
+            )
+            return f"{implant_fact}{source}缺少：{missing}。"
         if kind == "implant_information_complete":
             checked = labels("checked_fields", primary_labels)
             extension = labels(
@@ -1198,7 +1211,8 @@ def customer_finding_from_controlled_facts(
                 },
             )
             suffix = f"本院扩展字段待补：{extension}。" if extension else ""
-            return f"已核对{source}，{checked}均有记录。{suffix}"
+            implant_fact = f"已识别永久性植入物：{implant_names}；" if implant_names else ""
+            return f"{implant_fact}已核对{source}，{checked}均有记录。{suffix}"
 
     if rule_id == "LX0609-009":
         change_events = facts.get("change_events")

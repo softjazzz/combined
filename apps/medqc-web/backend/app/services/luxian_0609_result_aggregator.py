@@ -3178,6 +3178,24 @@ def safe_luxian_0609_customer_display_facts(
         )
         if source_label != expected_label:
             return None
+        identified_implants = raw.get("identified_implants")
+        if identified_implants is None:
+            safe_identified_implants: list[str] = []
+        elif (
+            isinstance(identified_implants, list)
+            and 1 <= len(identified_implants) <= 12
+            and all(
+                isinstance(item, str)
+                and 1 <= len(item.strip()) <= 80
+                and not any(ord(char) < 32 for char in item)
+                for item in identified_implants
+            )
+        ):
+            safe_identified_implants = list(
+                dict.fromkeys(item.strip() for item in identified_implants)
+            )
+        else:
+            return None
         if (
             raw.get("verification_kind") == "implant_information_complete"
             and raw.get("performed_surgery_confirmed") is True
@@ -3189,6 +3207,11 @@ def safe_luxian_0609_customer_display_facts(
                 "checked_fields": list(checked_implant_fields),
                 "source_label": expected_label,
                 "source_document_type": source_document_type,
+                **(
+                    {"identified_implants": safe_identified_implants}
+                    if safe_identified_implants
+                    else {}
+                ),
             }
             extension_missing = raw.get("local_extension_missing_fields")
             if isinstance(extension_missing, list) and all(
@@ -3210,7 +3233,12 @@ def safe_luxian_0609_customer_display_facts(
                 if value in {
                     "implant_barcode", "implant_type", "implant_quantity",
                 }
-            ]
+            ],
+            **(
+                {"identified_implants": safe_identified_implants}
+                if safe_identified_implants
+                else {}
+            ),
         }
         if not facts["missing_fields"]:
             return None
