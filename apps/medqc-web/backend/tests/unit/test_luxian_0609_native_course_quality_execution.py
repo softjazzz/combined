@@ -1754,6 +1754,38 @@ async def test_course_009_course_record_can_be_change_event_and_its_own_timely_r
 
 
 @pytest.mark.asyncio
+async def test_course_009_unknown_model_event_ref_does_not_become_authoritative_time_gap() -> None:
+    """模型编造事件引用是输出无效，不是客户病历缺少权威时间。"""
+
+    session = _severity_session(
+        rows=[{
+            "severity": "critical",
+            "prescribed_datetime": "2026-01-01 08:00:00",
+        }],
+        daily_rows=[
+            _row("首日病危记录。", "2026-01-01 08:00:00"),
+            _row("次日病危记录。", "2026-01-02 09:00:00"),
+        ],
+        evaluation_as_of_date="2026-01-02",
+    )
+    client = _Client([{"events": [{
+        "event_ref": "daily_course_record:not-in-projection",
+        "change_category": "objective",
+        "is_explicit_change": True,
+        "corresponding_course_ref": "",
+    }]}])
+
+    result, reduced = await _run_typed_009(session, client)
+
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_satisfied"
+    assert result.llm_call_count == 1
+    assert dict(result.customer_display_facts)["LX0609-009"]["failure_kind"] == (
+        "critical_daily_record_coverage_satisfied"
+    )
+
+
+@pytest.mark.asyncio
 async def test_course_009_daily_complete_model_failure_keeps_frequency_pass() -> None:
     session = _severity_session(
         rows=[

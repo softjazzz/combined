@@ -3209,6 +3209,13 @@ async def execute_luxian_0609_native_course_quality_rules(
                 customer_display_facts.extend(base_display_facts)
                 decisions.append(base_decision)
                 continue
+            # 模型只能引用当前安全投影中实际存在的事件。不存在的 event_ref
+            # 属于模型合同失败，不能伪装成病历“权威时间缺失”。与解析失败、
+            # 模型不可用保持同一 fail-open 语义，保留 Python 已证明的每日覆盖结论。
+            if any(str(event["event_ref"]) not in event_times for event in events):
+                customer_display_facts.extend(base_display_facts)
+                decisions.append(base_decision)
+                continue
             semantic_decision, change_facts = _rule_009_change_event_decision(
                 base_decision=base_decision,
                 events=events,
