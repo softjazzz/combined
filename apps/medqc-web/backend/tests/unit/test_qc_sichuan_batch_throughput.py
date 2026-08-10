@@ -3015,6 +3015,13 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
     workspace.job["parent_job_id"] = "parent-job-throughput-001"
     workspace.job["filters"] = {
         "sample_pool_id": "pool-live-phase-001",
+        "record_refs": [
+            {
+                "institute_id": "HOSP-001",
+                "patient_id": "PAT-visit-001",
+                "visit_id": "visit-001",
+            }
+        ],
         "rule_ids": native_rule_ids,
         "selected_rule_ids": native_rule_ids,
         "scoped_customer_rule_ids": native_rule_ids,
