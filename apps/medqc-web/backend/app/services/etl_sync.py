@@ -2751,32 +2751,98 @@ def _emit_sync_progress(
         logger.debug("sync progress callback failed (ignored): %s", exc)
 
 
-def _visit_id_set_from_rows(rows: List[Dict[str, Any]]) -> set[str]:
-    return {
-        str((row or {}).get("visit_id") or "").strip()
-        for row in rows or []
-        if str((row or {}).get("visit_id") or "").strip()
-    }
-
-
-def _build_visit_progress(
-    eligible_visit_ids: set[str],
-    mr_visit_ids: set[str],
-    detail_visit_ids: Optional[set[str]] = None,
+def _build_case_ref_progress(
+    eligible_case_refs: set[Any],
+    visible_case_refs: set[Any],
 ) -> Dict[str, Any]:
-    """Build patient-level progress by local mr visibility, not evidence completeness."""
-    total = len(eligible_visit_ids)
-    completed = len(eligible_visit_ids & mr_visit_ids) if eligible_visit_ids else 0
-    detail_only = len((detail_visit_ids or set()) - mr_visit_ids)
+    """按完整三坐标统计病例主记录可见进度。"""
+    total = len(eligible_case_refs)
+    completed = (
+        len(eligible_case_refs & visible_case_refs) if eligible_case_refs else 0
+    )
     return {
         "total": total,
         "completed": completed,
         "remaining": max(0, total - completed),
         "missing_mr": max(0, total - completed),
-        "detail_only": detail_only,
-        "basis": "mr_visible",
+        "detail_only": 0,
+        "basis": "case_ref_primary_visible",
+        "identity_basis": "institute_id+patient_id+visit_id",
         "label": "病历池可见进度",
     }
+
+
+def _create_case_scope_service():
+    from .case_scope_service import CaseScopeService
+
+    return CaseScopeService(
+        remote_url_loader=get_remote_db_url,
+        db_config_loader=load_db_config,
+        connection_factory=psycopg2.connect,
+    )
+
+
+def _create_case_set_sync_service():
+    from .case_set_sync_service import CaseSetSyncService
+
+    return CaseSetSyncService(
+        table_catalog_loader=list_sync_tables,
+        row_fetcher=fetch_remote_rows_by_case_refs,
+        row_upserter=upsert_to_local,
+        visit_index_ingester=ingest_sync_rows,
+        remote_url_loader=get_remote_db_url,
+        db_config_loader=load_db_config,
+    )
+
+
+def _scope_mode_for_scene(scene: str) -> str:
+    if scene == "running":
+        return "active"
+    if scene == "both":
+        return "active_and_discharged"
+    return "discharged"
+
+
+def _resolve_case_scope_window(
+    *,
+    scene: str,
+    sync_date: Optional[str],
+    policy: Dict[str, Any],
+    date_window: Optional[Dict[str, str]],
+    target_departments: Optional[List[str]],
+) -> Tuple[
+    Optional[date],
+    Optional[date],
+    Optional[date],
+    List[str],
+    Optional[str],
+]:
+    if scene != "running":
+        start_date, end_date, departments, error = _resolve_pg_extract_window(
+            policy=policy,
+            date_window=date_window,
+            target_departments=target_departments,
+        )
+        return end_date, start_date, end_date, departments, error
+
+    window_payload = date_window if isinstance(date_window, dict) else {}
+    as_of_text = str(
+        window_payload.get("end")
+        or window_payload.get("end_date")
+        or sync_date
+        or ""
+    ).strip()
+    as_of_date = _parse_ymd_or_none(as_of_text)
+    if as_of_date is None:
+        return None, None, None, [], "请先设置在院截止日期后再执行抽取"
+    override_departments = (
+        _normalize_target_departments(target_departments)
+        if isinstance(target_departments, list)
+        else []
+    )
+    policy_departments = _normalize_target_departments(policy.get("target_departments"))
+    departments = override_departments if override_departments else policy_departments
+    return as_of_date, None, None, departments, None
 
 
 def run_sync(
@@ -2796,7 +2862,7 @@ def run_sync(
     Args:
         sync_date: 兼容历史参数，表模式下优先使用 date_window
         tables: 要同步的表名列表，默认同步所有核心表
-        scene: 同步场景（用于幂等与追溯，不影响当前抽取逻辑）
+        scene: 同步场景（决定公共住院范围：在院、出院或合并）
         policy_version: 策略版本（用于幂等与追溯）
         tables_hash: 表范围哈希（用于幂等与追溯）
         date_window: 出院日期范围覆盖（start/end 或 start_date/end_date）
@@ -2807,7 +2873,6 @@ def run_sync(
     """
     lock_conn = None
     lock_acquired = False
-    sync_started_at = datetime.now()
     try:
         if engine is not None:
             lock_conn = engine.connect()
@@ -2837,7 +2902,7 @@ def run_sync(
                 "rows_pulled_total": 0,
                 "rows_upserted_total": 0,
                 "eligible_visit_count": 0,
-                "visit_progress": _build_visit_progress(set(), set()),
+                "visit_progress": _build_case_ref_progress(set(), set()),
                 "failed_tables": 0,
                 "eta_seconds": None,
             },
@@ -2846,11 +2911,6 @@ def run_sync(
         remote_url = get_remote_db_url()
         if not remote_url:
             return {"success": False, "error": "REMOTE_DB_URL 未配置"}
-        source_config = load_db_config()
-        default_institute_id = str(
-            source_config.get("default_institute_id") or ""
-        ).strip()
-
         sync_mode = _resolve_sync_mode()
         resolved_scene = _normalize_sync_scene(scene)
         base_target_tables, missing_tables = _resolve_target_tables(tables)
@@ -2895,7 +2955,7 @@ def run_sync(
                 "rows_pulled_total": 0,
                 "rows_upserted_total": 0,
                 "eligible_visit_count": 0,
-                "visit_progress": _build_visit_progress(set(), set()),
+                "visit_progress": _build_case_ref_progress(set(), set()),
                 "failed_tables": 0,
                 "eta_seconds": None,
             },
@@ -2915,60 +2975,72 @@ def run_sync(
                 "table_validations": preflight.get("table_validations", []),
             }
 
-        validation_map = {
-            str(item.get("table")): item
-            for item in preflight.get("table_validations", [])
-            if isinstance(item, dict)
-        }
         policy = load_sync_policy()
-        schedule = policy.get("schedule") if isinstance(policy.get("schedule"), dict) else {}
-        policy_sync_interval_minutes = int(schedule.get("minutes") or 30)
-        policy_mirror_delay_base_minutes = int(policy.get("mirror_delay_base_minutes") or 30)
-        remote_schema = str(preflight.get("remote_schema") or load_db_config().get("remote_schema") or "public")
-        start_date, end_date, dept_filters, window_error = _resolve_pg_extract_window(
-            policy=policy,
-            date_window=date_window,
-            target_departments=target_departments,
+        as_of_date, discharge_start_date, discharge_end_date, dept_filters, window_error = (
+            _resolve_case_scope_window(
+                scene=resolved_scene,
+                sync_date=sync_date,
+                policy=policy,
+                date_window=date_window,
+                target_departments=target_departments,
+            )
         )
-        if window_error:
-            return {"success": False, "error": window_error}
-        if resolved_scene == "running":
+        if window_error or as_of_date is None:
             return {
                 "success": False,
-                "error": "running 场景不支持按出院日期范围抽取，请切换为 final/frontpage/coding/both",
+                "status": "rejected",
+                "error": window_error or "病例范围日期无效",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "total_records": 0,
+                "case_ref_count": 0,
+                "eligible_visits": 0,
+                "eligible_visit_count": 0,
+                "tables": [],
+                "warnings": list(preflight.get("warnings") or []),
             }
         if sync_mode != "table":
             return {
                 "success": False,
-                "error": "存储过程模式暂不支持按科室 + 出院日期范围抽取，请切换为表直连模式",
+                "status": "rejected",
+                "error": "存储过程模式暂不支持公共病例集合同步，请切换为表直连模式",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "total_records": 0,
+                "case_ref_count": 0,
+                "eligible_visits": 0,
+                "eligible_visit_count": 0,
+                "tables": [],
+                "warnings": list(preflight.get("warnings") or []),
             }
 
-        target_table_map = {
-            str(item.get("name")): str(item.get("source_table") or item.get("name"))
-            for item in target_tables
+        target_table_names = [str(item.get("name") or "") for item in target_tables]
+        effective_start_date = discharge_start_date or as_of_date
+        effective_end_date = discharge_end_date or as_of_date
+        effective_date_window = {
+            "start": effective_start_date.isoformat(),
+            "end": effective_end_date.isoformat(),
         }
-        anchor_tables = [
+        scope_mode = _scope_mode_for_scene(resolved_scene)
+        run_warnings: List[str] = [
             str(item)
-            for item in (_SCENE_ANCHOR_TABLES.get(resolved_scene) or set())
-            if str(item) in target_table_map
+            for item in (preflight.get("warnings") or [])
+            if str(item or "").strip()
         ]
-        if not anchor_tables:
-            return {
-                "success": False,
-                "error": f"场景 {resolved_scene} 缺少可用锚点表，无法计算病例抽取范围",
-            }
-        try:
-            scoped_visit_keys = collect_visit_keys_by_policy(
-                remote_url=remote_url,
-                remote_schema=remote_schema,
-                start_date=start_date,
-                end_date=end_date,
-                target_departments=dept_filters,
-            )
-        except ValueError as exc:
-            return {"success": False, "error": str(exc)}
 
-        if not scoped_visit_keys:
+        try:
+            scope_result = _create_case_scope_service().resolve_hospitalization_scope(
+                scope_mode=scope_mode,
+                as_of_date=as_of_date,
+                discharge_start_date=discharge_start_date,
+                discharge_end_date=discharge_end_date,
+                departments=dept_filters,
+            )
+        except Exception as exc:
+            logger.warning(
+                "case_scope_resolution_failed error_type=%s",
+                type(exc).__name__,
+            )
             _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             _sync_state.last_sync_status = "failed"
             _sync_state.total_records_synced = 0
@@ -2978,14 +3050,64 @@ def run_sync(
                 {
                     "run_id": run_id,
                     "status": "failed",
-                    "stage": "completed",
+                    "stage": "scope_resolution",
                     "current_table": "",
                     "tables_total": len(target_tables),
-                    "tables_done": len(target_tables),
+                    "tables_done": 0,
                     "rows_pulled_total": 0,
                     "rows_upserted_total": 0,
                     "eligible_visit_count": 0,
-                    "visit_progress": _build_visit_progress(set(), set()),
+                    "case_ref_count": 0,
+                    "visit_progress": _build_case_ref_progress(set(), set()),
+                    "failed_tables": 0,
+                    "eta_seconds": 0,
+                },
+            )
+            return {
+                "success": False,
+                "status": "failed",
+                "error": "病例范围解析失败，请检查同步配置后重试",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "policy_version": str(policy_version or ""),
+                "tables_hash": str(tables_hash or ""),
+                "total_records": 0,
+                "target_tables": target_table_names,
+                "date_window": effective_date_window,
+                "target_departments": dept_filters or ["*"],
+                "eligible_visits": 0,
+                "eligible_visit_count": 0,
+                "case_ref_count": 0,
+                "tables": [],
+                "warnings": run_warnings,
+            }
+
+        case_refs = tuple(scope_result.case_refs)
+        eligible_case_refs = set(case_refs)
+        run_warnings.extend(
+            str(item)
+            for item in scope_result.warnings
+            if str(item or "").strip()
+        )
+        if not case_refs:
+            _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _sync_state.last_sync_status = "failed"
+            _sync_state.total_records_synced = 0
+            _sync_state.logs = []
+            _emit_sync_progress(
+                progress_callback,
+                {
+                    "run_id": run_id,
+                    "status": "rejected",
+                    "stage": "rejected",
+                    "current_table": "",
+                    "tables_total": len(target_tables),
+                    "tables_done": 0,
+                    "rows_pulled_total": 0,
+                    "rows_upserted_total": 0,
+                    "eligible_visit_count": 0,
+                    "case_ref_count": 0,
+                    "visit_progress": _build_case_ref_progress(set(), set()),
                     "failed_tables": 0,
                     "eta_seconds": 0,
                 },
@@ -2993,346 +3115,228 @@ def run_sync(
             return {
                 "success": False,
                 "status": "rejected",
-                "error": "当前出院日期范围和科室条件下未找到可同步的终末病历，请调整日期范围、科室或源库配置后重试",
+                "error": "当前病例范围和科室条件下未找到可同步病历，请调整日期范围、科室或源库配置后重试",
                 "mode": sync_mode,
                 "scene": resolved_scene,
                 "policy_version": str(policy_version or ""),
                 "tables_hash": str(tables_hash or ""),
                 "total_records": 0,
-                "target_tables": [str(item.get("name")) for item in target_tables],
-                "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+                "target_tables": target_table_names,
+                "date_window": effective_date_window,
                 "target_departments": dept_filters or ["*"],
                 "eligible_visits": 0,
+                "eligible_visit_count": 0,
+                "case_ref_count": 0,
                 "message": "候选病历数为 0，本次未执行同步。",
                 "tables": [],
+                "sources_used": list(scope_result.sources_used),
+                "source_status": scope_result.source_status,
+                "warnings": list(dict.fromkeys(run_warnings)),
             }
 
-        total_synced = 0
-        eligible_visit_count = len(scoped_visit_keys)
-        results = []
-        has_error = False
-        pulled_total = 0
-        done_tables = 0
-        failed_tables = 0
-        tracking_write_failed = False
-        run_warnings: List[str] = []
-        eligible_visit_ids = {visit_id for _patient_id, visit_id in scoped_visit_keys if str(visit_id).strip()}
-        mr_visit_ids: set[str] = set()
-        detail_visit_ids: set[str] = set()
-        detail_tables_with_rows: set[str] = set()
-        mr_rows_pulled = 0
-        mr_rows_upserted = 0
-        visit_index_upserted_count = 0
-        visit_index_failed_count = 0
-        synced_case_refs: set[tuple[str, str, str]] = set()
-
-        for table_config in target_tables:
-            table_name = str(table_config["name"])
-            validation = validation_map.get(table_name) or {}
-            source = str(validation.get("source") or f"{remote_schema}.{table_name}")
-            source_table = str(validation.get("source_table") or table_name)
-            procedure_name = str(table_config.get("procedure") or "")
-
-            table_started_at = datetime.now()
-            log = SyncLog(
-                table_name=table_name,
-                source=source,
-                stored_procedure=procedure_name,
-                started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            )
-            log.status = "running"
-            rows: List[Dict[str, Any]] = []
-            count = 0
-
-            try:
-                _emit_sync_progress(
-                    progress_callback,
-                    {
-                        "run_id": run_id,
-                        "status": "running",
-                        "stage": "syncing_table",
-                        "current_table": table_name,
-                        "tables_total": len(target_tables),
-                        "tables_done": done_tables,
-                        "rows_pulled_total": pulled_total,
-                        "rows_upserted_total": total_synced,
-                        "eligible_visit_count": eligible_visit_count,
-                        "visit_progress": _build_visit_progress(
-                            eligible_visit_ids,
-                            mr_visit_ids,
-                            detail_visit_ids,
-                        ),
-                        "failed_tables": failed_tables,
-                        "eta_seconds": None if done_tables <= 0 else max(
-                            0,
-                            int(
-                                ((datetime.now() - sync_started_at).total_seconds() / max(done_tables, 1))
-                                * max(0, len(target_tables) - done_tables)
-                            ),
-                        ),
-                    },
-                )
-                log.stage = "remote_select"
-                if sync_mode == "table":
-                    rows = fetch_remote_rows_by_visit_keys(
-                        remote_url=remote_url,
-                        remote_schema=remote_schema,
-                        source_table=source_table,
-                        visit_keys=scoped_visit_keys,
-                    )
-                else:
-                    rows = call_stored_procedure(
-                        remote_url=remote_url,
-                        procedure=procedure_name,
-                        date_str=sync_date,
-                        param_count=int(table_config.get("params") or 1),
-                    )
-
-                from .case_identity import stamp_source_rows_institute_id
-
-                rows = stamp_source_rows_institute_id(
-                    rows,
-                    default_institute_id=default_institute_id,
-                )
-
-                log.stage = "local_upsert"
-                count = upsert_to_local(
-                    table_name=table_name,
-                    records=rows,
-                    primary_keys=[str(pk) for pk in validation.get("local_primary_keys", [])],
-                )
-                for row in rows:
-                    identity = (
-                        str(row.get("institute_id") or "").strip(),
-                        str(row.get("patient_id") or "").strip(),
-                        str(row.get("visit_id") or "").strip(),
-                    )
-                    if all(identity):
-                        synced_case_refs.add(identity)
-                row_visit_ids = _visit_id_set_from_rows(rows)
-                if table_name == "mr":
-                    mr_visit_ids.update(row_visit_ids)
-                    mr_rows_pulled += len(rows)
-                    mr_rows_upserted += count
-                elif row_visit_ids:
-                    detail_visit_ids.update(row_visit_ids)
-                    detail_tables_with_rows.add(table_name)
-
-                # Maintain visit_index state machine only on real anchor tables.
-                # Non-critical: failures are logged but should not block the core table sync.
-                if table_name in _VISIT_INDEX_ANCHOR_TABLES:
-                    try:
-                        visit_index_result = ingest_sync_rows(
-                            table_name=table_name,
-                            rows=rows,
-                            policy_version=str(policy_version or "").strip() or None,
-                            sync_scene=resolved_scene,
-                            allow_frontpage_only=resolved_scene in {"frontpage", "coding", "both"},
-                            latest_mirror_success_time=datetime.now(),
-                            mirror_delay_base_minutes=policy_mirror_delay_base_minutes,
-                            sync_interval_minutes=policy_sync_interval_minutes,
-                        )
-                        visit_index_processed = int(visit_index_result.get("processed") or 0)
-                        visit_index_upserted = int(visit_index_result.get("upserted") or 0)
-                        visit_index_skipped = int(visit_index_result.get("skipped") or 0)
-                        visit_index_upserted_count += visit_index_upserted
-                        if (
-                            visit_index_processed > 0
-                            and visit_index_upserted == 0
-                            and visit_index_skipped >= visit_index_processed
-                        ):
-                            visit_index_failed_count += visit_index_processed
-                            run_warnings.append(f"{table_name}: visit_index 写入失败或全部跳过")
-                    except Exception as visit_index_exc:
-                        visit_index_failed_count += len(rows or [])
-                        run_warnings.append(f"{table_name}: visit_index 写入失败")
-                        logger.warning("visit_index 更新失败（不阻断主同步）: %s", visit_index_exc)
-                log.record_count = count
-                log.status = "success"
-                pulled_total += len(rows)
-                total_synced += count
-                logger.info("同步 %s (%s) 成功: %s 条", table_config["label"], source, count)
-                table_finished_at = datetime.now()
-                try:
-                    _record_sync_run_detail(
-                        run_id=run_id,
-                        source_table=source_table,
-                        target_table=table_name,
-                        status="success",
-                        pulled_count=len(rows),
-                        upserted_count=count,
-                        failed_count=max(0, len(rows) - count),
-                        started_at=table_started_at,
-                        finished_at=table_finished_at,
-                        error_message="",
-                    )
-                except Exception as detail_exc:
-                    tracking_write_failed = True
-                    run_warnings.append(f"{table_name}: 写入 sync_run_details 失败")
-                    logger.warning("写入 sync_run_details 失败（不阻断主同步）: %s", detail_exc)
-
-            except Exception as e:
-                log.status = "failed"
-                log.error_msg = str(e)[:200]
-                has_error = True
-                failed_tables += 1
-                pulled_total += len(rows)
-                logger.error("同步 %s (%s) 失败: %s", table_config["label"], source, e)
-                table_finished_at = datetime.now()
-                try:
-                    _record_sync_run_detail(
-                        run_id=run_id,
-                        source_table=source_table,
-                        target_table=table_name,
-                        status="failed",
-                        pulled_count=len(rows),
-                        upserted_count=0,
-                        failed_count=max(1, len(rows)),
-                        started_at=table_started_at,
-                        finished_at=table_finished_at,
-                        error_message=str(e),
-                    )
-                except Exception as detail_exc:
-                    tracking_write_failed = True
-                    run_warnings.append(f"{table_name}: 写入 sync_run_details 失败")
-                    logger.warning("写入 sync_run_details 失败（不阻断主同步）: %s", detail_exc)
-                try:
-                    sample_payload = rows[0] if rows and isinstance(rows[0], dict) else {}
-                    source_primary_key = ""
-                    pk_fields = [str(pk) for pk in validation.get("local_primary_keys", [])]
-                    if sample_payload and pk_fields:
-                        source_primary_key = "|".join(
-                            f"{pk}={str(sample_payload.get(pk) or '').strip()}" for pk in pk_fields
-                        )
-                    visit_id_value = str(sample_payload.get("visit_id") or "").strip() if sample_payload else ""
-                    _record_sync_error(
-                        run_id=run_id,
-                        source_table=source_table,
-                        source_primary_key=source_primary_key,
-                        visit_id=visit_id_value,
-                        error_code="SYNC_TABLE_FAILED",
-                        error_message=str(e),
-                        payload={
-                            "table": table_name,
-                            "source": source,
-                            "stage": log.stage,
-                            "sample_row": sample_payload,
-                        },
-                    )
-                except Exception as error_rec_exc:
-                    tracking_write_failed = True
-                    run_warnings.append(f"{table_name}: 写入 sync_error_records 失败")
-                    logger.warning("写入 sync_error_records 失败（不阻断主同步）: %s", error_rec_exc)
-
-            log.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            results.append(asdict(log))
-            done_tables += 1
-            avg_seconds = (datetime.now() - sync_started_at).total_seconds() / max(done_tables, 1)
-            remaining = max(0, len(target_tables) - done_tables)
+        def _forward_case_set_progress(payload: Dict[str, Any]) -> None:
+            step_key = str(payload.get("step_key") or "")
+            stage_by_step = {
+                "syncing": "syncing_table",
+                "primary_visible": "primary_visibility",
+                "primary_unavailable": "primary_visibility",
+                "completed": "finalizing",
+            }
+            processed_tables = int(payload.get("processed_tables") or 0)
+            total_tables = int(payload.get("total_tables") or len(target_tables))
             _emit_sync_progress(
                 progress_callback,
                 {
                     "run_id": run_id,
                     "status": "running",
-                    "stage": "syncing_table",
-                    "current_table": table_name,
-                    "tables_total": len(target_tables),
-                    "tables_done": done_tables,
-                    "rows_pulled_total": pulled_total,
-                    "rows_upserted_total": total_synced,
-                    "eligible_visit_count": eligible_visit_count,
-                    "visit_progress": _build_visit_progress(
-                        eligible_visit_ids,
-                        mr_visit_ids,
-                        detail_visit_ids,
+                    "stage": stage_by_step.get(step_key, step_key or "syncing_table"),
+                    "current_table": str(payload.get("current_table") or ""),
+                    "tables_total": total_tables,
+                    "tables_done": processed_tables,
+                    "rows_pulled_total": 0,
+                    "rows_upserted_total": 0,
+                    "eligible_visit_count": len(case_refs),
+                    "case_ref_count": len(case_refs),
+                    "visit_progress": _build_case_ref_progress(
+                        eligible_case_refs,
+                        set(),
                     ),
-                    "failed_tables": failed_tables,
-                    "eta_seconds": int(avg_seconds * remaining),
+                    "failed_tables": 0,
+                    "eta_seconds": None,
                 },
             )
 
-        # 明细全部写入后，使用与样本池相同的公共边界一次性刷新
-        # running/final Scene 与所有 Domain Bundle，避免中途快照缺文书。
-        if synced_case_refs:
-            try:
-                _refresh_all_bundle_variants_after_sync(
-                    case_refs=sorted(synced_case_refs),
-                    policy_version=str(policy_version or "").strip(),
-                )
-            except Exception as bundle_exc:
-                has_error = True
-                run_warnings.append("全部Bundle统一刷新失败")
-                logger.warning("全部Bundle统一刷新失败: %s", bundle_exc)
-        elif total_synced > 0:
-            has_error = True
-            run_warnings.append("同步结果缺少完整病例三坐标，未刷新Bundle")
-
-        # 更新全局状态
-        missing_mr_visit_ids = sorted(eligible_visit_ids - mr_visit_ids)
-        detail_only_visit_ids = sorted(detail_visit_ids - mr_visit_ids)
-        detail_only_visit_count = len(detail_only_visit_ids)
-        visit_index_skipped_missing_mr_count = detail_only_visit_count
-        if detail_only_visit_count > 0:
-            run_warnings.append(
-                "同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见"
+        try:
+            sync_result = _create_case_set_sync_service().sync_case_set(
+                case_refs=case_refs,
+                table_names=target_table_names,
+                policy_version=str(policy_version or ""),
+                sync_scene=resolved_scene,
+                progress_callback=_forward_case_set_progress,
             )
-        _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception as exc:
+            logger.warning(
+                "case_set_sync_failed error_type=%s",
+                type(exc).__name__,
+            )
+            _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _sync_state.last_sync_status = "failed"
+            _sync_state.total_records_synced = 0
+            _sync_state.logs = []
+            _emit_sync_progress(
+                progress_callback,
+                {
+                    "run_id": run_id,
+                    "status": "failed",
+                    "stage": "failed",
+                    "current_table": "",
+                    "tables_total": len(target_tables),
+                    "tables_done": 0,
+                    "rows_pulled_total": 0,
+                    "rows_upserted_total": 0,
+                    "eligible_visit_count": len(case_refs),
+                    "case_ref_count": len(case_refs),
+                    "visit_progress": _build_case_ref_progress(
+                        eligible_case_refs,
+                        set(),
+                    ),
+                    "failed_tables": 1,
+                    "eta_seconds": 0,
+                },
+            )
+            return {
+                "success": False,
+                "status": "failed",
+                "error": "病例资料同步失败，请稍后重试；如持续失败请联系管理员",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "policy_version": str(policy_version or ""),
+                "tables_hash": str(tables_hash or ""),
+                "total_records": 0,
+                "target_tables": target_table_names,
+                "date_window": effective_date_window,
+                "target_departments": dept_filters or ["*"],
+                "eligible_visits": len(case_refs),
+                "eligible_visit_count": len(case_refs),
+                "case_ref_count": len(case_refs),
+                "tables": [],
+                "sources_used": list(scope_result.sources_used),
+                "source_status": scope_result.source_status,
+                "warnings": list(dict.fromkeys(run_warnings)),
+            }
+
+        visible_case_refs = set(sync_result.visible_case_refs)
+        missing_primary_case_refs = set(sync_result.missing_primary_case_refs)
+        table_results = [dict(item) for item in sync_result.synced_tables]
+        for table_result in table_results:
+            if table_result.get("sync_status") != "source_table_unavailable":
+                continue
+            table_name = str(table_result.get("table_name") or "未知资料表")
+            skip_reason = str(
+                table_result.get("skip_reason")
+                or "该类资料暂未从源系统提供，本次同步已跳过。"
+            )
+            run_warnings.append(f"{table_name}: {skip_reason}")
+        if missing_primary_case_refs:
+            run_warnings.append(
+                f"{len(missing_primary_case_refs)} 份病例缺少可见主记录，本次未宣称完整成功"
+            )
+
+        total_rows_pulled = int(sync_result.total_rows_pulled)
+        total_rows_upserted = int(sync_result.total_rows_upserted)
+        final_success = not missing_primary_case_refs
         final_status = (
-            "failed"
-            if has_error and total_synced == 0
+            "success"
+            if final_success
             else "partial"
-            if has_error or tracking_write_failed or detail_only_visit_count > 0
-            else "success"
+            if visible_case_refs
+            else "failed"
         )
+        final_stage = "completed" if final_success else "primary_unavailable"
+        _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _sync_state.last_sync_status = final_status
-        _sync_state.total_records_synced = total_synced
-        _sync_state.logs = results
+        _sync_state.total_records_synced = total_rows_upserted
+        _sync_state.logs = table_results
         _emit_sync_progress(
             progress_callback,
             {
                 "run_id": run_id,
                 "status": final_status,
-                "stage": "completed",
+                "stage": final_stage,
                 "current_table": "",
                 "tables_total": len(target_tables),
-                "tables_done": len(target_tables),
-                "rows_pulled_total": pulled_total,
-                "rows_upserted_total": total_synced,
-                "eligible_visit_count": eligible_visit_count,
-                "visit_progress": _build_visit_progress(
-                    eligible_visit_ids,
-                    mr_visit_ids,
-                    detail_visit_ids,
+                "tables_done": len(table_results),
+                "rows_pulled_total": total_rows_pulled,
+                "rows_upserted_total": total_rows_upserted,
+                "eligible_visit_count": len(case_refs),
+                "case_ref_count": len(case_refs),
+                "visit_progress": _build_case_ref_progress(
+                    eligible_case_refs,
+                    visible_case_refs,
                 ),
-                "failed_tables": failed_tables,
+                "failed_tables": 0 if final_success else 1,
                 "eta_seconds": 0,
             },
         )
 
+        mr_result = next(
+            (
+                item
+                for item in table_results
+                if str(item.get("table_name") or "") == "mr"
+            ),
+            {},
+        )
+        detail_tables_with_rows = sorted(
+            str(item.get("table_name") or "")
+            for item in table_results
+            if str(item.get("table_name") or "") != "mr"
+            and int(item.get("rows_pulled") or 0) > 0
+        )
+        missing_visit_ids = sorted(
+            {
+                case_ref.visit_id
+                for case_ref in missing_primary_case_refs
+                if str(case_ref.visit_id or "").strip()
+            }
+        )
         return {
-            "success": not has_error,
+            "success": final_success,
             "status": final_status,
             "mode": sync_mode,
             "scene": resolved_scene,
             "policy_version": str(policy_version or ""),
             "tables_hash": str(tables_hash or ""),
-            "total_records": total_synced,
-            "target_tables": [str(item.get("name")) for item in target_tables],
-            "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            "total_records": total_rows_upserted,
+            "target_tables": target_table_names,
+            "date_window": effective_date_window,
             "target_departments": dept_filters or ["*"],
-            "eligible_visits": len(scoped_visit_keys),
-            "eligible_visit_count": len(scoped_visit_keys),
-            "mr_rows_pulled": mr_rows_pulled,
-            "mr_rows_upserted": mr_rows_upserted,
-            "missing_mr_visit_ids": missing_mr_visit_ids,
-            "detail_only_visit_count": detail_only_visit_count,
-            "detail_only_visit_ids": detail_only_visit_ids,
-            "detail_tables_with_rows": sorted(detail_tables_with_rows),
-            "visit_index_upserted_count": visit_index_upserted_count,
-            "visit_index_failed_count": visit_index_failed_count,
-            "visit_index_skipped_missing_mr_count": visit_index_skipped_missing_mr_count,
-            "tables": results,
-            "warnings": list(dict.fromkeys([item for item in run_warnings if str(item).strip()])),
+            "eligible_visits": len(case_refs),
+            "eligible_visit_count": len(case_refs),
+            "case_ref_count": len(case_refs),
+            "visible_case_ref_count": len(visible_case_refs),
+            "missing_primary_case_ref_count": len(missing_primary_case_refs),
+            "missing_primary_case_refs": [
+                case_ref.as_dict()
+                for case_ref in sorted(missing_primary_case_refs)
+            ],
+            "primary_visible": bool(sync_result.primary_visible),
+            "mr_rows_pulled": int(mr_result.get("rows_pulled") or 0),
+            "mr_rows_upserted": int(mr_result.get("rows_upserted") or 0),
+            "missing_mr_visit_ids": missing_visit_ids,
+            "detail_only_visit_count": 0,
+            "detail_only_visit_ids": [],
+            "detail_tables_with_rows": detail_tables_with_rows,
+            "visit_index_upserted_count": 0,
+            "visit_index_failed_count": 0,
+            "visit_index_skipped_missing_mr_count": 0,
+            "tables": table_results,
+            "bundle_refresh": dict(sync_result.bundle_refresh),
+            "sources_used": list(scope_result.sources_used),
+            "source_status": scope_result.source_status,
+            "warnings": list(
+                dict.fromkeys(item for item in run_warnings if str(item).strip())
+            ),
         }
     finally:
         _sync_state.is_running = False

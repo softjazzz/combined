@@ -7,6 +7,8 @@ from sqlalchemy import create_engine
 
 from app.services import etl_sync, mongo_sync, sync_run_history
 from app.services.case_identity import CaseRef
+from app.services.case_scope_service import HospitalizationScopeResult
+from app.services.case_set_sync_service import CaseSetSyncResult
 
 
 def test_list_remote_departments_uses_discharge_department_field(monkeypatch):
@@ -111,90 +113,14 @@ def test_run_sync_rejects_when_advisory_lock_not_acquired(monkeypatch):
     assert "同步正在进行中" in result["error"]
 
 
-def test_run_sync_updates_state_and_unlocks(monkeypatch):
-    calls: list[str] = []
-    state_snapshots: list[dict] = []
-
-    class _FakeConn:
-        def execute(self, stmt, params=None):
-            sql = str(stmt)
-            calls.append(sql)
-            if "pg_try_advisory_lock" in sql:
-                return _ScalarResult(True)
-            if "pg_advisory_unlock" in sql:
-                return _ScalarResult(True)
-            raise AssertionError(f"unexpected SQL: {sql}")
-
-        def close(self):
-            calls.append("close")
-            return None
-
-    class _FakeEngine:
-        def connect(self):
-            return _FakeConn()
-
-    monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
-    monkeypatch.setattr(
-        etl_sync,
-        "validate_pg_sync_plan",
-        lambda **_kwargs: {
-            "executable": True,
-            "remote_schema": "public",
-            "table_validations": [
-                {"table": "mr", "source": "public.mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {
-                    "table": "admission_record",
-                    "source": "public.admission_record",
-                    "source_table": "admission_record",
-                    "local_primary_keys": ["institute_id", "patient_id", "visit_id"],
-                },
-                {
-                    "table": "discharge_record",
-                    "source": "public.discharge_record",
-                    "source_table": "discharge_record",
-                    "local_primary_keys": ["institute_id", "patient_id", "visit_id"],
-                },
-            ],
-        },
-    )
-    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
-    monkeypatch.setattr(
-        etl_sync,
-        "_resolve_pg_extract_window",
-        lambda **_kwargs: (__import__("datetime").date(2026, 3, 25), __import__("datetime").date(2026, 3, 25), ["*"], ""),
-    )
-    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: [("p1", "v1")])
-    monkeypatch.setattr(
-        etl_sync,
-        "fetch_remote_rows_by_visit_keys",
-        lambda **kwargs: [{"institute_id": "A", "patient_id": "p1", "visit_id": "v1"}] if kwargs["source_table"] == "mr" else [],
-    )
-    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda *_args, **_kwargs: 1)
-
-    def _capture_state(state):
-        state_snapshots.append(
-            {
-                "is_running": state.is_running,
-                "last_sync_status": state.last_sync_status,
-                "total_records_synced": state.total_records_synced,
-            }
-        )
-
-    monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", _capture_state)
-
-    result = etl_sync.run_sync(sync_date="2026-03-25", tables=["mr", "admission_record", "discharge_record"])
-    assert result["success"] is True
-    assert result["total_records"] == 3
-    assert any("pg_try_advisory_lock" in item for item in calls)
-    assert any("pg_advisory_unlock" in item for item in calls)
-    assert state_snapshots[0]["is_running"] is True
-    assert state_snapshots[-1]["is_running"] is False
-    assert state_snapshots[-1]["last_sync_status"] == "success"
-    assert state_snapshots[-1]["total_records_synced"] == 3
-
-
-def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
+def test_run_sync_running_delegates_once_to_public_case_services(monkeypatch):
     progress_events: list[dict] = []
+    scope_calls: list[dict] = []
+    sync_calls: list[dict] = []
+    case_refs = (
+        CaseRef("H1", "P1", "SAME-VISIT"),
+        CaseRef("H2", "P2", "SAME-VISIT"),
+    )
 
     class _FakeConn:
         def execute(self, stmt, params=None):
@@ -210,121 +136,91 @@ def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
         def connect(self):
             return _FakeConn()
 
-    visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 5)]
-    rows_by_table = {
-        "mr": [],
-        "admission_record": [
-            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
-            for patient_id, visit_id in visit_keys
-        ],
-        "discharge_record": [
-            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
-            for patient_id, visit_id in visit_keys
-        ],
-    }
+    class _ScopeService:
+        def resolve_hospitalization_scope(self, **kwargs):
+            scope_calls.append(kwargs)
+            rows = tuple(
+                {
+                    **case_ref.as_dict(),
+                    "hospitalization_status": "active",
+                    "admission_time": "2026-08-01 08:00:00",
+                    "authoritative_time": "2026-08-01 08:00:00",
+                    "department": "重症医学科（ICU）",
+                    "department_basis": "current_department",
+                    "source_table": "inpat_registration",
+                }
+                for case_ref in case_refs
+            )
+            return HospitalizationScopeResult(
+                case_refs=case_refs,
+                selected=rows,
+                all_selected=rows,
+                sources_used=("inpat_registration",),
+                source_status="ready",
+                warnings=(),
+            )
 
-    monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
-    monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
-    monkeypatch.setattr(
-        etl_sync,
-        "validate_pg_sync_plan",
-        lambda **_kwargs: {
-            "executable": True,
-            "remote_schema": "public",
-            "table_validations": [
-                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "admission_record", "source_table": "admission_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-            ],
-        },
-    )
-    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
-    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
-    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
-    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
-    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
-    monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
-    refresh_calls: list[dict] = []
-    monkeypatch.setattr(
-        etl_sync,
-        "_refresh_all_bundle_variants_after_sync",
-        lambda **kwargs: refresh_calls.append(kwargs),
-    )
+    class _SyncService:
+        def sync_case_set(self, **kwargs):
+            sync_calls.append(kwargs)
+            callback = kwargs["progress_callback"]
+            callback(
+                {
+                    "step_key": "primary_visible",
+                    "current_table": "",
+                    "processed_tables": 1,
+                    "total_tables": 4,
+                }
+            )
+            callback(
+                {
+                    "step_key": "completed",
+                    "current_table": "",
+                    "processed_tables": 4,
+                    "total_tables": 4,
+                }
+            )
+            return CaseSetSyncResult(
+                case_refs=case_refs,
+                primary_visible=True,
+                visible_case_refs=case_refs,
+                missing_primary_case_refs=(),
+                synced_tables=(
+                    {
+                        "table_name": "mr",
+                        "rows_pulled": 2,
+                        "rows_upserted": 2,
+                        "sync_status": "synced",
+                    },
+                    {
+                        "table_name": "daily_course_record",
+                        "rows_pulled": 1,
+                        "rows_upserted": 1,
+                        "sync_status": "synced",
+                    },
+                ),
+                source_rows_by_table={},
+                total_rows_pulled=3,
+                total_rows_upserted=3,
+                bundle_refresh={"scenes": {}, "domains": {}},
+            )
 
-    result = etl_sync.run_sync(
-        sync_date="2026-05-25",
-        tables=["mr", "admission_record", "discharge_record"],
-        scene="both",
-        date_window={"start": "2026-05-25", "end": "2026-05-25"},
-        target_departments=["普通外科"],
-        progress_callback=progress_events.append,
-    )
-
-    assert result["success"] is True
-    assert result["status"] == "partial"
-    assert result["eligible_visit_count"] == 4
-    assert result["mr_rows_pulled"] == 0
-    assert result["mr_rows_upserted"] == 0
-    assert result["detail_only_visit_count"] == 4
-    assert result["missing_mr_visit_ids"] == ["v1", "v2", "v3", "v4"]
-    assert result["detail_only_visit_ids"] == ["v1", "v2", "v3", "v4"]
-    assert result["detail_tables_with_rows"] == ["admission_record", "discharge_record"]
-    assert result["visit_index_skipped_missing_mr_count"] == 4
-    assert any("缺少 mr 主记录" in warning for warning in result["warnings"])
-    final_progress = progress_events[-1]["visit_progress"]
-    assert final_progress["basis"] == "mr_visible"
-    assert final_progress["total"] == 4
-    assert final_progress["completed"] == 0
-    assert final_progress["remaining"] == 4
-    assert final_progress["missing_mr"] == 4
-    assert final_progress["detail_only"] == 4
-    assert len(refresh_calls) == 1
-    assert refresh_calls[0]["case_refs"] == [
-        ("A", "p1", "v1"),
-        ("A", "p2", "v2"),
-        ("A", "p3", "v3"),
-        ("A", "p4", "v4"),
+    target_tables = [
+        {"name": name, "source_table": name, "label": name}
+        for name in ("mr", "admission_record", "discharge_record", "daily_course_record")
     ]
-
-
-def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
-    progress_events: list[dict] = []
-
-    class _FakeConn:
-        def execute(self, stmt, params=None):
-            sql = str(stmt)
-            if "pg_try_advisory_lock" in sql or "pg_advisory_unlock" in sql:
-                return _ScalarResult(True)
-            raise AssertionError(f"unexpected SQL: {sql}")
-
-        def close(self):
-            return None
-
-    class _FakeEngine:
-        def connect(self):
-            return _FakeConn()
-
-    visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 5)]
-    rows_by_table = {
-        table: [
-            {"patient_id": patient_id, "visit_id": visit_id}
-            for patient_id, visit_id in visit_keys
-        ]
-        for table in ["mr", "admission_record", "discharge_record"]
-    }
-    upserted_rows: list[dict] = []
-    refreshed_case_refs: list[tuple[str, str, str]] = []
-
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
+    monkeypatch.setattr(etl_sync, "get_remote_db_url", lambda: "postgresql://source")
     monkeypatch.setattr(
         etl_sync,
         "load_db_config",
-        lambda: {
-            "remote_schema": "public",
-            "sync_mode": "table",
-            "default_institute_id": "LOCAL-HOSPITAL",
-        },
+        lambda: {"remote_schema": "public", "sync_mode": "table"},
+    )
+    monkeypatch.setattr(
+        etl_sync,
+        "_resolve_target_tables",
+        lambda _tables: (list(target_tables), []),
     )
     monkeypatch.setattr(
         etl_sync,
@@ -332,165 +228,118 @@ def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
         lambda **_kwargs: {
             "executable": True,
             "remote_schema": "public",
-            "table_validations": [
-                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "admission_record", "source_table": "admission_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-            ],
+            "table_validations": [],
+            "warnings": [],
         },
     )
-    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
-    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
-    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
-    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {})
     monkeypatch.setattr(
         etl_sync,
-        "upsert_to_local",
-        lambda **kwargs: upserted_rows.extend(kwargs["records"])
-        or len(kwargs["records"]),
+        "_create_case_scope_service",
+        lambda: _ScopeService(),
+        raising=False,
     )
-    monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
     monkeypatch.setattr(
         etl_sync,
-        "_refresh_all_bundle_variants_after_sync",
-        lambda **kwargs: refreshed_case_refs.extend(kwargs["case_refs"]),
+        "_create_case_set_sync_service",
+        lambda: _SyncService(),
+        raising=False,
     )
 
+    def _legacy_path_used(*_args, **_kwargs):
+        raise AssertionError("旧二坐标/逐表同步入口不得再被 run_sync 调用")
+
+    for legacy_name in (
+        "collect_visit_keys_by_policy",
+        "fetch_remote_rows_by_visit_keys",
+        "upsert_to_local",
+        "_refresh_all_bundle_variants_after_sync",
+    ):
+        monkeypatch.setattr(etl_sync, legacy_name, _legacy_path_used)
+
     result = etl_sync.run_sync(
-        sync_date="2026-05-25",
-        tables=["mr", "admission_record", "discharge_record"],
-        scene="both",
-        date_window={"start": "2026-05-25", "end": "2026-05-25"},
-        target_departments=["普通外科"],
+        sync_date="2026-08-10",
+        tables=[item["name"] for item in target_tables],
+        scene="running",
+        date_window={"start": "2026-08-01", "end": "2026-08-10"},
+        target_departments=["重症医学科（ICU）"],
+        policy_version="global-case-set-v1",
         progress_callback=progress_events.append,
     )
 
     assert result["success"] is True
     assert result["status"] == "success"
-    assert result["mr_rows_pulled"] == 4
-    assert result["mr_rows_upserted"] == 4
-    assert result["missing_mr_visit_ids"] == []
-    assert result["detail_only_visit_count"] == 0
-    assert result["warnings"] == []
-    assert upserted_rows
-    assert {row["institute_id"] for row in upserted_rows} == {"LOCAL-HOSPITAL"}
-    assert refreshed_case_refs == [
-        ("LOCAL-HOSPITAL", patient_id, visit_id)
-        for patient_id, visit_id in visit_keys
-    ]
-    final_progress = progress_events[-1]["visit_progress"]
-    assert final_progress["total"] == 4
-    assert final_progress["completed"] == 4
-    assert final_progress["remaining"] == 0
-    assert final_progress["missing_mr"] == 0
-    assert final_progress["detail_only"] == 0
-
-
-def test_run_sync_visit_progress_counts_mr_visible_records(monkeypatch):
-    progress_events: list[dict] = []
-
-    class _FakeConn:
-        def execute(self, stmt, params=None):
-            sql = str(stmt)
-            if "pg_try_advisory_lock" in sql or "pg_advisory_unlock" in sql:
-                return _ScalarResult(True)
-            raise AssertionError(f"unexpected SQL: {sql}")
-
-        def close(self):
-            return None
-
-    class _FakeEngine:
-        def connect(self):
-            return _FakeConn()
-
-    visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 6)]
-    mr_rows = [
-        {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
-        for patient_id, visit_id in visit_keys[:3]
-    ]
-    detail_rows = [
-        {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
-        for patient_id, visit_id in visit_keys
-    ]
-    rows_by_table = {
-        "mr": mr_rows,
-        "admission_record": detail_rows,
-        "discharge_record": detail_rows,
+    assert result["case_ref_count"] == 2
+    assert result["eligible_visit_count"] == 2
+    assert result["total_records"] == 3
+    assert len(scope_calls) == 1
+    assert scope_calls[0] == {
+        "scope_mode": "active",
+        "as_of_date": date(2026, 8, 10),
+        "discharge_start_date": None,
+        "discharge_end_date": None,
+        "departments": ["重症医学科（ICU）"],
     }
-
-    monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
-    monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
-    monkeypatch.setattr(
-        etl_sync,
-        "validate_pg_sync_plan",
-        lambda **_kwargs: {
-            "executable": True,
-            "remote_schema": "public",
-            "table_validations": [
-                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "admission_record", "source_table": "admission_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-            ],
-        },
+    assert len(sync_calls) == 1
+    assert tuple(sync_calls[0]["case_refs"]) == case_refs
+    assert tuple(sync_calls[0]["table_names"]) == tuple(
+        item["name"] for item in target_tables
     )
-    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
-    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
-    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
-    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
-    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
-    monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
-    monkeypatch.setattr(
-        etl_sync, "_refresh_all_bundle_variants_after_sync", lambda **_kwargs: None
+    assert sync_calls[0]["sync_scene"] == "running"
+    final_progress = progress_events[-1]
+    assert final_progress["status"] == "success"
+    assert final_progress["stage"] == "completed"
+    assert final_progress["visit_progress"]["total"] == 2
+    assert final_progress["visit_progress"]["completed"] == 2
+
+
+def _install_public_run_sync_fakes(
+    monkeypatch,
+    *,
+    scope_result: HospitalizationScopeResult | Exception,
+    sync_action,
+):
+    calls = {"lock": [], "scope": [], "sync": [], "state": []}
+    target_names = (
+        "mr",
+        "admission_record",
+        "discharge_record",
+        "daily_course_record",
     )
-
-    result = etl_sync.run_sync(
-        sync_date="2026-05-25",
-        tables=["admission_record", "discharge_record"],
-        scene="final",
-        date_window={"start": "2026-05-25", "end": "2026-05-25"},
-        target_departments=["普通外科"],
-        progress_callback=progress_events.append,
-    )
-
-    assert result["status"] == "partial"
-    assert result["eligible_visit_count"] == 5
-    assert result["missing_mr_visit_ids"] == ["v4", "v5"]
-    assert progress_events[2]["current_table"] == "mr"
-    mr_progress = next(
-        event["visit_progress"]
-        for event in progress_events
-        if event.get("current_table") == "mr" and int(event.get("tables_done") or 0) == 1
-    )
-    assert mr_progress["total"] == 5
-    assert mr_progress["completed"] == 3
-    assert mr_progress["remaining"] == 2
-    final_progress = progress_events[-1]["visit_progress"]
-    assert final_progress["completed"] == 3
-    assert final_progress["missing_mr"] == 2
-    assert final_progress["detail_only"] == 2
-
-
-def test_run_sync_rejects_zero_candidate_visits(monkeypatch):
-    state_snapshots: list[dict] = []
-    progress_events: list[dict] = []
-    fetch_calls: list[dict] = []
+    target_tables = [
+        {"name": name, "source_table": name, "label": name}
+        for name in target_names
+    ]
 
     class _FakeConn:
         def execute(self, stmt, params=None):
             sql = str(stmt)
+            calls["lock"].append(sql)
             if "pg_try_advisory_lock" in sql or "pg_advisory_unlock" in sql:
                 return _ScalarResult(True)
             raise AssertionError(f"unexpected SQL: {sql}")
 
         def close(self):
-            return None
+            calls["lock"].append("close")
 
     class _FakeEngine:
         def connect(self):
             return _FakeConn()
+
+    class _ScopeService:
+        def resolve_hospitalization_scope(self, **kwargs):
+            calls["scope"].append(kwargs)
+            if isinstance(scope_result, Exception):
+                raise scope_result
+            return scope_result
+
+    class _SyncService:
+        def sync_case_set(self, **kwargs):
+            calls["sync"].append(kwargs)
+            return sync_action(kwargs)
 
     def _capture_state(state):
-        state_snapshots.append(
+        calls["state"].append(
             {
                 "is_running": state.is_running,
                 "last_sync_status": state.last_sync_status,
@@ -498,52 +347,314 @@ def test_run_sync_rejects_zero_candidate_visits(monkeypatch):
             }
         )
 
-    def _unexpected_fetch(**kwargs):
-        fetch_calls.append(kwargs)
-        return []
+    def _legacy_path_used(*_args, **_kwargs):
+        raise AssertionError("旧二坐标/逐表同步入口不得再被 run_sync 调用")
 
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", _capture_state)
+    monkeypatch.setattr(etl_sync, "get_remote_db_url", lambda: "postgresql://source")
+    monkeypatch.setattr(
+        etl_sync,
+        "load_db_config",
+        lambda: {"remote_schema": "public", "sync_mode": "table"},
+    )
+    monkeypatch.setattr(
+        etl_sync,
+        "_resolve_target_tables",
+        lambda _tables: (list(target_tables), []),
+    )
     monkeypatch.setattr(
         etl_sync,
         "validate_pg_sync_plan",
         lambda **_kwargs: {
             "executable": True,
             "remote_schema": "public",
-            "table_validations": [
-                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
-            ],
+            "table_validations": [],
+            "warnings": [],
         },
     )
-    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
-    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["骨科"], ""))
-    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: [])
-    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", _unexpected_fetch)
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {})
+    monkeypatch.setattr(
+        etl_sync,
+        "_create_case_scope_service",
+        lambda: _ScopeService(),
+    )
+    monkeypatch.setattr(
+        etl_sync,
+        "_create_case_set_sync_service",
+        lambda: _SyncService(),
+    )
+    for legacy_name in (
+        "collect_visit_keys_by_policy",
+        "fetch_remote_rows_by_visit_keys",
+        "upsert_to_local",
+        "_refresh_all_bundle_variants_after_sync",
+    ):
+        monkeypatch.setattr(etl_sync, legacy_name, _legacy_path_used)
+    return calls, target_names
+
+
+def _hospitalization_scope_result(
+    case_refs: tuple[CaseRef, ...],
+    *,
+    warnings: tuple[str, ...] = (),
+) -> HospitalizationScopeResult:
+    selected = tuple(
+        {
+            **case_ref.as_dict(),
+            "hospitalization_status": "discharged",
+            "authoritative_time": "2026-08-10 09:00:00",
+            "department": "重症医学科（ICU）",
+            "department_basis": "discharge_department",
+            "source_table": "discharge_record",
+        }
+        for case_ref in case_refs
+    )
+    return HospitalizationScopeResult(
+        case_refs=case_refs,
+        selected=selected,
+        all_selected=selected,
+        sources_used=("inpat_registration", "discharge_record"),
+        source_status="ready",
+        warnings=warnings,
+    )
+
+
+def _successful_case_set_result(
+    case_refs: tuple[CaseRef, ...],
+    *,
+    visible_case_refs: tuple[CaseRef, ...] | None = None,
+    missing_primary_case_refs: tuple[CaseRef, ...] = (),
+    synced_tables: tuple[dict, ...] | None = None,
+) -> CaseSetSyncResult:
+    visible = case_refs if visible_case_refs is None else visible_case_refs
+    tables = synced_tables or (
+        {
+            "table_name": "mr",
+            "rows_pulled": len(visible),
+            "rows_upserted": len(visible),
+            "sync_status": "synced",
+        },
+    )
+    return CaseSetSyncResult(
+        case_refs=case_refs,
+        primary_visible=bool(visible),
+        visible_case_refs=visible,
+        missing_primary_case_refs=missing_primary_case_refs,
+        synced_tables=tables,
+        source_rows_by_table={},
+        total_rows_pulled=sum(int(item.get("rows_pulled") or 0) for item in tables),
+        total_rows_upserted=sum(
+            int(item.get("rows_upserted") or 0) for item in tables
+        ),
+        bundle_refresh={"scenes": {}, "domains": {}},
+    )
+
+
+def test_run_sync_both_uses_combined_scope_and_preserves_state_contract(monkeypatch):
+    case_refs = (CaseRef("H1", "P1", "V1"),)
+    synced_tables = (
+        {
+            "table_name": "mr",
+            "rows_pulled": 1,
+            "rows_upserted": 1,
+            "sync_status": "synced",
+        },
+        {
+            "table_name": "daily_course_record",
+            "rows_pulled": 0,
+            "rows_upserted": 0,
+            "sync_status": "source_table_unavailable",
+            "skip_reason": "该类资料暂未从源系统提供，本次同步已跳过。",
+        },
+    )
+    scope_result = _hospitalization_scope_result(
+        case_refs,
+        warnings=("出院来源按优先级合并",),
+    )
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=scope_result,
+        sync_action=lambda _kwargs: _successful_case_set_result(
+            case_refs,
+            synced_tables=synced_tables,
+        ),
+    )
 
     result = etl_sync.run_sync(
-        sync_date="2026-05-25",
-        tables=["mr", "discharge_record"],
+        sync_date="2026-08-10",
+        tables=list(target_names),
+        scene="both",
+        date_window={"start": "2026-08-01", "end": "2026-08-10"},
+        target_departments=["重症医学科（ICU）"],
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "success"
+    assert result["date_window"] == {"start": "2026-08-01", "end": "2026-08-10"}
+    assert result["target_departments"] == ["重症医学科（ICU）"]
+    assert result["case_ref_count"] == result["eligible_visit_count"] == 1
+    assert calls["scope"] == [
+        {
+            "scope_mode": "active_and_discharged",
+            "as_of_date": date(2026, 8, 10),
+            "discharge_start_date": date(2026, 8, 1),
+            "discharge_end_date": date(2026, 8, 10),
+            "departments": ["重症医学科（ICU）"],
+        }
+    ]
+    assert len(calls["sync"]) == 1
+    assert any("pg_advisory_unlock" in item for item in calls["lock"])
+    assert calls["state"][-1] == {
+        "is_running": False,
+        "last_sync_status": "success",
+        "total_records_synced": 1,
+    }
+    assert any("出院来源按优先级合并" in item for item in result["warnings"])
+    assert any("daily_course_record" in item for item in result["warnings"])
+
+
+def test_run_sync_missing_primary_fails_closed_by_full_case_ref(monkeypatch):
+    visible_ref = CaseRef("H1", "P1", "SAME-VISIT")
+    missing_ref = CaseRef("H2", "P2", "SAME-VISIT")
+    case_refs = (visible_ref, missing_ref)
+    progress_events: list[dict] = []
+
+    def _sync_action(kwargs):
+        kwargs["progress_callback"](
+            {
+                "step_key": "completed",
+                "current_table": "",
+                "processed_tables": 4,
+                "total_tables": 4,
+            }
+        )
+        return _successful_case_set_result(
+            case_refs,
+            visible_case_refs=(visible_ref,),
+            missing_primary_case_refs=(missing_ref,),
+        )
+
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=_hospitalization_scope_result(case_refs),
+        sync_action=_sync_action,
+    )
+    result = etl_sync.run_sync(
+        sync_date="2026-08-10",
+        tables=list(target_names),
+        scene="both",
+        date_window={"start": "2026-08-10", "end": "2026-08-10"},
+        progress_callback=progress_events.append,
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "partial"
+    assert result["case_ref_count"] == 2
+    assert result["visible_case_ref_count"] == 1
+    assert result["missing_primary_case_refs"] == [missing_ref.as_dict()]
+    assert len(calls["sync"]) == 1
+    assert progress_events[-1]["stage"] == "primary_unavailable"
+    assert progress_events[-1]["visit_progress"]["total"] == 2
+    assert progress_events[-1]["visit_progress"]["completed"] == 1
+    assert progress_events[-2]["stage"] == "finalizing"
+    assert not any(event.get("stage") == "completed" for event in progress_events)
+
+
+def test_run_sync_rejects_empty_scope_without_case_set_or_false_completion(monkeypatch):
+    progress_events: list[dict] = []
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=_hospitalization_scope_result(()),
+        sync_action=lambda _kwargs: (_ for _ in ()).throw(
+            AssertionError("空病例范围不得调用 CaseSetSyncService")
+        ),
+    )
+    result = etl_sync.run_sync(
+        sync_date="2026-08-10",
+        tables=list(target_names),
         scene="final",
-        date_window={"start": "2026-05-25", "end": "2026-05-25"},
-        target_departments=["骨科"],
+        date_window={"start": "2026-08-10", "end": "2026-08-10"},
         progress_callback=progress_events.append,
     )
 
     assert result["success"] is False
     assert result["status"] == "rejected"
+    assert result["case_ref_count"] == 0
     assert result["total_records"] == 0
-    assert result["eligible_visits"] == 0
-    assert "候选病历数为 0" in result["message"]
-    assert "未找到可同步的终末病历" in result["error"]
-    assert fetch_calls == []
-    assert any(event.get("status") == "failed" for event in progress_events)
-    final_progress = progress_events[-1]["visit_progress"]
-    assert final_progress["total"] == 0
-    assert final_progress["completed"] == 0
-    assert final_progress["remaining"] == 0
-    assert state_snapshots[-1]["last_sync_status"] == "failed"
-    assert state_snapshots[-1]["total_records_synced"] == 0
+    assert calls["sync"] == []
+    assert progress_events[-1]["status"] == "rejected"
+    assert progress_events[-1]["stage"] == "rejected"
+    assert progress_events[-1]["visit_progress"]["completed"] == 0
+    assert not any(event.get("stage") == "completed" for event in progress_events)
+
+
+def test_run_sync_case_set_hard_failure_never_reports_completed(monkeypatch, caplog):
+    case_refs = (CaseRef("H1", "P1", "V1"),)
+    progress_events: list[dict] = []
+
+    def _raise_after_primary(kwargs):
+        kwargs["progress_callback"](
+            {
+                "step_key": "primary_visible",
+                "current_table": "",
+                "processed_tables": 1,
+                "total_tables": 4,
+            }
+        )
+        raise RuntimeError("SECRET-SQL SELECT * FROM patient")
+
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=_hospitalization_scope_result(case_refs),
+        sync_action=_raise_after_primary,
+    )
+    result = etl_sync.run_sync(
+        sync_date="2026-08-10",
+        tables=list(target_names),
+        scene="final",
+        date_window={"start": "2026-08-10", "end": "2026-08-10"},
+        progress_callback=progress_events.append,
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert result["case_ref_count"] == 1
+    assert result["error"] == "病例资料同步失败，请稍后重试；如持续失败请联系管理员"
+    assert "SECRET-SQL" not in result["error"]
+    assert "SECRET-SQL" not in caplog.text
+    assert len(calls["scope"]) == len(calls["sync"]) == 1
+    assert calls["sync"][0]["sync_scene"] == "final"
+    assert progress_events[-1]["status"] == "failed"
+    assert progress_events[-1]["stage"] == "failed"
+    assert progress_events[-1]["visit_progress"]["completed"] == 0
+    assert not any(event.get("stage") == "completed" for event in progress_events)
+
+
+def test_run_sync_scope_failure_does_not_expose_source_error(monkeypatch, caplog):
+    progress_events: list[dict] = []
+    calls, target_names = _install_public_run_sync_fakes(
+        monkeypatch,
+        scope_result=RuntimeError("SECRET-SQL password=do-not-return"),
+        sync_action=lambda _kwargs: (_ for _ in ()).throw(
+            AssertionError("范围解析失败后不得调用 CaseSetSyncService")
+        ),
+    )
+    result = etl_sync.run_sync(
+        sync_date="2026-08-10",
+        tables=list(target_names),
+        scene="final",
+        date_window={"start": "2026-08-10", "end": "2026-08-10"},
+        progress_callback=progress_events.append,
+    )
+
+    assert result["success"] is False
+    assert result["status"] == "failed"
+    assert result["error"] == "病例范围解析失败，请检查同步配置后重试"
+    assert "SECRET-SQL" not in result["error"]
+    assert "SECRET-SQL" not in caplog.text
+    assert calls["sync"] == []
+    assert progress_events[-1]["stage"] == "scope_resolution"
 
 
 def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):

@@ -48,6 +48,7 @@ def test_case_set_sync_only_continues_cases_with_visible_primary_record():
         case_refs=(visible, missing),
         table_names=("mr", "daily_course_record"),
         policy_version="case-set-sync-v1",
+        sync_scene="running",
     )
 
     assert result.primary_visible is True
@@ -91,6 +92,7 @@ def test_case_set_sync_does_not_refresh_bundles_after_hard_detail_failure():
             case_refs=(case_ref,),
             table_names=("mr", "daily_course_record"),
             policy_version="case-set-sync-v1",
+            sync_scene="running",
         )
 
     assert refresh_calls == []
@@ -119,6 +121,7 @@ def test_case_set_sync_refreshes_after_controlled_optional_table_missing():
         case_refs=(case_ref,),
         table_names=("mr", "optional_detail"),
         policy_version="case-set-sync-v1",
+        sync_scene="running",
     )
 
     optional_result = next(
@@ -163,6 +166,7 @@ def test_case_set_sync_fails_closed_when_any_bundle_refresh_fails(
             case_refs=(case_ref,),
             table_names=("mr",),
             policy_version="case-set-sync-v1",
+            sync_scene="running",
         )
 
 
@@ -210,6 +214,7 @@ def test_case_set_sync_refreshes_all_bundles_once_after_detail_tables(monkeypatc
         case_refs=case_refs,
         table_names=("daily_course_record", "mr"),
         policy_version="case-set-sync-v1",
+        sync_scene="running",
     )
 
     assert result.primary_visible is True
@@ -262,6 +267,7 @@ def test_case_set_sync_injects_configured_institute_at_public_boundary():
         case_refs=[{"patient_id": "P-1", "visit_id": "V-1"}],
         table_names=("mr",),
         policy_version="case-set-sync-v1",
+        sync_scene="running",
     )
 
     expected = CaseRef("LOCAL-HOSPITAL", "P-1", "V-1")
@@ -300,6 +306,7 @@ def test_case_set_sync_preserves_explicit_source_institute_id():
         ],
         table_names=("mr",),
         policy_version="case-set-sync-v1",
+        sync_scene="running",
     )
 
     assert result.case_refs == (CaseRef("SOURCE-HOSPITAL", "P-1", "V-1"),)
@@ -316,4 +323,113 @@ def test_case_set_sync_rejects_incomplete_identity_without_configured_institute(
             case_refs=[{"institute_id": "", "patient_id": "P", "visit_id": "V"}],
             table_names=("mr",),
             policy_version="case-set-sync-v1",
+            sync_scene="running",
+        )
+
+
+@pytest.mark.parametrize(
+    ("sync_scene", "allow_frontpage_only"),
+    [
+        ("running", False),
+        ("final", False),
+        ("frontpage", True),
+        ("coding", True),
+        ("settlement", False),
+        ("both", True),
+    ],
+)
+def test_case_set_sync_passes_controlled_scene_to_visit_index(
+    sync_scene: str,
+    allow_frontpage_only: bool,
+):
+    case_ref = CaseRef("H1", "P1", "V1")
+    ingest_calls: list[dict[str, Any]] = []
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {"name": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]}
+        ],
+        row_fetcher=lambda **_: [case_ref.as_dict()],
+        row_upserter=lambda **kwargs: len(kwargs["records"]),
+        bundle_refresher=lambda **_: {
+            "scenes": {"running": {"failed": 0}, "final": {"failed": 0}},
+            "domains": {},
+        },
+        visit_index_ingester=lambda **kwargs: ingest_calls.append(kwargs) or {},
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    service.sync_case_set(
+        case_refs=(case_ref,),
+        table_names=("mr",),
+        policy_version="case-set-sync-v1",
+        sync_scene=sync_scene.upper(),
+    )
+
+    assert len(ingest_calls) == 1
+    assert ingest_calls[0]["sync_scene"] == sync_scene
+    assert ingest_calls[0]["allow_frontpage_only"] is allow_frontpage_only
+
+
+def test_case_set_sync_groups_mixed_case_scenes_without_guessing():
+    running_ref = CaseRef("H1", "P1", "SAME-VISIT")
+    final_ref = CaseRef("H2", "P2", "SAME-VISIT")
+    ingest_calls: list[dict[str, Any]] = []
+    service = CaseSetSyncService(
+        table_catalog_loader=lambda: [
+            {"name": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]}
+        ],
+        row_fetcher=lambda **_: [running_ref.as_dict(), final_ref.as_dict()],
+        row_upserter=lambda **kwargs: len(kwargs["records"]),
+        bundle_refresher=lambda **_: {
+            "scenes": {"running": {"failed": 0}, "final": {"failed": 0}},
+            "domains": {},
+        },
+        visit_index_ingester=lambda **kwargs: ingest_calls.append(kwargs) or {},
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    service.sync_case_set(
+        case_refs=(running_ref, final_ref),
+        table_names=("mr",),
+        policy_version="case-set-sync-v1",
+        sync_scene="both",
+        case_scene_by_ref={running_ref: "running", final_ref: "final"},
+    )
+
+    assert [call["sync_scene"] for call in ingest_calls] == ["running", "final"]
+    assert ingest_calls[0]["rows"] == [running_ref.as_dict()]
+    assert ingest_calls[1]["rows"] == [final_ref.as_dict()]
+
+
+def test_case_set_sync_rejects_incomplete_case_scene_mapping():
+    case_refs = (CaseRef("H1", "P1", "V1"), CaseRef("H2", "P2", "V2"))
+    service = CaseSetSyncService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    with pytest.raises(ValueError, match="病例场景映射不完整"):
+        service.sync_case_set(
+            case_refs=case_refs,
+            table_names=("mr",),
+            policy_version="case-set-sync-v1",
+            sync_scene="both",
+            case_scene_by_ref={case_refs[0]: "running"},
+        )
+
+
+def test_case_set_sync_rejects_unknown_scene():
+    service = CaseSetSyncService(
+        remote_url_loader=lambda: "postgresql://source",
+        db_config_loader=lambda: {"remote_schema": "public"},
+    )
+
+    with pytest.raises(ValueError, match="同步场景无效"):
+        service.sync_case_set(
+            case_refs=(CaseRef("H1", "P1", "V1"),),
+            table_names=("mr",),
+            policy_version="case-set-sync-v1",
+            sync_scene="guessed-scene",
         )

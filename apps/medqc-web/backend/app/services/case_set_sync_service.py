@@ -11,6 +11,7 @@ import psycopg2
 from .bundles.assembly import refresh_all_bundle_variants_for_rows
 from .case_identity import (
     CaseRef,
+    coerce_case_ref,
     normalize_source_case_refs,
     stamp_source_rows_institute_id,
 )
@@ -25,6 +26,17 @@ from .visit_index_service import ingest_sync_rows
 
 
 PRIMARY_CASE_TABLES = ("mr", "inpat_registration", "admission_record")
+_SYNC_SCENES = frozenset(
+    {"running", "final", "frontpage", "coding", "settlement", "both"}
+)
+_FRONTPAGE_ALLOWED_SCENES = frozenset({"frontpage", "coding", "both"})
+
+
+def _normalize_sync_scene(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized not in _SYNC_SCENES:
+        raise ValueError("同步场景无效")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -113,6 +125,8 @@ class CaseSetSyncService:
         case_refs: Sequence[CaseRef | Mapping[str, Any]],
         table_names: Sequence[str],
         policy_version: str,
+        sync_scene: str,
+        case_scene_by_ref: Mapping[CaseRef, str] | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> CaseSetSyncResult:
         config = self._db_config_loader()
@@ -123,6 +137,27 @@ class CaseSetSyncService:
             case_refs,
             default_institute_id=default_institute_id,
         )
+        normalized_sync_scene = _normalize_sync_scene(sync_scene)
+        normalized_scene_by_ref: dict[CaseRef, str] | None = None
+        if case_scene_by_ref is not None:
+            normalized_scene_by_ref = {}
+            for raw_case_ref, raw_scene in case_scene_by_ref.items():
+                normalized_case_ref = normalize_source_case_refs(
+                    (coerce_case_ref(raw_case_ref),),
+                    default_institute_id=default_institute_id,
+                )[0]
+                normalized_scene = _normalize_sync_scene(raw_scene)
+                existing_scene = normalized_scene_by_ref.get(normalized_case_ref)
+                if existing_scene is not None and existing_scene != normalized_scene:
+                    raise ValueError("同一病例存在冲突的同步场景")
+                normalized_scene_by_ref[normalized_case_ref] = normalized_scene
+            missing_scene_refs = [
+                case_ref
+                for case_ref in normalized_refs
+                if case_ref not in normalized_scene_by_ref
+            ]
+            if missing_scene_refs:
+                raise ValueError("病例场景映射不完整")
         normalized_tables = tuple(
             dict.fromkeys(
                 str(table_name or "").strip()
@@ -269,16 +304,33 @@ class CaseSetSyncService:
                 if all(case_ref):
                     primary_identities.add(case_ref)
             if rows:
-                self._visit_index_ingester(
-                    table_name=table_name,
-                    rows=list(rows),
-                    policy_version=str(policy_version or "").strip() or None,
-                    sync_scene="running",
-                    allow_frontpage_only=False,
-                    latest_mirror_success_time=datetime.now(),
-                    mirror_delay_base_minutes=30,
-                    sync_interval_minutes=30,
-                )
+                rows_by_scene: dict[str, list[dict[str, Any]]] = {}
+                for row in rows:
+                    row_case_ref = CaseRef.from_mapping(row)
+                    if (
+                        normalized_scene_by_ref is not None
+                        and row_case_ref not in normalized_scene_by_ref
+                    ):
+                        raise ValueError("源主记录存在未声明病例场景")
+                    row_scene = (
+                        normalized_scene_by_ref[row_case_ref]
+                        if normalized_scene_by_ref is not None
+                        else normalized_sync_scene
+                    )
+                    rows_by_scene.setdefault(row_scene, []).append(row)
+                for row_scene, scene_rows in rows_by_scene.items():
+                    self._visit_index_ingester(
+                        table_name=table_name,
+                        rows=scene_rows,
+                        policy_version=str(policy_version or "").strip() or None,
+                        sync_scene=row_scene,
+                        allow_frontpage_only=(
+                            row_scene in _FRONTPAGE_ALLOWED_SCENES
+                        ),
+                        latest_mirror_success_time=datetime.now(),
+                        mirror_delay_base_minutes=30,
+                        sync_interval_minutes=30,
+                    )
 
         visible_case_refs = tuple(
             case_ref for case_ref in normalized_refs if case_ref in primary_identities

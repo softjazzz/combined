@@ -5499,6 +5499,7 @@ class CustomQCSamplePoolService:
 
         visit_key_set: set[tuple[str, str]] = set()
         case_ref_set: set[CaseRef] = set()
+        case_scenes_by_ref: Dict[CaseRef, set[str]] = {}
         matched = 0
         ambiguous = 0
         unmatched = 0
@@ -5577,13 +5578,38 @@ class CustomQCSamplePoolService:
                 continue
             matched += 1
             visit_key_set.add((patient_id, visit_id))
-            case_ref_set.add(
-                CaseRef(
-                    _safe_text(chosen.get("institute_id")),
-                    patient_id,
-                    visit_id,
-                )
+            case_ref = CaseRef(
+                _safe_text(chosen.get("institute_id")),
+                patient_id,
+                visit_id,
             )
+            case_ref_set.add(case_ref)
+            anchor_table = _safe_text(chosen.get("source_anchor_table"))
+            current_state = _collect_current_hospitalization_states(
+                {anchor_table: [chosen]} if anchor_table else {}
+            ).get(tuple(case_ref))
+            trusted_state = _trusted_item_hospitalization_state(item)
+            status = _safe_text(
+                (current_state or trusted_state or {}).get("hospitalization_status")
+            ).lower()
+            expected_scene = (
+                "running"
+                if status == "active"
+                else "final"
+                if status == "discharged"
+                else _safe_text(item.get("expected_scene")).lower()
+            )
+            if expected_scene not in {"running", "final"}:
+                raise ValueError("样本病例缺少可核验的预期场景")
+            case_scenes_by_ref.setdefault(case_ref, set()).add(expected_scene)
+
+        conflicting_case_refs = [
+            case_ref
+            for case_ref, scenes in case_scenes_by_ref.items()
+            if len(scenes) != 1
+        ]
+        if conflicting_case_refs:
+            raise ValueError("同一病例存在冲突的预期场景")
 
         return {
             "matched": matched,
@@ -5591,6 +5617,10 @@ class CustomQCSamplePoolService:
             "unmatched": unmatched,
             "visit_keys": sorted(visit_key_set),
             "case_refs": sorted(case_ref_set),
+            "case_scene_by_ref": {
+                case_ref: next(iter(case_scenes_by_ref[case_ref]))
+                for case_ref in sorted(case_ref_set)
+            },
         }
 
     def list_remote_admission_departments(self) -> List[str]:
@@ -6377,6 +6407,17 @@ class CustomQCSamplePoolService:
                 if table_name not in PRIMARY_VISIBILITY_TABLES
             ),
         )
+        case_scene_by_ref = resolved.get("case_scene_by_ref")
+        if not isinstance(case_scene_by_ref, dict) or not case_scene_by_ref:
+            raise ValueError("样本病例缺少可核验的预期场景")
+        sync_scenes = {
+            _safe_text(scene).lower()
+            for scene in case_scene_by_ref.values()
+            if _safe_text(scene)
+        }
+        if not sync_scenes or not sync_scenes.issubset({"running", "final"}):
+            raise ValueError("样本病例预期场景无效")
+        batch_sync_scene = next(iter(sync_scenes)) if len(sync_scenes) == 1 else "both"
         sync_result = CaseSetSyncService(
             table_catalog_loader=list_sync_tables,
             row_fetcher=fetch_remote_rows_by_case_refs,
@@ -6391,6 +6432,8 @@ class CustomQCSamplePoolService:
             case_refs=requested_visit_keys,
             table_names=sync_plan["table_names"],
             policy_version="sample_pool_incremental_sync",
+            sync_scene=batch_sync_scene,
+            case_scene_by_ref=case_scene_by_ref,
             progress_callback=_forward_case_sync_progress,
         )
         source_rows_by_table = {

@@ -9,6 +9,7 @@ from app.services.custom_qc_sample_pool_service import (
     summarize_sample_validation_run_readiness,
 )
 from app.services.case_scope_service import HospitalizationScopeResult
+from app.services.case_identity import CaseRef
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
 from datetime import date, datetime, timedelta, timezone
 import pandas as pd
@@ -1714,7 +1715,9 @@ def test_resolve_remote_visit_keys_prefers_mr_over_running_anchors(monkeypatch):
         },
     )
 
-    result = service._resolve_remote_visit_keys(items=[{"visit_id": "V001"}])
+    result = service._resolve_remote_visit_keys(
+        items=[{"visit_id": "V001", "expected_scene": "running"}]
+    )
 
     assert result["matched"] == 1
     assert result["ambiguous"] == 0
@@ -1753,7 +1756,9 @@ def test_resolve_remote_visit_keys_uses_inpat_registration_without_mr(monkeypatc
         },
     )
 
-    result = service._resolve_remote_visit_keys(items=[{"visit_id": "V002"}])
+    result = service._resolve_remote_visit_keys(
+        items=[{"visit_id": "V002", "expected_scene": "running"}]
+    )
 
     assert result["matched"] == 1
     assert result["visit_keys"] == [("P002", "V002")]
@@ -1788,7 +1793,7 @@ def test_resolve_remote_visit_keys_injects_fixed_institute_for_single_hospital_s
     )
 
     result = service._resolve_remote_visit_keys(
-        items=[{"visit_id": "V-NO-INSTITUTE"}]
+        items=[{"visit_id": "V-NO-INSTITUTE", "expected_scene": "running"}]
     )
 
     assert result["matched"] == 1
@@ -1830,12 +1835,73 @@ def test_resolve_remote_visit_keys_uses_admission_record_and_rejects_incomplete_
     )
 
     result = service._resolve_remote_visit_keys(
-        items=[{"visit_id": "V003"}, {"visit_id": "V004"}]
+        items=[
+            {"visit_id": "V003", "expected_scene": "running"},
+            {"visit_id": "V004", "expected_scene": "running"},
+        ]
     )
 
     assert result["matched"] == 1
     assert result["unmatched"] == 1
     assert result["visit_keys"] == [("P003", "V003")]
+    assert result["case_scene_by_ref"] == {
+        CaseRef("H1", "P003", "V003"): "running"
+    }
+
+
+@pytest.mark.parametrize(
+    ("candidate", "stale_expected_scene", "expected_scene"),
+    [
+        (
+            {
+                "source_anchor_table": "inpat_registration",
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "admission_datetime": "2026-08-01 08:00:00",
+                "discharge_datetime": None,
+            },
+            "final",
+            "running",
+        ),
+        (
+            {
+                "source_anchor_table": "mr",
+                "institute_id": "H1",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "discharge_datetime": "2026-08-10 09:00:00",
+            },
+            "running",
+            "final",
+        ),
+    ],
+)
+def test_resolve_remote_visit_keys_prefers_current_controlled_hospitalization_state(
+    monkeypatch,
+    candidate,
+    stale_expected_scene,
+    expected_scene,
+):
+    service = CustomQCSamplePoolService()
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(
+        service,
+        "_lookup_remote_match_candidates",
+        lambda **_: {
+            "visit_id": {"V1": [candidate]},
+            "mr_no": {},
+            "inpat_no": {},
+        },
+    )
+
+    result = service._resolve_remote_visit_keys(
+        items=[{"visit_id": "V1", "expected_scene": stale_expected_scene}]
+    )
+
+    assert result["case_scene_by_ref"] == {
+        CaseRef("H1", "P1", "V1"): expected_scene
+    }
 
 
 def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundles(monkeypatch):
@@ -1857,6 +1923,9 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
             "case_refs": [("", "P001", "V001")],
+            "case_scene_by_ref": {
+                CaseRef("LOCAL-HOSPITAL", "P001", "V001"): "running"
+            },
         },
     )
     match_calls = []
@@ -2167,6 +2236,9 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
             "case_refs": [("H1", "P001", "V001")],
+            "case_scene_by_ref": {
+                CaseRef("H1", "P001", "V001"): "running"
+            },
         },
     )
     monkeypatch.setattr(
@@ -2261,6 +2333,9 @@ def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypat
             "unmatched": 0,
             "visit_keys": [("P001", "V001")],
             "case_refs": [("H1", "P001", "V001")],
+            "case_scene_by_ref": {
+                CaseRef("H1", "P001", "V001"): "running"
+            },
         },
     )
     monkeypatch.setattr(
@@ -2328,6 +2403,7 @@ def _run_two_stage_primary_sync(
     extra_table_names=None,
     refresh_scene_impl=None,
     resolved_visit_keys=None,
+    resolved_case_scene_by_ref=None,
 ):
     service = object.__new__(CustomQCSamplePoolService)
     service._item_table = sa.table(
@@ -2342,6 +2418,7 @@ def _run_two_stage_primary_sync(
     match_calls = []
     fetch_calls = []
     bundle_refresh_calls = []
+    visit_index_calls = []
     if capture is not None:
         capture.update(
             {
@@ -2350,6 +2427,7 @@ def _run_two_stage_primary_sync(
                 "match_calls": match_calls,
                 "fetch_calls": fetch_calls,
                 "bundle_refresh_calls": bundle_refresh_calls,
+                "visit_index_calls": visit_index_calls,
             }
         )
     table_names = [
@@ -2372,13 +2450,22 @@ def _run_two_stage_primary_sync(
         service,
         "_list_sync_candidate_items",
         lambda **_: list(item_payloads or [dict(item_payload or {
-                "id": "item-1",
-                "visit_id": "V001",
-                "matched_institute_id": "H1",
-                "matched_patient_id": "P001",
-                "matched_visit_id": "V001",
-            })]),
+            "id": "item-1",
+            "visit_id": "V001",
+            "matched_institute_id": "H1",
+            "matched_patient_id": "P001",
+            "matched_visit_id": "V001",
+            "expected_scene": "running",
+        })]),
     )
+    resolved_pairs = list(resolved_visit_keys or [("P001", "V001")])
+    resolved_case_refs = tuple(
+        CaseRef("H1", patient_id, visit_id)
+        for patient_id, visit_id in resolved_pairs
+    )
+    resolved_scenes = resolved_case_scene_by_ref or {
+        case_ref: "running" for case_ref in resolved_case_refs
+    }
     monkeypatch.setattr(
         service,
         "_resolve_remote_visit_keys",
@@ -2386,7 +2473,9 @@ def _run_two_stage_primary_sync(
             "matched": 1,
             "ambiguous": 0,
             "unmatched": 0,
-            "visit_keys": list(resolved_visit_keys or [("P001", "V001")]),
+            "visit_keys": resolved_pairs,
+            "case_refs": resolved_case_refs,
+            "case_scene_by_ref": resolved_scenes,
         },
     )
     monkeypatch.setattr(
@@ -2445,7 +2534,11 @@ def _run_two_stage_primary_sync(
         "upsert_to_local",
         upsert_impl or (lambda **kwargs: len(kwargs["records"])),
     )
-    monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **_: None)
+    monkeypatch.setattr(
+        sample_pool_module,
+        "ingest_sync_rows",
+        lambda **kwargs: visit_index_calls.append(kwargs),
+    )
     monkeypatch.setattr(service, "match_pool_items", _match)
     monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
     def _refresh_all(**kwargs):
@@ -2514,6 +2607,50 @@ def test_sync_pool_records_makes_inpat_registration_only_case_visible_before_det
         for event in progress_events
         if event.get("phase") == "detail_sync"
     )
+
+
+def test_sync_pool_records_preserves_mixed_running_and_final_visit_index_scenes(
+    monkeypatch,
+):
+    running_ref = CaseRef("H1", "P001", "V001")
+    final_ref = CaseRef("H1", "P002", "V002")
+    capture = {}
+    _run_two_stage_primary_sync(
+        monkeypatch,
+        {
+            "mr": [running_ref.as_dict(), final_ref.as_dict()],
+            "inpat_registration": [],
+            "admission_record": [],
+        },
+        capture=capture,
+        item_payloads=[
+            {
+                "id": "item-running",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P001",
+                "matched_visit_id": "V001",
+                "expected_scene": "running",
+            },
+            {
+                "id": "item-final",
+                "matched_institute_id": "H1",
+                "matched_patient_id": "P002",
+                "matched_visit_id": "V002",
+                "expected_scene": "final",
+            },
+        ],
+        resolved_visit_keys=[("P001", "V001"), ("P002", "V002")],
+        resolved_case_scene_by_ref={running_ref: "running", final_ref: "final"},
+    )
+
+    mr_calls = [
+        call
+        for call in capture["visit_index_calls"]
+        if call["table_name"] == "mr"
+    ]
+    assert [call["sync_scene"] for call in mr_calls] == ["running", "final"]
+    assert mr_calls[0]["rows"] == [running_ref.as_dict()]
+    assert mr_calls[1]["rows"] == [final_ref.as_dict()]
 
 
 def test_sync_pool_records_refreshes_changed_visit_once_and_reports_material_reads(
