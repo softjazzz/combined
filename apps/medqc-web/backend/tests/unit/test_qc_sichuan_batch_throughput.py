@@ -133,7 +133,13 @@ async def test_luxian_batch_create_rejects_customer_aggregation_without_unified_
                 rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
                 rule_ids=["LX0609-001"],
                 scope="final",
-                record_ids=["visit-001"],
+                record_refs=[
+                    {
+                        "institute_id": "HOSP-001",
+                        "patient_id": "PAT-visit-001",
+                        "visit_id": "visit-001",
+                    }
+                ],
             ),
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
             current_user={"id": "tester"},
@@ -202,16 +208,23 @@ class _WorkspaceStub:
         record_refs: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict[str, Any]]:
         refs = list(record_refs or [])
-        ids = list(record_ids or [ref["visit_id"] for ref in refs])
+        ids = list(
+            record_ids
+            or [ref.visit_id if isinstance(ref, CaseRef) else ref["visit_id"] for ref in refs]
+        )
         return [
             {
                 "institute_id": (
-                    str(refs[idx].get("institute_id") or "HOSP-001")
+                    refs[idx].institute_id
+                    if idx < len(refs) and isinstance(refs[idx], CaseRef)
+                    else str(refs[idx].get("institute_id") or "HOSP-001")
                     if idx < len(refs) and isinstance(refs[idx], dict)
                     else "HOSP-001"
                 ),
                 "patient_id": (
-                    str(refs[idx].get("patient_id") or f"PAT-{rid}")
+                    refs[idx].patient_id
+                    if idx < len(refs) and isinstance(refs[idx], CaseRef)
+                    else str(refs[idx].get("patient_id") or f"PAT-{rid}")
                     if idx < len(refs) and isinstance(refs[idx], dict)
                     else f"PAT-{rid}"
                 ),
@@ -1619,6 +1632,190 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
 
 
 @pytest.mark.asyncio
+async def test_create_workspace_batch_job_rejects_luxian_legacy_record_ids_before_collect(
+    monkeypatch,
+):
+    workspace = _WorkspaceStub()
+    collect_calls: List[Dict[str, Any]] = []
+
+    def collect_records(**kwargs: Any) -> List[Dict[str, Any]]:
+        collect_calls.append(kwargs)
+        return []
+
+    workspace.collect_records = collect_records  # type: ignore[method-assign]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+
+    with pytest.raises(HTTPException) as error:
+        await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+                scope="all",
+                record_ids=["VISIT-1"],
+            ),
+            qc_service=_ServiceStub(),  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
+
+    assert error.value.status_code == 422
+    assert "record_refs" in str(error.value.detail)
+    assert collect_calls == []
+    assert workspace.created_job is None
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_freezes_full_visit_filter_scope(monkeypatch):
+    workspace = _WorkspaceStub()
+    collect_calls: List[Dict[str, Any]] = []
+    matched_records = [
+        {
+            "institute_id": "HOSP-001",
+            "patient_id": f"PAT-{index}",
+            "visit_id": f"VISIT-{index}",
+            "scope": "running",
+            "admission_datetime": "2026-05-10 08:00:00",
+            "discharge_datetime": "",
+        }
+        for index in range(1, 4)
+    ]
+
+    def collect_records(**kwargs: Any) -> List[Dict[str, Any]]:
+        collect_calls.append(kwargs)
+        return list(matched_records)
+
+    workspace.collect_records = collect_records  # type: ignore[method-assign]
+    submitted_tasks: List[Dict[str, Any]] = []
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "submit_detached_task",
+        lambda name, func, *args: submitted_tasks.append(
+            {"name": name, "func": func, "args": args}
+        ),
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            scope="running",
+            department="重症医学科",
+            date_field="visit",
+            start_date="2026-05-01",
+            end_date="2026-05-31",
+            keyword="待复核",
+        ),
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert collect_calls == [
+        {
+            "scope": "running",
+            "department": "重症医学科",
+            "doctor": None,
+            "date_field": "visit",
+            "start_date": "2026-05-01",
+            "end_date": "2026-05-31",
+            "keyword": "待复核",
+            "record_ids": None,
+            "record_refs": None,
+        }
+    ]
+    assert workspace.created_job is not None
+    assert workspace.created_job["record_refs"] == [
+        CaseRef.from_mapping(item) for item in matched_records
+    ]
+    assert workspace.created_job["filters"]["date_field"] == "visit"
+    assert workspace.created_job["filters"]["record_refs"] == [
+        CaseRef.from_mapping(item).as_dict() for item in matched_records
+    ]
+    assert len(submitted_tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_rejects_partial_or_duplicate_explicit_record_refs(
+    monkeypatch,
+):
+    requested_refs = [
+        {"institute_id": "HOSP-001", "patient_id": "PAT-1", "visit_id": "VISIT-1"},
+        {"institute_id": "HOSP-001", "patient_id": "PAT-2", "visit_id": "VISIT-2"},
+    ]
+
+    partial_workspace = _WorkspaceStub()
+    partial_workspace.collect_records = lambda **_: [  # type: ignore[method-assign]
+        {**requested_refs[0], "scope": "final"}
+    ]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: partial_workspace)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_args: None)
+
+    with pytest.raises(HTTPException) as partial_error:
+        await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+                scope="all",
+                record_refs=requested_refs,
+            ),
+            qc_service=_ServiceStub(),  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
+    assert partial_error.value.status_code == 422
+    assert partial_workspace.created_job is None
+
+    duplicate_workspace = _WorkspaceStub()
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: duplicate_workspace)
+    with pytest.raises(HTTPException) as duplicate_error:
+        await qc_sichuan.create_workspace_batch_job(
+            request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+            payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+                rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+                scope="all",
+                record_refs=[requested_refs[0], dict(requested_refs[0])],
+            ),
+            qc_service=_ServiceStub(),  # type: ignore[arg-type]
+            current_user={"id": "tester"},
+        )
+    assert duplicate_error.value.status_code == 422
+    assert duplicate_workspace.created_job is None
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_accepts_reordered_complete_explicit_record_refs(
+    monkeypatch,
+):
+    requested_refs = [
+        {"institute_id": "HOSP-001", "patient_id": "PAT-1", "visit_id": "VISIT-1"},
+        {"institute_id": "HOSP-001", "patient_id": "PAT-2", "visit_id": "VISIT-2"},
+    ]
+    workspace = _WorkspaceStub()
+    workspace.collect_records = lambda **_: [  # type: ignore[method-assign]
+        {**record_ref, "scope": "final"} for record_ref in reversed(requested_refs)
+    ]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
+    monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_args: None)
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=SimpleNamespace(state=SimpleNamespace()),  # type: ignore[arg-type]
+        payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+            rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
+            scope="all",
+            record_refs=requested_refs,
+        ),
+        qc_service=_ServiceStub(),  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_without_legacy_mapping(
     monkeypatch,
 ):
@@ -1662,7 +1859,18 @@ async def test_create_workspace_batch_job_accepts_native_luxian_customer_ids_wit
         rule_ids=native_rule_ids,
         scope="all",
         date_field="admission",
-        record_ids=["visit-001", "visit-002"],
+        record_refs=[
+            {
+                "institute_id": "HOSP-001",
+                "patient_id": "PAT-visit-001",
+                "visit_id": "visit-001",
+            },
+            {
+                "institute_id": "HOSP-001",
+                "patient_id": "PAT-visit-002",
+                "visit_id": "visit-002",
+            },
+        ],
     )
 
     response = await qc_sichuan.create_workspace_batch_job(
@@ -1767,7 +1975,18 @@ async def test_create_workspace_batch_job_full_luxian_set_uses_49_customer_ids(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
             scope="all",
             date_field="admission",
-            record_ids=["visit-001", "visit-002"],
+            record_refs=[
+                {
+                    "institute_id": "HOSP-001",
+                    "patient_id": "PAT-visit-001",
+                    "visit_id": "visit-001",
+                },
+                {
+                    "institute_id": "HOSP-001",
+                    "patient_id": "PAT-visit-002",
+                    "visit_id": "visit-002",
+                },
+            ],
         ),
         qc_service=service,  # type: ignore[arg-type]
         current_user={"id": "tester"},
@@ -1818,7 +2037,13 @@ async def test_create_luxian_batch_single_family_off_checks_sc_source(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
             rule_ids=["LX0609-044"],
             scope="all",
-            record_ids=["visit-001"],
+            record_refs=[
+                {
+                    "institute_id": "HOSP-001",
+                    "patient_id": "PAT-visit-001",
+                    "visit_id": "visit-001",
+                }
+            ],
         ),
         qc_service=_CreateGuardService(),  # type: ignore[arg-type]
         current_user={"id": "tester"},

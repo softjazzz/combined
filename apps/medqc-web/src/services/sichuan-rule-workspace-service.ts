@@ -55,7 +55,7 @@ export async function createSichuanWorkspaceBatchJob(payload: {
   scope: 'all' | 'running' | 'final'
   department?: string
   doctor?: string
-  date_field: 'admission' | 'discharge'
+  date_field: 'visit' | 'admission' | 'discharge'
   start_date?: string
   end_date?: string
   keyword?: string

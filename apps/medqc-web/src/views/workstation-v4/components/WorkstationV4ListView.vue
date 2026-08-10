@@ -221,6 +221,9 @@
                     : `质控所选（${selectedWorkbenchKeys.length}）`
                 "
                 :primary-action-loading="batchActionLoading"
+                :show-filter-qc-action="!isStageQueueMode"
+                :filter-qc-count="qcSummary.totalRecords"
+                :filter-qc-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
                 :show-primary-action="true"
                 :show-selection="true"
@@ -230,6 +233,7 @@
                 @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
                 @open-record="emit('open-record', $event)"
                 @batch-extract="emit('batch-extract', $event)"
+                @filter-qc="emit('filter-qc')"
                 @batch-defer="emit('batch-defer', $event)"
                 @batch-assign="emit('batch-assign', $event)"
                 @clear-filters="emit('clear-filters')"
@@ -330,6 +334,7 @@ const emit = defineEmits<{
   selectHospFilter: [value: HospFilterValue]
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
+  'filter-qc': []
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []

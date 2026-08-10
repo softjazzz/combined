@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import BatchTablePanel from '@/views/workstation-v4/components/workbench/BatchTablePanel.vue'
+import type { RecordLatestQcSummary } from '@/views/workstation-v4/types'
 
 const TableStub = defineComponent({
   name: 'ATable',
@@ -32,7 +33,21 @@ const TableStub = defineComponent({
   },
 })
 
-function mountTable(summary: Record<string, unknown>) {
+const PopconfirmStub = defineComponent({
+  name: 'APopconfirm',
+  props: {
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ['confirm'],
+  setup(_props, { slots }) {
+    return () => h('div', { 'data-testid': 'filter-qc-confirm' }, slots.default?.())
+  },
+})
+
+function mountTable(summary: RecordLatestQcSummary) {
   return mount(BatchTablePanel, {
     props: {
       rows: [
@@ -64,12 +79,81 @@ function mountTable(summary: Record<string, unknown>) {
             return () => h('button', attrs, slots.default?.())
           },
         }),
+        APopconfirm: PopconfirmStub,
       },
     },
   })
 }
 
 describe('BatchTablePanel 病历池质控投影', () => {
+  it('shows a secondary full-filter QC action with the server total', () => {
+    const wrapper = mount(BatchTablePanel, {
+      props: {
+        rows: [],
+        selectedRowKeys: [],
+        summaryText: '',
+        showPrimaryAction: true,
+        showFilterQcAction: true,
+        filterQcCount: 19,
+      },
+      global: {
+        stubs: {
+          ATable: TableStub,
+          APopconfirm: PopconfirmStub,
+          AButton: defineComponent({
+            name: 'AButton',
+            setup(_props, { attrs, slots }) {
+              return () => h('button', attrs, slots.default?.())
+            },
+          }),
+        },
+      },
+    })
+
+    const button = wrapper.find('[data-testid="filter-qc-action"]')
+    expect(button.exists()).toBe(true)
+    expect(button.text()).toBe('质控当前筛选（19）')
+    expect(button.attributes('disabled')).toBeUndefined()
+  })
+
+  it.each([
+    { count: 0, loading: false },
+    { count: 19, loading: true },
+  ])(
+    'disables the full-filter QC action for $count records when loading=$loading',
+    ({ count, loading }) => {
+      const wrapper = mount(BatchTablePanel, {
+        props: {
+          rows: [],
+          selectedRowKeys: [],
+          summaryText: '',
+          showFilterQcAction: true,
+          filterQcCount: count,
+          filterQcLoading: loading,
+        },
+        global: {
+          stubs: {
+            ATable: TableStub,
+            APopconfirm: PopconfirmStub,
+            AButton: defineComponent({
+              name: 'AButton',
+              setup(_props, { attrs, slots }) {
+                return () => h('button', attrs, slots.default?.())
+              },
+            }),
+          },
+        },
+      })
+
+      expect(wrapper.find('[data-testid="filter-qc-action"]').attributes('disabled')).toBeDefined()
+    },
+  )
+
+  it('hides the full-filter QC action when it is not enabled', () => {
+    const wrapper = mountTable({ status: 'not_run' })
+    expect(wrapper.find('[data-testid="filter-qc-action"]').exists()).toBe(false)
+  })
+
   it('shows the formal QC action and prevents repeat submission while it is loading', async () => {
     const wrapper = mount(BatchTablePanel, {
       props: {
@@ -90,6 +174,7 @@ describe('BatchTablePanel 病历池质控投影', () => {
               return () => h('button', attrs, slots.default?.())
             },
           }),
+          APopconfirm: PopconfirmStub,
         },
       },
     })
@@ -142,6 +227,7 @@ describe('BatchTablePanel 病历池质控投影', () => {
               return () => h('button', attrs, slots.default?.())
             },
           }),
+          APopconfirm: PopconfirmStub,
         },
       },
     })

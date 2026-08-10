@@ -686,7 +686,7 @@ def _normalize_scope(scope: Optional[str]) -> str:
 
 def _normalize_date_field(date_field: Optional[str]) -> str:
     value = str(date_field or "").strip().lower()
-    if value not in {"admission", "discharge"}:
+    if value not in {"visit", "admission", "discharge"}:
         return "admission"
     return value
 
@@ -4403,6 +4403,11 @@ async def create_workspace_batch_job(
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
+    if is_direct_native_selection and payload.record_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="LX0609质控任务不接受 record_ids，请改用 record_refs",
+        )
     if is_direct_native_selection:
         effective_settings = resolve_mainline_rule_decision_settings(get_settings())
         try:
@@ -4437,6 +4442,8 @@ async def create_workspace_batch_job(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if payload.record_refs and len(requested_record_refs) != len(payload.record_refs):
+        raise HTTPException(status_code=422, detail="record_refs 不可重复")
     records = workspace.collect_records(
         scope=normalized_scope,
         department=payload.department,
@@ -4455,6 +4462,8 @@ async def create_workspace_batch_job(
         effective_record_refs = case_refs_from_records(records)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="病历缺少完整三坐标，无法创建质控任务") from exc
+    if requested_record_refs and set(effective_record_refs) != set(requested_record_refs):
+        raise HTTPException(status_code=422, detail="所选病历与服务端匹配结果不一致，请刷新后重试")
     if payload.record_ids and not requested_record_refs:
         refs_by_visit: Dict[str, set[CaseRef]] = {}
         for ref in effective_record_refs:
@@ -4565,6 +4574,7 @@ async def create_workspace_batch_job(
             "start_date": payload.start_date,
             "end_date": payload.end_date,
             "keyword": payload.keyword,
+            "record_refs": effective_record_ref_payload,
             "query_scope": normalized_scope,
             "rule_ids": rule_ids,
             "rule_set_key": rule_set_key,

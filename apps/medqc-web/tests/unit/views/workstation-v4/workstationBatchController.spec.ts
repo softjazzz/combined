@@ -34,7 +34,11 @@ vi.mock('@/views/workstation-v4/workstationActions', () => ({
   createBatchSummaryNotification: mocks.createBatchSummaryNotification,
 }))
 
-import { runBatchExtract, runRecordPoolQc } from '@/views/workstation-v4/workstationBatchController'
+import {
+  runBatchExtract,
+  runRecordPoolFilterQc,
+  runRecordPoolQc,
+} from '@/views/workstation-v4/workstationBatchController'
 import type { PatientRecord } from '@/views/workstation-v4/types'
 
 function record(
@@ -327,5 +331,121 @@ describe('runRecordPoolQc', () => {
     expect(mocks.createSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
     expect(params.setBatchExtracting).not.toHaveBeenCalled()
     expect(params.setSelectedWorkbenchKeys).not.toHaveBeenCalled()
+  })
+})
+
+describe('runRecordPoolFilterQc', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-filter-1', status: 'queued', idempotency_reused: false },
+    })
+  })
+
+  function createFilterParams(overrides: Record<string, unknown> = {}) {
+    return {
+      total: 75,
+      hospitalStatus: 'all',
+      department: '重症医学科',
+      keyword: '待复核',
+      dateField: 'visit',
+      dateRange: ['2026-05-01', '2026-05-31'] as [string, string],
+      getBatchExtracting: () => false,
+      setBatchExtracting: vi.fn(),
+      ...overrides,
+    }
+  }
+
+  it.each([
+    ['all', 'all'],
+    ['inpatient', 'running'],
+    ['discharged', 'final'],
+  ])('maps hospital status %s to the exact server-side scope %s', async (hospitalStatus, scope) => {
+    const params = createFilterParams({ hospitalStatus })
+
+    await runRecordPoolFilterQc(params)
+
+    expect(mocks.createSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
+      rule_set_key: 'luxian_0609_qc_v1',
+      scope,
+      department: '重症医学科',
+      keyword: '待复核',
+      date_field: 'visit',
+      start_date: '2026-05-01',
+      end_date: '2026-05-31',
+    })
+    const payload = mocks.createSichuanWorkspaceBatchJob.mock.calls[0]?.[0]
+    expect(payload).not.toHaveProperty('record_ids')
+    expect(payload).not.toHaveProperty('record_refs')
+    expect(params.setBatchExtracting).toHaveBeenNthCalledWith(1, true)
+    expect(params.setBatchExtracting).toHaveBeenLastCalledWith(false)
+  })
+
+  it('omits the all-departments sentinel and reports an idempotently reused task', async () => {
+    const params = createFilterParams({ department: '全部科室', dateRange: null })
+    mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-filter-1', status: 'running', idempotency_reused: true },
+    })
+
+    await runRecordPoolFilterQc(params)
+
+    expect(mocks.createSichuanWorkspaceBatchJob).toHaveBeenCalledWith({
+      rule_set_key: 'luxian_0609_qc_v1',
+      scope: 'all',
+      keyword: '待复核',
+      date_field: 'visit',
+    })
+    expect(mocks.messageInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('继续执行质控') }),
+    )
+  })
+
+  it('uses only the frozen server total in success copy and stays neutral when it is absent', async () => {
+    const params = createFilterParams({ total: 75 })
+    mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-filter-1', status: 'queued', total_records: 73 },
+    })
+
+    await runRecordPoolFilterQc(params)
+
+    expect(mocks.messageSuccess).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: '已按当前筛选创建 73 份病历的质控任务，正在执行质控',
+      }),
+    )
+
+    mocks.messageSuccess.mockClear()
+    mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: { id: 'job-filter-2', status: 'queued' },
+    })
+    await runRecordPoolFilterQc(params)
+
+    expect(mocks.messageSuccess).toHaveBeenLastCalledWith(
+      expect.objectContaining({ content: '质控任务已创建，正在执行质控' }),
+    )
+  })
+
+  it('does not call the API for an empty range and safely surfaces service failures', async () => {
+    const emptyParams = createFilterParams({ total: 0 })
+    await runRecordPoolFilterQc(emptyParams)
+    expect(mocks.createSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
+    expect(emptyParams.setBatchExtracting).not.toHaveBeenCalled()
+
+    mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: false,
+      message: '当前筛选范围暂不可质控',
+    })
+    const failedParams = createFilterParams()
+    await runRecordPoolFilterQc(failedParams)
+
+    expect(mocks.messageError).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '当前筛选范围暂不可质控' }),
+    )
+    expect(failedParams.setBatchExtracting).toHaveBeenNthCalledWith(1, true)
+    expect(failedParams.setBatchExtracting).toHaveBeenLastCalledWith(false)
   })
 })

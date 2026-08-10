@@ -41,6 +41,7 @@
         @select-hosp-filter="selectHospFilter"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
+        @filter-qc="handleFilterQc"
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
@@ -347,7 +348,11 @@ import FrontpageWorkspace from './components/FrontpageWorkspace.vue'
 import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
 import SettlementWorkspace from './components/SettlementWorkspace.vue'
 import { useWorkstationRouteEffects } from './workstationRouteEffects'
-import { runBatchExtract, runRecordPoolQc } from './workstationBatchController'
+import {
+  runBatchExtract,
+  runRecordPoolFilterQc,
+  runRecordPoolQc,
+} from './workstationBatchController'
 import {
   createDetailNavigation,
   findRecordById,
@@ -2150,6 +2155,21 @@ async function handleBatchExtract(keys: string[]) {
       await Promise.resolve(refreshData())
     },
     refreshSelectedSnapshots,
+  })
+}
+
+async function handleFilterQc() {
+  await runRecordPoolFilterQc({
+    total: qcSummary.value.totalRecords,
+    hospitalStatus: hospFilter.value,
+    department: activeDept.value,
+    keyword: searchText.value,
+    dateField: dateField.value,
+    dateRange: dateRange.value,
+    getBatchExtracting: () => batchExtracting.value,
+    setBatchExtracting: (value) => {
+      batchExtracting.value = value
+    },
   })
 }
 

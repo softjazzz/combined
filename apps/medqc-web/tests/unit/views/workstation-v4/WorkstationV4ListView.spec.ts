@@ -77,7 +77,20 @@ const BatchTablePanelStub = defineComponent({
       type: Boolean,
       default: false,
     },
+    showFilterQcAction: {
+      type: Boolean,
+      default: false,
+    },
+    filterQcCount: {
+      type: Number,
+      default: 0,
+    },
+    filterQcLoading: {
+      type: Boolean,
+      default: false,
+    },
   },
+  emits: ['filter-qc'],
   setup(_props, { attrs, slots }) {
     return () => h('div', attrs, slots.default?.())
   },
@@ -227,6 +240,19 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('showPrimaryAction')).toBe(true)
     expect(table.props('primaryActionLabel')).toBe('质控所选（2）')
     expect(table.props('primaryActionLoading')).toBe(true)
+    expect(table.props('showFilterQcAction')).toBe(true)
+    expect(table.props('filterQcCount')).toBe(19)
+    expect(table.props('filterQcLoading')).toBe(true)
+  })
+
+  it('forwards the full server-filter QC action from the record pool', async () => {
+    const wrapper = mountListView()
+    const table = wrapper.findComponent({ name: 'BatchTablePanel' })
+
+    table.vm.$emit('filter-qc')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('filter-qc')).toHaveLength(1)
   })
 
   it('keeps the stage queue batch action wording and selection behavior unchanged', () => {
@@ -245,6 +271,7 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('showSelection')).toBe(true)
     expect(table.props('showPrimaryAction')).toBe(true)
     expect(table.props('primaryActionLabel')).toBe('批量生成')
+    expect(table.props('showFilterQcAction')).toBe(false)
   })
 
   it('renders a customer-facing query failure state', () => {

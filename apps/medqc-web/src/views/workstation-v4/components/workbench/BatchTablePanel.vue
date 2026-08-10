@@ -34,6 +34,24 @@
           >
             {{ primaryActionLabel }}
           </a-button>
+          <a-popconfirm
+            v-if="showFilterQcAction"
+            :title="`将按当前全部筛选条件质控 ${filterQcCount} 份病历，是否继续？`"
+            ok-text="开始质控"
+            cancel-text="取消"
+            :disabled="filterQcDisabled"
+            @confirm="emit('filter-qc')"
+          >
+            <a-button
+              size="small"
+              class="batch-table-panel__action batch-table-panel__action--secondary"
+              data-testid="filter-qc-action"
+              :loading="filterQcLoading"
+              :disabled="filterQcDisabled"
+            >
+              质控当前筛选（{{ filterQcCount }}）
+            </a-button>
+          </a-popconfirm>
           <a-button
             v-if="showDeferAction"
             size="small"
@@ -200,9 +218,12 @@ const props = defineProps<{
   title?: string
   primaryActionLabel?: string
   primaryActionLoading?: boolean
+  filterQcCount?: number
+  filterQcLoading?: boolean
   rowActionLabel?: string
   showSelection?: boolean
   showPrimaryAction?: boolean
+  showFilterQcAction?: boolean
   showDeferAction?: boolean
   showAssignAction?: boolean
   showClearFiltersAction?: boolean
@@ -213,6 +234,7 @@ const emit = defineEmits<{
   'update:selectedRowKeys': [keys: string[]]
   'open-record': [id: string]
   'batch-extract': [keys: string[]]
+  'filter-qc': []
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
@@ -236,8 +258,14 @@ const rowSelection = computed(() => {
 const title = computed(() => props.title || '病历池列表')
 const primaryActionLabel = computed(() => props.primaryActionLabel || '批量处理')
 const primaryActionLoading = computed(() => props.primaryActionLoading === true)
+const filterQcCount = computed(() => Math.max(0, Math.trunc(Number(props.filterQcCount || 0))))
+const filterQcLoading = computed(() => props.filterQcLoading === true)
+const filterQcDisabled = computed(
+  () => filterQcCount.value === 0 || props.readonly === true || filterQcLoading.value,
+)
 const rowActionLabel = computed(() => props.rowActionLabel || '查看详情')
 const showPrimaryAction = computed(() => props.showPrimaryAction !== false)
+const showFilterQcAction = computed(() => props.showFilterQcAction === true)
 const showDeferAction = computed(() => props.showDeferAction === true)
 const showAssignAction = computed(() => props.showAssignAction === true)
 const showClearFiltersAction = computed(() => props.showClearFiltersAction === true)
@@ -245,6 +273,7 @@ const showQualityColumns = computed(() => props.showQualityColumns === true)
 const showBatchActions = computed(
   () =>
     showPrimaryAction.value ||
+    showFilterQcAction.value ||
     showDeferAction.value ||
     showAssignAction.value ||
     showClearFiltersAction.value,

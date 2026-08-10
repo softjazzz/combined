@@ -51,6 +51,17 @@ interface RunRecordPoolQcParams {
   setSelectedWorkbenchKeys: (keys: string[]) => void
 }
 
+interface RunRecordPoolFilterQcParams {
+  total: number
+  hospitalStatus: string
+  department: string
+  keyword: string
+  dateField: string
+  dateRange: [string, string] | null
+  getBatchExtracting: () => boolean
+  setBatchExtracting: (value: boolean) => void
+}
+
 const RECORD_POOL_QC_MESSAGE_KEY = 'workstation-v4-record-pool-qc'
 
 function recordPoolQcError(
@@ -163,6 +174,96 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       selectedRecordKeys,
       setSelectedWorkbenchKeys,
     )
+  } finally {
+    setBatchExtracting(false)
+  }
+}
+
+function recordPoolScopeFromHospitalStatus(status: string): 'all' | 'running' | 'final' {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'inpatient') return 'running'
+  if (normalized === 'discharged') return 'final'
+  return 'all'
+}
+
+function recordPoolDateField(value: string): 'visit' | 'admission' | 'discharge' | null {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'visit' || normalized === 'admission' || normalized === 'discharge') {
+    return normalized
+  }
+  return null
+}
+
+export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams): Promise<void> {
+  const { getBatchExtracting, setBatchExtracting } = params
+  const total = Math.max(0, Math.trunc(Number(params.total) || 0))
+  if (!total || getBatchExtracting()) return
+  const dateField = recordPoolDateField(params.dateField)
+  if (!dateField) {
+    message.error({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: '当前日期筛选口径暂不支持批量质控，请调整后重试。',
+    })
+    return
+  }
+
+  const department = String(params.department || '').trim()
+  const keyword = String(params.keyword || '').trim()
+  const startDate = String(params.dateRange?.[0] || '').trim()
+  const endDate = String(params.dateRange?.[1] || '').trim()
+  const payload = {
+    rule_set_key: 'luxian_0609_qc_v1',
+    scope: recordPoolScopeFromHospitalStatus(params.hospitalStatus),
+    ...(department && department !== '全部科室' ? { department } : {}),
+    ...(keyword ? { keyword } : {}),
+    date_field: dateField,
+    ...(startDate ? { start_date: startDate } : {}),
+    ...(endDate ? { end_date: endDate } : {}),
+  }
+
+  setBatchExtracting(true)
+  message.loading({
+    key: RECORD_POOL_QC_MESSAGE_KEY,
+    content: `正在按当前筛选创建 ${total} 份病历的质控任务…`,
+    duration: 0,
+  })
+  try {
+    const response = await createSichuanWorkspaceBatchJob(payload)
+    if (!response.success || !response.data) {
+      message.error({
+        key: RECORD_POOL_QC_MESSAGE_KEY,
+        content: response.message || '当前筛选范围的质控任务创建失败，请稍后重试。',
+      })
+      return
+    }
+    if (response.data.idempotency_reused) {
+      message.info({
+        key: RECORD_POOL_QC_MESSAGE_KEY,
+        content: '相同筛选范围的质控任务已存在，正在继续执行质控',
+      })
+      return
+    }
+    const frozenTotal = response.data.total_records
+    const successContent =
+      typeof frozenTotal === 'number' && Number.isFinite(frozenTotal) && frozenTotal >= 0
+        ? `已按当前筛选创建 ${Math.trunc(frozenTotal)} 份病历的质控任务，正在执行质控`
+        : '质控任务已创建，正在执行质控'
+    message.success({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: successContent,
+    })
+  } catch (error) {
+    message.error({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: extractApiErrorMessageFromError(
+        error,
+        '当前筛选范围的质控任务创建失败，请稍后重试。',
+      ),
+    })
   } finally {
     setBatchExtracting(false)
   }

@@ -3,6 +3,8 @@ from datetime import datetime
 
 import app.services.custom_qc_workspace_service as workspace_module
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 def test_serialize_record_row_should_include_programmatic_execution_keys():
@@ -282,6 +284,57 @@ def test_count_records_should_count_distinct_full_case_coordinates(monkeypatch):
         keyword=None,
     ) == 2
     assert selected_columns == ["institute_id", "patient_id", "visit_id"]
+
+
+def test_collect_records_visit_date_matches_admission_or_discharge_date() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    for model in (
+        workspace_module.MedicalRecordFrontpage,
+        workspace_module.AdmissionRecord,
+        workspace_module.DischargeRecord,
+    ):
+        model.__table__.create(bind=engine)
+
+    with Session(engine) as session:
+        session.add_all(
+            [
+                workspace_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P1",
+                    visit_id="ADMISSION-HIT",
+                    admission_datetime=datetime(2026, 5, 10, 8, 0),
+                    discharge_datetime=datetime(2026, 6, 2, 10, 0),
+                ),
+                workspace_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P2",
+                    visit_id="DISCHARGE-HIT",
+                    admission_datetime=datetime(2026, 4, 10, 8, 0),
+                    discharge_datetime=datetime(2026, 5, 20, 10, 0),
+                ),
+                workspace_module.MedicalRecordFrontpage(
+                    institute_id="H1",
+                    patient_id="P3",
+                    visit_id="OUTSIDE",
+                    admission_datetime=datetime(2026, 4, 1, 8, 0),
+                    discharge_datetime=datetime(2026, 6, 1, 10, 0),
+                ),
+            ]
+        )
+        session.commit()
+
+        rows = CustomQCWorkspaceService()._build_records_query(
+            session,
+            scope="all",
+            department=None,
+            doctor=None,
+            date_field="visit",
+            start_date="2026-05-01",
+            end_date="2026-05-31",
+            keyword=None,
+        ).all()
+
+    assert {row[0].visit_id for row in rows} == {"ADMISSION-HIT", "DISCHARGE-HIT"}
 
 
 def test_refresh_parent_batch_job_persists_completed_status_after_children_finish(monkeypatch):

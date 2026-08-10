@@ -1305,9 +1305,70 @@ def _normalize_scope(scope: Optional[str]) -> str:
 
 def _normalize_date_field(date_field: Optional[str]) -> str:
     normalized = _safe_text(date_field, "admission").lower()
-    if normalized not in {"admission", "discharge"}:
+    if normalized not in {"visit", "admission", "discharge"}:
         return "admission"
     return normalized
+
+
+def _date_range_condition(column: Any, start: Optional[date], end: Optional[date]):
+    conditions = []
+    date_column = func.date(column)
+    if start:
+        conditions.append(date_column >= start)
+    if end:
+        conditions.append(date_column <= end)
+    return and_(*conditions) if conditions else None
+
+
+def _record_date_range_condition(
+    *,
+    date_field: str,
+    admission_column: Any,
+    discharge_column: Any,
+    start: Optional[date],
+    end: Optional[date],
+):
+    if not start and not end:
+        return None
+    if date_field == "visit":
+        return or_(
+            _date_range_condition(admission_column, start, end),
+            _date_range_condition(discharge_column, start, end),
+        )
+    return _date_range_condition(
+        admission_column if date_field == "admission" else discharge_column,
+        start,
+        end,
+    )
+
+
+def _record_dates_match_range(
+    *,
+    date_field: str,
+    admission_datetime: Any,
+    discharge_datetime: Any,
+    start: Optional[date],
+    end: Optional[date],
+) -> bool:
+    if not start and not end:
+        return True
+    candidates = (
+        (admission_datetime, discharge_datetime)
+        if date_field == "visit"
+        else (admission_datetime,)
+        if date_field == "admission"
+        else (discharge_datetime,)
+    )
+    for value in candidates:
+        candidate = _as_date(_to_iso_date(value))
+        if candidate is None:
+            continue
+        if start and candidate < start:
+            continue
+        if end and candidate > end:
+            continue
+        return True
+    return False
 
 
 def _normalize_execution_mode(execution_mode: Optional[str]) -> str:
@@ -1762,7 +1823,10 @@ def _build_filter_text(filters: Dict[str, Any]) -> str:
     if keyword:
         parts.append(f"关键字：{keyword}")
     if start_date or end_date:
-        date_field_zh = "出院日期" if date_field == "discharge" else "入院日期"
+        date_field_zh = {
+            "visit": "入出院日期",
+            "discharge": "出院日期",
+        }.get(date_field, "入院日期")
         parts.append(f"{date_field_zh}：{start_date or '-'} ~ {end_date or '-'}")
     if not parts:
         return "未设置筛选条件"
@@ -2564,15 +2628,15 @@ class CustomQCWorkspaceService:
             if normalized_ids:
                 query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
 
-        date_col = (
-            admission_dt_expr
-            if date_field_value == "admission"
-            else discharge_dt_expr
+        date_condition = _record_date_range_condition(
+            date_field=date_field_value,
+            admission_column=admission_dt_expr,
+            discharge_column=discharge_dt_expr,
+            start=start,
+            end=end,
         )
-        if start:
-            query = query.filter(func.date(date_col) >= start)
-        if end:
-            query = query.filter(func.date(date_col) <= end)
+        if date_condition is not None:
+            query = query.filter(date_condition)
         return query
 
     def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
@@ -2709,15 +2773,13 @@ class CustomQCWorkspaceService:
                     continue
 
             admission_datetime = getattr(source, "admission_datetime", None)
-            effective_date = (
-                admission_datetime
-                if date_field_value == "admission"
-                else discharge_datetime
-            )
-            effective_date_value = _as_date(_to_iso_date(effective_date))
-            if start and (effective_date_value is None or effective_date_value < start):
-                continue
-            if end and (effective_date_value is None or effective_date_value > end):
+            if not _record_dates_match_range(
+                date_field=date_field_value,
+                admission_datetime=admission_datetime,
+                discharge_datetime=discharge_datetime,
+                start=start,
+                end=end,
+            ):
                 continue
 
             medical_text = _safe_text(getattr(source, "record_content", None))
@@ -2837,11 +2899,13 @@ class CustomQCWorkspaceService:
                 ):
                     continue
             admission_datetime = getattr(source, "admission_datetime", None)
-            effective_date = admission_datetime if date_field_value == "admission" else discharge_datetime
-            effective_date_value = _as_date(_to_iso_date(effective_date))
-            if start and (effective_date_value is None or effective_date_value < start):
-                continue
-            if end and (effective_date_value is None or effective_date_value > end):
+            if not _record_dates_match_range(
+                date_field=date_field_value,
+                admission_datetime=admission_datetime,
+                discharge_datetime=discharge_datetime,
+                start=start,
+                end=end,
+            ):
                 continue
             medical_text = _safe_text(getattr(source, "record_content", None))
             records.append(
@@ -3140,15 +3204,15 @@ class CustomQCWorkspaceService:
             if normalized_ids:
                 query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
 
-        date_col = (
-            admission_dt_expr
-            if date_field_value == "admission"
-            else discharge_dt_expr
+        date_condition = _record_date_range_condition(
+            date_field=date_field_value,
+            admission_column=admission_dt_expr,
+            discharge_column=discharge_dt_expr,
+            start=start,
+            end=end,
         )
-        if start:
-            query = query.filter(func.date(date_col) >= start)
-        if end:
-            query = query.filter(func.date(date_col) <= end)
+        if date_condition is not None:
+            query = query.filter(date_condition)
         return query
 
     def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
