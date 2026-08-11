@@ -339,6 +339,7 @@ async def test_legacy_adapters_cover_registered_keys_and_preserve_call_order():
     assert calls[0][1]["evidence_snapshot"] is snapshot
     assert calls[0][1]["evidence_materials"] is materials
     assert calls[1][1]["evidence_materials"] is materials
+    assert calls[1][1]["llm_client"] is resources.llm_client
     assert calls[2][1]["wrapper_rules"] == [{"rule_id": "LX0609-010"}]
     assert calls[3][1]["evidence_materials"] is materials
     assert calls[4][1]["evidence_materials"] is materials

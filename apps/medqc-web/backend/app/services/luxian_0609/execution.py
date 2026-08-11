@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -531,7 +532,10 @@ async def prepare_luxian_0609_execution(
             patient_id=str(patient_id or ""),
             visit_id=str(visit_id or ""),
             source_schema=source_schema,
+            llm_client=llm_client,
         )
+        if inspect.isawaitable(basic_execution):
+            basic_execution = await basic_execution
         native_results.extend(basic_execution.results)
         native_customer_display_facts.extend(
             getattr(basic_execution, "customer_display_facts", ())

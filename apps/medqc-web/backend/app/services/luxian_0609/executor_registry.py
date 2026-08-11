@@ -376,6 +376,7 @@ def build_luxian_0609_legacy_executor_registry(
                 patient_id=resources.patient_id,
                 visit_id=resources.visit_id,
                 source_schema=resources.source_schema,
+                llm_client=resources.llm_client,
                 evidence_materials=resources.evidence_materials,
                 evidence_snapshot=resources.evidence_snapshot,
                 decision_rule_ids=tuple(

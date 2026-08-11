@@ -246,13 +246,21 @@ def classify_course_round_role(row: Mapping[str, Any]) -> CourseRoundRole:
         return CourseRoundRole.SENIOR
     if any(marker in role_text for marker in _ATTENDING_MARKERS):
         return CourseRoundRole.ATTENDING_OR_ABOVE
-    if any(
-        title in _ATTENDING_OR_ABOVE_DOCUMENT_TITLES for title in document_titles
-    ):
+    if is_generic_upper_physician_round(row):
         return CourseRoundRole.ATTENDING_OR_ABOVE
     if "查房" in role_text:
         return CourseRoundRole.AMBIGUOUS
     return CourseRoundRole.NONE
+
+
+def is_generic_upper_physician_round(row: Mapping[str, Any]) -> bool:
+    """识别仅声明“上级医师”、但未声明具体职称的标准查房文书类型。"""
+
+    return any(
+        re.sub(r"\s+", "", str(row.get(field) or "").strip())
+        in _ATTENDING_OR_ABOVE_DOCUMENT_TITLES
+        for field in ("document_title", "title")
+    )
 
 
 def associate_timeliness_event(
@@ -288,6 +296,7 @@ __all__ = [
     "TimelinessAssociation",
     "associate_timeliness_event",
     "classify_course_round_role",
+    "is_generic_upper_physician_round",
     "extract_admission_anchor",
     "extract_document_events",
     "extract_rescue_events",
