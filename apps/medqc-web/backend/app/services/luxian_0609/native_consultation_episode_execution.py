@@ -54,9 +54,16 @@ _SOURCE_KEY = "consultation_record"
 _SOURCE_LIMIT = 48
 _MAX_DOCUMENT_CHARS = 1600
 _MAX_PROMPT_CHARS = 48000
+# 真实 29 个独立会诊事件、62 条建议和 67 份病程候选的共享投影为
+# 52,485 字符。第二阶段不重复候选正文后使用独立 64k 防御上限，避免
+# 把常见完整长住院资料误报为候选范围不完整。
+_MAX_EXECUTION_PROMPT_CHARS = 64000
 _MAX_EPISODES = 12
 _MAX_EPISODE_OPINION_CHARS = 1200
-_MAX_RECOMMENDATIONS = 24
+# 单份意见保留防御上限；整份长住院病例可包含多次独立会诊，不能把
+# “单文书建议数”和“全病历建议数”混成一个阈值而误报关联缺失。
+_MAX_RECOMMENDATIONS_PER_EPISODE = 12
+_MAX_TOTAL_RECOMMENDATIONS = 96
 _MAX_RECOMMENDATION_CHARS = 240
 # 病程是 4.20.4 的主执行证据。完整 Snapshot 中真实病程常超过 12 份，
 # 单份上级查房记录也常超过 1000 字；不能因为展示/提示词投影上限把整类
@@ -615,11 +622,22 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
             if value
             for token in (f"{prefix}:{value}",)
         )
+        document_id = _clean(row.get("document_id"))
+        event_identity_mode = "business" if business_tokens else "semantic"
+        if not business_tokens and document_id:
+            # 客户真实 CDM 没有 application_id/consultation_id；但
+            # consultation_record 的一行就是一份有稳定 document_id 的会诊
+            # 文书。此时用文书身份限定事件边界，禁止模型把两份独立会诊
+            # 文书合并。这里只在 Python 内使用原始 ID，提示词只看到请求内
+            # 的匿名 event_group_ref，绝不伪造 application_id。
+            business_tokens = frozenset((f"document:{document_id}",))
+            event_identity_mode = "document"
         projected.append(({
             "ref": f"{_SOURCE_KEY}-{index}",
-            "document_id": _clean(row.get("document_id")),
+            "document_id": document_id,
             "time": _clean(row.get("record_time")),
             "text": text,
+            "event_identity_mode": event_identity_mode,
         }, business_tokens))
 
     # consultation_id/application_id 是同一事件的别名。先在 Python 内做并查集，
@@ -984,8 +1002,60 @@ def _strong_explicit_consultation_statuses(
     return statuses
 
 
+def _uses_compact_document_contract(
+    documents: Sequence[Mapping[str, str]],
+) -> bool:
+    event_groups = tuple(
+        _clean(document.get("event_group_ref")) for document in documents
+    )
+    return bool(documents) and all(
+        _clean(document.get("event_identity_mode")) == "document"
+        for document in documents
+    ) and all(event_groups) and len(set(event_groups)) == len(event_groups)
+
+
+def _compact_document_prompt(
+    prompt_documents: Sequence[Mapping[str, str]],
+) -> str:
+    payload = json.dumps(
+        {"consultation_documents": list(prompt_documents)}, ensure_ascii=False
+    )
+    if len(payload) > _MAX_PROMPT_CHARS:
+        raise _SourceGap()
+    return (
+        "你逐份识别本次住院的普通专科会诊文书，并从明确会诊意见中抽取建议清单；不做质控结论。"
+        "每个ref已经由CDM稳定文书身份隔离为独立事件，禁止跨ref合并，也禁止拆分同一ref。"
+        "scope只能是ordinary/non_target/unknown：普通专科会诊为ordinary；术前多学科讨论、术前风险评估、"
+        "麻醉评估、MDT讨论、普通病程、计划会诊、既往会诊提及和空模板为non_target；材料确实无法辨认才为unknown。"
+        "application_state和opinion_state只能是clear/vague/missing/absent/unknown；"
+        "clear为有明确目的或具体意见，vague为只有泛化措辞，missing为角色存在但内容空缺，"
+        "absent为该角色不存在，unknown为材料无法可靠判断。confidence只能为high/medium/low。"
+        "明确写出会诊原因、临床问题、请求专科建议或具体诊疗意见，即使只有一句，也属于clear；"
+        "只有纯请会诊、协助诊治、遵会诊意见而没有具体内容时才为vague。"
+        "recommendations仅用于ordinary且意见clear、confidence=high的可执行建议；不得把诊断、风险描述、"
+        "既往史或泛化继续治疗当建议。建议身份由Python按数组顺序生成，禁止输出recommendation_ref；action_type只能是"
+        "medication/test/procedure/transfer/monitoring/other；source_quote优先返回该文书的连续支持原句，最长240字；"
+        "normalized_action只做医学归一化，不得虚构。non_target/unknown的recommendations必须为空。"
+        "每个输入ref必须恰好输出一次，禁止创造、改写、遗漏或重复ref。"
+        "严格输出JSON对象：{consultation_event_facts:[{ref,scope,application_state,opinion_state,confidence,"
+        "recommendations:[{source_quote,normalized_action,action_type}]}]}。输入："
+        + payload
+    )
+
+
 def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
-    payload = json.dumps({"consultation_documents": list(documents)}, ensure_ascii=False)
+    prompt_documents = [
+        {
+            "ref": _clean(document.get("ref")),
+            "time": _clean(document.get("time")),
+            "text": _clean(document.get("text")),
+            "event_group_ref": _clean(document.get("event_group_ref")),
+        }
+        for document in documents
+    ]
+    if _uses_compact_document_contract(documents):
+        return _compact_document_prompt(prompt_documents)
+    payload = json.dumps({"consultation_documents": prompt_documents}, ensure_ascii=False)
     if len(payload) > _MAX_PROMPT_CHARS:
         raise _SourceGap()
     return (
@@ -1011,7 +1081,7 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "且两个state都必须为clear；无法区分角色时返回unknown，不得猜测。"
         "missing只用于角色明确存在但内容空或模板，vague只用于角色存在但内容泛化。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
-        "event_group_ref非空表示CDM业务键已确认属于同一次会诊：同一event_group_ref的全部文书必须进入同一个归属，"
+        "event_group_ref非空表示Python已用CDM业务键或稳定文书身份确认事件边界：同一event_group_ref的全部文书必须进入同一个归属，"
         "不同event_group_ref的文书绝不能合并为同一个episode。event_group_ref为空时才允许按语义谨慎聚类。"
         "同一输入ref不得被拆入多个episode。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
@@ -1030,7 +1100,107 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
     )
 
 
+def _parse_compact_document_facts(
+    payload: Mapping[str, Any],
+    documents: Sequence[Mapping[str, str]],
+) -> tuple[_Episode, ...]:
+    raw_facts = payload.get("consultation_event_facts")
+    if not isinstance(raw_facts, list):
+        raise _SemanticInvalid()
+    expected_refs = tuple(str(item["ref"]) for item in documents)
+    expected = set(expected_refs)
+    documents_by_ref = {str(item["ref"]): item for item in documents}
+    if len(raw_facts) != len(expected_refs):
+        raise _SemanticInvalid()
+    seen: set[str] = set()
+    episodes: list[_Episode] = []
+    for raw in raw_facts:
+        if not isinstance(raw, Mapping):
+            raise _SemanticInvalid()
+        ref = _clean(raw.get("ref"))
+        scope = _clean(raw.get("scope")).lower()
+        application = _clean(raw.get("application_state")).lower()
+        opinion = _clean(raw.get("opinion_state")).lower()
+        confidence = _clean(raw.get("confidence")).lower()
+        raw_recommendations = raw.get("recommendations")
+        if (
+            ref not in expected
+            or ref in seen
+            or scope not in {"ordinary", "non_target", "unknown"}
+            or application not in _STATES
+            or opinion not in _STATES
+            or confidence not in _CONFIDENCE
+            or not isinstance(raw_recommendations, list)
+            or len(raw_recommendations) > _MAX_RECOMMENDATIONS_PER_EPISODE
+            or (scope != "ordinary" and raw_recommendations)
+        ):
+            raise _SemanticInvalid()
+        seen.add(ref)
+        if scope == "non_target":
+            continue
+        recommendations: list[_Recommendation] = []
+        document_text = _clean(documents_by_ref[ref].get("text"))
+        for number, raw_recommendation in enumerate(raw_recommendations, 1):
+            if not isinstance(raw_recommendation, Mapping):
+                raise _SemanticInvalid()
+            recommendation_ref = f"{ref}#r{number}"
+            action_type = _clean(raw_recommendation.get("action_type")).lower()
+            source_quote = raw_recommendation.get("source_quote")
+            normalized_action = raw_recommendation.get("normalized_action")
+            if (
+                action_type not in _RECOMMENDATION_TYPES
+                or not isinstance(normalized_action, str)
+                or not normalized_action.strip()
+                or len(normalized_action) > _MAX_RECOMMENDATION_CHARS
+            ):
+                raise _SemanticInvalid()
+            grounded_source_quote = ""
+            if (
+                isinstance(source_quote, str)
+                and source_quote.strip()
+                and len(source_quote) <= _MAX_RECOMMENDATION_CHARS
+                and _quote_is_grounded(
+                    quote=source_quote,
+                    source=document_text,
+                )
+            ):
+                grounded_source_quote = source_quote
+            recommendations.append(
+                _Recommendation(
+                    recommendation_ref,
+                    action_type,
+                    grounded_source_quote,
+                    normalized_action,
+                    ref,
+                )
+            )
+        if recommendations and (opinion != "clear" or confidence != "high"):
+            raise _SemanticInvalid()
+        if application in {"vague", "missing", "unknown"} and _has_specific_application_purpose(
+            application_refs=(ref,),
+            documents_by_ref=documents_by_ref,
+        ):
+            application = "clear"
+        episodes.append(
+            _Episode(
+                ref,
+                (ref,),
+                () if application == "absent" else (ref,),
+                () if opinion == "absent" else (ref,),
+                application,
+                opinion,
+                confidence,
+                tuple(recommendations),
+            )
+        )
+    if seen != expected:
+        raise _SemanticInvalid()
+    return tuple(episodes)
+
+
 def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -> tuple[_Episode, ...]:
+    if _uses_compact_document_contract(documents):
+        return _parse_compact_document_facts(payload, documents)
     raw_episodes = payload.get("episodes")
     non_target = payload.get("non_target_refs")
     unresolved = payload.get("unresolved_refs")
@@ -1073,7 +1243,7 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             or opinion not in _STATES
             or confidence not in _CONFIDENCE
             or not isinstance(raw_recommendations, list)
-            or len(raw_recommendations) > _MAX_RECOMMENDATIONS
+            or len(raw_recommendations) > _MAX_RECOMMENDATIONS_PER_EPISODE
         ):
             raise _SemanticInvalid()
         recommendations: list[_Recommendation] = []
@@ -1350,7 +1520,7 @@ def _completed_recommendations(
             _CompletedRecommendation(item.episode_ref, recommendation, opinion_time)
             for recommendation in item.recommendations
         )
-    if len(completed) > _MAX_RECOMMENDATIONS:
+    if len(completed) > _MAX_TOTAL_RECOMMENDATIONS:
         raise _SourceGap()
     return tuple(completed)
 
@@ -1406,17 +1576,36 @@ def _execution_prompt(
         entries.append({
             "recommendation_ref": item.recommendation.recommendation_ref,
             "action_type": item.recommendation.action_type,
-            "source_quote": item.recommendation.source_quote,
             "normalized_action": item.recommendation.normalized_action,
+            "source_quote": item.recommendation.source_quote,
             "opinion_date": item.opinion_time.value.isoformat(),
-            "candidate_refs": related_refs,
         })
     payload = json.dumps({
         "recommendations": entries,
         "candidate_documents": list(documents_by_ref.values()),
     }, ensure_ascii=False)
-    if len(payload) > _MAX_PROMPT_CHARS:
+    if len(payload) > _MAX_EXECUTION_PROMPT_CHARS:
         raise _SourceGap()
+    if course_candidates:
+        return (
+            "你只核对每条会诊建议在后续病程或查房记录中的执行痕迹，不得补充病历之外的信息。"
+            "execution_record_state只能是specific_trace/generic_trace/copied_opinion/no_trace/unknown："
+            "specific_trace=明确写出按会诊意见采取的具体措施；generic_trace=仅写遵会诊意见执行或已按建议处理；"
+            "copied_opinion=照抄意见但没有归纳执行情况；no_trace=未见该建议的执行记录痕迹；unknown=无法判断。"
+            "病程明确记载已经给予、已行、已实施的具体治疗、检查、固定、制动或监测措施，可判specific_trace；"
+            "属于specific_trace时必须能由所引病程原文直接核实具体执行动作。"
+            "同一治疗类别的多个细项建议，若病程明确记载该治疗类别已经实施、但未逐项重复细项，"
+            "可以分别判定已有执行痕迹；不得把跨类别措施合并推断。"
+            "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
+            "trace_refs只能引用candidate_documents中的病程ref，且候选时间不得早于该建议的opinion_date；"
+            "不得引用会诊申请或会诊意见的ref，也不得引用其他建议的ref。specific_trace/generic_trace/copied_opinion必须返回至少一个trace_refs；"
+            "no_trace/unknown必须返回空trace_refs。confidence只能是high/medium/low。"
+            "某条建议没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown。"
+            "每个输入recommendation_ref恰好输出一次，禁止重复、遗漏或创造。"
+            "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,confidence}]}。输入："
+            + payload,
+            allowed_refs,
+        )
     prompt = (
         "你分两步判断每条会诊建议的后续落实，不得补充病历之外的信息。"
         "第一步先识别会诊后病程/查房中是否记录会诊意见及执行情况："
@@ -1441,9 +1630,9 @@ def _execution_prompt(
         "这只适用于同一临床治疗类别，绝不得用一句泛化记录覆盖药物、检查、转运等跨类别建议。"
         "拟执行、计划执行、申请执行、请会诊、症状改善、无关治疗或同部位一般治疗都不是已经执行。"
         "confidence只能为high/medium/low。"
-        "trace_refs和structured_action_refs只能引用该建议candidate_refs所指向的candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
+        "trace_refs和structured_action_refs只能引用candidate_documents中的ref，且候选时间必须不早于该建议的opinion_date；绝不得引用会诊申请或会诊意见的ref。"
         "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
-        "没有可验证的candidate_documents ref时必须返回unknown。"
+        "某条建议没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown。"
         "execution_quotes是可选的辅助摘录；已选择精确trace_refs或structured_action_refs时可以返回空数组。"
         "若返回摘录，每项必须是所引执行候选中的连续原文，不得改写、拼接或引用未选候选。"
         "no_trace/absent组合必须返回空数组trace_refs、structured_action_refs和execution_quotes。"
@@ -1464,6 +1653,14 @@ def _parse_executions(
     raw = payload.get("executions")
     expected_refs = {item.recommendation.recommendation_ref for item in completed}
     candidate_by_ref = {item.ref: item for item in candidates}
+    prompt_candidate_refs = {
+        ref for refs in allowed_refs.values() for ref in refs
+    }
+    compact_course_only = bool(prompt_candidate_refs) and all(
+        ref in candidate_by_ref
+        and candidate_by_ref[ref].source_key in _COURSE_EXECUTION_SOURCE_KEYS
+        for ref in prompt_candidate_refs
+    )
     if not isinstance(raw, list) or len(raw) != len(expected_refs):
         raise _SemanticInvalid()
     parsed: list[_ExecutionAssessment] = []
@@ -1480,11 +1677,24 @@ def _parse_executions(
         raw_structured_refs = item.get("structured_action_refs")
         raw_quotes = item.get("execution_quotes")
         execution_record_state = _clean(item.get("execution_record_state")).lower()
+        compact_item = (
+            compact_course_only
+            and item.get("execution_state") is None
+            and item.get("execution_refs") is None
+            and raw_structured_refs is None
+            and raw_quotes is None
+        )
+        if compact_item:
+            state = "absent"
+            original_state = state
+            raw_structured_refs = []
+            raw_quotes = []
         if (
             recommendation_ref not in expected_refs
             or recommendation_ref in seen
             or state not in _EXECUTION_STATES
             or confidence not in _CONFIDENCE
+            or (compact_item and not execution_record_state)
             or (execution_record_state and execution_record_state not in _EXECUTION_RECORD_STATES)
             or (refs is not None and not isinstance(refs, list))
             or (raw_trace_refs is not None and not isinstance(raw_trace_refs, list))
@@ -1542,11 +1752,31 @@ def _parse_executions(
             # 但保留已经逐字落地的病程trace，不让模型的冗余枚举作废主事实。
             state = "absent"
         all_refs = [*trace_refs, *structured_refs]
+        reference_scope_invalid = any(
+            not isinstance(ref, str)
+            or ref not in allowed_refs[recommendation_ref]
+            for ref in all_refs
+        )
+        if reference_scope_invalid:
+            # 推荐项身份已经严格命中，但模型把存在的病程错配到意见时间之前，
+            # 或返回了不属于该建议白名单的ref。只关闭这一条建议并清空引用；
+            # 不能让一个局部错配作废同批其他几十条已经验证的执行事实。
+            seen.add(recommendation_ref)
+            parsed.append(_ExecutionAssessment(
+                recommendation_ref,
+                "unknown",
+                (),
+                "low",
+                (),
+                "unknown",
+                (),
+                (),
+            ))
+            continue
         if (
             len(trace_refs) != len(set(trace_refs))
             or len(structured_refs) != len(set(structured_refs))
             or len(all_refs) != len(set(all_refs))
-            or not all(isinstance(ref, str) and ref in allowed_refs[recommendation_ref] for ref in all_refs)
             or not all(candidate_by_ref[ref].source_key in _CONTEXT_ONLY_EXECUTION_SOURCE_KEYS for ref in trace_refs)
             or not all(candidate_by_ref[ref].source_key in _STRUCTURED_EXECUTION_EVIDENCE_SOURCE_KEYS for ref in structured_refs)
             or (state in {"linked_specific", "linked_vague"} and not structured_refs)
@@ -1638,12 +1868,38 @@ def _execution_outcome(
         item for item in episodes
         if item.opinion_state == "clear" and item.confidence == "high"
     )
+    if source_technical:
+        return "technical_error", "source_query_error"
+    trace_states = tuple(
+        item.execution_record_state for item in assessments or ()
+    )
+    confirmed_no_course_trace_refs = {
+        item.recommendation_ref
+        for item in assessments or ()
+        if item.execution_record_state == "no_trace"
+        and item.confidence == "high"
+        and item.execution_state != "unknown"
+    }
+    confirmed_vague_trace = any(
+        item.execution_record_state in {"generic_trace", "copied_opinion"}
+        and item.confidence == "high"
+        for item in assessments or ()
+    )
+    course_source_incomplete = bool(
+        _COURSE_EXECUTION_SOURCE_KEYS.intersection(source_incomplete_keys)
+    )
+    # 一条已经严格落地的缺陷足以形成不合规结论；其他建议仍待判断只会
+    # 阻止“全部合规”，不能反向抹掉已确认的缺失或笼统记录。
+    if rule_id == "LX0609-020" and confirmed_no_course_trace_refs:
+        if course_source_incomplete:
+            return "data_gap", "candidate_scope_incomplete"
+        return "non_compliant", "requirement_violated"
+    if rule_id == "LX0609-023" and confirmed_vague_trace:
+        return "non_compliant", "requirement_violated"
     if uncertain:
         return "evaluation_unknown", "semantic_low_confidence"
     if not completed or not completed_recommendations:
         return "not_applicable", "trigger_absent_complete"
-    if source_technical:
-        return "technical_error", "source_query_error"
     if assessments is None or any(
         item.confidence != "high"
         or item.execution_state == "unknown"
@@ -1653,10 +1909,6 @@ def _execution_outcome(
         if source_technical:
             return "technical_error", "source_query_error"
         return "evaluation_unknown", "semantic_low_confidence"
-    trace_states = tuple(item.execution_record_state for item in assessments)
-    course_source_incomplete = bool(
-        _COURSE_EXECUTION_SOURCE_KEYS.intersection(source_incomplete_keys)
-    )
     complete_course_traces = all(
         item.execution_record_state in {"specific_trace", "generic_trace", "copied_opinion"}
         and bool(item.trace_refs)

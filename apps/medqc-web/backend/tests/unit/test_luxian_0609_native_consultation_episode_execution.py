@@ -96,15 +96,107 @@ def _payload(*, episodes, non_target=(), unresolved=()):
     return {"episodes": list(episodes), "non_target_refs": list(non_target), "unresolved_refs": list(unresolved)}
 
 
+def _document_fact(
+    ref: str,
+    *,
+    scope="ordinary",
+    application="clear",
+    opinion="clear",
+    confidence="high",
+    recommendations=None,
+):
+    if recommendations is None:
+        recommendations = (
+            [{
+                "recommendation_ref": f"{ref}#r1",
+                "action_type": "test",
+                "source_quote": "复查血常规",
+                "normalized_action": "复查血常规检查",
+            }]
+            if scope == "ordinary" and opinion == "clear" and confidence == "high"
+            else []
+        )
+    return {
+        "ref": ref,
+        "scope": scope,
+        "application_state": application,
+        "opinion_state": opinion,
+        "confidence": confidence,
+        "recommendations": list(recommendations),
+    }
+
+
+def _document_payload(*facts):
+    return {"consultation_event_facts": list(facts)}
+
+
 def _materialize_recommendation_quotes(payload, prompt):
     """测试桩只补齐单一意见文书引用，不替模型计算字符下标。"""
 
     value = json.loads(json.dumps(payload, ensure_ascii=False))
-    if not isinstance(value, dict) or not isinstance(value.get("episodes"), list):
+    if not isinstance(value, dict):
         return value
     try:
-        json.loads(prompt.rsplit("输入：", 1)[1])
+        prompt_payload = json.loads(prompt.rsplit("输入：", 1)[1])
     except (IndexError, TypeError, ValueError):
+        return value
+    if (
+        "consultation_event_facts" in prompt
+        and isinstance(value.get("episodes"), list)
+    ):
+        episodes = value["episodes"]
+        if not all(
+            isinstance(item, dict)
+            and isinstance(item.get("member_refs"), list)
+            and len(item["member_refs"]) == 1
+            for item in episodes
+        ):
+            return value
+        by_ref = {item["member_refs"][0]: item for item in episodes}
+        non_target = set(value.get("non_target_refs") or ())
+        unresolved = set(value.get("unresolved_refs") or ())
+        documents = prompt_payload.get("consultation_documents")
+        if not isinstance(documents, list):
+            return value
+        facts = []
+        for document in documents:
+            ref = document.get("ref") if isinstance(document, dict) else None
+            if ref in by_ref:
+                item = by_ref[ref]
+                recommendations = []
+                for recommendation in item.get("recommendations", []):
+                    normalized = dict(recommendation)
+                    normalized.pop("opinion_ref", None)
+                    recommendations.append(normalized)
+                facts.append({
+                    "ref": ref,
+                    "scope": "ordinary",
+                    "application_state": item.get("application_state"),
+                    "opinion_state": item.get("opinion_state"),
+                    "confidence": item.get("confidence"),
+                    "recommendations": recommendations,
+                })
+            elif ref in non_target:
+                facts.append(_document_fact(
+                    ref,
+                    scope="non_target",
+                    application="absent",
+                    opinion="absent",
+                    recommendations=[],
+                ))
+            elif ref in unresolved:
+                facts.append(_document_fact(
+                    ref,
+                    scope="unknown",
+                    application="unknown",
+                    opinion="unknown",
+                    confidence="low",
+                    recommendations=[],
+                ))
+            else:
+                return value
+        return _document_payload(*facts)
+    if not isinstance(value.get("episodes"), list):
         return value
     for item in value["episodes"]:
         if not isinstance(item, dict):
@@ -356,6 +448,139 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
     assert display["LX0609-021"]["document_count"] == 2
     assert display["LX0609-022"]["semantic_state"] == "clear"
     assert display["LX0609-022"]["checked_requirement"] == "给出针对当前病情的明确诊疗意见"
+
+
+@pytest.mark.asyncio
+async def test_document_identity_separates_real_rows_without_application_id(
+    monkeypatch,
+):
+    rows = _rows("第一次会诊申请与意见", "第二次会诊申请与意见")
+    rows[0]["document_id"] = "DOC-REAL-1"
+    rows[1]["document_id"] = "DOC-REAL-2"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+    assert "DOC-REAL-1" not in client.prompts[0]
+    assert "DOC-REAL-2" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_document_identity_allows_independent_real_events_without_application_id(
+    monkeypatch,
+):
+    rows = _rows("第一次会诊申请与意见", "第二次会诊申请与意见")
+    rows[0]["document_id"] = "DOC-REAL-1"
+    rows[1]["document_id"] = "DOC-REAL-2"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _document_payload(
+            _document_fact("consultation_record-1"),
+            _document_fact("consultation_record-2"),
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    prompt_payload = json.loads(client.prompts[0].rsplit("输入：", 1)[1])
+    event_groups = [
+        item["event_group_ref"]
+        for item in prompt_payload["consultation_documents"]
+    ]
+    assert len(set(event_groups)) == 2
+    assert all(event_groups)
+    assert all("DOC-REAL" not in group for group in event_groups)
+
+
+@pytest.mark.asyncio
+async def test_many_real_documents_without_application_id_use_compact_fact_contract(
+    monkeypatch,
+):
+    rows = _rows(*(f"真实会诊文书{index}" for index in range(1, 14)))
+    for index, row in enumerate(rows, 1):
+        row["document_id"] = f"DOC-REAL-{index}"
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    facts = [
+        _document_fact(
+            "consultation_record-1",
+            application="vague",
+            opinion="clear",
+            recommendations=[{
+                "recommendation_ref": "MODEL-CREATED-ID-MUST-BE-IGNORED",
+                "action_type": "test",
+                "source_quote": "并非文书中的连续原句",
+                "normalized_action": "复查血常规检查",
+            }],
+        ),
+        *(
+            _document_fact(
+                f"consultation_record-{index}",
+                scope="non_target",
+                application="absent",
+                opinion="absent",
+                recommendations=[],
+            )
+            for index in range(2, 14)
+        ),
+    ]
+    client = _Client(_document_payload(*facts))
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 1
+    assert "consultation_event_facts" in client.prompts[0]
+    assert "member_refs" not in client.prompts[0]
+    assert "禁止输出recommendation_ref" in client.prompts[0]
+    assert all(f"DOC-REAL-{index}" not in client.prompts[0] for index in range(1, 14))
 
 
 @pytest.mark.asyncio
@@ -971,7 +1196,7 @@ async def test_clear_opinion_without_actionable_recommendation_skips_second_stag
     assert result.llm_call_count == 1
 
 
-def test_execution_prompt_requires_candidate_ref_for_linked_states():
+def test_course_only_execution_prompt_and_parser_use_compact_trace_contract():
     completed = (
         episode._CompletedRecommendation(
             "consultation_record-1",
@@ -990,13 +1215,169 @@ def test_execution_prompt_requires_candidate_ref_for_linked_states():
         ),
     )
 
-    prompt, _ = episode._execution_prompt(completed=completed, candidates=candidates)
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed, candidates=candidates
+    )
 
-    assert "linked_specific或linked_vague必须至少返回一个structured_action_refs" in prompt
     assert "trace_refs" in prompt
-    assert "没有可验证的candidate_documents ref时必须返回unknown" in prompt
+    assert "没有不早于其opinion_date的可验证candidate_documents ref时必须返回unknown" in prompt
     assert "不得引用会诊申请或会诊意见的ref" in prompt
-    assert "execution_quotes" in prompt
+    assert "structured_action_refs" not in prompt
+    assert "execution_quotes" not in prompt
+    assert "execution_record_state,trace_refs,confidence" in prompt
+
+    parsed = episode._parse_executions(
+        {
+            "executions": [{
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "confidence": "high",
+            }]
+        },
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+    assert parsed == (
+        episode._ExecutionAssessment(
+            "consultation_record-1#r1",
+            "absent",
+            (),
+            "high",
+            (),
+            "specific_trace",
+            ("daily_course_record-1",),
+            ("daily_course_record-1",),
+        ),
+    )
+
+
+def test_one_out_of_window_trace_only_downgrades_that_recommendation():
+    completed = (
+        episode._CompletedRecommendation(
+            "consultation_record-1",
+            episode._Recommendation(
+                "consultation_record-1#r1", "test", "", "复查血常规", "consultation_record-1"
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 1), True),
+        ),
+        episode._CompletedRecommendation(
+            "consultation_record-2",
+            episode._Recommendation(
+                "consultation_record-2#r1", "test", "", "复查血常规", "consultation_record-2"
+            ),
+            episode._ObservedTime(datetime(2026, 7, 20, 3), True),
+        ),
+    )
+    candidates = (
+        episode._CandidateDocument(
+            "daily_course_record-1",
+            "daily_course_record",
+            episode._ObservedTime(datetime(2026, 7, 20, 2), True),
+            "已复查血常规",
+        ),
+    )
+    _, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+
+    parsed = episode._parse_executions(
+        {
+            "executions": [
+                {
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "execution_record_state": "no_trace",
+                    "trace_refs": [],
+                    "confidence": "high",
+                },
+                {
+                    "recommendation_ref": "consultation_record-2#r1",
+                    "execution_record_state": "specific_trace",
+                    "trace_refs": ["daily_course_record-1"],
+                    "confidence": "high",
+                },
+            ]
+        },
+        completed=completed,
+        allowed_refs=allowed_refs,
+        candidates=candidates,
+    )
+
+    assert parsed[0].execution_record_state == "no_trace"
+    assert parsed[0].confidence == "high"
+    assert parsed[1].execution_record_state == "unknown"
+    assert parsed[1].trace_refs == ()
+    assert parsed[1].confidence == "low"
+
+
+def test_many_document_events_share_bounded_stage_two_candidates_without_repeated_refs():
+    episodes = tuple(
+        episode._Episode(
+            f"consultation_record-{index}",
+            (f"consultation_record-{index}",),
+            (f"consultation_record-{index}",),
+            (f"consultation_record-{index}",),
+            "clear",
+            "clear",
+            "high",
+            tuple(
+                episode._Recommendation(
+                    f"consultation_record-{index}#r{number}",
+                    "test",
+                    "",
+                    f"复查血常规检查{number}",
+                    f"consultation_record-{index}",
+                )
+                for number in (1, 2)
+            ),
+        )
+        for index in range(1, 29)
+    )
+    documents = tuple(
+        {
+            "ref": f"consultation_record-{index}",
+            "time": f"2026-07-{index:02d} 08:00:00",
+            "text": "安全会诊文书",
+        }
+        for index in range(1, 29)
+    )
+    completed = episode._completed_recommendations(
+        episodes,
+        documents,
+        stay_window=episode._StayWindow(date(2026, 7, 1), date(2026, 7, 31)),
+    )
+    candidates = tuple(
+        episode._CandidateDocument(
+            f"senior_course_record-{index}",
+            "senior_course_record",
+            episode._ObservedTime(
+                datetime(2026, 7, 29, 8 + index // 60, index % 60), True
+            ),
+            "安全后续病程" * 90,
+        )
+        for index in range(1, 68)
+    )
+
+    prompt, allowed_refs = episode._execution_prompt(
+        completed=completed,
+        candidates=candidates,
+    )
+    prompt_payload = json.loads(prompt.rsplit("输入：", 1)[1])
+
+    assert len(completed) == 56
+    assert len(allowed_refs) == 56
+    assert len(prompt_payload["candidate_documents"]) == 67
+    assert all(
+        "candidate_refs" not in item
+        for item in prompt_payload["recommendations"]
+    )
+    assert (
+        48000
+        < len(prompt.rsplit("输入：", 1)[1])
+        <= episode._MAX_EXECUTION_PROMPT_CHARS
+    )
 
 
 @pytest.mark.asyncio
@@ -1967,6 +2348,110 @@ async def test_023_evaluates_generic_trace_when_another_opinion_has_no_execution
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "non_compliant"]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_missing_execution_is_not_hidden_by_another_unknown_recommendation(
+    monkeypatch,
+):
+    consultation_rows = _rows("第一份会诊意见", "第二份会诊意见")
+    consultation_rows[0]["document_id"] = "DOC-REAL-1"
+    consultation_rows[1]["document_id"] = "DOC-REAL-2"
+    source_rows = {
+        "consultation_record": consultation_rows,
+        "daily_course_record": _rows("后续病程候选", hour_start=3),
+        "senior_course_record": [], "inpat_drug_order": [],
+        "inpat_nondrug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _document_payload(
+            _document_fact("consultation_record-1"),
+            _document_fact("consultation_record-2"),
+        ),
+        {"executions": [
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "execution_record_state": "unknown",
+                "trace_refs": [],
+                "confidence": "high",
+            },
+        ]},
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "uncertain",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_confirmed_generic_execution_is_not_hidden_by_another_unknown_recommendation(
+    monkeypatch,
+):
+    consultation_rows = _rows("第一份会诊意见", "第二份会诊意见")
+    consultation_rows[0]["document_id"] = "DOC-REAL-1"
+    consultation_rows[1]["document_id"] = "DOC-REAL-2"
+    source_rows = {
+        "consultation_record": consultation_rows,
+        "daily_course_record": _rows("仅笼统遵会诊意见执行", hour_start=3),
+        "senior_course_record": [], "inpat_drug_order": [],
+        "inpat_nondrug_order": [], "exam_item_report": [],
+        "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _document_payload(
+            _document_fact("consultation_record-1"),
+            _document_fact("consultation_record-2"),
+        ),
+        {"executions": [
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "generic_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "confidence": "high",
+            },
+            {
+                "recommendation_ref": "consultation_record-2#r1",
+                "execution_record_state": "unknown",
+                "trace_refs": [],
+                "confidence": "high",
+            },
+        ]},
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "uncertain",
+        "non_compliant",
+    ]
 
 
 @pytest.mark.asyncio
