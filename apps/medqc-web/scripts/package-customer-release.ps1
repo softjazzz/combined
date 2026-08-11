@@ -166,6 +166,7 @@ New-Item -ItemType Directory -Force -Path $releaseDir, $backendDir, $frontendDir
 Write-Step "Copy frontend build artifacts"
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\serve_dist_spa.py") -Destination (Join-Path $toolsDir "serve_dist_spa.py") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\customer-db-preflight.ps1") -Destination (Join-Path $toolsDir "customer-db-preflight.ps1") -Force
 Write-Step "Slim frontend fonts (keep Source Han Sans SC Regular/Medium only)"
 $distFontsDir = Join-Path $frontendDir "dist\fonts"
 $sfProDir = Join-Path $distFontsDir "sf-pro"
@@ -256,6 +257,7 @@ $readmeLines = @(
   "## Directory layout",
   "- frontend/dist: frontend static assets",
   "- backend: backend source code",
+  "- tools/customer-db-preflight.ps1: PostgreSQL and Alembic read-only preflight",
   "- docs/0418/QC/sheet2_exact_review_acceptance_package.json: runtime acceptance-package artifact",
   "",
   "## Excluded from this package",
@@ -271,7 +273,22 @@ $readmeLines = @(
   "- This package does not include the ICD semantic vector index.",
   "- This package does not include the ICD vector index builder script.",
   "- This package keeps only Source Han Sans SC Regular/Medium and removes SF Pro font files.",
-  "- Frontend is built in customer mode and does not hardcode the public API domain."
+  "- Frontend is built in customer mode and does not hardcode the public API domain.",
+  "",
+  "## Database deployment order",
+  "1. Start PostgreSQL and confirm its configured port is listening. Opening /docs only proves the backend process is alive; it does not prove database health.",
+  "2. Back up the customer database before changing application code or schema.",
+  "3. Run the read-only preflight from the package root: powershell -NoProfile -ExecutionPolicy Bypass -File tools/customer-db-preflight.ps1",
+  "4. Compare alembic current with alembic heads. The preflight never writes the database.",
+  "5. After an authorized operator confirms the backup and version gap, run from backend: python -m alembic -c alembic.ini upgrade head",
+  "6. Restart the backend and smoke-test the workstation, notifications, sample-pool list, and sample-pool upload endpoints.",
+  "",
+  "## Core API smoke tests",
+  "Use an authenticated browser session or an authorized API client. Expected result is not HTTP 500:",
+  "- GET /api/medical-records/workstation",
+  "- GET /api/v1/notifications?page_size=30",
+  "- GET /api/v1/qc/sample-pools?page=1&page_size=50",
+  "- POST /api/v1/qc/sample-pools/import-upload (use a valid customer template)"
 )
 $readme = $readmeLines -join "`n"
 $readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-deployment.txt") -Encoding UTF8
