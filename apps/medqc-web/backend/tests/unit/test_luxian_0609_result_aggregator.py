@@ -2501,6 +2501,64 @@ def test_017_customer_evidence_fails_closed_when_record_time_is_ambiguous():
     assert "79.9%" in result["findings"]
 
 
+def test_017_canonical_aggregation_keeps_four_ranked_copy_pairs_with_evidence():
+    pairs = [
+        {
+            "source_types": ["daily_course_record", "daily_course_record"],
+            "record_times": [
+                f"2026-06-{index * 2 - 1:02d} 09:00:00",
+                f"2026-06-{index * 2:02d} 09:00:00",
+            ],
+            "similarity": round(0.95 - index * 0.03, 4),
+        }
+        for index in range(1, 5)
+    ]
+    facts = {
+        "failure_kind": "copy_similarity_threshold_exceeded",
+        "copy_similarity": pairs[0]["similarity"],
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": pairs[0]["source_types"],
+        "copy_document_record_times": pairs[0]["record_times"],
+        "copy_match_pairs": pairs,
+    }
+
+    class _Materials:
+        @staticmethod
+        def rows(source_type):
+            assert source_type == "daily_course_record"
+            return tuple(
+                {
+                    "document_id": f"copy-{day:02d}",
+                    "record_time": f"2026-06-{day:02d} 09:00:00",
+                }
+                for day in range(1, 9)
+            )
+
+    result = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-017", facts),),
+        audit_context={"evidence_materials": _Materials()},
+        format_evidence=False,
+    )[0]
+
+    assert result["customer_display_facts"]["copy_match_pairs"] == pairs
+    assert result["findings"].endswith("另有 3 组病程记录达到判定阈值。")
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": f"copy-{day:02d}",
+        }
+        for day in range(1, 9)
+    ]
+
+
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
 def test_attestation_rejects_every_safe_provenance_tamper(field):
     gate, finding = _pair(FindingKind.REQUIREMENT_SATISFIED)

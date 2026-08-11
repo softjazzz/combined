@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from functools import lru_cache
+import heapq
 import json
 import re
 from typing import Any, Mapping, Protocol, Sequence
@@ -112,6 +113,9 @@ _RULE_009_CHANGE_WINDOW = timedelta(hours=24)
 _MIN_COMPARABLE_CHARS = 24
 _MIN_FIRST_COURSE_BODY_CHARS = 6
 _COPY_SIMILARITY_THRESHOLD = 0.70
+_COPY_FAST_SHINGLE_CHARS = 5
+_COPY_PRECISE_CANDIDATE_LIMIT = 20
+_COPY_DISPLAY_PAIR_LIMIT = 4
 # 017 仅允许排除这一组人工确认的通用模板壳。归一后仍有任何字符，
 # 都必须保留为病历特异内容，不能豁免复制判定。
 _COPY_TEMPLATE_SHELL_PHRASES = (
@@ -2485,12 +2489,32 @@ def _copy_similarity_band(value: float) -> str:
     return "threshold_exceeded" if value >= _COPY_SIMILARITY_THRESHOLD else "within_threshold"
 
 
+def _copy_fast_signature(normalized_content: str) -> frozenset[str]:
+    """生成轻量字符指纹；只用于候选排序，不参与最终质控结论。"""
+
+    material = _material_for_copy_coverage(normalized_content)
+    if len(material) <= _COPY_FAST_SHINGLE_CHARS:
+        return frozenset({material}) if material else frozenset()
+    return frozenset(
+        material[index : index + _COPY_FAST_SHINGLE_CHARS]
+        for index in range(len(material) - _COPY_FAST_SHINGLE_CHARS + 1)
+    )
+
+
+def _copy_fast_similarity(left: frozenset[str], right: frozenset[str]) -> float:
+    """以 Dice 系数筛出疑似重复组合；精确相似度仍由 SequenceMatcher 裁决。"""
+
+    if not left or not right:
+        return 0.0
+    return (2.0 * len(left.intersection(right))) / (len(left) + len(right))
+
+
 def _assess_copy(
     documents: Mapping[str, Any],
     *,
     source_complete: bool = False,
 ) -> _CopyRuleOutcome:
-    """只按相邻、不同日期且带 record_time 的病程对做 017 初筛。"""
+    """先全组合轻量筛选，再对最高疑似组合执行受控精确比较。"""
 
     rows = _substantive_rows(
         documents,
@@ -2540,6 +2564,9 @@ def _assess_copy(
         "similarity_band": "unknown",
         "best_match_source_types": [],
         "best_match_record_times": [],
+        "best_match_pairs": [],
+        "screened_pair_count": 0,
+        "precise_pair_count": 0,
         "template_shell_only": False,
     }
     if len(comparable) < 2:
@@ -2551,12 +2578,30 @@ def _assess_copy(
         )
 
     ordered = sorted(comparable, key=lambda item: (item[0], item[1], item[2]))
-    pairs = [
-        (left, right)
-        for left, right in zip(ordered, ordered[1:])
-        if left[0].date() < right[0].date()
-    ]
-    if not pairs:
+    signatures = [_copy_fast_signature(item[2]) for item in ordered]
+    candidate_heap: list[tuple[float, int, int, int, int]] = []
+    screened_pair_count = 0
+    for left_index in range(len(ordered) - 1):
+        for right_index in range(left_index + 1, len(ordered)):
+            if ordered[left_index][0].date() >= ordered[right_index][0].date():
+                continue
+            screened_pair_count += 1
+            fast_score = _copy_fast_similarity(
+                signatures[left_index], signatures[right_index]
+            )
+            candidate = (
+                fast_score,
+                -left_index,
+                -right_index,
+                left_index,
+                right_index,
+            )
+            if len(candidate_heap) < _COPY_PRECISE_CANDIDATE_LIMIT:
+                heapq.heappush(candidate_heap, candidate)
+            elif candidate[:3] > candidate_heap[0][:3]:
+                heapq.heapreplace(candidate_heap, candidate)
+
+    if not candidate_heap:
         return _CopyRuleOutcome(
             status="not_applicable",
             reason_code="copy_adjacent_day_pair_unavailable",
@@ -2564,14 +2609,35 @@ def _assess_copy(
             safe_metadata=safe_metadata,
         )
 
+    precise_pairs: list[
+        tuple[
+            float,
+            tuple[datetime, str, str, bool, str],
+            tuple[datetime, str, str, bool, str],
+        ]
+    ] = []
+    for _, _, _, left_index, right_index in candidate_heap:
+        left = ordered[left_index]
+        right = ordered[right_index]
+        similarity = SequenceMatcher(None, left[2], right[2], autojunk=False).ratio()
+        precise_pairs.append((similarity, left, right))
+    precise_pairs.sort(
+        key=lambda item: (
+            -item[0],
+            item[1][0],
+            item[2][0],
+            item[1][1],
+            item[2][1],
+        )
+    )
+
     maximum = -1.0
     best_pair: tuple[tuple[datetime, str, str, bool, str], tuple[datetime, str, str, bool, str]] | None = None
     longest_block = 0
     substantial_coverage = 0.0
     template_shell_only = False
-    for left, right in pairs:
+    for similarity, left, right in precise_pairs:
         matcher = SequenceMatcher(None, left[2], right[2], autojunk=False)
-        similarity = matcher.ratio()
         if similarity <= maximum:
             continue
         maximum = similarity
@@ -2595,6 +2661,18 @@ def _assess_copy(
         substantial_coverage = material_chars / max(1, material_min_length)
 
     maximum = max(maximum, 0.0)
+    best_match_pairs = [
+        {
+            "source_types": [left[1], right[1]],
+            "record_times": [
+                left[0].strftime("%Y-%m-%d %H:%M:%S"),
+                right[0].strftime("%Y-%m-%d %H:%M:%S"),
+            ],
+            "similarity": round(similarity, 4),
+        }
+        for similarity, left, right in precise_pairs
+        if similarity >= _COPY_SIMILARITY_THRESHOLD
+    ][:_COPY_DISPLAY_PAIR_LIMIT]
     safe_metadata.update(
         {
             "maximum_similarity": round(maximum, 4),
@@ -2604,6 +2682,9 @@ def _assess_copy(
                 best_pair[0][0].strftime("%Y-%m-%d %H:%M:%S"),
                 best_pair[1][0].strftime("%Y-%m-%d %H:%M:%S"),
             ] if best_pair else [],
+            "best_match_pairs": best_match_pairs,
+            "screened_pair_count": screened_pair_count,
+            "precise_pair_count": len(precise_pairs),
             "longest_matching_block_chars": longest_block,
             "substantial_matching_coverage": round(substantial_coverage, 4),
             "template_shell_only": template_shell_only,
@@ -2654,6 +2735,7 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
         "copy_similarity_threshold": round(float(threshold), 4),
         "copy_document_sources": list(source_types),
         "copy_document_record_times": list(record_times),
+        "copy_match_pairs": [dict(item) for item in metadata.get("best_match_pairs", [])],
     }
 
 

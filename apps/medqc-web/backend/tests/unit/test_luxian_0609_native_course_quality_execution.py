@@ -407,6 +407,19 @@ async def test_typed_017_strong_copy_emits_bound_decision_without_customer_dto(
                     "2026-01-01 09:00:00",
                     "2026-01-02 09:00:00",
                 ],
+                "copy_match_pairs": [
+                    {
+                        "source_types": [
+                            "daily_course_record",
+                            "senior_course_record",
+                        ],
+                        "record_times": [
+                            "2026-01-01 09:00:00",
+                            "2026-01-02 09:00:00",
+                        ],
+                        "similarity": 1.0,
+                    }
+                ],
             },
         ),
     )
@@ -4439,6 +4452,94 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
 
 
 @pytest.mark.asyncio
+async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
+    distinct_bodies = tuple(
+        character * 80
+        for character in "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未"
+    )
+    copied_body = "患者病情稳定继续当前治疗方案密切观察病情变化" * 5
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = []
+        if source_key == "daily_course_record":
+            bodies = (copied_body, *distinct_bodies, copied_body)
+            rows = [
+                {
+                    **_row(body, f"2026-06-{index:02d} 09:00:00"),
+                    "document_id": f"course-{index:02d}",
+                }
+                for index, body in enumerate(bodies, start=1)
+            ]
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    result = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
+    assert result.results == ()
+    facts = dict(result.customer_display_facts)["LX0609-017"]
+    assert facts["copy_similarity"] == 1.0
+    assert facts["copy_match_pairs"][0] == {
+        "source_types": ["daily_course_record", "daily_course_record"],
+        "record_times": ["2026-06-01 09:00:00", "2026-06-20 09:00:00"],
+        "similarity": 1.0,
+    }
+    assert result.llm_call_count == 0
+
+
+def test_017_twenty_records_screen_all_pairs_but_precisely_compare_only_twenty():
+    rows = [
+        {
+            **_row(
+                f"第{index}次病程记录包含当日症状检查治疗方案以及后续观察计划" * 3,
+                f"2026-06-{index:02d} 09:00:00",
+            ),
+            "document_id": f"course-{index:02d}",
+        }
+        for index in range(1, 21)
+    ]
+
+    result = course._copy_result(
+        {"daily_course_record": rows, "senior_course_record": []},
+        source_complete=True,
+    )
+
+    assert result["metadata"]["screened_pair_count"] == 190
+    assert result["metadata"]["precise_pair_count"] == 20
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("similarity", "expected_state", "expected_reason", "expected_failure_kind"),
     [
@@ -4518,7 +4619,7 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
     assert reduced[0].final_state is expected_state
     assert reduced[0].reason_code == expected_reason
     assert result.decisions[0].reason_code == expected_reason
-    assert dict(result.customer_display_facts)["LX0609-017"] == {
+    expected_facts = {
         "failure_kind": expected_failure_kind,
         "copy_similarity": round(similarity, 4),
         "copy_similarity_threshold": 0.7,
@@ -4527,7 +4628,20 @@ async def test_typed_017_similarity_threshold_is_inclusive_without_model(
             "2026-06-01 09:00:00",
             "2026-06-02 09:00:00",
         ],
+        "copy_match_pairs": [],
     }
+    if similarity >= 0.7:
+        expected_facts["copy_match_pairs"] = [
+            {
+                "source_types": ["daily_course_record", "daily_course_record"],
+                "record_times": [
+                    "2026-06-01 09:00:00",
+                    "2026-06-02 09:00:00",
+                ],
+                "similarity": round(similarity, 4),
+            }
+        ]
+    assert dict(result.customer_display_facts)["LX0609-017"] == expected_facts
     assert result.llm_call_count == result.prompt_tokens == result.total_tokens == 0
 
 

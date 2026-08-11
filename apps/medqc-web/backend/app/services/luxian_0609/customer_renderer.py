@@ -1191,11 +1191,15 @@ def customer_finding_from_controlled_facts(
         }
         similarity_percent = f"{round(float(similarity) * 100, 2):g}%"
         threshold_percent = f"{round(float(threshold) * 100, 2):g}%"
-        return (
+        finding = (
             f"{source_labels[source_types[0]]}（{record_times[0]}）与"
             f"{source_labels[source_types[1]]}（{record_times[1]}）全文相似度 "
             f"{similarity_percent}，达到判定阈值 {threshold_percent}。"
         )
+        match_pairs = facts.get("copy_match_pairs")
+        if isinstance(match_pairs, list) and len(match_pairs) > 1:
+            finding += f"另有 {len(match_pairs) - 1} 组病程记录达到判定阈值。"
+        return finding
 
     if rule_id == "LX0609-010":
         if kind == "exam_order_exam_association_failed":

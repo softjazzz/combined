@@ -3867,6 +3867,7 @@ def safe_luxian_0609_customer_display_facts(
         record_times = raw.get("copy_document_record_times")
         similarity = raw.get("copy_similarity")
         threshold = raw.get("copy_similarity_threshold")
+        raw_pairs = raw.get("copy_match_pairs")
         if (
             failure_kind
             not in {
@@ -3891,13 +3892,59 @@ def safe_luxian_0609_customer_display_facts(
             )
         ):
             return None
-        return {
+        safe_pairs: list[dict[str, Any]] = []
+        if raw_pairs is not None:
+            if not isinstance(raw_pairs, list) or len(raw_pairs) > 4:
+                return None
+            for pair in raw_pairs:
+                if not isinstance(pair, Mapping) or set(pair) != {
+                    "source_types",
+                    "record_times",
+                    "similarity",
+                }:
+                    return None
+                pair_sources = pair.get("source_types")
+                pair_times = pair.get("record_times")
+                pair_similarity = pair.get("similarity")
+                if (
+                    not isinstance(pair_sources, list)
+                    or len(pair_sources) != 2
+                    or any(
+                        value not in {"daily_course_record", "senior_course_record"}
+                        for value in pair_sources
+                    )
+                    or not isinstance(pair_times, list)
+                    or len(pair_times) != 2
+                    or not all(isinstance(value, str) and value for value in pair_times)
+                    or isinstance(pair_similarity, bool)
+                    or not isinstance(pair_similarity, (int, float))
+                    or not 0.0 <= float(pair_similarity) <= 1.0
+                    or float(pair_similarity) < float(threshold)
+                ):
+                    return None
+                safe_pairs.append(
+                    {
+                        "source_types": list(pair_sources),
+                        "record_times": list(pair_times),
+                        "similarity": round(float(pair_similarity), 4),
+                    }
+                )
+            if safe_pairs and (
+                safe_pairs[0]["source_types"] != source_types
+                or safe_pairs[0]["record_times"] != record_times
+                or safe_pairs[0]["similarity"] != round(float(similarity), 4)
+            ):
+                return None
+        safe = {
             "failure_kind": failure_kind,
             "copy_similarity": round(float(similarity), 4),
             "copy_similarity_threshold": round(float(threshold), 4),
             "copy_document_sources": list(source_types),
             "copy_document_record_times": list(record_times),
         }
+        if raw_pairs is not None:
+            safe["copy_match_pairs"] = safe_pairs
+        return safe
     if rule_id == "LX0609-068":
         failure_kind = raw.get("failure_kind")
         checked_dates = raw.get("checked_dates")
@@ -4446,59 +4493,85 @@ def _customer_evidence_from_copy_pair_facts(
 
     if not isinstance(facts, Mapping) or evidence_materials is None:
         return []
-    source_types = facts.get("copy_document_sources")
-    record_times = facts.get("copy_document_record_times")
-    if (
-        not isinstance(source_types, list)
-        or len(source_types) != 2
-        or any(
-            value not in {"daily_course_record", "senior_course_record"}
-            for value in source_types
-        )
-        or not isinstance(record_times, list)
-        or len(record_times) != 2
-        or not all(isinstance(value, str) and value for value in record_times)
-    ):
-        return []
+    raw_pairs = facts.get("copy_match_pairs")
+    pairs = (
+        raw_pairs
+        if isinstance(raw_pairs, list) and raw_pairs
+        else [
+            {
+                "source_types": facts.get("copy_document_sources"),
+                "record_times": facts.get("copy_document_record_times"),
+            }
+        ]
+    )
 
     located: list[dict[str, str]] = []
     seen_document_ids: set[str] = set()
-    for source_type, record_time in zip(source_types, record_times):
-        try:
-            rows = tuple(evidence_materials.rows(source_type))
-        except Exception:
-            return []
-        matched_ids = tuple(
-            dict.fromkeys(
-                document_id
-                for row in rows
-                if isinstance(row, Mapping)
-                and any(
-                    str(row.get(field) or "")
-                    .strip()
-                    .replace("T", " ")
-                    .startswith(record_time)
-                    for field in (
-                        "record_time",
-                        "record_datetime",
-                        "submit_time",
-                        "submit_datetime",
-                    )
-                )
-                for document_id in (
-                    _valid_customer_evidence_document_id(
-                        row.get("document_id") or row.get("id")
-                    ),
-                )
-                if document_id
+    for pair in pairs[:4]:
+        if not isinstance(pair, Mapping):
+            continue
+        source_types = pair.get("source_types")
+        record_times = pair.get("record_times")
+        if (
+            not isinstance(source_types, list)
+            or len(source_types) != 2
+            or any(
+                value not in {"daily_course_record", "senior_course_record"}
+                for value in source_types
             )
-        )
-        if len(matched_ids) != 1 or matched_ids[0] in seen_document_ids:
-            return []
-        seen_document_ids.add(matched_ids[0])
-        located.append(
-            {"source_type": source_type, "source_document_id": matched_ids[0]}
-        )
+            or not isinstance(record_times, list)
+            or len(record_times) != 2
+            or not all(isinstance(value, str) and value for value in record_times)
+        ):
+            continue
+        pair_rows: list[dict[str, str]] = []
+        pair_document_ids: set[str] = set()
+        for source_type, record_time in zip(source_types, record_times):
+            try:
+                rows = tuple(evidence_materials.rows(source_type))
+            except Exception:
+                pair_rows = []
+                break
+            matched_ids = tuple(
+                dict.fromkeys(
+                    document_id
+                    for row in rows
+                    if isinstance(row, Mapping)
+                    and any(
+                        str(row.get(field) or "")
+                        .strip()
+                        .replace("T", " ")
+                        .startswith(record_time)
+                        for field in (
+                            "record_time",
+                            "record_datetime",
+                            "submit_time",
+                            "submit_datetime",
+                        )
+                    )
+                    for document_id in (
+                        _valid_customer_evidence_document_id(
+                            row.get("document_id") or row.get("id")
+                        ),
+                    )
+                    if document_id
+                )
+            )
+            if len(matched_ids) != 1 or matched_ids[0] in pair_document_ids:
+                pair_rows = []
+                break
+            pair_document_ids.add(matched_ids[0])
+            pair_rows.append(
+                {"source_type": source_type, "source_document_id": matched_ids[0]}
+            )
+        if len(pair_rows) != 2:
+            continue
+        for row in pair_rows:
+            document_id = row["source_document_id"]
+            if document_id in seen_document_ids:
+                continue
+            seen_document_ids.add(document_id)
+            located.append(row)
     return located
 
 
