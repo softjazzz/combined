@@ -359,6 +359,84 @@ async def test_two_rows_can_merge_into_one_real_episode(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_distinct_consultation_business_keys_cannot_merge_into_one_episode(
+    monkeypatch,
+):
+    rows = _rows("第一次会诊申请与意见", "第二次会诊申请与意见")
+    rows[0].update({"consultation_id": "CONSULT-A", "application_id": "APPLY-A"})
+    rows[1].update({"consultation_id": "CONSULT-B", "application_id": "APPLY-B"})
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["uncertain", "uncertain"]
+
+
+@pytest.mark.asyncio
+async def test_application_alias_can_join_split_documents_into_one_episode(monkeypatch):
+    rows = _rows("会诊申请", "会诊意见")
+    rows[0].update({"application_id": "APPLY-SHARED"})
+    rows[1].update(
+        {
+            "consultation_id": "CONSULT-SHARED",
+            "application_id": "APPLY-SHARED",
+        }
+    )
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: rows if source_key == "consultation_record" else [],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    application_refs=["consultation_record-1"],
+                    opinion_refs=["consultation_record-2"],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-021", "LX0609-022"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert "event_group_ref" in client.prompts[0]
+    assert "APPLY-SHARED" not in client.prompts[0]
+    assert "CONSULT-SHARED" not in client.prompts[0]
+
+
+@pytest.mark.asyncio
 async def test_pure_signature_template_is_excluded_before_episode_prompt(monkeypatch):
     template = "会诊医师签名：张三"
     substantive = "申请会诊并提出明确诊疗问题；会诊意见：建议调整治疗方案"
@@ -1557,6 +1635,83 @@ async def test_complete_daily_trace_closes_020_023_when_senior_source_is_incompl
 
 
 @pytest.mark.asyncio
+async def test_020_display_facts_bind_selected_opinion_and_execution_documents(
+    monkeypatch,
+):
+    source_rows = {
+        "consultation_record": [
+            {
+                "document_id": "CONSULT-OPINION",
+                "document_title": "会诊记录",
+                "record_time": "2026-07-20 10:00:00",
+                "record_content": "会诊意见：建议复查血常规。",
+            }
+        ],
+        "daily_course_record": [
+            {
+                "document_id": "COURSE-EXECUTION",
+                "document_title": "日常病程记录",
+                "record_time": "2026-07-20 12:00:00",
+                "record_content": "已按会诊建议复查血常规。",
+            }
+        ],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1"],
+                    application="absent",
+                    application_refs=[],
+                    opinion_refs=["consultation_record-1"],
+                )
+            ]
+        ),
+        _execution(
+            {
+                "episode_ref": "consultation_record-1",
+                "execution_state": "absent",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "structured_action_refs": [],
+                "execution_quotes": ["已按会诊建议复查血常规"],
+                "confidence": "high",
+            }
+        ),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    facts = dict(result.customer_display_facts)["LX0609-020"]
+    assert facts["source_document_refs"] == [
+        {
+            "source_type": "consultation_record",
+            "source_document_id": "CONSULT-OPINION",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "COURSE-EXECUTION",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(monkeypatch):
     """病程来源不完整时，医嘱不能替代 4.20.4 要求的病程记录。"""
 
@@ -1666,6 +1821,65 @@ async def test_precise_candidate_earlier_than_opinion_is_not_sent_to_second_stag
         rule_ids=("LX0609-020", "LX0609-023"), institute_id="i", patient_id="p", visit_id="v", source_schema=None, llm_client=client,
     )
     assert [item["status"] for item in result.results] == ["non_compliant", "not_applicable"]
+    assert result.llm_call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_020_explicit_fast_path_cannot_use_course_before_current_opinion(
+    monkeypatch,
+):
+    source_rows = {
+        "consultation_record": [
+            {
+                "document_title": "会诊申请单",
+                "record_time": "2026-07-20 10:00:00",
+                "record_content": "会诊目的：申请感染科评估感染并提出方案。",
+            },
+            {
+                "document_title": "会诊记录单",
+                "record_time": "2026-07-20 12:00:00",
+                "record_content": "会诊意见：建议今日调整抗菌药物。",
+            },
+        ],
+        "daily_course_record": [
+            {
+                "document_title": "日常病程记录",
+                "record_time": "2026-07-20 09:00:00",
+                "record_content": "已执行会诊意见并调整抗菌药物。",
+            }
+        ],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "inpat_nondrug_order": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _Client(
+        _payload(
+            episodes=[
+                _episode(
+                    "consultation_record-1",
+                    ["consultation_record-1", "consultation_record-2"],
+                    application_refs=["consultation_record-1"],
+                    opinion_refs=["consultation_record-2"],
+                )
+            ]
+        )
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020",),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["non_compliant"]
     assert result.llm_call_count == 1
 
 

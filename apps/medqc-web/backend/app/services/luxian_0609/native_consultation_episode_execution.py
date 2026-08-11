@@ -306,6 +306,7 @@ class _CandidateDocument:
     source_key: str
     observed_time: "_ObservedTime"
     text: str
+    document_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -571,7 +572,7 @@ def _read_rows(
 
 
 def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
-    documents: list[dict[str, str]] = []
+    projected: list[tuple[dict[str, str], frozenset[str]]] = []
     for index, row in enumerate(rows, start=1):
         body = _clean(row.get("record_content"))
         if _is_pure_signature_template(body):
@@ -581,12 +582,58 @@ def _documents(rows: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
         ))
         if len(text) > _MAX_DOCUMENT_CHARS:
             raise _SourceGap()
-        documents.append({
+        business_tokens = frozenset(
+            token
+            for prefix, value in (
+                ("consultation", _clean(row.get("consultation_id"))),
+                ("application", _clean(row.get("application_id"))),
+            )
+            if value
+            for token in (f"{prefix}:{value}",)
+        )
+        projected.append(({
             "ref": f"{_SOURCE_KEY}-{index}",
             "document_id": _clean(row.get("document_id")),
             "time": _clean(row.get("record_time")),
             "text": text,
-        })
+        }, business_tokens))
+
+    # consultation_id/application_id 是同一事件的别名。先在 Python 内做并查集，
+    # 再只把本次请求内的序号 event_group_ref 交给模型，避免业务键出境，
+    # 同时禁止模型跨业务键合并或拆分文书。
+    parents = list(range(len(projected)))
+
+    def _root(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def _union(left: int, right: int) -> None:
+        left_root, right_root = _root(left), _root(right)
+        if left_root != right_root:
+            parents[right_root] = left_root
+
+    token_owner: dict[str, int] = {}
+    for index, (_, tokens) in enumerate(projected):
+        for token in tokens:
+            prior = token_owner.setdefault(token, index)
+            _union(index, prior)
+
+    component_tokens: dict[int, set[str]] = {}
+    for index, (_, tokens) in enumerate(projected):
+        component_tokens.setdefault(_root(index), set()).update(tokens)
+    component_labels = {
+        root: label
+        for label, root in enumerate(sorted(component_tokens), start=1)
+    }
+
+    documents: list[dict[str, str]] = []
+    for index, (document, tokens) in enumerate(projected):
+        event_group_ref = ""
+        if tokens:
+            event_group_ref = f"consultation-event-{component_labels[_root(index)]}"
+        documents.append({**document, "event_group_ref": event_group_ref})
     return tuple(documents)
 
 
@@ -827,6 +874,15 @@ def _candidate_documents(
                 source_key=source_key,
                 observed_time=observed_time,
                 text=text,
+                document_id=_clean(
+                    (
+                        row.get("order_id")
+                        or row.get("application_id")
+                        or row.get("document_id")
+                    )
+                    if is_order_source
+                    else row.get("document_id")
+                ),
             ))
         if source_is_complete:
             source_complete_keys.add(source_key)
@@ -871,8 +927,22 @@ def _strong_explicit_consultation_statuses(
         elif _EXPLICIT_OPINION_CLEAR_PATTERN.search(opinion_text):
             statuses["LX0609-022"] = ("compliant", "requirement_satisfied")
     if "LX0609-020" in selected and execution_projection is not None:
+        opinion_time = _parse_observed_time(opinion_documents[0].get("time"))
+
+        def _is_after_opinion(candidate: _CandidateDocument) -> bool:
+            if opinion_time is None:
+                return False
+            if candidate.observed_time.day != opinion_time.day:
+                return candidate.observed_time.day > opinion_time.day
+            return (
+                candidate.observed_time.precise
+                and opinion_time.precise
+                and candidate.observed_time.value > opinion_time.value
+            )
+
         if any(
             item.source_key in _COURSE_EXECUTION_SOURCE_KEYS
+            and _is_after_opinion(item)
             and _EXPLICIT_EXECUTION_TRACE_PATTERN.search(item.text)
             for item in execution_projection.candidates
         ):
@@ -917,6 +987,8 @@ def _prompt(documents: Sequence[Mapping[str, str]]) -> str:
         "且两个state都必须为clear；无法区分角色时返回unknown，不得猜测。"
         "missing只用于角色明确存在但内容空或模板，vague只用于角色存在但内容泛化。"
         "所有输入ref必须恰好归属一次：某个episode.member_refs、non_target_refs或unresolved_refs之一。"
+        "event_group_ref非空表示CDM业务键已确认属于同一次会诊：同一event_group_ref的全部文书必须进入同一个归属，"
+        "不同event_group_ref的文书绝不能合并为同一个episode。event_group_ref为空时才允许按语义谨慎聚类。"
         "同一输入ref不得被拆入多个episode。"
         "episode_ref必须是member_refs之一。禁止创造、改写或遗漏ref。"
         "每个episode还必须给出application_refs、opinion_refs和recommendations，三者只能引用本episode.member_refs；"
@@ -944,6 +1016,7 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
     expected = set(expected_refs)
     documents_by_ref = {str(item["ref"]): item for item in documents}
     assigned: list[str] = []
+    assignment_bucket_by_ref: dict[str, str] = {}
     episodes: list[_Episode] = []
     for raw in raw_episodes:
         if not isinstance(raw, Mapping):
@@ -1015,6 +1088,9 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
         ):
             application = "clear"
         assigned.extend(member_refs)
+        assignment_bucket_by_ref.update(
+            (ref, f"episode:{episode_ref}") for ref in member_refs
+        )
         episodes.append(_Episode(
             episode_ref,
             tuple(member_refs),
@@ -1025,11 +1101,30 @@ def _parse(payload: Mapping[str, Any], documents: Sequence[Mapping[str, str]]) -
             confidence,
             tuple(recommendations),
         ))
-    for group in (non_target, unresolved):
+    for bucket, group in (("non_target", non_target), ("unresolved", unresolved)):
         if not all(isinstance(ref, str) and ref in expected for ref in group):
             raise _SemanticInvalid()
         assigned.extend(group)
+        assignment_bucket_by_ref.update((ref, bucket) for ref in group)
     if len(assigned) != len(expected_refs) or len(set(assigned)) != len(expected_refs) or set(assigned) != expected:
+        raise _SemanticInvalid()
+    event_group_buckets: dict[str, set[str]] = {}
+    for ref, document in documents_by_ref.items():
+        event_group_ref = _clean(document.get("event_group_ref"))
+        if event_group_ref:
+            event_group_buckets.setdefault(event_group_ref, set()).add(
+                assignment_bucket_by_ref[ref]
+            )
+    if any(len(buckets) != 1 for buckets in event_group_buckets.values()):
+        raise _SemanticInvalid()
+    episode_event_groups: dict[str, set[str]] = {}
+    for ref, bucket in assignment_bucket_by_ref.items():
+        if not bucket.startswith("episode:"):
+            continue
+        event_group_ref = _clean(documents_by_ref[ref].get("event_group_ref"))
+        if event_group_ref:
+            episode_event_groups.setdefault(bucket, set()).add(event_group_ref)
+    if any(len(groups) > 1 for groups in episode_event_groups.values()):
         raise _SemanticInvalid()
     if unresolved:
         raise _SemanticUnresolved()
@@ -1098,6 +1193,7 @@ def _consultation_execution_display_facts(
     completed_recommendations: Sequence[_CompletedRecommendation],
     assessments: Sequence[_ExecutionAssessment] | None,
     documents: Sequence[Mapping[str, str]],
+    candidates: Sequence[_CandidateDocument] = (),
 ) -> Mapping[str, Any]:
     """解释020为何已关联、缺失、未触发或暂不能关联。"""
 
@@ -1124,6 +1220,31 @@ def _consultation_execution_display_facts(
         if (document_id := _clean(documents_by_ref.get(ref, {}).get("document_id")))
     ]
     assessment_rows = tuple(assessments or ())
+    candidate_by_ref = {item.ref: item for item in candidates}
+    source_document_refs: list[dict[str, str]] = [
+        {
+            "source_type": "consultation_record",
+            "source_document_id": document_id,
+        }
+        for document_id in source_document_ids
+    ]
+    for assessment in assessment_rows:
+        for ref in (*assessment.trace_refs, *assessment.execution_refs):
+            candidate = candidate_by_ref.get(ref)
+            if candidate is None or not candidate.document_id:
+                continue
+            source_document_refs.append(
+                {
+                    "source_type": candidate.source_key,
+                    "source_document_id": candidate.document_id,
+                }
+            )
+    source_document_refs = list(
+        {
+            (item["source_type"], item["source_document_id"]): item
+            for item in source_document_refs
+        }.values()
+    )[:8]
     return {
         "verification_kind": "consultation_execution_relation_check",
         "completed_opinion_episode_count": len(
@@ -1151,6 +1272,7 @@ def _consultation_execution_display_facts(
         ),
         "relation_state": relation_by_status.get(status, "association_unresolved"),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
+        "source_document_refs": source_document_refs,
     }
 
 
@@ -2173,6 +2295,11 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,
                     documents=documents,
+                    candidates=(
+                        execution_candidate_projection.candidates
+                        if execution_candidate_projection is not None
+                        else ()
+                    ),
                 ),
             )
         )

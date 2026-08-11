@@ -4053,6 +4053,7 @@ def safe_luxian_0609_customer_display_facts(
             "relation_state",
             "source_document_ids",
         }
+        allowed_internal_keys = {"source_document_refs"}
         count_keys = (
             "completed_opinion_episode_count",
             "recommendation_count",
@@ -4062,7 +4063,7 @@ def safe_luxian_0609_customer_display_facts(
         )
         source_document_ids = raw.get("source_document_ids")
         if (
-            set(raw) != expected_keys
+            set(raw) - allowed_internal_keys != expected_keys
             or raw.get("verification_kind")
             != "consultation_execution_relation_check"
             or raw.get("relation_state")
@@ -4082,6 +4083,26 @@ def safe_luxian_0609_customer_display_facts(
             or any(not isinstance(value, str) or not value.strip() for value in source_document_ids)
         ):
             return None
+        source_document_refs = raw.get("source_document_refs")
+        if source_document_refs is not None:
+            allowed_source_types = {
+                "consultation_record",
+                "daily_course_record",
+                "senior_course_record",
+                "inpat_drug_order",
+                "inpat_nondrug_order",
+            }
+            if not isinstance(source_document_refs, list) or len(source_document_refs) > 8:
+                return None
+            for item in source_document_refs:
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item) != {"source_type", "source_document_id"}
+                    or item.get("source_type") not in allowed_source_types
+                    or not isinstance(item.get("source_document_id"), str)
+                    or not item["source_document_id"].strip()
+                ):
+                    return None
         return {
             "verification_kind": "consultation_execution_relation_check",
             **{key: raw[key] for key in count_keys},
@@ -4307,6 +4328,38 @@ def _customer_evidence_from_display_facts(
                 located.append({
                     "source_type": located_source_type,
                     "source_document_id": located_document_id,
+                })
+            if located:
+                return located
+
+    if rule_id == "LX0609-020":
+        allowed_source_types = {
+            "consultation_record",
+            "daily_course_record",
+            "senior_course_record",
+            "inpat_drug_order",
+            "inpat_nondrug_order",
+        }
+        raw_refs = raw.get("source_document_refs")
+        if isinstance(raw_refs, list) and len(raw_refs) <= 8:
+            located: list[dict[str, str]] = []
+            seen: set[tuple[str, str]] = set()
+            for item in raw_refs:
+                if not isinstance(item, Mapping):
+                    return []
+                source_type = str(item.get("source_type") or "").strip()
+                source_document_id = valid_document_id(
+                    item.get("source_document_id")
+                )
+                key = (source_type, source_document_id)
+                if source_type not in allowed_source_types or not source_document_id:
+                    return []
+                if key in seen:
+                    continue
+                seen.add(key)
+                located.append({
+                    "source_type": source_type,
+                    "source_document_id": source_document_id,
                 })
             if located:
                 return located
