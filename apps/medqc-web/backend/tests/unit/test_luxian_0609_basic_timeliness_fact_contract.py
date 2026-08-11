@@ -86,6 +86,8 @@ def test_rescue_event_keeps_exact_and_one_second_over_boundary() -> None:
     ("title", "author_title", "expected"),
     [
         ("主治医师首次查房记录", "", CourseRoundRole.ATTENDING_OR_ABOVE),
+        ("上级医师查房记录", "", CourseRoundRole.ATTENDING_OR_ABOVE),
+        ("上级医生查房记录", "", CourseRoundRole.ATTENDING_OR_ABOVE),
         ("普通查房记录", "副主任医师", CourseRoundRole.SENIOR),
         ("查房记录", "", CourseRoundRole.AMBIGUOUS),
         ("日常病程记录", "", CourseRoundRole.NONE),

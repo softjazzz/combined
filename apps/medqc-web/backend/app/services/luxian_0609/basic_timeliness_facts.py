@@ -29,6 +29,14 @@ _INLINE_RESCUE_END_TIME_PATTERN = re.compile(
 )
 _ATTENDING_MARKERS = ("主治医师", "主治查房", "代主治医师", "代主治查房")
 _SENIOR_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房", "高级职称")
+_ATTENDING_OR_ABOVE_DOCUMENT_TITLES = frozenset(
+    {
+        "上级医师查房记录",
+        "上级医师首次查房记录",
+        "上级医生查房记录",
+        "上级医生首次查房记录",
+    }
+)
 
 
 class AdmissionAnchorState(str, Enum):
@@ -228,15 +236,21 @@ def extract_rescue_events(rows: Sequence[Mapping[str, Any]]) -> tuple[RescueEven
 
 
 def classify_course_round_role(row: Mapping[str, Any]) -> CourseRoundRole:
-    text = " ".join(
-        str(row.get(field) or "").strip()
-        for field in ("document_title", "title", "author_title")
+    document_titles = tuple(
+        re.sub(r"\s+", "", str(row.get(field) or "").strip())
+        for field in ("document_title", "title")
     )
-    if any(marker in text for marker in _SENIOR_MARKERS):
+    author_title = str(row.get("author_title") or "").strip()
+    role_text = " ".join((*document_titles, author_title))
+    if any(marker in role_text for marker in _SENIOR_MARKERS):
         return CourseRoundRole.SENIOR
-    if any(marker in text for marker in _ATTENDING_MARKERS):
+    if any(marker in role_text for marker in _ATTENDING_MARKERS):
         return CourseRoundRole.ATTENDING_OR_ABOVE
-    if "查房" in text:
+    if any(
+        title in _ATTENDING_OR_ABOVE_DOCUMENT_TITLES for title in document_titles
+    ):
+        return CourseRoundRole.ATTENDING_OR_ABOVE
+    if "查房" in role_text:
         return CourseRoundRole.AMBIGUOUS
     return CourseRoundRole.NONE
 

@@ -1019,7 +1019,7 @@ def test_005_006_typed_fail_closed_without_text_time_guess(
     elif scenario == "ambiguous_role":
         rows["senior_course_record"] = [
             {
-                "document_title": "上级医师查房记录",
+                "document_title": "医师查房记录",
                 "record_time": "2026-06-02 08:00:00",
             }
         ]
@@ -1048,6 +1048,39 @@ def test_005_006_typed_fail_closed_without_text_time_guess(
     assert target.final_state is expected_state
     assert target.reason_code == expected_reason
     assert "2026-06" not in repr(target)
+
+
+@pytest.mark.unit
+def test_005_accepts_customer_standard_upper_physician_round_within_48_hours():
+    selected = ("LX0609-005", "LX0609-006")
+    session = _typed_basic_session(
+        {
+            "inpat_registration": [
+                {"admission_datetime": "2026-07-15 13:48:49"}
+            ],
+            "admission_record": [],
+            "daily_course_record": [],
+            "senior_course_record": [
+                {
+                    "document_id": "safe-upper-round-ref",
+                    "document_title": "上级医师查房记录",
+                    "record_time": "2026-07-16 10:30:02",
+                }
+            ],
+        },
+        selected_rule_ids=selected,
+    )
+
+    execution, reduced = _reduce_typed_basic(session, selected)
+
+    assert execution.results == ()
+    assert reduced[0].final_state is CustomerFinalState.COMPLIANT
+    assert reduced[0].reason_code == "requirement_within_threshold"
+    facts = dict(execution.customer_display_facts)
+    assert facts["LX0609-005"]["source_document_id"] == "safe-upper-round-ref"
+    assert facts["LX0609-005"]["elapsed_hours"] == 20.69
+    # “上级医师”只满足主治医师及以上，不得放宽副主任/主任医师规则。
+    assert reduced[1].final_state is not CustomerFinalState.COMPLIANT
 
 
 @pytest.mark.unit
