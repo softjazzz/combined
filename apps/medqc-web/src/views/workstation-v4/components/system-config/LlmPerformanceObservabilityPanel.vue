@@ -123,6 +123,27 @@
 
         <section
           v-if="hasObservedCalls"
+          class="llm-observability__billing"
+          aria-label="Token 计费估算"
+        >
+          <div class="llm-observability__billing-total">
+            <span>Token 计费估算</span>
+            <strong>{{ billingSummary.totalLabel }}</strong>
+            <em>{{ billingSummary.completenessLabel }}</em>
+          </div>
+          <div class="llm-observability__billing-breakdown">
+            <span>输入费用 <strong>{{ billingSummary.inputLabel }}</strong></span>
+            <span>输出费用 <strong>{{ billingSummary.outputLabel }}</strong></span>
+          </div>
+          <div class="llm-observability__billing-rates">
+            <span>输入 ¥0.20 / 百万 Token</span>
+            <span>输出 ¥0.80 / 百万 Token</span>
+            <em>按当前单价估算，不等同实际账单</em>
+          </div>
+        </section>
+
+        <section
+          v-if="hasObservedCalls"
           class="llm-observability__health-strip"
           aria-label="调用质量摘要"
         >
@@ -273,6 +294,7 @@
                     }}
                   </th>
                   <th>P95 响应</th>
+                  <th>估算费用</th>
                   <th>最近调用</th>
                   <th>状态</th>
                   <th>操作</th>
@@ -290,6 +312,15 @@
                   <td>{{ formatInteger(record.http_attempts) }}</td>
                   <td>{{ formatNullableInteger(record.total_tokens) }}</td>
                   <td>{{ formatNullableDuration(record.p95_latency_ms) }}</td>
+                  <td>
+                    {{
+                      recordCostLabel(
+                        record.input_tokens,
+                        record.output_tokens,
+                        record.unknown_usage_attempts,
+                      )
+                    }}
+                  </td>
                   <td>{{ formatDateTime(record.last_called_at) }}</td>
                   <td>
                     <span :class="['llm-observability__status', statusTone(record.status)]">
@@ -402,6 +433,18 @@
                 <dd>{{ formatNullableInteger(attempt.total_tokens) }}</dd>
               </div>
               <div>
+                <dt>本次费用</dt>
+                <dd>
+                  {{
+                    attemptCostLabel(
+                      attempt.usage_state,
+                      attempt.input_tokens,
+                      attempt.output_tokens,
+                    )
+                  }}
+                </dd>
+              </div>
+              <div>
                 <dt>响应时间</dt>
                 <dd>{{ formatNullableDuration(attempt.latency_ms) }}</dd>
               </div>
@@ -457,6 +500,9 @@ use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, Canv
 
 type RangeKey = '24h' | '7d' | '30d'
 
+const INPUT_PRICE_PER_MILLION_CNY = 0.2
+const OUTPUT_PRICE_PER_MILLION_CNY = 0.8
+
 const rangeKey = ref<RangeKey>('7d')
 const providerCode = ref('')
 const modelCode = ref('')
@@ -500,6 +546,26 @@ const sceneOptions = [
 
 const hasObservedCalls = computed(() => Number(overview.value?.kpis.http_attempts || 0) > 0)
 const hasTrendData = computed(() => Boolean(overview.value?.trends.length))
+
+const billingSummary = computed(() => {
+  const kpis = overview.value?.kpis
+  const unknownAttempts = Number(kpis?.unknown_usage_attempts || 0)
+  const inputCost = calculateTokenCost(kpis?.input_tokens ?? null, INPUT_PRICE_PER_MILLION_CNY)
+  const outputCost = calculateTokenCost(kpis?.output_tokens ?? null, OUTPUT_PRICE_PER_MILLION_CNY)
+  const totalCost = inputCost === null || outputCost === null ? null : inputCost + outputCost
+
+  return {
+    inputLabel: formatCostCny(inputCost),
+    outputLabel: formatCostCny(outputCost),
+    totalLabel: totalCost === null ? '费用待核实' : formatCostCny(totalCost),
+    completenessLabel:
+      totalCost === null
+        ? '输入或输出 Token 未完整上报，无法估算费用'
+        : unknownAttempts > 0
+          ? `已上报费用 · ${formatInteger(unknownAttempts)} 次用量未上报，非完整账单`
+          : '全部已上报用量 · 估算费用',
+  }
+})
 
 const providerOptions = computed(() => {
   const values = new Set(knownModelOptions.value.map((item) => item.provider_code).filter(Boolean))
@@ -816,6 +882,44 @@ function formatNullableInteger(value: number | null): string {
   return value === null ? '未知' : Number(value).toLocaleString('zh-CN')
 }
 
+function calculateTokenCost(tokens: number | null, pricePerMillion: number): number | null {
+  if (tokens === null || !Number.isFinite(tokens) || tokens < 0) return null
+  return (tokens / 1_000_000) * pricePerMillion
+}
+
+function calculateCombinedCost(
+  inputTokens: number | null,
+  outputTokens: number | null,
+): number | null {
+  const inputCost = calculateTokenCost(inputTokens, INPUT_PRICE_PER_MILLION_CNY)
+  const outputCost = calculateTokenCost(outputTokens, OUTPUT_PRICE_PER_MILLION_CNY)
+  return inputCost === null || outputCost === null ? null : inputCost + outputCost
+}
+
+function formatCostCny(value: number | null): string {
+  return value === null ? '未知' : `¥${value.toFixed(6)}`
+}
+
+function recordCostLabel(
+  inputTokens: number | null,
+  outputTokens: number | null,
+  unknownUsageAttempts: number,
+): string {
+  const cost = calculateCombinedCost(inputTokens, outputTokens)
+  if (cost === null) return '费用未知'
+  return unknownUsageAttempts > 0 ? `已上报 ${formatCostCny(cost)}` : formatCostCny(cost)
+}
+
+function attemptCostLabel(
+  usageState: 'known' | 'unknown',
+  inputTokens: number | null,
+  outputTokens: number | null,
+): string {
+  if (usageState !== 'known') return '费用未知'
+  const cost = calculateCombinedCost(inputTokens, outputTokens)
+  return cost === null ? '费用未知' : formatCostCny(cost)
+}
+
 function aggregateTokenLabel(unknownUsageAttempts: number, totalTokens: number | null): string {
   if (Number(unknownUsageAttempts || 0) <= 0) return '总 Token'
   return totalTokens === null ? 'Token' : '已上报 Token'
@@ -1098,6 +1202,56 @@ onMounted(() => {
   line-height: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.llm-observability__billing {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.1fr) minmax(260px, 1fr) minmax(280px, 1.25fr);
+  align-items: center;
+  gap: 18px;
+  padding: 15px 18px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(0, 102, 204, 0.075), rgba(255, 255, 255, 0.92));
+}
+
+.llm-observability__billing-total span,
+.llm-observability__billing-total em,
+.llm-observability__billing-breakdown span,
+.llm-observability__billing-rates span,
+.llm-observability__billing-rates em {
+  display: block;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.llm-observability__billing-total strong {
+  display: block;
+  margin: 4px 0 2px;
+  color: #0058b0;
+  font-size: 24px;
+  line-height: 30px;
+}
+
+.llm-observability__billing-breakdown,
+.llm-observability__billing-rates {
+  display: grid;
+  gap: 5px;
+}
+
+.llm-observability__billing-breakdown strong {
+  color: rgba(29, 29, 31, 0.82);
+}
+
+.llm-observability__billing-rates {
+  padding-left: 18px;
+  border-left: 1px solid rgba(0, 102, 204, 0.12);
+}
+
+.llm-observability__billing-rates em {
+  color: rgba(29, 29, 31, 0.42);
 }
 
 .llm-observability__health-strip {
@@ -1456,6 +1610,18 @@ onMounted(() => {
     width: 100%;
     margin-left: 0;
   }
+
+  .llm-observability__billing {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .llm-observability__billing-rates {
+    grid-column: 1 / -1;
+    padding-top: 10px;
+    padding-left: 0;
+    border-top: 1px solid rgba(0, 102, 204, 0.12);
+    border-left: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1481,6 +1647,14 @@ onMounted(() => {
 
   .llm-observability__attempt dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .llm-observability__billing {
+    grid-template-columns: 1fr;
+  }
+
+  .llm-observability__billing-rates {
+    grid-column: auto;
   }
 }
 </style>

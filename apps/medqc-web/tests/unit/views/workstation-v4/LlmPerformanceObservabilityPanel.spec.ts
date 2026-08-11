@@ -172,6 +172,11 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('1,500')
     expect(wrapper.text()).toContain('P95 响应')
     expect(wrapper.text()).toContain('峰值并发')
+    expect(wrapper.text()).toContain('Token 计费估算')
+    expect(wrapper.text()).toContain('¥0.000480')
+    expect(wrapper.text()).toContain('输入 ¥0.20 / 百万 Token')
+    expect(wrapper.text()).toContain('输出 ¥0.80 / 百万 Token')
+    expect(wrapper.text()).toContain('按当前单价估算，不等同实际账单')
     expect(wrapper.text()).toContain('不含独立部署的 SQLBot')
     expect(wrapper.findAll('.v-chart-stub')).toHaveLength(2)
     expect(wrapper.findAll('.v-chart-stub')[0].text()).toBe('["08-10"]')
@@ -354,6 +359,9 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('第 1 次尝试')
     expect(wrapper.text()).toContain('用量已上报')
     expect(wrapper.text()).toContain('用量未上报')
+    expect(wrapper.text()).toContain('本次费用')
+    expect(wrapper.text()).toContain('¥0.000480')
+    expect(wrapper.text()).toContain('费用未知')
     expect(wrapper.text()).toContain('未知')
     expect(wrapper.text()).not.toContain('job-1')
     expect(wrapper.find('.pagination-stub').exists()).toBe(true)
@@ -406,6 +414,8 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('输入 未知 · 输出 未知')
     expect(wrapper.text()).toContain('P95 响应未知')
     expect(wrapper.text()).toContain('Token 未上报 9')
+    expect(wrapper.text()).toContain('费用待核实')
+    expect(wrapper.text()).not.toContain('¥0.000000')
   })
 
   it('存在部分未上报用量时将全部聚合 Token 明确标为已上报值', async () => {
@@ -425,8 +435,29 @@ describe('LlmPerformanceObservabilityPanel', () => {
 
     expect(wrapper.text()).toContain('已上报 Token')
     expect(wrapper.text()).toContain('2 次未上报')
+    expect(wrapper.text()).toContain('已上报费用')
+    expect(wrapper.text()).toContain('2 次用量未上报，非完整账单')
     const chart = wrapper.findAllComponents({ name: 'VChart' })[0]
     expect(chart.props('option').series[2].name).toBe('已上报 Token')
+  })
+
+  it('费用严格按输入输出分别计价，不使用可能不一致的总 Token', async () => {
+    vi.mocked(getLlmObservabilityOverview).mockResolvedValue({
+      ...overview,
+      kpis: {
+        ...overview.kpis,
+        input_tokens: 79_409,
+        output_tokens: 7_595,
+        total_tokens: 86_925,
+      },
+    })
+
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('¥0.021958')
+    expect(wrapper.text()).toContain('输入费用 ¥0.015882')
+    expect(wrapper.text()).toContain('输出费用 ¥0.006076')
   })
 
   it('将观测事实中的安全错误类别翻译为客户可读文案', async () => {
