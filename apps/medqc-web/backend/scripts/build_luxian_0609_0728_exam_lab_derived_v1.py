@@ -836,6 +836,7 @@ def _append_consultation_and_handover_supplements(
     consultation_prefix = f"{case.target_visit_id}-consultation-controlled-001"
     _append(rows_by_table, "consultation_record", {
         **_base(case, consultation_request_time),
+        "application_id": consultation_prefix,
         "document_id": f"{consultation_prefix}-application",
         "document_title": "会诊申请单（合成补件）",
         "document_status": "Submitted",
@@ -847,6 +848,7 @@ def _append_consultation_and_handover_supplements(
     })
     _append(rows_by_table, "consultation_record", {
         **_base(case, consultation_record_time),
+        "application_id": consultation_prefix,
         "document_id": f"{consultation_prefix}-record",
         "document_title": "会诊记录单（合成补件）",
         "document_status": "Submitted",
@@ -1076,6 +1078,13 @@ def _validate_before_write(rows_by_table: dict[str, list[dict[str, Any]]]) -> No
         ]
         if len(controlled_consultation) != 2:
             raise ValueError(f"{case.source_mr_no} 未生成受控会诊申请/记录对")
+        consultation_application_ids = {
+            str(row.get("application_id") or "") for row in controlled_consultation
+        }
+        if consultation_application_ids != {
+            f"{prefix}-consultation-controlled-001"
+        }:
+            raise ValueError(f"{case.source_mr_no} 的受控会诊申请/记录未绑定同一会诊事件")
         consultation_times = sorted(
             row.get("record_time") for row in controlled_consultation if isinstance(row.get("record_time"), datetime)
         )

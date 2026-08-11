@@ -110,6 +110,25 @@ def _discharge_diagnosis_rows(
     }
 
 
+def test_build_rows_assigns_one_stable_application_id_to_each_controlled_consultation_pair() -> None:
+    rows_by_table, _ = builder.build_rows()
+
+    for case in builder.CASES:
+        controlled = [
+            row
+            for row in rows_by_table["consultation_record"]
+            if row.get("visit_id") == case.target_visit_id
+            and str(row.get("document_id") or "").startswith(
+                f"{case.target_visit_id}-consultation-controlled-"
+            )
+        ]
+
+        assert len(controlled) == 2
+        assert {
+            str(row.get("application_id") or "") for row in controlled
+        } == {f"{case.target_visit_id}-consultation-controlled-001"}
+
+
 def test_discharge_diagnosis_contract_is_unique_consistent_and_idempotent() -> None:
     case = builder.CASES[0]
     rows = _discharge_diagnosis_rows(case)
