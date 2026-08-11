@@ -1658,4 +1658,126 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('今日准备开始辅助化疗')
     expect(wrapper.text()).not.toContain('触发状态：unknown')
   })
+
+  it('LX0609 单病历焦点下应汇总输血前评估、输血病程和输血后评价均已齐备', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.items = [
+      {
+        rule_id: 'LX0609-044',
+        rule_code: 'LX0609-044',
+        rule_name: '输血前评估记录',
+        record_ref: 'case-A',
+        status: 'compliant',
+        canonical_status: 'compliant',
+      },
+      {
+        rule_id: 'LX0609-045',
+        rule_code: 'LX0609-045',
+        rule_name: '输血病程记录',
+        record_ref: 'case-A',
+        status: 'compliant',
+        canonical_status: 'compliant',
+      },
+      {
+        rule_id: 'LX0609-047',
+        rule_code: 'LX0609-047',
+        rule_name: '输血后评价',
+        record_ref: 'case-A',
+        status: 'compliant',
+        canonical_status: 'compliant',
+      },
+      {
+        rule_id: 'LX0609-044',
+        rule_code: 'LX0609-044',
+        rule_name: '输血前评估记录',
+        record_ref: 'case-B',
+        status: 'data_gap',
+        canonical_status: 'data_gap',
+      },
+    ]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: { ...props, focusRecordRef: 'case-A' },
+      global: { stubs: drawerStubs },
+    })
+
+    const summary = wrapper.find('[data-testid="transfusion-documentation-summary"]')
+    expect(summary.exists()).toBe(true)
+    expect(summary.text()).toContain('输血前评估、输血病程、输血后评价已齐备')
+    expect(summary.text()).not.toContain('数据不足')
+  })
+
+  it('LX0609 输血三项汇总应仅使用当前焦点病例，并说明缺少的具体项目及状态', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.items = [
+      {
+        rule_id: 'LX0609-044',
+        rule_code: 'LX0609-044',
+        rule_name: '输血前评估记录',
+        record_ref: 'case-B',
+        status: 'non_compliant',
+        canonical_status: 'non_compliant',
+      },
+      {
+        rule_id: 'LX0609-045',
+        rule_code: 'LX0609-045',
+        rule_name: '输血病程记录',
+        record_ref: 'case-B',
+        status: 'data_gap',
+        canonical_status: 'data_gap',
+      },
+      {
+        rule_id: 'LX0609-047',
+        rule_code: 'LX0609-047',
+        rule_name: '输血后评价',
+        record_ref: 'case-B',
+        status: 'uncertain',
+        canonical_status: 'uncertain',
+      },
+      {
+        rule_id: 'LX0609-046',
+        rule_code: 'LX0609-046',
+        rule_name: '输血病程记录完整性',
+        record_ref: 'case-B',
+        status: 'non_compliant',
+        canonical_status: 'non_compliant',
+      },
+    ]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: { ...props, focusRecordRef: 'case-B' },
+      global: { stubs: drawerStubs },
+    })
+
+    const summary = wrapper.find('[data-testid="transfusion-documentation-summary"]')
+    expect(summary.exists()).toBe(true)
+    expect(summary.text()).toContain('输血前评估：不合规')
+    expect(summary.text()).toContain('输血病程：数据不足')
+    expect(summary.text()).toContain('输血后评价：AI判断')
+    expect(summary.text()).not.toContain('LX0609-046')
+  })
+
+  it('非LX0609任务不展示输血三项汇总', () => {
+    const props = buildProps()
+    props.batchJobDetail.items = [
+      {
+        rule_id: 'LX0609-044',
+        rule_code: 'LX0609-044',
+        record_ref: 'case-A',
+        status: 'compliant',
+        canonical_status: 'compliant',
+      },
+    ]
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: { ...props, focusRecordRef: 'case-A' },
+      global: { stubs: drawerStubs },
+    })
+
+    expect(wrapper.find('[data-testid="transfusion-documentation-summary"]').exists()).toBe(false)
+  })
 })

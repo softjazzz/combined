@@ -423,6 +423,43 @@ export function useSemanticRulesBatchResultDrawerController(
       })
   })
 
+  const transfusionDocumentationSummary = computed(() => {
+    if (!isLuxian0609BatchJob.value || !isFocusedRecordMode.value) return null
+
+    const definitions = [
+      { ruleId: 'LX0609-044', label: '输血前评估' },
+      { ruleId: 'LX0609-045', label: '输血病程' },
+      { ruleId: 'LX0609-047', label: '输血后评价' },
+    ]
+    const sourceItems = canonicalLuxianIssueSourceItems.value
+    const entries = definitions.map((definition) => {
+      const item = sourceItems.find(
+        (candidate) =>
+          String(candidate.rule_id || candidate.rule_code || '').trim() === definition.ruleId,
+      )
+      const status = item ? resolveIssueCanonicalStatus(item) : ''
+      return {
+        ...definition,
+        status,
+        statusText: item
+          ? resolveDisplayStatusText(item) || resolveStatusText(status)
+          : '未返回结果',
+      }
+    })
+    if (!entries.some((entry) => entry.status)) return null
+
+    const incompleteEntries = entries.filter((entry) => entry.status !== 'compliant')
+    return {
+      complete: incompleteEntries.length === 0,
+      entries,
+      summaryText:
+        incompleteEntries.length === 0
+          ? '输血前评估、输血病程、输血后评价已齐备'
+          : '尚未齐备：' +
+            incompleteEntries.map((entry) => entry.label + '：' + entry.statusText).join('；'),
+    }
+  })
+
   const selectedClusterKey = ref('')
   const selectedDebugRuleJobId = ref('')
   const selectedIssueRecordKey = ref(ALL_RECORDS_KEY)
@@ -3009,6 +3046,7 @@ export function useSemanticRulesBatchResultDrawerController(
     toggleClusterFilter,
     toggleIssueExpanded,
     topAggregationClusters,
+    transfusionDocumentationSummary,
     truncateText,
     waitingFirstResultDescription,
   }

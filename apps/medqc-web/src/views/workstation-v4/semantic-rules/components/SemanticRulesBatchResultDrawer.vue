@@ -468,6 +468,32 @@
               </template>
             </aside>
             <div class="issue-business-main">
+              <section
+                v-if="transfusionDocumentationSummary"
+                class="transfusion-documentation-summary"
+                :class="{
+                  'transfusion-documentation-summary--complete':
+                    transfusionDocumentationSummary.complete,
+                }"
+                data-testid="transfusion-documentation-summary"
+              >
+                <div class="transfusion-documentation-summary-head">
+                  <strong>输血相关三项</strong>
+                  <span>{{
+                    transfusionDocumentationSummary.complete ? '资料齐备' : '需要关注'
+                  }}</span>
+                </div>
+                <p>{{ transfusionDocumentationSummary.summaryText }}</p>
+                <div
+                  v-if="!transfusionDocumentationSummary.complete"
+                  class="transfusion-documentation-summary-statuses"
+                >
+                  <span
+                    v-for="entry in transfusionDocumentationSummary.entries"
+                    :key="entry.ruleId"
+                  >{{ entry.label }}：{{ entry.statusText }}</span>
+                </div>
+              </section>
               <div
                 v-if="isSingleRecordIssueMode && selectedBusinessIssueCard"
                 class="issue-conclusion-card issue-detail-panel"
@@ -2404,6 +2430,7 @@ const {
   toggleClusterFilter,
   toggleIssueExpanded,
   topAggregationClusters,
+  transfusionDocumentationSummary,
   truncateText,
   waitingFirstResultDescription,
 } = useSemanticRulesBatchResultDrawerController(props)

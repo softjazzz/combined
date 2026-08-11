@@ -901,6 +901,65 @@
   margin-bottom: 12px;
 }
 
+.transfusion-documentation-summary {
+  margin-bottom: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 251, 235, 0.8);
+  padding: 10px 12px;
+}
+
+.transfusion-documentation-summary--complete {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(236, 253, 245, 0.82);
+}
+
+.transfusion-documentation-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.transfusion-documentation-summary-head strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.transfusion-documentation-summary-head span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #b45309;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.transfusion-documentation-summary--complete .transfusion-documentation-summary-head span {
+  color: #047857;
+}
+
+.transfusion-documentation-summary p {
+  margin: 5px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.transfusion-documentation-summary-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .issue-record-result-group {
   display: flex;
   flex-direction: column;
