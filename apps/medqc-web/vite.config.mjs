@@ -16,7 +16,7 @@ const devServerHost = process.env.VITE_DEV_HOST || '127.0.0.1'
 const publicHmrHost = process.env.VITE_HMR_HOST || undefined
 const publicHmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || devServerPort)
 
-function createManualChunks(id) {
+export function createManualChunks(id) {
   const normalizedId = normalizeId(id)
 
   if (normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')) {
@@ -99,31 +99,10 @@ function createManualChunks(id) {
       return 'vendor-echarts-vue'
     }
 
-    if (
-      normalizedId.includes('/node_modules/echarts/core/')
-      || normalizedId.includes('/node_modules/echarts/shared/')
-      || normalizedId.includes('/node_modules/echarts/lib/core/')
-    ) {
-      return 'vendor-echarts-core'
-    }
-
-    if (
-      normalizedId.includes('/node_modules/echarts/charts/')
-      || normalizedId.includes('/node_modules/echarts/lib/chart/')
-    ) {
-      return 'vendor-echarts-charts'
-    }
-
-    if (
-      normalizedId.includes('/node_modules/echarts/components/')
-      || normalizedId.includes('/node_modules/echarts/renderers/')
-      || normalizedId.includes('/node_modules/echarts/lib/component/')
-      || normalizedId.includes('/node_modules/echarts/lib/renderer/')
-    ) {
-      return 'vendor-echarts-components'
-    }
-
     if (normalizedId.includes('/node_modules/echarts/')) {
+      // ECharts 内部模块之间存在循环初始化关系，必须作为一个整体输出。
+      // 拆成 core/charts/components 会让生产构建在读取 env.domSupported 时拿到
+      // 尚未初始化的循环依赖导出，导致系统配置页加载失败。
       return 'vendor-echarts'
     }
 
