@@ -4042,7 +4042,36 @@ def safe_luxian_0609_customer_display_facts(
             "checked_requirement": expected_requirement,
             "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         }
-    if rule_id == "LX0609-020":
+    if rule_id in {"LX0609-020", "LX0609-023"} and raw.get(
+        "verification_kind"
+    ) in {
+        "consultation_execution_relation_check",
+        "consultation_execution_quality_check",
+    }:
+        expected_verification_kind = (
+            "consultation_execution_quality_check"
+            if rule_id == "LX0609-023"
+            else "consultation_execution_relation_check"
+        )
+        allowed_relation_states = (
+            {
+                "specific_execution",
+                "generic_or_copied_execution",
+                "execution_record_absent",
+                "source_incomplete",
+                "association_unresolved",
+                "source_error",
+            }
+            if rule_id == "LX0609-023"
+            else {
+                "all_linked",
+                "execution_missing",
+                "not_triggered",
+                "source_incomplete",
+                "association_unresolved",
+                "source_error",
+            }
+        )
         expected_keys = {
             "verification_kind",
             "completed_opinion_episode_count",
@@ -4064,17 +4093,8 @@ def safe_luxian_0609_customer_display_facts(
         source_document_ids = raw.get("source_document_ids")
         if (
             set(raw) - allowed_internal_keys != expected_keys
-            or raw.get("verification_kind")
-            != "consultation_execution_relation_check"
-            or raw.get("relation_state")
-            not in {
-                "all_linked",
-                "execution_missing",
-                "not_triggered",
-                "source_incomplete",
-                "association_unresolved",
-                "source_error",
-            }
+            or raw.get("verification_kind") != expected_verification_kind
+            or raw.get("relation_state") not in allowed_relation_states
             or any(
                 type(raw.get(key)) is not int or not 0 <= raw[key] <= 100
                 for key in count_keys
@@ -4104,7 +4124,7 @@ def safe_luxian_0609_customer_display_facts(
                 ):
                     return None
         return {
-            "verification_kind": "consultation_execution_relation_check",
+            "verification_kind": expected_verification_kind,
             **{key: raw[key] for key in count_keys},
             "relation_state": raw["relation_state"],
             "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
@@ -4332,7 +4352,7 @@ def _customer_evidence_from_display_facts(
             if located:
                 return located
 
-    if rule_id == "LX0609-020":
+    if rule_id in {"LX0609-020", "LX0609-023"}:
         allowed_source_types = {
             "consultation_record",
             "daily_course_record",

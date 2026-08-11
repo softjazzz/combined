@@ -295,6 +295,45 @@ def test_020_uses_exact_opinion_and_execution_document_refs_for_customer_evidenc
     assert "source_document_refs" not in result.get("customer_display_facts", {})
 
 
+def test_023_uses_exact_opinion_and_execution_document_refs_for_customer_evidence():
+    module = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    )
+    facts = {
+        "verification_kind": "consultation_execution_quality_check",
+        "completed_opinion_episode_count": 1,
+        "recommendation_count": 1,
+        "specific_execution_count": 1,
+        "generic_execution_count": 0,
+        "missing_execution_count": 0,
+        "relation_state": "specific_execution",
+        "source_document_ids": ["CONSULT-OPINION"],
+        "source_document_refs": [
+            {
+                "source_type": "consultation_record",
+                "source_document_id": "CONSULT-OPINION",
+            },
+            {
+                "source_type": "daily_course_record",
+                "source_document_id": "COURSE-EXECUTION",
+            },
+        ],
+    }
+
+    result = module.aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-023"}],
+        execution_results=[],
+        reduced_decisions=(_reduced_decision("LX0609-023"),),
+        customer_display_facts=(("LX0609-023", facts),),
+    )[0]
+
+    assert result["customer_evidence"] == facts["source_document_refs"]
+    assert result["customer_display_facts"] == {
+        key: value for key, value in facts.items() if key != "source_document_refs"
+    }
+
+
 @pytest.mark.parametrize(
     ("rule_id", "facts"),
     [

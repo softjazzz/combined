@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 import httpx
 import json
@@ -291,6 +291,30 @@ class _ExecutionAssessment:
     execution_record_state: str = "no_trace"
     trace_refs: tuple[str, ...] = ()
     context_only_refs: tuple[str, ...] = ()
+
+
+def _merge_rechecked_execution_assessment(
+    original: _ExecutionAssessment,
+    rechecked: _ExecutionAssessment,
+) -> _ExecutionAssessment:
+    """复核结果优先；两次独立均确认无执行痕迹时可收敛信心。"""
+
+    if rechecked.confidence == "high":
+        return rechecked
+    if (
+        original.execution_record_state == "no_trace"
+        and rechecked.execution_record_state == "no_trace"
+        and original.execution_state == "absent"
+        and rechecked.execution_state == "absent"
+        and not original.trace_refs
+        and not rechecked.trace_refs
+        and not original.execution_refs
+        and not rechecked.execution_refs
+    ):
+        # 不从关键词推断“未执行”；只在两次受控语义核对对
+        # 同一建议给出完全一致的 no_trace/absent 事实时收敛。
+        return replace(rechecked, confidence="high")
+    return rechecked
 
 
 @dataclass(frozen=True)
@@ -1188,6 +1212,7 @@ def _consultation_semantic_display_facts(
 
 def _consultation_execution_display_facts(
     *,
+    rule_id: str,
     status: str,
     episodes: Sequence[_Episode],
     completed_recommendations: Sequence[_CompletedRecommendation],
@@ -1195,12 +1220,20 @@ def _consultation_execution_display_facts(
     documents: Sequence[Mapping[str, str]],
     candidates: Sequence[_CandidateDocument] = (),
 ) -> Mapping[str, Any]:
-    """解释020为何已关联、缺失、未触发或暂不能关联。"""
+    """解释020的关联结果或023的执行质量结果。"""
 
-    relation_by_status = {
+    relation_by_status_020 = {
         "compliant": "all_linked",
         "non_compliant": "execution_missing",
         "not_applicable": "not_triggered",
+        "data_gap": "source_incomplete",
+        "evaluation_unknown": "association_unresolved",
+        "technical_error": "source_error",
+    }
+    relation_by_status_023 = {
+        "compliant": "specific_execution",
+        "non_compliant": "generic_or_copied_execution",
+        "not_applicable": "execution_record_absent",
         "data_gap": "source_incomplete",
         "evaluation_unknown": "association_unresolved",
         "technical_error": "source_error",
@@ -1246,7 +1279,11 @@ def _consultation_execution_display_facts(
         }.values()
     )[:8]
     return {
-        "verification_kind": "consultation_execution_relation_check",
+        "verification_kind": (
+            "consultation_execution_quality_check"
+            if rule_id == "LX0609-023"
+            else "consultation_execution_relation_check"
+        ),
         "completed_opinion_episode_count": len(
             {
                 episode.episode_ref
@@ -1270,7 +1307,9 @@ def _consultation_execution_display_facts(
             item.execution_record_state == "no_trace" and not item.execution_refs
             for item in assessment_rows
         ),
-        "relation_state": relation_by_status.get(status, "association_unresolved"),
+        "relation_state": (
+            relation_by_status_023 if rule_id == "LX0609-023" else relation_by_status_020
+        ).get(status, "association_unresolved"),
         "source_document_ids": list(dict.fromkeys(source_document_ids))[:8],
         "source_document_refs": source_document_refs,
     }
@@ -1405,8 +1444,8 @@ def _execution_prompt(
         "trace_refs和structured_action_refs只能引用该建议candidate_refs所指向的candidate_documents中的ref，绝不得引用会诊申请或会诊意见的ref。"
         "specific_trace/generic_trace/copied_opinion必须至少返回一个trace_refs；linked_specific或linked_vague必须至少返回一个structured_action_refs。"
         "没有可验证的candidate_documents ref时必须返回unknown。"
-        "每个非空trace_refs或structured_action_refs都必须返回execution_quotes：每项是所引执行候选中的连续原文摘录，"
-        "用于证明该候选真的支持你的关联；不得改写、拼接或引用未选候选。"
+        "execution_quotes是可选的辅助摘录；已选择精确trace_refs或structured_action_refs时可以返回空数组。"
+        "若返回摘录，每项必须是所引执行候选中的连续原文，不得改写、拼接或引用未选候选。"
         "no_trace/absent组合必须返回空数组trace_refs、structured_action_refs和execution_quotes。"
         "每个输入recommendation_ref恰好输出一项，禁止重复。"
         "严格输出JSON：{executions:[{recommendation_ref,execution_record_state,trace_refs,execution_state,structured_action_refs,execution_quotes,confidence}]}。输入："
@@ -1535,7 +1574,7 @@ def _parse_executions(
         selected_documents = tuple(
             candidate_by_ref[ref] for ref in all_refs if ref in candidate_by_ref
         )
-        if all_refs:
+        if all_refs and quotes:
             grounded_quotes = tuple(
                 quote
                 for quote in quotes
@@ -1545,9 +1584,8 @@ def _parse_executions(
                 )
             )
             # 模型偶尔在已落地摘录之外追加一段无法落地的冗余文字。只保留
-            # 已逐字命中受控候选的摘录；若一段都不能落地，仍严格拒绝。
-            if not grounded_quotes:
-                raise _SemanticInvalid()
+            # 已逐字命中受控候选的摘录。摘录是辅助字段，精确ref已通过
+            # 来源、时序与白名单校验后，冗余改写不得作废主事实。
             quotes = grounded_quotes
         elif quotes:
             raise _SemanticInvalid()
@@ -2207,6 +2245,64 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                                 allowed_refs=allowed_refs,
                                 candidates=projection.candidates,
                             )
+                            low_confidence_refs = {
+                                item.recommendation_ref
+                                for item in execution_assessments
+                                if item.confidence != "high"
+                            }
+                            if low_confidence_refs:
+                                # 只对首轮明确标为中/低信心的建议做一次
+                                # 最小上下文重问；已高信心的其他建议不重复投递。
+                                recheck_completed = tuple(
+                                    item
+                                    for item in completed_recommendations
+                                    if item.recommendation.recommendation_ref
+                                    in low_confidence_refs
+                                )
+                                try:
+                                    recheck_prompt, recheck_allowed_refs = _execution_prompt(
+                                        completed=recheck_completed,
+                                        candidates=projection.candidates,
+                                    )
+                                    calls += 1
+                                    recheck_started = time.perf_counter()
+                                    recheck_response = await llm_client.generate(recheck_prompt)
+                                    if not isinstance(recheck_response, Mapping):
+                                        raise _SemanticInvalid()
+                                    (
+                                        recheck_prompt_tokens,
+                                        recheck_completion_tokens,
+                                        recheck_total_tokens,
+                                        recheck_response_time,
+                                    ) = _usage(recheck_response)
+                                    prompt_tokens += recheck_prompt_tokens
+                                    completion_tokens += recheck_completion_tokens
+                                    total_tokens += recheck_total_tokens
+                                    api_time += recheck_response_time or (
+                                        time.perf_counter() - recheck_started
+                                    )
+                                    rechecked = _parse_executions(
+                                        _payload(recheck_response),
+                                        completed=recheck_completed,
+                                        allowed_refs=recheck_allowed_refs,
+                                        candidates=projection.candidates,
+                                    )
+                                    rechecked_by_ref = {
+                                        item.recommendation_ref: item for item in rechecked
+                                    }
+                                    execution_assessments = tuple(
+                                        _merge_rechecked_execution_assessment(
+                                            item,
+                                            rechecked_by_ref[item.recommendation_ref],
+                                        )
+                                        if item.recommendation_ref in rechecked_by_ref
+                                        else item
+                                        for item in execution_assessments
+                                    )
+                                except Exception:
+                                    # 语义复核只用于提升个别低信心事实；其失败
+                                    # 不得覆盖首轮可交付的其他建议。
+                                    pass
                         except _SemanticInvalid:
                             status = "technical_error" if execution_source_technical else "evaluation_unknown"
                             reason = "source_query_error" if execution_source_technical else "semantic_output_unknown"
@@ -2285,12 +2381,15 @@ async def execute_luxian_0609_native_consultation_episode_rules(
                     ),
                 )
             )
-    if "LX0609-020" in selected and "LX0609-020" in statuses:
+    for rule_id in ("LX0609-020", "LX0609-023"):
+        if rule_id not in selected or rule_id not in statuses:
+            continue
         display_facts.append(
             (
-                "LX0609-020",
+                rule_id,
                 _consultation_execution_display_facts(
-                    status=statuses["LX0609-020"][0],
+                    rule_id=rule_id,
+                    status=statuses[rule_id][0],
                     episodes=episodes,
                     completed_recommendations=completed_recommendations,
                     assessments=execution_assessments,

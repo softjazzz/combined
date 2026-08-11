@@ -1505,6 +1505,188 @@ async def test_020_023_specific_course_trace_does_not_require_structured_order(m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "execution_quotes",
+    ([], ["模型重述但非原文的冗余摘录"]),
+)
+async def test_020_023_accept_exact_course_ref_when_model_omits_redundant_quote(
+    monkeypatch,
+    execution_quotes,
+):
+    """精确文书ref已受时序与来源约束时，不依赖冗余摘录。"""
+
+    source_rows = {
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 01:00:00",
+            "record_content": "会诊意见：建议加强抗感染治疗。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "病程记录",
+            "record_time": "2026-07-20 03:00:00",
+            "record_content": "已按会诊意见启动抗感染治疗。",
+        }],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[{
+                "recommendation_ref": "consultation_record-1#r1",
+                "action_type": "medication",
+                "source_quote": "加强抗感染治疗",
+                "normalized_action": "加强抗感染治疗",
+                "opinion_ref": "__AUTO__",
+            }],
+        )]),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "specific_trace",
+            "trace_refs": ["daily_course_record-1"],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": execution_quotes,
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == ["compliant", "compliant"]
+    assert result.llm_call_count == 2
+    facts = dict(result.customer_display_facts)
+    assert facts["LX0609-023"]["source_document_refs"] == [
+        {
+            "source_type": "consultation_record",
+            "source_document_id": "CONSULT-OPINION",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "COURSE-EXECUTION",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_020_023_rechecks_only_low_confidence_execution_assessment_once(
+    monkeypatch,
+):
+    """二阶段只有个别建议为中信心时，仅重问该建议一次。"""
+
+    source_rows = {
+        "consultation_record": [{
+            "document_id": "CONSULT-OPINION",
+            "document_title": "会诊记录",
+            "record_time": "2026-07-20 01:00:00",
+            "record_content": "会诊意见：建议加强抗感染治疗，并复查血常规。",
+        }],
+        "daily_course_record": [{
+            "document_id": "COURSE-EXECUTION",
+            "document_title": "病程记录",
+            "record_time": "2026-07-20 03:00:00",
+            "record_content": "已按会诊意见复查血常规。",
+        }],
+        "senior_course_record": [],
+        "inpat_drug_order": [],
+        "exam_item_report": [],
+        "labtest_item_report": [],
+        "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[_episode(
+            "consultation_record-1",
+            ["consultation_record-1"],
+            recommendations=[
+                {
+                    "recommendation_ref": "consultation_record-1#r1",
+                    "action_type": "medication",
+                    "source_quote": "加强抗感染治疗",
+                    "normalized_action": "加强抗感染治疗",
+                    "opinion_ref": "__AUTO__",
+                },
+                {
+                    "recommendation_ref": "consultation_record-1#r2",
+                    "action_type": "test",
+                    "source_quote": "复查血常规",
+                    "normalized_action": "复查血常规",
+                    "opinion_ref": "__AUTO__",
+                },
+            ],
+        )]),
+        _execution(
+            {
+                "recommendation_ref": "consultation_record-1#r1",
+                "execution_record_state": "no_trace",
+                "trace_refs": [],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "execution_quotes": [],
+                "confidence": "medium",
+            },
+            {
+                "recommendation_ref": "consultation_record-1#r2",
+                "execution_record_state": "specific_trace",
+                "trace_refs": ["daily_course_record-1"],
+                "execution_state": "absent",
+                "structured_action_refs": [],
+                "execution_quotes": [],
+                "confidence": "high",
+            },
+        ),
+        _execution({
+            "recommendation_ref": "consultation_record-1#r1",
+            "execution_record_state": "no_trace",
+            "trace_refs": [],
+            "execution_state": "absent",
+            "structured_action_refs": [],
+            "execution_quotes": [],
+            "confidence": "medium",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        source_schema=None,
+        llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 3
+    assert "consultation_record-1#r1" in client.prompts[2]
+    assert "consultation_record-1#r2" not in client.prompts[2]
+
+
+@pytest.mark.asyncio
 async def test_020_generic_course_trace_is_compliant_but_023_is_non_compliant(monkeypatch):
     """020只核对病程是否记载，023再核对是否笼统。"""
 
