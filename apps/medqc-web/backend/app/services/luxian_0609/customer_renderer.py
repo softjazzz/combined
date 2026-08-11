@@ -1381,6 +1381,49 @@ def customer_finding_from_controlled_facts(
     if rule_id in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}:
         subject = "CT/MRI" if rule_id in {"LX0609-011", "LX0609-012"} else "细菌培养"
         analysis_rule = rule_id in {"LX0609-012", "LX0609-015"}
+        event_results = facts.get("event_results")
+        if isinstance(event_results, list) and len(event_results) > 1:
+            requirement_label = "阳性结果分析或处置" if analysis_rule else "报告结果记录"
+            details: list[str] = []
+            for index, item in enumerate(event_results, start=1):
+                if not isinstance(item, Mapping):
+                    return ""
+                report_time = str(item.get("report_time") or "时间待核实")
+                event_status = str(item.get("event_status") or "")
+                response_time = item.get("response_record_time")
+                interval = item.get("interval_hours")
+                response_count = item.get("response_record_count")
+                if event_status == "compliant":
+                    timing = (
+                        f"，最早相关病程 {response_time}，间隔 {interval:g} 小时"
+                        if isinstance(interval, (int, float)) and response_time
+                        else ""
+                    )
+                    conclusion = f"已完成{requirement_label}{timing}"
+                elif event_status == "non_compliant":
+                    conclusion = (
+                        f"找到 {response_count} 份报告后相关病程，"
+                        f"但未完成{requirement_label}"
+                        if isinstance(response_count, int) and response_count > 0
+                        else f"未找到报告后24小时内的{requirement_label}"
+                    )
+                elif event_status == "not_applicable":
+                    conclusion = (
+                        "报告未明确阳性，本项不适用"
+                        if analysis_rule
+                        else "本次事件不适用"
+                    )
+                elif event_status == "data_gap":
+                    uncertain_label = (
+                        "阳性结果是否已分析或处置"
+                        if analysis_rule
+                        else "报告结果是否已记录"
+                    )
+                    conclusion = f"资料待核实，暂无法确认{uncertain_label}"
+                else:
+                    return ""
+                details.append(f"{index}）报告时间 {report_time}：{conclusion}")
+            return f"共核对{len(details)}次{subject}检查：" + "；".join(details) + "。"
         report_time = facts.get("report_time")
         response_count = facts.get("response_record_count")
         response_time = facts.get("response_record_time")

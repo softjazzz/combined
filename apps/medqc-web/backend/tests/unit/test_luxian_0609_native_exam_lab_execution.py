@@ -800,6 +800,37 @@ def test_multiple_report_business_ids_are_independent_events():
     assert all(not event.conflict_roles for event in projection.culture_events)
 
 
+def test_duplicate_exam_rows_share_one_event_while_another_exam_stays_independent():
+    projection = build_exam_lab_text_projection(
+        rows_by_source={
+            "exam_master": (
+                {
+                    "exam_id": "2505871||668^2505871||669",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-07-22 09:55:49",
+                },
+                {
+                    "exam_id": "2505871||668^2505871||669",
+                    "exam_name": "胸部CT",
+                    "report_time": "2026-07-22 09:55:49",
+                },
+                {
+                    "exam_id": "2505871||993^2505871||994",
+                    "exam_name": "头颅CT",
+                    "report_time": "2026-07-27 10:49:19",
+                },
+            ),
+        }
+    )
+
+    assert len(projection.imaging_events) == 2
+    assert [len(event.document_refs) for event in projection.imaging_events] == [2, 1]
+    assert [
+        event.report_time.strftime("%Y-%m-%d %H:%M:%S")
+        for event in projection.imaging_events
+    ] == ["2026-07-22 09:55:49", "2026-07-27 10:49:19"]
+
+
 def test_many_unrelated_rows_do_not_hide_one_bound_mri_event():
     projection = build_exam_lab_text_projection(
         rows_by_source={
@@ -2831,6 +2862,17 @@ async def test_six_ct_mri_events_are_checked_independently_in_one_model_call(
     assert "COURSE_DOC_POSITION=1" in client.prompts[0]
     assert "每个规则与事件组合各一条" in client.prompts[0]
     assert "每个rule_id各一条" not in client.prompts[0]
+    display_facts = dict(result.customer_display_facts)
+    for rule_id in ("LX0609-011", "LX0609-012"):
+        assert display_facts[rule_id]["event_count"] == 6
+        assert [
+            item["event_position"]
+            for item in display_facts[rule_id]["event_results"]
+        ] == [1, 2, 3, 4, 5, 6]
+        assert all(
+            item["event_status"] == "compliant"
+            for item in display_facts[rule_id]["event_results"]
+        )
 
 
 def test_multi_event_parser_localizes_course_outside_the_event_window():
@@ -2962,6 +3004,83 @@ async def test_multi_event_violation_is_not_hidden_by_another_event_data_gap(
     )
 
     assert result.decisions[0].qc_direction.value == "defect"
+    assert result.llm_call_count == 1
+    display = dict(result.customer_display_facts)["LX0609-011"]
+    assert display["event_count"] == 2
+    assert display["event_results"] == [
+        {
+            "event_position": 1,
+            "event_status": "data_gap",
+            "report_time": "2026-04-01 12:00:00",
+            "positive_state": "not_relevant",
+            "response_record_count": 0,
+        },
+        {
+            "event_position": 2,
+            "event_status": "non_compliant",
+            "report_time": "2026-04-04 12:00:00",
+            "positive_state": "not_relevant",
+            "response_record_count": 0,
+            "applicable": True,
+            "requirement_met": False,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_multi_event_all_data_gap_still_delivers_each_event_detail(monkeypatch):
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        exam_rows=(
+            {
+                "exam_id": "EXAM-1",
+                "exam_name": "胸部CT",
+                "report_time": "2026-04-01 12:00:00",
+            },
+            {
+                "exam_id": "EXAM-2",
+                "exam_name": "头颅MRI",
+                "report_time": "2026-04-04 12:00:00",
+            },
+        ),
+        course_rows=({
+            "record_time": "2026-04-01 13:00:00",
+            "record_content": "住院期间一般病程。",
+        },),
+        evaluation_horizon_rows=({"horizon_date": "2026-04-10"},),
+    )
+    client = _Client([{
+        "schema_version": "lx0609-exam-lab-text-facts-v4",
+        "facts": [
+            {
+                "rule_id": "LX0609-011",
+                "event_position": event_position,
+                "applicability": "unknown",
+                "semantic_state": "unknown",
+                "positive_state": "not_relevant",
+                "course_doc_positions": [],
+            }
+            for event_position in (1, 2)
+        ],
+    }])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-011",),
+        wrapper_rules=[_wrapper("LX0609-011")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-011",),
+    )
+
+    assert result.decisions[0].evidence_state.value == "data_gap"
+    display = dict(result.customer_display_facts)["LX0609-011"]
+    assert display["verification_kind"] == "exam_lab_event_review_incomplete"
+    assert [item["event_status"] for item in display["event_results"]] == [
+        "data_gap",
+        "data_gap",
+    ]
     assert result.llm_call_count == 1
 
 

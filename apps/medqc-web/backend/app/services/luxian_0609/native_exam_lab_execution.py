@@ -1079,6 +1079,72 @@ def _fact_for_outcome_display(
     return rule_facts[0]
 
 
+def _display_facts_for_text_outcome(
+    *,
+    rule_id: str,
+    facts: Sequence[ExamLabEventFact],
+    projection: ExamLabTextProjection,
+    outcome: _ExamLabOutcome,
+) -> Mapping[str, Any] | None:
+    """保留总状态兼容字段，并附加每个检查/检验事件的受控判定明细。"""
+
+    primary_fact = _fact_for_outcome_display(
+        rule_id=rule_id,
+        facts=facts,
+        projection=projection,
+        outcome=outcome,
+    )
+    rule_facts = tuple(item for item in facts if item.rule_id == rule_id)
+    multi_event = len(rule_facts) > 1
+    event_results: list[dict[str, Any]] = []
+    source_document_refs: list[Mapping[str, str]] = []
+    for fact in rule_facts:
+        event_outcome = _single_text_fact_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+        )
+        single = _text_outcome_display_facts(
+            rule_id=rule_id,
+            status=event_outcome.status,
+            fact=fact,
+            projection=projection,
+            include_data_gap=multi_event,
+        )
+        if not isinstance(single, Mapping):
+            continue
+        detail: dict[str, Any] = {
+            "event_position": fact.event_position,
+            "event_status": event_outcome.status,
+        }
+        for key in (
+            "report_time",
+            "positive_state",
+            "response_record_count",
+            "response_record_time",
+            "interval_hours",
+            "applicable",
+            "requirement_met",
+        ):
+            if key in single:
+                detail[key] = single[key]
+        event_results.append(detail)
+        raw_refs = single.get("source_document_refs")
+        if isinstance(raw_refs, list):
+            source_document_refs.extend(
+                item for item in raw_refs if isinstance(item, Mapping)
+            )
+    return _text_outcome_display_facts(
+        rule_id=rule_id,
+        status=outcome.status,
+        fact=primary_fact,
+        projection=projection,
+        event_results=event_results if len(event_results) > 1 else (),
+        event_source_document_refs=source_document_refs,
+        include_data_gap=multi_event,
+    )
+
+
 def _strong_semantic_fact(
     *, rule_id: str, projection: ExamLabTextProjection
 ) -> ExamLabEventFact | None:
@@ -1618,22 +1684,16 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         facts=facts,
                         projection=projection,
                     )
-                    display_fact = _fact_for_outcome_display(
-                        rule_id=rule_id,
-                        facts=facts,
-                        projection=projection,
-                        outcome=outcome,
-                    )
                     emit_typed(
                         rule_id,
                         outcome.status,
                         outcome.reason_code,
                         outcome.fact_refs,
-                        display_facts=_text_outcome_display_facts(
+                        display_facts=_display_facts_for_text_outcome(
                             rule_id=rule_id,
-                            status=outcome.status,
-                            fact=display_fact,
+                            facts=facts,
                             projection=projection,
+                            outcome=outcome,
                         ),
                     )
                     typed_processed.add(rule_id)
@@ -1698,29 +1758,19 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 projection=projection,
                             )
                         )
-                        display_fact = (
-                            _fact_for_outcome_display(
-                                rule_id=rule_id,
-                                facts=text_facts,
-                                projection=projection,
-                                outcome=outcome,
-                            )
-                            if text_facts is not None
-                            else None
-                        )
                         emit_typed(
                             rule_id,
                             outcome.status,
                             outcome.reason_code,
                             outcome.fact_refs,
                             display_facts=(
-                                _text_outcome_display_facts(
+                                _display_facts_for_text_outcome(
                                     rule_id=rule_id,
-                                    status=outcome.status,
-                                    fact=display_fact,
+                                    facts=text_facts,
                                     projection=projection,
+                                    outcome=outcome,
                                 )
-                                if display_fact is not None
+                                if text_facts is not None
                                 else None
                             ),
                         )

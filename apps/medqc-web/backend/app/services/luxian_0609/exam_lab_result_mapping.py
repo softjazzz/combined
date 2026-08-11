@@ -188,12 +188,18 @@ def build_text_outcome_display_facts(
     status: str,
     fact: ExamLabEventFact,
     projection: ExamLabTextProjection,
+    event_results: Sequence[Mapping[str, Any]] = (),
+    event_source_document_refs: Sequence[Mapping[str, str]] = (),
+    include_data_gap: bool = False,
 ) -> Mapping[str, Any] | None:
     """输出报告事件、响应病程和24小时计算事实，不暴露正文。"""
 
     if (
         rule_id not in {"LX0609-011", "LX0609-012", "LX0609-014", "LX0609-015"}
-        or status not in {"compliant", "non_compliant", "not_applicable"}
+        or (
+            status not in {"compliant", "non_compliant", "not_applicable"}
+            and not (include_data_gap and status == "data_gap")
+        )
     ):
         return None
     is_exam_rule = rule_id in {"LX0609-011", "LX0609-012"}
@@ -216,20 +222,17 @@ def build_text_outcome_display_facts(
     )
     first_response = response_times[0] if response_times else None
     facts: dict[str, Any] = {
-        (
-            "failure_kind"
-            if status == "non_compliant"
-            else "verification_kind"
-        ): (
+        ("failure_kind" if status == "non_compliant" else "verification_kind"): (
             "exam_lab_requirement_not_documented"
             if status == "non_compliant"
+            else "exam_lab_event_review_incomplete"
+            if status == "data_gap"
             else "exam_lab_requirement_checked"
         ),
         "subject": subject,
         "requirement": requirement,
         "event_phase": "report",
         "checked_sources": ["exam_lab_report", "course_record"],
-        "applicable": status != "not_applicable",
         "positive_state": fact.positive_state,
         "threshold_hours": 24,
         "response_record_count": len(response_times),
@@ -238,10 +241,12 @@ def build_text_outcome_display_facts(
         )),
         "event_position": fact.event_position,
     }
+    if status != "data_gap":
+        facts["applicable"] = status != "not_applicable"
     # 对报告后病程规则，向客户明确“查找范围”，而不是把内部 source key
     # 直接交给界面。该字段描述的是已核对范围，不是命中的关键证据。
     facts["reviewed_record_scope"] = "首次病程记录及后续病程记录"
-    if status != "not_applicable":
+    if status in {"compliant", "non_compliant"}:
         facts["requirement_met"] = status == "compliant"
     if event.report_time is not None:
         facts["report_time"] = event.report_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -261,8 +266,22 @@ def build_text_outcome_display_facts(
         if (located := source_document_refs.get(ref)) is not None
         for source_type, source_document_id in (located,)
     ]
-    if located_documents:
-        facts["source_document_refs"] = located_documents
+    all_located_documents = [*located_documents, *event_source_document_refs]
+    if all_located_documents:
+        facts["source_document_refs"] = list(
+            {
+                (str(item["source_type"]), str(item["source_document_id"])): {
+                    "source_type": str(item["source_type"]),
+                    "source_document_id": str(item["source_document_id"]),
+                }
+                for item in all_located_documents
+                if isinstance(item, Mapping)
+                and item.get("source_type")
+                and item.get("source_document_id")
+            }.values()
+        )[:8]
+    if event_results:
+        facts["event_results"] = [dict(item) for item in event_results]
     return facts
 
 

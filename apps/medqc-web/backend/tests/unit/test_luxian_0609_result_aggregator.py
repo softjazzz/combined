@@ -1704,6 +1704,76 @@ def test_legacy_native_result_preserves_only_controlled_customer_display_facts(
     assert "PRIVATE_" not in repr(result)
 
 
+def test_011_multi_event_details_reach_canonical_customer_finding():
+    raw_facts = {
+        "failure_kind": "exam_lab_requirement_not_documented",
+        "subject": "ct_mri",
+        "requirement": "result_recording_within_24h",
+        "event_phase": "report",
+        "checked_sources": ["exam_lab_report", "course_record"],
+        "applicable": True,
+        "requirement_met": False,
+        "positive_state": "not_relevant",
+        "threshold_hours": 24,
+        "response_record_count": 0,
+        "event_count": 2,
+        "event_position": 2,
+        "report_time": "2026-04-04 12:00:00",
+        "reviewed_record_scope": "首次病程记录及后续病程记录",
+        "event_results": [
+            {
+                "event_position": 1,
+                "event_status": "data_gap",
+                "report_time": "2026-04-01 12:00:00",
+                "positive_state": "not_relevant",
+                "response_record_count": 0,
+            },
+            {
+                "event_position": 2,
+                "event_status": "non_compliant",
+                "report_time": "2026-04-04 12:00:00",
+                "positive_state": "not_relevant",
+                "response_record_count": 0,
+                "applicable": True,
+                "requirement_met": False,
+            },
+        ],
+        "source_document_refs": [
+            {
+                "source_type": "exam_item_report",
+                "source_document_id": "exam-one",
+            },
+            {
+                "source_type": "exam_item_report",
+                "source_document_id": "exam-two",
+            },
+        ],
+    }
+    result = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-011", "name": "检查结果记录"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-011", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-011", raw_facts),),
+        format_evidence=False,
+    )[0]
+
+    assert result["customer_display_facts"]["event_results"] == raw_facts["event_results"]
+    assert result["findings"] == (
+        "共核对2次CT/MRI检查："
+        "1）报告时间 2026-04-01 12:00:00：资料待核实，暂无法确认报告结果是否已记录；"
+        "2）报告时间 2026-04-04 12:00:00：未找到报告后24小时内的报告结果记录。"
+    )
+    assert result["customer_evidence"] == [
+        {"source_type": "exam_item_report", "source_document_id": "exam-one"},
+        {"source_type": "exam_item_report", "source_document_id": "exam-two"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("rule_id", "raw_facts", "expected_evidence"),
     [

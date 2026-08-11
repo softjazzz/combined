@@ -2676,7 +2676,11 @@ def safe_luxian_0609_customer_display_facts(
         if (
             (
                 failure_kind != "exam_lab_requirement_not_documented"
-                and verification_kind != "exam_lab_requirement_checked"
+                and verification_kind
+                not in {
+                    "exam_lab_requirement_checked",
+                    "exam_lab_event_review_incomplete",
+                }
             )
             or (failure_kind is not None and verification_kind is not None)
             or subject != expected_subject
@@ -2691,7 +2695,7 @@ def safe_luxian_0609_customer_display_facts(
             ): (
                 "exam_lab_requirement_not_documented"
                 if failure_kind is not None
-                else "exam_lab_requirement_checked"
+                else verification_kind
             ),
             "subject": subject,
             "requirement": requirement,
@@ -2738,6 +2742,102 @@ def safe_luxian_0609_customer_display_facts(
             if reviewed_record_scope != "首次病程记录及后续病程记录":
                 return None
             facts["reviewed_record_scope"] = reviewed_record_scope
+        event_count = raw.get("event_count")
+        event_position = raw.get("event_position")
+        if event_count is not None or event_position is not None:
+            if (
+                type(event_count) is not int
+                or type(event_position) is not int
+                or not 1 <= event_position <= event_count <= 32
+            ):
+                return None
+            facts["event_count"] = event_count
+            facts["event_position"] = event_position
+        raw_event_results = raw.get("event_results")
+        if raw_event_results is not None:
+            if (
+                not isinstance(raw_event_results, list)
+                or event_count is None
+                or len(raw_event_results) != event_count
+            ):
+                return None
+            safe_event_results: list[dict[str, Any]] = []
+            allowed_event_keys = {
+                "event_position",
+                "event_status",
+                "report_time",
+                "positive_state",
+                "response_record_count",
+                "response_record_time",
+                "interval_hours",
+                "applicable",
+                "requirement_met",
+            }
+            for expected_position, item in enumerate(raw_event_results, start=1):
+                if (
+                    not isinstance(item, Mapping)
+                    or set(item) - allowed_event_keys
+                    or item.get("event_position") != expected_position
+                    or item.get("event_status")
+                    not in {
+                        "compliant",
+                        "non_compliant",
+                        "not_applicable",
+                        "data_gap",
+                    }
+                ):
+                    return None
+                safe_item: dict[str, Any] = {
+                    "event_position": expected_position,
+                    "event_status": item["event_status"],
+                }
+                for key in ("report_time", "response_record_time"):
+                    value = item.get(key)
+                    if value is not None:
+                        if not isinstance(value, str) or not re.fullmatch(
+                            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", value
+                        ):
+                            return None
+                        safe_item[key] = value
+                event_positive_state = item.get("positive_state")
+                if event_positive_state is not None:
+                    if event_positive_state not in {
+                        "positive",
+                        "negative",
+                        "not_relevant",
+                    }:
+                        return None
+                    safe_item["positive_state"] = event_positive_state
+                event_response_count = item.get("response_record_count")
+                if event_response_count is not None:
+                    if type(event_response_count) is not int or event_response_count < 0:
+                        return None
+                    safe_item["response_record_count"] = event_response_count
+                event_interval = item.get("interval_hours")
+                if event_interval is not None:
+                    if (
+                        isinstance(event_interval, bool)
+                        or not isinstance(event_interval, (int, float))
+                        or event_interval < 0
+                    ):
+                        return None
+                    safe_item["interval_hours"] = round(float(event_interval), 2)
+                for key in ("applicable", "requirement_met"):
+                    value = item.get(key)
+                    if value is not None:
+                        if not isinstance(value, bool):
+                            return None
+                        safe_item[key] = value
+                safe_event_results.append(safe_item)
+            if (
+                verification_kind == "exam_lab_event_review_incomplete"
+                and not any(
+                    item["event_status"] == "data_gap"
+                    for item in safe_event_results
+                )
+            ):
+                return None
+            facts["event_results"] = safe_event_results
         return facts
     if rule_id == "LX0609-013":
         trigger_sources = raw.get("pathology_trigger_sources")
