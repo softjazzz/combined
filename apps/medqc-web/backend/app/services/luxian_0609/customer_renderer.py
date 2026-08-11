@@ -1132,6 +1132,7 @@ def customer_finding_from_controlled_facts(
         "LX0609-013",
         "LX0609-014",
         "LX0609-015",
+        "LX0609-017",
         "LX0609-019",
         "LX0609-020",
         "LX0609-021",
@@ -1161,6 +1162,40 @@ def customer_finding_from_controlled_facts(
     def joined(key: str) -> str:
         values = facts.get(key)
         return "、".join(str(value) for value in values) if isinstance(values, list) else ""
+
+    if rule_id == "LX0609-017":
+        if kind != "copy_similarity_threshold_exceeded":
+            return ""
+        source_types = facts.get("copy_document_sources")
+        record_times = facts.get("copy_document_record_times")
+        similarity = facts.get("copy_similarity")
+        threshold = facts.get("copy_similarity_threshold")
+        if (
+            not isinstance(source_types, list)
+            or len(source_types) != 2
+            or any(
+                value not in {"daily_course_record", "senior_course_record"}
+                for value in source_types
+            )
+            or not isinstance(record_times, list)
+            or len(record_times) != 2
+            or not all(isinstance(value, str) and value for value in record_times)
+            or not isinstance(similarity, (int, float))
+            or not isinstance(threshold, (int, float))
+            or float(similarity) < float(threshold)
+        ):
+            return ""
+        source_labels = {
+            "daily_course_record": "日常病程记录",
+            "senior_course_record": "上级医师查房记录",
+        }
+        similarity_percent = f"{round(float(similarity) * 100, 2):g}%"
+        threshold_percent = f"{round(float(threshold) * 100, 2):g}%"
+        return (
+            f"{source_labels[source_types[0]]}（{record_times[0]}）与"
+            f"{source_labels[source_types[1]]}（{record_times[1]}）全文相似度 "
+            f"{similarity_percent}，达到判定阈值 {threshold_percent}。"
+        )
 
     if rule_id == "LX0609-010":
         if kind == "exam_order_exam_association_failed":

@@ -4439,6 +4439,69 @@ def _valid_customer_evidence_document_id(value: Any) -> str:
     )
 
 
+def _customer_evidence_from_copy_pair_facts(
+    *, facts: Mapping[str, Any] | None, evidence_materials: Any
+) -> list[dict[str, str]]:
+    """按017已选定的来源与权威记录时间反查唯一文书，不重新计算相似度。"""
+
+    if not isinstance(facts, Mapping) or evidence_materials is None:
+        return []
+    source_types = facts.get("copy_document_sources")
+    record_times = facts.get("copy_document_record_times")
+    if (
+        not isinstance(source_types, list)
+        or len(source_types) != 2
+        or any(
+            value not in {"daily_course_record", "senior_course_record"}
+            for value in source_types
+        )
+        or not isinstance(record_times, list)
+        or len(record_times) != 2
+        or not all(isinstance(value, str) and value for value in record_times)
+    ):
+        return []
+
+    located: list[dict[str, str]] = []
+    seen_document_ids: set[str] = set()
+    for source_type, record_time in zip(source_types, record_times):
+        try:
+            rows = tuple(evidence_materials.rows(source_type))
+        except Exception:
+            return []
+        matched_ids = tuple(
+            dict.fromkeys(
+                document_id
+                for row in rows
+                if isinstance(row, Mapping)
+                and any(
+                    str(row.get(field) or "")
+                    .strip()
+                    .replace("T", " ")
+                    .startswith(record_time)
+                    for field in (
+                        "record_time",
+                        "record_datetime",
+                        "submit_time",
+                        "submit_datetime",
+                    )
+                )
+                for document_id in (
+                    _valid_customer_evidence_document_id(
+                        row.get("document_id") or row.get("id")
+                    ),
+                )
+                if document_id
+            )
+        )
+        if len(matched_ids) != 1 or matched_ids[0] in seen_document_ids:
+            return []
+        seen_document_ids.add(matched_ids[0])
+        located.append(
+            {"source_type": source_type, "source_document_id": matched_ids[0]}
+        )
+    return located
+
+
 def _customer_evidence_from_reduced_decision(
     *,
     decision: ReducedRuleDecision,
@@ -4737,8 +4800,19 @@ def aggregate_luxian_0609_results(
                 evidence_snapshot=(audit_context or {}).get("evidence_snapshot"),
                 evidence_materials=(audit_context or {}).get("evidence_materials"),
             )
+            copy_pair_evidence = (
+                _customer_evidence_from_copy_pair_facts(
+                    facts=display_facts_by_rule.get(wrapper_id),
+                    evidence_materials=(audit_context or {}).get(
+                        "evidence_materials"
+                    ),
+                )
+                if wrapper_id == "LX0609-017"
+                else []
+            )
             customer_evidence = _merge_customer_evidence(
                 customer_evidence_by_rule.get(wrapper_id, []),
+                copy_pair_evidence,
                 decision_evidence,
             )
             if customer_evidence:

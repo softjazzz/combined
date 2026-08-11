@@ -2383,6 +2383,7 @@ def test_native_copy_result_keeps_only_safe_structured_similarity_metrics():
     [
         (0.6999, "copy_similarity_within_threshold"),
         (0.7000, "copy_similarity_threshold_exceeded"),
+        (0.7990, "copy_similarity_threshold_exceeded"),
     ],
 )
 def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
@@ -2402,6 +2403,21 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         rule_id="LX0609-017", raw=facts
     ) == facts
 
+    class _Materials:
+        @staticmethod
+        def rows(source_type):
+            assert source_type == "daily_course_record"
+            return (
+                {
+                    "document_id": "copy-left",
+                    "record_time": "2026-06-01 09:00:00",
+                },
+                {
+                    "document_id": "copy-right",
+                    "record_time": "2026-06-02 09:00:00",
+                },
+            )
+
     direction = (
         QcDirection.DEFECT
         if failure_kind == "copy_similarity_threshold_exceeded"
@@ -2415,6 +2431,7 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         execution_results=[],
         reduced_decisions=(_reduced_decision("LX0609-017", direction=direction),),
         customer_display_facts=(("LX0609-017", facts),),
+        audit_context={"evidence_materials": _Materials()},
         format_evidence=False,
     )[0]
 
@@ -2424,8 +2441,64 @@ def test_017_canonical_aggregation_keeps_inclusive_similarity_boundary(
         else "compliant"
     )
     assert result["customer_display_facts"] == facts
+    assert result["customer_evidence"] == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "copy-left",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "copy-right",
+        },
+    ]
     if failure_kind == "copy_similarity_within_threshold":
         assert "达到或超过 70%" in result["findings"]
+    else:
+        similarity_percent = f"{round(float(similarity) * 100, 2):g}%"
+        assert result["findings"] == (
+            "日常病程记录（2026-06-01 09:00:00）与日常病程记录"
+            f"（2026-06-02 09:00:00）全文相似度 {similarity_percent}，"
+            "达到判定阈值 70%。"
+        )
+
+
+def test_017_customer_evidence_fails_closed_when_record_time_is_ambiguous():
+    facts = {
+        "failure_kind": "copy_similarity_threshold_exceeded",
+        "copy_similarity": 0.799,
+        "copy_similarity_threshold": 0.7,
+        "copy_document_sources": ["daily_course_record", "daily_course_record"],
+        "copy_document_record_times": [
+            "2026-06-01 09:00:00",
+            "2026-06-02 09:00:00",
+        ],
+    }
+
+    class _AmbiguousMaterials:
+        @staticmethod
+        def rows(_source_type):
+            return (
+                {"document_id": "left-a", "record_time": "2026-06-01 09:00:00"},
+                {"document_id": "left-b", "record_time": "2026-06-01 09:00:00"},
+                {"document_id": "right", "record_time": "2026-06-02 09:00:00"},
+            )
+
+    result = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["aggregate_luxian_0609_results"],
+    ).aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=(
+            _reduced_decision("LX0609-017", direction=QcDirection.DEFECT),
+        ),
+        customer_display_facts=(("LX0609-017", facts),),
+        audit_context={"evidence_materials": _AmbiguousMaterials()},
+        format_evidence=False,
+    )[0]
+
+    assert "customer_evidence" not in result
+    assert "79.9%" in result["findings"]
 
 
 @pytest.mark.parametrize("field", ["visit_ref", "gate_fingerprint", "finding_schema_version", "finding_policy_version", "findings"])
