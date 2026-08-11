@@ -2306,6 +2306,115 @@ async def test_020_course_source_incomplete_is_data_gap_even_when_order_exists(m
 
 
 @pytest.mark.asyncio
+async def test_empty_course_artifact_does_not_make_020_source_incomplete(
+    monkeypatch,
+):
+    source_rows = {
+        "consultation_record": _rows(
+            "会诊意见：建议复查血常规。", action_suffix=False
+        ),
+        "daily_course_record": [
+            {
+                "document_id": "EMPTY-COURSE",
+                "document_title": "",
+                "record_content": "",
+                "record_time": None,
+            },
+            {
+                "document_id": "VALID-COURSE",
+                "document_title": "病程记录",
+                "record_content": "患者病情平稳。",
+                "record_time": "2026-07-20 03:00:00",
+            },
+        ],
+        "senior_course_record": [],
+        "inpat_drug_order": [], "inpat_nondrug_order": [],
+        "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"])
+        ]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "absent",
+            "execution_refs": [],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "non_compliant",
+        "not_applicable",
+    ]
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_course_time_is_recovered_from_same_document_id_without_guessing(
+    monkeypatch,
+):
+    source_rows = {
+        "consultation_record": _rows(
+            "会诊意见：建议复查血常规。", action_suffix=False
+        ),
+        "daily_course_record": [{
+            "document_id": "SHARED-COURSE",
+            "document_title": "病程记录",
+            "record_content": "患者病情平稳。",
+            "record_time": "2026-07-20 03:00:00",
+        }],
+        "senior_course_record": [{
+            "document_id": "SHARED-COURSE",
+            "document_title": "上级医师查房记录",
+            "record_content": "已按会诊意见复查血常规。",
+            "record_time": None,
+        }],
+        "inpat_drug_order": [], "inpat_nondrug_order": [],
+        "exam_item_report": [], "labtest_item_report": [], "surgery_record": [],
+    }
+    monkeypatch.setattr(
+        episode,
+        "read_luxian_0609_native_source_rows",
+        lambda *, source_key, **_: source_rows[source_key],
+    )
+    client = _SequentialClient(
+        _payload(episodes=[
+            _episode("consultation_record-1", ["consultation_record-1"])
+        ]),
+        _execution({
+            "episode_ref": "consultation_record-1",
+            "execution_state": "linked_specific",
+            "execution_refs": ["senior_course_record-1"],
+            "confidence": "high",
+        }),
+    )
+
+    result = await episode.execute_luxian_0609_native_consultation_episode_rules(
+        rule_ids=("LX0609-020", "LX0609-023"),
+        institute_id="i", patient_id="p", visit_id="v",
+        source_schema=None, llm_client=client,
+    )
+
+    assert [item["status"] for item in result.results] == [
+        "compliant",
+        "compliant",
+    ]
+    assert result.llm_call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_different_general_treatment_must_be_absent_not_linked(monkeypatch):
     source_rows = {
         "consultation_record": _rows("意见：使用康复排痰设备"),

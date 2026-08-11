@@ -855,8 +855,10 @@ def _candidate_documents(
         if evidence_materials is not None and evidence_snapshot is not None
         else _EXECUTION_SOURCE_KEYS
     )
+    preloaded_course_rows: dict[str, tuple[str, Sequence[Mapping[str, Any]]]] = {}
     for source_key in source_keys:
-        is_order_source = source_key in _ORDER_EXECUTION_SOURCE_KEYS
+        if source_key not in _COURSE_EXECUTION_SOURCE_KEYS:
+            continue
         try:
             rows = _read_rows(
                 source_key=source_key,
@@ -866,14 +868,60 @@ def _candidate_documents(
                 source_schema=source_schema,
                 evidence_materials=evidence_materials,
                 evidence_snapshot=evidence_snapshot,
-                allow_truncated=is_order_source,
+                allow_truncated=False,
             )
         except _SourceGap:
-            source_incomplete_keys.add(source_key)
-            continue
+            preloaded_course_rows[source_key] = ("gap", ())
         except _SourceTechnical:
-            source_technical = True
+            preloaded_course_rows[source_key] = ("technical", ())
+        else:
+            preloaded_course_rows[source_key] = ("ok", rows)
+
+    course_document_times: dict[str, _ObservedTime] = {}
+    conflicting_course_document_times: set[str] = set()
+    for source_key, (state, rows) in preloaded_course_rows.items():
+        if state != "ok":
             continue
+        for row in rows:
+            document_id = _clean(row.get("document_id"))
+            observed_time = _row_time(row, source_key=source_key)
+            if not document_id or observed_time is None:
+                continue
+            existing = course_document_times.get(document_id)
+            if existing is not None and existing != observed_time:
+                conflicting_course_document_times.add(document_id)
+                course_document_times.pop(document_id, None)
+            elif document_id not in conflicting_course_document_times:
+                course_document_times[document_id] = observed_time
+
+    for source_key in source_keys:
+        is_order_source = source_key in _ORDER_EXECUTION_SOURCE_KEYS
+        if source_key in preloaded_course_rows:
+            read_state, rows = preloaded_course_rows[source_key]
+            if read_state == "gap":
+                source_incomplete_keys.add(source_key)
+                continue
+            if read_state == "technical":
+                source_technical = True
+                continue
+        else:
+            try:
+                rows = _read_rows(
+                    source_key=source_key,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    source_schema=source_schema,
+                    evidence_materials=evidence_materials,
+                    evidence_snapshot=evidence_snapshot,
+                    allow_truncated=is_order_source,
+                )
+            except _SourceGap:
+                source_incomplete_keys.add(source_key)
+                continue
+            except _SourceTechnical:
+                source_technical = True
+                continue
         source_is_complete = True
         if evidence_snapshot is not None:
             observation = next(
@@ -896,6 +944,9 @@ def _candidate_documents(
         for index, row in enumerate(rows, start=1):
             observed_time = _row_time(row, source_key=source_key)
             text = _candidate_text(row=row, source_key=source_key)
+            if observed_time is None and source_key in _COURSE_EXECUTION_SOURCE_KEYS:
+                document_id = _clean(row.get("document_id"))
+                observed_time = course_document_times.get(document_id)
             # 住院窗口外的行不属于本次就诊，既不能作为执行证据，也不能
             # 反过来宣称本次候选范围不完整。
             if observed_time is not None and not stay_window.contains(observed_time):
@@ -908,6 +959,10 @@ def _candidate_documents(
                 if is_order_source
                 else _MAX_CANDIDATE_CHARS
             )
+            if not text and source_key in _COURSE_EXECUTION_SOURCE_KEYS:
+                # 无标题、无正文的病程占位行不可能承载会诊执行事实；忽略该
+                # 空工件，不能仅因它同时缺时间就把完整病程来源降为不完整。
+                continue
             if observed_time is None or not text or len(text) > text_limit:
                 source_is_complete = False
                 continue
