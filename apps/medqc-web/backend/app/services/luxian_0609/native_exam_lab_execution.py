@@ -1107,44 +1107,57 @@ def _strong_semantic_fact(
         positive_state = "positive"
     else:
         positive_state = "not_relevant"
+    family = "exam" if rule_id in EXAM_RULE_IDS else "culture"
+    allowed_course_refs = (projection.event_course_refs or {}).get(
+        (family, 1)
+    )
+    course_items = tuple(
+        (ref, text)
+        for ref, text in (projection.course_texts or {}).items()
+        if (allowed_course_refs is None or ref in allowed_course_refs)
+        and (
+            event.report_time is None
+            or (
+                projection.course_times.get(ref) is not None
+                and event.report_time <= projection.course_times[ref]
+                <= event.report_time + timedelta(hours=24)
+            )
+        )
+    )
     pattern = _STRONG_SEMANTIC_PATTERNS[rule_id]
     refs = []
-    deferred_semantic = False
-    for ref, text in (projection.course_texts or {}).items():
+    for ref, text in course_items:
         for clause in _CLAUSE_SPLIT_PATTERN.split(text):
             if not pattern.search(clause):
                 continue
             if _UNCERTAIN_SEMANTIC_PATTERN.search(clause):
-                deferred_semantic = True
                 continue
             if rule_id == "LX0609-015":
                 if (
                     _NEGATED_CULTURE_ACTION_PATTERN.search(clause)
                     or _CONDITIONAL_CULTURE_ACTION_PATTERN.search(clause)
                 ):
-                    deferred_semantic = True
                     continue
             if (
                 rule_id == "LX0609-012"
                 and _CONDITIONAL_ANALYSIS_PATTERN.search(clause)
                 and not _DEFINITE_ANALYSIS_PATTERN.search(clause)
             ):
-                deferred_semantic = True
                 continue
             refs.append(ref)
             break
     refs = tuple(refs)
     if not refs:
         # 阳性报告已明确记入病程，但完整病程投影中没有分析/处置事实时，
-        # 可直接形成“已记录结果、未完成分析”的闭世界结论。含待评估、
-        # 计划处理等条件性语句仍交给受控模型，避免把灰区误判为缺陷。
-        if rule_id in {"LX0609-012", "LX0609-015"} and not deferred_semantic:
+        # 可直接形成“已记录结果、未完成分析”的闭世界结论。条件性计划或
+        # “待结合病情观察”不是已经完成的分析/处置，不得据此降为资料不足。
+        if rule_id in {"LX0609-012", "LX0609-015"}:
             mention_pattern = _STRONG_SEMANTIC_PATTERNS[
                 "LX0609-011" if rule_id == "LX0609-012" else "LX0609-014"
             ]
             mention_refs = tuple(
                 ref
-                for ref, text in (projection.course_texts or {}).items()
+                for ref, text in course_items
                 if any(
                     mention_pattern.search(clause)
                     and not _UNCERTAIN_SEMANTIC_PATTERN.search(clause)

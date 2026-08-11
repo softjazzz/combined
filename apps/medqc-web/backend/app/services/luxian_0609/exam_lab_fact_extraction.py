@@ -232,6 +232,14 @@ def _parse_datetime(value: Any) -> datetime | None:
     return parsed.replace(tzinfo=None)
 
 
+def _course_datetime(row: Mapping[str, Any]) -> datetime | None:
+    """病程优先使用记录时间；旧表缺失时使用同文书的提交时间。"""
+
+    return _parse_datetime(row.get("record_time")) or _parse_datetime(
+        row.get("submit_datetime")
+    )
+
+
 def _parse_date(value: Any) -> date | None:
     if isinstance(value, datetime):
         return value.date()
@@ -400,15 +408,38 @@ def build_exam_lab_text_projection(
             else _CULTURE_POSITIVE_PATTERN
         )
         uncertain_pattern = _IMAGING_UNCERTAIN_PATTERN if family == "exam" else None
-        positive_hint = (
-            "negative"
-            if negative_pattern.search(material)
-            else "unknown"
-            if uncertain_pattern is not None and uncertain_pattern.search(material)
-            else "positive"
-            if positive_pattern.search(material)
-            else "unknown"
-        ) if target_confirmed else "unknown"
+        structured_culture_indicators = {
+            _clean(row.get("abnormal_indicator")) for row in rows
+            if _clean(row.get("abnormal_indicator"))
+        }
+        culture_indicator_positive = any(
+            "阳性" in value for value in structured_culture_indicators
+        )
+        culture_indicator_negative = any(
+            "阴性" in value for value in structured_culture_indicators
+        )
+        if not target_confirmed:
+            positive_hint = "unknown"
+        elif family == "culture" and (
+            culture_indicator_positive or culture_indicator_negative
+        ):
+            positive_hint = (
+                "unknown"
+                if culture_indicator_positive and culture_indicator_negative
+                else "positive"
+                if culture_indicator_positive
+                else "negative"
+            )
+        else:
+            positive_hint = (
+                "negative"
+                if negative_pattern.search(material)
+                else "unknown"
+                if uncertain_pattern is not None and uncertain_pattern.search(material)
+                else "positive"
+                if positive_pattern.search(material)
+                else "unknown"
+            )
         explicit_non_target_pattern = (
             _EXPLICIT_NON_TARGET_EXAM_PATTERN
             if family == "exam"
@@ -555,7 +586,7 @@ def build_exam_lab_text_projection(
     parsed_course_entries = tuple(
         (source_position, source_key, row_index, row, text, parsed)
         for source_position, source_key, row_index, row, text in course_entries
-        if (parsed := _parse_datetime(row.get("record_time"))) is not None
+        if (parsed := _course_datetime(row)) is not None
     )
     event_course_keys: dict[tuple[str, int], set[tuple[int, str, int]]] = {}
     for family, events in (("exam", imaging_events), ("culture", culture_events)):
@@ -643,7 +674,7 @@ def build_exam_lab_text_projection(
         document_id = _clean(row.get("document_id"))
         if document_id:
             source_document_refs[doc_ref] = (source_key, document_id)
-        course_times[doc_ref] = _parse_datetime(row.get("record_time"))
+        course_times[doc_ref] = _course_datetime(row)
         course_texts[doc_ref] = text
         parts.append(
             f"[COURSE_DOC_POSITION={course_position_by_entry[entry_key]}|"
@@ -690,7 +721,7 @@ def build_exam_lab_text_projection(
         horizon_conflict=precise_horizon_conflict or len(horizon_dates) > 1,
         horizon_unavailable_reason=horizon_unavailable_reason,
         course_time_incomplete=any(
-            _row_text(row) and _parse_datetime(row.get("record_time")) is None
+            _row_text(row) and _course_datetime(row) is None
             for _, _, _, row, _ in course_entries
         ),
         course_projection_truncated=course_projection_truncated,

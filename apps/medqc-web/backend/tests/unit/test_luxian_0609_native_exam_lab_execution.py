@@ -1830,6 +1830,13 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
         ),
         course_rows=(
             {
+                "document_id": "course-012-before",
+                "record_time": "2026-04-26 11:00:00",
+                "record_content": (
+                    "患者腰痛伴右下肢麻木持续，拟行腰椎MRI平扫以明确神经根受压情况。"
+                ),
+            },
+            {
                 "document_id": "course-012",
                 "record_time": "2026-04-26 13:00:00",
                 "record_content": "胸部CT报告提示右肺占位。",
@@ -1839,6 +1846,14 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
             {
                 "horizon_datetime": "2026-04-28 12:00:00",
                 "horizon_date": "2026-04-28",
+            },
+        ),
+        rescue_rows=(
+            {
+                "document_id": "course-012-legacy-time",
+                "record_time": None,
+                "submit_datetime": "2026-04-26 07:00:00",
+                "record_content": "上级医师查房时拟完善胸部CT检查。",
             },
         ),
     )
@@ -1892,6 +1907,105 @@ async def test_lx0609_012_gold_explicit_positive_without_analysis_is_defect(monk
     ]
     assert "source_document_refs" not in canonical["customer_display_facts"]
     assert "已核对首次病程记录及后续病程记录" in canonical["findings"]
+
+
+@pytest.mark.asyncio
+async def test_lx0609_015_structured_positive_culture_with_pending_observation_is_defect(
+    monkeypatch,
+):
+    """药敏明细已明确阳性，但病程仅记录结果并待观察，不得降为资料不足。"""
+
+    snapshot, materials = _typed_session(
+        monkeypatch,
+        culture_rows=(
+            {
+                "test_id": "CULTURE-015",
+                "labtest_subject": "尿培养+药敏",
+                "report_datetime": "2026-04-26 12:00:00",
+                "record_content": "尿培养主记录。",
+            },
+        ),
+        culture_report_rows=(
+            {
+                "document_id": "culture-report-015",
+                "test_id": "CULTURE-015",
+                "item_name": "尿培养+药敏",
+                "report_time": "2026-04-26 12:00:00",
+                "result": "大肠埃希菌阳性；对头孢曲松敏感。",
+                "abnormal_indicator": "阳性",
+            },
+        ),
+        course_rows=(
+            {
+                "document_id": "course-culture-015",
+                "record_time": "2026-04-26 16:00:00",
+                "record_content": (
+                    "已阅尿培养报告，记录大肠埃希菌阳性及药敏结果，"
+                    "待结合病情继续观察。"
+                ),
+            },
+        ),
+        evaluation_horizon_rows=(
+            {
+                "horizon_datetime": "2026-04-28 12:00:00",
+                "horizon_date": "2026-04-28",
+            },
+        ),
+        rescue_rows=(
+            {
+                "document_id": "course-culture-015-legacy-time",
+                "record_time": None,
+                "submit_datetime": "2026-04-29 08:00:00",
+                "record_content": "后续查房再次提及尿培养结果。",
+            },
+        ),
+    )
+    client = _Client([
+        _fact_response(
+            ("LX0609-015",),
+            applicability="unknown",
+            semantic_state="unknown",
+        )
+    ])
+
+    result = await exam_lab.execute_luxian_0609_native_exam_lab_rules(
+        rule_ids=("LX0609-015",),
+        wrapper_rules=[_wrapper("LX0609-015")],
+        evidence_payload=None,
+        llm_client=client,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+        decision_rule_ids=("LX0609-015",),
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=result.decisions,
+        expected_rule_ids=("LX0609-015",),
+        snapshot=snapshot,
+    )
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-015"}],
+        execution_results=list(result.results),
+        reduced_decisions=reduced,
+        customer_display_facts=result.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": snapshot,
+            "evidence_materials": materials,
+        },
+    )[0]
+
+    assert result.llm_call_count == 0
+    assert canonical["status"] == "non_compliant"
+    assert canonical["reason_code"] == "requirement_violated"
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "labtest_item_report",
+            "source_document_id": "culture-report-015",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "course-culture-015",
+        },
+    ]
 
 
 @pytest.mark.asyncio
