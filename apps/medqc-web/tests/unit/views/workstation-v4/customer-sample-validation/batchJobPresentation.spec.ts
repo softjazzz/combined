@@ -162,18 +162,20 @@ describe('batchJobPresentation', () => {
   })
 
   it('无最终结果时只展示安全的规则族执行阶段', () => {
+    const executorStreamState = {
+      enabled: true,
+      kind: 'native_executor_phase',
+      event: 'started',
+      executor_key: 'exam_lab',
+      completed_batches: 2,
+      total_batches: 10,
+    }
     const model = buildBatchJobPresentation(
       buildJob({
         status: 'running',
         summary: {
           ...buildJob().summary,
-          stream_state: {
-            kind: 'native_executor_phase',
-            event: 'started',
-            executor_key: 'exam_lab',
-            completed_batches: 2,
-            total_batches: 10,
-          },
+          stream_state: executorStreamState,
         },
         items: [],
       }),

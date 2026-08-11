@@ -152,19 +152,21 @@ describe('CustomerSampleQcTaskStatusBar', () => {
   })
 
   it('单病历尚未形成Canonical结果时展示真实执行阶段，不伪造结论', () => {
+    const executorStreamState = {
+      enabled: true,
+      kind: 'native_executor_phase',
+      event: 'started',
+      executor_key: 'course_quality',
+      completed_batches: 4,
+      total_batches: 10,
+    }
     const wrapper = mount(CustomerSampleQcTaskStatusBar, {
       props: {
         task: buildJob({
           items: [],
           summary: {
             ...buildJob().summary,
-            stream_state: {
-              kind: 'native_executor_phase',
-              event: 'started',
-              executor_key: 'course_quality',
-              completed_batches: 4,
-              total_batches: 10,
-            },
+            stream_state: executorStreamState,
           },
         }),
       },
@@ -253,8 +255,8 @@ describe('CustomerSampleQcTaskStatusBar', () => {
       global: { stubs },
     })
 
-    expect(wrapper.get('[data-testid="qc-task-view-result"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="qc-task-open-history"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="qc-task-view-result"]').element).toBeTruthy()
+    expect(wrapper.get('[data-testid="qc-task-open-history"]').element).toBeTruthy()
     expect(wrapper.find('[data-testid="qc-task-cancel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="qc-task-more-actions"]').exists()).toBe(false)
   })
@@ -309,9 +311,9 @@ describe('CustomerSampleQcTaskStatusBar', () => {
     expect(other).toContain('不适用 17')
     expect(other).toContain('未执行 4')
     expect(wrapper.get('[data-testid="qc-task-settled-summary"]').text()).toContain('更新')
-    expect(wrapper.get('[data-testid="qc-task-view-result"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="qc-task-more-actions"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="qc-task-open-history"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="qc-task-view-result"]').element).toBeTruthy()
+    expect(wrapper.get('[data-testid="qc-task-more-actions"]').element).toBeTruthy()
+    expect(wrapper.get('[data-testid="qc-task-open-history"]').element).toBeTruthy()
 
     wrapper.unmount()
   })

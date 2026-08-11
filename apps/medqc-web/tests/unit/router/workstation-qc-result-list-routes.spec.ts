@@ -14,6 +14,14 @@ window.scrollTo = vi.fn()
 
 const { default: router } = await import('@/router')
 
+function loadRouteComponent(component: unknown): Promise<{ default: unknown }> {
+  if (typeof component !== 'function') {
+    throw new Error('运行和终末质控必须加载共享结果清单视图')
+  }
+
+  return component() as Promise<{ default: unknown }>
+}
+
 describe('运行与终末质控结果清单路由', () => {
   it('两个路径都使用共享结果清单视图，并传入不同的病历阶段', async () => {
     const running = router
@@ -28,11 +36,10 @@ describe('运行与终末质控结果清单路由', () => {
     expect(running?.props?.default).toEqual({ carePhase: 'inpatient' })
     expect(final?.props?.default).toEqual({ carePhase: 'discharged' })
 
-    if (typeof runningLoader !== 'function' || typeof finalLoader !== 'function') {
-      throw new Error('运行和终末质控必须加载共享结果清单视图')
-    }
-
-    const [runningModule, finalModule] = await Promise.all([runningLoader(), finalLoader()])
+    const [runningModule, finalModule] = await Promise.all([
+      loadRouteComponent(runningLoader),
+      loadRouteComponent(finalLoader),
+    ])
     expect(runningModule.default).toBe(finalModule.default)
   })
 })

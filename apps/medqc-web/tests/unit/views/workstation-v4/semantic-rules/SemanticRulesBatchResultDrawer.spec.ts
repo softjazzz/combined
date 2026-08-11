@@ -1671,6 +1671,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-A',
         status: 'compliant',
         canonical_status: 'compliant',
+        is_compliant: true,
       },
       {
         rule_id: 'LX0609-045',
@@ -1679,6 +1680,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-A',
         status: 'compliant',
         canonical_status: 'compliant',
+        is_compliant: true,
       },
       {
         rule_id: 'LX0609-047',
@@ -1687,6 +1689,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-A',
         status: 'compliant',
         canonical_status: 'compliant',
+        is_compliant: true,
       },
       {
         rule_id: 'LX0609-044',
@@ -1695,6 +1698,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-B',
         status: 'data_gap',
         canonical_status: 'data_gap',
+        is_compliant: false,
       },
     ]
 
@@ -1721,6 +1725,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-B',
         status: 'non_compliant',
         canonical_status: 'non_compliant',
+        is_compliant: false,
       },
       {
         rule_id: 'LX0609-045',
@@ -1729,6 +1734,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-B',
         status: 'data_gap',
         canonical_status: 'data_gap',
+        is_compliant: false,
       },
       {
         rule_id: 'LX0609-047',
@@ -1737,6 +1743,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-B',
         status: 'uncertain',
         canonical_status: 'uncertain',
+        is_compliant: false,
       },
       {
         rule_id: 'LX0609-046',
@@ -1745,6 +1752,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-B',
         status: 'non_compliant',
         canonical_status: 'non_compliant',
+        is_compliant: false,
       },
     ]
 
@@ -1770,6 +1778,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
         record_ref: 'case-A',
         status: 'compliant',
         canonical_status: 'compliant',
+        is_compliant: true,
       },
     ]
 
