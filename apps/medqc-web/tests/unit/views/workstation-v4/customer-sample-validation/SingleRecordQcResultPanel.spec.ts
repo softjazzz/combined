@@ -182,6 +182,11 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).not.toContain('关键证据')
     expect(wrapper.text()).not.toContain('处理建议')
 
+    await wrapper.get('.rule-name').trigger('click')
+
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.result-detail').exists()).toBe(false)
+
     await trigger.trigger('click')
 
     expect(trigger.attributes('aria-expanded')).toBe('true')
@@ -218,7 +223,7 @@ describe('SingleRecordQcResultPanel', () => {
       },
     })
 
-    await wrapper.get('.result-trigger').trigger('click')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
 
     expect(wrapper.get('[data-testid="single-record-detail-grid"]').text()).toContain(
       '实际相似度100%',
@@ -346,7 +351,7 @@ describe('SingleRecordQcResultPanel', () => {
       .trigger('click')
     await wrapper
       .findAll('[data-testid="single-record-result-row"]')[0]!
-      .get('.result-trigger')
+      .get('[data-testid="single-record-result-toggle"]')
       .trigger('click')
     await wrapper.get('[data-testid="single-record-evidence"]').trigger('click')
     expect(wrapper.emitted('locate-evidence')).toBeTruthy()
@@ -431,7 +436,7 @@ describe('SingleRecordQcResultPanel', () => {
       },
     })
 
-    await wrapper.get('.result-trigger').trigger('click')
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
 
     expect(wrapper.get('[data-testid="single-record-compliant-detail"]').text()).toContain(
       '核对说明已按输血发生时间核对后续病程记录，均可定位复核。',
@@ -860,7 +865,6 @@ describe('SingleRecordQcResultPanel', () => {
     expect(wrapper.text()).toContain('未发现问题。')
     expect(wrapper.text()).not.toContain('历史结果缺少可核查通过依据')
     expect(wrapper.find('.toggle-mark').exists()).toBe(false)
-    await wrapper.get('[data-testid="single-record-result-row"] button').trigger('click')
     expect(wrapper.find('.result-detail').exists()).toBe(false)
   })
 

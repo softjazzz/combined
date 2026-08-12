@@ -125,14 +125,10 @@
             />
           </button>
         </div>
-        <button
+        <div
           v-if="isDocumentGroupExpandedForItem(item.key)"
-          type="button"
           class="result-trigger"
           :class="{ 'is-static': !isExpandable(item) }"
-          :aria-expanded="isExpandable(item) ? expandedKey === item.key : undefined"
-          :data-testid="isExpandable(item) ? 'single-record-result-toggle' : undefined"
-          @click="isExpandable(item) && toggle(item.key)"
         >
           <span class="result-main">
             <span
@@ -156,9 +152,14 @@
                   {{ item.evidence.length }}处证据
                 </span>
               </span>
-              <span
+              <button
                 v-if="isExpandable(item)"
+                type="button"
                 class="toggle-mark"
+                :aria-expanded="expandedKey === item.key"
+                :aria-label="expandedKey === item.key ? '收起质控详情' : '查看质控详情'"
+                data-testid="single-record-result-toggle"
+                @click="toggle(item.key)"
               >
                 <span class="toggle-text">{{
                   expandedKey === item.key ? '收起详情' : '查看详情'
@@ -175,7 +176,7 @@
                   :stroke-width="2"
                   aria-hidden="true"
                 />
-              </span>
+              </button>
             </span>
             <strong class="rule-name">{{ item.rule_name }}</strong>
             <span
@@ -185,7 +186,7 @@
               item.conclusionText
             }}</span>
           </span>
-        </button>
+        </div>
 
         <section
           v-if="
@@ -1255,7 +1256,6 @@ watch(
   background: transparent;
   color: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
 .result-trigger:hover {
@@ -1326,9 +1326,21 @@ watch(
   justify-content: center;
   gap: 3px;
   padding: 0 8px;
+  border: 0;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.035);
   color: rgba(29, 29, 31, 0.42);
+  cursor: pointer;
+}
+
+.toggle-mark:hover {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.toggle-mark:focus-visible {
+  outline: 2px solid rgba(0, 102, 204, 0.3);
+  outline-offset: 2px;
 }
 
 .toggle-text {
