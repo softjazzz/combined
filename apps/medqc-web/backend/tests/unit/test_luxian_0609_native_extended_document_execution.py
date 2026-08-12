@@ -1212,7 +1212,76 @@ async def test_064_multievent_compatible_summary_reaches_customer_conclusion() -
         "2026-07-07 18:30:00；2026-07-08 17:15:00"
     )
     assert canonical["customer_display_facts"]["surgeon_round_present"] is True
-    assert "手术时间 2026-07-07 18:30:00；2026-07-08 17:15:00" in canonical["findings"]
+    assert "共核对 2 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）" in canonical["findings"]
+    assert "手术 1：2026-07-07 18:30:00，术者 韩平" in canonical["findings"]
+    assert "手术 2：2026-07-08 17:15:00，术者 曾亚丽" in canonical["findings"]
+    assert result.llm_call_count == result.total_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_064_multievent_customer_findings_keep_three_days_and_surgeon_per_event() -> None:
+    """相邻两台手术必须逐台展示术后3天与术者，不能合并成4天窗口。"""
+    snapshot, materials, result, reduced = await _evaluate_selected(
+        ("LX0609-064",),
+        {
+            "surgery_record": (
+                {
+                    "document_id": "E1",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-07 18:30:00+08",
+                    "surgeon": "韩平",
+                },
+                {
+                    "document_id": "E2",
+                    "surgery_code": "01.2400X013",
+                    "surgery_end_time": "2026-07-08 17:15:00+08",
+                    "surgeon": "曾亚丽",
+                },
+            ),
+            "daily_course_record": tuple(
+                {
+                    "record_time": f"2026-07-{day:02d} 08:00:00",
+                    "author_name": "其他医师",
+                }
+                for day in range(8, 12)
+            ),
+        },
+    )
+    canonical = _canonical_extended_result(
+        rule_id="LX0609-064",
+        snapshot=snapshot,
+        materials=materials,
+        result=result,
+        reduced=reduced,
+    )
+
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_display_facts"]["surgery_events"] == [
+        {
+            "surgery_time": "2026-07-07 18:30:00",
+            "surgeon_names": ["韩平"],
+            "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+            "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+            "surgeon_round_present": False,
+        },
+        {
+            "surgery_time": "2026-07-08 17:15:00",
+            "surgeon_names": ["曾亚丽"],
+            "required_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
+            "covered_postop_dates": ["2026-07-09", "2026-07-10", "2026-07-11"],
+            "surgeon_round_present": False,
+        },
+    ]
+    assert "共核对 2 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）" in canonical["findings"]
+    assert (
+        "手术 1：2026-07-07 18:30:00，术者 韩平；应记录日期 2026-07-08、2026-07-09、2026-07-10，"
+        "实际均已覆盖；未查到韩平术者查房记录。"
+    ) in canonical["findings"]
+    assert (
+        "手术 2：2026-07-08 17:15:00，术者 曾亚丽；应记录日期 2026-07-09、2026-07-10、2026-07-11，"
+        "实际均已覆盖；未查到曾亚丽术者查房记录。"
+    ) in canonical["findings"]
+    assert "术后应记录日期为 2026-07-08、2026-07-09、2026-07-10、2026-07-11" not in canonical["findings"]
     assert result.llm_call_count == result.total_tokens == 0
 
 

@@ -664,6 +664,7 @@ class _PostoperativeSurgeryEvent:
     document_id: str
     surgery_name: str
     surgery_end_time: datetime | None
+    surgeon_names: tuple[str, ...]
     surgeon_tokens: frozenset[str]
 
 
@@ -701,6 +702,17 @@ def _surgery_event_surgeon_tokens(row: Mapping[str, Any]) -> frozenset[str]:
         )
         if (token := _normalized_physician_token(row.get(key)))
     )
+
+
+def _surgery_event_surgeon_names(row: Mapping[str, Any]) -> tuple[str, ...]:
+    """保留术者专属字段中的客户可读姓名，不展示标准化匹配 token。"""
+
+    names: list[str] = []
+    for key in ("surgeon", "surgeon_sign", "main_surgery_sign"):
+        name = _clean(row.get(key))
+        if name and name not in names:
+            names.append(name)
+    return tuple(names)
 
 
 def _course_record_physician_tokens(row: Mapping[str, Any]) -> frozenset[str]:
@@ -782,6 +794,7 @@ def _postoperative_surgery_events(
                 or row.get("procedure_name")
             ),
             surgery_end_time=_actual_surgery_end_time(source_key=source_key, row=row),
+            surgeon_names=_surgery_event_surgeon_names(row),
             surgeon_tokens=_surgery_event_surgeon_tokens(row),
         )
         for index, row in enumerate(source_rows, start=1)
@@ -835,6 +848,7 @@ def _event_display_base(event: _PostoperativeSurgeryEvent) -> dict[str, Any]:
     return {
         "document_id": event.document_id,
         "surgery_name": event.surgery_name,
+        "surgeon_names": list(event.surgeon_names),
         "surgery_end_time": (
             event.surgery_end_time.isoformat(sep=" ")
             if event.surgery_end_time is not None

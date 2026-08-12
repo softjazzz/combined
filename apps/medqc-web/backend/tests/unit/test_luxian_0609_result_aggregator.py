@@ -1001,6 +1001,47 @@ def test_extended_document_list_facts_are_normalized_without_raw_text():
     }
 
 
+def test_064_multievent_facts_expose_only_customer_safe_surgery_details():
+    safe = __import__(
+        "app.services.luxian_0609_result_aggregator",
+        fromlist=["safe_luxian_0609_customer_display_facts"],
+    ).safe_luxian_0609_customer_display_facts
+    result = safe(
+        rule_id="LX0609-064",
+        raw={
+            "verification_kind": "postoperative_three_day_coverage_check",
+            "performed_surgery_count": 1,
+            "surgery_time": "2026-07-07 18:30:00",
+            "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+            "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+            "surgeon_round_present": False,
+            "surgery_events": [{
+                "document_id": "PRIVATE_DOCUMENT_ID",
+                "surgery_name": "血肿清除术",
+                "surgery_end_time": "2026-07-07 18:30:00",
+                "surgeon_names": ["韩平"],
+                "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+                "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+                "surgeon_round_present": False,
+                "raw_record_content": "PRIVATE_RECORD_CONTENT",
+            }],
+        },
+    )
+
+    assert result is not None
+    assert result["performed_surgery_count"] == 1
+    assert result["surgery_events"] == [{
+        "surgery_time": "2026-07-07 18:30:00",
+        "surgery_name": "血肿清除术",
+        "surgeon_names": ["韩平"],
+        "required_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+        "covered_postop_dates": ["2026-07-08", "2026-07-09", "2026-07-10"],
+        "surgeon_round_present": False,
+    }]
+    assert "PRIVATE_DOCUMENT_ID" not in repr(result)
+    assert "PRIVATE_RECORD_CONTENT" not in repr(result)
+
+
 def test_reduced_decision_preserves_surgery_record_present_facts():
     module = __import__(
         "app.services.luxian_0609_result_aggregator",

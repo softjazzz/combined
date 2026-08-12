@@ -1760,6 +1760,57 @@ def customer_finding_from_controlled_facts(
         return f"权威出院诊断为“{authority}”，出院记录诊断为“{written}”，两者顺序及内容{state}。"
 
     if rule_id == "LX0609-064" and kind == "postoperative_three_day_coverage_check":
+        surgery_events = facts.get("surgery_events")
+        if isinstance(surgery_events, list) and surgery_events and all(
+            isinstance(item, Mapping) for item in surgery_events
+        ):
+            event_findings = [
+                f"共核对 {len(surgery_events)} 台手术，均从手术次日开始计算连续 3 天（术后当天不计入）。"
+            ]
+            for index, event in enumerate(surgery_events, start=1):
+                required_dates = event.get("required_postop_dates")
+                covered_dates = event.get("covered_postop_dates")
+                required = "、".join(required_dates) if isinstance(required_dates, list) else "未返回"
+                covered = set(covered_dates) if isinstance(covered_dates, list) else set()
+                missing_dates = (
+                    [value for value in required_dates if value not in covered]
+                    if isinstance(required_dates, list)
+                    else []
+                )
+                covered_text = (
+                    "、".join(value for value in required_dates if value in covered)
+                    if isinstance(required_dates, list)
+                    else ""
+                )
+                coverage = (
+                    "实际均已覆盖"
+                    if not missing_dates
+                    else (
+                        f"实际覆盖 {covered_text or '无'}，"
+                        f"缺少 {'、'.join(missing_dates)} 的病程记录"
+                    )
+                )
+                surgeon_names = event.get("surgeon_names")
+                surgeon = (
+                    "、".join(surgeon_names)
+                    if isinstance(surgeon_names, list) and surgeon_names
+                    else ""
+                )
+                if not surgeon:
+                    surgeon_round = "术者姓名缺失，暂无法核对术者查房记录"
+                elif event.get("surgeon_round_present") is True:
+                    surgeon_round = f"已查到{surgeon}术者查房记录"
+                else:
+                    surgeon_round = f"未查到{surgeon}术者查房记录"
+                surgery_name = event.get("surgery_name")
+                event_label = f"手术 {index}"
+                if isinstance(surgery_name, str) and surgery_name:
+                    event_label += f"（{surgery_name}）"
+                event_findings.append(
+                    f"{event_label}：{event.get('surgery_time')}，术者 {surgeon or '未提供'}；"
+                    f"应记录日期 {required}，{coverage}；{surgeon_round}。"
+                )
+            return " ".join(event_findings)
         required = joined("required_postop_dates")
         covered = joined("covered_postop_dates") or "无"
         surgeon = "有" if facts.get("surgeon_round_present") is True else "无"

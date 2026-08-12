@@ -1998,6 +1998,71 @@ def safe_luxian_0609_customer_display_facts(
             return None
         return values
 
+    def controlled_postoperative_events(value: Any) -> list[dict[str, Any]] | None:
+        """只投影 064 客户逐台核对所需字段，拒绝原始文书和内部事件标识。"""
+
+        if not isinstance(value, (list, tuple)) or not value or len(value) > 100:
+            return None
+        safe_events: list[dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, Mapping):
+                return None
+            surgery_time = item.get("surgery_end_time")
+            surgeon_names = item.get("surgeon_names")
+            required_dates = item.get("required_postop_dates")
+            covered_dates = item.get("covered_postop_dates")
+            surgeon_round_present = item.get("surgeon_round_present")
+            if (
+                not isinstance(surgery_time, str)
+                or not surgery_time
+                or len(surgery_time) > 160
+                or "\n" in surgery_time
+                or not isinstance(surgeon_names, (list, tuple))
+                or len(surgeon_names) > 10
+                or any(
+                    not isinstance(name, str)
+                    or not name
+                    or len(name) > 80
+                    or "\n" in name
+                    for name in surgeon_names
+                )
+                or not isinstance(required_dates, (list, tuple))
+                or len(required_dates) != 3
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
+                    for value in required_dates
+                )
+                or len(set(required_dates)) != 3
+                or not isinstance(covered_dates, (list, tuple))
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None
+                    for value in covered_dates
+                )
+                or not set(covered_dates).issubset(set(required_dates))
+                or not isinstance(surgeon_round_present, bool)
+            ):
+                return None
+            safe_event: dict[str, Any] = {
+                "surgery_time": surgery_time,
+                "surgeon_names": list(surgeon_names),
+                "required_postop_dates": list(required_dates),
+                "covered_postop_dates": list(covered_dates),
+                "surgeon_round_present": surgeon_round_present,
+            }
+            surgery_name = item.get("surgery_name")
+            if surgery_name:
+                if (
+                    not isinstance(surgery_name, str)
+                    or len(surgery_name) > 160
+                    or "\n" in surgery_name
+                ):
+                    return None
+                safe_event["surgery_name"] = surgery_name
+            safe_events.append(safe_event)
+        return safe_events
+
     extended_kinds_by_rule = {
         "LX0609-050": {"uncertain_diagnosis_discussion_check"},
         "LX0609-051": {
@@ -2174,6 +2239,18 @@ def safe_luxian_0609_customer_display_facts(
                 safe[key] = list(value)
             else:
                 return None
+        if kind == "postoperative_three_day_coverage_check" and raw.get("surgery_events") is not None:
+            surgery_events = controlled_postoperative_events(raw.get("surgery_events"))
+            performed_surgery_count = raw.get("performed_surgery_count")
+            if (
+                surgery_events is None
+                or not isinstance(performed_surgery_count, int)
+                or isinstance(performed_surgery_count, bool)
+                or performed_surgery_count != len(surgery_events)
+            ):
+                return None
+            safe["performed_surgery_count"] = performed_surgery_count
+            safe["surgery_events"] = surgery_events
         return safe
 
     if rule_id == "LX0609-041":
