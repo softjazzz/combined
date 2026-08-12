@@ -205,6 +205,21 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.text()).not.toContain('当前正在处理中的病历数')
   })
 
+  it('renders the record-pool header and filters as one accessible workbench surface', () => {
+    const wrapper = mountListView()
+
+    const surface = wrapper.find('.wv4-record-pool-hero')
+    expect(surface.attributes('aria-labelledby')).toBe('workstation-list-overview-title')
+    expect(surface.find('#workstation-list-overview-title').text()).toBe('病历池')
+    expect(surface.find('.workbench-dept-filter__count').text()).toBe('100')
+    expect(surface.find('.workbench-dept-filter__count').attributes('aria-label')).toBe(
+      '当前科室共 100 份病历',
+    )
+    expect(surface.find('.wv4-record-pool-filter__notice').text()).toContain(
+      '病历范围由服务端统一筛选',
+    )
+  })
+
   it('uses the compact record-pool table instead of quality-result columns', () => {
     const wrapper = mountListView({
       workbenchRows: [

@@ -3,7 +3,10 @@
     <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
       <div class="mx-auto w-full max-w-[1440px]">
         <div class="workstation-surface-enter mb-4">
-          <section class="wv4-analysis-overview wv4-record-pool-hero">
+          <section
+            class="wv4-analysis-overview wv4-record-pool-hero"
+            aria-labelledby="workstation-list-overview-title"
+          >
             <div class="wv4-analysis-overview__header">
               <div>
                 <div
@@ -12,7 +15,10 @@
                 >
                   {{ overviewEyebrow }}
                 </div>
-                <h3 class="wv4-analysis-overview__title">
+                <h3
+                  id="workstation-list-overview-title"
+                  class="wv4-analysis-overview__title"
+                >
                   {{ overviewTitle }}
                 </h3>
                 <p class="wv4-analysis-overview__subtitle">
@@ -71,6 +77,7 @@
                   allow-clear
                   value-format="YYYY-MM-DD"
                   format="YYYY-MM-DD"
+                  :placeholder="['开始日期', '结束日期']"
                   @update:value="emit('update:dateRange', normalizeDateRange($event))"
                 />
 
@@ -90,25 +97,35 @@
                   </a-select-option>
                 </a-select>
 
-                <a-select
-                  :value="activeDept"
-                  class="workbench-dept-select"
-                  size="large"
-                  show-search
-                  :filter-option="filterDepartmentSelectOption"
-                  @update:value="emit('selectDept', normalizeDepartmentValue($event))"
-                >
-                  <a-select-option
-                    v-for="dept in departmentSelectOptions"
-                    :key="dept.name"
-                    :value="dept.name"
+                <div class="workbench-dept-filter">
+                  <a-select
+                    :value="activeDept"
+                    class="workbench-dept-select"
+                    size="large"
+                    show-search
+                    popup-class-name="wv4-record-pool-select-popup"
+                    :filter-option="filterDepartmentSelectOption"
+                    @update:value="emit('selectDept', normalizeDepartmentValue($event))"
                   >
-                    <span class="workbench-dept-select__option">
-                      <span class="workbench-dept-select__name">{{ dept.name }}</span>
-                      <span class="workbench-dept-select__count">{{ dept.total }}</span>
-                    </span>
-                  </a-select-option>
-                </a-select>
+                    <a-select-option
+                      v-for="dept in departmentSelectOptions"
+                      :key="dept.name"
+                      :value="dept.name"
+                      :label="dept.name"
+                    >
+                      <span class="workbench-dept-select__option">
+                        <span class="workbench-dept-select__name">{{ dept.name }}</span>
+                        <span class="workbench-dept-select__count">{{ dept.total }}</span>
+                      </span>
+                    </a-select-option>
+                  </a-select>
+                  <span
+                    class="workbench-dept-filter__count"
+                    :aria-label="`当前科室共 ${activeDepartmentTotal} 份病历`"
+                  >
+                    {{ activeDepartmentTotal }}
+                  </span>
+                </div>
 
                 <div class="wv4-filter-actions">
                   <a-button
@@ -135,7 +152,8 @@
                 v-if="!isStageQueueMode"
                 class="wv4-record-pool-filter__notice"
               >
-                在院、已出院均按服务端病历范围筛选。
+                <InfoCircleOutlined aria-hidden="true" />
+                <span>病历范围由服务端统一筛选，可分别查看在院与已出院病历。</span>
               </div>
             </div>
 
@@ -261,6 +279,7 @@ import {
   CheckCircleOutlined,
   FileTextOutlined,
   InboxOutlined,
+  InfoCircleOutlined,
   SearchOutlined,
   SyncOutlined,
   WarningOutlined,
@@ -390,6 +409,13 @@ const overviewSubtitle = computed(() =>
 const searchPlaceholder = computed(() =>
   isFrontpageGenerateStage.value ? '搜索病案号、姓名、住院号、生成状态' : '搜索患者、住院号、科室',
 )
+
+const activeDepartmentTotal = computed(() => {
+  const selected = props.departmentSelectOptions.find(
+    (department) => department.name === props.activeDept,
+  )
+  return selected?.total ?? props.qcSummary.totalRecords
+})
 
 const totalRows = computed(() =>
   isFrontpageGenerateStage.value ? props.displayServerTotal : props.qcSummary.totalRecords,
