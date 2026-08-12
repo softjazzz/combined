@@ -237,6 +237,62 @@ describe('SingleRecordQcResultPanel', () => {
     )
   })
 
+  it('将 017 的内部复制相似度原因码转换为客户可读结论', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-017',
+            rule_name: '不合理复制病历：2次以上病程记录完全相同（相似度大于70%）',
+            status: 'non_compliant',
+            conclusion: '两份日常病程记录全文相似度 100%，达到判定阈值 70%。',
+            customer_display_facts: {
+              failure_kind: 'copy_similarity_threshold_exceeded',
+              copy_similarity: 1,
+              copy_similarity_threshold: 0.7,
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const detail = wrapper.get('[data-testid="single-record-detail-grid"]').text()
+    expect(detail).toContain('问题说明病程记录相似度达到判定阈值')
+    expect(detail).toContain('实际相似度100%')
+    expect(detail).toContain('判定阈值70%')
+    expect(detail).not.toContain('copy_similarity_threshold_exceeded')
+  })
+
+  it('未知内部原因码没有客户文案时不在结果卡片中直接显示', async () => {
+    const wrapper = mount(SingleRecordQcResultPanel, {
+      props: {
+        items: [
+          {
+            rule_id: 'LX0609-017',
+            rule_name: '不合理复制病历',
+            status: 'non_compliant',
+            conclusion: '发现需要复核的病程记录相似内容。',
+            customer_display_facts: {
+              failure_kind: 'future_internal_failure_kind',
+              copy_similarity: 0.8,
+              copy_similarity_threshold: 0.7,
+            },
+          },
+        ],
+      },
+    })
+
+    await wrapper.get('[data-testid="single-record-result-toggle"]').trigger('click')
+
+    const detail = wrapper.get('[data-testid="single-record-detail-grid"]').text()
+    expect(detail).not.toContain('future_internal_failure_kind')
+    expect(detail).not.toContain('问题说明')
+    expect(detail).toContain('实际相似度80%')
+    expect(detail).toContain('判定阈值70%')
+  })
+
   it('按引擎返回顺序展示每条规则的状态、编号、标题和结论', () => {
     const wrapper = mount(SingleRecordQcResultPanel, { props: { items } })
 

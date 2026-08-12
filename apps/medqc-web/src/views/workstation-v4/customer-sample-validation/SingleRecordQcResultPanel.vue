@@ -581,6 +581,7 @@ const factValueLabels: Record<string, string> = {
   surgery_consent_body_missing: '手术知情同意书正文为空',
   surgery_consent_signature_missing: '手术知情同意书签名不完整',
   admission_first_course_copy_detected: '入院记录现病史与首次病程记录病例特点高度重复',
+  copy_similarity_threshold_exceeded: '病程记录相似度达到判定阈值',
   implant_name: '名称',
   implant_category: '种类',
   implant_specification: '规格/型号',
@@ -655,7 +656,9 @@ function displayFactRows(item: SingleRecordQcResultItem) {
             const percentage = Math.round(entry * 1000) / 10
             return `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%`
           }
-          return factValueLabels[String(entry)] || String(entry)
+          const customerLabel = factValueLabels[String(entry)]
+          if (key === 'failure_kind') return customerLabel || ''
+          return customerLabel || String(entry)
         })
         .filter(Boolean)
         .join('、')
