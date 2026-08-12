@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any, Mapping
@@ -4669,6 +4670,90 @@ def _customer_evidence_from_copy_pair_facts(
         ]
     )
 
+    raw_fingerprints = facts.get("copy_match_document_fingerprints")
+    if raw_fingerprints is not None:
+        if (
+            not isinstance(raw_fingerprints, list)
+            or len(raw_fingerprints) != len(pairs[:4])
+            or not raw_fingerprints
+        ):
+            return []
+        precise_located: list[dict[str, str]] = []
+        precise_seen: set[str] = set()
+        for pair, pair_fingerprints in zip(pairs[:4], raw_fingerprints):
+            if not isinstance(pair, Mapping):
+                return []
+            source_types = pair.get("source_types")
+            record_times = pair.get("record_times")
+            if (
+                not isinstance(source_types, list)
+                or len(source_types) != 2
+                or any(
+                    value not in {"daily_course_record", "senior_course_record"}
+                    for value in source_types
+                )
+                or not isinstance(record_times, list)
+                or len(record_times) != 2
+                or not all(isinstance(value, str) and value for value in record_times)
+                or not isinstance(pair_fingerprints, list)
+                or len(pair_fingerprints) != 2
+            ):
+                return []
+            pair_document_ids: set[str] = set()
+            for source_type, record_time, fingerprint in zip(
+                source_types, record_times, pair_fingerprints
+            ):
+                if not isinstance(fingerprint, str) or not re.fullmatch(
+                    r"sha256:[0-9a-f]{64}", fingerprint
+                ):
+                    return []
+                try:
+                    rows = tuple(evidence_materials.rows(source_type))
+                except Exception:
+                    return []
+                matched_ids = tuple(
+                    dict.fromkeys(
+                        document_id
+                        for row in rows
+                        if isinstance(row, Mapping)
+                        and any(
+                            str(row.get(field) or "")
+                            .strip()
+                            .replace("T", " ")
+                            .startswith(record_time)
+                            for field in (
+                                "record_time",
+                                "record_datetime",
+                                "submit_time",
+                                "submit_datetime",
+                            )
+                        )
+                        for document_id in (
+                            _valid_customer_evidence_document_id(
+                                row.get("document_id") or row.get("id")
+                            ),
+                        )
+                        if document_id
+                        and "sha256:"
+                        + hashlib.sha256(
+                            f"{source_type}\0{document_id}".encode("utf-8")
+                        ).hexdigest()
+                        == fingerprint
+                    )
+                )
+                if len(matched_ids) != 1 or matched_ids[0] in pair_document_ids:
+                    return []
+                pair_document_ids.add(matched_ids[0])
+                if matched_ids[0] not in precise_seen:
+                    precise_seen.add(matched_ids[0])
+                    precise_located.append(
+                        {
+                            "source_type": source_type,
+                            "source_document_id": matched_ids[0],
+                        }
+                    )
+        return precise_located
+
     located: list[dict[str, str]] = []
     seen_document_ids: set[str] = set()
     for pair in pairs[:4]:
@@ -4974,6 +5059,7 @@ def aggregate_luxian_0609_results(
         reduced_decisions=reduced_decisions,
     )
     display_facts_by_rule: dict[str, dict[str, Any]] = {}
+    raw_copy_facts_by_rule: dict[str, Mapping[str, Any]] = {}
     customer_evidence_by_rule: dict[str, list[dict[str, str]]] = {}
     wrapper_rule_ids = {
         _norm_id(item.get("rule_id") or item.get("rule_code"))
@@ -4996,6 +5082,8 @@ def aggregate_luxian_0609_results(
         )
         if safe_facts is not None:
             display_facts_by_rule[rule_id] = safe_facts
+            if rule_id == "LX0609-017":
+                raw_copy_facts_by_rule[rule_id] = facts
         elif not is_010_new_contract:
             display_facts_by_rule[rule_id] = _strip_sensitive(dict(facts))
         customer_evidence = _customer_evidence_from_display_facts(
@@ -5039,7 +5127,7 @@ def aggregate_luxian_0609_results(
             )
             copy_pair_evidence = (
                 _customer_evidence_from_copy_pair_facts(
-                    facts=display_facts_by_rule.get(wrapper_id),
+                    facts=raw_copy_facts_by_rule.get(wrapper_id),
                     evidence_materials=(audit_context or {}).get(
                         "evidence_materials"
                     ),

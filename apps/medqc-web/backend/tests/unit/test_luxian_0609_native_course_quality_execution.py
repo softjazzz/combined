@@ -4452,6 +4452,102 @@ async def test_typed_017_high_similarity_is_non_compliant_without_model():
 
 
 @pytest.mark.asyncio
+async def test_typed_017_keeps_exact_evidence_when_record_time_is_ambiguous():
+    copied = "患者病情平稳，查体无明显变化，继续当前治疗方案。" * 4
+
+    def read(**kwargs):
+        source_key = kwargs["source_key"]
+        rows = (
+            [
+                {
+                    **_row(copied, "2026-06-01 09:00:00"),
+                    "document_id": "copy-left",
+                },
+                {
+                    **_row(copied, "2026-06-02 09:00:00"),
+                    "document_id": "copy-right-selected",
+                },
+                {
+                    **_row("甲" * 120, "2026-06-02 09:00:00"),
+                    "document_id": "copy-right-other-a",
+                },
+                {
+                    **_row("乙" * 120, "2026-06-02 09:00:00"),
+                    "document_id": "copy-right-other-b",
+                },
+            ]
+            if source_key == "daily_course_record"
+            else []
+        )
+        return SnapshotSourceRows.create(
+            source_key=source_key,
+            rows=rows,
+            truncated=False,
+            limit_rows=50,
+        )
+
+    session = build_luxian_0609_evidence_read_session(
+        selected_rule_ids=("LX0609-017",),
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        created_at="2026-07-17T12:00:00+08:00",
+        row_reader=read,
+    )
+    native = await course.execute_luxian_0609_native_course_quality_rules(
+        rule_ids=("LX0609-017",),
+        decision_rule_ids=("LX0609-017",),
+        wrapper_rules=[_wrapper("LX0609-017")],
+        evidence_payload=None,
+        institute_id="I",
+        patient_id="P",
+        visit_id="V",
+        source_schema=None,
+        llm_client=_UnexpectedLLMClient(),
+        evidence_snapshot=session.snapshot,
+        evidence_materials=session.materials,
+    )
+    reduced = bind_and_reduce_luxian_0609_rule_decisions(
+        decisions=native.decisions,
+        expected_rule_ids=("LX0609-017",),
+        snapshot=session.snapshot,
+    )
+
+    canonical = aggregate_luxian_0609_results(
+        wrapper_rules=[{"rule_id": "LX0609-017", "name": "不合理复制病历"}],
+        execution_results=[],
+        reduced_decisions=reduced,
+        customer_display_facts=native.customer_display_facts,
+        audit_context={
+            "evidence_snapshot": session.snapshot,
+            "evidence_materials": session.materials,
+        },
+        format_evidence=False,
+    )[0]
+
+    raw_facts = dict(native.customer_display_facts)["LX0609-017"]
+    assert len(raw_facts["copy_match_document_fingerprints"]) == 1
+    assert all(
+        value.startswith("sha256:")
+        for value in raw_facts["copy_match_document_fingerprints"][0]
+    )
+    assert canonical["status"] == "non_compliant"
+    assert canonical["customer_evidence"] == [
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "copy-left",
+        },
+        {
+            "source_type": "daily_course_record",
+            "source_document_id": "copy-right-selected",
+        },
+    ]
+    assert "copy_match_document_fingerprints" not in canonical["customer_display_facts"]
+    assert "copy-right-selected" not in repr(native)
+
+
+@pytest.mark.asyncio
 async def test_typed_017_finds_non_adjacent_copy_across_twenty_course_records():
     distinct_bodies = tuple(
         character * 80

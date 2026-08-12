@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from functools import lru_cache
+import hashlib
 import heapq
 import json
 import re
@@ -2396,6 +2397,7 @@ class _CopyRuleOutcome:
     evidence: str = ""
     suggestion: str = ""
     confidence: float | None = None
+    copy_match_document_fingerprints: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2521,7 +2523,7 @@ def _assess_copy(
         _COPY_SOURCES,
         limit_per_source=None if source_complete else _MAX_ROWS_PER_SOURCE,
     )
-    comparable: list[tuple[datetime, str, str, bool, str]] = []
+    comparable: list[tuple[datetime, str, str, bool, str, str]] = []
     seen_document_ids: set[str] = set()
     for source_key, row, content in rows:
         if _clean(row.get("document_title")) == "长期医嘱":
@@ -2554,6 +2556,7 @@ def _assess_copy(
                 normalized,
                 _is_copy_template_shell(normalized),
                 content,
+                document_id,
             )
         )
 
@@ -2612,8 +2615,8 @@ def _assess_copy(
     precise_pairs: list[
         tuple[
             float,
-            tuple[datetime, str, str, bool, str],
-            tuple[datetime, str, str, bool, str],
+            tuple[datetime, str, str, bool, str, str],
+            tuple[datetime, str, str, bool, str, str],
         ]
     ] = []
     for _, _, _, left_index, right_index in candidate_heap:
@@ -2632,7 +2635,10 @@ def _assess_copy(
     )
 
     maximum = -1.0
-    best_pair: tuple[tuple[datetime, str, str, bool, str], tuple[datetime, str, str, bool, str]] | None = None
+    best_pair: tuple[
+        tuple[datetime, str, str, bool, str, str],
+        tuple[datetime, str, str, bool, str, str],
+    ] | None = None
     longest_block = 0
     substantial_coverage = 0.0
     template_shell_only = False
@@ -2673,6 +2679,38 @@ def _assess_copy(
         for similarity, left, right in precise_pairs
         if similarity >= _COPY_SIMILARITY_THRESHOLD
     ][:_COPY_DISPLAY_PAIR_LIMIT]
+    evidence_pairs = [
+        (left, right)
+        for similarity, left, right in precise_pairs
+        if similarity >= _COPY_SIMILARITY_THRESHOLD
+    ][:_COPY_DISPLAY_PAIR_LIMIT]
+    if not evidence_pairs and best_pair is not None:
+        evidence_pairs = [best_pair]
+    occurrence_counts: dict[tuple[str, datetime], int] = {}
+    for item in comparable:
+        key = (item[1], item[0])
+        occurrence_counts[key] = occurrence_counts.get(key, 0) + 1
+    ambiguous_selected_time = any(
+        occurrence_counts.get((item[1], item[0]), 0) > 1
+        for pair in evidence_pairs
+        for item in pair
+    )
+    copy_match_document_fingerprints = (
+        tuple(
+            tuple(
+                "sha256:"
+                + hashlib.sha256(
+                    f"{item[1]}\0{item[5]}".encode("utf-8")
+                ).hexdigest()
+                if item[5]
+                else ""
+                for item in pair
+            )
+            for pair in evidence_pairs
+        )
+        if ambiguous_selected_time
+        else ()
+    )
     safe_metadata.update(
         {
             "maximum_similarity": round(maximum, 4),
@@ -2696,12 +2734,14 @@ def _assess_copy(
             reason_code="copy_similarity_within_threshold",
             executor_type="program",
             safe_metadata=safe_metadata,
+            copy_match_document_fingerprints=copy_match_document_fingerprints,
         )
     return _CopyRuleOutcome(
         status="non_compliant",
         reason_code="copy_similarity_threshold_exceeded",
         executor_type="program",
         safe_metadata=safe_metadata,
+        copy_match_document_fingerprints=copy_match_document_fingerprints,
     )
 
 
@@ -2725,7 +2765,7 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
         or not isinstance(threshold, (int, float))
     ):
         return None
-    return {
+    facts = {
         "failure_kind": (
             "copy_similarity_threshold_exceeded"
             if outcome.status == "non_compliant"
@@ -2737,6 +2777,11 @@ def _copy_customer_display_facts(outcome: _CopyRuleOutcome) -> Mapping[str, Any]
         "copy_document_record_times": list(record_times),
         "copy_match_pairs": [dict(item) for item in metadata.get("best_match_pairs", [])],
     }
+    if outcome.copy_match_document_fingerprints:
+        facts["copy_match_document_fingerprints"] = [
+            list(pair) for pair in outcome.copy_match_document_fingerprints
+        ]
+    return facts
 
 
 def _copy_result(
