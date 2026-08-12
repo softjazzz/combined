@@ -168,6 +168,16 @@
         </div>
 
         <div
+          v-if="recordPoolQcTask && !isStageQueueMode"
+          class="workstation-surface-enter mb-4"
+        >
+          <RecordPoolQcTaskStatusBar
+            :job="recordPoolQcTask"
+            @dismiss="emit('dismiss-qc-task')"
+          />
+        </div>
+
+        <div
           v-if="loadError"
           class="workstation-empty-state mb-4 flex items-center gap-2 px-4 py-3 text-[13px]"
           role="alert"
@@ -257,7 +267,9 @@ import {
 } from '@ant-design/icons-vue'
 
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
+import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
+import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
 import type { DeptInfo, RecordPoolQcSummary } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
@@ -306,6 +318,7 @@ const props = defineProps<{
   pageSize: number
   displayServerTotal: number
   qcSummary: RecordPoolQcSummary
+  recordPoolQcTask?: SichuanBatchJob | null
   loadError: boolean
 }>()
 
@@ -322,6 +335,7 @@ const emit = defineEmits<{
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
   'filter-qc': []
+  'dismiss-qc-task': []
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []

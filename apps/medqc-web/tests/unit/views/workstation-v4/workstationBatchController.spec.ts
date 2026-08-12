@@ -189,6 +189,7 @@ describe('runRecordPoolQc', () => {
       setBatchExtracting: vi.fn(),
       findBatchRecordByKey: vi.fn((key: string) => records[key] || null),
       setSelectedWorkbenchKeys: vi.fn(),
+      onTaskCreated: vi.fn(),
     }
   }
 
@@ -208,8 +209,11 @@ describe('runRecordPoolQc', () => {
     })
     expect(mocks.createSichuanWorkspaceBatchJob.mock.calls[0]?.[0]).not.toHaveProperty('record_ids')
     expect(params.setSelectedWorkbenchKeys).toHaveBeenCalledWith([])
+    expect(params.onTaskCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-1', status: 'queued' }),
+    )
     expect(mocks.messageSuccess).toHaveBeenCalledWith(
-      expect.objectContaining({ content: '质控任务已创建，正在执行质控' }),
+      expect.objectContaining({ content: '质控任务已创建，可在下方查看实时进度' }),
     )
   })
 
@@ -353,6 +357,7 @@ describe('runRecordPoolFilterQc', () => {
       dateRange: ['2026-05-01', '2026-05-31'] as [string, string],
       getBatchExtracting: () => false,
       setBatchExtracting: vi.fn(),
+      onTaskCreated: vi.fn(),
       ...overrides,
     }
   }
@@ -380,6 +385,9 @@ describe('runRecordPoolFilterQc', () => {
     expect(payload).not.toHaveProperty('record_refs')
     expect(params.setBatchExtracting).toHaveBeenNthCalledWith(1, true)
     expect(params.setBatchExtracting).toHaveBeenLastCalledWith(false)
+    expect(params.onTaskCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-filter-1' }),
+    )
   })
 
   it('omits the all-departments sentinel and reports an idempotently reused task', async () => {
@@ -413,7 +421,7 @@ describe('runRecordPoolFilterQc', () => {
 
     expect(mocks.messageSuccess).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        content: '已按当前筛选创建 73 份病历的质控任务，正在执行质控',
+        content: '已按当前筛选创建 73 份病历的质控任务，可在下方查看实时进度',
       }),
     )
 
@@ -425,7 +433,7 @@ describe('runRecordPoolFilterQc', () => {
     await runRecordPoolFilterQc(params)
 
     expect(mocks.messageSuccess).toHaveBeenLastCalledWith(
-      expect.objectContaining({ content: '质控任务已创建，正在执行质控' }),
+      expect.objectContaining({ content: '质控任务已创建，可在下方查看实时进度' }),
     )
   })
 

@@ -3,6 +3,7 @@ import { extractApiErrorMessageFromError } from '@/utils/api-envelope'
 import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { PatientRecord } from './types'
+import type { SichuanBatchJob } from './semantic-rules/types'
 import {
   requestFrontpageDraft as requestFrontpageDraftAction,
   persistBatchFrontpageDraft as persistBatchFrontpageDraftAction,
@@ -49,6 +50,7 @@ interface RunRecordPoolQcParams {
   setBatchExtracting: (value: boolean) => void
   findBatchRecordByKey: (recordKey: string) => PatientRecord | null
   setSelectedWorkbenchKeys: (keys: string[]) => void
+  onTaskCreated?: (job: SichuanBatchJob) => void
 }
 
 interface RunRecordPoolFilterQcParams {
@@ -60,6 +62,7 @@ interface RunRecordPoolFilterQcParams {
   dateRange: [string, string] | null
   getBatchExtracting: () => boolean
   setBatchExtracting: (value: boolean) => void
+  onTaskCreated?: (job: SichuanBatchJob) => void
 }
 
 const RECORD_POOL_QC_MESSAGE_KEY = 'workstation-v4-record-pool-qc'
@@ -83,6 +86,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
     setBatchExtracting,
     findBatchRecordByKey,
     setSelectedWorkbenchKeys,
+    onTaskCreated,
   } = params
   if (getBatchExtracting()) return
 
@@ -156,6 +160,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       return
     }
 
+    onTaskCreated?.(response.data)
     setSelectedWorkbenchKeys([])
     if (response.data.idempotency_reused) {
       message.info({
@@ -166,7 +171,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
     }
     message.success({
       key: RECORD_POOL_QC_MESSAGE_KEY,
-      content: '质控任务已创建，正在执行质控',
+      content: '质控任务已创建，可在下方查看实时进度',
     })
   } catch (error) {
     recordPoolQcError(
@@ -240,6 +245,7 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
       })
       return
     }
+    params.onTaskCreated?.(response.data)
     if (response.data.idempotency_reused) {
       message.info({
         key: RECORD_POOL_QC_MESSAGE_KEY,
@@ -250,8 +256,8 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
     const frozenTotal = response.data.total_records
     const successContent =
       typeof frozenTotal === 'number' && Number.isFinite(frozenTotal) && frozenTotal >= 0
-        ? `已按当前筛选创建 ${Math.trunc(frozenTotal)} 份病历的质控任务，正在执行质控`
-        : '质控任务已创建，正在执行质控'
+        ? `已按当前筛选创建 ${Math.trunc(frozenTotal)} 份病历的质控任务，可在下方查看实时进度`
+        : '质控任务已创建，可在下方查看实时进度'
     message.success({
       key: RECORD_POOL_QC_MESSAGE_KEY,
       content: successContent,

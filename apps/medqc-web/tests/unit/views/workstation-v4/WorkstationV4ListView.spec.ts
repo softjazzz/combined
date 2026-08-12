@@ -150,6 +150,7 @@ function mountListView(overrides: Record<string, unknown> = {}) {
         },
         runningState: 'unknown',
       },
+      recordPoolQcTask: null,
       loadError: false,
       ...overrides,
     },
@@ -237,6 +238,22 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('showFilterQcAction')).toBe(true)
     expect(table.props('filterQcCount')).toBe(19)
     expect(table.props('filterQcLoading')).toBe(true)
+  })
+
+  it('shows the persistent task progress returned by a record-pool QC action', () => {
+    const task = {
+      id: 'job-1',
+      rule_code: 'LX0609',
+      rule_name: '泸县0609质控',
+      scope: 'all',
+      status: 'running',
+      total_records: 4,
+    }
+    const wrapper = mountListView({ recordPoolQcTask: task })
+
+    const statusBar = wrapper.findComponent({ name: 'RecordPoolQcTaskStatusBar' })
+    expect(statusBar.exists()).toBe(true)
+    expect(statusBar.props('job')).toEqual(task)
   })
 
   it('forwards the full server-filter QC action from the record pool', async () => {

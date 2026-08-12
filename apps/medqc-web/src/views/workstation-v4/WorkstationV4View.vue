@@ -29,6 +29,7 @@
         :page-size="pageSize"
         :display-server-total="displayServerTotal"
         :qc-summary="qcSummary"
+        :record-pool-qc-task="recordPoolQcTask"
         :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
@@ -42,6 +43,7 @@
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
         @filter-qc="handleFilterQc"
+        @dismiss-qc-task="recordPoolQcTask = null"
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
@@ -411,6 +413,7 @@ import type {
 } from './types'
 import type { PriorityCard, PriorityGroup } from './components/workbench/PriorityLane.vue'
 import type { WorkbenchRow } from './components/workbench/BatchTablePanel.vue'
+import type { SichuanBatchJob } from './semantic-rules/types'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
 import type { FrontpageReportScene } from '@/api/frontpage'
 
@@ -490,6 +493,7 @@ const stageServerTotal = ref(0)
 const stageServerTotalPages = ref(1)
 const stageLoading = ref(false)
 const batchExtracting = ref(false)
+const recordPoolQcTask = ref<SichuanBatchJob | null>(null)
 const batchRuntimeStatusMap = ref<Record<string, BatchRuntimeStatus>>({})
 const selectedStageRecord = ref<PatientRecord | null>(null)
 // 仅用于当前前端选中行。真实请求仍从 selectedRecord 读取三坐标字段。
@@ -2131,6 +2135,9 @@ async function handleBatchExtract(keys: string[]) {
       setSelectedWorkbenchKeys: (nextKeys) => {
         selectedWorkbenchKeys.value = nextKeys
       },
+      onTaskCreated: (job) => {
+        recordPoolQcTask.value = job
+      },
     })
     return
   }
@@ -2169,6 +2176,9 @@ async function handleFilterQc() {
     getBatchExtracting: () => batchExtracting.value,
     setBatchExtracting: (value) => {
       batchExtracting.value = value
+    },
+    onTaskCreated: (job) => {
+      recordPoolQcTask.value = job
     },
   })
 }
