@@ -131,6 +131,7 @@
           class="result-trigger"
           :class="{ 'is-static': !isExpandable(item) }"
           :aria-expanded="isExpandable(item) ? expandedKey === item.key : undefined"
+          :data-testid="isExpandable(item) ? 'single-record-result-toggle' : undefined"
           @click="isExpandable(item) && toggle(item.key)"
         >
           <span class="result-main">
@@ -158,17 +159,21 @@
               <span
                 v-if="isExpandable(item)"
                 class="toggle-mark"
-                aria-hidden="true"
               >
+                <span class="toggle-text">{{
+                  expandedKey === item.key ? '收起详情' : '查看详情'
+                }}</span>
                 <ChevronUp
                   v-if="expandedKey === item.key"
                   :size="17"
                   :stroke-width="2"
+                  aria-hidden="true"
                 />
                 <ChevronRight
                   v-else
                   :size="17"
                   :stroke-width="2"
+                  aria-hidden="true"
                 />
               </span>
             </span>
@@ -1261,6 +1266,10 @@ watch(
   cursor: default;
 }
 
+.result-row:not(.is-expanded) .result-trigger {
+  padding: 11px 13px 10px;
+}
+
 .status-cell {
   display: inline-flex;
   min-width: 0;
@@ -1310,14 +1319,23 @@ watch(
 
 .toggle-mark {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  min-width: 0;
+  height: 28px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  padding: 0 8px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.035);
   color: rgba(29, 29, 31, 0.42);
+}
+
+.toggle-text {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 .result-row.is-expanded .toggle-mark {
@@ -1347,6 +1365,21 @@ watch(
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
+}
+
+.result-row:not(.is-expanded) .rule-name,
+.result-row:not(.is-expanded) .rule-conclusion {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.result-row:not(.is-expanded) .rule-name {
+  -webkit-line-clamp: 2;
+}
+
+.result-row:not(.is-expanded) .rule-conclusion {
+  -webkit-line-clamp: 2;
 }
 
 .result-detail {
