@@ -8,6 +8,7 @@ export interface LlmObservabilityKpis {
   logical_calls: number
   http_attempts: number
   record_count: number
+  unbound_record_attempts: number
   input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
@@ -18,6 +19,11 @@ export interface LlmObservabilityKpis {
   successful_attempts: number
   failed_attempts: number
   unknown_usage_attempts: number
+}
+
+export interface LlmObservabilityScope {
+  account_scope: 'all_accounts'
+  record_scope: 'all_observed_records'
 }
 
 export interface LlmObservabilityTrendPoint {
@@ -69,6 +75,7 @@ export interface LlmObservabilityRecordPage {
 }
 
 export interface LlmObservabilityOverview {
+  scope: LlmObservabilityScope
   range: LlmObservabilityRange
   kpis: LlmObservabilityKpis
   trends: LlmObservabilityTrendPoint[]

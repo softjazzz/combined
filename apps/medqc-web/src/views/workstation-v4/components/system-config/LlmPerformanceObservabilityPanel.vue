@@ -69,6 +69,14 @@
         <Clock3 :size="14" />
         {{ formatRange(overview.range.start_at, overview.range.end_at) }}
       </div>
+      <div
+        v-if="overview?.scope?.account_scope === 'all_accounts'"
+        class="llm-observability__range-note"
+        data-testid="account-scope"
+      >
+        <ShieldCheck :size="14" />
+        账号范围：全部账号
+      </div>
     </section>
 
     <section
@@ -273,7 +281,11 @@
           <div class="llm-observability__section-head">
             <div>
               <h3>单病历调用概览</h3>
-              <p>病例仅以不可逆哈希短标识展示；点击查看该病例的 HTTP 尝试明细。</p>
+              <p>汇总全部账号发起且已绑定病历身份的调用；病例仅以不可逆哈希短标识展示。</p>
+              <p v-if="overview.kpis.unbound_record_attempts > 0">
+                另有 {{ formatInteger(overview.kpis.unbound_record_attempts) }}
+                次模型尝试未绑定病历身份，已计入全局统计但不进入本列表。
+              </p>
             </div>
             <span>{{ formatInteger(overview.records.total) }} 份</span>
           </div>

@@ -18,6 +18,10 @@ vi.mock('vue-echarts', () => ({
 }))
 
 const overview: LlmObservabilityOverview = {
+  scope: {
+    account_scope: 'all_accounts',
+    record_scope: 'all_observed_records',
+  },
   range: {
     start_at: '2026-08-03T00:00:00Z',
     end_at: '2026-08-10T00:00:00Z',
@@ -27,6 +31,7 @@ const overview: LlmObservabilityOverview = {
     logical_calls: 8,
     http_attempts: 9,
     record_count: 2,
+    unbound_record_attempts: 3,
     input_tokens: 1200,
     output_tokens: 300,
     total_tokens: 1500,
@@ -185,6 +190,15 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).not.toContain('abcdef1234567890abcdef1234567890')
     expect(wrapper.text()).not.toContain('patient_id')
     expect(wrapper.text()).not.toContain('visit_id')
+  })
+
+  it('明确展示全部账号范围并区分未绑定病历的调用', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('账号范围：全部账号')
+    expect(wrapper.text()).toContain('全部账号发起且已绑定病历身份的调用')
+    expect(wrapper.text()).toContain('另有 3 次模型尝试未绑定病历身份')
   })
 
   it('使用后端真实业务场景枚举发起筛选请求', async () => {

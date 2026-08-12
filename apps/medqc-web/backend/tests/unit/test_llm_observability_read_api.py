@@ -132,6 +132,7 @@ def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurren
         "logical_calls": 2,
         "http_attempts": 3,
         "record_count": 2,
+        "unbound_record_attempts": 0,
         "input_tokens": 10,
         "output_tokens": 5,
         "total_tokens": 15,
@@ -142,6 +143,43 @@ def test_overview_counts_logical_calls_attempts_unknown_usage_and_peak_concurren
         "successful_attempts": 2,
         "failed_attempts": 1,
         "unknown_usage_attempts": 2,
+    }
+
+
+def test_sync_admin_overview_declares_global_scope_and_separates_unbound_record_attempts():
+    rows = [
+        _event(
+            event_id="event-admin",
+            logical_call_id="logical-admin",
+            record_key_hash="record-admin",
+        ),
+        _event(
+            event_id="event-doctor",
+            logical_call_id="logical-doctor",
+            record_key_hash="record-doctor",
+        ),
+        _event(
+            event_id="event-unbound",
+            logical_call_id="logical-unbound",
+            record_key_hash=None,
+            business_scene="llm_config_probe",
+        ),
+    ]
+
+    with _client(rows, roles=["sync_admin"], email="sync_admin@medqc.com") as client:
+        response = client.get("/api/v1/system/llm-observability/overview")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["scope"] == {
+        "account_scope": "all_accounts",
+        "record_scope": "all_observed_records",
+    }
+    assert data["kpis"]["record_count"] == 2
+    assert data["kpis"]["unbound_record_attempts"] == 1
+    assert {item["record_key_hash"] for item in data["records"]["items"]} == {
+        "record-admin",
+        "record-doctor",
     }
 
 
@@ -200,7 +238,7 @@ def test_overview_returns_frozen_sections_model_role_and_paginated_records():
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert set(data) == {"range", "kpis", "trends", "models", "safe_errors", "records"}
+    assert set(data) == {"scope", "range", "kpis", "trends", "models", "safe_errors", "records"}
     assert {item["model_role"] for item in data["models"]} == {
         "qc_fact_extractor",
         "coding_assistant",

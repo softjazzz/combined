@@ -445,12 +445,18 @@ class LLMObservabilityReadService:
                     if str(row.get("record_key_hash") or "").strip()
                 }
             ),
+            "unbound_record_attempts": sum(
+                1
+                for row in rows
+                if not str(row.get("record_key_hash") or "").strip()
+            ),
         }
         # 固定合同顺序，避免调用方因字典插入顺序产生漂移。
         kpis = {
             "logical_calls": kpis["logical_calls"],
             "http_attempts": kpis["http_attempts"],
             "record_count": kpis["record_count"],
+            "unbound_record_attempts": kpis["unbound_record_attempts"],
             "input_tokens": kpis["input_tokens"],
             "output_tokens": kpis["output_tokens"],
             "total_tokens": kpis["total_tokens"],
@@ -465,6 +471,10 @@ class LLMObservabilityReadService:
         records = _record_items(rows)
         offset = (page - 1) * page_size
         return {
+            "scope": {
+                "account_scope": "all_accounts",
+                "record_scope": "all_observed_records",
+            },
             "range": {
                 "start_at": _iso(filters.start_at),
                 "end_at": _iso(filters.end_at),
