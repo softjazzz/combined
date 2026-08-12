@@ -64,6 +64,7 @@ async def get_departments_api():
 @router.get("/workstation")
 async def get_workstation_data_api(
     dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
+    doctor: Optional[str] = Query(None, description="主管医师筛选，不传则返回全部"),
     keyword: Optional[str] = Query(None, description="搜索姓名/病案号"),
     start_date: Optional[date] = Query(None, description="筛选开始日期"),
     end_date: Optional[date] = Query(None, description="筛选结束日期"),
@@ -95,6 +96,7 @@ async def get_workstation_data_api(
     try:
         return get_workstation_data(
             dept=dept,
+            doctor=doctor,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,

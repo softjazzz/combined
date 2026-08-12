@@ -1,9 +1,11 @@
 import { computed, ref } from 'vue'
 import { ApiService } from '@/services/apiService'
-import type { DeptInfo, PatientRecord, RecordPoolQcSummary } from '../types'
+import type { DeptInfo, DoctorInfo, PatientRecord, RecordPoolQcSummary } from '../types'
 import { normalizeRecord, normalizeRecordPoolQcSummary } from '../normalize'
 
 const WORKSTATION_PAGE_SIZE = 15
+const ALL_DEPARTMENTS = '全部科室'
+const ALL_DOCTORS = '全部主管医师'
 const EMPTY_QC_SUMMARY: RecordPoolQcSummary = {
   totalRecords: 0,
   readyRecords: 0,
@@ -50,6 +52,16 @@ function buildDepartments(records: PatientRecord[]): DeptInfo[] {
   ]
 }
 
+function normalizeDoctor(raw: unknown): DoctorInfo {
+  const source = (raw || {}) as Record<string, unknown>
+  const name = String(source.name ?? source.doctor ?? ALL_DOCTORS).trim()
+  const total = Number(source.total ?? source.count ?? 0)
+  return {
+    name: name || ALL_DOCTORS,
+    total: Number.isFinite(total) ? total : 0,
+  }
+}
+
 /**
  * 病历池的住院状态必须由调用方显式固定到服务端查询。
  * 默认值保留既有全量病历池的行为，运行/终末质控页不会在当前页做本地过滤。
@@ -57,8 +69,10 @@ function buildDepartments(records: PatientRecord[]): DeptInfo[] {
 export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = 'all') {
   const initialRouteQuery = new URLSearchParams(window.location.search)
   const initialDepartment = initialRouteQuery.get('department')?.trim()
+  const initialDoctor = initialRouteQuery.get('doctor')?.trim()
   const allRecords = ref<PatientRecord[]>([])
   const departments = ref<DeptInfo[]>([])
+  const doctors = ref<DoctorInfo[]>([])
   const currentPage = ref(1)
   const pageSize = ref(WORKSTATION_PAGE_SIZE)
   const serverTotal = ref(0)
@@ -68,7 +82,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const loadError = ref(false)
   const qcSummary = ref<RecordPoolQcSummary>({ ...EMPTY_QC_SUMMARY })
 
-  const activeDept = ref(initialDepartment || '\u5168\u90e8\u79d1\u5ba4')
+  const activeDept = ref(initialDepartment || ALL_DEPARTMENTS)
+  const activeDoctor = ref(initialDoctor || ALL_DOCTORS)
   const searchText = ref('')
   const dateRange = ref<WorkstationDateRange>(null)
   const dateField = ref<WorkstationDateField>('visit')
@@ -101,8 +116,11 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         page_size: requestedPageSize,
         date_field: dateField.value,
       }
-      if (activeDept.value !== '\u5168\u90e8\u79d1\u5ba4') {
+      if (activeDept.value !== ALL_DEPARTMENTS) {
         params.dept = activeDept.value
+      }
+      if (activeDoctor.value !== ALL_DOCTORS) {
+        params.doctor = activeDoctor.value
       }
       const keyword = searchText.value.trim()
       if (keyword) {
@@ -152,6 +170,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         Array.isArray(data.departments) && data.departments.length > 0
           ? data.departments.map((dept: unknown) => normalizeDepartment(dept))
           : buildDepartments(normalizedRecords)
+      doctors.value =
+        Array.isArray(data.doctors) && data.doctors.length > 0
+          ? data.doctors.map((doctor: unknown) => normalizeDoctor(doctor))
+          : [{ name: ALL_DOCTORS, total: 0 }]
 
       const total = Number(data.total ?? data.total_count ?? 0)
       const totalPagesComputed = requestedPageSize > 0 ? Math.ceil(total / requestedPageSize) : 1
@@ -192,6 +214,13 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   function selectDept(deptName: string) {
     activeDept.value = deptName
+    activeDoctor.value = ALL_DOCTORS
+    currentPage.value = 1
+    fetchData(1)
+  }
+
+  function selectDoctor(doctorName: string) {
+    activeDoctor.value = String(doctorName || ALL_DOCTORS).trim() || ALL_DOCTORS
     currentPage.value = 1
     fetchData(1)
   }
@@ -205,7 +234,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   }
 
   function resetFilters() {
-    activeDept.value = '\u5168\u90e8\u79d1\u5ba4'
+    activeDept.value = ALL_DEPARTMENTS
+    activeDoctor.value = ALL_DOCTORS
     searchText.value = ''
     dateRange.value = null
     dateField.value = 'visit'
@@ -216,6 +246,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   return {
     allRecords,
     departments,
+    doctors,
     currentPage,
     pageSize,
     serverTotal,
@@ -225,6 +256,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     loadError,
     qcSummary,
     activeDept,
+    activeDoctor,
     searchText,
     dateRange,
     dateField,
@@ -235,6 +267,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     handlePageChange,
     refreshData,
     selectDept,
+    selectDoctor,
     selectHospFilter,
     resetFilters,
   }

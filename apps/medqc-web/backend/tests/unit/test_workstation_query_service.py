@@ -538,6 +538,58 @@ def test_get_workstation_data_filters_department_by_coalesced_dept(workstation_s
     assert result["records"][0]["department"] == "中医科"
 
 
+def test_get_workstation_data_filters_by_attending_physician_and_returns_department_scoped_doctors(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="V1",
+            name="甲",
+            admission_dept_name="重症医学科",
+            attending_physician_sign="张医师",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P2",
+            visit_id="V2",
+            name="乙",
+            admission_dept_name="重症医学科",
+            attending_physician_sign="李医师",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P3",
+            visit_id="V3",
+            name="丙",
+            admission_dept_name="普通外科",
+            attending_physician_sign="王医师",
+            admission_datetime=datetime(2026, 5, 25, 9, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        dept="重症医学科",
+        doctor=" 张医师 ",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["qc_summary"]["total_records"] == 1
+    assert [record["id"] for record in result["records"]] == ["V1"]
+    assert result["doctors"] == [
+        {"name": "全部主管医师", "total": 2},
+        {"name": "张医师", "total": 1},
+        {"name": "李医师", "total": 1},
+    ]
+
+
 def test_get_workstation_data_date_field_filters_admission_discharge_and_visit(
     workstation_session_factory,
 ):

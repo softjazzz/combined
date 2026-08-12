@@ -64,6 +64,11 @@ export interface DeptInfo {
   warningCount: number
 }
 
+export interface DoctorInfo {
+  name: string
+  total: number
+}
+
 export interface DocumentAuthor {
   role?: string
   name?: string

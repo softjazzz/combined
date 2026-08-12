@@ -57,6 +57,7 @@ interface RunRecordPoolFilterQcParams {
   total: number
   hospitalStatus: string
   department: string
+  doctor: string
   keyword: string
   dateField: string
   dateRange: [string, string] | null
@@ -217,6 +218,7 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
   }
 
   const department = String(params.department || '').trim()
+  const doctor = String(params.doctor || '').trim()
   const keyword = String(params.keyword || '').trim()
   const startDate = String(params.dateRange?.[0] || '').trim()
   const endDate = String(params.dateRange?.[1] || '').trim()
@@ -224,6 +226,7 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
     rule_set_key: 'luxian_0609_qc_v1',
     scope: recordPoolScopeFromHospitalStatus(params.hospitalStatus),
     ...(department && department !== '全部科室' ? { department } : {}),
+    ...(doctor && doctor !== '全部主管医师' ? { doctor } : {}),
     ...(keyword ? { keyword } : {}),
     date_field: dateField,
     ...(startDate ? { start_date: startDate } : {}),

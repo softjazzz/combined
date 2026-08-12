@@ -176,14 +176,14 @@
 }
 
 .wv4-record-pool-hero .workbench-controls__search-input {
-  flex: 1 1 360px;
+  flex: 1 1 250px;
   width: auto;
-  max-width: 480px;
+  max-width: 360px;
 }
 
 .wv4-record-pool-hero .workbench-date-row__range {
-  flex: 0 1 310px;
-  width: 310px;
+  flex: 0 1 270px;
+  width: 270px;
 }
 
 .wv4-record-pool-hero .workbench-hosp-select {
@@ -706,6 +706,17 @@
   align-items: center;
 }
 
+.workbench-doctor-filter {
+  display: flex;
+  min-width: 168px;
+  flex: 0 1 190px;
+  align-items: center;
+}
+
+.workbench-doctor-select {
+  width: 100%;
+}
+
 .workbench-dept-filter .workbench-dept-select {
   width: 100%;
 }
@@ -984,6 +995,8 @@
 
   .workbench-dept-select,
   .workbench-dept-filter,
+  .workbench-doctor-filter,
+  .workbench-doctor-select,
   .workbench-status-select,
   .workbench-date-row__field,
   .workbench-date-row__range {

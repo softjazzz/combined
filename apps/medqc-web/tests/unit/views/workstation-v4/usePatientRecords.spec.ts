@@ -31,6 +31,10 @@ function mockWorkstationResponse() {
         { name: '全部科室', total: 1 },
         { name: '中医科', total: 1 },
       ],
+      doctors: [
+        { name: '全部主管医师', total: 1 },
+        { name: '陈医师', total: 1 },
+      ],
       total: 1,
       page: 1,
       pageSize: 15,
@@ -67,9 +71,10 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
-  it('fetchData sends department, keyword and date filters to backend', async () => {
+  it('fetchData sends department, attending physician, keyword and date filters to backend', async () => {
     const records = usePatientRecords()
     records.activeDept.value = '中医科'
+    records.activeDoctor.value = '陈医师'
     records.searchText.value = '张三'
     records.dateRange.value = ['2026-05-01', '2026-05-31']
     records.dateField.value = 'admission'
@@ -82,6 +87,7 @@ describe('usePatientRecords workstation filters', () => {
       page_size: 10,
       date_field: 'admission',
       dept: '中医科',
+      doctor: '陈医师',
       keyword: '张三',
       start_date: '2026-05-01',
       end_date: '2026-05-31',
@@ -166,11 +172,13 @@ describe('usePatientRecords workstation filters', () => {
   it('selectDept resets page and triggers backend query', async () => {
     const records = usePatientRecords()
     records.currentPage.value = 3
+    records.activeDoctor.value = '陈医师'
 
     records.selectDept('普通外科')
     await flushPromises()
 
     expect(records.currentPage.value).toBe(1)
+    expect(records.activeDoctor.value).toBe('全部主管医师')
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       page: 1,
       page_size: 15,
@@ -179,9 +187,31 @@ describe('usePatientRecords workstation filters', () => {
     })
   })
 
+  it('selectDoctor resets page and applies the server-side attending physician filter', async () => {
+    const records = usePatientRecords()
+    records.currentPage.value = 3
+
+    records.selectDoctor('陈医师')
+    await flushPromises()
+
+    expect(records.currentPage.value).toBe(1)
+    expect(records.activeDoctor.value).toBe('陈医师')
+    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
+      page: 1,
+      page_size: 15,
+      date_field: 'visit',
+      doctor: '陈医师',
+    })
+    expect(records.doctors.value).toEqual([
+      { name: '全部主管医师', total: 1 },
+      { name: '陈医师', total: 1 },
+    ])
+  })
+
   it('resetFilters clears department, search and date filters', () => {
     const records = usePatientRecords()
     records.activeDept.value = '普通外科'
+    records.activeDoctor.value = '陈医师'
     records.searchText.value = '李四'
     records.dateRange.value = ['2026-05-01', '2026-05-31']
     records.dateField.value = 'discharge'
@@ -191,6 +221,7 @@ describe('usePatientRecords workstation filters', () => {
     records.resetFilters()
 
     expect(records.activeDept.value).toBe('全部科室')
+    expect(records.activeDoctor.value).toBe('全部主管医师')
     expect(records.searchText.value).toBe('')
     expect(records.dateRange.value).toBeNull()
     expect(records.dateField.value).toBe('visit')

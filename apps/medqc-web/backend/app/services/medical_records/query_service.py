@@ -503,17 +503,24 @@ def _apply_workstation_filters(
     query,
     *,
     dept: Optional[str],
+    doctor: Optional[str],
     keyword: Optional[str],
     start_date: Optional[date],
     end_date: Optional[date],
     date_field: Optional[str],
     hospital_status: Optional[str],
     include_department: bool,
+    include_doctor: bool,
     discharge_summary=None,
 ):
     query = query.filter(_workstation_identity_condition())
     if include_department and dept:
         query = query.filter(_workstation_department_expr(discharge_summary) == dept)
+    normalized_doctor = str(doctor or "").strip()
+    if include_doctor and normalized_doctor:
+        query = query.filter(
+            func.trim(MedicalRecordFrontpage.attending_physician_sign) == normalized_doctor
+        )
     if keyword:
         kw = f"%{keyword}%"
         query = query.filter(
@@ -554,6 +561,7 @@ def _workstation_default_order_by(discharge_summary=None):
 
 def get_workstation_data(
     dept: Optional[str] = None,
+    doctor: Optional[str] = None,
     keyword: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
@@ -626,12 +634,14 @@ def get_workstation_data(
         q = _apply_workstation_filters(
             base_query,
             dept=dept,
+            doctor=doctor,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
             include_department=True,
+            include_doctor=True,
             discharge_summary=discharge_summary,
         )
         if any(
@@ -795,12 +805,14 @@ def get_workstation_data(
         dept_stats_query = _apply_workstation_filters(
             dept_stats_base_query,
             dept=None,
+            doctor=doctor,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
             include_department=False,
+            include_doctor=True,
             discharge_summary=discharge_summary,
         )
         dept_stats = dept_stats_query.group_by(dept_expr).all()
@@ -814,14 +826,49 @@ def get_workstation_data(
         dept_total_count = _apply_workstation_filters(
             dept_total_count,
             dept=None,
+            doctor=doctor,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
             hospital_status=normalized_hospital_status,
             include_department=False,
+            include_doctor=True,
             discharge_summary=discharge_summary,
         ).scalar() or 0
+
+        doctor_name_expr = func.trim(MedicalRecordFrontpage.attending_physician_sign).label(
+            "doctor_name"
+        )
+        doctor_stats_base_query = session.query(
+            doctor_name_expr,
+            func.count().label("total"),
+        ).select_from(MedicalRecordFrontpage)
+        if discharge_summary is not None:
+            doctor_stats_base_query = doctor_stats_base_query.outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            )
+        doctor_stats_query = _apply_workstation_filters(
+            doctor_stats_base_query,
+            dept=dept,
+            doctor=None,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            hospital_status=normalized_hospital_status,
+            include_department=True,
+            include_doctor=False,
+            discharge_summary=discharge_summary,
+        ).filter(
+            MedicalRecordFrontpage.attending_physician_sign.is_not(None),
+            func.trim(MedicalRecordFrontpage.attending_physician_sign) != "",
+        )
+        doctor_stats = doctor_stats_query.group_by(doctor_name_expr).order_by(
+            func.count().desc(),
+            doctor_name_expr.asc(),
+        ).all()
 
         real_visit_ids = [r.visit_id for r in records]
         demo_visit_ids = [str(item.get("visitId") or item.get("id") or "").strip() for item in visible_demos]
@@ -932,6 +979,17 @@ def get_workstation_data(
 
         total_count = total_real_filtered + demo_count
         departments[0]["total"] = int(dept_total_count) + demo_count
+        doctors = [
+            {
+                "name": "全部主管医师",
+                "total": sum(int(item.total) for item in doctor_stats),
+            },
+            *[
+                {"name": str(item.doctor_name).strip(), "total": int(item.total)}
+                for item in doctor_stats
+                if str(item.doctor_name or "").strip()
+            ],
+        ]
         demo_items = [
             _apply_frontpage_generate_state(item, demo_frontpage_generate_state_map)
             for item in demo_page
@@ -940,6 +998,7 @@ def get_workstation_data(
 
     return {
         "departments": departments,
+        "doctors": doctors,
         "records": items,
         "total": total_count,
         "page": page,

@@ -11,8 +11,10 @@
         :date-range="dateRange"
         :date-field="dateField"
         :department-select-options="departmentSelectOptions"
+        :doctor-select-options="doctors"
         :quick-departments="quickDepartments"
         :active-dept="activeDept"
+        :active-doctor="activeDoctor"
         :hosp-filter="hospFilter"
         :hosp-options="hospOptions"
         :workbench-rows="workbenchRows"
@@ -39,6 +41,7 @@
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
         @select-dept="selectDept"
+        @select-doctor="selectDoctor"
         @select-hosp-filter="selectHospFilter"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
@@ -438,6 +441,7 @@ const router = useRouter()
 const {
   allRecords,
   departments,
+  doctors,
   currentPage,
   pageSize,
   serverTotal,
@@ -446,6 +450,7 @@ const {
   loadError,
   qcSummary,
   activeDept,
+  activeDoctor,
   searchText,
   dateRange,
   dateField,
@@ -456,6 +461,7 @@ const {
   handlePageChange: handleBasePageChange,
   refreshData,
   selectDept,
+  selectDoctor,
   selectHospFilter,
   resetFilters,
 } = usePatientRecords()
@@ -832,6 +838,9 @@ const activeHospLabel = computed(
 )
 const scopeStatusText = computed(() => {
   const parts = [activeDept.value]
+  if (activeDoctor.value !== '全部主管医师') {
+    parts.push(activeDoctor.value)
+  }
   if (activeHospLabel.value !== '全部') {
     parts.push(activeHospLabel.value)
   }
@@ -934,8 +943,14 @@ const tableSummaryText = computed(() => {
     stageTitle: stageMeta.value.tableTitle,
     isStageQueueMode: isStageQueueMode.value,
   })
-  if (activeHospLabel.value === '全部') return baseSummary
-  return `${baseSummary} / ${activeHospLabel.value}`
+  const parts = [baseSummary]
+  if (activeDoctor.value !== '全部主管医师') {
+    parts.push(activeDoctor.value)
+  }
+  if (activeHospLabel.value !== '全部') {
+    parts.push(activeHospLabel.value)
+  }
+  return parts.join(' / ')
 })
 
 // ========== 质控规则 Tab ==========
@@ -2170,6 +2185,7 @@ async function handleFilterQc() {
     total: qcSummary.value.totalRecords,
     hospitalStatus: hospFilter.value,
     department: activeDept.value,
+    doctor: activeDoctor.value,
     keyword: searchText.value,
     dateField: dateField.value,
     dateRange: dateRange.value,

@@ -352,6 +352,7 @@ describe('runRecordPoolFilterQc', () => {
       total: 75,
       hospitalStatus: 'all',
       department: '重症医学科',
+      doctor: '陈医师',
       keyword: '待复核',
       dateField: 'visit',
       dateRange: ['2026-05-01', '2026-05-31'] as [string, string],
@@ -375,6 +376,7 @@ describe('runRecordPoolFilterQc', () => {
       rule_set_key: 'luxian_0609_qc_v1',
       scope,
       department: '重症医学科',
+      doctor: '陈医师',
       keyword: '待复核',
       date_field: 'visit',
       start_date: '2026-05-01',
@@ -391,7 +393,11 @@ describe('runRecordPoolFilterQc', () => {
   })
 
   it('omits the all-departments sentinel and reports an idempotently reused task', async () => {
-    const params = createFilterParams({ department: '全部科室', dateRange: null })
+    const params = createFilterParams({
+      department: '全部科室',
+      doctor: '全部主管医师',
+      dateRange: null,
+    })
     mocks.createSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: { id: 'job-filter-1', status: 'running', idempotency_reused: true },

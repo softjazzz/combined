@@ -49,3 +49,24 @@ def test_workstation_route_rejects_unknown_hospital_status(monkeypatch):
     response = client.get("/api/medical-records/workstation?hospital_status=unknown")
 
     assert response.status_code == 422
+
+
+def test_workstation_route_forwards_attending_physician_filter(monkeypatch):
+    captured = {}
+    app = FastAPI()
+    app.include_router(medical_records.router)
+    monkeypatch.setattr(
+        medical_records_query,
+        "get_workstation_data",
+        lambda **kwargs: captured.update(kwargs) or {"records": [], "doctors": [], "total": 0},
+    )
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "reader-1",
+        "roles": ["read_only_observer"],
+    }
+    client = TestClient(app)
+
+    response = client.get("/api/medical-records/workstation?doctor=%E5%BC%A0%E5%8C%BB%E5%B8%88")
+
+    assert response.status_code == 200
+    assert captured["doctor"] == "张医师"

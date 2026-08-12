@@ -127,6 +127,33 @@
                   </span>
                 </div>
 
+                <div
+                  v-if="!isStageQueueMode"
+                  class="workbench-doctor-filter"
+                >
+                  <a-select
+                    :value="activeDoctor"
+                    class="workbench-doctor-select"
+                    size="large"
+                    show-search
+                    popup-class-name="wv4-record-pool-select-popup"
+                    :filter-option="filterDepartmentSelectOption"
+                    @update:value="emit('selectDoctor', normalizeDoctorValue($event))"
+                  >
+                    <a-select-option
+                      v-for="doctor in doctorSelectOptions"
+                      :key="doctor.name"
+                      :value="doctor.name"
+                      :label="doctor.name"
+                    >
+                      <span class="workbench-dept-select__option">
+                        <span class="workbench-dept-select__name">{{ doctor.name }}</span>
+                        <span class="workbench-dept-select__count">{{ doctor.total }}</span>
+                      </span>
+                    </a-select-option>
+                  </a-select>
+                </div>
+
                 <div class="wv4-filter-actions">
                   <a-button
                     type="primary"
@@ -290,7 +317,7 @@ import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { SichuanBatchJob } from '../semantic-rules/types'
 import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
-import type { DeptInfo, RecordPoolQcSummary } from '../types'
+import type { DeptInfo, DoctorInfo, RecordPoolQcSummary } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
 import { filterDepartmentOption } from '../utils/workstationFilterPresentation'
@@ -319,8 +346,10 @@ const props = defineProps<{
   dateRange: WorkstationDateRange
   dateField: WorkstationDateField
   departmentSelectOptions: DeptInfo[]
+  doctorSelectOptions: DoctorInfo[]
   quickDepartments: DeptInfo[]
   activeDept: string
+  activeDoctor: string
   hospFilter: string
   hospOptions: HospFilterOption[]
   workbenchRows: WorkbenchRow[]
@@ -350,6 +379,7 @@ const emit = defineEmits<{
   'priority-open': [recordId: string]
   'priority-defer': [recordId: string]
   selectDept: [deptName: string]
+  selectDoctor: [doctorName: string]
   selectHospFilter: [value: HospFilterValue]
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
@@ -374,6 +404,10 @@ function normalizeDateRange(value: unknown): WorkstationDateRange {
 
 function normalizeDepartmentValue(value: unknown): string {
   return String(value || '全部科室').trim() || '全部科室'
+}
+
+function normalizeDoctorValue(value: unknown): string {
+  return String(value || '全部主管医师').trim() || '全部主管医师'
 }
 
 function normalizeHospFilterValue(value: unknown): HospFilterValue {

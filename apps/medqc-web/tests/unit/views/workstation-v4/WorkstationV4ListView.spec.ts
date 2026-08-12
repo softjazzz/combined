@@ -118,6 +118,11 @@ function mountListView(overrides: Record<string, unknown> = {}) {
         { name: '中医科', total: 19, warningCount: 0 },
       ],
       activeDept: '全部科室',
+      doctorSelectOptions: [
+        { name: '全部主管医师', total: 100 },
+        { name: '陈医师', total: 19 },
+      ],
+      activeDoctor: '全部主管医师',
       hospFilter: 'all',
       hospOptions: [
         { value: 'all', label: '全部住院状态' },
@@ -332,6 +337,18 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.emitted('selectDept')?.[0]).toEqual(['中医科'])
   })
 
+  it('shows a searchable attending physician selector and emits a server-side filter change', async () => {
+    const wrapper = mountListView({ activeDoctor: '陈医师' })
+
+    const doctorSelect = wrapper.find('select.workbench-doctor-select')
+    expect(doctorSelect.exists()).toBe(true)
+    expect((doctorSelect.element as HTMLSelectElement).value).toBe('陈医师')
+
+    await doctorSelect.setValue('全部主管医师')
+
+    expect(wrapper.emitted('selectDoctor')?.[0]).toEqual(['全部主管医师'])
+  })
+
   it('shows the current hospital status and emits a server-side filter change for the record pool', async () => {
     const wrapper = mountListView({ hospFilter: 'inpatient' })
 
@@ -351,6 +368,7 @@ describe('WorkstationV4ListView filters', () => {
     })
 
     expect(wrapper.find('select.workbench-hosp-select').exists()).toBe(false)
+    expect(wrapper.find('select.workbench-doctor-select').exists()).toBe(false)
   })
 
   it('opens tender field validation drawer from frontpage generate queue', async () => {
