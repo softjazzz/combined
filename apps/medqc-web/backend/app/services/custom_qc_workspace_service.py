@@ -3996,13 +3996,6 @@ class CustomQCWorkspaceService:
 
         session = _session()
         try:
-            escaped_visit_id = (
-                normalized_visit_id
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-                .replace('"', '\\"')
-            )
             root_rows = (
                 session.execute(
                     select(self._batch_job_table)
@@ -4017,10 +4010,6 @@ class CustomQCWorkspaceService:
                             or_(
                                 self._batch_job_table.c.parent_job_id.is_(None),
                                 self._batch_job_table.c.parent_job_id == "",
-                            ),
-                            self._batch_job_table.c.record_ids_json.ilike(
-                                f'%"{escaped_visit_id}"%',
-                                escape="\\",
                             ),
                             self._record_result_envelope_table.c.institute_id
                             == normalized_institute_id,
@@ -4888,35 +4877,17 @@ class CustomQCWorkspaceService:
                     updated_at=now,
                 )
             )
-            session.commit()
-            self._persist_record_result_envelopes(
+            self._write_record_result_envelopes(
+                session,
                 job_row=dict(row),
                 items=items,
                 now=now,
             )
-            self.refresh_parent_batch_job(parent_job_id=parent_job_id)
-        finally:
-            session.close()
-
-    def _persist_record_result_envelopes(
-        self,
-        *,
-        job_row: Dict[str, Any],
-        items: Sequence[Dict[str, Any]],
-        now: datetime,
-    ) -> None:
-        """独立保存失败不得反向把已完成质控任务标记为失败。
-
-        正常环境必须已由 migration 创建 Envelope 表；这里采用独立事务，仅是为了
-        兼容旧客户库尚未迁移时保留历史读取回退，不让一次发布导致全量任务失败。
-        """
-
-        session = _session()
-        try:
-            self._write_record_result_envelopes(session, job_row=job_row, items=items, now=now)
             session.commit()
-        except (sa.exc.ProgrammingError, sa.exc.OperationalError):
+            self.refresh_parent_batch_job(parent_job_id=parent_job_id)
+        except Exception:
             session.rollback()
+            raise
         finally:
             session.close()
 
@@ -5127,6 +5098,20 @@ class CustomQCWorkspaceService:
             record_ref = CaseRef.from_mapping(raw_item)
             if all(record_ref):
                 grouped.setdefault(record_ref, []).append(raw_item)
+
+        expected_record_refs: set[CaseRef] = set()
+        for raw_ref in list(filters.get("record_refs") or []):
+            if not isinstance(raw_ref, Mapping):
+                continue
+            record_ref = CaseRef.from_mapping(raw_ref)
+            if all(record_ref):
+                expected_record_refs.add(record_ref)
+        if (
+            rule_set_key == LUXIAN_0609_RULE_SET_KEY
+            and expected_record_refs
+            and set(grouped) != expected_record_refs
+        ):
+            raise ValueError("Canonical Envelope 病例集合不完整，拒绝完成质控任务")
 
         for record_ref, record_items in grouped.items():
             record_id = record_ref.visit_id
