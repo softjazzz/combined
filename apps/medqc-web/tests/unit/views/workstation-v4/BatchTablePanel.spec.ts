@@ -3,7 +3,6 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import BatchTablePanel from '@/views/workstation-v4/components/workbench/BatchTablePanel.vue'
-import type { RecordLatestQcSummary } from '@/views/workstation-v4/types'
 
 const TableStub = defineComponent({
   name: 'ATable',
@@ -47,7 +46,7 @@ const PopconfirmStub = defineComponent({
   },
 })
 
-function mountTable(summary: RecordLatestQcSummary) {
+function mountTable() {
   return mount(BatchTablePanel, {
     props: {
       rows: [
@@ -59,16 +58,22 @@ function mountTable(summary: RecordLatestQcSummary) {
           stageStatus: '待处理',
           riskReason: '',
           updatedAt: '2026-08-08',
+          admissionDate: '2026-08-01',
+          dischargeDate: '2026-08-08',
           isDemo: false,
           sourceState: { status: 'unknown', lastSyncAt: null, reasonCode: null },
-          latestQcSummary: summary,
+          latestQcSummary: {
+            status: 'ready',
+            totalRuleCount: 75,
+            statusCounts: { non_compliant: 2, data_gap: 3 },
+          },
         },
       ],
       selectedRowKeys: [],
       summaryText: '',
       showSelection: false,
       showPrimaryAction: false,
-      showQualityColumns: true,
+      recordPoolMode: true,
     },
     global: {
       stubs: {
@@ -85,7 +90,7 @@ function mountTable(summary: RecordLatestQcSummary) {
   })
 }
 
-describe('BatchTablePanel 病历池质控投影', () => {
+describe('BatchTablePanel 病历池列表', () => {
   it('shows a secondary full-filter QC action with the server total', () => {
     const wrapper = mount(BatchTablePanel, {
       props: {
@@ -150,7 +155,7 @@ describe('BatchTablePanel 病历池质控投影', () => {
   )
 
   it('hides the full-filter QC action when it is not enabled', () => {
-    const wrapper = mountTable({ status: 'not_run' })
+    const wrapper = mountTable()
     expect(wrapper.find('[data-testid="filter-qc-action"]').exists()).toBe(false)
   })
 
@@ -237,34 +242,16 @@ describe('BatchTablePanel 病历池质控投影', () => {
     expect(wrapper.emitted('open-record')).toEqual([['["H-2","P-2","V-100"]']])
   })
 
-  it('separates unknown source state from a not-run QC result', () => {
-    const wrapper = mountTable({ status: 'not_run' })
+  it('renders only patient, department, hospitalization and action columns in record-pool mode', () => {
+    const wrapper = mountTable()
+    const table = wrapper.getComponent({ name: 'ATable' })
+    const keys = (table.props('columns') as Array<{ key: string }>).map((column) => column.key)
 
-    expect(wrapper.text()).toContain('资料同步状态待核实')
-    expect(wrapper.text()).toContain('尚未运行质控')
-    expect(wrapper.text()).toContain('当前规则版本尚未生成结果')
-    expect(wrapper.text()).not.toContain('资料不足')
-  })
-
-  it('renders canonical ready counts and keeps data gaps distinct from technical errors', () => {
-    const wrapper = mountTable({
-      status: 'ready',
-      totalRuleCount: 75,
-      statusCounts: { non_compliant: 2, data_gap: 3 },
-    })
-
-    expect(wrapper.text()).toContain('已完成 · 75 条规则')
-    expect(wrapper.text()).toContain('确定问题 2 项；资料待补 3 项')
-  })
-
-  it('renders a canonical delivery error as result validation error rather than data gap', () => {
-    const wrapper = mountTable({
-      status: 'technical_error',
-      reasonCode: 'canonical_envelope_missing',
-    })
-
-    expect(wrapper.text()).toContain('结果校验异常')
-    expect(wrapper.text()).toContain('质控结果未完整交付')
-    expect(wrapper.text()).not.toContain('资料待补')
+    expect(keys).toEqual(['patient', 'department', 'admissionDischarge', 'action'])
+    expect(wrapper.text()).toContain('2026-08-01')
+    expect(wrapper.text()).toContain('2026-08-08')
+    expect(wrapper.text()).not.toContain('资料同步状态待核实')
+    expect(wrapper.text()).not.toContain('已完成 · 75 条规则')
+    expect(wrapper.text()).not.toContain('确定问题 2 项')
   })
 })

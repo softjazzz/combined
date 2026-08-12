@@ -110,22 +110,6 @@
                   </a-select-option>
                 </a-select>
 
-                <a-select
-                  v-if="!isStageQueueMode"
-                  :value="activePriorityGroup"
-                  class="workbench-status-select"
-                  size="large"
-                  @update:value="emit('update:activePriorityGroup', normalizePriorityGroup($event))"
-                >
-                  <a-select-option
-                    v-for="group in priorityGroups"
-                    :key="group.key"
-                    :value="group.key"
-                  >
-                    {{ group.label }}
-                  </a-select-option>
-                </a-select>
-
                 <div class="wv4-filter-actions">
                   <a-button
                     type="primary"
@@ -151,11 +135,14 @@
                 v-if="!isStageQueueMode"
                 class="wv4-record-pool-filter__notice"
               >
-                在院、已出院已按服务端结果筛选；质控状态筛选待接入服务端。
+                在院、已出院均按服务端病历范围筛选。
               </div>
             </div>
 
-            <div class="wv4-analysis-kpis">
+            <div
+              v-if="isFrontpageGenerateStage"
+              class="wv4-analysis-kpis"
+            >
               <article
                 v-for="card in kpiCards"
                 :key="card.key"
@@ -227,7 +214,7 @@
                 :row-action-label="stageMeta.singleActionText"
                 :show-primary-action="true"
                 :show-selection="true"
-                :show-quality-columns="!isStageQueueMode"
+                :record-pool-mode="!isStageQueueMode"
                 :show-defer-action="false"
                 :show-assign-action="false"
                 @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
@@ -352,10 +339,6 @@ function normalizeDateRange(value: unknown): WorkstationDateRange {
   return start && end ? [start, end] : null
 }
 
-function normalizePriorityGroup(value: unknown): string {
-  return String(value || 'all').trim() || 'all'
-}
-
 function normalizeDepartmentValue(value: unknown): string {
   return String(value || '全部科室').trim() || '全部科室'
 }
@@ -387,7 +370,7 @@ const overviewTitle = computed(() =>
 const overviewSubtitle = computed(() =>
   isFrontpageGenerateStage.value
     ? props.stageMeta.pageDesc || '对待生成病历进行批量生成和阻塞清理，不影响正式首页数据。'
-    : '聚合待处理、超时与资料异常病历，快速定位处理优先级',
+    : '用于筛选病例并发起质控；质控结果请在运行病历质控或终末病历质控中查看。',
 )
 
 const searchPlaceholder = computed(() =>
@@ -397,13 +380,6 @@ const searchPlaceholder = computed(() =>
 const totalRows = computed(() =>
   isFrontpageGenerateStage.value ? props.displayServerTotal : props.qcSummary.totalRecords,
 )
-
-const hasCompletedQcResults = computed(() => props.qcSummary.readyRecords > 0)
-
-function completedStatusCount(status: string): string | number {
-  if (!hasCompletedQcResults.value) return '—'
-  return Number(props.qcSummary.statusCounts[status] || 0)
-}
 
 const pendingGenerateCount = computed(
   () =>
@@ -425,77 +401,38 @@ const failedRate = computed(() => {
   return Math.round((failedGenerateCount.value / totalRows.value) * 100)
 })
 
-const kpiCards = computed(() =>
-  isFrontpageGenerateStage.value
-    ? [
-        {
-          key: 'total',
-          label: '待生成总量',
-          value: totalRows.value,
-          desc: '当前筛选范围内病历总数',
-          icon: FileTextOutlined,
-          tone: 'brand',
-        },
-        {
-          key: 'pending',
-          label: '待生成',
-          value: pendingGenerateCount.value,
-          desc: '尚未启动生成任务',
-          icon: CheckCircleOutlined,
-          tone: 'success',
-        },
-        {
-          key: 'running',
-          label: '生成中',
-          value: generatingCount.value,
-          desc: '后台任务执行中',
-          icon: SyncOutlined,
-          tone: 'info',
-        },
-        {
-          key: 'failed-rate',
-          label: '失败占比',
-          value: `${failedRate.value}%`,
-          desc: '需优先排查失败病历',
-          icon: WarningOutlined,
-          tone: 'warning',
-        },
-      ]
-    : [
-        {
-          key: 'total',
-          label: '病历总量',
-          value: totalRows.value,
-          desc: '服务端当前筛选范围',
-          icon: FileTextOutlined,
-          tone: 'brand',
-        },
-        {
-          key: 'completed-qc',
-          label: '已完成质控',
-          value: props.qcSummary.readyRecords,
-          desc: props.qcSummary.readyRecords
-            ? `另有 ${props.qcSummary.notRunRecords} 份尚未运行`
-            : '暂无已完成质控结果',
-          icon: CheckCircleOutlined,
-          tone: 'success',
-        },
-        {
-          key: 'confirmed-defect',
-          label: '确定问题',
-          value: completedStatusCount('non_compliant'),
-          desc: hasCompletedQcResults.value ? '仅统计已完成结果中的确定问题' : '等待质控结果回写',
-          icon: WarningOutlined,
-          tone: 'warning',
-        },
-        {
-          key: 'data-gap',
-          label: '资料待补',
-          value: completedStatusCount('data_gap'),
-          desc: hasCompletedQcResults.value ? '与资料同步状态分开统计' : '等待质控结果回写',
-          icon: FileTextOutlined,
-          tone: 'brand',
-        },
-      ],
-)
+const kpiCards = computed(() => [
+  {
+    key: 'total',
+    label: '待生成总量',
+    value: totalRows.value,
+    desc: '当前筛选范围内病历总数',
+    icon: FileTextOutlined,
+    tone: 'brand',
+  },
+  {
+    key: 'pending',
+    label: '待生成',
+    value: pendingGenerateCount.value,
+    desc: '尚未启动生成任务',
+    icon: CheckCircleOutlined,
+    tone: 'success',
+  },
+  {
+    key: 'running',
+    label: '生成中',
+    value: generatingCount.value,
+    desc: '后台任务执行中',
+    icon: SyncOutlined,
+    tone: 'info',
+  },
+  {
+    key: 'failed-rate',
+    label: '失败占比',
+    value: `${failedRate.value}%`,
+    desc: '需优先排查失败病历',
+    icon: WarningOutlined,
+    tone: 'warning',
+  },
+])
 </script>

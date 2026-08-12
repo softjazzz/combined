@@ -57,7 +57,7 @@ const BatchTablePanelStub = defineComponent({
       type: Array,
       default: () => [],
     },
-    showQualityColumns: {
+    recordPoolMode: {
       type: Boolean,
       default: false,
     },
@@ -186,24 +186,22 @@ function mountListView(overrides: Record<string, unknown> = {}) {
 }
 
 describe('WorkstationV4ListView filters', () => {
-  it('uses the full-scope canonical summary for record-pool KPI instead of page rows', () => {
+  it('keeps QC result metrics out of the record pool and directs users to the result worklists', () => {
     const wrapper = mountListView({
       workbenchRows: [],
       displayServerTotal: 1,
     })
 
-    expect(wrapper.text()).toContain('已完成质控')
-    expect(wrapper.text()).toContain('8')
-    expect(wrapper.text()).toContain('确定问题')
-    expect(wrapper.text()).toContain('6')
-    expect(wrapper.text()).toContain('资料待补')
-    expect(wrapper.text()).toContain('4')
-    expect(wrapper.findAll('.wv4-analysis-kpi-card')).toHaveLength(4)
+    expect(wrapper.text()).toContain('质控结果请在运行病历质控或终末病历质控中查看')
+    expect(wrapper.text()).not.toContain('已完成质控')
+    expect(wrapper.text()).not.toContain('确定问题')
+    expect(wrapper.text()).not.toContain('资料待补')
+    expect(wrapper.findAll('.wv4-analysis-kpi-card')).toHaveLength(0)
     expect(wrapper.text()).not.toContain('结果校验异常')
     expect(wrapper.text()).not.toContain('当前正在处理中的病历数')
   })
 
-  it('passes the source and canonical result state to the record-pool table without treating unknown as ready', () => {
+  it('uses the compact record-pool table instead of quality-result columns', () => {
     const wrapper = mountListView({
       workbenchRows: [
         {
@@ -222,11 +220,7 @@ describe('WorkstationV4ListView filters', () => {
     })
 
     const table = wrapper.findComponent({ name: 'BatchTablePanel' })
-    expect(table.props('showQualityColumns')).toBe(true)
-    expect(table.props('rows')[0]).toMatchObject({
-      sourceState: { status: 'unknown' },
-      latestQcSummary: { status: 'not_run' },
-    })
+    expect(table.props('recordPoolMode')).toBe(true)
   })
 
   it('enables triple-identity selection and the selected-record QC action in the formal record pool', () => {
@@ -272,6 +266,7 @@ describe('WorkstationV4ListView filters', () => {
     expect(table.props('showPrimaryAction')).toBe(true)
     expect(table.props('primaryActionLabel')).toBe('批量生成')
     expect(table.props('showFilterQcAction')).toBe(false)
+    expect(table.props('recordPoolMode')).toBe(false)
   })
 
   it('renders a customer-facing query failure state', () => {
