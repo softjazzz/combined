@@ -201,6 +201,8 @@ class Settings(BaseSettings):
         default=120,
         validation_alias=AliasChoices("LLM_TIMEOUT_SECONDS", "SICHUAN_TIMEOUT_SECONDS"),
     )
+    # 全进程共享的 LLM HTTP 出口预算；所有事件循环与后台线程共同受此上限约束。
+    LLM_HTTP_MAX_CONCURRENCY: int = Field(default=4, ge=1, le=16)
     LLM_ENABLE_TRUNCATE: bool = Field(
         default=False,
         validation_alias=AliasChoices("LLM_ENABLE_TRUNCATE", "SICHUAN_ENABLE_TRUNCATE"),

@@ -2485,7 +2485,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
-        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 2)))
+        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 4)))
         if compatibility_rule_ids:
             _enforce_sc_source_guard(
                 qc_service,

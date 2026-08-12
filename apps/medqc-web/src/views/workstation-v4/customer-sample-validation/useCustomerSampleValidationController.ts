@@ -317,7 +317,7 @@ export function useCustomerSampleValidationController() {
     description: '',
   })
   const runOptions = ref({
-    maxParallelRecords: 2,
+    maxParallelRecords: 4,
   })
   const selectedValidationMode = ref<ManualSampleValidationMode>('customer')
   const isFormalFastScreenMode = computed(

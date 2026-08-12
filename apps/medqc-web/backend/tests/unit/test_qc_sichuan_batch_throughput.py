@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import date
@@ -679,6 +680,75 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
     assert int(workspace.summary.get("rule_count") or 0) == 3
     assert int(workspace.summary.get("processed_rule_count") or 0) == 3
     assert int(((workspace.summary.get("pack_metrics") or {}).get("total_packs")) or 0) >= 1
+
+
+@pytest.mark.parametrize(
+    ("configured_limit", "expected_peak"),
+    [(None, 4), (1, 1), (2, 2)],
+)
+@pytest.mark.asyncio
+async def test_workspace_parallel_batch_default_and_explicit_record_limits(
+    monkeypatch,
+    configured_limit: Optional[int],
+    expected_peak: int,
+):
+    workspace = _WorkspaceStub()
+    workspace.job["run_mode"] = "parallel"
+    workspace.job["record_ids"] = [f"visit-{index:03d}" for index in range(1, 9)]
+    if configured_limit is None:
+        workspace.job["filters"].pop("max_parallel_records", None)
+    else:
+        workspace.job["filters"]["max_parallel_records"] = configured_limit
+
+    service = _ServiceStub()
+    concurrency = {"active": 0, "peak": 0}
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    async def _fake_evaluate_running_final_bundle(
+        *, rule_ids: List[str], **_: Any
+    ) -> Dict[str, Any]:
+        concurrency["active"] += 1
+        concurrency["peak"] = max(concurrency["peak"], concurrency["active"])
+        try:
+            await asyncio.sleep(0.03)
+            return {
+                "evaluation_results": [
+                    {
+                        "rule_id": rule_id,
+                        "rule_name": f"规则-{rule_id}",
+                        "status": "compliant",
+                        "is_compliant": True,
+                        "findings": "",
+                        "evidence": "",
+                        "suggestion": "",
+                        "confidence": 0.9,
+                        "metadata": {"executor_type": "program", "tokens_used": 0},
+                    }
+                    for rule_id in rule_ids
+                ],
+                "token_usage": {"total_tokens": 0},
+                "api_time": 0.03,
+                "pack_metrics": {"total_packs": 1, "avg_pack_size": len(rule_ids)},
+            }
+        finally:
+            concurrency["active"] -= 1
+
+    monkeypatch.setattr(
+        qc_sichuan,
+        "evaluate_running_final_bundle",
+        _fake_evaluate_running_final_bundle,
+    )
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert service.evaluate_calls == 0
+    assert concurrency["peak"] == expected_peak
+    assert workspace.job["status"] == "completed"
 
 
 @pytest.mark.asyncio

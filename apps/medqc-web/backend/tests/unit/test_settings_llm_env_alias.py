@@ -18,6 +18,7 @@ LLM_ENV_KEYS = [
     "LLM_ADJUDICATOR_MODEL",
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
+    "LLM_HTTP_MAX_CONCURRENCY",
     "DEEPSEEK_API_ENDPOINT",
     "DEEPSEEK_API_KEY",
     "SICHUAN_API_ENDPOINT",
@@ -114,6 +115,24 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert settings.LLM_ADJUDICATOR_MODEL == "qwen-plus"
     assert settings.LLM_TIMEOUT_SECONDS == 30
     assert settings.llm_env_source() == "LLM_*"
+
+
+def test_llm_http_max_concurrency_defaults_to_four_and_is_bounded(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+
+    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 4
+
+    monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "16")
+    assert Settings(_env_file=None).LLM_HTTP_MAX_CONCURRENCY == 16
+
+    monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+    monkeypatch.setenv("LLM_HTTP_MAX_CONCURRENCY", "17")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
 
 def test_formal_qc_default_llm_model_should_use_aliyun_dual_model(monkeypatch):

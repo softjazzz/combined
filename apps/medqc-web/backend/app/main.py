@@ -12,6 +12,7 @@ from .core.otel import configure_otel
 from .core.middleware_errors import UnifiedErrorMiddleware
 from .core.middleware_api_version import APIVersionMiddleware
 from .core.access_control import enforce_default_auth
+from .core.http import close_shared_http_resources
 
 logger = logging.getLogger(__name__)
 from .routers import system as system_router
@@ -391,6 +392,8 @@ def create_app() -> FastAPI:
             await qc_sichuan_router.stop_rule_source_monitor()
         except Exception:
             logger.warning("停止 SC 规则来源巡检任务失败", exc_info=True)
+        finally:
+            close_shared_http_resources()
 
     return app
 

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 import numpy as np
 import requests
 
+from ..core.http import run_shared_http_call_sync
 from ..core.settings import get_settings
 from .llm_observability import observe_llm_sync_http_attempt
 
@@ -358,7 +359,7 @@ class IcdSemanticRetrievalService:
                 return observed
 
             observed = observe_llm_sync_http_attempt(
-                _request,
+                lambda: run_shared_http_call_sync(_request),
                 provider_code=_embedding_provider_code(endpoint),
                 model=model,
                 business_scene="icd_semantic_embedding",

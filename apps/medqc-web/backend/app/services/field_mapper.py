@@ -17,6 +17,7 @@ import yaml
 from openai import OpenAI
 from dotenv import dotenv_values
 
+from ..core.http import run_shared_http_call
 from .llm_observability import (
     observe_llm_http_attempt,
     safe_status_for_exception,
@@ -316,7 +317,7 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
             timeout=45.0,
             max_retries=0,
         )
-        async def _request() -> Dict[str, Any]:
+        def _request_sync() -> Dict[str, Any]:
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -331,6 +332,9 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
             if usage is not None:
                 observed_result["usage"] = usage
             return observed_result
+
+        async def _request() -> Dict[str, Any]:
+            return await run_shared_http_call(_request_sync)
 
         logical_call_id = str(uuid4())
         observed_result: Dict[str, Any] | None = None

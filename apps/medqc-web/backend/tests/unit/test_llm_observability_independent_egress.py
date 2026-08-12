@@ -587,6 +587,12 @@ async def test_demo_rule_generation_records_one_safe_http_attempt(monkeypatch):
 
 
 def test_icd_semantic_embedding_records_one_sync_http_attempt(monkeypatch):
+    budget_calls: list[str] = []
+
+    def _run_in_budget(operation):
+        budget_calls.append("icd_embedding")
+        return operation()
+
     class _Response:
         def raise_for_status(self) -> None:
             return None
@@ -609,6 +615,12 @@ def test_icd_semantic_embedding_records_one_sync_http_attempt(monkeypatch):
         ),
     )
     monkeypatch.setattr(icd_semantic_module.requests, "post", lambda *_args, **_kwargs: _Response())
+    monkeypatch.setattr(
+        icd_semantic_module,
+        "run_shared_http_call_sync",
+        _run_in_budget,
+        raising=False,
+    )
     store = _SyncMemoryEventStore()
     monkeypatch.setattr(
         llm_observability_module,
@@ -621,6 +633,7 @@ def test_icd_semantic_embedding_records_one_sync_http_attempt(monkeypatch):
 
     assert result is not None
     assert result.shape == (1, 2)
+    assert budget_calls == ["icd_embedding"]
     assert len(store.started) == 1
     assert len(store.finished) == 1
     assert store.started[0]["business_scene"] == "icd_semantic_embedding"

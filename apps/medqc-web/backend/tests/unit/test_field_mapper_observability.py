@@ -92,6 +92,13 @@ async def test_field_mapping_records_one_sdk_attempt_with_usage_and_safe_context
         "_get_field_mapper_model",
         lambda: "field-mapper-model",
     )
+    budget_calls: list[str] = []
+
+    async def _run_in_budget(operation):
+        budget_calls.append("field_mapper")
+        return operation()
+
+    monkeypatch.setattr(field_mapper_module, "run_shared_http_call", _run_in_budget)
     store = _MemoryEventStore()
     monkeypatch.setattr(
         llm_observability_module,
@@ -111,6 +118,7 @@ async def test_field_mapping_records_one_sdk_attempt_with_usage_and_safe_context
 
     assert result["fallback"] is False
     assert fake_client.completions.calls == 1
+    assert budget_calls == ["field_mapper"]
     assert len(store.started) == 1
     assert len(store.finished) == 1
     started = store.started[0]

@@ -101,6 +101,53 @@ def test_qc_agent_intent_records_one_safe_sync_http_attempt(monkeypatch):
     assert "example.test" not in persisted
 
 
+def test_qc_agent_intent_http_exit_uses_shared_budget(monkeypatch):
+    budget_calls: list[str] = []
+
+    class _Response:
+        status_code = 200
+        text = '{"ok":true}'
+
+        def json(self) -> dict[str, bool]:
+            return {"ok": True}
+
+    class _Client:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def post(self, *_args: Any, **_kwargs: Any) -> _Response:
+            return _Response()
+
+    def _run_in_budget(operation):
+        budget_calls.append("intent_router")
+        return operation()
+
+    monkeypatch.setattr(intent_router_module, "_is_allowed_host", lambda _host: True)
+    monkeypatch.setattr(intent_router_module.httpx, "Client", _Client)
+    monkeypatch.setattr(
+        intent_router_module,
+        "run_shared_http_call_sync",
+        _run_in_budget,
+        raising=False,
+    )
+
+    result = intent_router_module._post_llm_json(
+        endpoint="https://example.test/v1",
+        headers={"Authorization": "Bearer test"},
+        payload={"model": "intent-model"},
+        timeout_seconds=30,
+    )
+
+    assert result == {"ok": True}
+    assert budget_calls == ["intent_router"]
+
+
 def test_qc_agent_disabled_does_not_create_attempt(monkeypatch):
     store = _SyncMemoryEventStore()
     monkeypatch.setattr(

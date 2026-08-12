@@ -7,7 +7,11 @@ from typing import Any, Dict, Iterable, Tuple
 
 import httpx
 
-from app.core.http import _is_allowed_host, _is_private_address
+from app.core.http import (
+    _is_allowed_host,
+    _is_private_address,
+    run_shared_http_call_sync,
+)
 from app.core.settings import get_settings
 from app.services.llm_observability import observe_llm_sync_http_attempt
 
@@ -369,8 +373,11 @@ def _post_llm_json(endpoint: str, headers: Dict[str, str], payload: Dict[str, An
         if _is_private_address(host):
             raise ValueError("Outbound host resolves to private/loopback address")
         raise ValueError(f"Outbound host not in allowlist: {host}")
-    with httpx.Client(timeout=timeout_seconds, trust_env=False) as client:
-        resp = client.post(url, headers=headers, json=payload)
+    def _request() -> httpx.Response:
+        with httpx.Client(timeout=timeout_seconds, trust_env=False) as client:
+            return client.post(url, headers=headers, json=payload)
+
+    resp = run_shared_http_call_sync(_request)
     try:
         body = resp.json() if resp.text else {}
     except Exception:
