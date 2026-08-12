@@ -680,6 +680,11 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
     assert int(workspace.summary.get("rule_count") or 0) == 3
     assert int(workspace.summary.get("processed_rule_count") or 0) == 3
     assert int(((workspace.summary.get("pack_metrics") or {}).get("total_packs")) or 0) >= 1
+    progress_steps = [item["step_key"] for item in workspace.progress_updates]
+    assert "prepare" in progress_steps
+    assert "run" in progress_steps
+    assert progress_steps.index("prepare") < progress_steps.index("run")
+    assert progress_steps[-1] == "aggregate"
 
 
 @pytest.mark.parametrize(
@@ -3063,10 +3068,12 @@ async def test_native_luxian_batch_worker_uses_customer_ids_without_sc_rule_look
 
 
 @pytest.mark.asyncio
-async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_canonical_results(
+@pytest.mark.parametrize("sample_pool_id", [None, "pool-live-phase-001"])
+async def test_native_luxian_worker_persists_executor_phase_before_canonical_results(
     monkeypatch: pytest.MonkeyPatch,
+    sample_pool_id: Optional[str],
 ) -> None:
-    """Native族阶段可实时回写，但结果只能在完整交付后写入。"""
+    """正式病历池与样本池的Native族阶段均实时回写，结果只在完整交付后写入。"""
     workspace = _WorkspaceStub()
     original_update_progress = workspace.update_batch_job_progress
 
@@ -3084,7 +3091,6 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
     workspace.job["record_ids"] = ["visit-001"]
     workspace.job["parent_job_id"] = "parent-job-throughput-001"
     workspace.job["filters"] = {
-        "sample_pool_id": "pool-live-phase-001",
         "record_refs": [
             {
                 "institute_id": "HOSP-001",
@@ -3099,6 +3105,8 @@ async def test_native_luxian_sample_pool_worker_persists_executor_phase_before_c
         "rule_set_key": qc_sichuan.LUXIAN_0609_RULE_SET_KEY,
         "validation_mode": "programmatic",
     }
+    if sample_pool_id:
+        workspace.job["filters"]["sample_pool_id"] = sample_pool_id
     service = _ServiceStub()
     observed_stream_states: List[Dict[str, Any]] = []
     observed_llm_contexts: List[Any] = []

@@ -2514,6 +2514,18 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             record_ids=None if has_persisted_record_refs else current.get("record_ids") or None,
             record_refs=persisted_record_refs if has_persisted_record_refs else None,
         )
+        workspace.update_batch_job_progress(
+            job_id=job_id,
+            step_key="prepare",
+            rule_index=0,
+            rule_count=max(1, len(rule_ids)),
+            processed_records=0,
+            total_records=len(records),
+            summary_patch={
+                "rule_count": max(1, len(rule_ids)),
+                "total_records": len(records),
+            },
+        )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
         total_records = len(hydrated_records)
         if total_records == 0:
@@ -2965,7 +2977,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 or list(valid_rule_ids)
             )
             execution_trace_sink = None
-            if enable_incremental_results and native_direct_enabled:
+            if native_direct_enabled:
                 try:
                     executor_batches = tuple(
                         build_luxian_0609_package_plan_from_settings(
@@ -4158,7 +4170,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
         workspace.update_batch_job_progress(
             job_id=job_id,
-            step_key="filter",
+            step_key="run",
             rule_index=0,
             rule_count=total_rules,
             processed_records=0,

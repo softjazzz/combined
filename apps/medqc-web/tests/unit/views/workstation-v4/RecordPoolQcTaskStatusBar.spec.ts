@@ -95,4 +95,54 @@ describe('RecordPoolQcTaskStatusBar', () => {
     expect(wrapper.text()).toContain('失败 1 份')
     expect(mocks.getSichuanWorkspaceBatchJob).not.toHaveBeenCalled()
   })
+
+  it('shows the real four-stage workflow and projected in-flight rule progress', async () => {
+    mocks.getSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: job({
+        status: 'running',
+        total_records: 1,
+        summary: {
+          total_records: 1,
+          success_count: 0,
+          failed_count: 0,
+          issue_records: 0,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          rule_count: 49,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 18,
+            rule_count: 49,
+            processed_records: 0,
+            total_records: 1,
+          },
+        },
+      }),
+    })
+
+    const wrapper = mount(RecordPoolQcTaskStatusBar, {
+      props: { job: job({ total_records: 1 }) },
+      global: {
+        stubs: {
+          AProgress: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已执行 18 / 49 个质控点')
+    const stages = wrapper.get('[data-testid="record-pool-qc-task-stages"]')
+    expect(stages.text()).toContain('确认质控范围')
+    expect(stages.text()).toContain('准备病历资料')
+    expect(stages.text()).toContain('执行质控规则')
+    expect(stages.text()).toContain('汇总并保存结果')
+    expect(stages.find('[data-stage-key="scope"]').classes()).toContain('is-complete')
+    expect(stages.find('[data-stage-key="records"]').classes()).toContain('is-complete')
+    expect(stages.find('[data-stage-key="rules"]').classes()).toContain('is-active')
+    expect(stages.find('[data-stage-key="result"]').classes()).toContain('is-pending')
+
+    wrapper.unmount()
+  })
 })

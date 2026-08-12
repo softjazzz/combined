@@ -14,6 +14,40 @@ def _service() -> CustomQCWorkspaceService:
     return object.__new__(CustomQCWorkspaceService)
 
 
+def test_customer_safe_batch_job_projects_inflight_rule_progress() -> None:
+    projected = project_customer_safe_batch_job(
+        {
+            "id": "job-progress-1",
+            "status": "running",
+            "rule_code": "LX0609",
+            "rule_name": "泸县0609质控",
+            "scope": "all",
+            "summary": {
+                "total_records": 1,
+                "rule_count": 49,
+                "progress": {
+                    "step_key": "run",
+                    "rule_index": 18,
+                    "rule_count": 49,
+                    "processed_records": 0,
+                    "total_records": 1,
+                },
+            },
+            "items": [],
+        },
+        hmac_key="unit-test-key",
+    )
+
+    assert projected["summary"]["progress"] == {
+        "step_key": "run",
+        "processed_rule_count": 18,
+        "rule_count": 49,
+        "processed_records": 0,
+        "total_records": 1,
+    }
+    assert projected["summary"]["processed_rule_count"] == 18
+
+
 def test_export_batch_job_html_groups_records_and_sanitizes_internal_fields():
     service = _service()
     job = {

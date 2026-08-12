@@ -850,17 +850,24 @@ def _safe_operational_progress(value: Any) -> Dict[str, Any]:
         "progress_percent",
         "processed_records",
         "total_records",
-        "processed_rule_count",
         "rule_count",
         "completed",
         "total",
         "remaining",
     }
-    return {
+    projected = {
         key: value.get(key)
         for key in allowed
         if isinstance(value.get(key), (str, int, float, bool)) and value.get(key) is not None
     }
+    processed_rule_count = value.get("processed_rule_count")
+    if processed_rule_count is None:
+        processed_rule_count = value.get("rule_index")
+    if isinstance(processed_rule_count, (str, int, float)) and not isinstance(
+        processed_rule_count, bool
+    ):
+        projected["processed_rule_count"] = processed_rule_count
+    return projected
 
 
 def _safe_review_report(value: Any, *, hmac_key: str) -> Optional[Dict[str, Any]]:
@@ -991,7 +998,10 @@ def project_customer_safe_batch_job(
             or filters.get("execution_rule_count")
             or job.get("execution_rule_count")
         ),
-        "processed_rule_count": _to_int(raw_summary.get("processed_rule_count")),
+        "processed_rule_count": _to_int(
+            progress.get("processed_rule_count"),
+            _to_int(raw_summary.get("processed_rule_count")),
+        ),
         "retryable_rule_count": _to_int(raw_summary.get("retryable_rule_count")),
         "total_tokens": _to_int(raw_summary.get("total_tokens"), _to_int(job.get("total_tokens"))),
         "total_processing_time": _to_float(

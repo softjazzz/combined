@@ -56,6 +56,28 @@
           </div>
         </div>
 
+        <ol
+          class="record-pool-qc-status__stages"
+          data-testid="record-pool-qc-task-stages"
+          aria-label="质控任务执行阶段"
+        >
+          <li
+            v-for="stage in workflowStages"
+            :key="stage.key"
+            :class="`is-${stage.state}`"
+            :data-stage-key="stage.key"
+          >
+            <span
+              class="record-pool-qc-status__stage-marker"
+              aria-hidden="true"
+            />
+            <span class="record-pool-qc-status__stage-copy">
+              <strong>{{ stage.label }}</strong>
+              <small>{{ stage.detail }}</small>
+            </span>
+          </li>
+        </ol>
+
         <p class="record-pool-qc-status__stage">
           {{ stageText }}
         </p>
@@ -111,7 +133,8 @@ const isActive = computed(() =>
 )
 
 function finiteCount(value: unknown): number | null {
-  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean')
+    return null
   const count = Number(value)
   return Number.isFinite(count) && count >= 0 ? Math.trunc(count) : null
 }
@@ -128,6 +151,7 @@ const totalRecords = computed(() =>
   firstCount(
     currentJob.value?.total_records,
     currentJob.value?.summary?.total_records,
+    currentJob.value?.summary?.progress?.total_records,
     currentJob.value?.summary?.stream_state?.total_records,
   ),
 )
@@ -147,6 +171,7 @@ const failedRecords = computed(
 
 const processedRecords = computed(() =>
   firstCount(
+    currentJob.value?.summary?.progress?.processed_records,
     currentJob.value?.summary?.stream_state?.processed_records,
     successRecords.value + failedRecords.value,
   ),
@@ -158,13 +183,19 @@ const recordProgressText = computed(() => {
   return `已处理 ${Math.min(processedRecords.value ?? 0, totalRecords.value)} / ${totalRecords.value} 份病历`
 })
 
-const processedRules = computed(() => firstCount(currentJob.value?.summary?.processed_rule_count))
+const processedRules = computed(() =>
+  firstCount(
+    currentJob.value?.summary?.progress?.processed_rule_count,
+    currentJob.value?.summary?.processed_rule_count,
+  ),
+)
 const totalRules = computed(() =>
   firstCount(
     currentJob.value?.summary?.customer_rule_count,
     currentJob.value?.customer_rule_count,
     currentJob.value?.summary?.rule_count,
     currentJob.value?.rule_count,
+    currentJob.value?.summary?.progress?.rule_count,
   ),
 )
 
@@ -178,7 +209,14 @@ const progressPercent = computed(() => {
   const reported = finiteCount(currentJob.value?.summary?.progress_percent)
   if (reported !== null && reported > 0) return Math.min(100, reported)
   if (!totalRecords.value) return null
-  return Math.min(100, Math.round(((processedRecords.value ?? 0) / totalRecords.value) * 100))
+  const currentRuleFraction =
+    processedRules.value !== null && totalRules.value
+      ? Math.min(1, processedRules.value / totalRules.value)
+      : 0
+  return Math.min(
+    100,
+    Math.round((((processedRecords.value ?? 0) + currentRuleFraction) / totalRecords.value) * 100),
+  )
 })
 
 const statusTitle = computed(() => {
@@ -211,6 +249,77 @@ const stepLabels: Record<string, string> = {
   failed: '执行未完成',
   canceled: '任务已停止',
 }
+
+type WorkflowStageState = 'complete' | 'active' | 'pending' | 'error'
+
+interface WorkflowStageItem {
+  key: 'scope' | 'records' | 'rules' | 'result'
+  label: string
+  detail: string
+  state: WorkflowStageState
+}
+
+const workflowStages = computed<WorkflowStageItem[]>(() => {
+  const status = currentJob.value?.status
+  const stepKey = String(currentJob.value?.summary?.progress?.step_key || '').trim()
+  const activeStageIndex =
+    status === 'queued' || !stepKey
+      ? 0
+      : stepKey === 'filter'
+        ? 0
+        : stepKey === 'prepare'
+          ? 1
+          : stepKey === 'aggregate'
+            ? 3
+            : stepKey === 'completed' || stepKey === 'failed' || stepKey === 'canceled'
+              ? 3
+              : 2
+  const terminalCompleted = status === 'completed'
+  const terminalError = status === 'failed' || status === 'canceled'
+  const stateFor = (index: number): WorkflowStageState => {
+    if (terminalCompleted) return 'complete'
+    if (index < activeStageIndex) return 'complete'
+    if (index === activeStageIndex) return terminalError ? 'error' : 'active'
+    return 'pending'
+  }
+  const ruleDetail =
+    processedRules.value !== null && totalRules.value !== null
+      ? `${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
+      : stateFor(2) === 'active'
+        ? '正在逐项执行'
+        : '等待执行'
+
+  return [
+    {
+      key: 'scope',
+      label: '确认质控范围',
+      detail: totalRecords.value === null ? '正在确认病历' : `本次共 ${totalRecords.value} 份病历`,
+      state: stateFor(0),
+    },
+    {
+      key: 'records',
+      label: '准备病历资料',
+      detail: stateFor(1) === 'complete' ? '质控资料已准备' : '正在整理质控资料',
+      state: stateFor(1),
+    },
+    {
+      key: 'rules',
+      label: '执行质控规则',
+      detail: ruleDetail,
+      state: stateFor(2),
+    },
+    {
+      key: 'result',
+      label: '汇总并保存结果',
+      detail: terminalCompleted
+        ? '结果已保存'
+        : stateFor(3) === 'active'
+          ? '正在生成最终结果'
+          : '等待规则执行完成',
+      state: stateFor(3),
+    },
+  ]
+})
 
 const stageText = computed(() => {
   const status = currentJob.value?.status
@@ -398,6 +507,91 @@ onBeforeUnmount(() => {
   animation: record-pool-qc-progress 1.35s ease-in-out infinite;
 }
 
+.record-pool-qc-status__stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 760px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record-pool-qc-status__stages li {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.025);
+  color: rgba(29, 29, 31, 0.48);
+}
+
+.record-pool-qc-status__stage-marker {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 5px;
+  border: 2px solid rgba(29, 29, 31, 0.22);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.record-pool-qc-status__stage-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.record-pool-qc-status__stage-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-pool-qc-status__stage-copy small {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-pool-qc-status__stages li.is-complete {
+  background: rgba(16, 185, 129, 0.065);
+  color: #047857;
+}
+
+.record-pool-qc-status__stages li.is-complete .record-pool-qc-status__stage-marker {
+  border-color: #10b981;
+  background: #10b981;
+}
+
+.record-pool-qc-status__stages li.is-active {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0055aa;
+}
+
+.record-pool-qc-status__stages li.is-active .record-pool-qc-status__stage-marker {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.record-pool-qc-status__stages li.is-error {
+  background: rgba(239, 68, 68, 0.075);
+  color: #b91c1c;
+}
+
+.record-pool-qc-status__stages li.is-error .record-pool-qc-status__stage-marker {
+  border-color: #ef4444;
+  background: #ef4444;
+}
+
 .record-pool-qc-status__stage,
 .record-pool-qc-status__refresh-note {
   margin: 5px 0 0;
@@ -455,6 +649,10 @@ onBeforeUnmount(() => {
   .record-pool-qc-status__metrics {
     display: grid;
     gap: 2px;
+  }
+
+  .record-pool-qc-status__stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
